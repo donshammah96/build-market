@@ -1,0 +1,17 @@
+{
+  "name": "@repo/kafka",
+  "version": "0.0.1",
+  "main": "./src/index.ts",
+  "type": "module",
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^24.8.1"
+  },
+  "dependencies": {
+    "@kafkajs/confluent-schema-registry": "^3.9.0",
+    "kafkajs": "^2.2.4"
+  }
+}

@@ -1,21 +1,36 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
+  "globalDependencies": [ ".env*"],
+  "globalEnv": ["NODE_ENV", "DATABASE_URL", "KAFKA_BROKERS"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**"]
+      "outputs": [".next/**", "!.next/cache/**", "dist/**", "build/**"],
+      "env": ["NODE_ENV"]
     },
     "lint": {
-      "dependsOn": ["^lint"]
+      "dependsOn": ["^lint"],
+      "cache": true,
+      "inputs": ["src/**/*.ts", "src/**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     "check-types": {
-      "dependsOn": ["^check-types"]
+      "dependsOn": ["^check-types"],
+      "cache": true,
+      "inputs": ["src/**/*.ts", "src/**/*.tsx", "tsconfig.json"]
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "cache": true,
+      "inputs": ["src/**/*.ts", "src/**/*.tsx", "**/*.test.ts", "**/*.test.tsx"]
     }
+  },
+  "remoteCache": {
+    "enabled": true
   }
 }

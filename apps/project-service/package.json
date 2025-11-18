@@ -1,0 +1,28 @@
+{
+  "name": "project-service",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm dlx tsx --env-file=.env --watch src/index.ts",
+    "check-types": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@clerk/express": "^1.7.41",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.0.3",
+    "@repo/kafka": "workspace:*",
+    "@repo/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@repo/kafka": "workspace:*"
+  }
+}

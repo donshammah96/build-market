@@ -1,0 +1,8 @@
+{
+  "PAYMENT_SERVICE_URL": {
+    "value": "localhost:8002",
+    "type": "string",
+    "id": 0,
+    "isSecret": false
+  }
+}

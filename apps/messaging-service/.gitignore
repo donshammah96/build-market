@@ -1,0 +1,48 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Local env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Testing
+coverage
+
+# Turbo
+.turbo
+!.turbo/config.json
+
+# Vercel
+.vercel
+
+# Build Outputs
+.next/
+out/
+build
+dist
+
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+.DS_Store
+*.pem
+
+/src/generated/prisma
+
+AUTH_ENCRYPTION_GUIDE.md
+IMPLEMENTATION_SUMMARY.md
+PRISMA_MIGRATION_SUMMARY.md
+QUICK_START.md
+SCHEMA_ALIGNMENT.md
+TESTING_COMPLETE.md
+TESTING_NOTES.md
+TESTING_SUMMARY.md

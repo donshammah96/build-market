@@ -1,0 +1,155 @@
+{
+  "professionals": [
+    {
+      "id": "prof_001",
+      "name": "Modern Architecture Studio",
+      "description": "Award-winning architectural firm specializing in contemporary residential and commercial design. Over 15 years of experience creating innovative spaces.",
+      "services": ["architecture", "interior-design", "landscape-design"],
+      "location": {
+        "lat": 40.7589,
+        "lon": -73.9851
+      },
+      "address": "123 Design Ave, New York, NY 10001",
+      "city": "New York",
+      "state": "NY",
+      "country": "USA",
+      "rating": 4.8,
+      "reviewCount": 145,
+      "verified": true,
+      "priceRange": "premium",
+      "profileImage": "/images/prof_001.jpg",
+      "portfolio": "/portfolio/prof_001",
+      "yearsOfExperience": 15,
+      "createdAt": "2024-01-01T00:00:00Z",
+      "updatedAt": "2024-01-15T00:00:00Z"
+    },
+    {
+      "id": "prof_002",
+      "name": "Green Building Contractors",
+      "description": "Sustainable construction company focused on eco-friendly building practices and LEED certification.",
+      "services": ["general-contractor", "renovation", "green-building"],
+      "location": {
+        "lat": 34.0522,
+        "lon": -118.2437
+      },
+      "address": "456 Eco Street, Los Angeles, CA 90001",
+      "city": "Los Angeles",
+      "state": "CA",
+      "country": "USA",
+      "rating": 4.9,
+      "reviewCount": 203,
+      "verified": true,
+      "priceRange": "moderate",
+      "profileImage": "/images/prof_002.jpg",
+      "portfolio": "/portfolio/prof_002",
+      "yearsOfExperience": 12,
+      "createdAt": "2024-01-02T00:00:00Z",
+      "updatedAt": "2024-01-16T00:00:00Z"
+    }
+  ],
+  "stores": [
+    {
+      "id": "store_001",
+      "name": "Premium Home Furnishings",
+      "description": "Luxury furniture and home decor retailer offering curated collections from top designers worldwide.",
+      "category": "furniture",
+      "location": {
+        "lat": 40.7128,
+        "lon": -74.0060
+      },
+      "address": "789 Furniture Blvd, New York, NY 10002",
+      "city": "New York",
+      "state": "NY",
+      "rating": 4.7,
+      "reviewCount": 892,
+      "hasDelivery": true,
+      "storeImage": "/images/store_001.jpg",
+      "createdAt": "2024-01-03T00:00:00Z",
+      "updatedAt": "2024-01-17T00:00:00Z"
+    },
+    {
+      "id": "store_002",
+      "name": "BuildMart Supply",
+      "description": "Complete building materials and construction supplies for professionals and DIY enthusiasts.",
+      "category": "building-materials",
+      "location": {
+        "lat": 41.8781,
+        "lon": -87.6298
+      },
+      "address": "321 Supply Way, Chicago, IL 60601",
+      "city": "Chicago",
+      "state": "IL",
+      "rating": 4.5,
+      "reviewCount": 456,
+      "hasDelivery": true,
+      "storeImage": "/images/store_002.jpg",
+      "createdAt": "2024-01-04T00:00:00Z",
+      "updatedAt": "2024-01-18T00:00:00Z"
+    }
+  ],
+  "products": [
+    {
+      "id": "prod_001",
+      "name": "Modern Leather Sofa",
+      "description": "Premium Italian leather sofa with contemporary design. Comfortable seating for 3-4 people.",
+      "category": "furniture",
+      "price": 1299.99,
+      "inStock": true,
+      "storeId": "store_001",
+      "storeName": "Premium Home Furnishings",
+      "images": ["/products/prod_001_1.jpg", "/products/prod_001_2.jpg"],
+      "rating": 4.6,
+      "reviewCount": 78,
+      "createdAt": "2024-01-05T00:00:00Z",
+      "updatedAt": "2024-01-19T00:00:00Z"
+    },
+    {
+      "id": "prod_002",
+      "name": "Professional Power Drill Kit",
+      "description": "Heavy-duty cordless drill with multiple bits and carrying case. Perfect for professionals.",
+      "category": "tools",
+      "price": 189.99,
+      "inStock": true,
+      "storeId": "store_002",
+      "storeName": "BuildMart Supply",
+      "images": ["/products/prod_002_1.jpg"],
+      "rating": 4.8,
+      "reviewCount": 234,
+      "createdAt": "2024-01-06T00:00:00Z",
+      "updatedAt": "2024-01-20T00:00:00Z"
+    }
+  ],
+  "ideaBooks": [
+    {
+      "id": "idea_001",
+      "title": "Contemporary Kitchen Designs",
+      "description": "Explore modern kitchen layouts with sleek appliances and minimalist aesthetics.",
+      "style": "contemporary",
+      "room": "kitchen",
+      "budget": "premium",
+      "images": ["/ideabooks/idea_001_1.jpg", "/ideabooks/idea_001_2.jpg"],
+      "professionalId": "prof_001",
+      "professionalName": "Modern Architecture Studio",
+      "likes": 1245,
+      "saves": 892,
+      "createdAt": "2024-01-07T00:00:00Z",
+      "updatedAt": "2024-01-21T00:00:00Z"
+    },
+    {
+      "id": "idea_002",
+      "title": "Eco-Friendly Home Renovations",
+      "description": "Sustainable renovation ideas using recycled materials and energy-efficient solutions.",
+      "style": "eco-friendly",
+      "room": "whole-home",
+      "budget": "moderate",
+      "images": ["/ideabooks/idea_002_1.jpg"],
+      "professionalId": "prof_002",
+      "professionalName": "Green Building Contractors",
+      "likes": 987,
+      "saves": 654,
+      "createdAt": "2024-01-08T00:00:00Z",
+      "updatedAt": "2024-01-22T00:00:00Z"
+    }
+  ]
+}
+

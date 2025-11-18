@@ -1,0 +1,8 @@
+{
+  "MESSAGING_SERVICE_URL": {
+    "value": "localhost:3010",
+    "type": "string",
+    "id": 0,
+    "isSecret": false
+  }
+}

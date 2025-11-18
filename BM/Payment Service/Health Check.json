@@ -1,0 +1,21 @@
+{
+  "name": "Health Check",
+  "request": {
+    "type": "http",
+    "url": "{{PAYMENT_SERVICE_URL}}/health",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    },
+    "pathVariables": []
+  }
+}
