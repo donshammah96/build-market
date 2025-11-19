@@ -16,7 +16,12 @@ const Homepage = async () => {
         Authorization: `Bearer ${token}`,
       },
     }
-  ).then((res) => res.json());
+  ).then((res) => {
+    if (!res.ok) {
+      throw new Error("Failed to fetch order chart data!");
+    }
+    return res.json();
+  });
   
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4 gap-4">
