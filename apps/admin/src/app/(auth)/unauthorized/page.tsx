@@ -2,6 +2,8 @@
 
 import { useAuth } from "@clerk/nextjs";
 
+export const dynamic = 'force-dynamic';
+
 const Page = () => {
   const { signOut } = useAuth();
   return (
