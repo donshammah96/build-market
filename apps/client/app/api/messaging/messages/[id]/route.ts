@@ -9,7 +9,7 @@ const MESSAGING_SERVICE_URL = process.env.MESSAGING_SERVICE_URL || "http://local
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -21,7 +21,8 @@ export async function GET(
       );
     }
 
-    const messageId = params.id;
+    const { id } = await params;
+    const messageId = id;
 
     // Forward request to messaging service
     const response = await fetch(
@@ -56,7 +57,7 @@ export async function GET(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -68,7 +69,8 @@ export async function DELETE(
       );
     }
 
-    const messageId = params.id;
+    const { id } = await params;
+    const messageId = id;
 
     // Forward request to messaging service
     const response = await fetch(

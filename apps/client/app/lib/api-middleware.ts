@@ -27,7 +27,7 @@ type AuthenticatedHandler<T = any> = (
  * and provides the database user ID in the context
  */
 export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
-  return async (req: NextRequest, routeContext?: { params: Promise<T> }) => {
+  return async (req: NextRequest, routeContext: { params?: Promise<T> } = {}) => {
     try {
       // Get Clerk user ID
       const { userId: clerkId } = await auth();
