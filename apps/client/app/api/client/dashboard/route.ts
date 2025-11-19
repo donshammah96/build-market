@@ -9,8 +9,14 @@ import { checkRateLimit, getRateLimitIdentifier, RateLimits } from '@/app/lib/ra
  * GET /api/client/dashboard
  * Get dashboard data for authenticated client
  */
-export const GET = withAuth(async (request: NextRequest, { dbUserId }) => {
+export async function GET (
+  request: NextRequest, 
+  {params}:{ params: Promise<{ dbUserId: string }> }
+  ) {
   try {
+
+    const { dbUserId } = await params;
+    
     // Rate limiting
     const identifier = getRateLimitIdentifier(request);
     const rateLimitResult = await checkRateLimit(
@@ -75,4 +81,4 @@ export const GET = withAuth(async (request: NextRequest, { dbUserId }) => {
     console.error('Error fetching dashboard data:', error);
     return apiError('Failed to fetch dashboard data');
   }
-});
+};
