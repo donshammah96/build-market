@@ -9,7 +9,7 @@ const MESSAGING_SERVICE_URL = process.env.MESSAGING_SERVICE_URL || "http://local
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { conversationId: string } }
+  { params }: { params: Promise<{ conversationId: string }> }
 ) {
   try {
     const session = await auth();
@@ -21,7 +21,7 @@ export async function GET(
       );
     }
 
-    const conversationId = params.conversationId;
+    const { conversationId } = await params;
     
     // Get query parameters for pagination
     const searchParams = request.nextUrl.searchParams;
