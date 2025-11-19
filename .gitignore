@@ -67,3 +67,5 @@ QUICK_START_GUIDE.md
 fix-migration-permissions.ps1
 SETUP_DATABASE.md
 setup-database.ps1
+create-pr.ps1
+create-pr.sh
