@@ -73,6 +73,9 @@ export function DataTable<TData, TValue>({
               },
             }
           );
+          if (!res.ok) {
+            throw new Error(`Failed to delete user ${userId}`);
+          }
         })
       );
     },

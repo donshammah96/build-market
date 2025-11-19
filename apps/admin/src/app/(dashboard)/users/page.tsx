@@ -14,6 +14,9 @@ const getData = async (): Promise<{ data: User[]; totalCount: number }> => {
         },
       }
     );
+    if (!res.ok) {
+      throw new Error("Failed to fetch users!");
+    }
     const data = await res.json();
     return data;
   } catch (err) {

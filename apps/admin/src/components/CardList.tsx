@@ -132,7 +132,12 @@ const CardList = async ({ title }: { title: string }) => {
   if (title === "Popular Products") {
     products = await fetch(
       `${process.env.NEXT_PUBLIC_PRODUCT_SERVICE_URL}/products?limit=5&popular=true`
-    ).then((res) => res.json());
+    ).then((res) => {
+      if (!res.ok) {
+        throw new Error("Failed to fetch popular products!");
+      }
+      return res.json();
+    });
   } else {
     orders = await fetch(
       `${process.env.NEXT_PUBLIC_ORDER_SERVICE_URL}/orders?limit=5`,
@@ -141,7 +146,12 @@ const CardList = async ({ title }: { title: string }) => {
           Authorization: `Bearer ${token}`,
         },
       }
-    ).then((res) => res.json());
+    ).then((res) => {
+      if (!res.ok) {
+        throw new Error("Failed to fetch orders!");
+      }
+      return res.json();
+    });
   }
 
   return (
