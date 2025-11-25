@@ -38,6 +38,9 @@ Build Market is a comprehensive construction and home improvement marketplace th
 
 ## 🌟 Recent Updates
 
+- ✅ **Resilience Framework** - Comprehensive fault tolerance with timeouts, retries, circuit breakers, and caching
+- ✅ **Observability** - Full metrics collection, structured logging, and correlation IDs for request tracing
+- ✅ **Graceful Degradation** - Fallback mechanisms ensure services degrade gracefully under load
 - ✅ **Refactored API Routes** - Enhanced security, performance, and error handling
 - ✅ **90%+ Test Coverage** - Comprehensive test suite with Vitest
 - ✅ **Performance Optimized** - 50-80% faster queries with strategic database indexes
@@ -489,10 +492,92 @@ Display with pagination & relevance score
 - Decoupled services
 - Used in: Email, notifications, analytics
 
-#### Circuit Breaker (Planned)
+#### Circuit Breaker (Implemented)
 - Fault tolerance for external services
 - Graceful degradation
-- Future enhancement
+- See [Resilience Package](#resilience-framework)
+
+## 🛡️ Resilience Framework
+
+Build Market implements comprehensive resilience patterns from first principles to ensure fault-tolerant, observable, and highly available services.
+
+### Key Features
+
+#### 1. **Timeouts** ⏱️
+Criticality-based timeout strategies prevent hanging requests:
+- **Critical** (3s): Payments, authentication, security
+- **Normal** (10s): User data, listings, searches
+- **Background** (30s): Analytics, logs, notifications
+
+#### 2. **Retry Logic** 🔄
+Intelligent exponential backoff with jitter:
+- Configurable max attempts (default: 3)
+- Exponential backoff (2x multiplier)
+- Jitter (±10%) prevents thundering herd
+- Retryable error filtering
+
+#### 3. **Circuit Breakers** 🔌
+Protect struggling services from cascading failures:
+- Three states: Closed, Open, Half-Open
+- Automatic failure detection and recovery
+- Per-service isolation
+- Default: 5 failures → 60s timeout → recovery
+
+#### 4. **Caching** 💾
+Aggressive multi-layer caching:
+- In-memory LRU cache (1000 entries)
+- Stale-while-revalidate pattern
+- Background revalidation
+- Configurable TTL per operation
+
+#### 5. **Fallbacks** 🎯
+Graceful degradation mechanisms:
+- Static fallback values
+- Fallback functions
+- Cascading fallback chains
+- Non-critical feature degradation
+
+#### 6. **Observability** 📊
+Comprehensive metrics and logging:
+- Operation duration tracking (p50, p95, p99)
+- Success/failure counters
+- Circuit breaker state monitoring
+- Correlation IDs for request tracing
+- Structured logging with context
+
+### Usage Example
+
+```typescript
+import { executeResilient, initializeCorrelationId } from '@/app/lib/resilient-api';
+
+export async function GET(request: NextRequest) {
+  initializeCorrelationId(request);
+  
+  return executeResilient(
+    async () => fetchData(),
+    {
+      criticality: 'normal',
+      operationName: 'fetch-data',
+      cache: { ttl: 60000, staleWhileRevalidate: 30000 },
+      fallback: async () => [],
+    }
+  );
+}
+```
+
+### Monitoring Endpoints
+
+- `GET /api/health` - Service health with circuit breaker states
+- `GET /api/metrics` - Comprehensive metrics (p50/p95/p99 latencies, cache stats)
+
+### Documentation
+
+- [Resilience Summary](./RESILIENCE_SUMMARY.md) - Overview and benefits
+- [Implementation Guide](./RESILIENCE_IMPLEMENTATION.md) - Detailed patterns
+- [Quick Reference](./RESILIENCE_QUICK_REFERENCE.md) - Common patterns
+- [Architecture](./RESILIENCE_ARCHITECTURE.md) - Visual diagrams
+- [Setup Guide](./RESILIENCE_SETUP.md) - Installation instructions
+- [Service Integration](./RESILIENCE_SERVICE_INTEGRATION.md) - Apply to other services
 
 ### Database Schema Highlights
 

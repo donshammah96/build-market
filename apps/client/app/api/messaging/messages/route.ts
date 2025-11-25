@@ -1,54 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/app/lib/auth";
+import { executeResilient, resilientFetch, initializeCorrelationId, apiError, getClientLogger } from '@/app/lib/resilient-api';
 
 const MESSAGING_SERVICE_URL = process.env.MESSAGING_SERVICE_URL || "http://localhost:3010";
+const logger = getClientLogger();
 
 /**
  * POST /api/messaging/messages
- * Send a new message
+ * Send a new message with resilience patterns
  */
 export async function POST(request: NextRequest) {
+  const correlationId = initializeCorrelationId(request);
+
+  const session = await auth();
+
+  if (!session || !session.user?.id) {
+    return apiError("Unauthorized", 401);
+  }
+
   try {
-    const session = await auth();
-
-    if (!session || !session.user?.id) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
     const body = await request.json();
 
     // Ensure sender is the authenticated user
     const messageData = {
       ...body,
-      senderId: session.user.id, // Override to ensure it's the authenticated user
+      senderId: session.user.id,
     };
 
-    // Forward request to messaging service
-    const response = await fetch(`${MESSAGING_SERVICE_URL}/api/messages`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-        "Content-Type": "application/json",
+    // Execute with resilience - critical operation for user experience
+    return executeResilient(
+      async () => {
+        const data = await resilientFetch(
+          `${MESSAGING_SERVICE_URL}/api/messages`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${session.accessToken}`,
+              'X-Correlation-ID': correlationId,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(messageData),
+            timeout: 8000,
+            retry: true,
+            operationName: 'send-message',
+          }
+        );
+        return data;
       },
-      body: JSON.stringify(messageData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: "Failed to send message" }));
-      return NextResponse.json(error, { status: response.status });
-    }
-
-    const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
-  } catch (error) {
-    console.error("Error sending message:", error);
-    return NextResponse.json(
-      { success: false, error: "Internal server error" },
-      { status: 500 }
+      {
+        criticality: 'normal',
+        operationName: 'post-message',
+        // No cache for messages, no fallback - fail if service is down
+      }
     );
+  } catch (error) {
+    logger.error("Error sending message", error as Error, { 
+      correlationId, 
+      userId: session.user.id 
+    });
+    return apiError("Failed to send message", 500);
   }
 }
 

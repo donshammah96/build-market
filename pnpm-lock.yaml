@@ -196,6 +196,9 @@ importers:
       '@repo/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@repo/resilience':
+        specifier: workspace:*
+        version: link:../../packages/resilience
       '@repo/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -782,6 +785,19 @@ importers:
       prisma:
         specifier: ^6.19.0
         version: 6.19.0(typescript@5.9.3)
+
+  packages/resilience:
+    dependencies:
+      lru-cache:
+        specifier: ^11.2.2
+        version: 11.2.2
+    devDependencies:
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
 
   packages/types:
     dependencies:
