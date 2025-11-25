@@ -155,82 +155,21 @@ export default function ChatWindow({
       }),
   });
 
-  // WebSocket setup
+  // Polling for new messages (MVP replacement for Socket.io)
   useEffect(() => {
-    if (!session?.accessToken) return;
+    const interval = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+    }, 5000); // Poll every 5 seconds
 
-    const SOCKET_URL = process.env.NEXT_PUBLIC_MESSAGING_SERVICE_URL || "http://localhost:3010";
-    const newSocket = io(SOCKET_URL, {
-      auth: {
-        token: session.accessToken,
-      },
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5,
-    });
+    return () => clearInterval(interval);
+  }, [conversationId, queryClient]);
 
-    newSocket.on("connect", () => {
-      console.log("Socket connected");
-      newSocket.emit("join:conversation", conversationId);
-    });
-
-    newSocket.on("authenticated", (data: { userId: string; conversationCount: number }) => {
-      console.log("Socket authenticated:", data);
-    });
-
-    // New message received
-    newSocket.on("message:new", ({ message }: { message: Message; conversation: Conversation }) => {
-      queryClient.setQueryData(["messages", conversationId], (old: any) => ({
-        ...old,
-        items: [...(old?.items || []), message],
-      }));
-
-      // Play notification sound (optional)
-      if (message.senderId !== session.user?.id) {
-        // new Audio('/notification.mp3').play().catch(() => {});
-      }
-    });
-
-    // Typing indicators
-    newSocket.on("typing:start", ({ userId }: { conversationId: string; userId: string }) => {
-      if (userId !== session.user?.id) {
-        setOtherUserTyping(true);
-      }
-    });
-
-    newSocket.on("typing:stop", ({ userId }: { conversationId: string; userId: string }) => {
-      if (userId !== session.user?.id) {
-        setOtherUserTyping(false);
-      }
-    });
-
-    // Messages marked as read
-    newSocket.on("messages:read", ({ userId }: { conversationId: string; userId: string }) => {
-      if (userId !== session.user?.id) {
-        queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
-      }
-    });
-
-    newSocket.on("error", ({ message }: { message: string }) => {
-      console.error("Socket error:", message);
-      toast({
-        variant: "destructive",
-        title: "Connection error",
-        description: message,
-      });
-    });
-
-    newSocket.on("disconnect", () => {
-      console.log("Socket disconnected");
-    });
-
-    setSocket(newSocket);
-
-    return () => {
-      newSocket.emit("leave:conversation", conversationId);
-      newSocket.disconnect();
-    };
-  }, [session?.accessToken, conversationId, queryClient, toast, session?.user?.id]);
+  /* 
+  // Socket.io removed for MVP
+  useEffect(() => {
+    // ... socket code ...
+  }, ...); 
+  */
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -311,7 +250,10 @@ export default function ChatWindow({
     return message.readBy.some((id) => id !== session?.user?.id);
   };
 
-  if (error) {
+  // Check if we have cached data but are currently in error state
+  const isOffline = !!error && messages.length > 0;
+
+  if (error && messages.length === 0) {
     return (
       <Card className="h-[600px] flex items-center justify-center">
         <div className="text-center">
@@ -328,29 +270,39 @@ export default function ChatWindow({
     <Card className="h-[600px] flex flex-col">
       {/* Header */}
       <CardHeader className="border-b py-3">
-        <div className="flex items-center gap-3">
-          <Avatar>
-            <AvatarImage src={otherUserAvatar} alt={otherUserName} />
-            <AvatarFallback>{getInitials(otherUserName)}</AvatarFallback>
-          </Avatar>
-          <div className="flex-1">
-            <CardTitle className="text-lg">{otherUserName}</CardTitle>
-            <AnimatePresence mode="wait">
-              {otherUserTyping && (
-                <motion.p
-                  initial={{ opacity: 0, y: -5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  className="text-xs text-muted-foreground"
-                >
-                  typing...
-                </motion.p>
-              )}
-            </AnimatePresence>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <Avatar>
+              <AvatarImage src={otherUserAvatar} alt={otherUserName} />
+              <AvatarFallback>{getInitials(otherUserName)}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <CardTitle className="text-lg">{otherUserName}</CardTitle>
+              <AnimatePresence mode="wait">
+                {otherUserTyping && (
+                  <motion.p
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    className="text-xs text-muted-foreground"
+                  >
+                    typing...
+                  </motion.p>
+                )}
+              </AnimatePresence>
+            </div>
+            <Badge variant="outline" className="text-xs">
+              {messages.length} messages
+            </Badge>
           </div>
-          <Badge variant="outline" className="text-xs">
-            {messages.length} messages
-          </Badge>
+          
+          {/* Offline Banner */}
+          {isOffline && (
+            <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-xs px-3 py-1 rounded-md flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              You are in offline mode. Some messages may not be up to date.
+            </div>
+          )}
         </div>
       </CardHeader>
 
@@ -511,8 +463,8 @@ export default function ChatWindow({
               type="text"
               value={newMessage}
               onChange={(e) => handleTyping(e.target.value)}
-              placeholder="Type a message..."
-              disabled={sendMutation.isPending}
+              placeholder={isOffline ? "You are offline..." : "Type a message..."}
+              disabled={sendMutation.isPending || isOffline}
               className="flex-1"
               maxLength={1000}
             />
@@ -537,7 +489,7 @@ export default function ChatWindow({
           </div>
           <Button
             type="submit"
-            disabled={!newMessage.trim() || sendMutation.isPending}
+            disabled={!newMessage.trim() || sendMutation.isPending || isOffline}
             className="shrink-0"
           >
             {sendMutation.isPending ? (

@@ -91,7 +91,7 @@ export interface ApiResponse<T> {
 
 export interface PaginatedResponse<T> {
   success: boolean;
-  data: {
+  data?: {
     items: T[];
     pagination: {
       page: number;
@@ -100,6 +100,8 @@ export interface PaginatedResponse<T> {
       totalPages: number;
     };
   };
+  error?: string;
+  message?: string;
 }
 
 // Legacy types (for backward compatibility)
