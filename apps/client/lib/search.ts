@@ -1,31 +1,24 @@
 import { SearchFilters } from "@repo/types";
+import { searchProfessionalsAction } from "@/app/actions/search";
 
 export async function searchProfessionals(query: string, filters?: SearchFilters) {
-    const params = new URLSearchParams({
-        q: query, 
-        ...(filters?.location && { location: filters.location} ),
-        ...(filters?.radius && { radius: filters.radius.toString() }),
-        ...(filters?.minRating && { minRating: filters.minRating.toString() }),
-        ...(filters?.services && { services: filters.services.join(",") })
-        });
-
-        const response = await fetch (
-            `${process.env.NEXT_PUBLIC_SEARCH_SERVICE_URL}/api/search/professionals?${params}`
-        );
-
-        return response.json();
-    }
+    // Note: filters are not yet implemented in the MVP action
+    const results = await searchProfessionalsAction(query);
+    return {
+        success: true,
+        data: results
+    };
+}
 
 export async function autoComplete(query: string, type: string = "all") {
-    const params = new URLSearchParams({
-        q: query,
-        type,
-        limit: "5",
-    });
-
-    const response = await fetch(
-        `${process.env.NEXT_PUBLIC_SEARCH_SERVICE_URL}/api/search/autocomplete?${params}`
-    );
-
-    return response.json();
+    // Reuse search action for autocomplete in MVP
+    const results = await searchProfessionalsAction(query);
+    return {
+        success: true,
+        data: results.map(p => ({
+            id: p.userId,
+            text: p.companyName,
+            type: 'professional'
+        }))
+    };
 }
