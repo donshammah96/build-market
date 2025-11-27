@@ -65,7 +65,11 @@ export default function OnboardingPage() {
         if (response.ok) {
           const data = await response.json();
           if (data.isProfileComplete) {
-            router.push(ROUTES.userDashboard);
+            if (data.role === 'professional') {
+              router.push(ROUTES.professionalDashboard);
+            } else {
+              router.push(ROUTES.userDashboard);
+            }
           }
         }
       } catch (err) {
@@ -124,7 +128,11 @@ export default function OnboardingPage() {
 
         if (response.ok) {
           // Success! Redirect to dashboard
-          router.push(ROUTES.userDashboard);
+          if (role === 'professional') {
+            router.push(ROUTES.professionalDashboard);
+          } else {
+            router.push(ROUTES.userDashboard);
+          }
           return;
         }
 

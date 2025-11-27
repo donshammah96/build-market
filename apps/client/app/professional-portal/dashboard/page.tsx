@@ -22,7 +22,7 @@ import {
   Bell
 } from "lucide-react";
 
-import { Navbar } from "@/components/layout/NavBar";
+import { ProfessionalNavbar } from "@/components/layout/ProfessionalNavbar";
 import { Footer } from "@/components/layout/Footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -156,12 +156,12 @@ export default function ProfessionalDashboardPage() {
     }, 1000);
   }, []);
 
-  const firstName = user?.firstName || user?.username || "Professional";
+  const displayName = user?.fullName || user?.username || "Professional";
 
   if (!isLoaded || loading) {
     return (
       <>
-        <Navbar />
+        <ProfessionalNavbar />
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
           <div className="container mx-auto px-4 py-12 pt-24">
             <div className="space-y-8">
@@ -287,7 +287,7 @@ export default function ProfessionalDashboardPage() {
 
   return (
     <>
-      <Navbar />
+      <ProfessionalNavbar />
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
         <div className="container mx-auto px-4 py-12 pt-24">
           {/* Welcome Header */}
@@ -306,7 +306,7 @@ export default function ProfessionalDashboardPage() {
                   <Sparkles className="h-8 w-8 text-blue-500" />
                 </motion.div>
                 <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-900 to-blue-700 bg-clip-text text-transparent">
-                  Welcome back, {firstName}!
+                  Welcome back, {displayName}!
                 </h1>
               </div>
               <div className="flex items-center gap-4">
@@ -583,7 +583,6 @@ export default function ProfessionalDashboardPage() {
           </motion.div>
         </div>
       </div>
-      <Footer />
     </>
   );
 }
