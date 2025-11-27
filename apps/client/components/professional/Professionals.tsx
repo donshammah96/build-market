@@ -5,6 +5,13 @@ import ProfessionalCard from "./ProfessionalCard";
 import { ProfessionalCardData } from "../../types/professional";
 import Link from "next/link";
 import { Button } from "../ui/button";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "../ui/carousel";
 
 // Helper function to style last word(s) in emerald
 const renderTitleWithEmerald = (title: string) => {
@@ -111,16 +118,31 @@ export function Professionals({ professionals = defaultProfessionals, showViewAl
           Showcasing professionals in the industry
         </motion.p>
         
-        <div className="grid md:grid-cols-2 gap-6">
-          {professionals.map((professional, index) => (
-            <ProfessionalCard
-              key={professional.id}
-              professional={professional}
-              index={index}
-              isInView={isInView}
-            />
-          ))}
-        </div>
+        <Carousel
+          opts={{
+            align: "start",
+            loop: true,
+          }}
+          className="w-full"
+        >
+          <CarouselContent className="-ml-2 md:-ml-4">
+            {professionals.map((professional, index) => (
+              <CarouselItem key={professional.id} className="pl-2 md:pl-4 md:basis-1/2 lg:basis-1/3">
+                <div className="h-full">
+                  <ProfessionalCard
+                    professional={professional}
+                    index={index}
+                    isInView={isInView}
+                  />
+                </div>
+              </CarouselItem>
+            ))}
+          </CarouselContent>
+          <div className="hidden md:block">
+            <CarouselPrevious />
+            <CarouselNext />
+          </div>
+        </Carousel>
 
         {showViewAll && (
           <motion.div

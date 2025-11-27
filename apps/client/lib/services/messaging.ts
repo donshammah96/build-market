@@ -1,9 +1,8 @@
 import { prisma } from '../db';
 
 export async function createThread(participantIds: string[], projectId?: string) {
-  return await prisma.messageThread.create({
+  const thread = await prisma.messageThread.create({
     data: {
-      participants: participantIds,
       projectId,
       users: {
         connect: participantIds.map((id) => ({ id })),
@@ -13,6 +12,11 @@ export async function createThread(participantIds: string[], projectId?: string)
       users: true,
     },
   });
+
+  return {
+    ...thread,
+    participants: thread.users.map(u => u.id),
+  };
 }
 
 export async function sendMessage(threadId: string, senderId: string, content: string) {
@@ -37,7 +41,7 @@ export async function sendMessage(threadId: string, senderId: string, content: s
 }
 
 export async function getThread(threadId: string) {
-  return await prisma.messageThread.findUnique({
+  const thread = await prisma.messageThread.findUnique({
     where: { id: threadId },
     include: {
       messages: {
@@ -46,13 +50,22 @@ export async function getThread(threadId: string) {
       users: true,
     },
   });
+
+  if (!thread) return null;
+
+  return {
+    ...thread,
+    participants: thread.users.map(u => u.id),
+  };
 }
 
 export async function getUserThreads(userId: string) {
-  return await prisma.messageThread.findMany({
+  const threads = await prisma.messageThread.findMany({
     where: {
-      participants: {
-        has: userId,
+      users: {
+        some: {
+          id: userId,
+        },
       },
     },
     orderBy: {
@@ -62,6 +75,11 @@ export async function getUserThreads(userId: string) {
       users: true,
     },
   });
+
+  return threads.map(thread => ({
+    ...thread,
+    participants: thread.users.map(u => u.id),
+  }));
 }
 
 export async function markThreadAsRead(threadId: string, userId: string) {
