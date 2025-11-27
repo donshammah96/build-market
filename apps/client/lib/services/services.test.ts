@@ -35,14 +35,14 @@ describe('Messaging Service', () => {
   });
 
   it('should create a thread', async () => {
-    const mockThread = { id: 'thread-1', participants: ['user-1', 'user-2'] };
+    const mockUsers = [{ id: 'user-1' }, { id: 'user-2' }];
+    const mockThread = { id: 'thread-1', users: mockUsers };
     prismaMock.messageThread.create.mockResolvedValue(mockThread);
 
     const result = await createThread(['user-1', 'user-2']);
 
     expect(prismaMock.messageThread.create).toHaveBeenCalledWith({
       data: {
-        participants: ['user-1', 'user-2'],
         projectId: undefined,
         users: {
           connect: [{ id: 'user-1' }, { id: 'user-2' }],
@@ -50,7 +50,10 @@ describe('Messaging Service', () => {
       },
       include: { users: true },
     });
-    expect(result).toEqual(mockThread);
+    expect(result).toEqual({
+      ...mockThread,
+      participants: ['user-1', 'user-2'],
+    });
   });
 
   it('should send a message and update thread', async () => {

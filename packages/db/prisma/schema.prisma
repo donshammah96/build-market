@@ -71,10 +71,12 @@ model User {
   projects            Project[]            @relation("ClientProjects")
   orders              Order[]              @relation("ClientOrders")
   reviews             Review[]             @relation("Reviewer")
-  ideaBooks           IdeaBook[]
+  ideaBooks           IdeaBook[]           @relation("IdeaBookOwner")
+  sharedIdeaBooks     IdeaBook[]           @relation("IdeaBookShares")
   messageThreads      MessageThread[]      @relation("MessageThreadUsers")
   messages            Message[]            @relation("Sender")
   analytics           UserAnalytics[]
+  verifiedCertificates Certificate[]       @relation("CertificateVerifier")
 
   @@index([clerkId])
   @@index([email])
@@ -135,7 +137,7 @@ model Project {
   title          String
   description    String?
   status         ProjectStatus        @default(planning)
-  budget         Float?
+  budget         Decimal?             @db.Decimal(10, 2)
   startDate      DateTime?
   endDate        DateTime?
   createdAt      DateTime             @default(now())
@@ -164,11 +166,11 @@ model ProjectMilestone {
 model IdeaBook {
   id          String   @id @default(uuid())
   clientId    String
-  client      User     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client      User     @relation(fields: [clientId], references: [id], onDelete: Cascade, name: "IdeaBookOwner")
   title       String
   description String?
   items       Json // Stores IdeaBookItem array as JSONB
-  sharedWith  String[] // UUIDs of users
+  sharedWith  User[]   @relation("IdeaBookShares")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -213,17 +215,18 @@ model Store {
 }
 
 model Product {
-  id          String   @id @default(uuid())
+  id          String      @id @default(uuid())
   storeId     String
-  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store       Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
   name        String
   description String?
-  price       Float
+  price       Decimal     @db.Decimal(10, 2)
   imageUrl    String?
   category    String
-  inStock     Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  inStock     Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  orderItems  OrderItem[]
 }
 
 model Order {
@@ -234,8 +237,8 @@ model Order {
   store          Store?               @relation(fields: [storeId], references: [id], onDelete: SetNull, name: "StoreOrders")
   professionalId String?
   professional   ProfessionalProfile? @relation(fields: [professionalId], references: [userId], onDelete: SetNull, name: "ProfessionalOrders")
-  items          Json // Stores OrderItem array as JSONB
-  totalAmount    Float
+  items          OrderItem[]
+  totalAmount    Decimal              @db.Decimal(10, 2)
   status         OrderStatus          @default(pending)
   paymentMethod  String?
   createdAt      DateTime             @default(now())
@@ -243,11 +246,27 @@ model Order {
   payments       Payment[]
 }
 
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  name      String // Snapshot of product name
+  price     Decimal  @db.Decimal(10, 2) // Snapshot of product price
+  quantity  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([productId])
+}
+
 model Payment {
   id            String        @id @default(uuid())
   orderId       String
   order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  amount        Float
+  amount        Decimal       @db.Decimal(10, 2)
   transactionId String        @unique
   status        PaymentStatus @default(pending)
   createdAt     DateTime      @default(now())
@@ -272,7 +291,6 @@ model Portfolio {
 
 model MessageThread {
   id            String    @id @default(uuid())
-  participants  String[] // UUIDs of users
   users         User[]    @relation("MessageThreadUsers")
   projectId     String?
   project       Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -337,7 +355,8 @@ model Certificate {
   fileUrl            String
   verificationStatus CertificateVerificationStatus @default(pending)
   verifiedAt         DateTime?
-  verifiedBy         String? // Admin userId who verified
+  verifiedById       String?
+  verifiedBy         User?                         @relation(fields: [verifiedById], references: [id], onDelete: SetNull, name: "CertificateVerifier")
   notes              String?
   createdAt          DateTime                      @default(now())
   updatedAt          DateTime                      @updatedAt
@@ -346,5 +365,5 @@ model Certificate {
   @@index([createdAt])
   @@index([updatedAt])
   @@index([verificationStatus])
-  @@index([verifiedBy])
+  @@index([verifiedById])
 }
