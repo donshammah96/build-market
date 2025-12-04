@@ -41,7 +41,7 @@ export const GET = withAuth<{ id: string }>(async (req: NextRequest, { clerkId, 
       return apiError("Project not found", HttpStatus.NOT_FOUND);
     }
 
-    return apiSuccess({ success: true, data: project });
+    return apiSuccess(project);
   } catch (error) {
     console.error("Error fetching project:", error);
     return apiError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR);
@@ -97,7 +97,7 @@ export const PATCH = withAuth<{ id: string }>(async (req: NextRequest, { clerkId
       },
     });
 
-    return apiSuccess({ success: true, data: updatedProject });
+    return apiSuccess(updatedProject);
   } catch (error) {
     console.error("Error updating project:", error);
     return apiError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR);
@@ -126,7 +126,7 @@ export const DELETE = withAuth<{ id: string }>(async (req: NextRequest, { clerkI
       },
     });
 
-    return apiSuccess({ success: true, message: "Project deleted successfully" });
+    return apiSuccess({ message: "Project deleted successfully" });
   } catch (error) {
     console.error("Error deleting project:", error);
     return apiError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR);

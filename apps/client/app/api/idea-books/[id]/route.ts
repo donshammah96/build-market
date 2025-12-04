@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { z } from 'zod';
-import { prisma } from '@repo/db'; // Adjust path based on your monorepo structure
+import { prisma } from '@repo/db';
 import { 
   checkRateLimit, 
   getRateLimitIdentifier, 
@@ -16,18 +16,17 @@ import {
 
 const logger = getClientLogger();
 
-// --- Validation Schemas ---
-const createIdeaBookSchema = z.object({
-  title: z.string().min(3, "Title must be at least 3 characters").max(100),
+const updateIdeaBookSchema = z.object({
+  title: z.string().min(3, "Title must be at least 3 characters").max(100).optional(),
   description: z.string().max(500).optional(),
 });
 
-/**
- * GET /api/idea-books
- * Fetch all idea books for the authenticated user.
- * Supports simple search filtering.
- */
-export async function GET(request: NextRequest): Promise<NextResponse> {
+export async function GET(
+  request: NextRequest,
+  props: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  const params = await props.params;
+  const id = params.id;
   const correlationId = initializeCorrelationId(request);
   const { userId } = await auth();
 
@@ -35,93 +34,41 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return apiError('Unauthorized', 401);
   }
 
-  // Rate Limiting (Read Operation)
-  const identifier = getRateLimitIdentifier(request);
-  const rateLimitResult = await checkRateLimit(
-    `idea-books-read:${identifier}`,
-    RateLimits.READ.limit,
-    RateLimits.READ.window
-  );
-
-  if (!rateLimitResult.success) {
-    logger.warn('Rate limit exceeded for GET idea-books', { correlationId, identifier });
-    return apiError('Too many requests', 429);
-  }
-
-  const searchParams = request.nextUrl.searchParams;
-  const search = searchParams.get('search')?.trim();
-
   return executeResilient(
     async () => {
-      // Find the internal DB User ID based on Clerk ID
       const user = await prisma.user.findUnique({
         where: { clerkId: userId },
         select: { id: true }
       });
 
       if (!user) {
-        logger.warn('User found in Clerk but not in DB', { correlationId, clerkId: userId });
-        return apiError('User profile not found', 404);
+        return apiError('User not found', 404);
       }
 
-      const ideaBooks = await prisma.ideaBook.findMany({
-        where: {
-          clientId: user.id,
-          ...(search && {
-            OR: [
-              { title: { contains: search, mode: 'insensitive' } },
-              { description: { contains: search, mode: 'insensitive' } },
-            ],
-          }),
-        },
-        orderBy: { updatedAt: 'desc' },
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          items: true, // JSONB field
-          createdAt: true,
-          updatedAt: true,
-          _count: {
-            select: { sharedWith: true } // Optional: see how many people it's shared with
-          }
-        }
+      const ideaBook = await prisma.ideaBook.findUnique({
+        where: { id },
       });
 
-      // Transform JSONB items into a frontend-friendly format (e.g., getting counts)
-      const transformedBooks = ideaBooks.map(book => {
-        const itemsList = Array.isArray(book.items) ? book.items : [];
-        return {
-          id: book.id,
-          title: book.title,
-          description: book.description,
-          items: itemsList, // Pass full items or just a preview slice if payload is large
-          itemCount: itemsList.length,
-          createdAt: book.createdAt,
-          updatedAt: book.updatedAt,
-        };
-      });
+      if (!ideaBook) {
+        return apiError('Idea book not found', 404);
+      }
 
-      logger.info('Idea Books fetched successfully', { 
-        correlationId, 
-        userId: user.id, 
-        count: transformedBooks.length 
-      });
+      if (ideaBook.clientId !== user.id) {
+        return apiError('Forbidden', 403);
+      }
 
-      return transformedBooks;
+      return ideaBook;
     },
-    {
-      operationName: 'fetch-idea-books',
-      criticality: 'critical', // User content is high criticality
-    }
+    { operationName: 'get-idea-book' }
   );
 }
 
-/**
- * POST /api/idea-books
- * Create a new idea book linked to the user's profile.
- */
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export async function PATCH(
+  request: NextRequest,
+  props: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  const params = await props.params;
+  const id = params.id;
   const correlationId = initializeCorrelationId(request);
   const { userId } = await auth();
 
@@ -129,61 +76,91 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return apiError('Unauthorized', 401);
   }
 
-  // Rate Limiting (Write Operation - Stricter limits)
-  const identifier = getRateLimitIdentifier(request);
-  const rateLimitResult = await checkRateLimit(
-    `idea-books-write:${identifier}`,
-    RateLimits.WRITE.limit,
-    RateLimits.WRITE.window
-  );
-
-  if (!rateLimitResult.success) {
-    return apiError('Too many requests', 429);
-  }
-
   return executeResilient(
     async () => {
-      // 1. Parse Body
       const body = await request.json();
-      const validation = createIdeaBookSchema.safeParse(body);
+      const validation = updateIdeaBookSchema.safeParse(body);
 
       if (!validation.success) {
         return apiError('Invalid input data', 400, validation.error.issues);
       }
 
-      const { title, description } = validation.data;
-
-      // 2. Resolve User
       const user = await prisma.user.findUnique({
         where: { clerkId: userId },
         select: { id: true }
       });
 
       if (!user) {
-        return apiError('User profile not found. Please complete onboarding.', 404);
+        return apiError('User not found', 404);
       }
 
-      // 3. Create Book Transactionally
-      const newBook = await prisma.ideaBook.create({
-        data: {
-          title,
-          description,
-          clientId: user.id,
-          items: [], // Initialize empty JSON array
-        },
+      const ideaBook = await prisma.ideaBook.findUnique({
+        where: { id },
       });
 
-      logger.info('Idea Book created successfully', { 
-        correlationId, 
-        bookId: newBook.id,
-        userId: user.id 
+      if (!ideaBook) {
+        return apiError('Idea book not found', 404);
+      }
+
+      if (ideaBook.clientId !== user.id) {
+        return apiError('Forbidden', 403);
+      }
+
+      const updatedBook = await prisma.ideaBook.update({
+        where: { id },
+        data: validation.data,
       });
 
-      return newBook;
+      logger.info('Idea book updated', { correlationId, bookId: id });
+      return updatedBook;
     },
-    {
-      operationName: 'create-idea-book',
-      criticality: 'critical',
-    }
+    { operationName: 'update-idea-book' }
+  );
+}
+
+export async function DELETE(
+  request: NextRequest,
+  props: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  const params = await props.params;
+  const id = params.id;
+  const correlationId = initializeCorrelationId(request);
+  const { userId } = await auth();
+
+  if (!userId) {
+    return apiError('Unauthorized', 401);
+  }
+
+  return executeResilient(
+    async () => {
+      const user = await prisma.user.findUnique({
+        where: { clerkId: userId },
+        select: { id: true }
+      });
+
+      if (!user) {
+        return apiError('User not found', 404);
+      }
+
+      const ideaBook = await prisma.ideaBook.findUnique({
+        where: { id },
+      });
+
+      if (!ideaBook) {
+        return apiError('Idea book not found', 404);
+      }
+
+      if (ideaBook.clientId !== user.id) {
+        return apiError('Forbidden', 403);
+      }
+
+      await prisma.ideaBook.delete({
+        where: { id },
+      });
+
+      logger.info('Idea book deleted', { correlationId, bookId: id });
+      return { success: true };
+    },
+    { operationName: 'delete-idea-book' }
   );
 }
