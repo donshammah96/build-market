@@ -34,6 +34,19 @@ export async function GET(
     return apiError('Unauthorized', 401);
   }
 
+  // Rate Limiting (Read Operation)
+  const identifier = getRateLimitIdentifier(request);
+  const rateLimitResult = await checkRateLimit(
+    `idea-books-read:${identifier}`,
+    RateLimits.READ.limit,
+    RateLimits.READ.window
+  );
+
+  if (!rateLimitResult.success) {
+    logger.warn('Rate limit exceeded for GET idea-books/[id]', { correlationId, identifier });
+    return apiError('Too many requests', 429);
+  }
+
   return executeResilient(
     async () => {
       const user = await prisma.user.findUnique({
@@ -74,6 +87,19 @@ export async function PATCH(
 
   if (!userId) {
     return apiError('Unauthorized', 401);
+  }
+
+  // Rate Limiting (Write Operation - Stricter limits)
+  const identifier = getRateLimitIdentifier(request);
+  const rateLimitResult = await checkRateLimit(
+    `idea-books-write:${identifier}`,
+    RateLimits.WRITE.limit,
+    RateLimits.WRITE.window
+  );
+
+  if (!rateLimitResult.success) {
+    logger.warn('Rate limit exceeded for PATCH idea-books/[id]', { correlationId, identifier });
+    return apiError('Too many requests', 429);
   }
 
   return executeResilient(
@@ -129,6 +155,19 @@ export async function DELETE(
 
   if (!userId) {
     return apiError('Unauthorized', 401);
+  }
+
+  // Rate Limiting (Write Operation - Stricter limits)
+  const identifier = getRateLimitIdentifier(request);
+  const rateLimitResult = await checkRateLimit(
+    `idea-books-write:${identifier}`,
+    RateLimits.WRITE.limit,
+    RateLimits.WRITE.window
+  );
+
+  if (!rateLimitResult.success) {
+    logger.warn('Rate limit exceeded for DELETE idea-books/[id]', { correlationId, identifier });
+    return apiError('Too many requests', 429);
   }
 
   return executeResilient(
