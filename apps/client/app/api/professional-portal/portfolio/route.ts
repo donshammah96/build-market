@@ -39,7 +39,7 @@ export const GET = withAuth(async (req: NextRequest, { clerkId, dbUserId }) => {
       },
     });
 
-    return apiSuccess({ success: true, data: portfolioItems });
+    return apiSuccess(portfolioItems);
   } catch (error) {
     console.error("Error fetching portfolio:", error);
     return apiError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR);
@@ -82,7 +82,7 @@ export const POST = withAuth(async (req: NextRequest, { clerkId, dbUserId }) => 
       },
     });
 
-    return apiSuccess({ success: true, data: portfolioItem });
+    return apiSuccess(portfolioItem);
   } catch (error) {
     console.error("Error creating portfolio item:", error);
     return apiError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR);

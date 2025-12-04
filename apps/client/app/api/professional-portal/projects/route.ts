@@ -39,7 +39,7 @@ export const GET = withAuth(async (req: NextRequest, { clerkId, dbUserId }) => {
       },
     });
 
-    return apiSuccess({ success: true, data: projects });
+    return apiSuccess(projects);
   } catch (error) {
     console.error("Error fetching projects:", error);
     return apiError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR);
@@ -81,7 +81,7 @@ export const POST = withAuth(async (req: NextRequest, { clerkId, dbUserId }) => 
       },
     });
 
-    return apiSuccess({ success: true, data: project });
+    return apiSuccess(project);
   } catch (error) {
     console.error("Error creating project:", error);
     return apiError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR);

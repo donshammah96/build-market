@@ -67,7 +67,7 @@ export const GET = withAuth(async (req: NextRequest, { clerkId, dbUserId }) => {
       },
     });
 
-    return apiSuccess({ success: true, data: events });
+    return apiSuccess(events);
   } catch (error) {
     console.error("Error fetching events:", error);
     return apiError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR);
@@ -111,7 +111,7 @@ export const POST = withAuth(async (req: NextRequest, { clerkId, dbUserId }) => 
       },
     });
 
-    return apiSuccess({ success: true, data: event });
+    return apiSuccess(event);
   } catch (error) {
     console.error("Error creating event:", error);
     return apiError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR);
