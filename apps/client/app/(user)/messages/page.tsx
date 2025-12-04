@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { MessageSquare, Search, MoreVertical, Phone, Video, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
