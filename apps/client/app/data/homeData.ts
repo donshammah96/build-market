@@ -1,13 +1,50 @@
-import { ROUTES } from '../lib/links';
+import { ROUTES } from '@/lib/links'
 
 export interface Review {
+  id: string;
   quote: string;
   name: string;
-  description: string;
+  location: string; // Added location for local context
+  role: string; // e.g., Homeowner, Developer
   image: string;
-  imageAlt: string;
+  rating: number; // Added rating for trust
   href: string;
 }
+
+// ... keep other interfaces (Feature, Store, Professional) as they were ...
+
+export const reviews: Review[] = [
+  { 
+    id: '1',
+    quote: "Finding a reliable contractor in Nairobi used to be a nightmare. Build Market connected me with a vetted team that finished my Kileleshwa apartment renovation two weeks early.", 
+    name: 'Pamela Njeru', 
+    location: 'Kileleshwa, Nairobi',
+    role: 'Homeowner',
+    image: '/customers/pamela.jpg', // Ensure you have a placeholder
+    rating: 5,
+    href: ROUTES.reviews 
+  },
+  { 
+    id: '2',
+    quote: "As a diaspora investor, I needed someone I could trust to manage my build in Nakuru while I was in the UK. The transparency this platform offers is unmatched.", 
+    name: 'Catherine Mwende', 
+    location: 'Nakuru (Diaspora Client)',
+    role: 'Property Investor',
+    image: '/customers/catherine.jpg', 
+    rating: 5,
+    href: ROUTES.reviews 
+  },
+  { 
+    id: '3',
+    quote: "The quality of architects on this platform is top-tier. I found a landscape designer who completely transformed our Karen garden using native plants.", 
+    name: 'Khalid Galileo', 
+    location: 'Karen, Nairobi',
+    role: 'Homeowner',
+    image: '/customers/khalid.jpg', 
+    rating: 4,
+    href: ROUTES.reviews 
+  },
+];
 
 export interface Feature {
   title: string;
@@ -33,11 +70,6 @@ export interface Professional {
   href: string;
 }
 
-export const reviews: Review[] = [
-  { quote: '“Excellent service!”', name: 'Name', description: 'Description', image: '/customers/amy-burns.png', imageAlt: 'Amy Burns', href: ROUTES.speakWithAdvisor },
-  { quote: '“Best experience ever!”', name: 'Name', description: 'Description', image: '/customers/balazs-orban.png', imageAlt: 'Balazs Orban', href: ROUTES.ideaBooks },
-  { quote: '“Great products and service!”', name: 'Name', description: 'Description', image: '/customers/lee-robinson.png', imageAlt: 'Lee Robinson', href: ROUTES.findProfessional },
-];
 
 export const features: Feature[] = [
   { title: 'Idea Books', description: 'Browse idea books to find inspiration', image: '/design.png', imageAlt: 'Idea Books', href: ROUTES.ideaBooks },

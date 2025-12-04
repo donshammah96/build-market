@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import Link from "next/link";
+import { ROUTES } from "@/lib/links";
 
 export default function SignInPage() {
   const [loading, setLoading] = useState<string | null>(null);
@@ -15,7 +16,7 @@ export default function SignInPage() {
       setLoading(provider);
       setError("");
       await signIn(provider, { 
-        callbackUrl: "/onboarding",
+        callbackUrl: ROUTES.onboarding,
         redirect: true 
       });
     } catch (err) {
@@ -136,7 +137,7 @@ export default function SignInPage() {
           <div className="text-center text-sm">
             <span className="text-gray-600">Don't have an account? </span>
             <Link
-              href="/sign-up"
+              href={ROUTES.signUp}
               className="font-medium text-emerald-600 hover:text-emerald-500"
             >
               Sign up for free

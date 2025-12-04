@@ -12,16 +12,18 @@ import { Footer } from '../components/layout/Footer';
 
 export default function Home() {
   const [searchTerm, setSearchTerm] = useState('');
-  
+
   return (
     <main className="overflow-hidden mx-auto max-w-screen-2xl bg-white">
       <Navbar />
-      <Hero />
-      <FeaturesSection searchTerm={searchTerm} />
-      <Professionals />
-      <VendorsSection searchTerm={searchTerm} />
-      <ReviewsSection searchTerm={searchTerm} />
-      <CTA />
+        <>
+          <Hero />
+          <FeaturesSection searchTerm={searchTerm} />
+          <Professionals />
+          <VendorsSection searchTerm={searchTerm} />
+          <ReviewsSection searchTerm={searchTerm} />
+          <CTA />
+        </>
       <Footer />
     </main>
   );

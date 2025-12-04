@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from "next/link";
 import { Button } from "../ui/button";
-import { Menu, X, LayoutDashboard } from "lucide-react";
+import { Menu, X, LayoutDashboard, UserCircle } from "lucide-react";
 import {
   SignedIn,
   SignedOut,
@@ -12,8 +12,9 @@ import {
   UserButton,
   useUser,
 } from "@clerk/nextjs";
-import { ROUTES } from '../../app/lib/links';
+import { ROUTES } from '@/lib/links';
 import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 const navItems = [
   { label: "Home", href: ROUTES.home },
@@ -22,19 +23,27 @@ const navItems = [
   { label: "Guidance", href: ROUTES.speakWithAdvisor },
 ];
 
-export const Navbar: React.FC = () => {
+interface NavbarProps {
+  onSignUpClick?: () => void;
+  onLogoClick?: () => void;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({ onLogoClick }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user } = useUser();
 
-  // Get user role from Clerk metadata
   const userRole = user?.publicMetadata?.role as string | undefined;
 
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 50);
+    const handleScroll = () => setIsScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Dynamic classes for text visibility
+  const textColorClass = isScrolled ? "text-zinc-900" : "text-white";
+  const hoverColorClass = "hover:text-emerald-500 transition-colors";
 
   return (
     <>
@@ -42,77 +51,82 @@ export const Navbar: React.FC = () => {
         initial={{ y: -100 }}
         animate={{ y: 0 }}
         transition={{ duration: 0.5 }}
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        className={cn(
+          "fixed top-0 left-0 right-0 z-50 transition-all duration-300 border-b",
           isScrolled 
-            ? "bg-slate-900/95 backdrop-blur-sm shadow-lg" 
-            : "bg-white/95 backdrop-blur-sm shadow-lg"
-        }`}
+            ? "bg-white/90 backdrop-blur-md border-zinc-200/50 shadow-sm py-3" 
+            : "bg-transparent border-transparent py-5"
+        )}
       >
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-[1440px] mx-auto px-4 md:px-8 flex items-center justify-between">
+          
           {/* Logo */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
+          <Link 
+            href="/" 
+            className="z-50"
+            onClick={onLogoClick}
           >
-            <Link href="/" className={`text-xl font-bold ${isScrolled ? 'text-white' : 'text-black'} hover:text-emerald-400 transition-colors`}>
-              Build Market
-            </Link>
-          </motion.div>
+            <span className={cn("text-2xl font-bold tracking-tight transition-colors", textColorClass)}>
+              Build<span className="text-emerald-500">Market</span>
+            </span>
+          </Link>
 
           {/* Desktop Navigation */}
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="hidden md:flex items-center gap-2"
-          >
+          <div className="hidden md:flex items-center gap-1">
             {navItems.map((item) => (
               <Link key={item.href} href={item.href}>
                 <Button
                   variant="ghost"
-                  className={`${isScrolled ? 'text-white' : 'text-black'} hover:text-emerald-400 ${isScrolled ? 'hover:bg-slate-800' : 'hover:bg-gray-100'}`}
+                  className={cn(
+                    "text-sm font-medium transition-all duration-200", 
+                    textColorClass,
+                    isScrolled ? "hover:bg-zinc-100" : "hover:bg-white/10"
+                  )}
                 >
                   {item.label}
                 </Button>
               </Link>
             ))}
 
-            {/* Clerk Auth Buttons */}
+            <div className="h-6 w-px bg-zinc-300/30 mx-2" />
+
+            {/* Auth Buttons */}
             <SignedOut>
               <SignInButton mode="modal" forceRedirectUrl={ROUTES.onboarding}>
-                <Button variant="ghost" className={`${isScrolled ? 'text-white' : 'text-black'} hover:text-emerald-400`}>
+                <Button 
+                  variant="ghost" 
+                  className={cn("font-medium", textColorClass, isScrolled ? "hover:bg-zinc-100" : "hover:bg-white/10")}
+                >
                   Sign In
                 </Button>
               </SignInButton>
               <SignUpButton mode="modal" forceRedirectUrl={ROUTES.onboarding}>
-                <Button variant="default" className="bg-emerald-500 hover:bg-emerald-600">
+                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md rounded-full px-6">
                   Join as a Pro
                 </Button>
               </SignUpButton>
             </SignedOut>
+
             <SignedIn>
-              {/* Dashboard link based on user role */}
               {userRole === 'client' && (
                 <Link href={ROUTES.client}>
-                  <Button
-                    variant="ghost"
-                    className={`${isScrolled ? 'text-white' : 'text-black'} hover:text-emerald-400 ${isScrolled ? 'hover:bg-slate-800' : 'hover:bg-gray-100'}`}
-                  >
+                  <Button variant="ghost" size="sm" className={cn(textColorClass)}>
                     <LayoutDashboard className="mr-2 h-4 w-4" />
                     Dashboard
                   </Button>
                 </Link>
               )}
-              <UserButton afterSignOutUrl="/" />
+               <div className="ml-2">
+                 <UserButton afterSignOutUrl="/" />
+               </div>
             </SignedIn>
-          </motion.div>
+          </div>
 
-          {/* Mobile Menu Button */}
+          {/* Mobile Menu Toggle */}
           <Button
             variant="ghost"
             size="icon"
-            className={`md:hidden ${isScrolled ? 'text-white' : 'text-black'} ${isScrolled ? 'hover:bg-slate-800' : 'hover:bg-gray-100'}`}
+            className={cn("md:hidden", textColorClass, isScrolled ? "hover:bg-zinc-100" : "hover:bg-white/10")}
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           >
             {isMobileMenuOpen ? <X /> : <Menu />}
@@ -120,77 +134,57 @@ export const Navbar: React.FC = () => {
         </div>
       </motion.nav>
 
-      {/* Mobile Menu */}
+      {/* Mobile Menu Overlay */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <motion.div
             initial={{ opacity: 0, x: "100%" }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: "100%" }}
-            transition={{ type: "spring", damping: 25 }}
-            className="fixed top-16 right-0 bottom-0 w-64 bg-slate-900/98 backdrop-blur-sm z-40 md:hidden"
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className="fixed inset-0 bg-white z-40 md:hidden pt-24 px-6 flex flex-col gap-6"
           >
-            <div className="flex flex-col gap-2 p-4">
-              {navItems.map((item, index) => (
+             {navItems.map((item, index) => (
                 <motion.div
                   key={item.href}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.1 }}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
                 >
-                  <Link href={item.href} onClick={() => setIsMobileMenuOpen(false)}>
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start text-white hover:text-emerald-400 hover:bg-slate-800"
-                    >
-                      {item.label}
-                    </Button>
+                  <Link 
+                    href={item.href} 
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="block text-2xl font-semibold text-zinc-900 py-2 border-b border-zinc-100"
+                  >
+                    {item.label}
                   </Link>
                 </motion.div>
               ))}
 
-              {/* Mobile Auth Buttons */}
-              <SignedOut>
-                <SignInButton mode="modal" forceRedirectUrl={ROUTES.onboarding}>
-                  <Button variant="ghost" className="w-full justify-start text-white">
-                    Sign In
-                  </Button>
-                </SignInButton>
-                <SignUpButton mode="modal" forceRedirectUrl={ROUTES.onboarding}>
-                  <Button className="w-full bg-emerald-500 hover:bg-emerald-600">
-                    Join as a Pro
-                  </Button>
-                </SignUpButton>
-              </SignedOut>
-              <SignedIn>
-                {/* Dashboard link for mobile */}
-                {userRole === 'client' && (
-                  <Link href={ROUTES.client} onClick={() => setIsMobileMenuOpen(false)}>
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start text-white hover:text-emerald-400 hover:bg-slate-800"
-                    >
-                      <LayoutDashboard className="mr-2 h-4 w-4" />
-                      Dashboard
-                    </Button>
-                  </Link>
-                )}
-                {userRole === 'professional' && (
-                  <Link href="/professional" onClick={() => setIsMobileMenuOpen(false)}>
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start text-white hover:text-emerald-400 hover:bg-slate-800"
-                    >
-                      <LayoutDashboard className="mr-2 h-4 w-4" />
-                      Dashboard
-                    </Button>
-                  </Link>
-                )}
-                <div className="p-2">
-                  <UserButton afterSignOutUrl="/" />
-                </div>
-              </SignedIn>
-            </div>
+              <div className="mt-4 flex flex-col gap-3">
+                <SignedOut>
+                  <SignInButton mode="modal">
+                    <Button variant="outline" size="lg" className="w-full justify-center">Sign In</Button>
+                  </SignInButton>
+                  <SignUpButton mode="modal">
+                    <Button size="lg" className="w-full justify-center bg-emerald-600">Join as a Pro</Button>
+                  </SignUpButton>
+                </SignedOut>
+                
+                <SignedIn>
+                   {/* Mobile Dashboard Links */}
+                   <Link href={userRole === 'professional' ? '/professional-portal/dashboard' : '/dashboard'}>
+                      <Button variant="secondary" size="lg" className="w-full justify-start">
+                        <LayoutDashboard className="mr-2 h-4 w-4" />
+                        My Dashboard
+                      </Button>
+                   </Link>
+                   <div className="flex items-center gap-2 mt-4">
+                      <UserButton afterSignOutUrl="/" />
+                      <span className="text-zinc-500">Manage Account</span>
+                   </div>
+                </SignedIn>
+              </div>
           </motion.div>
         )}
       </AnimatePresence>

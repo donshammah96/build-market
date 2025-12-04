@@ -1,7 +1,7 @@
 'use client';
 import { useState, useCallback, useRef } from  'react';
 import Link from 'next/link';
-import { ROUTES } from '../../app/lib/links';
+import { ROUTES } from '@/lib/links';
 import { MobileNav } from './MobileNav';
 import SearchBar from '../forms/SearchBar';
 import Image from 'next/image';

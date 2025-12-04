@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useSession } from "next-auth/react";
+import { useUser } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { io, Socket } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
@@ -41,7 +41,7 @@ export default function ChatWindow({
   otherUserName = "User",
   otherUserAvatar,
 }: ChatWindowProps) {
-  const { data: session } = useSession();
+  const { user } = useUser();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -90,12 +90,12 @@ export default function ChatWindow({
   // Send message mutation
   const sendMutation = useMutation({
     mutationFn: async (content: string) => {
-      if (!session?.user?.id) {
+      if (!user?.id) {
         throw new Error("User not authenticated");
       }
       const result = await messagingClient.sendMessage({
         conversationId,
-        senderId: session.user.id,
+        senderId: user.id,
         content,
         type: "text",
       });
@@ -112,10 +112,10 @@ export default function ChatWindow({
       const optimisticMessage: Message = {
         id: `temp-${Date.now()}`,
         conversationId,
-        senderId: session?.user?.id || "",
+        senderId: user?.id || "",
         content,
         type: "text",
-        readBy: [session?.user?.id || ""],
+        readBy: [user?.id || ""],
         attachments: [],
         encrypted: false,
         createdAt: new Date(),
@@ -149,10 +149,14 @@ export default function ChatWindow({
 
   // Mark conversation as read
   const markAsReadMutation = useMutation({
-    mutationFn: () =>
-      messagingClient.markConversationAsRead(conversationId, {
-        userId: session?.user?.id,
-      }),
+    mutationFn: () => {
+      if (!user?.id) {
+        throw new Error("User not authenticated");
+      }
+      return messagingClient.markConversationAsRead(conversationId, {
+        userId: user.id,
+      });
+    },
   });
 
   // Polling for new messages (MVP replacement for Socket.io)
@@ -180,23 +184,23 @@ export default function ChatWindow({
 
   // Mark as read when viewing
   useEffect(() => {
-    if (messages.length > 0 && session?.user?.id) {
+    if (messages.length > 0 && user?.id) {
       markAsReadMutation.mutate();
     }
-  }, [messages.length, session?.user?.id]);
+  }, [messages.length, user?.id]);
 
   // Handle typing
   const handleTyping = (value: string) => {
     setNewMessage(value);
 
-    if (!socket || !session?.user?.id) return;
+    if (!socket || !user?.id) return;
 
     // Emit typing start
     if (value.length > 0 && !isTyping) {
       setIsTyping(true);
       socket.emit("typing:start", {
         conversationId,
-        userId: session.user.id,
+        userId: user.id,
       });
     }
 
@@ -210,7 +214,7 @@ export default function ChatWindow({
       setIsTyping(false);
       socket.emit("typing:stop", {
         conversationId,
-        userId: session.user.id,
+        userId: user.id,
       });
     }, 2000);
   };
@@ -224,10 +228,10 @@ export default function ChatWindow({
     inputRef.current?.focus();
 
     // Stop typing indicator
-    if (socket && session?.user?.id) {
+    if (socket && user?.id) {
       socket.emit("typing:stop", {
         conversationId,
-        userId: session.user.id,
+        userId: user.id,
       });
       setIsTyping(false);
     }
@@ -247,7 +251,7 @@ export default function ChatWindow({
 
   // Check if message is read by other user
   const isMessageRead = (message: Message) => {
-    return message.readBy.some((id) => id !== session?.user?.id);
+    return message.readBy.some((id) => id !== user?.id);
   };
 
   // Check if we have cached data but are currently in error state
@@ -333,7 +337,7 @@ export default function ChatWindow({
               // Messages list
               <AnimatePresence initial={false}>
                 {messages.map((message: Message, index: number) => {
-                  const isOwn = message.senderId === session?.user?.id;
+                  const isOwn = message.senderId === user?.id;
                   const showAvatar = index === 0 || messages[index - 1]?.senderId !== message.senderId;
                   const isRead = isMessageRead(message);
 
@@ -394,9 +398,9 @@ export default function ChatWindow({
 
                       {isOwn && showAvatar && (
                         <Avatar className="w-8 h-8">
-                          <AvatarImage src={session?.user?.image || undefined} alt="You" />
+                          <AvatarImage src={user?.imageUrl || undefined} alt="You" />
                           <AvatarFallback className="text-xs">
-                            {getInitials(session?.user?.name || "You")}
+                            {getInitials(user?.fullName || user?.firstName || "You")}
                           </AvatarFallback>
                         </Avatar>
                       )}

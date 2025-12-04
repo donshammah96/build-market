@@ -29,6 +29,7 @@ import { Badge } from "../../components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 import { Progress } from "../../components/ui/progress";
 import Link from "next/link";
+import { ROUTES } from "@/lib/links";
 
 // Mock data for demonstration
 const mockProfessionalData = {
@@ -232,13 +233,13 @@ export default function ProfessionalDashboard() {
             </div>
             <div className="flex gap-3">
               <Button variant="outline" asChild>
-                <Link href="/professional/profile">
+                <Link href={ROUTES.professionalProfile}>
                   <Settings className="mr-2 h-4 w-4" />
                   Edit Profile
                 </Link>
               </Button>
               <Button asChild>
-                <Link href="/professional/portfolio">
+                <Link href={ROUTES.professionalPortfolio}>
                   <Plus className="mr-2 h-4 w-4" />
                   Add Portfolio
                 </Link>

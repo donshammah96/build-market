@@ -96,6 +96,9 @@ export const RateLimits = {
   // Relaxed limits for read operations
   READ: { limit: 100, window: 60000 }, // 100 requests per minute
 
+  // Stricter limits for write operations
+  WRITE: { limit: 10, window: 60000 }, // 10 requests per minute
+
   // Very strict for webhooks
   WEBHOOK: { limit: 100, window: 60000 }, // 100 requests per minute
 } as const;
