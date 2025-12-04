@@ -1,6 +1,6 @@
 'use client';
 
-import { ROUTES } from "../../app/lib/links";
+import { ROUTES } from "@/lib/links";
 import { useState, useEffect, useRef } from 'react';
 import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';

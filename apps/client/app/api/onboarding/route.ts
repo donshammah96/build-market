@@ -1,19 +1,10 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@repo/db';
-import { ClientProfileSchema, ProfessionalProfileSchema } from '@repo/types';
+import { OnboardingSchema } from '@repo/types';
 import { z } from 'zod';
 import { withAuth } from '@/app/lib/api-middleware';
 import { apiError, apiSuccess, HttpStatus } from '@/app/lib/api-response';
 import { checkRateLimit, getRateLimitIdentifier, RateLimits } from '@/app/lib/rate-limit';
-
-/**
- * Request body schema
- */
-const OnboardingRequestSchema = z.object({
-  role: z.enum(['client', 'professional']).refine((val) => ['client', 'professional'].includes(val), {
-    message: 'Role must be either "client" or "professional"',
-  }),
-});
 
 /**
  * POST /api/onboarding
@@ -35,10 +26,8 @@ export const POST = withAuth(async (req: NextRequest, { clerkId, dbUserId }) => 
 
     // Parse and validate request body
     const body = await req.json();
-    const { role } = OnboardingRequestSchema.parse(body);
-
-    // Extract profile data (everything except role)
-    const { role: _, ...profileData } = body;
+    const validatedData = OnboardingSchema.parse(body);
+    const { role } = validatedData;
 
     // Use transaction to ensure atomicity
     const result = await prisma.$transaction(async (tx) => {
@@ -53,28 +42,91 @@ export const POST = withAuth(async (req: NextRequest, { clerkId, dbUserId }) => 
 
       // Create or update profile based on role
       if (role === 'client') {
-        const validated = ClientProfileSchema.parse({
-          userId: user.id,
-          ...profileData,
-        });
+        const { projectType, projectLocation, estimatedBudget, description } = validatedData;
+        
+        // Map form data to preferences JSON
+        const preferences = {
+          projectType,
+          projectLocation,
+          estimatedBudget,
+          description
+        };
 
         await tx.clientProfile.upsert({
           where: { userId: user.id },
-          update: validated,
-          create: validated,
+          update: {
+            preferences,
+          },
+          create: {
+            userId: user.id,
+            preferences,
+          },
         });
       } else if (role === 'professional') {
-        const validated = ProfessionalProfileSchema.parse({
-          userId: user.id,
-          ...profileData,
-          verified: false, // Professionals need verification
+        const { 
+          profession, 
+          companyName,
+          licenseNumber,
+          yearsExperience, 
+          portfolio, 
+          website, 
+          bio,
+          certificatesUrls,
+          idDocumentsUrls
+        } = validatedData;
+
+        // Create professional profile
+        const professionalProfile = await tx.professionalProfile.upsert({
+          where: { userId: user.id },
+          update: {
+            companyName,
+            licenseNumber,
+            servicesOffered: [profession], // Map single profession to services array for now
+            yearsExperience,
+            website,
+            bio,
+            portfolioUrl: portfolio,
+            verified: false, // Professionals need verification
+          },
+          create: {
+            userId: user.id,
+            companyName,
+            licenseNumber,
+            servicesOffered: [profession],
+            yearsExperience,
+            website,
+            bio,
+            portfolioUrl: portfolio,
+            verified: false,
+          },
         });
 
-        await tx.professionalProfile.upsert({
-          where: { userId: user.id },
-          update: validated,
-          create: validated,
-        });
+        // Handle certificates and documents
+        // We'll treat both as "Certificate" records for now, or distinguish them if the model supports it.
+        
+        const certPromises = (certificatesUrls || []).map(url => 
+          tx.certificate.create({
+            data: {
+              name: 'Professional Certificate', // Generic name as we don't capture specific names in the form yet
+              issuer: 'Self-reported',
+              fileUrl: url,
+              professionalId: professionalProfile.userId,
+            }
+          })
+        );
+
+        const idPromises = (idDocumentsUrls || []).map(url => 
+          tx.certificate.create({
+            data: {
+              name: 'ID Document',
+              issuer: 'Government/Official',
+              fileUrl: url,
+              professionalId: professionalProfile.userId,
+            }
+          })
+        );
+
+        await Promise.all([...certPromises, ...idPromises]);
       }
 
       return user;

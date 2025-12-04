@@ -77,6 +77,7 @@ export interface ProfessionalCardData {
   verified: boolean;
   rating?: number;
   reviewCount?: number;
+  projectCount?: number;
   portfolioImage?: string;
   profileImage?: string;
   city?: string;

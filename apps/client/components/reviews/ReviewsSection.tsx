@@ -1,79 +1,100 @@
-import { reviews as allReviews, type Review } from '../../app/data/homeData';
+import { reviews as allReviews } from '../../app/data/homeData';
 import ReviewCard from './ReviewCard';
 import Link from 'next/link';
-import { ROUTES } from '../../app/lib/links';
+import { ROUTES } from '@/lib/links';
 import { motion, useInView } from 'framer-motion';
 import { useRef } from 'react';
 import { Button } from '../ui/button';
+import { ArrowRight } from 'lucide-react';
 
-// Mock data fallback
-const defaultReviews: Review[] = [
-  { quote: '"Excellent service!"', name: 'Amy Burns', description: 'Happy Customer', image: '/customers/amy-burns.png', imageAlt: 'Amy Burns', href: ROUTES.speakWithAdvisor },
-  { quote: '"Best experience ever!"', name: 'Balazs Orban', description: 'Satisfied Client', image: '/customers/balazs-orban.png', imageAlt: 'Balazs Orban', href: ROUTES.ideaBooks },
-  { quote: '"Great products and service!"', name: 'Lee Robinson', description: 'Verified Buyer', image: '/customers/lee-robinson.png', imageAlt: 'Lee Robinson', href: ROUTES.findProfessional },
-];
+// Robust helper component for the title
+const TitleWithHighlight = ({ text }: { text: string }) => {
+  const words = text.split(' ');
+  // Highlights the last 2 words if lengthy, or just last 1
+  const highlightCount = words.length > 3 ? 2 : 1; 
+  const normalText = words.slice(0, -highlightCount).join(' ');
+  const highlightText = words.slice(-highlightCount).join(' ');
 
-// Helper function to style last word(s) in emerald
-const renderTitleWithEmerald = (title: string) => {
-  const words = title.split(' ');
-  const lastWord = words[words.length - 1];
-  const restWords = words.slice(0, -1).join(' ');
-  
   return (
-    <>
-      {restWords && `${restWords} `}
-      <span className="text-emerald-600">{lastWord}</span>
-    </>
+    <span className="block">
+      {normalText} <span className="text-emerald-600 relative inline-block">
+        {highlightText}
+        {/* Optional: Add a subtle underline svg here if you want extra flair */}
+      </span>
+    </span>
   );
 };
 
-export const ReviewsSection: React.FC<{ searchTerm?: string; reviews?: Review[] }> = ({ 
-  searchTerm = '', 
-  reviews = allReviews.length > 0 ? allReviews : defaultReviews 
+export const ReviewsSection: React.FC<{ searchTerm?: string }> = ({ 
+  searchTerm = '' 
 }) => {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
 
-  const filteredReviews = reviews.filter(review =>
+  const filteredReviews = allReviews.filter(review =>
     review.quote.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    review.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    review.description.toLowerCase().includes(searchTerm.toLowerCase())
+    review.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
+  // Fallback if filter returns empty (Improvement: never show empty section)
+  const displayReviews = filteredReviews.length > 0 ? filteredReviews : allReviews;
+
   return (
-    <section className="px-4 sm:px-6 md:px-20 py-6 sm:py-10 bg-white" ref={ref}>
-      <motion.h2
-        initial={{ opacity: 0, x: 50 }}
-        animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: 50 }}
-        transition={{ duration: 0.6 }}
-        className="text-black text-4xl sm:text-5xl md:text-6xl font-semibold font-inter mb-6 sm:mb-10 text-left"
-      >
-        {renderTitleWithEmerald("Client Reviews")}
-      </motion.h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
-        {filteredReviews.map((review, index) => (
+    <section className="bg-zinc-50/50 relative py-16 sm:py-24" ref={ref}>
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 md:px-20">
+        
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-end mb-12 gap-6">
           <motion.div
-            key={index}
-            initial={{ opacity: 0, y: 30 }}
-            animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 30 }}
-            transition={{ duration: 0.5, delay: index * 0.15 }}
+            initial={{ opacity: 0, x: -20 }}
+            animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
+            transition={{ duration: 0.6 }}
           >
-            <ReviewCard {...review} />
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold font-inter tracking-tight text-zinc-900 mb-2">
+              <TitleWithHighlight text="Trusted by Kenyans everywhere" />
+            </h2>
+            <p className="text-zinc-500 text-lg max-w-xl">
+              From Runda to Riverside, see how we are helping homeowners build their dreams with confidence.
+            </p>
           </motion.div>
-        ))}
+
+          <motion.div
+             initial={{ opacity: 0, x: 20 }}
+             animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: 20 }}
+             transition={{ duration: 0.6, delay: 0.2 }}
+             className="hidden sm:block"
+          >
+            <Button variant="outline" className="group" asChild>
+              <Link href={ROUTES.reviews}>
+                Read all stories 
+                <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Link>
+            </Button>
+          </motion.div>
+        </div>
+
+        {/* Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+          {displayReviews.slice(0, 3).map((review, index) => (
+            <motion.div
+              key={review.id || index}
+              initial={{ opacity: 0, y: 30 }}
+              animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 30 }}
+              transition={{ duration: 0.5, delay: index * 0.15 }}
+              className="h-full"
+            >
+              <ReviewCard {...review} />
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Mobile-only View More Button */}
+        <div className="mt-8 sm:hidden text-center">
+            <Button variant="outline" className="w-full" asChild>
+              <Link href={ROUTES.reviews}>Read all stories</Link>
+            </Button>
+        </div>
       </div>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-        transition={{ duration: 0.6, delay: 0.4 }}
-        className="mt-6 text-center"
-      >
-        <Button variant="secondary" size="lg" asChild>
-          <Link href={ROUTES.home} className="inline-flex items-center gap-1">
-            Explore More <span aria-hidden>→</span>
-          </Link>
-        </Button>
-      </motion.div>
     </section>
   );
 };

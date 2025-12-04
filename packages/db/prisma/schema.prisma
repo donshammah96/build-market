@@ -61,6 +61,7 @@ model User {
   firstName           String?
   lastName            String?
   phone               String?
+  avatar              String?
   role                UserRole             @default(client)
   isProfileComplete   Boolean              @default(false)
   createdAt           DateTime             @default(now())
@@ -77,6 +78,7 @@ model User {
   messages            Message[]            @relation("Sender")
   analytics           UserAnalytics[]
   verifiedCertificates Certificate[]       @relation("CertificateVerifier")
+  calendarEvents      CalendarEvent[]
 
   @@index([clerkId])
   @@index([email])
@@ -103,6 +105,7 @@ model ProfessionalProfile {
   yearsExperience Int?
   servicesOffered String[]
   portfolioUrl    String?
+  website         String?
   bio             String?
   city            String?
   county          String?
@@ -115,6 +118,7 @@ model ProfessionalProfile {
   orders          Order[]       @relation("ProfessionalOrders")
   reviews         Review[]      @relation("ProfessionalReviews")
   certificates    Certificate[]
+  calendarEvents  CalendarEvent[]
 
   @@index([verified])
   @@index([city])
@@ -144,6 +148,7 @@ model Project {
   updatedAt      DateTime             @updatedAt
   milestones     ProjectMilestone[]
   messageThreads MessageThread[]
+  calendarEvents CalendarEvent[]
 
   @@index([clientId])
   @@index([professionalId])
@@ -366,4 +371,26 @@ model Certificate {
   @@index([updatedAt])
   @@index([verificationStatus])
   @@index([verifiedById])
+}
+
+model CalendarEvent {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+  title          String
+  description    String?
+  startDate      DateTime
+  endDate        DateTime
+  location       String?
+  type           String              @default("meeting") // meeting, site_visit, deadline, etc.
+  status         String              @default("scheduled") // scheduled, completed, cancelled
+  clientId       String?
+  client         User?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  projectId      String?
+  project        Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([professionalId])
+  @@index([startDate])
 }

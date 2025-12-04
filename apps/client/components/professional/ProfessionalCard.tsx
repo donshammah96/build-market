@@ -1,134 +1,159 @@
 import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
-import { Badge } from "../ui/badge";
-import { Button } from "../ui/button";
-import { Linkedin, ExternalLink, Star, MapPin, Award } from "lucide-react";
-import { ImageWithFallback } from "../../app/lib/ImageWithFallback";
-import { motion } from "framer-motion";
 import Link from "next/link";
-import { ProfessionalCardData } from "../../types/professional";
+import { motion } from "framer-motion";
+import { 
+  Star, 
+  MapPin, 
+  BadgeCheck, 
+  Briefcase,
+} from "lucide-react";
+
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
+import { getProfessionalUrl } from "@/lib/links";
+import { ProfessionalCardData } from "@/types/professional";
 
 interface ProfessionalCardProps {
   professional: ProfessionalCardData;
-  index?: number;
-  isInView?: boolean;
 }
 
-const ProfessionalCard: React.FC<ProfessionalCardProps> = ({ 
-  professional, 
-  index = 0, 
-  isInView = true 
-}) => {
+const ProfessionalCard: React.FC<ProfessionalCardProps> = ({ professional }) => {
+  // 1. Generate the centralized Profile URL
+  const profileUrl = getProfessionalUrl(professional.id);
+  
   const fullName = professional.name || professional.companyName;
   const displayTitle = professional.title || professional.servicesOffered[0] || 'Professional';
+  
+  const projectCount = professional.projectCount || 0;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 30 }}
-      transition={{ duration: 0.5, delay: index * 0.15 }}
-      whileHover={{ y: -8 }}
+      whileHover={{ y: -4 }}
+      transition={{ type: "spring", stiffness: 300, damping: 30 }}
+      className="h-full p-1"
     >
-      <Card className="overflow-hidden hover:shadow-xl transition-shadow h-full">
-        <div className="aspect-video overflow-hidden bg-slate-200 relative">
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            transition={{ duration: 0.3 }}
-            className="h-full"
-          >
-            <ImageWithFallback 
-              src={professional.portfolioImage || professional.profileImage || '/professional.png'}
-              alt={fullName}
-              className="w-full h-full object-cover"
-            />
-          </motion.div>
-          {professional.verified && (
-            <div className="absolute top-3 right-3 bg-blue-600 text-white px-2 py-1 rounded-full flex items-center gap-1 text-xs font-medium">
-              <Award className="h-3 w-3" />
-              Verified
+      <Card className="h-full flex flex-col border border-zinc-200 bg-white overflow-hidden rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 group">
+        
+        {/* --- 1. Hero Image (Portfolio Preview) --- */}
+        <div className="relative aspect-[4/3] overflow-hidden bg-zinc-100 border-b border-zinc-100">
+          <Link href={profileUrl} className="block h-full w-full">
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              transition={{ duration: 0.7, ease: "easeOut" }}
+              className="h-full w-full"
+            >
+              <ImageWithFallback 
+                src={professional.portfolioImage || '/professional-placeholder.jpg'}
+                alt={`${fullName} Portfolio`}
+                className="w-full h-full object-cover"
+              />
+            </motion.div>
+          </Link>
+          
+          {/* Floating Rating Badge */}
+          {professional.rating && (
+            <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm border border-black/5">
+              <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+              <span className="text-xs font-bold text-zinc-900">{professional.rating.toFixed(1)}</span>
+              {professional.reviewCount && (
+                <span className="text-xs text-zinc-500 font-medium">({professional.reviewCount})</span>
+              )}
             </div>
+          )}
+
+          {/* "Verified" Badge (Houzz Style) */}
+          {professional.verified && (
+             <div className="absolute top-3 right-3 bg-emerald-600 text-white p-1 rounded-full shadow-md" title="Verified Pro">
+                <BadgeCheck className="h-4 w-4" />
+             </div>
           )}
         </div>
         
-        <CardHeader>
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1">
-              <CardTitle className="text-xl font-semibold">{fullName}</CardTitle>
-              <p className="text-sm text-slate-600 font-medium mt-1">{displayTitle}</p>
-            </div>
-            {professional.rating && (
-              <div className="flex items-center gap-1 bg-amber-50 px-2 py-1 rounded">
-                <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                <span className="text-sm font-semibold">{professional.rating.toFixed(1)}</span>
+        {/* --- 2. Content Section --- */}
+        <CardContent className="flex flex-col flex-grow p-5">
+          
+          {/* Header Info */}
+          <div className="flex items-start justify-between gap-4 mb-3">
+             <div className="flex-1 min-w-0">
+                <Link href={profileUrl} className="group/title">
+                   <h3 className="font-bold text-zinc-900 text-lg truncate group-hover/title:text-emerald-700 transition-colors">
+                      {fullName}
+                   </h3>
+                </Link>
+                <p className="text-sm text-zinc-500 font-medium truncate">{displayTitle}</p>
+             </div>
+             {/* Avatar Overlay */}
+             <Link href={profileUrl}>
+                <Avatar className="h-10 w-10 border-2 border-white shadow-sm -mt-2">
+                   <AvatarImage src={professional.profileImage} />
+                   <AvatarFallback className="bg-zinc-100 text-zinc-500 font-bold">
+                      {fullName.charAt(0)}
+                   </AvatarFallback>
+                </Avatar>
+             </Link>
+          </div>
+
+          {/* Location & Exp */}
+          <div className="flex items-center gap-3 text-xs text-zinc-500 mb-5">
+            {professional.location && (
+              <div className="flex items-center gap-1 min-w-0">
+                <MapPin className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{professional.location}</span>
               </div>
             )}
+            <div className="h-3 w-px bg-zinc-200" />
+            <span className="whitespace-nowrap">{professional.yearsExperience}+ Years Exp.</span>
           </div>
-          
-          {professional.location && (
-            <div className="flex items-center gap-1 text-sm text-slate-600 mt-2">
-              <MapPin className="h-4 w-4" />
-              <span>{professional.location}</span>
-            </div>
-          )}
-          
-          {professional.bio && (
-            <CardDescription className="line-clamp-2 mt-2">
-              {professional.bio}
-            </CardDescription>
-          )}
-          
-          <div className="flex items-center gap-4 text-sm text-slate-600 mt-2">
-            {professional.yearsExperience && (
-              <span>{professional.yearsExperience}+ years exp.</span>
-            )}
-            {professional.reviewCount && professional.reviewCount > 0 && (
-              <span>{professional.reviewCount} reviews</span>
-            )}
-            {professional.certificates && professional.certificates.length > 0 && (
-              <span className="flex items-center gap-1">
-                <Award className="h-4 w-4" />
-                {professional.certificates.filter(c => c.verificationStatus === 'verified').length} certified
+
+          {/* Services Tags */}
+          <div className="flex flex-wrap gap-1.5 mb-6">
+            {professional.servicesOffered.slice(0, 3).map((service, i) => (
+              <Badge 
+                key={i} 
+                variant="secondary" 
+                className="text-[10px] bg-zinc-50 text-zinc-600 border border-zinc-100 font-medium hover:bg-zinc-100"
+              >
+                {service}
+              </Badge>
+            ))}
+            {professional.servicesOffered.length > 3 && (
+              <span className="text-[10px] text-zinc-400 self-center pl-1">
+                +{professional.servicesOffered.length - 3} more
               </span>
             )}
           </div>
-        </CardHeader>
-        
-        <CardContent>
-          <div className="flex flex-wrap gap-2 mb-4">
-            {professional.servicesOffered.slice(0, 4).map((service, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={isInView ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.8 }}
-                transition={{ duration: 0.3, delay: index * 0.15 + i * 0.05 }}
-              >
-                <Badge variant="secondary" className="text-xs">
-                  {service}
-                </Badge>
-              </motion.div>
-            ))}
-            {professional.servicesOffered.length > 4 && (
-              <Badge variant="outline" className="text-xs">
-                +{professional.servicesOffered.length - 4} more
-              </Badge>
-            )}
-          </div>
           
-          <div className="flex gap-2">
-            {professional.portfolioUrl && (
-              <Button variant="outline" size="sm" className="flex-1" asChild>
-                <a href={professional.portfolioUrl} target="_blank" rel="noopener noreferrer">
-                  <Linkedin className="mr-2 h-4 w-4" />
-                  Connect
-                </a>
-              </Button>
-            )}
-            <Button variant="outline" size="sm" className="flex-1" asChild>
-              <Link href={`/professionals/${professional.id}`}>
-                <ExternalLink className="mr-2 h-4 w-4" />
-                View Profile
+          {/* --- 3. Footer Actions (Projects & Profile) --- */}
+          <div className="mt-auto pt-4 border-t border-zinc-100 flex items-center gap-3">
+            
+            {/* Primary Action: View Projects */}
+            <Button 
+               variant="default" 
+               className="flex-1 bg-zinc-900 hover:bg-emerald-600 text-white h-9 text-xs font-medium transition-colors"
+               asChild
+            >
+              <Link href={profileUrl}>
+                 View Profile
               </Link>
             </Button>
+
+            {/* Secondary Action: Project Count / Link */}
+            <Button 
+               variant="outline" 
+               className="flex-1 border-zinc-200 hover:bg-zinc-50 hover:text-emerald-600 h-9 text-xs font-medium group/btn"
+               asChild
+            >
+               {/* This links to the same profile but implies viewing their work context */}
+               <Link href={`${profileUrl}?tab=projects`}>
+                  <Briefcase className="mr-2 h-3.5 w-3.5 text-zinc-400 group-hover/btn:text-emerald-500" />
+                  {projectCount} Projects
+               </Link>
+            </Button>
+
           </div>
         </CardContent>
       </Card>

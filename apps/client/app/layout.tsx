@@ -5,6 +5,7 @@ import {
 } from '@clerk/nextjs'
 import { Inter, Roboto} from 'next/font/google'
 import { ToastContainer } from 'react-toastify';
+import { QueryProvider } from '@/components/providers/QueryProvider';
 
 const inter = Inter({ subsets: ["latin"] });
 const roboto = Roboto({ subsets: ["latin"], weight: "400" });
@@ -50,8 +51,10 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
       <body className={`${inter.className} ${roboto.className} antialiased bg-white`}>
+        <QueryProvider>
           {children}
           <ToastContainer position="bottom-right" />
+        </QueryProvider>
       </body>
     </html>
     </ClerkProvider>

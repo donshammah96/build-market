@@ -47,7 +47,6 @@ export const ClientProfileSchema = z.object({
   userId: z.string(),
   address: z.string().optional(),
   city: z.string().optional(),
-  state: z.string().optional(),
   zipCode: z.string().optional(),
   preferences: z.any().optional(),
   createdAt: z.date().optional(),
@@ -70,3 +69,37 @@ export const ProfessionalProfileSchema = z.object({
 });
 
 export type ProfessionalProfile = z.infer<typeof ProfessionalProfileSchema>;
+
+// --- Onboarding Schemas ---
+
+export const ClientOnboardingSchema = z.object({
+  role: z.literal('client'),
+  projectType: z.string().min(1, "Project type is required"),
+  projectLocation: z.string().min(1, "Project location is required"),
+  estimatedBudget: z.string().min(1, "Estimated budget is required"),
+  description: z.string().min(10, "Description must be at least 10 characters"),
+});
+
+export const ProfessionalOnboardingSchema = z.object({
+  role: z.literal('professional'),
+  profession: z.string().min(1, "Profession is required"),
+  companyName: z.string().min(1, "Company name is required"),
+  licenseNumber: z.string().min(1, "License number is required"),
+  yearsExperience: z.number().optional(),
+  portfolio: z.string().optional(),
+  website: z.string().optional(),
+  bio: z.string().optional(),
+  certificatesUrls: z.array(z.string()).optional().nullable(),
+  idDocumentsUrls: z.array(z.string()).optional().nullable(),
+  certificatesPending: z.boolean().optional(),
+  idPending: z.boolean().optional(),
+});
+
+export type ProfessionalOnboardingData = z.infer<typeof ProfessionalOnboardingSchema>;
+
+export const OnboardingSchema = z.discriminatedUnion('role', [
+  ClientOnboardingSchema,
+  ProfessionalOnboardingSchema,
+]);
+
+export type OnboardingData = z.infer<typeof OnboardingSchema>;

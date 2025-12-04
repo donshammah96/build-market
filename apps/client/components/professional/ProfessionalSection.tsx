@@ -1,7 +1,7 @@
 import { professionals as allProfessionals } from '../../app/data/homeData';
 import ProfessionalCard from './ProfessionalCard';
 import Link from 'next/link';
-import { ROUTES } from '../../app/lib/links';
+import { ROUTES } from '@/lib/links';
 import Image from 'next/image';
 import { FC } from "react";
 import { ProfessionalCardData } from '../../types/professional';

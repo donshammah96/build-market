@@ -2,13 +2,12 @@
 
 import React from 'react';
 import { SignUp } from '@clerk/nextjs';
-import { ROUTES } from '../../app/lib/links';
 
 const RegisterForm: React.FC = () => {
   return (
     <div className="w-full max-w-md">
       <SignUp 
-        forceRedirectUrl={ROUTES.onboarding}
+        routing="hash"
         appearance={{
           elements: {
             rootBox: "w-full",

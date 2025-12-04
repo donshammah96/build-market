@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSession } from "next-auth/react";
+import { useUser } from "@clerk/nextjs";
 import { motion, AnimatePresence } from "framer-motion";
 import { messagingClient } from "@/lib/messaging-client";
 import type { Conversation } from "@repo/types";
@@ -28,7 +28,7 @@ export function ConversationsList({
   onSelectConversation,
   selectedId,
 }: ConversationsListProps) {
-  const { data: session } = useSession();
+  const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data: conversations, isLoading } = useQuery({
@@ -40,7 +40,7 @@ export function ConversationsList({
       }
       throw new Error("Failed to fetch conversations");
     },
-    enabled: !!session,
+    enabled: !!user,
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 
@@ -52,14 +52,14 @@ export function ConversationsList({
 
   // Get other user ID
   const getOtherUserId = (conv: Conversation) => {
-    return conv.participants.find((id) => id !== session?.user?.id) || "";
+    return conv.participants.find((id) => id !== user?.id) || "";
   };
 
   // Get unread count for current user
   const getUnreadCount = (conv: Conversation) => {
-    if (!session?.user?.id || !conv.unreadCount) return 0;
+    if (!user?.id || !conv.unreadCount) return 0;
     const unreadData = conv.unreadCount as Record<string, number>;
-    return unreadData[session.user.id] || 0;
+    return unreadData[user.id] || 0;
   };
 
   // Format timestamp
