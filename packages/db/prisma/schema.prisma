@@ -54,6 +54,26 @@ enum CertificateVerificationStatus {
   rejected
 }
 
+enum LeadStatus {
+  NEW
+  CONTACTED
+  PROPOSAL
+  WON
+  LOST
+}
+
+enum TransactionType {
+  INCOME
+  WITHDRAWAL
+  EXPENSE
+}
+
+enum TransactionStatus {
+  COMPLETED
+  PENDING
+  FAILED
+}
+
 model User {
   id                  String               @id @default(uuid())
   clerkId             String               @unique
@@ -79,6 +99,7 @@ model User {
   analytics           UserAnalytics[]
   verifiedCertificates Certificate[]       @relation("CertificateVerifier")
   calendarEvents      CalendarEvent[]
+  notifications       Notification[]
 
   @@index([clerkId])
   @@index([email])
@@ -119,6 +140,8 @@ model ProfessionalProfile {
   reviews         Review[]      @relation("ProfessionalReviews")
   certificates    Certificate[]
   calendarEvents  CalendarEvent[]
+  leads           Lead[]
+  transactions    ProfessionalTransaction[]
 
   @@index([verified])
   @@index([city])
@@ -393,4 +416,55 @@ model CalendarEvent {
 
   @@index([professionalId])
   @@index([startDate])
+}
+
+model Lead {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+  clientName     String
+  clientEmail    String?
+  clientPhone    String?
+  projectType    String
+  location       String?
+  budget         String?
+  status         LeadStatus          @default(NEW)
+  notes          String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([professionalId])
+  @@index([status])
+}
+
+model ProfessionalTransaction {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+  description    String
+  amount         Decimal             @db.Decimal(10, 2)
+  type           TransactionType
+  status         TransactionStatus   @default(PENDING)
+  date           DateTime            @default(now())
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([professionalId])
+  @@index([date])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("info") // info, success, warning, error
+  read      Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
 }

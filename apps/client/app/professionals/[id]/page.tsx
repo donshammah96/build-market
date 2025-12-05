@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useState, useEffect, useRef } from "react";
 import { motion, useInView } from "framer-motion";
 import { 
@@ -11,20 +12,64 @@ import {
   ExternalLink,
   Calendar,
   CheckCircle,
-  MessageSquare
+  MessageSquare,
+  Loader2
 } from "lucide-react";
 import { useParams } from "next/navigation";
-import { ImageWithFallback } from "../../../app/lib/ImageWithFallback";
-import { Button, buttonVariants } from "../../../components/ui/button";
-import { Badge } from "../../../components/ui/badge";
-import { cn } from "../../../lib/utils";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
-import { Separator } from "../../../components/ui/separator";
-import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
-import { Navbar } from "../../../components/layout/NavBar";
-import { Footer } from "../../../components/layout/Footer";
-import { ProfessionalProfile } from "../../../types/professional";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { toast } from "sonner";
+
+import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Navbar } from "@/components/layout/NavBar";
+import { Footer } from "@/components/layout/Footer";
+import { ProfessionalProfile } from "@/types/professional";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/text-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const contactSchema = z.object({
+  clientName: z.string().min(1, "Name is required"),
+  clientEmail: z.string().email("Invalid email address"),
+  clientPhone: z.string().optional(),
+  projectType: z.string().min(1, "Project type is required"),
+  location: z.string().optional(),
+  budget: z.string().optional(),
+  message: z.string().min(10, "Message must be at least 10 characters"),
+});
+
+type ContactFormValues = z.infer<typeof contactSchema>;
 
 export default function ProfessionalProfilePage() {
   const params = useParams();
@@ -34,6 +79,21 @@ export default function ProfessionalProfilePage() {
   const [professional, setProfessional] = useState<ProfessionalProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isContactOpen, setIsContactOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const form = useForm<ContactFormValues>({
+    resolver: zodResolver(contactSchema),
+    defaultValues: {
+      clientName: "",
+      clientEmail: "",
+      clientPhone: "",
+      projectType: "",
+      location: "",
+      budget: "",
+      message: "",
+    },
+  });
 
   useEffect(() => {
     const fetchProfessional = async () => {
@@ -63,6 +123,35 @@ export default function ProfessionalProfilePage() {
       fetchProfessional();
     }
   }, [params.id]);
+
+  const onSubmit = async (data: ContactFormValues) => {
+    if (!professional) return;
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          professionalId: professional.userId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to send message");
+      }
+
+      toast.success("Message sent successfully!");
+      setIsContactOpen(false);
+      form.reset();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to send message");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -207,10 +296,144 @@ export default function ProfessionalProfilePage() {
 
                   {/* Action Buttons */}
                   <div className="flex flex-wrap gap-3">
-                    <Button size="lg" className="gap-2">
-                      <MessageSquare className="h-4 w-4" />
-                      Contact Professional
-                    </Button>
+                    <Dialog open={isContactOpen} onOpenChange={setIsContactOpen}>
+                      <DialogTrigger asChild>
+                        <Button size="lg" className="gap-2">
+                          <MessageSquare className="h-4 w-4" />
+                          Contact Professional
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle>Contact {professional.companyName}</DialogTitle>
+                          <DialogDescription>
+                            Send a message to discuss your project.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <Form {...form}>
+                          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                            <FormField
+                              control={form.control}
+                              name="clientName"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Your Name</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="John Doe" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <div className="grid grid-cols-2 gap-4">
+                              <FormField
+                                control={form.control}
+                                name="clientEmail"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Email</FormLabel>
+                                    <FormControl>
+                                      <Input placeholder="john@example.com" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name="clientPhone"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Phone (Optional)</FormLabel>
+                                    <FormControl>
+                                      <Input placeholder="+254..." {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <FormField
+                                control={form.control}
+                                name="projectType"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Project Type</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                      <FormControl>
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Select type" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        <SelectItem value="Residential Construction">Residential Construction</SelectItem>
+                                        <SelectItem value="Commercial Construction">Commercial Construction</SelectItem>
+                                        <SelectItem value="Renovation">Renovation</SelectItem>
+                                        <SelectItem value="Interior Design">Interior Design</SelectItem>
+                                        <SelectItem value="Landscaping">Landscaping</SelectItem>
+                                        <SelectItem value="Other">Other</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name="budget"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Budget (Optional)</FormLabel>
+                                    <FormControl>
+                                      <Input placeholder="e.g. 500k - 1M" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                            <FormField
+                              control={form.control}
+                              name="location"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Project Location (Optional)</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="e.g. Nairobi, Westlands" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="message"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Message</FormLabel>
+                                  <FormControl>
+                                    <Textarea 
+                                      placeholder="Describe your project..." 
+                                      className="min-h-[100px]"
+                                      {...field} 
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <DialogFooter>
+                              <Button type="submit" disabled={isSubmitting} className="w-full">
+                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Send Message
+                              </Button>
+                            </DialogFooter>
+                          </form>
+                        </Form>
+                      </DialogContent>
+                    </Dialog>
+
                     <Button size="lg" variant="outline" className="gap-2">
                       <Calendar className="h-4 w-4" />
                       Schedule Consultation
@@ -416,4 +639,5 @@ export default function ProfessionalProfilePage() {
     </div>
   );
 }
+
 

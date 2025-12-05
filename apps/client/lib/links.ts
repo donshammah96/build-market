@@ -70,3 +70,4 @@ export const getVendorUrl = (id: string) => `/vendors/${id}`;
 export const getProfessionalProjectUrl = (id: string) => `/professional-portal/projects/${id}`;
 export const getProfessionalPortfolioUrl = (id: string) => `/professional-portal/portfolio/${id}`;
 export const getProfessionalEventUrl = (id: string) => `/professional-portal/calendar/${id}`;
+export const getProfessionalLeadUrl = (id: string) => `/professional-portal/leads/${id}`;

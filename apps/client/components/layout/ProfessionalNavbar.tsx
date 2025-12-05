@@ -1,9 +1,11 @@
 "use client";
 
-import { Bell, Search, Menu } from "lucide-react";
+import { Search, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UserButton } from "@clerk/nextjs";
+import { NotificationsPopover } from "@/components/notifications/NotificationsPopover";
+import { MessagesPopover } from "@/components/chat/MessagesPopover";
 
 export function ProfessionalNavbar() {
   return (
@@ -35,10 +37,9 @@ export function ProfessionalNavbar() {
 
           <div className="h-6 w-px bg-zinc-200 hidden sm:block" />
 
-          <Button variant="ghost" size="icon" className="text-zinc-500 hover:text-zinc-900 relative">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-2.5 right-2.5 h-2 w-2 bg-red-500 rounded-full border border-white" />
-          </Button>
+          <NotificationsPopover />
+
+          <MessagesPopover />
 
           <UserButton 
              appearance={{
