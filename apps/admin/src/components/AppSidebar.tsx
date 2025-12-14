@@ -36,10 +36,7 @@ import {
     DropdownMenuTrigger,
   } from "./ui/dropdown-menu";
   import { Sheet, SheetTrigger } from "./ui/sheet";
-  import AddOrder from "./AddOrder";
   import AddUser from "./AddUser";
-  import AddCategory from "./AddCategory";
-  import AddProduct from "./AddProduct";
   
   const items = [
     {
@@ -106,49 +103,32 @@ import {
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
+          {/* Products section removed - not used in BuildMarket admin */}
           <SidebarGroup>
-            <SidebarGroupLabel>Products</SidebarGroupLabel>
-            <SidebarGroupAction>
-              <Plus /> <span className="sr-only">Add Product</span>
-            </SidebarGroupAction>
+            <SidebarGroupLabel>Professionals</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
-                    <Link href="/products">
-                      <Shirt />
-                      See All Products
+                    <Link href="/professionals">
+                      <User />
+                      All Professionals
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+          <SidebarGroup>
+            <SidebarGroupLabel>Projects</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
-                    <Sheet>
-                      <SheetTrigger asChild>
-                        <SidebarMenuButton asChild>
-                          <Link href="#">
-                            <Plus />
-                            Add Product
-                          </Link>
-                        </SidebarMenuButton>
-                      </SheetTrigger>
-                      <AddProduct />
-                    </Sheet>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Sheet>
-                      <SheetTrigger asChild>
-                        <SidebarMenuButton asChild>
-                          <Link href="#">
-                            <Plus />
-                            Add Category
-                          </Link>
-                        </SidebarMenuButton>
-                      </SheetTrigger>
-                      <AddCategory />
-                    </Sheet>
+                    <Link href="/projects">
+                      <Inbox />
+                      All Projects
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -187,34 +167,17 @@ import {
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
+          {/* Orders section removed - not used in BuildMarket admin */}
           <SidebarGroup>
-            <SidebarGroupLabel>Orders / Payments</SidebarGroupLabel>
-            <SidebarGroupAction>
-              <Plus /> <span className="sr-only">Add Order</span>
-            </SidebarGroupAction>
+            <SidebarGroupLabel>Settings</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild>
-                    <Link href="/orders">
-                      <ShoppingBasket />
-                      See All Transactions
+                    <Link href="/settings">
+                      <Settings />
+                      Platform Settings
                     </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Sheet>
-                      <SheetTrigger asChild>
-                        <SidebarMenuButton asChild>
-                          <Link href="#">
-                            <Plus />
-                            Add Order
-                          </Link>
-                        </SidebarMenuButton>
-                      </SheetTrigger>
-                      <AddOrder />
-                    </Sheet>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>

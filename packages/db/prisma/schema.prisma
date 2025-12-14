@@ -106,6 +106,18 @@ model User {
   @@index([role])
 }
 
+model SystemSettings {
+  id               String   @id @default("global")
+  maintenanceMode  Boolean  @default(false)
+  publicSignup     Boolean  @default(true)
+  autoVerifyNCA    Boolean  @default(false)
+  commissionRate   Decimal  @default(10.0) @db.Decimal(5, 2)
+  supportEmail     String   @default("support@buildmarket.co.ke")
+  adminEmailAlerts Boolean  @default(true)
+  securityMFA      Boolean  @default(true)
+  updatedAt        DateTime @updatedAt
+}
+
 model ClientProfile {
   userId      String   @id
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -114,6 +126,7 @@ model ClientProfile {
   county      String?
   zipCode     String?
   preferences Json?
+  quotes      Quote[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -142,6 +155,7 @@ model ProfessionalProfile {
   calendarEvents  CalendarEvent[]
   leads           Lead[]
   transactions    ProfessionalTransaction[]
+  quotes          Quote[]
 
   @@index([verified])
   @@index([city])
@@ -172,6 +186,8 @@ model Project {
   milestones     ProjectMilestone[]
   messageThreads MessageThread[]
   calendarEvents CalendarEvent[]
+  reviews        Review[]
+  quotes         Quote[]
 
   @@index([clientId])
   @@index([professionalId])
@@ -211,6 +227,8 @@ model Review {
   storeId        String?
   professional   ProfessionalProfile? @relation(fields: [professionalId], references: [userId], onDelete: Cascade, name: "ProfessionalReviews")
   store          Store?               @relation(fields: [storeId], references: [id], onDelete: Cascade, name: "StoreReviews")
+  projectId      String?
+  project        Project?             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   type           ReviewType
   rating         Int // 1-5 rating scale
   comment        String?
@@ -223,6 +241,7 @@ model Review {
   @@index([approved])
   @@index([professionalId])
   @@index([storeId])
+  @@index([projectId])
 }
 
 model Store {
@@ -467,4 +486,23 @@ model Notification {
   @@index([userId])
   @@index([read])
   @@index([createdAt])
+}
+
+model Quote {
+  id             String              @id @default(uuid())
+  projectId      String
+  project        Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  professionalId String
+  clientId       String
+  client         ClientProfile       @relation(fields: [clientId], references: [userId], onDelete: Cascade)
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+  amount         Decimal             @db.Decimal(10, 2)
+  description    String?
+  status         String              @default("pending") // pending, accepted, rejected
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([projectId])
+  @@index([professionalId])
+  @@index([clientId])
 }
