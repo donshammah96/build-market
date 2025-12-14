@@ -1,40 +1,30 @@
-import { auth, type User } from "@clerk/nextjs/server";
-import { columns } from "./columns";
-import { DataTable } from "./data-table";
+import { getUsers } from "@/actions/admin";
+import { columns, UserData } from "./columns";
+import { DataTable } from "@/components/ui/data-table";
 
-const getData = async (): Promise<{ data: User[]; totalCount: number }> => {
-  const { getToken } = await auth();
-  const token = await getToken();
-  try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_AUTH_SERVICE_URL}/users`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-    if (!res.ok) {
-      throw new Error("Failed to fetch users!");
-    }
-    const data = await res.json();
-    return data;
-  } catch (err) {
-    console.log(err);
-    return { data: [], totalCount: 0 };
+export default async function UsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const resolvedSearchParams = await searchParams;
+  const page = Number(resolvedSearchParams.page) || 1;
+  const search = typeof resolvedSearchParams.search === "string" ? resolvedSearchParams.search : "";
+
+  const response = await getUsers(page, 10, search);
+  
+  if (!response.success || !response.data) {
+     return <div>Failed to load users</div>;
   }
-};
 
-const UsersPage = async () => {
-  const res = await getData();
+  const { users, meta } = response.data;
+  
   return (
     <div className="">
-      <div className="mb-8 px-4 py-2 bg-secondary rounded-md">
-        <h1 className="font-semibold">All Users</h1>
+      <div className="mb-8 px-4 py-2 bg-secondary rounded-md flex justify-between items-center">
+        <h1 className="font-semibold">All Users ({meta.total})</h1>
       </div>
-      <DataTable columns={columns} data={res.data} />
+      <DataTable columns={columns} data={users as unknown as UserData[]} pageCount={meta.totalPages} />
     </div>
   );
-};
-
-export default UsersPage;
+}

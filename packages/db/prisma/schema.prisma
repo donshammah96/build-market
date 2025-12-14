@@ -54,6 +54,26 @@ enum CertificateVerificationStatus {
   rejected
 }
 
+enum LeadStatus {
+  NEW
+  CONTACTED
+  PROPOSAL
+  WON
+  LOST
+}
+
+enum TransactionType {
+  INCOME
+  WITHDRAWAL
+  EXPENSE
+}
+
+enum TransactionStatus {
+  COMPLETED
+  PENDING
+  FAILED
+}
+
 model User {
   id                  String               @id @default(uuid())
   clerkId             String               @unique
@@ -79,10 +99,23 @@ model User {
   analytics           UserAnalytics[]
   verifiedCertificates Certificate[]       @relation("CertificateVerifier")
   calendarEvents      CalendarEvent[]
+  notifications       Notification[]
 
   @@index([clerkId])
   @@index([email])
   @@index([role])
+}
+
+model SystemSettings {
+  id               String   @id @default("global")
+  maintenanceMode  Boolean  @default(false)
+  publicSignup     Boolean  @default(true)
+  autoVerifyNCA    Boolean  @default(false)
+  commissionRate   Decimal  @default(10.0) @db.Decimal(5, 2)
+  supportEmail     String   @default("support@buildmarket.co.ke")
+  adminEmailAlerts Boolean  @default(true)
+  securityMFA      Boolean  @default(true)
+  updatedAt        DateTime @updatedAt
 }
 
 model ClientProfile {
@@ -93,6 +126,7 @@ model ClientProfile {
   county      String?
   zipCode     String?
   preferences Json?
+  quotes      Quote[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -119,6 +153,9 @@ model ProfessionalProfile {
   reviews         Review[]      @relation("ProfessionalReviews")
   certificates    Certificate[]
   calendarEvents  CalendarEvent[]
+  leads           Lead[]
+  transactions    ProfessionalTransaction[]
+  quotes          Quote[]
 
   @@index([verified])
   @@index([city])
@@ -149,6 +186,8 @@ model Project {
   milestones     ProjectMilestone[]
   messageThreads MessageThread[]
   calendarEvents CalendarEvent[]
+  reviews        Review[]
+  quotes         Quote[]
 
   @@index([clientId])
   @@index([professionalId])
@@ -188,6 +227,8 @@ model Review {
   storeId        String?
   professional   ProfessionalProfile? @relation(fields: [professionalId], references: [userId], onDelete: Cascade, name: "ProfessionalReviews")
   store          Store?               @relation(fields: [storeId], references: [id], onDelete: Cascade, name: "StoreReviews")
+  projectId      String?
+  project        Project?             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   type           ReviewType
   rating         Int // 1-5 rating scale
   comment        String?
@@ -200,6 +241,7 @@ model Review {
   @@index([approved])
   @@index([professionalId])
   @@index([storeId])
+  @@index([projectId])
 }
 
 model Store {
@@ -393,4 +435,74 @@ model CalendarEvent {
 
   @@index([professionalId])
   @@index([startDate])
+}
+
+model Lead {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+  clientName     String
+  clientEmail    String?
+  clientPhone    String?
+  projectType    String
+  location       String?
+  budget         String?
+  status         LeadStatus          @default(NEW)
+  notes          String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([professionalId])
+  @@index([status])
+}
+
+model ProfessionalTransaction {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+  description    String
+  amount         Decimal             @db.Decimal(10, 2)
+  type           TransactionType
+  status         TransactionStatus   @default(PENDING)
+  date           DateTime            @default(now())
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([professionalId])
+  @@index([date])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("info") // info, success, warning, error
+  read      Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+model Quote {
+  id             String              @id @default(uuid())
+  projectId      String
+  project        Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  professionalId String
+  clientId       String
+  client         ClientProfile       @relation(fields: [clientId], references: [userId], onDelete: Cascade)
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+  amount         Decimal             @db.Decimal(10, 2)
+  description    String?
+  status         String              @default("pending") // pending, accepted, rejected
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([projectId])
+  @@index([professionalId])
+  @@index([clientId])
 }

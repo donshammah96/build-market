@@ -1,11 +1,104 @@
 "use client";
 
-import { DollarSign, Download, ArrowUpRight, ArrowDownLeft, Wallet } from "lucide-react";
+import { useState } from "react";
+import { DollarSign, Download, Wallet, Loader2 } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm, Resolver } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { toast } from "sonner";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+
+const withdrawSchema = z.object({
+  amount: z.coerce.number().min(1, "Amount must be at least 1"),
+});
+
+type WithdrawFormValues = z.infer<typeof withdrawSchema>;
 
 export default function FinancePage() {
+  const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Fetch Stats
+  const { data: stats, isLoading: isLoadingStats } = useQuery({
+    queryKey: ["finance-stats"],
+    queryFn: async () => {
+      const res = await fetch("/api/professional-portal/finance/stats");
+      if (!res.ok) throw new Error("Failed to fetch stats");
+      return res.json();
+    },
+  });
+
+  // Fetch Transactions
+  const { data: transactions, isLoading: isLoadingTransactions } = useQuery({
+    queryKey: ["transactions"],
+    queryFn: async () => {
+      const res = await fetch("/api/professional-portal/finance/transactions");
+      if (!res.ok) throw new Error("Failed to fetch transactions");
+      return res.json();
+    },
+  });
+
+  // Withdraw Form
+  const form = useForm<WithdrawFormValues>({
+    resolver: zodResolver(withdrawSchema) as Resolver<WithdrawFormValues>,
+    defaultValues: {
+      amount: 0,
+    },
+  });
+
+  // Withdraw Mutation
+  const withdrawMutation = useMutation({
+    mutationFn: async (data: WithdrawFormValues) => {
+      const res = await fetch("/api/professional-portal/finance/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to withdraw funds");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["finance-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      setIsWithdrawOpen(false);
+      toast.success("Withdrawal request submitted");
+      form.reset();
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    }
+  });
+
+  function onSubmit(data: WithdrawFormValues) {
+    withdrawMutation.mutate(data);
+  }
+
   return (
     <div className="space-y-8 max-w-[1600px] mx-auto">
       
@@ -19,17 +112,70 @@ export default function FinancePage() {
           <Button variant="outline" className="bg-white">
             <Download className="mr-2 h-4 w-4" /> Export Report
           </Button>
-          <Button className="bg-zinc-900 text-white hover:bg-zinc-800">
-            <Wallet className="mr-2 h-4 w-4" /> Withdraw Funds
-          </Button>
+          
+          <Dialog open={isWithdrawOpen} onOpenChange={setIsWithdrawOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-zinc-900 text-white hover:bg-zinc-800">
+                <Wallet className="mr-2 h-4 w-4" /> Withdraw Funds
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Withdraw Funds</DialogTitle>
+                <DialogDescription>
+                  Request a payout to your connected account.
+                </DialogDescription>
+              </DialogHeader>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="amount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Amount (KSh)</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="0.00" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="text-sm text-zinc-500">
+                    <p>Available Balance: KSh {stats?.totalEarnings ? (stats.totalEarnings - (stats.pendingPayouts || 0)).toLocaleString() : "..."}</p>
+                  </div>
+                  <DialogFooter>
+                    <Button type="submit" disabled={withdrawMutation.isPending}>
+                      {withdrawMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Request Withdrawal
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
       {/* Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <FinanceCard title="Total Earnings" value="KSh 4,250,000" sub="All time" active />
-        <FinanceCard title="Pending Payouts" value="KSh 150,000" sub="Available for withdrawal" />
-        <FinanceCard title="Outstanding Invoices" value="KSh 85,000" sub="2 Invoices overdue" alert />
+        <FinanceCard 
+          title="Total Earnings" 
+          value={isLoadingStats ? "..." : `KSh ${stats?.totalEarnings?.toLocaleString() || "0"}`} 
+          sub="All time" 
+          active 
+        />
+        <FinanceCard 
+          title="Pending Payouts" 
+          value={isLoadingStats ? "..." : `KSh ${stats?.pendingPayouts?.toLocaleString() || "0"}`} 
+          sub="Available for withdrawal" 
+        />
+        <FinanceCard 
+          title="Outstanding Invoices" 
+          value={isLoadingStats ? "..." : `KSh ${stats?.outstandingInvoices?.toLocaleString() || "0"}`} 
+          sub="Total pending payments" 
+          alert={stats?.outstandingInvoices > 0} 
+        />
       </div>
 
       {/* Transactions Table */}
@@ -37,7 +183,7 @@ export default function FinancePage() {
         <CardHeader className="border-b border-zinc-100 py-4 px-6">
           <CardTitle className="text-base font-bold text-zinc-900">Recent Transactions</CardTitle>
         </CardHeader>
-        <div className="p-0">
+        <div className="p-0 overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="bg-zinc-50 text-zinc-500 font-medium">
               <tr>
@@ -49,30 +195,32 @@ export default function FinancePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              <TransactionRow 
-                id="TXN-9923" 
-                desc="Payment for Kitchen Reno (Milestone 1)" 
-                date="Oct 24, 2024" 
-                amount="+ KSh 450,000" 
-                status="Completed" 
-                type="in"
-              />
-              <TransactionRow 
-                id="TXN-9922" 
-                desc="Withdrawal to Equity Bank" 
-                date="Oct 20, 2024" 
-                amount="- KSh 200,000" 
-                status="Processing" 
-                type="out"
-              />
-              <TransactionRow 
-                id="TXN-9921" 
-                desc="Consultation Fee - Sarah J." 
-                date="Oct 18, 2024" 
-                amount="+ KSh 5,000" 
-                status="Completed" 
-                type="in"
-              />
+              {isLoadingTransactions ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-zinc-500">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+                    Loading transactions...
+                  </td>
+                </tr>
+              ) : transactions?.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-zinc-500">
+                    No transactions found.
+                  </td>
+                </tr>
+              ) : (
+                transactions?.map((txn: any) => (
+                  <TransactionRow 
+                    key={txn.id}
+                    id={txn.id.substring(0, 8).toUpperCase()} 
+                    desc={txn.description} 
+                    date={new Date(txn.date).toLocaleDateString()} 
+                    amount={`KSh ${Number(txn.amount).toLocaleString()}`} 
+                    status={txn.status} 
+                    type={txn.type}
+                  />
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -94,16 +242,23 @@ function FinanceCard({ title, value, sub, active, alert }: any) {
 }
 
 function TransactionRow({ id, desc, date, amount, status, type }: any) {
+  const isIncome = type === 'INCOME';
+  const isWithdrawal = type === 'WITHDRAWAL';
+  
   return (
     <tr className="hover:bg-zinc-50/50 transition-colors">
       <td className="px-6 py-4 font-mono text-xs text-zinc-500">{id}</td>
       <td className="px-6 py-4 font-medium text-zinc-900">{desc}</td>
       <td className="px-6 py-4 text-zinc-500">{date}</td>
-      <td className={`px-6 py-4 font-medium ${type === 'in' ? 'text-emerald-600' : 'text-zinc-900'}`}>
-        {amount}
+      <td className={`px-6 py-4 font-medium ${isIncome ? 'text-emerald-600' : 'text-zinc-900'}`}>
+        {isIncome ? '+' : isWithdrawal ? '-' : ''} {amount}
       </td>
       <td className="px-6 py-4">
-        <Badge variant="outline" className={status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}>
+        <Badge variant="outline" className={
+          status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
+          status === 'PENDING' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+          'bg-red-50 text-red-700 border-red-200'
+        }>
           {status}
         </Badge>
       </td>

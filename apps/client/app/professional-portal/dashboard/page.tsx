@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { 
   TrendingUp, 
@@ -46,6 +47,21 @@ export default function ProfessionalDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [leads, setLeads] = useState<Lead[]>([]);
 
+  // Fetch Agenda (Today's Events)
+  const { data: events } = useQuery({
+    queryKey: ["dashboard-agenda"],
+    queryFn: async () => {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+      
+      const res = await fetch(`/api/professional-portal/calendar?start=${start.toISOString()}&end=${end.toISOString()}`);
+      if (!res.ok) throw new Error("Failed to fetch agenda");
+      return res.json();
+    },
+  });
+
   useEffect(() => {
     // Simulate API Fetch
     setTimeout(() => {
@@ -72,8 +88,10 @@ export default function ProfessionalDashboardPage() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" className="border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 bg-white shadow-sm">
-            <Calendar className="mr-2 h-4 w-4" /> Schedule
+          <Button variant="outline" className="border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 bg-white shadow-sm" asChild>
+            <Link href="/professional-portal/calendar">
+                <Calendar className="mr-2 h-4 w-4" /> Schedule
+            </Link>
           </Button>
           <Button className="bg-zinc-900 hover:bg-zinc-800 text-white shadow-md transition-all hover:shadow-lg">
             <ArrowUpRight className="mr-2 h-4 w-4" /> Promote Profile
@@ -231,12 +249,23 @@ export default function ProfessionalDashboardPage() {
              </CardHeader>
              <CardContent className="px-2 pb-2">
                 <div className="space-y-1">
-                   <AgendaItem time="09:00 AM" title="Site Visit: Karen" checked />
-                   <AgendaItem time="11:30 AM" title="Client Call: Sarah J." />
-                   <AgendaItem time="02:00 PM" title="Material Delivery" />
+                   {(events?.data || []).length === 0 ? (
+                       <p className="p-3 text-xs text-zinc-500 text-center">No events scheduled for today.</p>
+                   ) : (
+                       (events?.data || []).map((event: any) => (
+                           <AgendaItem 
+                                key={event.id}
+                                time={new Date(event.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} 
+                                title={event.title} 
+                                checked={event.status === 'completed'}
+                           />
+                       ))
+                   )}
                 </div>
-                <Button variant="ghost" size="sm" className="w-full mt-2 text-xs text-zinc-500 hover:text-zinc-900">
-                   View Calendar
+                <Button variant="ghost" size="sm" className="w-full mt-2 text-xs text-zinc-500 hover:text-zinc-900" asChild>
+                   <Link href="/professional-portal/calendar">
+                        View Calendar
+                   </Link>
                 </Button>
              </CardContent>
           </Card>
