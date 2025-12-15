@@ -37,32 +37,39 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
 
   // If user is accessing a protected route
   if (isProtectedRoute(req) && userId) {
-    // Check if profile is complete
+    // Check if user exists in database
     try {
       const baseUrl = req.nextUrl.origin;
-      const response = await fetch(`${baseUrl}/api/profile/complete`, {
+      const response = await fetch(`${baseUrl}/api/user/profile`, {
         headers: {
           'Cookie': req.headers.get('cookie') || '',
         },
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        
-        // If profile is not complete and not already on onboarding, redirect
-        if (!data.isProfileComplete && pathname !== '/onboarding') {
+      if (response.status === 404) {
+        // User doesn't exist in DB -> redirect to onboarding
+        // This only happens for new users who haven't completed initial onboarding
+        if (pathname !== '/onboarding') {
           const onboardingUrl = new URL('/onboarding', req.url);
           return NextResponse.redirect(onboardingUrl);
         }
+      } else if (response.ok) {
+        const data = await response.json();
+        const userRole = data?.data?.user?.role;
+        const isProfileComplete = data?.data?.user?.isProfileComplete;
 
-        // If profile is complete and on onboarding, redirect to role-specific dashboard
-        if (data.isProfileComplete && pathname === '/onboarding') {
-          const dashboardPath = data.role === 'professional' 
+        // If user is on onboarding but already exists in DB, redirect to dashboard
+        // (They've completed initial onboarding, even if profile is incomplete)
+        if (pathname === '/onboarding') {
+          const dashboardPath = userRole === 'professional' 
             ? '/professional-portal/dashboard' 
             : '/dashboard';
           const dashboardUrl = new URL(dashboardPath, req.url);
           return NextResponse.redirect(dashboardUrl);
         }
+        
+        // Note: We no longer redirect incomplete profiles to onboarding.
+        // Instead, the dashboard will show a ProfileCompletionBanner.
       }
     } catch (error) {
       console.error('Profile check error in middleware:', error);

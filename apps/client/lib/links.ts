@@ -9,6 +9,7 @@ export const ROUTES = {
   client: '/client',
   userDashboard: '/dashboard',
   userProfile: '/profile',
+  userProfileComplete: '/profile/complete',
   userSettings: '/profile', // mapped to profile for now
   userNotifications: '/notifications',
   userProjects: '/projects',
@@ -35,6 +36,7 @@ export const ROUTES = {
   professionalPortfolio: '/professional-portal/portfolio',
   professionalFinance: '/professional-portal/finance',
   professionalSettings: '/professional-portal/settings',
+  professionalProfileComplete: '/professional-portal/settings/complete-profile',
   professionalCalendar: '/professional-portal/calendar',
 
   // Categories & Search

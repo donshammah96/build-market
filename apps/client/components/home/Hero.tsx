@@ -71,20 +71,23 @@ export const Hero: FC = () => {
           const response = await fetch('/api/user/profile');
           
           if (response.status === 404) {
-            // Profile doesn't exist -> Redirect to Onboarding Route
+            // User doesn't exist in database -> Redirect to Onboarding
+            // (API only returns 404 when user truly doesn't exist, not for incomplete profiles)
             router.push(ROUTES.onboarding);
-          } else if (response.ok) {
-            // Profile exists -> Redirect to Dashboard
+          } else if (response.status === 200) {
+            // User exists (complete or incomplete) -> Redirect to Dashboard based on role
             const data = await response.json();
-            const target = data.role === 'professional' 
+            const role = data?.data?.user?.role;
+            const target = role === 'professional' 
               ? ROUTES.professionalDashboard 
               : ROUTES.userDashboard;
             router.push(target);
           }
         } catch (error) {
           console.error("Profile check failed", error);
-          // Fallback to onboarding on error to be safe
-          router.push(ROUTES.onboarding);
+          // Don't redirect on network errors - let user stay on homepage
+          // They can try again or navigate manually
+          setCheckingProfile(false);
         } finally {
           // Note: We don't setCheckingProfile(false) here because we are likely redirecting.
           // Leaving it true keeps the loader visible until the page changes.

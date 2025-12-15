@@ -28,6 +28,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ProfileCompletionBanner } from "@/components/shared/ProfileCompletionBanner";
+import { useProfileStatus } from "@/hooks/useProfileStatus";
 import { cn } from "@/lib/utils";
 
 // --- Types ---
@@ -46,6 +48,9 @@ export default function ProfessionalDashboardPage() {
   const { user, isLoaded } = useUser();
   const [loading, setLoading] = useState(true);
   const [leads, setLeads] = useState<Lead[]>([]);
+  
+  // Profile completion status
+  const { completion, isLoading: profileLoading } = useProfileStatus();
 
   // Fetch Agenda (Today's Events)
   const { data: events } = useQuery({
@@ -78,6 +83,15 @@ export default function ProfessionalDashboardPage() {
 
   return (
     <div className="space-y-10 max-w-[1600px] mx-auto pb-10">
+      
+      {/* Profile Completion Banner */}
+      {!profileLoading && completion && !completion.isComplete && (
+        <ProfileCompletionBanner 
+          percentage={completion.percentage}
+          missingFields={completion.missingRequiredLabels || []}
+          profileType="professional"
+        />
+      )}
       
       {/* --- Header: Clean & Minimalist --- */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 pb-6 border-b border-zinc-100">
