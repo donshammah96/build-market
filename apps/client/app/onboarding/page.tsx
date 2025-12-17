@@ -1,24 +1,82 @@
 "use client";
 
 import { useState } from "react";
-import { useUser } from '@clerk/nextjs';
+import { useUser, useClerk } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { toast } from 'react-toastify';
 import { cn } from "@/lib/utils";
 import HomeownerForm from "@/components/forms/HomeownerForm";
 import ProfessionalForm from "@/components/forms/ProfessionalForm";
-import { Home, Briefcase, ArrowLeft, Loader2, CheckCircle2 } from "lucide-react";
+import { Home, Briefcase, ArrowLeft, Loader2, CheckCircle2, X, ChevronRight } from "lucide-react";
 import { OnboardingData } from '@repo/types';
 import { motion, AnimatePresence } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+    Breadcrumb,
+    BreadcrumbItem,
+    BreadcrumbLink,
+    BreadcrumbList,
+    BreadcrumbPage,
+    BreadcrumbSeparator,
+} from "@/components/ui/breadcrumbs";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialogue";
 
 export default function Onboarding() {
     const { user } = useUser();
+    const { signOut } = useClerk();
     const router = useRouter();
     const [step, setStep] = useState(1);
     const [role, setRole] = useState<'client' | 'professional' | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const [showCancelDialog, setShowCancelDialog] = useState(false);
+
+    // Handle cancel onboarding - sign out and redirect to homepage
+    const handleCancelOnboarding = async () => {
+        toast.info('Onboarding cancelled. Signing out and returning to homepage.');
+        await signOut({ redirectUrl: '/' });
+    };
+
+    // Handle skip onboarding for homeowners - creates minimal profile and goes to dashboard
+    const handleSkipOnboarding = async () => {
+        setSubmitting(true);
+        try {
+            const response = await fetch('/api/onboarding/skip', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to skip onboarding');
+            }
+
+            toast.info('Welcome! You can complete your profile anytime from the dashboard.');
+            router.push('/dashboard');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    // Get the current step label for breadcrumbs
+    const getCurrentStepLabel = () => {
+        if (step === 1) return 'Select Role';
+        if (role === 'client') return 'Homeowner Details';
+        return 'Professional Details';
+    };
 
     type Role = 'client' | 'professional';
 
@@ -81,6 +139,74 @@ export default function Onboarding() {
 
             <div className="w-full max-w-5xl relative z-10">
                 
+                {/* --- Navigation Bar with Breadcrumbs and Cancel --- */}
+                <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center justify-between mb-8 px-4"
+                >
+                    {/* Breadcrumbs */}
+                    <Breadcrumb>
+                        <BreadcrumbList className="text-zinc-400">
+                            <BreadcrumbItem>
+                                <BreadcrumbLink asChild>
+                                    <Link href="/" className="flex items-center gap-1.5 hover:text-emerald-400 transition-colors">
+                                        <Home className="h-4 w-4" />
+                                        Home
+                                    </Link>
+                                </BreadcrumbLink>
+                            </BreadcrumbItem>
+                            <BreadcrumbSeparator>
+                                <ChevronRight className="h-4 w-4 text-zinc-600" />
+                            </BreadcrumbSeparator>
+                            <BreadcrumbItem>
+                                <BreadcrumbPage className="text-zinc-300">Onboarding</BreadcrumbPage>
+                            </BreadcrumbItem>
+                            <BreadcrumbSeparator>
+                                <ChevronRight className="h-4 w-4 text-zinc-600" />
+                            </BreadcrumbSeparator>
+                            <BreadcrumbItem>
+                                <BreadcrumbPage className="text-emerald-400 font-medium">
+                                    {getCurrentStepLabel()}
+                                </BreadcrumbPage>
+                            </BreadcrumbItem>
+                        </BreadcrumbList>
+                    </Breadcrumb>
+
+                    {/* Cancel Onboarding Button with Confirmation */}
+                    <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+                        <AlertDialogTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                            >
+                                <X className="h-4 w-4 mr-2" />
+                                Cancel
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="bg-zinc-900 border-zinc-800">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle className="text-white">Cancel Onboarding?</AlertDialogTitle>
+                                <AlertDialogDescription className="text-zinc-400">
+                                    Are you sure you want to cancel the onboarding process? Your progress will not be saved and you'll be redirected to the homepage.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel className="bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:text-white">
+                                    Continue Onboarding
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                    onClick={handleCancelOnboarding}
+                                    className="bg-red-600 text-white hover:bg-red-700"
+                                >
+                                    Yes, Cancel
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </motion.div>
+
                 {/* --- 2. Header / Progress --- */}
                 <motion.div 
                     initial={{ opacity: 0, y: -20 }}
@@ -130,6 +256,22 @@ export default function Onboarding() {
                                 delay={0.2}
                                 highlight
                             />
+
+                            {/* Back to Home Link */}
+                            <motion.div 
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.3 }}
+                                className="col-span-1 md:col-span-2 flex justify-center mt-4"
+                            >
+                                <Link 
+                                    href="/" 
+                                    className="text-zinc-500 hover:text-emerald-400 text-sm flex items-center gap-2 transition-colors group"
+                                >
+                                    <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
+                                    Back to Homepage
+                                </Link>
+                            </motion.div>
                         </motion.div>
                     )}
 
@@ -170,6 +312,7 @@ export default function Onboarding() {
                                             onBack={() => setStep(1)} 
                                             onSubmit={handleHomeownerSubmit} 
                                             onAuthSuccess={() => {}} 
+                                            onSkip={handleSkipOnboarding}
                                         />
                                     ) : (
                                         <ProfessionalForm 

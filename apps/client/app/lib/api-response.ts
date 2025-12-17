@@ -1,4 +1,14 @@
-import { NextResponse } from 'next/server';
+/**
+ * Unified API Response utilities
+ * 
+ * This module re-exports response helpers from resilient-api.ts for backward compatibility.
+ * The resilient-api version includes enhanced features like correlation ID tracking.
+ * 
+ * @module api-response
+ */
+
+// Re-export response functions from resilient-api (single source of truth)
+export { apiSuccess, apiError } from './resilient-api';
 
 /**
  * Standard API error response format
@@ -6,8 +16,9 @@ import { NextResponse } from 'next/server';
 export interface ApiErrorResponse {
   success: false;
   error: string;
-  details?: any;
+  details?: unknown;
   timestamp: string;
+  correlationId?: string;
 }
 
 /**
@@ -17,50 +28,7 @@ export interface ApiSuccessResponse<T> {
   success: true;
   data: T;
   timestamp: string;
-}
-
-/**
- * Returns a standardized error response
- * @param message - Error message for the client
- * @param status - HTTP status code (default: 500)
- * @param details - Additional error details (only included in development)
- */
-export function apiError(
-  message: string,
-  status: number = 500,
-  details?: any
-): NextResponse<ApiErrorResponse> {
-  const isDevelopment = process.env.NODE_ENV === 'development';
-
-  return NextResponse.json(
-    {
-      success: false,
-      error: message,
-      // Only include details in development to avoid exposing sensitive info
-      ...(isDevelopment && details && { details }),
-      timestamp: new Date().toISOString(),
-    },
-    { status }
-  );
-}
-
-/**
- * Returns a standardized success response
- * @param data - Response data
- * @param status - HTTP status code (default: 200)
- */
-export function apiSuccess<T>(
-  data: T,
-  status: number = 200
-): NextResponse<ApiSuccessResponse<T>> {
-  return NextResponse.json(
-    {
-      success: true,
-      data,
-      timestamp: new Date().toISOString(),
-    },
-    { status }
-  );
+  correlationId?: string;
 }
 
 /**

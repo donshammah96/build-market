@@ -1,11 +1,12 @@
-
-import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@repo/db";
 import { z } from "zod";
 import { withAuth } from "@/app/lib/api-middleware";
-import { apiSuccess, apiError, executeResilient } from "@/app/lib/resilient-api";
+import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { initializeCorrelationId, executeResilient, getClientLogger } from "@/app/lib/resilient-api";
 import { checkRateLimit, RateLimits, getRateLimitIdentifier } from "@/app/lib/rate-limit";
+
+const logger = getClientLogger();
 
 const createLeadSchema = z.object({
   clientName: z.string().min(1, "Client name is required"),
@@ -18,52 +19,70 @@ const createLeadSchema = z.object({
   notes: z.string().optional(),
 });
 
+/**
+ * GET /api/professional-portal/leads
+ * Get all leads for the authenticated professional
+ */
+export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
+  const correlationId = initializeCorrelationId(req);
 
-export const GET = withAuth(async (req, context) => {
   const identifier = getRateLimitIdentifier(req);
   const { success } = await checkRateLimit(identifier, RateLimits.READ.limit, RateLimits.READ.window);
 
   if (!success) {
-    return apiError("Too many requests", 429);
+    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
   }
+
+  logger.info('Fetching leads', { correlationId, userId: dbUserId });
 
   return executeResilient(
     async () => {
       const leads = await prisma.lead.findMany({
         where: {
           professional: {
-            userId: context.dbUserId,
+            userId: dbUserId,
           },
         },
         orderBy: {
           createdAt: "desc",
         },
       });
+
+      logger.info('Leads fetched successfully', { correlationId, userId: dbUserId, count: leads.length });
       return leads;
     },
     {
       operationName: "get_leads",
-      successStatus: 200,
+      successStatus: HttpStatus.OK,
     }
   );
 });
 
-export const POST = withAuth(async (req, context) => {
+/**
+ * POST /api/professional-portal/leads
+ * Create a new lead for the authenticated professional
+ */
+export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
+  const correlationId = initializeCorrelationId(req);
+
   const identifier = getRateLimitIdentifier(req);
   const { success } = await checkRateLimit(identifier, RateLimits.WRITE.limit, RateLimits.WRITE.window);
 
   if (!success) {
-    return apiError("Too many requests", 429);
+    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
   }
 
   const body = await req.json();
   const validation = createLeadSchema.safeParse(body);
 
   if (!validation.success) {
-    return apiError("Invalid input data", 400, validation.error.issues);
+    logger.warn('Lead creation validation failed', { correlationId, userId: dbUserId, errors: validation.error.issues });
+    return apiError("Invalid input data", HttpStatus.BAD_REQUEST, validation.error.issues);
   }
 
   const { data } = validation;
+
+  logger.info('Creating lead', { correlationId, userId: dbUserId, projectType: data.projectType });
 
   return executeResilient(
     async () => {
@@ -71,7 +90,7 @@ export const POST = withAuth(async (req, context) => {
         data: {
           professional: {
             connect: {
-              userId: context.dbUserId,
+              userId: dbUserId,
             },
           },
           clientName: data.clientName,
@@ -84,12 +103,13 @@ export const POST = withAuth(async (req, context) => {
           notes: data.notes || null,
         },
       });
+
+      logger.info('Lead created successfully', { correlationId, userId: dbUserId, leadId: lead.id });
       return lead;
     },
     {
       operationName: "create_lead",
-      successStatus: 201,
+      successStatus: HttpStatus.CREATED,
     }
   );
 });
-

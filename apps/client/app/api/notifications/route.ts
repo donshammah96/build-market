@@ -1,69 +1,109 @@
-
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@repo/db";
 import { withAuth } from "@/app/lib/api-middleware";
-import { apiSuccess, apiError, executeResilient } from "@/app/lib/resilient-api";
+import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { initializeCorrelationId, executeResilient, getClientLogger } from "@/app/lib/resilient-api";
+import { checkRateLimit, getRateLimitIdentifier, RateLimits } from "@/app/lib/rate-limit";
 
-export const GET = withAuth(async (req, context) => {
+const logger = getClientLogger();
+
+/**
+ * GET /api/notifications
+ * Get notifications for the authenticated user
+ */
+export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
+  const correlationId = initializeCorrelationId(req);
+
+  const identifier = getRateLimitIdentifier(req);
+  const { success } = await checkRateLimit(identifier, RateLimits.READ.limit, RateLimits.READ.window);
+
+  if (!success) {
+    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+  }
+
+  logger.info('Fetching notifications', { correlationId, userId: dbUserId });
+
   return executeResilient(
     async () => {
       const notifications = await prisma.notification.findMany({
         where: {
-          userId: context.dbUserId,
+          userId: dbUserId,
         },
         orderBy: {
           createdAt: "desc",
         },
-        take: 20, // Limit to last 20 notifications
+        take: 20,
       });
+
+      logger.info('Notifications fetched successfully', { correlationId, userId: dbUserId, count: notifications.length });
       return notifications;
     },
     {
       operationName: "get_notifications",
-      successStatus: 200,
+      successStatus: HttpStatus.OK,
     }
   );
 });
 
-export const PATCH = withAuth(async (req, context) => {
+/**
+ * PATCH /api/notifications
+ * Mark notification(s) as read
+ */
+export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
+  const correlationId = initializeCorrelationId(req);
+
+  const identifier = getRateLimitIdentifier(req);
+  const { success } = await checkRateLimit(identifier, RateLimits.WRITE.limit, RateLimits.WRITE.window);
+
+  if (!success) {
+    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+  }
+
   const body = await req.json();
   const { id, read } = body;
 
   if (!id) {
-    return apiError("Notification ID is required", 400);
+    logger.warn('Missing notification ID', { correlationId, userId: dbUserId });
+    return apiError("Notification ID is required", HttpStatus.BAD_REQUEST);
   }
+
+  logger.info('Updating notification', { correlationId, userId: dbUserId, notificationId: id });
 
   return executeResilient(
     async () => {
       // If marking all as read (id === "all")
       if (id === "all") {
-        await prisma.notification.updateMany({
+        const result = await prisma.notification.updateMany({
           where: {
-            userId: context.dbUserId,
+            userId: dbUserId,
             read: false,
           },
           data: {
             read: true,
           },
         });
-        return { message: "All notifications marked as read" };
+
+        logger.info('All notifications marked as read', { correlationId, userId: dbUserId, count: result.count });
+        return { message: "All notifications marked as read", count: result.count };
       }
 
       // Mark single notification as read
       const notification = await prisma.notification.update({
         where: {
           id,
-          userId: context.dbUserId, // Ensure ownership
+          userId: dbUserId,
         },
         data: {
           read: read ?? true,
         },
       });
+
+      logger.info('Notification updated', { correlationId, userId: dbUserId, notificationId: id });
       return notification;
     },
     {
       operationName: "update_notification",
-      successStatus: 200,
+      successStatus: HttpStatus.OK,
     }
   );
 });

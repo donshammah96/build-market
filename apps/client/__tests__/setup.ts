@@ -1,5 +1,13 @@
 import { beforeAll, afterEach, afterAll, vi } from 'vitest';
-import { cleanup } from '@testing-library/react';
+
+// Only import cleanup in jsdom environment
+let cleanup: (() => void) | undefined;
+if (typeof window !== 'undefined') {
+  // We're in jsdom environment
+  import('@testing-library/react').then((mod) => {
+    cleanup = mod.cleanup;
+  });
+}
 
 // Setup mocks for Next.js modules
 vi.mock('next/navigation', () => ({
@@ -27,11 +35,10 @@ beforeAll(() => {
 });
 
 afterEach(() => {
-  cleanup();
+  if (cleanup) cleanup();
   vi.clearAllMocks();
 });
 
 afterAll(() => {
   // Global test teardown
 });
-

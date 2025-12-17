@@ -74,7 +74,7 @@ export interface Professional {
 export const features: Feature[] = [
   { title: 'Idea Books', description: 'Browse idea books to find inspiration', image: '/design.png', imageAlt: 'Idea Books', href: ROUTES.ideaBooks },
   { title: 'Find a Professional', description: 'Find a professional for your specific needs.', image: '/professional.png', imageAlt: 'Find a Professional', href: ROUTES.findProfessional },
-  { title: 'Speak with an Advisor', description: 'Contact a knowledgeable guide.', image: '/contact.png', imageAlt: 'Speak with an Advisor', href: ROUTES.speakWithAdvisor },
+  { title: 'Find Properties', description: 'Find properties for sale or rent.', image: '/hero-realestate.jpg', imageAlt: 'Find Properties', href: ROUTES.properties },
 ];
 
 export const stores: Store[] = [

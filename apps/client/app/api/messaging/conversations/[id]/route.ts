@@ -1,100 +1,95 @@
-import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/app/lib/auth";
+import { NextRequest } from "next/server";
+import { withAuth } from "@/app/lib/api-middleware";
+import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { initializeCorrelationId, executeResilient, resilientFetch, getClientLogger } from "@/app/lib/resilient-api";
+import { checkRateLimit, getRateLimitIdentifier, RateLimits } from "@/app/lib/rate-limit";
 
 const MESSAGING_SERVICE_URL = process.env.MESSAGING_SERVICE_URL || "http://localhost:3010";
+const logger = getClientLogger();
 
 /**
  * GET /api/messaging/conversations/[id]
  * Get a specific conversation
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const session = await auth();
+export const GET = withAuth<{ id: string }>(async (req: NextRequest, { dbUserId }, params) => {
+  const correlationId = initializeCorrelationId(req);
+  const { id: conversationId } = params!;
 
-    if (!session || !session.user?.id) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+  const identifier = getRateLimitIdentifier(req);
+  const { success } = await checkRateLimit(identifier, RateLimits.READ.limit, RateLimits.READ.window);
 
-    const conversationId = params.id;
-
-    // Forward request to messaging service
-    const response = await fetch(
-      `${MESSAGING_SERVICE_URL}/api/conversations/${conversationId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: "Conversation not found" }));
-      return NextResponse.json(error, { status: response.status });
-    }
-
-    const data = await response.json();
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error("Error fetching conversation:", error);
-    return NextResponse.json(
-      { success: false, error: "Internal server error" },
-      { status: 500 }
-    );
+  if (!success) {
+    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
   }
-}
+
+  logger.info('Fetching conversation', { correlationId, conversationId, userId: dbUserId });
+
+  return executeResilient(
+    async () => {
+      const data = await resilientFetch(
+        `${MESSAGING_SERVICE_URL}/api/conversations/${conversationId}`,
+        {
+          headers: {
+            'X-User-Id': dbUserId,
+            'X-Correlation-ID': correlationId,
+            'Content-Type': 'application/json',
+          },
+          timeout: 8000,
+          retry: true,
+          operationName: 'fetch-conversation',
+        }
+      );
+
+      logger.info('Conversation fetched successfully', { correlationId, conversationId });
+      return data;
+    },
+    {
+      operationName: 'get-conversation',
+      successStatus: HttpStatus.OK,
+    }
+  );
+});
 
 /**
  * DELETE /api/messaging/conversations/[id]
  * Leave or delete a conversation
  */
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const session = await auth();
+export const DELETE = withAuth<{ id: string }>(async (req: NextRequest, { dbUserId }, params) => {
+  const correlationId = initializeCorrelationId(req);
+  const { id: conversationId } = params!;
 
-    if (!session || !session.user?.id) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+  const identifier = getRateLimitIdentifier(req);
+  const { success } = await checkRateLimit(identifier, RateLimits.WRITE.limit, RateLimits.WRITE.window);
 
-    const conversationId = params.id;
-
-    // Forward request to messaging service
-    const response = await fetch(
-      `${MESSAGING_SERVICE_URL}/api/conversations/${conversationId}`,
-      {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: "Failed to delete conversation" }));
-      return NextResponse.json(error, { status: response.status });
-    }
-
-    const data = await response.json();
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error("Error deleting conversation:", error);
-    return NextResponse.json(
-      { success: false, error: "Internal server error" },
-      { status: 500 }
-    );
+  if (!success) {
+    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
   }
-}
 
+  logger.info('Deleting conversation', { correlationId, conversationId, userId: dbUserId });
+
+  return executeResilient(
+    async () => {
+      const data = await resilientFetch(
+        `${MESSAGING_SERVICE_URL}/api/conversations/${conversationId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'X-User-Id': dbUserId,
+            'X-Correlation-ID': correlationId,
+            'Content-Type': 'application/json',
+          },
+          timeout: 8000,
+          retry: false, // Don't retry deletes
+          operationName: 'delete-conversation',
+        }
+      );
+
+      logger.info('Conversation deleted successfully', { correlationId, conversationId });
+      return data;
+    },
+    {
+      operationName: 'delete-conversation',
+      successStatus: HttpStatus.OK,
+    }
+  );
+});

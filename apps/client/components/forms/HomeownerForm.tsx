@@ -71,6 +71,7 @@ interface Props {
   onBack: () => void;
   onSubmit: (data: OnboardingData) => Promise<void>;
   onAuthSuccess: (response: any) => void;
+  onSkip?: () => void; // Optional: allows skipping onboarding
 }
 
 const Toast = ({ type, message }: { type: 'success' | 'error' | 'info'; message: string }) => {
@@ -84,7 +85,7 @@ const Toast = ({ type, message }: { type: 'success' | 'error' | 'info'; message:
   return <div className={`${base} ${classes}`}>{message}</div>;
 };
 
-const HomeownerForm = ({ onBack, onSubmit, onAuthSuccess }: Props) => {
+const HomeownerForm = ({ onBack, onSubmit, onAuthSuccess, onSkip }: Props) => {
   const { user } = useUser();
   const router = useRouter();
 
@@ -212,6 +213,27 @@ const HomeownerForm = ({ onBack, onSubmit, onAuthSuccess }: Props) => {
           <Button variant="default" className="w-full" size="lg" type="submit" disabled={submitting}>
             {submitting ? 'Submitting…' : 'Create Account'}
           </Button>
+          
+          {/* Skip option for homeowners */}
+          {onSkip && (
+            <div className="mt-4 text-center">
+              <p className="text-zinc-400 text-xs mb-2">
+                Not ready to fill this out? No problem.
+              </p>
+              <button 
+                type="button" 
+                onClick={onSkip} 
+                disabled={submitting}
+                className="text-emerald-400 hover:text-emerald-300 text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                Skip for now →
+              </button>
+              <p className="text-zinc-500 text-[10px] mt-1">
+                You can complete your profile anytime from your dashboard
+              </p>
+            </div>
+          )}
+          
           <button type="button" onClick={onBack} className="w-full text-center text-slate-400 text-xs mt-4 hover:text-white transition-colors">
             Go Back
           </button>

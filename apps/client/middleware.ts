@@ -2,81 +2,106 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Define protected routes that require authentication
+// =============================================================================
+// Route Matchers
+// =============================================================================
+
+/**
+ * Protected routes require authentication.
+ * Unauthenticated users will be redirected to sign-in.
+ */
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)',
   '/professional-portal(.*)',
   '/messages(.*)',
   '/profile(.*)',
   '/client(.*)',
-  '/professional(.*)',
 ]);
 
-// Define routes that should be accessible even without profile completion
+/**
+ * Professional routes - subset of protected routes for professional users
+ */
+const isProfessionalRoute = createRouteMatcher([
+  '/professional-portal(.*)',
+]);
+
+/**
+ * Public routes - accessible to everyone, authenticated or not.
+ * These bypass all authentication checks.
+ */
 const isPublicRoute = createRouteMatcher([
   '/',
   '/sign-in(.*)',
   '/sign-up(.*)',
-  '/verify(.*)',        // Clerk email verification
-  '/sso-callback(.*)',  // Clerk SSO callbacks
-  '/onboarding',
-  '/api(.*)',
-  '/professionals(.*)',
-  '/idea-books(.*)',
+  '/verify(.*)',            // Clerk email verification
+  '/sso-callback(.*)',      // Clerk SSO callbacks  
+  '/auth-callback',         // Post-authentication redirect handler
+  '/onboarding(.*)',        // Onboarding flows (including /onboarding/professional)
+  '/api(.*)',               // API routes handle their own auth
+  '/professionals(.*)',     // Public professional listings
+  '/professional',           // Public professional landing page (exact)
+  '/professional/sign-up(.*)', // Professional sign-up flow
+  '/idea-books(.*)',        // Public idea books
   '/speak-with-an-advisor(.*)',
 ]);
 
+// =============================================================================
+// Middleware
+// =============================================================================
+
 export default clerkMiddleware(async (auth, req: NextRequest) => {
-  const { userId } = await auth();
   const { pathname } = req.nextUrl;
 
-  // Allow access to public routes
+  // 1. Public routes - allow access without any checks
   if (isPublicRoute(req)) {
     return NextResponse.next();
   }
 
-  // If user is accessing a protected route
-  if (isProtectedRoute(req) && userId) {
-    // Check if user exists in database
-    try {
-      const baseUrl = req.nextUrl.origin;
-      const response = await fetch(`${baseUrl}/api/user/profile`, {
-        headers: {
-          'Cookie': req.headers.get('cookie') || '',
-        },
-      });
+  // 2. Protected routes - require authentication
+  if (isProtectedRoute(req)) {
+    const authObject = await auth();
+    const { userId, sessionClaims } = authObject;
 
-      if (response.status === 404) {
-        // User doesn't exist in DB -> redirect to onboarding
-        // This only happens for new users who haven't completed initial onboarding
-        if (pathname !== '/onboarding') {
-          const onboardingUrl = new URL('/onboarding', req.url);
-          return NextResponse.redirect(onboardingUrl);
-        }
-      } else if (response.ok) {
-        const data = await response.json();
-        const userRole = data?.data?.user?.role;
-        const isProfileComplete = data?.data?.user?.isProfileComplete;
+    // Redirect unauthenticated users to sign-in with return URL
+    if (!userId) {
+      const signInUrl = new URL('/sign-in', req.url);
+      signInUrl.searchParams.set('redirect_url', pathname);
+      return NextResponse.redirect(signInUrl);
+    }
 
-        // If user is on onboarding but already exists in DB, redirect to dashboard
-        // (They've completed initial onboarding, even if profile is incomplete)
-        if (pathname === '/onboarding') {
-          const dashboardPath = userRole === 'professional' 
-            ? '/professional-portal/dashboard' 
-            : '/dashboard';
-          const dashboardUrl = new URL(dashboardPath, req.url);
-          return NextResponse.redirect(dashboardUrl);
-        }
-        
-        // Note: We no longer redirect incomplete profiles to onboarding.
-        // Instead, the dashboard will show a ProfileCompletionBanner.
-      }
-    } catch (error) {
-      console.error('Profile check error in middleware:', error);
-      // Continue on error to avoid blocking access
+    // Get user role and onboarding status from Clerk's publicMetadata
+    // This is set during onboarding via Clerk's backend API
+    const metadata = sessionClaims?.metadata as { 
+      role?: string; 
+      isOnboarded?: boolean;
+    } | undefined;
+    
+    const userRole = metadata?.role;
+    const isOnboarded = metadata?.isOnboarded;
+
+    // If user hasn't completed onboarding yet, redirect to onboarding
+    // Skip this check if they're already headed to a public/onboarding route
+    if (!isOnboarded && pathname !== '/onboarding') {
+      const onboardingUrl = new URL('/onboarding', req.url);
+      return NextResponse.redirect(onboardingUrl);
+    }
+
+    // If user is on onboarding but already onboarded, redirect to their dashboard
+    if (isOnboarded && pathname === '/onboarding') {
+      const dashboardPath = userRole === 'professional' 
+        ? '/professional-portal/dashboard' 
+        : '/dashboard';
+      return NextResponse.redirect(new URL(dashboardPath, req.url));
+    }
+
+    // Optional: Check role-based access for professional routes
+    if (isProfessionalRoute(req) && userRole !== 'professional') {
+      // Non-professionals trying to access professional routes
+      return NextResponse.redirect(new URL('/dashboard', req.url));
     }
   }
 
+  // 3. All other routes - allow access
   return NextResponse.next();
 });
 

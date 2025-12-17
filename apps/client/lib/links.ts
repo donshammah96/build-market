@@ -4,6 +4,7 @@ export const ROUTES = {
   signIn: '/sign-in',
   signUp: '/sign-up',
   onboarding: '/onboarding',
+  authCallback: '/auth-callback',
   
   // Client / Homeowner Routes
   client: '/client',
@@ -25,8 +26,9 @@ export const ROUTES = {
   professional: '/professional',
   professionalList: '/professionals',
   professionalDetail: '/professionals/:id', // Placeholder for dynamic route
-  joinAsPro: '/professional/register',
+  joinAsPro: '/professional/sign-up',
   professionalProfile: '/professional/profile',
+  professionalOnboarding: '/professional/onboarding',
   
   // Professional Portal (Private Tools)
   professionalDashboard: '/professional-portal/dashboard',
@@ -58,6 +60,7 @@ export const ROUTES = {
   engineers: '/professionals/engineers',
   designers: '/professionals/designers',
   architects: '/professionals/architects',
+  properties: '/properties',
 } as const;
 
 export type RouteKey = keyof typeof ROUTES;
@@ -67,7 +70,7 @@ export const getProfessionalUrl = (id: string) => `/professionals/${id}`;
 export const getProjectUrl = (id: string) => `/projects/${id}`;
 export const getIdeaBookUrl = (id: string) => `/idea-books/${id}`;
 export const getVendorUrl = (id: string) => `/vendors/${id}`;
-
+export const getPropertyUrl = (id: string) => `/properties/${id}`;
 // Professional Portal Helpers
 export const getProfessionalProjectUrl = (id: string) => `/professional-portal/projects/${id}`;
 export const getProfessionalPortfolioUrl = (id: string) => `/professional-portal/portfolio/${id}`;

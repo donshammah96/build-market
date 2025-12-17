@@ -100,7 +100,7 @@ export const Footer = () => {
                             </div>
                             <div className="flex items-center gap-3 text-sm text-zinc-500">
                                 <Phone size={16} className="text-emerald-600" />
-                                <span>+254 700 000 000</span>
+                                <span>+254 791 938 881</span>
                             </div>
                         </div>
                     </div>

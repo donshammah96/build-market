@@ -5,15 +5,18 @@ import { apiError, apiSuccess, HttpStatus } from '@/app/lib/api-response';
 import { UserRepository } from '@/app/lib/repositories/user.repository';
 import { checkRateLimit, getRateLimitIdentifier, RateLimits } from '@/app/lib/rate-limit';
 import { env } from '@/app/lib/env';
+import { initializeCorrelationId, getClientLogger } from '@/app/lib/resilient-api';
+
+const logger = getClientLogger();
 
 /**
  * POST /api/clerk-webhook
  * Handle Clerk webhook events for user creation and updates
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  console.log('===============================================');
-  console.log('WEBHOOK: Request received');
-  console.log('===============================================');
+  const correlationId = initializeCorrelationId(req);
+
+  logger.info('Webhook request received', { correlationId });
 
   try {
     // Rate limiting for webhooks
@@ -30,7 +33,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     // Check webhook secret
     if (!env.CLERK_WEBHOOK_SECRET) {
-      console.error('ERROR: CLERK_WEBHOOK_SECRET not configured');
+      logger.error('CLERK_WEBHOOK_SECRET not configured', undefined, { correlationId });
       return apiError('Service configuration error', HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
@@ -38,7 +41,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const payload = await req.text();
     const headers = Object.fromEntries(req.headers);
 
-    console.log('WEBHOOK: Payload received, length:', payload.length);
+    logger.debug('Webhook payload received', { correlationId, payloadLength: payload.length });
 
     // Verify webhook signature
     const wh = new Webhook(env.CLERK_WEBHOOK_SECRET);
@@ -47,18 +50,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
       evt = wh.verify(payload, headers);
     } catch (verifyError) {
-      console.error('WEBHOOK: Signature verification failed:', verifyError);
+      logger.error('Webhook signature verification failed', verifyError instanceof Error ? verifyError : new Error(String(verifyError)), { correlationId });
       return apiError('Invalid webhook signature', HttpStatus.UNAUTHORIZED);
     }
 
-    console.log('WEBHOOK: Verified, event type:', evt.type);
+    logger.info('Webhook verified', { correlationId, eventType: evt.type });
 
     // Check database connection
     try {
       await prisma.$connect();
-      console.log('DATABASE: Connection verified');
+      logger.debug('Database connection verified', { correlationId });
     } catch (dbError) {
-      console.error('DATABASE: Connection failed:', dbError);
+      logger.error('Database connection failed', dbError instanceof Error ? dbError : new Error(String(dbError)), { correlationId });
       return apiError('Database connection failed', HttpStatus.SERVICE_UNAVAILABLE);
     }
 
@@ -67,32 +70,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     // Handle user.created event
     if (evt.type === 'user.created') {
-      return await handleUserCreated(evt, userRepo);
+      return await handleUserCreated(evt, userRepo, correlationId);
     }
 
     // Handle user.updated event
     if (evt.type === 'user.updated') {
-      return await handleUserUpdated(evt, userRepo);
+      return await handleUserUpdated(evt, userRepo, correlationId);
     }
 
     // Handle user.deleted event (optional)
     if (evt.type === 'user.deleted') {
-      return await handleUserDeleted(evt, userRepo);
+      return await handleUserDeleted(evt, userRepo, correlationId);
     }
 
     // Other events - just acknowledge
-    console.log('WEBHOOK: Event type not handled:', evt.type);
+    logger.info('Event type not handled', { correlationId, eventType: evt.type });
     return apiSuccess(
       { message: `Event ${evt.type} acknowledged` },
       HttpStatus.OK
     );
   } catch (err: any) {
-    console.error('===============================================');
-    console.error('WEBHOOK ERROR');
-    console.error('===============================================');
-    console.error(err);
-    console.error('===============================================');
-
+    logger.error('Webhook processing failed', err instanceof Error ? err : new Error(String(err)), { correlationId });
     return apiError('Webhook processing failed', HttpStatus.INTERNAL_SERVER_ERROR);
   }
 }
@@ -100,18 +98,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 /**
  * Handle user.created webhook event
  */
-async function handleUserCreated(evt: any, userRepo: UserRepository) {
+async function handleUserCreated(evt: any, userRepo: UserRepository, correlationId: string) {
   const { id, email_addresses, first_name, last_name, phone_numbers } = evt.data;
 
   if (!id || !email_addresses?.[0]?.email_address) {
-    console.error('ERROR: Missing required data (id or email)');
+    logger.error('Missing required data (id or email)', undefined, { correlationId });
     return apiError('Missing required user data', HttpStatus.BAD_REQUEST);
   }
 
   const email = email_addresses[0].email_address;
   const phone = phone_numbers?.[0]?.phone_number;
 
-  console.log('USER CREATE: Processing', { clerkId: id, email });
+  logger.info('Processing user creation', { correlationId, clerkId: id, email });
 
   try {
     const user = await userRepo.upsert(
@@ -132,7 +130,7 @@ async function handleUserCreated(evt: any, userRepo: UserRepository) {
       }
     );
 
-    console.log('USER CREATE: Success', { userId: user.id, email: user.email });
+    logger.info('User created successfully', { correlationId, userId: user.id, email: user.email });
 
     return apiSuccess(
       {
@@ -142,10 +140,11 @@ async function handleUserCreated(evt: any, userRepo: UserRepository) {
       HttpStatus.OK
     );
   } catch (err: any) {
-    console.error('===============================================');
-    console.error('USER CREATE: Failed');
-    console.error('Error:', err);
-    console.error('===============================================');
+    logger.error('User creation failed', err instanceof Error ? err : new Error(String(err)), {
+      correlationId,
+      clerkId: id,
+      errorCode: err.code,
+    });
 
     if (err.code === 'P2002') {
       return apiError('User already exists', HttpStatus.CONFLICT);
@@ -158,18 +157,18 @@ async function handleUserCreated(evt: any, userRepo: UserRepository) {
 /**
  * Handle user.updated webhook event
  */
-async function handleUserUpdated(evt: any, userRepo: UserRepository) {
+async function handleUserUpdated(evt: any, userRepo: UserRepository, correlationId: string) {
   const { id, email_addresses, first_name, last_name, phone_numbers } = evt.data;
 
   if (!id) {
-    console.error('ERROR: Missing user ID in update event');
+    logger.error('Missing user ID in update event', undefined, { correlationId });
     return apiError('Missing user ID', HttpStatus.BAD_REQUEST);
   }
 
   const email = email_addresses?.[0]?.email_address;
   const phone = phone_numbers?.[0]?.phone_number;
 
-  console.log('USER UPDATE: Processing', { clerkId: id });
+  logger.info('Processing user update', { correlationId, clerkId: id });
 
   try {
     const user = await userRepo.update(id, {
@@ -179,7 +178,7 @@ async function handleUserUpdated(evt: any, userRepo: UserRepository) {
       ...(phone !== undefined && { phone: phone || null }),
     });
 
-    console.log('USER UPDATE: Success', { userId: user.id });
+    logger.info('User updated successfully', { correlationId, userId: user.id });
 
     return apiSuccess(
       {
@@ -189,7 +188,11 @@ async function handleUserUpdated(evt: any, userRepo: UserRepository) {
       HttpStatus.OK
     );
   } catch (err: any) {
-    console.error('USER UPDATE: Failed:', err.message);
+    logger.error('User update failed', err instanceof Error ? err : new Error(String(err)), {
+      correlationId,
+      clerkId: id,
+      errorCode: err.code,
+    });
 
     if (err.code === 'P2025') {
       return apiError('User not found', HttpStatus.NOT_FOUND);
@@ -202,20 +205,20 @@ async function handleUserUpdated(evt: any, userRepo: UserRepository) {
 /**
  * Handle user.deleted webhook event
  */
-async function handleUserDeleted(evt: any, userRepo: UserRepository) {
+async function handleUserDeleted(evt: any, userRepo: UserRepository, correlationId: string) {
   const { id } = evt.data;
 
   if (!id) {
-    console.error('ERROR: Missing user ID in delete event');
+    logger.error('Missing user ID in delete event', undefined, { correlationId });
     return apiError('Missing user ID', HttpStatus.BAD_REQUEST);
   }
 
-  console.log('USER DELETE: Processing', { clerkId: id });
+  logger.info('Processing user deletion', { correlationId, clerkId: id });
 
   try {
     // Soft delete or mark as deleted
     // For now, just log it - implement based on your requirements
-    console.log('USER DELETE: User deletion requested but not implemented');
+    logger.info('User deletion acknowledged (not implemented)', { correlationId, clerkId: id });
 
     return apiSuccess(
       {
@@ -224,7 +227,11 @@ async function handleUserDeleted(evt: any, userRepo: UserRepository) {
       HttpStatus.OK
     );
   } catch (err: any) {
-    console.error('USER DELETE: Failed:', err.message);
+    logger.error('User deletion failed', err instanceof Error ? err : new Error(String(err)), {
+      correlationId,
+      clerkId: id,
+    });
     return apiError('Failed to delete user', HttpStatus.INTERNAL_SERVER_ERROR);
   }
 }
+

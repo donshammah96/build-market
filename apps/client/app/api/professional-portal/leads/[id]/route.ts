@@ -1,8 +1,12 @@
+import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@repo/db";
 import { withAuth } from "@/app/lib/api-middleware";
-import { apiSuccess, apiError, executeResilient } from "@/app/lib/resilient-api";
+import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { initializeCorrelationId, executeResilient, getClientLogger } from "@/app/lib/resilient-api";
 import { checkRateLimit, RateLimits, getRateLimitIdentifier } from "@/app/lib/rate-limit";
+
+const logger = getClientLogger();
 
 const updateLeadSchema = z.object({
   clientName: z.string().min(1).optional(),
@@ -15,27 +19,71 @@ const updateLeadSchema = z.object({
   notes: z.string().optional(),
 });
 
-export const PATCH = withAuth(async (req, context, params?: { id: string }) => {
+/**
+ * GET /api/professional-portal/leads/[id]
+ * Get a specific lead by ID
+ */
+export const GET = withAuth<{ id: string }>(async (req: NextRequest, { dbUserId }, params) => {
+  const correlationId = initializeCorrelationId(req);
+  const { id } = params!;
+
+  const identifier = getRateLimitIdentifier(req);
+  const { success } = await checkRateLimit(identifier, RateLimits.READ.limit, RateLimits.READ.window);
+
+  if (!success) {
+    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+  }
+
+  logger.info('Fetching lead', { correlationId, leadId: id, userId: dbUserId });
+
+  return executeResilient(
+    async () => {
+      const lead = await prisma.lead.findUnique({
+        where: { id },
+        include: { professional: true },
+      });
+
+      if (!lead || lead.professional.userId !== dbUserId) {
+        logger.warn('Lead not found or unauthorized', { correlationId, leadId: id, userId: dbUserId });
+        return apiError("Lead not found", HttpStatus.NOT_FOUND);
+      }
+
+      logger.info('Lead fetched successfully', { correlationId, leadId: id });
+      return lead;
+    },
+    {
+      operationName: "get_lead",
+      successStatus: HttpStatus.OK,
+    }
+  );
+});
+
+/**
+ * PATCH /api/professional-portal/leads/[id]
+ * Update a specific lead
+ */
+export const PATCH = withAuth<{ id: string }>(async (req: NextRequest, { dbUserId }, params) => {
+  const correlationId = initializeCorrelationId(req);
+  const { id } = params!;
+
   const identifier = getRateLimitIdentifier(req);
   const { success } = await checkRateLimit(identifier, RateLimits.WRITE.limit, RateLimits.WRITE.window);
 
   if (!success) {
-    return apiError("Too many requests", 429);
+    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
   }
 
-  if (!params?.id) {
-    return apiError("Missing ID", 400);
-  }
-
-  const { id } = params;
   const body = await req.json();
   const validation = updateLeadSchema.safeParse(body);
 
   if (!validation.success) {
-    return apiError("Invalid input data", 400, validation.error.issues);
+    logger.warn('Lead update validation failed', { correlationId, leadId: id, errors: validation.error.issues });
+    return apiError("Invalid input data", HttpStatus.BAD_REQUEST, validation.error.issues);
   }
 
   const { data } = validation;
+
+  logger.info('Updating lead', { correlationId, leadId: id, userId: dbUserId });
 
   return executeResilient(
     async () => {
@@ -45,8 +93,9 @@ export const PATCH = withAuth(async (req, context, params?: { id: string }) => {
         include: { professional: true },
       });
 
-      if (!existingLead || existingLead.professional.userId !== context.dbUserId) {
-        throw new Error("Lead not found or unauthorized");
+      if (!existingLead || existingLead.professional.userId !== dbUserId) {
+        logger.warn('Lead not found or unauthorized for update', { correlationId, leadId: id, userId: dbUserId });
+        return apiError("Lead not found", HttpStatus.NOT_FOUND);
       }
 
       const updatedLead = await prisma.lead.update({
@@ -56,29 +105,33 @@ export const PATCH = withAuth(async (req, context, params?: { id: string }) => {
           clientEmail: data.clientEmail === "" ? null : data.clientEmail,
         },
       });
+
+      logger.info('Lead updated successfully', { correlationId, leadId: id });
       return updatedLead;
     },
     {
       operationName: "update_lead",
-      successStatus: 200,
-      errorStatus: 500, // Default, but good to be explicit if needed
+      successStatus: HttpStatus.OK,
     }
   );
 });
 
-export const DELETE = withAuth(async (req, context, params?: { id: string }) => {
+/**
+ * DELETE /api/professional-portal/leads/[id]
+ * Delete a specific lead
+ */
+export const DELETE = withAuth<{ id: string }>(async (req: NextRequest, { dbUserId }, params) => {
+  const correlationId = initializeCorrelationId(req);
+  const { id } = params!;
+
   const identifier = getRateLimitIdentifier(req);
   const { success } = await checkRateLimit(identifier, RateLimits.WRITE.limit, RateLimits.WRITE.window);
 
   if (!success) {
-    return apiError("Too many requests", 429);
+    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
   }
 
-  if (!params?.id) {
-    return apiError("Missing ID", 400);
-  }
-
-  const { id } = params;
+  logger.info('Deleting lead', { correlationId, leadId: id, userId: dbUserId });
 
   return executeResilient(
     async () => {
@@ -88,19 +141,21 @@ export const DELETE = withAuth(async (req, context, params?: { id: string }) => 
         include: { professional: true },
       });
 
-      if (!existingLead || existingLead.professional.userId !== context.dbUserId) {
-        throw new Error("Lead not found or unauthorized");
+      if (!existingLead || existingLead.professional.userId !== dbUserId) {
+        logger.warn('Lead not found or unauthorized for deletion', { correlationId, leadId: id, userId: dbUserId });
+        return apiError("Lead not found", HttpStatus.NOT_FOUND);
       }
 
       await prisma.lead.delete({
         where: { id },
       });
-      
+
+      logger.info('Lead deleted successfully', { correlationId, leadId: id });
       return { message: "Lead deleted successfully" };
     },
     {
       operationName: "delete_lead",
-      successStatus: 200,
+      successStatus: HttpStatus.OK,
     }
   );
 });

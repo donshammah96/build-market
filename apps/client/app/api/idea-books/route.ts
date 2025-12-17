@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@repo/db';
+import { withAuth } from '@/app/lib/api-middleware';
+import { apiError, HttpStatus } from '@/app/lib/api-response';
 import { 
   checkRateLimit, 
   getRateLimitIdentifier, 
@@ -10,7 +11,6 @@ import {
 import {
   executeResilient,
   initializeCorrelationId,
-  apiError,
   getClientLogger,
 } from '@/app/lib/resilient-api';
 
@@ -25,18 +25,13 @@ const createIdeaBookSchema = z.object({
 /**
  * GET /api/idea-books
  * Fetch all idea books for the authenticated user.
- * Supports simple search filtering.
+ * Supports simple search filtering via ?search= query param.
  */
-export async function GET(request: NextRequest): Promise<NextResponse> {
-  const correlationId = initializeCorrelationId(request);
-  const { userId } = await auth();
+export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
+  const correlationId = initializeCorrelationId(req);
 
-  if (!userId) {
-    return apiError('Unauthorized', 401);
-  }
-
-  // Rate Limiting (Read Operation)
-  const identifier = getRateLimitIdentifier(request);
+  // Rate Limiting
+  const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
     `idea-books-read:${identifier}`,
     RateLimits.READ.limit,
@@ -45,28 +40,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   if (!rateLimitResult.success) {
     logger.warn('Rate limit exceeded for GET idea-books', { correlationId, identifier });
-    return apiError('Too many requests', 429);
+    return apiError('Too many requests', HttpStatus.TOO_MANY_REQUESTS);
   }
 
-  const searchParams = request.nextUrl.searchParams;
+  const searchParams = req.nextUrl.searchParams;
   const search = searchParams.get('search')?.trim();
+
+  logger.info('Fetching idea books', { correlationId, userId: dbUserId, search });
 
   return executeResilient(
     async () => {
-      // Find the internal DB User ID based on Clerk ID
-      const user = await prisma.user.findUnique({
-        where: { clerkId: userId },
-        select: { id: true }
-      });
-
-      if (!user) {
-        logger.warn('User found in Clerk but not in DB', { correlationId, clerkId: userId });
-        return apiError('User profile not found', 404);
-      }
-
       const ideaBooks = await prisma.ideaBook.findMany({
         where: {
-          clientId: user.id,
+          clientId: dbUserId,
           ...(search && {
             OR: [
               { title: { contains: search, mode: 'insensitive' } },
@@ -75,36 +61,41 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           }),
         },
         orderBy: { updatedAt: 'desc' },
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          items: true, // JSONB field
-          createdAt: true,
-          updatedAt: true,
+        include: {
+          attachments: {
+            orderBy: { createdAt: 'desc' },
+            take: 5, // Return first 5 attachments as preview
+          },
           _count: {
-            select: { sharedWith: true } // Optional: see how many people it's shared with
+            select: { 
+              sharedWith: true,
+              attachments: true,
+            }
           }
         }
       });
 
-      // Transform JSONB items into a frontend-friendly format (e.g., getting counts)
+      // Transform for frontend
       const transformedBooks = ideaBooks.map(book => {
         const itemsList = Array.isArray(book.items) ? book.items : [];
         return {
           id: book.id,
           title: book.title,
           description: book.description,
-          items: itemsList, // Pass full items or just a preview slice if payload is large
+          items: itemsList,
           itemCount: itemsList.length,
+          sharedCount: book._count.sharedWith,
+          attachmentCount: book._count.attachments,
+          coverImage: book.attachments[0]?.url || null,
+          attachments: book.attachments,
           createdAt: book.createdAt,
           updatedAt: book.updatedAt,
         };
       });
 
-      logger.info('Idea Books fetched successfully', { 
+      logger.info('Idea books fetched successfully', { 
         correlationId, 
-        userId: user.id, 
+        userId: dbUserId, 
         count: transformedBooks.length 
       });
 
@@ -112,25 +103,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     },
     {
       operationName: 'fetch-idea-books',
-      criticality: 'critical', // User content is high criticality
+      successStatus: HttpStatus.OK,
     }
   );
-}
+});
 
 /**
  * POST /api/idea-books
  * Create a new idea book linked to the user's profile.
  */
-export async function POST(request: NextRequest): Promise<NextResponse> {
-  const correlationId = initializeCorrelationId(request);
-  const { userId } = await auth();
+export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
+  const correlationId = initializeCorrelationId(req);
 
-  if (!userId) {
-    return apiError('Unauthorized', 401);
-  }
-
-  // Rate Limiting (Write Operation - Stricter limits)
-  const identifier = getRateLimitIdentifier(request);
+  // Rate Limiting
+  const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
     `idea-books-write:${identifier}`,
     RateLimits.WRITE.limit,
@@ -138,53 +124,46 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   );
 
   if (!rateLimitResult.success) {
-    return apiError('Too many requests', 429);
+    return apiError('Too many requests', HttpStatus.TOO_MANY_REQUESTS);
   }
+
+  const body = await req.json();
+  const validation = createIdeaBookSchema.safeParse(body);
+
+  if (!validation.success) {
+    logger.warn('Idea book validation failed', { correlationId, userId: dbUserId, errors: validation.error.issues });
+    return apiError('Invalid input data', HttpStatus.BAD_REQUEST, validation.error.issues);
+  }
+
+  const { title, description } = validation.data;
+
+  logger.info('Creating idea book', { correlationId, userId: dbUserId, title });
 
   return executeResilient(
     async () => {
-      // 1. Parse Body
-      const body = await request.json();
-      const validation = createIdeaBookSchema.safeParse(body);
-
-      if (!validation.success) {
-        return apiError('Invalid input data', 400, validation.error.issues);
-      }
-
-      const { title, description } = validation.data;
-
-      // 2. Resolve User
-      const user = await prisma.user.findUnique({
-        where: { clerkId: userId },
-        select: { id: true }
-      });
-
-      if (!user) {
-        return apiError('User profile not found. Please complete onboarding.', 404);
-      }
-
-      // 3. Create Book Transactionally
       const newBook = await prisma.ideaBook.create({
         data: {
           title,
           description,
-          clientId: user.id,
-          items: [], // Initialize empty JSON array
+          clientId: dbUserId,
+          items: [],
+        },
+        include: {
+          attachments: true,
         },
       });
 
-      logger.info('Idea Book created successfully', { 
+      logger.info('Idea book created successfully', { 
         correlationId, 
         bookId: newBook.id,
-        userId: user.id 
+        userId: dbUserId 
       });
 
       return newBook;
     },
     {
       operationName: 'create-idea-book',
-      criticality: 'critical',
+      successStatus: HttpStatus.CREATED,
     }
   );
-}
-
+});

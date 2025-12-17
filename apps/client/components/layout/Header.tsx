@@ -1,9 +1,7 @@
 'use client';
-import { useState, useCallback, useRef } from  'react';
 import Link from 'next/link';
 import { ROUTES } from '@/lib/links';
 import { MobileNav } from './MobileNav';
-import SearchBar from '../forms/SearchBar';
 import Image from 'next/image';
 import { SignedIn, SignedOut, SignInButton } from '@clerk/nextjs';
 import ProfileButton from '../shared/ProfileButton';
@@ -32,7 +30,7 @@ export const Header = () => {
               <Link href={ROUTES.speakWithAdvisor} className="text-black text-md font-medium font-['Inter'] leading-loose">Guidance</Link>
               <div className="flex items-center gap-6">
               <SignedOut>
-                <SignInButton forceRedirectUrl={ROUTES.onboarding} />
+                <SignInButton forceRedirectUrl={ROUTES.authCallback} />
               </SignedOut>
               <SignedIn>
                 <ProfileButton />

@@ -19,21 +19,25 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { label: "Home", href: ROUTES.home },
   { label: "Idea Books", href: ROUTES.ideaBooks },
-  { label: "Find Professionals", href: ROUTES.findProfessional },
-  { label: "Guidance", href: ROUTES.speakWithAdvisor },
+  { label: "Professionals", href: ROUTES.findProfessional },
+  { label: "Properties", href: ROUTES.properties },
 ];
 
 interface NavbarProps {
   onSignUpClick?: () => void;
   onLogoClick?: () => void;
+  variant?: "default" | "light"; // "light" forces dark text for pages with light backgrounds
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onLogoClick }) => {
+export const Navbar: React.FC<NavbarProps> = ({ onLogoClick, variant = "default" }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user } = useUser();
 
   const userRole = user?.publicMetadata?.role as string | undefined;
+
+  // For "light" variant, always use scrolled styles (dark text, white bg)
+  const useScrolledStyles = variant === "light" || isScrolled;
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -42,7 +46,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onLogoClick }) => {
   }, []);
 
   // Dynamic classes for text visibility
-  const textColorClass = isScrolled ? "text-zinc-900" : "text-white";
+  const textColorClass = useScrolledStyles ? "text-zinc-900" : "text-white";
   const hoverColorClass = "hover:text-emerald-500 transition-colors";
 
   return (
@@ -53,7 +57,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onLogoClick }) => {
         transition={{ duration: 0.5 }}
         className={cn(
           "fixed top-0 left-0 right-0 z-50 transition-all duration-300 border-b",
-          isScrolled 
+          useScrolledStyles 
             ? "bg-white/90 backdrop-blur-md border-zinc-200/50 shadow-sm py-3" 
             : "bg-transparent border-transparent py-5"
         )}
@@ -80,7 +84,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onLogoClick }) => {
                   className={cn(
                     "text-sm font-medium transition-all duration-200", 
                     textColorClass,
-                    isScrolled ? "hover:bg-zinc-100" : "hover:bg-white/10"
+                    useScrolledStyles ? "hover:bg-zinc-100" : "hover:bg-white/10"
                   )}
                 >
                   {item.label}
@@ -92,17 +96,19 @@ export const Navbar: React.FC<NavbarProps> = ({ onLogoClick }) => {
 
             {/* Auth Buttons */}
             <SignedOut>
-              <SignInButton mode="modal" forceRedirectUrl={ROUTES.onboarding}>
+              <SignInButton mode="modal" forceRedirectUrl={ROUTES.authCallback}>
                 <Button 
                   variant="ghost" 
-                  className={cn("font-medium", textColorClass, isScrolled ? "hover:bg-zinc-100" : "hover:bg-white/10")}
+                  className={cn("font-medium", textColorClass, useScrolledStyles ? "hover:bg-zinc-100" : "hover:bg-white/10")}
                 >
                   Sign In
                 </Button>
               </SignInButton>
               <SignUpButton mode="modal" forceRedirectUrl={ROUTES.onboarding}>
                 <Button className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md rounded-full px-6">
-                  Join as a Pro
+                  <Link href={ROUTES.professional}>
+                    Join as a Pro
+                  </Link>
                 </Button>
               </SignUpButton>
             </SignedOut>
@@ -126,7 +132,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onLogoClick }) => {
           <Button
             variant="ghost"
             size="icon"
-            className={cn("md:hidden", textColorClass, isScrolled ? "hover:bg-zinc-100" : "hover:bg-white/10")}
+            className={cn("md:hidden", textColorClass, useScrolledStyles ? "hover:bg-zinc-100" : "hover:bg-white/10")}
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           >
             {isMobileMenuOpen ? <X /> : <Menu />}

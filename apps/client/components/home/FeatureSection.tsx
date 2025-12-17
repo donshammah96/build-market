@@ -9,7 +9,7 @@ import { ROUTES } from '@/lib/links';
 const defaultFeatures: Feature[] = [
   { title: 'Idea Books', description: 'Curated galleries of Kenyan homes to spark your imagination.', image: '/design.png', imageAlt: 'Idea Books', href: ROUTES.ideaBooks },
   { title: 'Find a Professional', description: 'Connect with verified architects, engineers, and contractors.', image: '/professional.png', imageAlt: 'Find a Professional', href: ROUTES.findProfessional },
-  { title: 'Speak with an Advisor', description: 'Get free expert guidance on your construction journey.', image: '/contact.png', imageAlt: 'Advisor', href: ROUTES.speakWithAdvisor },
+  { title: 'Find Properties', description: 'Get free expert guidance on your construction journey.', image: '/hero-realestate.jpg', imageAlt: 'Find Properties', href: ROUTES.properties },
 ];
 
 export const FeaturesSection: React.FC<{ searchTerm?: string; features?: Feature[] }> = ({ 
