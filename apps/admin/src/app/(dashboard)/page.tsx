@@ -1,6 +1,9 @@
 import { getDashboardStats } from "@/actions/admin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, UserCheck, Briefcase, PlusCircle, Activity, Server, AlertCircle, ShieldCheck } from "lucide-react";
+import { Users, UserCheck, Briefcase, PlusCircle, Server, AlertCircle, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   // Fetch real data from your server action
@@ -14,12 +17,12 @@ export default async function DashboardPage() {
             {response.error || "Unknown error"}
           </div>
           <div className="flex justify-center">
-            <a 
+            <Link 
               href="/sign-in" 
               className="inline-flex h-10 items-center justify-center rounded-md bg-zinc-900 px-8 text-sm font-medium text-zinc-50 shadow transition-colors hover:bg-zinc-900/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 disabled:pointer-events-none disabled:opacity-50"
             >
               Back to Sign In
-            </a>
+            </Link>
           </div>
         </div>
       </div>
@@ -87,9 +90,9 @@ export default async function DashboardPage() {
         <Card className="col-span-1 lg:col-span-2 border-zinc-200 shadow-sm">
           <CardHeader>
             <CardTitle className="text-base font-bold text-zinc-900 flex items-center gap-2">
-              <Activity className="h-4 w-4 text-zinc-500" />
-              Platform Activity
-            </CardTitle>
+              <Link href="/sign-in/" className="text-blue-600 hover:underline">
+              Please sign in
+            </Link></CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">

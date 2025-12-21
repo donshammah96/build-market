@@ -124,7 +124,7 @@ export const Hero: FC = () => {
               variants={itemVariants}
               className="text-lg sm:text-xl text-zinc-300 font-light leading-relaxed max-w-xl mx-auto lg:mx-0"
             >
-              Connect with Kenya's top verified architects, engineers, and contractors. 
+              Connect with Kenya&apos;s top verified architects, engineers, and contractors. 
               From blueprint to occupancy, we bridge the trust gap.
             </motion.p>
 

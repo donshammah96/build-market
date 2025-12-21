@@ -4,14 +4,12 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useUser } from "@clerk/nextjs";
-import { motion } from "framer-motion";
+
 import { 
   Plus, 
-  ArrowRight, 
   MessageSquare, 
   Clock, 
   Calendar, 
-  CheckCircle2,
   MoreHorizontal,
   Search,
   LayoutTemplate,
@@ -392,7 +390,7 @@ export default function UserDashboardPage() {
 
 // --- Sub-Components ---
 
-function QuickLink({ icon, label, href, count, badgeColor = "bg-zinc-100 text-zinc-600" }: any) {
+function QuickLink({ icon, label, href, count, badgeColor = "bg-zinc-100 text-zinc-600" }: { icon: React.ReactNode, label: string, href: string, count?: string, badgeColor?: string }) {
   return (
     <Link 
       href={href} 

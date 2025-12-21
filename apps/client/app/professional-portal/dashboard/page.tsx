@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
 import { 
   TrendingUp, 
   Users, 
@@ -13,21 +12,19 @@ import {
   Star,
   Clock,
   ArrowUpRight,
-  MoreHorizontal,
   Phone,
-  MessageSquare,
   Calendar,
   AlertCircle,
   CheckCircle2,
   ChevronRight
 } from "lucide-react";
 
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ProfileCompletionBanner } from "@/components/shared/ProfileCompletionBanner";
 import { useProfileStatus } from "@/hooks/useProfileStatus";
 import { cn } from "@/lib/utils";
@@ -45,7 +42,7 @@ interface Lead {
 }
 
 export default function ProfessionalDashboardPage() {
-  const { user, isLoaded } = useUser();
+  const { isLoaded } = useUser();
   const [loading, setLoading] = useState(true);
   const [leads, setLeads] = useState<Lead[]>([]);
   
@@ -238,20 +235,32 @@ export default function ProfessionalDashboardPage() {
              </CardHeader>
              <CardContent className="px-5 pb-6">
                 <div className="flex items-baseline gap-2 mb-3">
-                   <span className="text-3xl font-bold text-zinc-900">85%</span>
-                   <span className="text-sm font-medium text-emerald-600">Excellent</span>
+                   <span className="text-3xl font-bold text-zinc-900">{completion?.percentage ?? 0}%</span>
+                   <span className={cn(
+                     "text-sm font-medium",
+                     (completion?.percentage ?? 0) >= 80 ? "text-emerald-600" : 
+                     (completion?.percentage ?? 0) >= 50 ? "text-amber-600" : "text-red-600"
+                   )}>
+                     {(completion?.percentage ?? 0) >= 80 ? "Excellent" : 
+                      (completion?.percentage ?? 0) >= 50 ? "Good" : "Needs Work"}
+                   </span>
                 </div>
-                <Progress value={85} className="h-1.5 bg-zinc-100" indicatorClassName="bg-zinc-900" />
+                <Progress value={completion?.percentage ?? 0} className="h-1.5 bg-zinc-100" indicatorClassName="bg-zinc-900" />
                 
-                <div className="mt-6 space-y-3">
-                   <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
-                      <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                      <div>
-                         <p className="text-xs font-semibold text-amber-900">Action Required</p>
-                         <p className="text-xs text-amber-700 mt-0.5">Upload 2 recent project photos to boost visibility.</p>
-                      </div>
-                   </div>
-                </div>
+                {completion && !completion.isComplete && completion.missingRequiredLabels && completion.missingRequiredLabels.length > 0 && (
+                  <div className="mt-6 space-y-3">
+                     <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
+                        <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                           <p className="text-xs font-semibold text-amber-900">Action Required</p>
+                           <p className="text-xs text-amber-700 mt-0.5">
+                             Complete: {completion.missingRequiredLabels.slice(0, 2).join(', ')}
+                             {completion.missingRequiredLabels.length > 2 && ` and ${completion.missingRequiredLabels.length - 2} more`}
+                           </p>
+                        </div>
+                     </div>
+                  </div>
+                )}
              </CardContent>
           </Card>
 
@@ -266,7 +275,7 @@ export default function ProfessionalDashboardPage() {
                    {(events?.data || []).length === 0 ? (
                        <p className="p-3 text-xs text-zinc-500 text-center">No events scheduled for today.</p>
                    ) : (
-                       (events?.data || []).map((event: any) => (
+                         (events?.data || []).map((event: { id: string; startDate: string | Date; title: string; status: string }) => (
                            <AgendaItem 
                                 key={event.id}
                                 time={new Date(event.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} 
@@ -292,7 +301,15 @@ export default function ProfessionalDashboardPage() {
 
 // --- Sophisticated Sub-Components ---
 
-function MetricCard({ title, value, trend, icon: Icon, chart }: any) {
+interface MetricCardProps {
+  title: string;
+  value: string;
+  trend: string;
+  icon: React.ComponentType<{ className?: string }>;
+  chart: number[];
+}
+
+function MetricCard({ title, value, trend, icon: Icon, chart }: MetricCardProps) {
   return (
     <Card className="border border-zinc-200 shadow-sm hover:shadow-md transition-all duration-300 bg-white group">
       <CardContent className="p-6">
@@ -324,7 +341,16 @@ function MetricCard({ title, value, trend, icon: Icon, chart }: any) {
   );
 }
 
-function ProjectStatusCard({ title, client, progress, status, dueDate, alert }: any) {
+interface ProjectStatusCardProps {
+  title: string;
+  client: string;
+  progress: number;
+  status: string;
+  dueDate: string;
+  alert?: boolean;
+}
+
+function ProjectStatusCard({ title, client, progress, status, dueDate, alert }: ProjectStatusCardProps) {
    return (
       <Card className="border border-zinc-200 shadow-sm bg-white">
          <CardContent className="p-6">

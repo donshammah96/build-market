@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from "next/link";
 import { Button } from "../ui/button";
-import { Menu, X, LayoutDashboard, UserCircle } from "lucide-react";
+import { Menu, X, LayoutDashboard } from "lucide-react";
 import {
   SignedIn,
   SignedOut,
@@ -47,7 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onLogoClick, variant = "default"
 
   // Dynamic classes for text visibility
   const textColorClass = useScrolledStyles ? "text-zinc-900" : "text-white";
-  const hoverColorClass = "hover:text-emerald-500 transition-colors";
+
 
   return (
     <>

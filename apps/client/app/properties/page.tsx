@@ -4,12 +4,10 @@ import { useState } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { 
-  Search, 
   MapPin, 
   Home, 
   Building2, 
   Warehouse, 
-  Filter,
   ArrowRight,
   LandPlot
 } from "lucide-react";
@@ -18,7 +16,7 @@ import { Navbar } from "@/components/layout/NavBar";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import PropertyCard, { PropertyCardData } from "@/components/real-estate/PropertyCard";
 import { ROUTES } from "@/lib/links";
@@ -80,7 +78,7 @@ const FEATURED_PROPERTIES: PropertyCardData[] = [
 ];
 
 export default function RealEstatePage() {
-  const [activeTab, setActiveTab] = useState("buy");
+  const [, setActiveTab] = useState("buy");
 
   return (
     <div className="min-h-screen bg-zinc-50 flex flex-col font-sans">
@@ -233,7 +231,7 @@ export default function RealEstatePage() {
   );
 }
 
-function CategoryIcon({ icon: Icon, label }: { icon: any, label: string }) {
+function CategoryIcon({ icon: Icon, label }: { icon: React.ElementType, label: string }) {
   return (
     <div className="flex flex-col items-center gap-2 group cursor-pointer min-w-[80px]">
       <div className="h-14 w-14 rounded-full bg-zinc-50 border border-zinc-100 flex items-center justify-center text-zinc-500 group-hover:bg-emerald-50 group-hover:text-emerald-600 group-hover:border-emerald-200 transition-all duration-300">

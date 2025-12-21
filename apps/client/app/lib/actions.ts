@@ -1,8 +1,6 @@
 'use server';
 
 import { z } from 'zod';
-import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
 import { signIn } from './auth';
 import crypto from 'node:crypto';
 import { AuthError } from 'next-auth';
@@ -122,7 +120,7 @@ export async function signUp(prevState: SignUpState, formData: FormData) {
 
     // Do not auto-login here to avoid coupling with auth hash algorithm
     return { message: 'Account created successfully.', success: true };
-  } catch (error) {
+  } catch {
     return { message: 'Database Error: Failed to create account.', success: false };
   }
 }
@@ -234,7 +232,7 @@ export async function requestPasswordReset(prevState: RequestResetState, formDat
       return { message: 'If the email exists, a reset link has been sent.', success: true };
     }
 
-    const userId = (users as any)[0]?.id as string;
+    const userId = (users[0] as { id: string }).id;
     const rawToken = crypto.randomBytes(32).toString('hex');
     const tokenHash = sha256Hex(rawToken);
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // 1 hour
@@ -260,8 +258,9 @@ export async function requestPasswordReset(prevState: RequestResetState, formDat
       });
 
     return { message: 'If the email exists, a reset link has been sent.', success: true };
-  } catch (error: any) {
-    if (error.message === 'Rate limit exceeded') {
+  } catch (error: unknown) {
+    const err = error as Error;
+    if (err.message === 'Rate limit exceeded') {
       return { message: 'Too many requests. Please try again later.', success: false };
     }
     console.error('Password reset request error:', error);
@@ -311,7 +310,7 @@ export async function resetPassword(prevState: ResetPasswordState, formData: For
     const sql = getSqlClient();
     const rows = await sql`SELECT id, user_id, expires_at, used_at FROM password_reset_tokens WHERE token_hash = ${tokenHash} LIMIT 1`;
     if (!rows?.length) return { message: 'Invalid or expired token.', success: false };
-    const row = rows[0] as any;
+    const row = rows[0] as { id: string; user_id: string; expires_at: string; used_at: string | null };
     if (row.used_at) return { message: 'Token already used.', success: false };
     if (new Date(row.expires_at).getTime() < Date.now()) return { message: 'Token expired.', success: false };
 
@@ -320,10 +319,11 @@ export async function resetPassword(prevState: ResetPasswordState, formData: For
     await sql`UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = ${row.id}`;
 
     return { message: 'Password has been reset successfully.', success: true };
-  } catch (error: any) {
-    if (error.message === 'Invalid or expired token') return { message: 'Invalid or expired token.', success: false };
-    if (error.message === 'Token already used') return { message: 'Token already used.', success: false };
-    if (error.message === 'Token expired') return { message: 'Token expired.', success: false };
+  } catch (error: unknown) {
+    const err = error as Error;
+    if (err.message === 'Invalid or expired token') return { message: 'Invalid or expired token.', success: false };
+    if (err.message === 'Token already used') return { message: 'Token already used.', success: false };
+    if (err.message === 'Token expired') return { message: 'Token expired.', success: false };
     console.error('Password reset error:', error);
     return { message: 'Unable to reset password at this time.', success: false };
   }
@@ -368,43 +368,44 @@ export async function changePassword(userId: string, prevState: ChangePasswordSt
 
   try {
     const sql = getSqlClient();
-    const rows = await sql`SELECT password_hash FROM users WHERE id = ${userId} LIMIT 1` as any;
+    const rows = await sql`SELECT password_hash FROM users WHERE id = ${userId} LIMIT 1` as { password_hash: string }[];
     if (!rows?.length) return { message: 'User not found.', success: false };
-    const currentHash = (rows as any)[0]?.password_hash as string;
-    const ok = await verifyScryptPassword(validated.data.currentPassword, currentHash);
+    const currentHash = rows[0]?.password_hash;
+    const ok = await verifyScryptPassword(validated.data.currentPassword, currentHash || "");
     if (!ok) return { message: 'Invalid password.', success: false };
 
     const newHash = await hashPasswordScrypt(validated.data.newPassword);
     await sql`UPDATE users SET password_hash = ${newHash} WHERE id = ${userId}`;
     return { message: 'Password changed successfully.', success: true };
-  } catch (error: any) {
-    if (error.message === 'User not found') return { message: 'User not found.', success: false };
-    if (error.message === 'Invalid password') return { message: 'Current password is incorrect.', success: false };
+  } catch (error: unknown) {
+    const err = error as Error;
+    if (err.message === 'User not found') return { message: 'User not found.', success: false };
+    if (err.message === 'Invalid password') return { message: 'Current password is incorrect.', success: false };
     console.error('Change password error:', error);
     return { message: 'Unable to change password at this time.', success: false };
   }
 }
 
 
-const FormSchema = z.object({
-    id: z.string(),
-    customerId: z.string({
-      message: 'Please select a customer',
-    }),
-    amount: z.coerce.number().gt(
-      0, 
-      { 
-        message: 'Please enter an amount greater than $0.' 
-      }
-    ),
-    status: z.enum(['pending', 'paid'], {
-      message: 'Please select an invoice status.'
-    }),
-    date: z.string(),
-});
+// const FormSchema = z.object({
+//     id: z.string(),
+//     customerId: z.string({
+//       message: 'Please select a customer',
+//     }),
+//     amount: z.coerce.number().gt(
+//       0, 
+//       { 
+//         message: 'Please enter an amount greater than $0.' 
+//       }
+//     ),
+//     status: z.enum(['pending', 'paid'], {
+//       message: 'Please select an invoice status.'
+//     }),
+//     date: z.string(),
+// });
 
-const CreateInvoice = FormSchema.omit({ id: true, date: true});
-const UpdateInvoice = FormSchema.omit({ id: true, date: true });
+// const _CreateInvoice = FormSchema.omit({ id: true, date: true});
+// const _UpdateInvoice = FormSchema.omit({ id: true, date: true });
 
 export type State = {
   errors?: {

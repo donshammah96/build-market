@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
 import { getProfessionalUrl } from "@/lib/links";
 import { ProfessionalCardData } from "@/types/professional";
+import { getProfessionLabel } from "@/lib/constants/professionalCategories";
 
 interface ProfessionalCardProps {
   professional: ProfessionalCardData;
@@ -26,7 +27,9 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = ({ professional }) => 
   const profileUrl = getProfessionalUrl(professional.id);
   
   const fullName = professional.name || professional.companyName;
-  const displayTitle = professional.title || professional.servicesOffered[0] || 'Professional';
+  // Convert profession value to human-readable label
+  const primaryService = professional.servicesOffered[0] || 'Professional';
+  const displayTitle = professional.title || getProfessionLabel(primaryService);
   
   const projectCount = professional.projectCount || 0;
 
@@ -117,7 +120,7 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = ({ professional }) => 
                 variant="secondary" 
                 className="text-[10px] bg-zinc-50 text-zinc-600 border border-zinc-100 font-medium hover:bg-zinc-100"
               >
-                {service}
+                {getProfessionLabel(service)}
               </Badge>
             ))}
             {professional.servicesOffered.length > 3 && (

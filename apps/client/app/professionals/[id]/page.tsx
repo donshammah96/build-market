@@ -156,7 +156,7 @@ export default function ProfessionalProfilePage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <Navbar />
+        <Navbar variant="light" />
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
@@ -171,7 +171,7 @@ export default function ProfessionalProfilePage() {
   if (error) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <Navbar />
+        <Navbar variant="light" />
         <div className="min-h-screen flex items-center justify-center">
           <Card className="max-w-md">
             <CardContent className="p-6 text-center">
@@ -188,7 +188,7 @@ export default function ProfessionalProfilePage() {
   if (!professional) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <Navbar />
+        <Navbar variant="light" />
         <div className="min-h-screen flex items-center justify-center">
           <Card className="max-w-md">
             <CardContent className="p-6 text-center">
@@ -202,14 +202,18 @@ export default function ProfessionalProfilePage() {
     );
   }
 
-  const fullName = `${professional.user.firstName || ''} ${professional.user.lastName || ''}`.trim() || professional.companyName;
+  // Safely access user properties with fallbacks
+  const user = professional.user;
+  const fullName = user 
+    ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || professional.companyName
+    : professional.companyName;
   const averageRating = professional.reviews && professional.reviews.length > 0
     ? (professional.reviews.reduce((sum, review) => sum + review.rating, 0) / professional.reviews.length).toFixed(1)
     : null;
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Navbar />
+      <Navbar variant="light" />
 
       <main className="max-w-7xl mx-auto px-4 py-12">
         {/* Header Section */}
@@ -224,9 +228,9 @@ export default function ProfessionalProfilePage() {
                 {/* Profile Image */}
                 <div className="flex-shrink-0">
                   <Avatar className="h-32 w-32 rounded-lg">
-                    <AvatarImage src={professional.portfolios?.[0]?.images[0]} alt={fullName} />
+                    <AvatarImage src={professional.portfolios?.[0]?.images?.[0] ?? ""} alt={fullName} />
                     <AvatarFallback className="rounded-lg text-3xl">
-                      {professional.user.firstName?.[0]}{professional.user.lastName?.[0]}
+                      {user?.firstName?.[0]}{user?.lastName?.[0]}
                     </AvatarFallback>
                   </Avatar>
                 </div>
@@ -333,7 +337,7 @@ export default function ProfessionalProfilePage() {
                                   <FormItem>
                                     <FormLabel>Email</FormLabel>
                                     <FormControl>
-                                      <Input placeholder="john@example.com" {...field} />
+                                      <Input placeholder="don@example.com" {...field} />
                                     </FormControl>
                                     <FormMessage />
                                   </FormItem>
@@ -487,11 +491,15 @@ export default function ProfessionalProfilePage() {
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Services Offered</h3>
                     <div className="flex flex-wrap gap-2">
-                      {professional.servicesOffered.map((service, index) => (
-                        <Badge key={index} variant="secondary" className="text-sm px-3 py-1">
-                          {service}
-                        </Badge>
-                      ))}
+                      {professional.servicesOffered && professional.servicesOffered.length > 0 ? (
+                        professional.servicesOffered.map((service, index) => (
+                          <Badge key={index} variant="secondary" className="text-sm px-3 py-1">
+                            {service}
+                          </Badge>
+                        ))
+                      ) : (
+                        <p className="text-slate-500">No services listed</p>
+                      )}
                     </div>
                   </div>
 
@@ -500,16 +508,16 @@ export default function ProfessionalProfilePage() {
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Contact Information</h3>
                     <div className="space-y-3">
-                      {professional.user.email && (
+                      {user?.email && (
                         <div className="flex items-center gap-3">
                           <Mail className="h-5 w-5 text-slate-400" />
-                          <span className="text-slate-600">{professional.user.email}</span>
+                          <span className="text-slate-600">{user.email}</span>
                         </div>
                       )}
-                      {professional.user.phone && (
+                      {user?.phone && (
                         <div className="flex items-center gap-3">
                           <Phone className="h-5 w-5 text-slate-400" />
-                          <span className="text-slate-600">{professional.user.phone}</span>
+                          <span className="text-slate-600">{user.phone}</span>
                         </div>
                       )}
                     </div>
@@ -532,7 +540,7 @@ export default function ProfessionalProfilePage() {
                       <Card className="overflow-hidden hover:shadow-lg transition-shadow h-full">
                         <div className="aspect-video overflow-hidden bg-slate-200">
                           <ImageWithFallback
-                            src={portfolio.images[0]}
+                            src={portfolio?.images?.[0] ?? ""}
                             alt={portfolio.title}
                             className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
                           />
@@ -550,7 +558,7 @@ export default function ProfessionalProfilePage() {
                           <CardContent>
                             <div className="bg-slate-50 p-4 rounded-lg">
                               <p className="text-sm text-slate-600 italic">
-                                "{portfolio.clientTestimonial}"
+                                &quot;{portfolio.clientTestimonial}&quot;
                               </p>
                             </div>
                           </CardContent>
@@ -572,7 +580,7 @@ export default function ProfessionalProfilePage() {
                 <CardHeader>
                   <CardTitle>Client Reviews</CardTitle>
                   <CardDescription>
-                    See what clients have to say about working with {professional.user.firstName}
+                    See what clients have to say about working with {user?.firstName || professional.companyName}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">

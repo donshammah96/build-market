@@ -10,7 +10,6 @@ import ProfessionalForm from "@/components/forms/ProfessionalForm";
 import { Home, Briefcase, ArrowLeft, Loader2, CheckCircle2 } from "lucide-react";
 import { OnboardingData } from '@repo/types';
 import { motion, AnimatePresence } from "framer-motion";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 export default function Onboarding() {
@@ -40,7 +39,7 @@ export default function Onboarding() {
         
         toast.success('Welcome home! Profile created.');
         router.push('/dashboard');
-      } catch (error) {
+      } catch {
         toast.error('Something went wrong. Please try again.');
       } finally {
         setSubmitting(false);
@@ -60,7 +59,7 @@ export default function Onboarding() {
         
         toast.success('Professional account verified!');
         router.push('/professional-portal/dashboard');
-      } catch (error) {
+      } catch {
         toast.error('Could not verify profile. Please try again.');
       } finally {
         setSubmitting(false);
@@ -207,7 +206,16 @@ const StepIndicator = ({ current, stepNumber, label }: { current: number, stepNu
     );
 };
 
-const RoleCard = ({ icon, title, description, onClick, delay, highlight }: any) => (
+interface RoleCardProps {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+  delay: number;
+  highlight?: boolean;
+}
+
+const RoleCard = ({ icon, title, description, onClick, delay, highlight }: RoleCardProps) => (
     <motion.button
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

@@ -8,6 +8,14 @@ import { checkRateLimit, getRateLimitIdentifier, RateLimits } from '@/app/lib/ra
 
 const logger = getClientLogger();
 
+interface CalendarWhereClause {
+  professionalId: string;
+  startDate?: {
+    gte: Date;
+    lte: Date;
+  };
+}
+
 const createEventSchema = z.object({
   title: z.string().min(3),
   description: z.string().optional(),
@@ -47,7 +55,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
 
   return executeResilient(
     async () => {
-      const where: any = {
+      const where: CalendarWhereClause = {
         professionalId: dbUserId,
       };
 

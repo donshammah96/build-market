@@ -2,16 +2,13 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Plus, 
   BookOpen, 
   MoreVertical, 
   Image as ImageIcon, 
-  Share2, 
-  Lock, 
-  Trash2, 
-  Edit3,
   Search,
   LayoutGrid
 } from "lucide-react";
@@ -21,9 +18,7 @@ import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
 
 // --- Types based on Prisma Schema ---
 // In a real app, 'items' would be parsed from JSON
@@ -76,7 +71,7 @@ export default function IdeaBooksPage() {
 
   return (
     <div className="min-h-screen bg-zinc-50/50 flex flex-col">
-      <Navbar />
+      <Navbar variant="light" />
 
       <main className="flex-1 container mx-auto px-4 md:px-8 py-8 pt-24 max-w-7xl">
         
@@ -163,7 +158,7 @@ export default function IdeaBooksPage() {
 function IdeaBookCard({ book, index }: { book: IdeaBook; index: number }) {
   // Logic to display preview grid (collage)
   const previews = book.items.slice(0, 3);
-  const emptySlots = 3 - previews.length;
+  // const _emptySlots = 3 - previews.length;
 
   return (
     <motion.div
@@ -182,7 +177,7 @@ function IdeaBookCard({ book, index }: { book: IdeaBook; index: number }) {
              {/* Large Main Image */}
              <div className="col-span-2 row-span-2 relative overflow-hidden bg-zinc-200">
                {previews[0] ? (
-                 <img src={previews[0].imageUrl} alt="" className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                 <Image src={previews[0].imageUrl} alt="" fill className="object-cover transition-transform duration-700 group-hover:scale-105" />
                ) : (
                  <div className="h-full w-full flex items-center justify-center text-zinc-300">
                    <ImageIcon className="h-10 w-10" />
@@ -193,12 +188,12 @@ function IdeaBookCard({ book, index }: { book: IdeaBook; index: number }) {
              {/* Small Side Images */}
              <div className="relative overflow-hidden bg-zinc-200">
                 {previews[1] ? (
-                   <img src={previews[1].imageUrl} alt="" className="h-full w-full object-cover" />
+                   <Image src={previews[1].imageUrl} alt="" fill className="object-cover" />
                 ) : <div className="h-full w-full bg-zinc-100" />}
              </div>
              <div className="relative overflow-hidden bg-zinc-200">
                 {previews[2] ? (
-                   <img src={previews[2].imageUrl} alt="" className="h-full w-full object-cover" />
+                   <Image src={previews[2].imageUrl} alt="" fill className="object-cover" />
                 ) : <div className="h-full w-full bg-zinc-100" />}
              </div>
 

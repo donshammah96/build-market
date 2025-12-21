@@ -15,7 +15,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
-import { ROUTES } from '@/lib/links';
 
 interface ProfileCompletionBannerProps {
   percentage: number;

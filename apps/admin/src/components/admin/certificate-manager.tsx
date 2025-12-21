@@ -31,9 +31,9 @@ export function CertificateManager({ certificates }: CertificateManagerProps) {
       } else {
         toast.error(result.error || "Failed to delete");
       }
-    } catch (error) {
-      toast.error("Error deleting certificate");
-    } finally {
+      } catch {
+        toast.error("Failed to revoke certificate");
+      } finally {
       setDeletingId(null);
     }
   }

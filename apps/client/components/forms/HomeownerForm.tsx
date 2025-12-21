@@ -1,12 +1,31 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { OnboardingData } from '@repo/types';
-import { Combobox } from '../ui/combobox';
-import { useUser } from '@clerk/nextjs';
-import { useRouter } from 'next/navigation';
+import { Combobox, ComboboxOption } from '../ui/combobox';
 
-const LOCATION_OPTIONS = [
+import { 
+  CheckCircle2, 
+  Loader2, 
+  Home, 
+  MapPin, 
+  Wallet, 
+  FileText,
+  Sparkles,
+  ArrowRight,
+  Building2,
+  AlertCircle
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { homeownerOnboardingSchema, type HomeownerOnboardingData } from '@/lib/schemas/onboarding';
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+const LOCATION_OPTIONS: ComboboxOption[] = [
   { value: "karen", label: "Karen" },
   { value: "runda", label: "Runda" },
   { value: "muthaiga", label: "Muthaiga" },
@@ -31,211 +50,533 @@ const LOCATION_OPTIONS = [
   { value: "other", label: "Other (Nairobi Environs)" },
 ];
 
-// UI Components (mocked or imported from your UI library)
-const Card = ({ children, className }: { children: React.ReactNode; className?: string }) => (
-  <div className={`bg-white/5 backdrop-blur-sm border border-white/20 ${className}`}>{children}</div>
-);
+const PROJECT_TYPE_OPTIONS: ComboboxOption[] = [
+  // Residential - New Construction
+  { value: "new_residential_build", label: "New Residential Build" },
+  { value: "custom_home", label: "Custom Home Construction" },
+  { value: "townhouse_development", label: "Townhouse Development" },
+  { value: "apartment_building", label: "Apartment Building Construction" },
+  { value: "maisonette", label: "Maisonette Construction" },
+  { value: "bungalow", label: "Bungalow Construction" },
+  
+  // Residential - Renovation & Remodeling
+  { value: "full_home_renovation", label: "Full Home Renovation" },
+  { value: "kitchen_remodel", label: "Kitchen Remodel" },
+  { value: "bathroom_remodel", label: "Bathroom Remodel" },
+  { value: "home_extension", label: "Home Extension / Addition" },
+  { value: "roof_replacement", label: "Roof Replacement / Repair" },
+  { value: "structural_repairs", label: "Structural Repairs" },
+  { value: "facade_upgrade", label: "Facade / Exterior Upgrade" },
+  
+  // Commercial
+  { value: "commercial_office", label: "Commercial Office Building" },
+  { value: "retail_space", label: "Retail / Shop Construction" },
+  { value: "warehouse", label: "Warehouse / Industrial Facility" },
+  { value: "restaurant_hospitality", label: "Restaurant / Hospitality" },
+  { value: "mixed_use", label: "Mixed-Use Development" },
+  
+  // Interior & Finishing
+  { value: "interior_design", label: "Interior Design & Decoration" },
+  { value: "flooring_tiling", label: "Flooring & Tiling" },
+  { value: "painting_finishing", label: "Painting & Finishing" },
+  { value: "ceiling_works", label: "Ceiling Works (Gypsum/PVC)" },
+  { value: "cabinetry", label: "Custom Cabinetry & Joinery" },
+  
+  // Exterior & Landscaping
+  { value: "landscaping", label: "Landscaping & Outdoor Spaces" },
+  { value: "swimming_pool", label: "Swimming Pool Construction" },
+  { value: "perimeter_wall", label: "Perimeter Wall & Fencing" },
+  { value: "driveway_paving", label: "Driveway & Paving" },
+  { value: "gate_installation", label: "Gate Installation (Sliding/Swing)" },
+  
+  // Infrastructure & Systems
+  { value: "plumbing_works", label: "Plumbing Works" },
+  { value: "electrical_works", label: "Electrical Works" },
+  { value: "hvac_installation", label: "HVAC Installation" },
+  { value: "solar_installation", label: "Solar Power Installation" },
+  { value: "borehole_drilling", label: "Borehole Drilling" },
+  { value: "water_tank", label: "Water Tank Installation" },
+  { value: "septic_tank", label: "Septic Tank / Biodigester" },
+  
+  // Specialized
+  { value: "smart_home", label: "Smart Home Automation" },
+  { value: "security_systems", label: "Security Systems Installation" },
+  { value: "fire_safety", label: "Fire Safety Systems" },
+  
+  // Professional Services
+  { value: "consultation", label: "Professional Consultation Only" },
+  { value: "architectural_plans", label: "Architectural Plans / Drawings" },
+  { value: "project_management", label: "Project Management Services" },
+  
+  // Other
+  { value: "other", label: "Other (Please Specify)" },
+];
 
-const Button = ({ children, className, disabled, type, onClick, variant, size }: any) => (
-  <button
-    type={type}
-    disabled={disabled}
-    onClick={onClick}
-    className={`bg-emerald-600 text-white font-bold py-3 px-6 hover:bg-emerald-700 transition-colors shadow-lg ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-  >
-    {children}
-  </button>
-);
-
-const Input = ({ placeholder, value, onChange }: any) => (
-  <input
-    type="text"
-    placeholder={placeholder}
-    value={value}
-    onChange={onChange}
-    className="w-full bg-white/5 border border-white/30 p-3 text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors"
-  />
-);
-
-const Select = ({ children, value, onChange, className }: any) => (
-  <select
-    value={value}
-    onChange={onChange}
-    className={`w-full bg-white/5 border border-white/30 p-3 text-white focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors ${className}`}
-  >
-    {children}
-  </select>
-);
+// ============================================================================
+// TYPES
+// ============================================================================
 
 interface Props {
   onBack: () => void;
   onSubmit: (data: OnboardingData) => Promise<void>;
-  onAuthSuccess: (response: any) => void;
-  onSkip?: () => void; // Optional: allows skipping onboarding
+  onAuthSuccess: (response: OnboardingData) => void;
+  onSkip?: () => void;
 }
 
-const Toast = ({ type, message }: { type: 'success' | 'error' | 'info'; message: string }) => {
-  const base = 'px-4 py-2 rounded-sm text-sm';
-  const classes =
-    type === 'success'
-      ? 'bg-green-600 text-white'
-      : type === 'error'
-      ? 'bg-red-600 text-white'
-      : 'bg-gray-800 text-white';
-  return <div className={`${base} ${classes}`}>{message}</div>;
+type ToastType = 'success' | 'error' | 'info';
+
+interface ToastState {
+  type: ToastType;
+  message: string;
+}
+
+// ============================================================================
+// SUB-COMPONENTS
+// ============================================================================
+
+const Toast: React.FC<ToastState> = ({ type, message }) => {
+  const baseClasses = 'px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-3 animate-in slide-in-from-top-2 duration-300 backdrop-blur-md';
+  const typeClasses: Record<ToastType, string> = {
+    success: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-lg shadow-emerald-500/10',
+    error: 'bg-red-500/20 text-red-300 border border-red-500/30 shadow-lg shadow-red-500/10',
+    info: 'bg-white/10 text-white border border-white/20 shadow-lg',
+  };
+  
+  return (
+    <div className={cn(baseClasses, typeClasses[type])}>
+      {type === 'info' && <Loader2 className="h-4 w-4 animate-spin" />}
+      {type === 'success' && <CheckCircle2 className="h-4 w-4" />}
+      {message}
+    </div>
+  );
 };
 
-const HomeownerForm = ({ onBack, onSubmit, onAuthSuccess, onSkip }: Props) => {
-  const { user } = useUser();
-  const router = useRouter();
+const FormField: React.FC<{
+  label: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+  hint?: string;
+  required?: boolean;
+  error?: string;
+}> = ({ label, icon, children, hint, required, error }) => (
+  <div className="group space-y-3">
+    <label className="flex items-center gap-2.5 text-sm font-medium">
+      {icon && (
+        <span className={cn(
+          "transition-colors",
+          error ? "text-red-500" : "text-emerald-500 group-focus-within:text-emerald-400"
+        )}>
+          {icon}
+        </span>
+      )}
+      <span className="text-zinc-300 group-focus-within:text-white transition-colors">
+        {label}
+      </span>
+      {required && (
+        <span className="text-xs text-amber-500/80 font-normal">(required)</span>
+      )}
+    </label>
+    {children}
+    {error && (
+      <p className="text-xs text-red-400 flex items-center gap-1">
+        <AlertCircle className="h-3 w-3" />
+        {error}
+      </p>
+    )}
+    {hint && !error && (
+      <p className="text-xs text-zinc-500 pl-0.5 flex items-center gap-1.5">
+        <Sparkles className="h-3 w-3 text-emerald-500/50" />
+        {hint}
+      </p>
+    )}
+  </div>
+);
 
-  const [projectType, setProjectType] = useState('');
-  const [customProjectType, setCustomProjectType] = useState('');
-  const [projectLocation, setProjectLocation] = useState('');
-  const [estimatedBudget, setEstimatedBudget] = useState('');
-  const [description, setDescription] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
-  const [success, setSuccess] = useState<boolean>(false);
-  const [role, setRole] = useState<'client'>('client');
+const SuccessCard: React.FC<{ 
+  onEdit: () => void;
+  onGoDashboard: () => void;
+  isNavigating?: boolean;
+}> = ({ onEdit, onGoDashboard, isNavigating }) => (
+  <div className="relative overflow-hidden">
+    {/* Background glow */}
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+      <div className="w-64 h-64 bg-emerald-500/20 rounded-full blur-3xl" />
+    </div>
+    
+    <div className="relative bg-gradient-to-b from-white/10 to-white/5 backdrop-blur-xl border border-white/20 p-10 max-w-md mx-auto text-center rounded-2xl shadow-2xl">
+      {/* Success icon with animation */}
+      <div className="mb-6 relative">
+        <div className="absolute inset-0 flex items-center justify-center animate-ping">
+          <div className="w-16 h-16 bg-emerald-500/20 rounded-full" />
+        </div>
+        <div className="relative w-16 h-16 mx-auto bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/30">
+          <CheckCircle2 className="w-8 h-8 text-white" />
+        </div>
+      </div>
+      
+      <h3 className="text-2xl font-bold text-white mb-3">
+        You&apos;re all set!
+      </h3>
+      <p className="text-zinc-400 mb-8 leading-relaxed">
+        We&apos;ve received your project details. Our team will match you with 
+        vetted professionals who specialize in your needs.
+      </p>
+      
+      <div className="flex flex-col gap-3">
+        <button 
+          onClick={onGoDashboard}
+          disabled={isNavigating}
+          className={cn(
+            "w-full py-3 px-6 rounded-xl font-semibold text-sm",
+            "bg-gradient-to-r from-emerald-500 to-emerald-600",
+            "text-white shadow-lg shadow-emerald-500/25",
+            "hover:from-emerald-400 hover:to-emerald-500",
+            "transition-all duration-200 hover:scale-[1.02]",
+            "flex items-center justify-center gap-2",
+            "disabled:opacity-50 disabled:cursor-not-allowed"
+          )}
+        >
+          {isNavigating && <Loader2 className="h-4 w-4 animate-spin" />}
+          Proceed to Dashboard
+          <ArrowRight className="h-4 w-4" />
+        </button>
+        <button 
+          onClick={onEdit}
+          disabled={isNavigating}
+          className="text-sm text-zinc-400 hover:text-white transition-colors py-2 disabled:opacity-50"
+        >
+          ← Edit details
+        </button>
+      </div>
+    </div>
+  </div>
+);
 
+const FormHeader: React.FC = () => (
+  <div className="text-center mb-10 relative">
+    {/* Decorative glow */}
+    <div className="absolute inset-0 -top-8 flex items-center justify-center pointer-events-none">
+      <div className="w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl" />
+    </div>
+    
+    {/* Icon with decorative lines */}
+    <div className="relative inline-flex items-center justify-center gap-4 mb-5">
+      <div className="h-px w-12 bg-gradient-to-r from-transparent via-emerald-500/50 to-emerald-500" />
+      <div className="relative">
+        <div className="absolute inset-0 animate-pulse">
+          <Home className="h-9 w-9 text-emerald-500/30" />
+        </div>
+        <Home className="h-9 w-9 text-emerald-500 drop-shadow-[0_0_12px_rgba(16,185,129,0.5)]" />
+      </div>
+      <div className="h-px w-12 bg-gradient-to-l from-transparent via-emerald-500/50 to-emerald-500" />
+    </div>
+    
+    {/* Heading with gradient */}
+    <h2 className="text-3xl md:text-4xl font-bold mb-3">
+      <span className="bg-gradient-to-r from-white via-zinc-200 to-zinc-400 bg-clip-text text-transparent">
+        Tell us about your
+      </span>
+      <br />
+      <span className="bg-gradient-to-r from-emerald-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent">
+        dream project
+      </span>
+    </h2>
+    
+    {/* Subtitle */}
+    <p className="text-zinc-400 text-sm max-w-xs mx-auto leading-relaxed">
+      Share your vision and we&apos;ll connect you with the 
+      <span className="text-emerald-400 font-medium"> perfect professionals</span>.
+    </p>
+  </div>
+);
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+
+const HomeownerForm: React.FC<Props> = ({ onBack, onSubmit, onAuthSuccess, onSkip }) => {
+
+  // React Hook Form with Zod validation
+  const {
+    register,
+    control,
+    handleSubmit: rhfHandleSubmit,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<HomeownerOnboardingData>({
+    resolver: zodResolver(homeownerOnboardingSchema),
+    defaultValues: {
+      projectType: '',
+      customProjectType: '',
+      projectLocation: '',
+      estimatedBudget: '',
+      description: '',
+    },
+  });
+
+  // Watch project type for conditional field
+  const projectType = watch('projectType');
+   
+  // UI state
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [navigating, setNavigating] = useState(false);
+
+  // Handle navigation to dashboard with hard refresh
+  const handleGoDashboard = useCallback(async () => {
+    setNavigating(true);
+    await new Promise(resolve => setTimeout(resolve, 4000));
+    window.location.href = '/dashboard';
+  }, []);
+
+  // Auto-dismiss toast
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 6000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setToast(null), 6000);
+    return () => clearTimeout(timer);
   }, [toast]);
 
-  const handleSubmit = async (e?: React.FormEvent) => {
-    e?.preventDefault();
+  const showToast = useCallback((type: ToastType, message: string) => {
+    setToast({ type, message });
+  }, []);
+
+  // Form submission handler
+  const onFormSubmit = async (formData: HomeownerOnboardingData) => {
+    const finalProjectType = formData.projectType === 'other' 
+      ? formData.customProjectType 
+      : formData.projectType;
     
-    // Construct data matching ClientOnboardingData
     const data: OnboardingData = { 
-      role, 
-      projectType: projectType === 'Other' ? customProjectType : projectType, 
-      projectLocation, 
-      estimatedBudget, 
-      description 
+      role: 'client', 
+      projectType: finalProjectType!, 
+      projectLocation: formData.projectLocation || '', 
+      estimatedBudget: formData.estimatedBudget || '', 
+      description: formData.description || '',
     };
 
     try {
-      setSubmitting(true);
-      setToast({ type: 'info', message: 'Submitting your details…' });
-
-      // Parent handles API call
+      showToast('info', 'Submitting your details…');
       await onSubmit(data);
-
-      setToast({ type: 'success', message: 'Profile completed successfully!' });
+      showToast('success', 'Profile completed successfully!');
       setSuccess(true);
-      
-      // Notify parent of success
-      if (onAuthSuccess) onAuthSuccess(data);
-      
-    } catch (err: any) {
+      onAuthSuccess(data);
+    } catch (err) {
       console.error('Homeowner submit error', err);
-      setToast({ type: 'error', message: err?.message || 'Failed to submit. Please try again.' });
-    } finally {
-      setSubmitting(false);
+      const message = err instanceof Error ? err.message : 'Failed to submit. Please try again.';
+      showToast('error', message);
     }
   };
 
   if (success) {
     return (
-      <Card className="p-8 max-w-md mx-auto text-center">
-        <div className="mb-4 text-emerald-400"><svg className="w-12 h-12 inline-block" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
-        <h3 className="font-playfair text-2xl text-white mb-2 drop-shadow-lg">You're all set</h3>
-        <p className="text-slate-200 mb-6">We've sent a confirmation email with instructions to complete your account. You can now sign in and begin connecting with vetted professionals.</p>
-        <div className="flex gap-4 justify-center">
-          <a href="/dashboard" className="text-sm border-b border-emerald-400/50 pb-1 text-emerald-400 hover:text-emerald-300 transition-colors">Proceed to Dashboard</a>
-          <button onClick={() => { setSuccess(false); }} className="text-sm text-slate-400 hover:text-white transition-colors">Edit details</button>
-        </div>
-      </Card>
+      <SuccessCard 
+        onEdit={() => setSuccess(false)}
+        onGoDashboard={handleGoDashboard}
+        isNavigating={navigating}
+      />
     );
   }
 
+  // Common input styles
+  const inputStyles = cn(
+    "w-full px-4 py-3.5 rounded-xl text-white text-sm",
+    "bg-white/5 backdrop-blur-sm",
+    "border border-white/10 hover:border-white/20",
+    "focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20",
+    "placeholder:text-zinc-500",
+    "transition-all duration-200"
+  );
+
   return (
-    <form onSubmit={handleSubmit} className="max-w-md mx-auto">
-      <div className="mb-4">{toast && <Toast type={toast.type} message={toast.message} />}</div>
+    <form onSubmit={rhfHandleSubmit(onFormSubmit)} className="max-w-md mx-auto">
+      {/* Toast notification */}
+      {toast && (
+        <div className="mb-6">
+          <Toast type={toast.type} message={toast.message} />
+        </div>
+      )}
 
-      <h2 className="font-playfair text-3xl text-white mb-2 drop-shadow-lg">Tell us about your vision.</h2>
-      <p className="text-slate-200 mb-8 text-sm">We'll match you with professionals who specialize in your needs.</p>
+      {/* Header */}
+      <FormHeader />
 
+      {/* Form fields */}
       <div className="space-y-6">
-        <div>
-          <label className="block text-emerald-400 text-xs uppercase tracking-widest mb-2 font-semibold">Project Type</label>
-          <Select className="w-full bg-white/5 border border-white/30 text-white hover:bg-white/10" value={projectType} onChange={(e: any) => setProjectType(e.target.value)}>
-            <option className="bg-slate-800 text-white">New Residential Build</option>
-            <option className="bg-slate-800 text-white">Residential Renovation</option>
-            <option className="bg-slate-800 text-white">Residential Development</option>
-            <option className="bg-slate-800 text-white">Commercial Development</option>
-            <option className="bg-slate-800 text-white">Commercial Renovation</option>
-            <option className="bg-slate-800 text-white">Interior Design</option>
-            <option className="bg-slate-800 text-white">Other</option>
-          </Select>
-          {projectType === 'Other' && (
-            <div className="mt-2 animate-in fade-in slide-in-from-top-2 duration-300">
-              <Input 
-                placeholder="Please specify your project type" 
-                value={customProjectType} 
-                onChange={(e: any) => setCustomProjectType(e.target.value)} 
+        {/* Project Type */}
+        <FormField 
+          label="Project Type" 
+          icon={<Building2 className="h-4 w-4" />}
+          required
+          error={errors.projectType?.message}
+        >
+          <Controller
+            name="projectType"
+            control={control}
+            render={({ field }) => (
+              <Combobox
+                options={PROJECT_TYPE_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+                placeholder="What are you building?"
+                searchPlaceholder="Search project types..."
+                emptyMessage="No matching project type found."
+                className={cn(
+                  "w-full rounded-xl",
+                  "bg-white/5 border",
+                  errors.projectType ? "border-red-500/50" : "border-white/10 hover:border-white/20",
+                  "text-white hover:bg-white/10",
+                  "focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20"
+                )}
               />
+            )}
+          />
+          {projectType === 'other' && (
+            <div className="mt-3 animate-in fade-in slide-in-from-top-2 duration-300">
+              <input
+                type="text"
+                placeholder="Describe your project type..."
+                {...register('customProjectType')}
+                className={cn(
+                  inputStyles,
+                  errors.customProjectType && "border-red-500/50"
+                )}
+              />
+              {errors.customProjectType && (
+                <p className="mt-1 text-xs text-red-400 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {errors.customProjectType.message}
+                </p>
+              )}
             </div>
           )}
-        </div>
+        </FormField>
 
-        <div>
-          <label className="block text-emerald-400 text-xs uppercase tracking-widest mb-2 font-semibold">Project Location</label>
-          <Combobox
-            options={LOCATION_OPTIONS}
-            value={projectLocation}
-            onChange={setProjectLocation}
-            placeholder="Select a Location..."
-            searchPlaceholder="Search location..."
-            className="w-full bg-white/5 border border-white/30 text-white hover:bg-white/10"
+        {/* Project Location */}
+        <FormField 
+          label="Project Location" 
+          icon={<MapPin className="h-4 w-4" />}
+        >
+          <Controller
+            name="projectLocation"
+            control={control}
+            render={({ field }) => (
+              <Combobox
+                options={LOCATION_OPTIONS}
+                value={field.value || ''}
+                onChange={field.onChange}
+                placeholder="Where is your project located?"
+                searchPlaceholder="Search locations..."
+                className={cn(
+                  "w-full rounded-xl",
+                  "bg-white/5 border border-white/10 hover:border-white/20",
+                  "text-white hover:bg-white/10"
+                )}
+              />
+            )}
           />
-        </div>
+        </FormField>
 
-        <div>
-          <label className="block text-emerald-400 text-xs uppercase tracking-widest mb-2 font-semibold">Estimated Budget (KES)</label>
-          <Input placeholder="e.g. 5,000,000 - 15,000,000" value={estimatedBudget} onChange={(e: any) => setEstimatedBudget(e.target.value)} />
-        </div>
+        {/* Estimated Budget */}
+        <FormField 
+          label="Estimated Budget (KES)" 
+          icon={<Wallet className="h-4 w-4" />}
+          hint="Helps us match you with appropriate professionals"
+        >
+          <input
+            type="text"
+            placeholder="e.g. 5,000,000 - 15,000,000"
+            {...register('estimatedBudget')}
+            className={inputStyles}
+          />
+        </FormField>
 
-        <div>
-          <label className="block text-emerald-400 text-xs uppercase tracking-widest mb-2 font-semibold">Project Description</label>
+        {/* Project Description */}
+        <FormField 
+          label="Project Description" 
+          icon={<FileText className="h-4 w-4" />}
+          error={errors.description?.message}
+        >
           <textarea
-            className="flex min-h-[100px] w-full rounded-none border border-white/30 bg-white/5 px-4 py-2 text-sm text-white placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 focus:border-emerald-400 transition-colors"
-            placeholder="Describe your project vision, requirements, and any specific details..."
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            className={cn(
+              inputStyles,
+              "min-h-[140px] resize-none leading-relaxed",
+              errors.description && "border-red-500/50"
+            )}
+            placeholder="Describe your vision, timeline, requirements, and any specific details that would help professionals understand your needs..."
+            {...register('description')}
           />
-        </div>
+        </FormField>
 
-        <div className="pt-4">
-          <Button variant="default" className="w-full" size="lg" type="submit" disabled={submitting}>
-            {submitting ? 'Submitting…' : 'Create Account'}
-          </Button>
+        {/* Submit Button */}
+        <div className="pt-6 space-y-4">
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className={cn(
+              "w-full py-4 px-6 rounded-xl font-semibold text-base",
+              "bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600",
+              "text-white shadow-lg shadow-emerald-500/25",
+              "hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-500",
+              "hover:shadow-xl hover:shadow-emerald-500/30",
+              "transition-all duration-300 hover:scale-[1.02]",
+              "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100",
+              "disabled:shadow-none"
+            )}
+          >
+            {isSubmitting ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Creating your profile...
+              </span>
+            ) : (
+              <span className="flex items-center justify-center gap-2">
+                Get Started
+                <ArrowRight className="h-5 w-5" />
+              </span>
+            )}
+          </button>
           
           {/* Skip option for homeowners */}
           {onSkip && (
-            <div className="mt-4 text-center">
-              <p className="text-zinc-400 text-xs mb-2">
-                Not ready to fill this out? No problem.
-              </p>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/10" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-zinc-900 px-4 text-zinc-500">or</span>
+              </div>
+            </div>
+          )}
+          
+          {onSkip && (
+            <div className="text-center space-y-2">
               <button 
                 type="button" 
                 onClick={onSkip} 
-                disabled={submitting}
-                className="text-emerald-400 hover:text-emerald-300 text-sm font-medium transition-colors disabled:opacity-50"
+                disabled={isSubmitting}
+                className={cn(
+                  "text-sm font-medium transition-all duration-200",
+                  "text-zinc-400 hover:text-emerald-400",
+                  "disabled:opacity-50"
+                )}
               >
                 Skip for now →
               </button>
-              <p className="text-zinc-500 text-[10px] mt-1">
-                You can complete your profile anytime from your dashboard
+              <p className="text-[11px] text-zinc-600">
+                Complete your profile anytime from the dashboard
               </p>
             </div>
           )}
           
-          <button type="button" onClick={onBack} className="w-full text-center text-slate-400 text-xs mt-4 hover:text-white transition-colors">
-            Go Back
+          <button 
+            type="button" 
+            onClick={onBack} 
+            className={cn(
+              "w-full py-3 text-center text-sm",
+              "text-zinc-500 hover:text-white",
+              "transition-colors duration-200"
+            )}
+          >
+            ← Back to role selection
           </button>
         </div>
       </div>

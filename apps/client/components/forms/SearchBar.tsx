@@ -5,9 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 
 const SearchBar = () => {
-  const [value, setValue] = useState("");
+  const [value] = useState("");
   const [query, setQuery] = useState("");
-  const [suggestions, setSuggestions] = useState<any[]>([]);
+  interface SuggestedItem {
+    name?: string;
+    title?: string;
+    rating?: number;
+  }
+  const [suggestions, setSuggestions] = useState<SuggestedItem[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -65,12 +70,12 @@ const SearchBar = () => {
 
       {showSuggestions && suggestions.length > 0 && (
         <div className="absolute top-full left-0 right-0 bg-white border rounded-lg shadow-lg mt-1 z-50">
-        {suggestions.map((item: any, index) => (
+        {suggestions.map((item, index) => (
           <div
             key={index}
             className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
             onClick={() => {
-              setQuery(item.name || item.title);
+              setQuery(item?.name || item.title || "");
               setShowSuggestions(false);
             }}
           >

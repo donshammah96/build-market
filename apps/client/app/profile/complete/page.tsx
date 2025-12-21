@@ -5,10 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { motion } from 'framer-motion';
 import { 
-  User, 
   Phone, 
   MapPin, 
-  Camera,
   CheckCircle2,
   AlertCircle,
   ArrowLeft,
@@ -46,7 +44,7 @@ export default function CompleteClientProfilePage() {
   const { 
     user, 
     profile, 
-    completion, 
+    // completion, 
     isLoading, 
     updateProfile,
     isUpdating,

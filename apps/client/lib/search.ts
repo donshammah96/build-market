@@ -1,7 +1,7 @@
-import { SearchFilters } from "@repo/types";
+// import { SearchFilters } from "@repo/types";
 import { searchProfessionalsAction } from "@/app/actions/search";
 
-export async function searchProfessionals(query: string, filters?: SearchFilters) {
+export async function searchProfessionals(query: string) {
     // Note: filters are not yet implemented in the MVP action
     const results = await searchProfessionalsAction(query);
     return {
@@ -10,7 +10,7 @@ export async function searchProfessionals(query: string, filters?: SearchFilters
     };
 }
 
-export async function autoComplete(query: string, type: string = "all") {
+export async function autoComplete(query: string) {
     // Reuse search action for autocomplete in MVP
     const results = await searchProfessionalsAction(query);
     return {

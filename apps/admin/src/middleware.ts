@@ -15,7 +15,6 @@ export default clerkMiddleware(async (auth, req) => {
     const { userId, sessionClaims } = authObj;
 
     if (userId && sessionClaims) {
-      const userRole = (sessionClaims as CustomJwtSessionClaims).metadata?.role;
 
       if (isAdminRoute(req)) {
         const isAuthorized = authObj.has({ role: "admin" }) || (authObj.sessionClaims as CustomJwtSessionClaims)?.metadata?.role === "admin";

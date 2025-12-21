@@ -26,7 +26,7 @@ export default function SignInPage() {
         <div className="relative z-10 text-center px-10">
            <h1 className="text-4xl font-bold text-white mb-4">Welcome Back</h1>
            <p className="text-zinc-400 max-w-sm mx-auto">
-             Continue building your legacy with Kenya's premier construction marketplace.
+             Continue building your legacy with Kenya&apos;s premier construction marketplace.
            </p>
         </div>
       </div>

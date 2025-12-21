@@ -6,24 +6,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
   Star,
-  Filter,
-  ChevronDown,
   SlidersHorizontal,
   Briefcase,
   Award,
   Users,
   X,
   Loader2,
-  Hammer,
-  Paintbrush,
-  Lightbulb,
-  Wrench,
-  DraftingCompass,
-  Sprout,
-  ShoppingBasket,
-  Building2,
-  HardHat,
-  Ruler,
 } from "lucide-react";
 
 import { Navbar } from "@/components/layout/NavBar";
@@ -42,73 +30,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import ProfessionalCard from "@/components/professional/ProfessionalCard";
 import { ProfessionalCardData } from "@/types/professional";
-
-// =============================================================================
-// Constants
-// =============================================================================
-
-const CATEGORIES = [
-  {
-    name: "All Professionals",
-    slug: "all",
-    icon: ShoppingBasket,
-    description: "Browse all verified professionals",
-  },
-  {
-    name: "Architecture",
-    slug: "architecture",
-    icon: DraftingCompass,
-    description: "Architects & building designers",
-  },
-  {
-    name: "General Contracting",
-    slug: "general-contracting",
-    icon: Hammer,
-    description: "General contractors & builders",
-  },
-  {
-    name: "Interior Design",
-    slug: "interior-design",
-    icon: Paintbrush,
-    description: "Interior designers & decorators",
-  },
-  {
-    name: "Structural Engineering",
-    slug: "structural-engineering",
-    icon: Building2,
-    description: "Structural & civil engineers",
-  },
-  {
-    name: "Electrical",
-    slug: "electrical",
-    icon: Lightbulb,
-    description: "Electrical contractors & lighting",
-  },
-  {
-    name: "Plumbing",
-    slug: "plumbing",
-    icon: Wrench,
-    description: "Plumbers & water specialists",
-  },
-  {
-    name: "Landscaping",
-    slug: "landscaping",
-    icon: Sprout,
-    description: "Landscape architects & gardeners",
-  },
-  {
-    name: "Construction",
-    slug: "construction",
-    icon: HardHat,
-    description: "Construction specialists",
-  },
-  {
-    name: "Surveying",
-    slug: "surveying",
-    icon: Ruler,
-    description: "Land surveyors & quantity surveyors",
-  },
-];
+import { 
+  CATEGORIES,
+} from "@/lib/constants/professionalCategories";
 
 const SORT_OPTIONS = [
   { value: "rating", label: "Top Rated", icon: Star },
@@ -415,7 +339,7 @@ function ProfessionalsPageContent() {
             </Badge>
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 tracking-tight">
-              Find Your Perfect{" "}
+              Find Your Trusted{" "}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">
                 Professional
               </span>

@@ -3,13 +3,9 @@
 import { 
   Users, 
   DollarSign, 
-  TrendingUp, 
-  MoreHorizontal, 
-  CheckCircle2,
-  Clock
+  TrendingUp
 } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+
 
 export function MockDashboard() {
   return (
@@ -87,7 +83,15 @@ export function MockDashboard() {
   );
 }
 
-function MetricCard({ icon: Icon, label, value, trend, color }: any) {
+interface MetricCardProps {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  trend: string;
+  color: string;
+}
+
+function MetricCard({ icon: Icon, label, value, trend, color }: MetricCardProps) {
   const colors = {
     emerald: "text-emerald-500 bg-emerald-500/10",
     blue: "text-blue-500 bg-blue-500/10",
@@ -108,7 +112,15 @@ function MetricCard({ icon: Icon, label, value, trend, color }: any) {
   );
 }
 
-function LeadItem({ name, project, status, time, color }: any) {
+interface LeadItemProps {
+  name: string;
+  project: string;
+  status: string;
+  time: string;
+  color: string;
+}
+
+function LeadItem({ status, time, color }: LeadItemProps) {
   const statusColors = {
     emerald: "bg-emerald-500/20 text-emerald-400 border-emerald-500/20",
     blue: "bg-blue-500/20 text-blue-400 border-blue-500/20",

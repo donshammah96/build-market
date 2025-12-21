@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { DollarSign, Download, Wallet, Loader2 } from "lucide-react";
+import { Download, Wallet, Loader2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -209,7 +209,7 @@ export default function FinancePage() {
                   </td>
                 </tr>
               ) : (
-                transactions?.map((txn: any) => (
+                transactions?.map((txn: { id: string; description: string; date: string | number | Date; amount: number; status: "completed" | "pending" | "failed"; type: "credit" | "debit"; }) => (
                   <TransactionRow 
                     key={txn.id}
                     id={txn.id.substring(0, 8).toUpperCase()} 
@@ -229,7 +229,15 @@ export default function FinancePage() {
   );
 }
 
-function FinanceCard({ title, value, sub, active, alert }: any) {
+interface FinanceCardProps {
+  title: string;
+  value: string;
+  sub: string;
+  active?: boolean;
+  alert?: boolean;
+}
+
+function FinanceCard({ title, value, sub, active, alert }: FinanceCardProps) {
   return (
     <Card className={`border shadow-sm ${active ? 'border-emerald-200 bg-emerald-50/30' : 'border-zinc-200 bg-white'}`}>
       <CardContent className="p-6">
@@ -241,7 +249,16 @@ function FinanceCard({ title, value, sub, active, alert }: any) {
   )
 }
 
-function TransactionRow({ id, desc, date, amount, status, type }: any) {
+interface TransactionRowProps {
+  id: string;
+  desc: string;
+  date: string;
+  amount: string;
+  status: string;
+  type: string;
+}
+
+function TransactionRow({ id, desc, date, amount, status, type }: TransactionRowProps) {
   const isIncome = type === 'INCOME';
   const isWithdrawal = type === 'WITHDRAWAL';
   

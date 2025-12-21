@@ -32,7 +32,7 @@ interface ProfessionalSidebarProps {
 
 export function ProfessionalSidebar({ verified = false }: ProfessionalSidebarProps) {
   const pathname = usePathname();
-  const { user, isLoaded } = useUser();
+  const { user } = useUser();
 
   return (
     <aside className="fixed inset-y-0 left-0 z-50 w-64 bg-zinc-900 text-white hidden lg:flex flex-col border-r border-zinc-800">

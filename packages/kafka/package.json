@@ -7,7 +7,7 @@
     "check-types": "tsc --noEmit"
   },
   "devDependencies": {
-    "@repo/typescript-config": "workspace:*",
+    "@repo/typescript-config": "0.0.0",
     "@types/node": "^24.8.1"
   },
   "dependencies": {

@@ -23,7 +23,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 // Mock environment variables
-process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';
+process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3500';
 process.env.CLERK_WEBHOOK_SECRET = 'test_webhook_secret';
 process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = 'pk_test_123';
 process.env.CLERK_SECRET_KEY = 'sk_test_123';

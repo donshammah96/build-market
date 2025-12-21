@@ -10,12 +10,21 @@ import {
   apiError,
   getClientLogger,
 } from '@/app/lib/resilient-api';
+import { 
+  getProfessionsForCategory
+} from '@/lib/constants/professionalCategories';
 
 const logger = getClientLogger();
 
 /**
  * GET /api/professionals
  * Get list of verified professionals with filtering, sorting, and resilience
+ * 
+ * Query params:
+ * - search: Search term for name, company, service
+ * - category: Category slug (e.g., "architecture", "plumbing")
+ * - sortBy: "rating" | "experience" | "reviews"
+ * - includeUnverified: "true" to include unverified professionals (dev/admin only)
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const correlationId = initializeCorrelationId(request);
@@ -37,14 +46,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   
   // Validate and sanitize inputs
   const search = searchParams.get('search')?.trim().slice(0, 100) || '';
-  const category = searchParams.get('category')?.trim() || 'All';
+  const categorySlug = searchParams.get('category')?.trim().toLowerCase() || 'all';
   const sortBy = (searchParams.get('sortBy') || 'rating') as 'rating' | 'experience' | 'reviews';
+  const includeUnverified = searchParams.get('includeUnverified') === 'true';
 
   // Whitelist sortBy values
   const validSortOptions = ['rating', 'experience', 'reviews'];
   if (!validSortOptions.includes(sortBy)) {
     return apiError('Invalid sort option. Must be one of: rating, experience, reviews', 400);
   }
+
+  // Convert category slug to profession values array
+  const professions = getProfessionsForCategory(categorySlug);
 
   // Execute with resilience patterns
   return executeResilient(
@@ -53,9 +66,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const repo = new ProfessionalRepository(prisma);
       const professionals = await repo.findMany({
         search,
-        category,
+        professions,
         sortBy,
         verified: true,
+        includeUnverified,
       });
 
       // Transform data to match ProfessionalCardData interface
@@ -123,7 +137,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         correlationId,
         count: transformedData.length,
         search,
-        category,
+        professions,
         sortBy,
       });
 

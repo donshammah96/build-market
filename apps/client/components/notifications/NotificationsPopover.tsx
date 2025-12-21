@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, Check, Loader2 } from "lucide-react";
+import { Bell, Loader2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,9 @@ export function NotificationsPopover() {
     queryFn: async () => {
       const res = await fetch("/api/notifications");
       if (!res.ok) throw new Error("Failed to fetch notifications");
-      return res.json();
+      const json = await res.json();
+      // API returns { success: true, data: notifications[] }
+      return json.data || [];
     },
     // Refetch every minute to keep notifications fresh
     refetchInterval: 60000, 

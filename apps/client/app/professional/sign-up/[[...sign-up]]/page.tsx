@@ -42,7 +42,7 @@ export default function ProfessionalSignUpPage() {
                <span className="text-emerald-500">starts here.</span>
              </h1>
              <p className="text-lg text-zinc-400 font-light leading-relaxed max-w-lg">
-               Join Kenya's vetted network of Architects, Engineers, and Contractors. Access high-intent leads and manage your reputation.
+               Join Kenya&apos;s vetted network of Architects, Engineers, and Contractors. Access high-intent leads and manage your reputation.
              </p>
            </div>
 
@@ -54,7 +54,7 @@ export default function ProfessionalSignUpPage() {
 
            <div className="mt-12 pt-8 border-t border-zinc-800">
               <p className="text-sm text-zinc-500">
-                "Build Market helped us secure 3 major building contracts in our first month."
+                &quot;Build Market helped us secure 3 major building contracts in our first month.&quot;
               </p>
               <div className="flex items-center gap-3 mt-4">
                 <div className="h-8 w-8 rounded-full bg-emerald-900/50 border border-emerald-500/30 flex items-center justify-center text-emerald-500 font-bold text-xs">

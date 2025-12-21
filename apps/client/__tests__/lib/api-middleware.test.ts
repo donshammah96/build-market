@@ -38,7 +38,7 @@ describe('API Middleware', () => {
       );
 
       const wrappedHandler = withAuth(mockHandler);
-      const request = new NextRequest('http://localhost:3000/test');
+      const request = new NextRequest('http://localhost:3500/test');
 
       await wrappedHandler(request);
 
@@ -59,7 +59,7 @@ describe('API Middleware', () => {
 
       const mockHandler = vi.fn();
       const wrappedHandler = withAuth(mockHandler);
-      const request = new NextRequest('http://localhost:3000/test');
+      const request = new NextRequest('http://localhost:3500/test');
 
       const response = await wrappedHandler(request);
       const data = await response.json();
@@ -77,7 +77,7 @@ describe('API Middleware', () => {
 
       const mockHandler = vi.fn();
       const wrappedHandler = withAuth(mockHandler);
-      const request = new NextRequest('http://localhost:3000/test');
+      const request = new NextRequest('http://localhost:3500/test');
 
       const response = await wrappedHandler(request);
       const data = await response.json();
@@ -93,7 +93,7 @@ describe('API Middleware', () => {
 
       const mockHandler = vi.fn();
       const wrappedHandler = withAuth(mockHandler);
-      const request = new NextRequest('http://localhost:3000/test');
+      const request = new NextRequest('http://localhost:3500/test');
 
       const response = await wrappedHandler(request);
       const data = await response.json();
@@ -123,7 +123,7 @@ describe('API Middleware', () => {
       );
 
       const wrappedHandler = withRole(['professional'])(mockHandler);
-      const request = new NextRequest('http://localhost:3000/test');
+      const request = new NextRequest('http://localhost:3500/test');
 
       const response = await wrappedHandler(request);
       const data = await response.json();
@@ -148,7 +148,7 @@ describe('API Middleware', () => {
 
       const mockHandler = vi.fn();
       const wrappedHandler = withRole(['professional'])(mockHandler);
-      const request = new NextRequest('http://localhost:3000/test');
+      const request = new NextRequest('http://localhost:3500/test');
 
       const response = await wrappedHandler(request);
       const data = await response.json();

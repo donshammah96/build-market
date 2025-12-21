@@ -7,6 +7,8 @@ export default defineConfig({
   test: {
     globals: true,
     setupFiles: ['./__tests__/setup.ts'],
+    environment: 'node', // Default to node for API tests
+    include: ['**/__tests__/**/*.{test,spec}.{js,ts,tsx}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
@@ -26,28 +28,4 @@ export default defineConfig({
       '@/components': path.resolve(__dirname, './components'),
     },
   },
-  projects: [
-    {
-      // API tests - use node environment
-      extends: true,
-      test: {
-        name: 'api',
-        environment: 'node',
-        include: ['**/__tests__/api/**/*.{test,spec}.{js,ts}'],
-      },
-    },
-    {
-      // Component and hook tests - use jsdom environment
-      extends: true,
-      test: {
-        name: 'components',
-        environment: 'jsdom',
-        include: [
-          '**/__tests__/components/**/*.{test,spec}.{js,ts,tsx}',
-          '**/__tests__/hooks/**/*.{test,spec}.{js,ts,tsx}',
-        ],
-      },
-    },
-  ],
 });
-

@@ -2,8 +2,17 @@
 
 import { useState, useEffect } from "react";
 
+interface DashboardData {
+  stats: {
+    activeProjects: number;
+  };
+  projects: unknown[];
+  ideaBooks: unknown[];
+  savedProfessionals: unknown[];
+}
+
 export default function ClientDashboard() {
-  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

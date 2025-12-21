@@ -12,8 +12,6 @@ import {
   Star, 
   BookOpen, 
   Bell, 
-  User,
-  LogOut,
   Settings
 } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";

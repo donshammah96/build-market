@@ -148,8 +148,11 @@ export function useProfileStatus() {
   const updateMutation = useMutation({
     mutationFn: updateProfile,
     onSuccess: (newData) => {
-      // Update cache with new data
+      // Update cache with new data immediately for instant feedback
       queryClient.setQueryData(['profile-status'], newData);
+      // Also invalidate the query to ensure fresh data on next access
+      // This handles cases where components may have mounted before the update
+      queryClient.invalidateQueries({ queryKey: ['profile-status'] });
     },
     onError: (error) => {
       console.error('Profile update error:', error);

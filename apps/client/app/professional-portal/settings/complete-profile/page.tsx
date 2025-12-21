@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { motion } from 'framer-motion';
@@ -18,12 +18,15 @@ import {
   Save,
   Plus,
   X,
+  Upload,
+  Link2,
+  ImageIcon,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Textarea } from '@/components/ui/text-area';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -72,7 +75,7 @@ export default function CompleteProfessionalProfilePage() {
   const { 
     user, 
     profile, 
-    completion, 
+    // completion, 
     isLoading, 
     updateProfile,
     isUpdating,
@@ -98,6 +101,61 @@ export default function CompleteProfessionalProfilePage() {
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [customService, setCustomService] = useState('');
+  
+  // Avatar upload state
+  const [avatarMode, setAvatarMode] = useState<'upload' | 'url'>('upload');
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Handle file upload for avatar
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      setErrors(prev => ({ ...prev, avatar: 'Please upload a valid image (JPEG, PNG, GIF, or WebP)' }));
+      return;
+    }
+    
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      setErrors(prev => ({ ...prev, avatar: 'Image must be less than 5MB' }));
+      return;
+    }
+    
+    setIsUploadingAvatar(true);
+    setErrors(prev => ({ ...prev, avatar: undefined }));
+    
+    try {
+      // Convert to base64 data URL for preview and submission
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        handleChange('avatar', base64String);
+        setIsUploadingAvatar(false);
+      };
+      reader.onerror = () => {
+        setErrors(prev => ({ ...prev, avatar: 'Failed to read file. Please try again.' }));
+        setIsUploadingAvatar(false);
+      };
+      reader.readAsDataURL(file);
+    } catch {
+      setErrors(prev => ({ ...prev, avatar: 'Failed to process image. Please try again.' }));
+      setIsUploadingAvatar(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  
+  // Clear avatar
+  const handleClearAvatar = useCallback(() => {
+    handleChange('avatar', '');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Populate form with existing data
   useEffect(() => {
@@ -307,26 +365,127 @@ export default function CompleteProfessionalProfilePage() {
             </CardHeader>
             
             <CardContent className="space-y-6">
-              {/* Avatar */}
-              <div className="flex items-center gap-6">
-                <Avatar className="h-20 w-20 border-2 border-zinc-100">
-                  <AvatarImage src={formData.avatar || clerkUser?.imageUrl} />
-                  <AvatarFallback className="bg-zinc-100 text-zinc-500 text-xl">
-                    {formData.firstName?.[0]}{formData.lastName?.[0]}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <Label htmlFor="avatar" className="text-sm font-medium text-zinc-700">
-                    Profile Photo URL
-                  </Label>
-                  <Input
-                    id="avatar"
-                    type="url"
-                    placeholder="https://example.com/photo.jpg"
-                    value={formData.avatar}
-                    onChange={(e) => handleChange('avatar', e.target.value)}
-                    className="mt-1.5"
-                  />
+              {/* Avatar Upload Section */}
+              <div className="space-y-4">
+                <Label className="text-sm font-medium text-zinc-700">
+                  Profile Photo
+                </Label>
+                
+                <div className="flex flex-col md:flex-row gap-6">
+                  {/* Avatar Preview */}
+                  <div className="relative">
+                    <Avatar className="h-24 w-24 border-2 border-zinc-200 shadow-sm">
+                      <AvatarImage src={formData.avatar || clerkUser?.imageUrl} />
+                      <AvatarFallback className="bg-zinc-100 text-zinc-500 text-2xl">
+                        {formData.firstName?.[0]}{formData.lastName?.[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    {formData.avatar && (
+                      <button
+                        type="button"
+                        onClick={handleClearAvatar}
+                        className="absolute -top-2 -right-2 p-1 bg-red-100 hover:bg-red-200 rounded-full text-red-600 transition-colors"
+                        title="Remove photo"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                    {isUploadingAvatar && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-full">
+                        <Loader2 className="h-6 w-6 animate-spin text-zinc-600" />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Upload Controls */}
+                  <div className="flex-1 space-y-3">
+                    {/* Mode Toggle */}
+                    <div className="flex gap-1 p-1 bg-zinc-100 rounded-lg w-fit">
+                      <button
+                        type="button"
+                        onClick={() => setAvatarMode('upload')}
+                        className={cn(
+                          'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all',
+                          avatarMode === 'upload'
+                            ? 'bg-white shadow-sm text-zinc-900'
+                            : 'text-zinc-600 hover:text-zinc-900'
+                        )}
+                      >
+                        <Upload className="h-4 w-4" />
+                        Upload
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAvatarMode('url')}
+                        className={cn(
+                          'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all',
+                          avatarMode === 'url'
+                            ? 'bg-white shadow-sm text-zinc-900'
+                            : 'text-zinc-600 hover:text-zinc-900'
+                        )}
+                      >
+                        <Link2 className="h-4 w-4" />
+                        URL
+                      </button>
+                    </div>
+                    
+                    {avatarMode === 'upload' ? (
+                      <div className="space-y-2">
+                        {/* Hidden file input */}
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/gif,image/webp"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                          id="avatar-file-input"
+                        />
+                        
+                        {/* Upload zone */}
+                        <label
+                          htmlFor="avatar-file-input"
+                          className={cn(
+                            'flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors',
+                            'border-zinc-200 hover:border-zinc-400 hover:bg-zinc-50',
+                            isUploadingAvatar && 'opacity-50 pointer-events-none'
+                          )}
+                        >
+                          <ImageIcon className="h-8 w-8 text-zinc-400 mb-2" />
+                          <span className="text-sm font-medium text-zinc-700">
+                            Click to upload
+                          </span>
+                          <span className="text-xs text-zinc-500 mt-1">
+                            JPEG, PNG, GIF, or WebP (max 5MB)
+                          </span>
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                          <Input
+                            id="avatar-url"
+                            type="url"
+                            placeholder="https://example.com/photo.jpg"
+                            value={formData.avatar}
+                            onChange={(e) => handleChange('avatar', e.target.value)}
+                            className="pl-10"
+                          />
+                        </div>
+                        <p className="text-xs text-zinc-500">
+                          Enter a direct link to your profile photo
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Error message */}
+                    {errors.avatar && (
+                      <p className="text-sm text-red-500 flex items-center gap-1">
+                        <AlertCircle className="h-4 w-4" />
+                        {errors.avatar}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 

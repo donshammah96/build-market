@@ -37,7 +37,7 @@ export default function ClientSignUpPage() {
                <span className="text-emerald-500">with confidence.</span>
              </h1>
              <p className="text-lg text-zinc-300 font-light leading-relaxed max-w-lg">
-               Join Kenya's most trusted community for home improvement. Find verified fundis, browse local ideas, and manage your project safely.
+               Join Kenya&apos;s most trusted community for home improvement. Find verified fundis, browse local ideas, and manage your project safely.
              </p>
            </div>
 
@@ -109,7 +109,7 @@ export default function ClientSignUpPage() {
   );
 }
 
-function FeatureItem({ icon: Icon, text }: { icon: any, text: string }) {
+function FeatureItem({ icon: Icon, text }: { icon: React.ElementType, text: string }) {
   return (
     <div className="flex items-center gap-4">
       <div className="h-10 w-10 rounded-full bg-zinc-800 flex items-center justify-center border border-zinc-700 shrink-0">

@@ -3,8 +3,12 @@ import { PrismaClient } from '@prisma/client';
 export interface ProfessionalFilters {
   search?: string;
   category?: string;
+  /** Array of profession values to filter by (used when category is converted to professions) */
+  professions?: string[];
   sortBy?: 'rating' | 'experience' | 'reviews';
   verified?: boolean;
+  /** Include unverified professionals (for dev/admin testing) */
+  includeUnverified?: boolean;
 }
 
 export class ProfessionalRepository {
@@ -14,12 +18,23 @@ export class ProfessionalRepository {
    * Find professionals with filters and includes
    */
   async findMany(filters: ProfessionalFilters = {}) {
-    const { search = '', category = 'All', sortBy = 'rating', verified = true } = filters;
+    const { 
+      search = '', 
+      category = 'All', 
+      professions = [],
+      sortBy = 'rating', 
+      verified = true,
+      includeUnverified = false,
+    } = filters;
 
     // Build where clause
-    const where: any = {
-      verified,
-    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: any = {};
+    
+    // Verification filter (unless includeUnverified is true for dev/admin testing)
+    if (!includeUnverified) {
+      where.verified = verified;
+    }
 
     // Search filter
     if (search) {
@@ -38,12 +53,16 @@ export class ProfessionalRepository {
       ];
     }
 
-    // Category filter
-    if (category !== 'All') {
+    // Profession filter - uses hasSome for matching any profession in the array
+    if (professions.length > 0) {
+      where.servicesOffered = { hasSome: professions };
+    } else if (category !== 'All' && category !== 'all') {
+      // Fallback to legacy category filter for backwards compatibility
       where.servicesOffered = { has: category };
     }
 
     // Build orderBy clause
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let orderBy: any = {};
     switch (sortBy) {
       case 'experience':
@@ -161,6 +180,7 @@ export class ProfessionalRepository {
   /**
    * Create or update professional profile
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async upsert(userId: string, data: any) {
     return this.prisma.professionalProfile.upsert({
       where: { userId },

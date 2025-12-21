@@ -78,8 +78,8 @@ export const features: Feature[] = [
 ];
 
 export const stores: Store[] = [
-  { title: 'Hardware Shops', description: 'Find hardware shops near you.', image: '/hardware.png', imageAlt: 'Hardware Shops', href: ROUTES.hardwareShops },
-  { title: 'Commercial Stores', description: 'Find specialty stores to suit your specific project needs.', image: '/kitchen-fixtures.png', imageAlt: 'Commercial Stores', href: ROUTES.commercialStores },
+  { title: 'Hardware Shops', description: 'Find hardware shops near you.', image: '/hardware.png', imageAlt: 'Hardware Shops', href: ROUTES.storeHardware },
+  { title: 'Commercial Stores', description: 'Find specialty stores to suit your specific project needs.', image: '/kitchen-fixtures.png', imageAlt: 'Commercial Stores', href: ROUTES.stores },
 ];
 
 export const professionals: Professional[] = [

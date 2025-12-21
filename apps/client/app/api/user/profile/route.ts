@@ -21,7 +21,7 @@ const logger = new StructuredLogger('profile-api');
  * Returns profile data with completion status (even for incomplete profiles)
  * Returns 404 only if user truly doesn't exist in database
  */
-export const GET = withAuth(async (req: NextRequest, { clerkId, dbUserId }) => {
+export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
   const correlationId = CorrelationIdManager.generate();
   CorrelationIdManager.set(correlationId);
 

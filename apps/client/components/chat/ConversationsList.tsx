@@ -45,7 +45,7 @@ export function ConversationsList({
   });
 
   // Filter conversations by search query
-  const filteredConversations = conversations?.filter((conv) => {
+  const filteredConversations = conversations?.filter(() => {
     // You might want to fetch user details and search by name
     return true; // Placeholder
   }) || [];

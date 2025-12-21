@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { 
   Plus, 
   MoreVertical, 
@@ -8,8 +8,9 @@ import {
   Eye, 
   Edit, 
   Trash2,
-  ExternalLink,
-  Loader2
+  Loader2,
+  Upload,
+  X
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -55,12 +56,21 @@ import {
 } from "@/components/ui/select";
 import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
 
+// Portfolio item interface
+interface PortfolioItem {
+  id: string;
+  title: string;
+  description?: string;
+  projectType: string;
+  images: string[] | string;
+}
+
 const createProjectSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters"),
   description: z.string().optional(),
   projectType: z.string().min(1, "Project type is required"),
-  // For MVP, we'll ask for a single image URL. In real app -> proper upload component
-  imageUrl: z.string().url("Must be a valid URL").min(1, "Image URL is required"), 
+  // Image URL is optional in schema - we validate file separately
+  imageUrl: z.string().optional(), 
   clientTestimonial: z.string().optional(),
 });
 
@@ -69,6 +79,73 @@ type CreateProjectFormValues = z.infer<typeof createProjectSchema>;
 export default function PortfolioPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const queryClient = useQueryClient();
+  
+  // File upload state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- File Upload Helper ---
+  const uploadFiles = async (files: File[], fieldName: string): Promise<string[]> => {
+    const form = new FormData();
+    files.forEach((f) => form.append(fieldName, f));
+    
+    const res = await fetch('/api/uploads', { method: 'POST', body: form });
+    
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(txt || `Upload failed with ${res.status}`);
+    }
+    
+    const json = await res.json();
+    return json.data?.uploaded?.[fieldName]?.map((i: { url: string }) => i.url) || [];
+  };
+
+  // --- File Selection Handler ---
+  const handleFileSelect = useCallback((file: File | null) => {
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please select an image file');
+        return;
+      }
+      // Validate file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error('Image must be less than 10MB');
+        return;
+      }
+      setSelectedFile(file);
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setSelectedFile(null);
+      setImagePreview(null);
+    }
+  }, []);
+
+  // --- Drag & Drop Handlers ---
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileSelect(file);
+  }, [handleFileSelect]);
 
   // --- Fetch Portfolio ---
   const { data: portfolioItems, isLoading } = useQuery({
@@ -84,10 +161,35 @@ export default function PortfolioPage() {
   // --- Create Mutation ---
   const createMutation = useMutation({
     mutationFn: async (data: CreateProjectFormValues) => {
-      // Map form data to API expected shape (images is array)
+      // Validate image is selected
+      if (!selectedFile) {
+        throw new Error("Please select an image for your project");
+      }
+
+      // Upload file first
+      setIsUploading(true);
+      let imageUrls: string[];
+      try {
+        imageUrls = await uploadFiles([selectedFile], 'images');
+      } catch {
+        throw new Error("Failed to upload image. Please try again.");
+      } finally {
+        setIsUploading(false);
+      }
+
+      if (!imageUrls.length) {
+        throw new Error("No image was uploaded. Please try again.");
+      }
+
+      // Create portfolio item with uploaded image URL
+      // Convert relative URLs to absolute URLs (portfolio API validates for full URLs)
+      const absoluteUrls = imageUrls.map(url => 
+        url.startsWith('/') ? `${window.location.origin}${url}` : url
+      );
+      
       const payload = {
         ...data,
-        images: [data.imageUrl], // API expects array of strings
+        images: absoluteUrls,
       };
 
       const res = await fetch("/api/professional-portal/portfolio", {
@@ -107,6 +209,9 @@ export default function PortfolioPage() {
       setIsCreateOpen(false);
       toast.success("Project added successfully");
       form.reset();
+      // Reset file state
+      setSelectedFile(null);
+      setImagePreview(null);
     },
     onError: (error) => {
       toast.error(error.message);
@@ -193,19 +298,64 @@ export default function PortfolioPage() {
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="imageUrl"
-                    render={({ field }) => (
-                      <FormItem>
-                         <FormLabel>Main Image URL</FormLabel>
-                        <FormControl>
-                          <Input placeholder="https://..." {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+                </div>
+
+                {/* File Upload Area */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    Project Image <span className="text-red-500">*</span>
+                  </label>
+                  <div
+                    className={`relative border-2 border-dashed rounded-lg p-6 transition-colors cursor-pointer
+                      ${isDragging ? 'border-zinc-900 bg-zinc-50' : 'border-zinc-300 hover:border-zinc-400'}
+                      ${imagePreview ? 'bg-zinc-50' : ''}
+                    `}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileSelect(file);
+                      }}
+                    />
+                    
+                    {imagePreview ? (
+                      <div className="relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src={imagePreview} 
+                          alt="Preview" 
+                          className="w-full h-40 object-cover rounded-md"
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleFileSelect(null);
+                          }}
+                          className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-md hover:bg-zinc-100"
+                        >
+                          <X className="h-4 w-4 text-zinc-600" />
+                        </button>
+                        <p className="text-xs text-zinc-500 mt-2 text-center truncate">
+                          {selectedFile?.name}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-zinc-500">
+                        <Upload className="h-8 w-8" />
+                        <p className="text-sm font-medium">Click or drag to upload</p>
+                        <p className="text-xs">PNG, JPG, WebP up to 10MB</p>
+                      </div>
                     )}
-                  />
+                  </div>
                 </div>
 
                 <FormField
@@ -237,9 +387,9 @@ export default function PortfolioPage() {
                 />
 
                 <DialogFooter>
-                  <Button type="submit" disabled={createMutation.isPending}>
-                    {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Create Project
+                  <Button type="submit" disabled={createMutation.isPending || isUploading}>
+                    {(createMutation.isPending || isUploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {isUploading ? 'Uploading...' : createMutation.isPending ? 'Creating...' : 'Create Project'}
                   </Button>
                 </DialogFooter>
               </form>
@@ -270,7 +420,7 @@ export default function PortfolioPage() {
             <p className="text-sm text-zinc-500 mt-1">Upload photos & details</p>
           </Card>
 
-          {portfolioItems?.map((item: any) => (
+          {portfolioItems?.map((item: PortfolioItem) => (
             <PortfolioItemCard key={item.id} item={item} />
           ))}
         </div>
@@ -280,7 +430,7 @@ export default function PortfolioPage() {
   );
 }
 
-function PortfolioItemCard({ item }: { item: any }) {
+function PortfolioItemCard({ item }: { item: PortfolioItem }) {
   // Safe image handling: item.images might be string[] or JSON
   const mainImage = Array.isArray(item.images) ? item.images[0] : item.images;
 

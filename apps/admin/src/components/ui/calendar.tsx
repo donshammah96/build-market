@@ -7,6 +7,7 @@ import { DayPicker } from "react-day-picker"
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
 
+/* eslint-disable react/prop-types */
 function Calendar({
   className,
   classNames,

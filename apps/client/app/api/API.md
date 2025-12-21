@@ -133,7 +133,10 @@ Returns service health with database and messaging service status.
 
 | Method | Path | Auth | Rate Limit | Description |
 |--------|------|------|------------|-------------|
-| POST | `/api/uploads` | Yes | WRITE | Upload files (multipart/form-data) |
+| POST | `/api/uploads` | Yes (DB User) | WRITE | Upload files (requires existing user) |
+| POST | `/api/onboarding/uploads` | Yes (Clerk) | WRITE | Upload files during onboarding |
+
+> **Note:** `/api/onboarding/uploads` only requires Clerk authentication and does NOT require the user to exist in the database. This allows file uploads during the onboarding flow before the user record is created.
 
 ---
 
@@ -141,9 +144,10 @@ Returns service health with database and messaging service status.
 
 | Method | Path | Auth | Rate Limit | Description |
 |--------|------|------|------------|-------------|
-| POST | `/api/onboarding` | Yes | AUTH | Complete user onboarding |
+| POST | `/api/onboarding` | Yes (Clerk) | AUTH | Complete user onboarding |
+| POST | `/api/onboarding/skip` | Yes (Clerk) | AUTH | Skip onboarding (homeowners) |
 
----
+> **Important:** Onboarding endpoints use Clerk authentication directly and will **create the user** in the database if they don't exist (upsert behavior). This ensures the onboarding flow works even if the Clerk webhook hasn't fired yet.
 
 ### Webhooks
 

@@ -7,9 +7,7 @@ import {
     User2,
     ChevronUp,
     Plus,
-    Shirt,
     User,
-    ShoppingBasket,
   } from "lucide-react";
   import {
     Sidebar,

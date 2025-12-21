@@ -7,29 +7,40 @@ import {
   Search, 
   Filter, 
   MoreHorizontal, 
-  Calendar, 
-  MapPin, 
-  DollarSign,
-  Clock,
-  CheckCircle2,
-  AlertCircle
+  MapPin
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { getProfessionalProjectUrl } from "@/lib/links";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
+
+// Project interface for type safety
+interface Project {
+  id: string;
+  title: string;
+  client: string;
+  clientAvatar?: string;
+  location: string;
+  budget: string;
+  spent?: string;
+  status: string;
+  progress: number;
+  dueDate: string;
+  image?: string;
+  tags?: string[];
+}
 
 // --- Mock Data ---
 const PROJECTS = [
@@ -143,7 +154,7 @@ export default function ProjectsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {projects.map((project: any) => (
+          {projects.map((project: Project) => (
             <ProjectCard key={project.id} project={project} />
           ))}
         </div>
@@ -153,7 +164,7 @@ export default function ProjectsPage() {
   );
 }
 
-function ProjectCard({ project }: { project: any }) {
+function ProjectCard({ project }: { project: Project }) {
   return (
     <Card className="border border-zinc-200 shadow-sm hover:shadow-md transition-all duration-300 bg-white group flex flex-col h-full">
       <CardHeader className="p-0">

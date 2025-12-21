@@ -1,6 +1,8 @@
 import SettingsClient from "./settings-client";
 import { getSystemSettings } from "@/actions/admin";
 
+export const dynamic = "force-dynamic";
+
 export default async function SettingsPage() {
   // Fetch real settings from the database
   const settings = await getSystemSettings();

@@ -8,7 +8,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { 
   Search, 
-  Filter, 
   MoreHorizontal, 
   Phone, 
   MessageSquare, 
@@ -20,7 +19,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,14 +43,21 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "sonner";
+
+// Lead interface for type safety
+interface Lead {
+  id: string;
+  clientName: string;
+  clientEmail?: string;
+  clientPhone?: string;
+  projectType: string;
+  location?: string;
+  budget?: string;
+  status: string;
+  notes?: string;
+  createdAt: string;
+}
 
 // Schema for creating a lead
 const leadSchema = z.object({
@@ -295,7 +301,7 @@ export default function LeadsPage() {
                   </td>
                 </tr>
               ) : (
-                leads?.map((lead: any) => (
+                leads?.map((lead: Lead) => (
                   <tr key={lead.id} className="group hover:bg-zinc-50/50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">

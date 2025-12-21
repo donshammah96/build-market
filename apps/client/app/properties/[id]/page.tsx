@@ -36,9 +36,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
+
 import PropertyCard, { PropertyCardData } from "@/components/real-estate/PropertyCard";
-import { ROUTES, getProfessionalUrl } from "@/lib/links";
+import { ROUTES } from "@/lib/links";
 
 // Type definitions
 interface PropertyAgent {
@@ -399,7 +399,7 @@ export default function PropertyDetailPage() {
           text: `Check out this property: ${property.title}`,
           url: window.location.href,
         });
-      } catch (err) {
+      } catch {
         // User cancelled or error
       }
     } else {

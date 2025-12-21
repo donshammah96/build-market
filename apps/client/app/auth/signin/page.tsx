@@ -19,7 +19,7 @@ export default function SignInPage() {
         callbackUrl: ROUTES.onboarding,
         redirect: true 
       });
-    } catch (err) {
+    } catch {
       setError("Failed to sign in. Please try again.");
       setLoading(null);
     }
@@ -135,7 +135,7 @@ export default function SignInPage() {
 
           {/* Sign Up Link */}
           <div className="text-center text-sm">
-            <span className="text-gray-600">Don't have an account? </span>
+            <span className="text-gray-600">Don&apos;t have an account? </span>
             <Link
               href={ROUTES.signUp}
               className="font-medium text-emerald-600 hover:text-emerald-500"

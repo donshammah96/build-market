@@ -8,6 +8,8 @@ import { checkRateLimit, getRateLimitIdentifier, RateLimits } from '@/app/lib/ra
 
 const logger = getClientLogger();
 
+type ProjectStatus = "planning" | "in_progress" | "completed" | "archived";
+
 const updateProjectSchema = z.object({
   title: z.string().min(3).optional(),
   description: z.string().optional(),
@@ -120,7 +122,7 @@ export const PATCH = withAuth<{ id: string }>(async (req: NextRequest, { dbUserI
           budget,
           startDate: startDate ? new Date(startDate) : undefined,
           endDate: endDate ? new Date(endDate) : undefined,
-          status: status as any,
+          status: status as ProjectStatus | undefined,
         },
       });
 

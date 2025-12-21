@@ -1,5 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ClientProfileData = Record<string, any>;
+
+interface ProjectData {
+  status: string;
+  startDate?: Date | string | null;
+  endDate?: Date | string | null;
+}
+
 export class ClientRepository {
   constructor(private prisma: PrismaClient) {}
 
@@ -49,7 +58,7 @@ export class ClientRepository {
   /**
    * Upsert client profile
    */
-  async upsertProfile(userId: string, data: any) {
+  async upsertProfile(userId: string, data: ClientProfileData) {
     return this.prisma.clientProfile.upsert({
       where: { userId },
       update: data,
@@ -60,7 +69,7 @@ export class ClientRepository {
   /**
    * Calculate project progress
    */
-  calculateProgress(project: any): number {
+  calculateProgress(project: ProjectData): number {
     if (project.status === 'completed') return 100;
     if (project.status === 'planning' || !project.startDate) return 20;
 

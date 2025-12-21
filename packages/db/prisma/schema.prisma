@@ -95,6 +95,31 @@ enum PropertyStatus {
   UNDER_OFFER
 }
 
+enum StoreCategory {
+  hardware              // Tools, fasteners, nails, screws
+  building_materials    // Cement, sand, bricks, blocks
+  tiles_and_ceramics    // Floor tiles, wall tiles, mosaics
+  electrical            // Cables, switches, lighting
+  plumbing              // Pipes, fittings, sanitaryware
+  paints_and_finishes   // Paints, varnishes, coatings
+  roofing               // Metal sheets, tiles, gutters
+  timber_and_wood       // Lumber, plywood, doors
+  glass_and_aluminum    // Windows, mirrors, aluminum profiles
+  kitchen_and_bath      // Cabinets, sinks, fixtures
+  landscaping           // Pavers, outdoor materials
+  steel_and_metals      // Reinforcement bars, structural steel
+  safety_and_tools      // PPE, power tools, hand tools
+  hvac                  // Air conditioning, ventilation
+}
+
+enum StoreType {
+  retail               // Direct consumer sales
+  wholesale            // Bulk/trade sales
+  manufacturer         // Factory/producer
+  distributor          // Official distributor
+  online_only          // E-commerce only
+}
+
 model Property {
   id          String              @id @default(uuid())
   title       String
@@ -202,6 +227,7 @@ model ProfessionalProfile {
   licenseNumber   String?       @unique
   yearsExperience Int?
   servicesOffered String[]
+  images          String[]
   portfolioUrl    String?
   website         String?
   bio             String?
@@ -212,6 +238,7 @@ model ProfessionalProfile {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   portfolios      Portfolio[]
+  stores          Store[]       @relation("ProfessionalStores")
   projects        Project[]     @relation("ProfessionalProjects")
   orders          Order[]       @relation("ProfessionalOrders")
   reviews         Review[]      @relation("ProfessionalReviews")
@@ -331,21 +358,31 @@ model Review {
 }
 
 model Store {
-  id          String    @id @default(uuid())
-  name        String
-  description String?
-  address     String
-  city        String
-  state       String
-  zipCode     String
-  categories  String[]
-  verified    Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  products    Product[]
-  orders      Order[]   @relation("StoreOrders")
-  reviews     Review[]  @relation("StoreReviews")
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade, name: "ProfessionalStores")
+  name           String
+  description    String?
+  address        String
+  city           String
+  state          String
+  zipCode        String
+  images         String[]
+  categories     StoreCategory[]     // Building material categories
+  storeType      StoreType           @default(retail) // Business model type
+  verified       Boolean             @default(false)
+  featured       Boolean             @default(false)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  products       Product[]
+  orders         Order[]             @relation("StoreOrders")
+  reviews        Review[]            @relation("StoreReviews")
+
+  @@index([professionalId])
+  @@index([verified])
+  @@index([storeType])
 }
+
 
 model Product {
   id          String      @id @default(uuid())

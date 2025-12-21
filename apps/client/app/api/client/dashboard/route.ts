@@ -8,6 +8,10 @@ import { checkRateLimit, getRateLimitIdentifier, RateLimits } from '@/app/lib/ra
 
 const logger = getClientLogger();
 
+interface IdeaBookItem {
+  imageUrl?: string;
+}
+
 /**
  * GET /api/client/dashboard
  * Get dashboard data for authenticated client
@@ -34,7 +38,7 @@ export const GET = withAuth(async (request: NextRequest, { dbUserId }) => {
     async () => {
       // Use repository to fetch dashboard data
       const repo = new ClientRepository(prisma);
-      const { projects, ideaBooks, clientProfile } = await repo.getDashboardData(dbUserId);
+      const { projects, ideaBooks } = await repo.getDashboardData(dbUserId);
 
       // Calculate stats
       const stats = {
@@ -70,7 +74,7 @@ export const GET = withAuth(async (request: NextRequest, { dbUserId }) => {
         title: book.title,
         itemCount: Array.isArray(book.items) ? book.items.length : 0,
         coverImage: (Array.isArray(book.items) && book.items.length > 0)
-          ? (book.items[0] as any)?.imageUrl || '/placeholder.jpg'
+          ? (book.items[0] as IdeaBookItem)?.imageUrl || '/placeholder.jpg'
           : '/placeholder.jpg',
       }));
 

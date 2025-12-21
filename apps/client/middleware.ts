@@ -36,7 +36,6 @@ const isPublicRoute = createRouteMatcher([
   '/verify(.*)',            // Clerk email verification
   '/sso-callback(.*)',      // Clerk SSO callbacks  
   '/auth-callback',         // Post-authentication redirect handler
-  '/onboarding(.*)',        // Onboarding flows (including /onboarding/professional)
   '/api(.*)',               // API routes handle their own auth
   '/professionals(.*)',     // Public professional listings
   '/professional',           // Public professional landing page (exact)
@@ -45,19 +44,112 @@ const isPublicRoute = createRouteMatcher([
   '/speak-with-an-advisor(.*)',
 ]);
 
+/**
+ * Onboarding routes - require authentication but have special onboarding logic
+ * Separated from public routes so middleware can redirect already-onboarded users
+ */
+const isOnboardingRoute = createRouteMatcher([
+  '/onboarding(.*)',
+]);
+
+// =============================================================================
+// DB Fallback Helper
+// =============================================================================
+
+/**
+ * Check user onboarding status from database when Clerk metadata is stale.
+ * This is called when sessionClaims.metadata.isOnboarded is undefined.
+ */
+async function checkOnboardingFromDB(
+  clerkId: string,
+  baseUrl: string
+): Promise<{ isOnboarded: boolean; role: string | null }> {
+  try {
+    const internalSecret = process.env.INTERNAL_API_SECRET || '';
+    const url = new URL('/api/internal/user-status', baseUrl);
+    url.searchParams.set('clerkId', clerkId);
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        'x-internal-secret': internalSecret,
+      },
+      // Short timeout to avoid blocking requests
+      signal: AbortSignal.timeout(3000),
+    });
+
+    if (!response.ok) {
+      console.warn('[Middleware] DB fallback failed:', response.status);
+      return { isOnboarded: false, role: null };
+    }
+
+    const data = await response.json();
+    return {
+      isOnboarded: data.isOnboarded ?? false,
+      role: data.role ?? null,
+    };
+  } catch (error) {
+    console.warn('[Middleware] DB fallback error:', error);
+    // If fallback fails, assume not onboarded (safer default)
+    return { isOnboarded: false, role: null };
+  }
+}
+
 // =============================================================================
 // Middleware
 // =============================================================================
 
 export default clerkMiddleware(async (auth, req: NextRequest) => {
   const { pathname } = req.nextUrl;
+  const baseUrl = req.nextUrl.origin;
 
   // 1. Public routes - allow access without any checks
   if (isPublicRoute(req)) {
     return NextResponse.next();
   }
 
-  // 2. Protected routes - require authentication
+  // 2. Onboarding routes - require auth but have special logic
+  if (isOnboardingRoute(req)) {
+    const authObject = await auth();
+    const { userId, sessionClaims } = authObject;
+
+    // Unauthenticated users trying to access onboarding should sign in first
+    if (!userId) {
+      const signInUrl = new URL('/sign-in', req.url);
+      signInUrl.searchParams.set('redirect_url', pathname);
+      return NextResponse.redirect(signInUrl);
+    }
+
+    // Check if user is already onboarded (from Clerk metadata)
+    const metadata = sessionClaims?.metadata as { 
+      role?: string; 
+      isOnboarded?: boolean;
+    } | undefined;
+
+    let isOnboarded = metadata?.isOnboarded;
+    let userRole = metadata?.role;
+
+    // If Clerk metadata is undefined, fall back to DB check
+    // This handles the case where Clerk metadata hasn't propagated yet
+    if (isOnboarded === undefined) {
+      console.log('[Middleware] Clerk metadata undefined, checking DB for:', userId);
+      const dbResult = await checkOnboardingFromDB(userId, baseUrl);
+      isOnboarded = dbResult.isOnboarded;
+      userRole = dbResult.role ?? userRole;
+    }
+
+    // If already onboarded, redirect to their dashboard (prevent accessing onboarding again)
+    if (isOnboarded) {
+      const dashboardPath = userRole === 'professional' 
+        ? '/professional-portal/dashboard' 
+        : '/dashboard';
+      return NextResponse.redirect(new URL(dashboardPath, req.url));
+    }
+
+    // Not onboarded - allow access to onboarding
+    return NextResponse.next();
+  }
+
+  // 3. Protected routes - require authentication AND completed onboarding
   if (isProtectedRoute(req)) {
     const authObject = await auth();
     const { userId, sessionClaims } = authObject;
@@ -70,38 +162,36 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
     }
 
     // Get user role and onboarding status from Clerk's publicMetadata
-    // This is set during onboarding via Clerk's backend API
     const metadata = sessionClaims?.metadata as { 
       role?: string; 
       isOnboarded?: boolean;
     } | undefined;
     
-    const userRole = metadata?.role;
-    const isOnboarded = metadata?.isOnboarded;
+    let userRole = metadata?.role;
+    let isOnboarded = metadata?.isOnboarded;
+
+    // If Clerk metadata is undefined, fall back to DB check
+    if (isOnboarded === undefined) {
+      console.log('[Middleware] Clerk metadata undefined for protected route, checking DB for:', userId);
+      const dbResult = await checkOnboardingFromDB(userId, baseUrl);
+      isOnboarded = dbResult.isOnboarded;
+      userRole = dbResult.role ?? userRole;
+    }
 
     // If user hasn't completed onboarding yet, redirect to onboarding
-    // Skip this check if they're already headed to a public/onboarding route
-    if (!isOnboarded && pathname !== '/onboarding') {
+    if (!isOnboarded) {
       const onboardingUrl = new URL('/onboarding', req.url);
       return NextResponse.redirect(onboardingUrl);
     }
 
-    // If user is on onboarding but already onboarded, redirect to their dashboard
-    if (isOnboarded && pathname === '/onboarding') {
-      const dashboardPath = userRole === 'professional' 
-        ? '/professional-portal/dashboard' 
-        : '/dashboard';
-      return NextResponse.redirect(new URL(dashboardPath, req.url));
-    }
-
-    // Optional: Check role-based access for professional routes
+    // Check role-based access for professional routes
     if (isProfessionalRoute(req) && userRole !== 'professional') {
       // Non-professionals trying to access professional routes
       return NextResponse.redirect(new URL('/dashboard', req.url));
     }
   }
 
-  // 3. All other routes - allow access
+  // 4. All other routes - allow access
   return NextResponse.next();
 });
 
@@ -113,3 +203,4 @@ export const config = {
     '/(api|trpc)(.*)',
   ],
 };
+

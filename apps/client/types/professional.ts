@@ -19,18 +19,23 @@ export interface ProfessionalProfile {
     lastName?: string | null;
     email: string;
     phone?: string | null;
+    avatar?: string | null;
   };
   companyName: string;
   licenseNumber?: string | null;
   yearsExperience?: number | null;
   servicesOffered: string[];
+  images?: string[];
   portfolioUrl?: string | null;
-  profileUrl?: string | null;
+  website?: string | null;
   bio?: string | null;
+  city?: string | null;
+  county?: string | null;
+  country?: string | null;
   verified: boolean;
   certificates?: CertificateData[];
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Date | string;
+  updatedAt: Date | string;
   portfolios?: Portfolio[];
   reviews?: Review[];
   _count?: {
@@ -44,7 +49,7 @@ export interface Portfolio {
   professionalId: string;
   title: string;
   description?: string | null;
-  images: string[];
+  images?: string[];
   projectType: string;
   clientTestimonial?: string | null;
   createdAt: Date;

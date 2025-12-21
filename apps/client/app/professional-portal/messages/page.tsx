@@ -26,7 +26,7 @@ export default function MessagesPage() {
         // but ChatWindow fetches details if conversationId is present.
         setSelectedConversationId(initialConversationId);
     }
-  }, [initialConversationId]);
+  }, [initialConversationId, selectedConversationId]);
 
 
   return (

@@ -9,7 +9,7 @@ const MESSAGING_SERVICE_URL = process.env.MESSAGING_SERVICE_URL || "http://local
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -21,7 +21,7 @@ export async function POST(
       );
     }
 
-    const messageId = params.id;
+    const { id: messageId } = await params;
     const userId = session.user.id;
 
     // Forward request to messaging service

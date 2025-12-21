@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import { prisma } from '@repo/db';
 import { withAuth } from '@/app/lib/api-middleware';
 import { apiError, HttpStatus } from '@/app/lib/api-response';
 import { checkRateLimit, getRateLimitIdentifier, RateLimits } from '@/app/lib/rate-limit';

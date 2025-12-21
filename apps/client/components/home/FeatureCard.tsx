@@ -13,8 +13,7 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from '../ui/carousel';
-import { ArrowRight, ChevronRight, ChevronLeft } from 'lucide-react';
-import { cn } from "@/lib/utils";
+import { ArrowRight } from 'lucide-react';
 
 interface Feature {
   title: string;

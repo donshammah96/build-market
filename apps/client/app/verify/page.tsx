@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@clerk/nextjs';
-import { ROUTES } from '../lib/links';
+import { ROUTES } from '@/lib/links';
 
-export default function VerifyPage() {
+function VerifyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isLoaded, userId } = useAuth();
@@ -42,13 +42,25 @@ export default function VerifyPage() {
   }, [isLoaded, userId, searchParams, router]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 to-blue-50">
-      <div className="text-center space-y-4">
-        <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-emerald-600"></div>
-        <h2 className="text-xl font-semibold text-gray-900">Verifying your email...</h2>
-        <p className="text-gray-600">Please wait while we complete your registration.</p>
-      </div>
+    <div className="text-center space-y-4">
+      <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-emerald-600"></div>
+      <h2 className="text-xl font-semibold text-gray-900">Verifying your email...</h2>
+      <p className="text-gray-600">Please wait while we complete your registration.</p>
     </div>
   );
 }
 
+export default function VerifyPage() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 to-blue-50">
+      <Suspense fallback={
+        <div className="text-center space-y-4">
+          <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-emerald-600"></div>
+          <h2 className="text-xl font-semibold text-gray-900">Loading...</h2>
+        </div>
+      }>
+        <VerifyContent />
+      </Suspense>
+    </div>
+  );
+}

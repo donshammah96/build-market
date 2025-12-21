@@ -1,16 +1,14 @@
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
-import { 
-  LayoutDashboard, 
-  Users, 
-  UserCheck, 
-  Settings, 
-  ShieldCheck, 
-  Menu 
+import {
+  LayoutDashboard,
+  Users,
+  UserCheck,
+  Settings,
+  ShieldCheck,
 } from "lucide-react";
 import { syncUserRole } from "@/lib/auth-sync";
 import { currentUser } from "@clerk/nextjs/server";
-import { Breadcrumbs } from "@/components/admin/breadcrumbs";
 
 export default async function DashboardLayout({
   children,

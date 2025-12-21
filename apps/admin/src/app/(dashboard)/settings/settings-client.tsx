@@ -39,7 +39,7 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
   const [hasChanges, setHasChanges] = useState(false);
   const [settings, setSettings] = useState(initialSettings);
 
-  const handleChange = (key: string, value: any) => {
+  const handleChange = (key: string, value: string | number | boolean) => {
     setSettings(prev => ({ ...prev, [key]: value }));
     setHasChanges(true);
   };
@@ -58,9 +58,16 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
 
   const handleClearCache = () => {
     startTransition(async () => {
-      const result = await clearSystemCache();
-      if (result.success) {
-        alert("Cache cleared successfully");
+      try {
+        const result = await clearSystemCache();
+        if (result.success) {
+          alert("Cache cleared successfully");
+        } else {
+          alert("Failed to clear cache: " + result.error);
+        }
+      } catch (error: unknown) {
+        alert("An unexpected error occurred while clearing cache.");
+        console.error("Clear cache error:", error);
       }
     });
   };

@@ -16,12 +16,21 @@ import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu";
+
+// Event type for calendar items
+interface CalendarEvent {
+  id: string;
+  title: string;
+  type: string;
+  date: Date;
+  time: string;
+  location: string;
+  client: string;
+  clientAvatar: string;
+  status: string;
+  startDate?: Date;
+  endDate?: Date;
+}
 
 // --- Mock Data ---
 const EVENTS = [
@@ -82,12 +91,13 @@ export default function CalendarPage() {
       if (!response.ok) throw new Error("Failed to fetch events");
       const result = await response.json();
       // Convert string dates back to Date objects
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return result.data.map((event: any) => ({
         ...event,
         date: new Date(event.startDate), // Map startDate to date for frontend compatibility
         startDate: new Date(event.startDate),
         endDate: new Date(event.endDate)
-      }));
+      })) as CalendarEvent[];
     },
   });
 
@@ -95,7 +105,7 @@ export default function CalendarPage() {
   const events = (apiEvents && apiEvents.length > 0) ? apiEvents : EVENTS;
 
   // Filter events based on selected date
-  const selectedDateEvents = events.filter((event: any) => 
+  const selectedDateEvents = events.filter((event: CalendarEvent) => 
     date && 
     event.date.getDate() === date.getDate() && 
     event.date.getMonth() === date.getMonth() && 
@@ -146,19 +156,19 @@ export default function CalendarPage() {
               <div className="flex items-center justify-between text-sm">
                 <span className="text-zinc-600">Site Visits</span>
                 <Badge variant="secondary" className="bg-zinc-100 text-zinc-900">
-                  {events.filter((e: any) => e.type === 'Site Visit').length}
+                  {events.filter((e: CalendarEvent) => e.type === 'Site Visit').length}
                 </Badge>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-zinc-600">Deadlines</span>
                 <Badge variant="secondary" className="bg-amber-50 text-amber-700">
-                  {events.filter((e: any) => e.type === 'Deadline').length}
+                  {events.filter((e: CalendarEvent) => e.type === 'Deadline').length}
                 </Badge>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-zinc-600">Meetings</span>
                 <Badge variant="secondary" className="bg-zinc-100 text-zinc-900">
-                  {events.filter((e: any) => e.type === 'Meeting').length}
+                  {events.filter((e: CalendarEvent) => e.type === 'Meeting').length}
                 </Badge>
               </div>
             </CardContent>
@@ -184,7 +194,7 @@ export default function CalendarPage() {
             </div>
           ) : selectedDateEvents.length > 0 ? (
             <div className="space-y-4">
-              {selectedDateEvents.map((event: any) => (
+              {selectedDateEvents.map((event: CalendarEvent) => (
                 <EventCard key={event.id} event={event} />
               ))}
             </div>
@@ -194,7 +204,7 @@ export default function CalendarPage() {
                 <CalendarIcon className="h-6 w-6 text-zinc-400" />
               </div>
               <h3 className="font-semibold text-zinc-900">No events scheduled</h3>
-              <p className="text-sm text-zinc-500 mt-1">You're free for the day!</p>
+              <p className="text-sm text-zinc-500 mt-1">You&apos;re free for the day!</p>
               <Button variant="outline" className="mt-4 border-zinc-200 text-zinc-900">
                 Schedule Event
               </Button>
@@ -207,7 +217,7 @@ export default function CalendarPage() {
   );
 }
 
-function EventCard({ event }: { event: any }) {
+function EventCard({ event }: { event: CalendarEvent }) {
   return (
     <Card className="border border-zinc-200 shadow-sm hover:shadow-md transition-all duration-300 bg-white group">
       <CardContent className="p-5 flex flex-col md:flex-row gap-6 items-start md:items-center">

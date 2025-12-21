@@ -2,8 +2,7 @@
 import { getProjectDetails } from "@/actions/admin";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Calendar, DollarSign, User, Building2 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";

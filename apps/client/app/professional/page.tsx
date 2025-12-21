@@ -84,7 +84,7 @@ function HeroSection() {
           </h1>
           
           <p className="text-lg md:text-xl text-zinc-300 max-w-2xl mx-auto mb-10 leading-relaxed font-light">
-            Stop chasing low-quality leads. Join Kenya's premier marketplace connecting verified professionals with homeowners ready to build.
+            Stop chasing low-quality leads. Join Kenya&apos;s premier marketplace connecting verified professionals with homeowners ready to build.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -258,7 +258,7 @@ function FeatureShowcase() {
           <div className="lg:w-1/2 space-y-6">
             <h3 className="text-3xl font-bold text-zinc-900">Showcase your expertise</h3>
             <p className="text-lg text-zinc-600 leading-relaxed">
-              Don't let your best work get lost in a phone gallery. Create stunning Idea Books and Project Portfolios that inspire clients to hire you.
+              Don&apos;t let your best work get lost in a phone gallery. Create stunning Idea Books and Project Portfolios that inspire clients to hire you.
             </p>
             <div className="grid grid-cols-2 gap-6 mt-4">
                <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-100">
@@ -294,7 +294,7 @@ function Testimonials() {
                 {[...Array(5)].map((_, i) => <span key={i}>★</span>)}
               </div>
               <p className="text-lg text-zinc-300 mb-6 italic leading-relaxed">
-                "Since joining Build Market, I've stopped relying on word-of-mouth alone. The leads are serious, and the messaging tool keeps everything organized."
+                &quot;Since joining Build Market, I&apos;ve stopped relying on word-of-mouth alone. The leads are serious, and the messaging tool keeps everything organized.&quot;
               </p>
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-full bg-zinc-700 flex items-center justify-center font-bold text-emerald-500">
@@ -314,7 +314,7 @@ function Testimonials() {
                 {[...Array(5)].map((_, i) => <span key={i}>★</span>)}
               </div>
               <p className="text-lg text-zinc-300 mb-6 italic leading-relaxed">
-                "The ability to showcase my previous projects in high quality has changed how clients perceive my business. I can finally charge what I'm worth."
+                &quot;The ability to showcase my previous projects in high quality has changed how clients perceive my business. I can finally charge what I&apos;m worth.&quot;
               </p>
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-full bg-zinc-700 flex items-center justify-center font-bold text-emerald-500">
@@ -343,7 +343,7 @@ function CTASection() {
           Ready to scale your business?
         </h2>
         <p className="text-emerald-100 text-xl max-w-2xl mx-auto mb-10">
-          Join thousands of professionals building the future of Kenya's construction industry.
+          Join thousands of professionals building the future of Kenya&apos;s construction industry.
         </p>
         <div className="flex flex-col sm:flex-row justify-center gap-4">
           <Button size="lg" className="bg-white text-emerald-700 hover:bg-emerald-50 h-16 px-10 text-lg rounded-full font-bold shadow-2xl" asChild>

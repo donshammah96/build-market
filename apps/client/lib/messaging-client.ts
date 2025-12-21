@@ -4,7 +4,7 @@ import type {
   Message,
   CreateConversation,
   CreateMessage,
-  MarkAsRead,
+  // MarkAsRead,
   ApiResponse,
   PaginatedResponse,
 } from "@repo/types";
@@ -19,7 +19,7 @@ import {
 import {
   ResilientExecutor,
   getGlobalExecutor,
-  OperationCriticality,
+  type Metric,
 } from "@repo/resilience";
 
 // Simple Concurrency Limiter (Bulkhead pattern)
@@ -46,6 +46,50 @@ class ConcurrencyLimiter {
   }
 }
 
+// Helper to normalize Prisma/Action result to Conversation type
+// Handles mismatch between Prisma JsonValue and Record<string, number>
+function normalizeConversation(thread: unknown): Conversation {
+  const t = thread as Record<string, unknown>;
+  return {
+    ...(t as unknown as Conversation),
+    unreadCount: t.unreadCount ? (t.unreadCount as Record<string, number>) : undefined,
+  };
+}
+
+// Helper to normalize Prisma Message to client Message type
+function normalizeMessage(msg: unknown): Message {
+  const m = msg as Record<string, unknown>;
+  return {
+    id: m.id as string,
+    conversationId: (m.threadId || m.conversationId) as string,
+    senderId: m.senderId as string,
+    content: m.content as string,
+    type: ((m.type as string)?.toLowerCase() as "text" | "image" | "file") || "text",
+    attachments: (Array.isArray(m.attachments) ? m.attachments : []).map((att: unknown) => {
+      if (typeof att === "string") {
+        return {
+          url: att,
+          filename: att.split("/").pop() || "unknown",
+          size: 0,
+          mimeType: "application/octet-stream",
+        };
+      }
+      const a = att as Record<string, unknown>;
+      return {
+        url: (a.url as string) || "",
+        filename: (a.filename as string) || "unknown",
+        size: (a.size as number) || 0,
+        mimeType: (a.mimeType as string) || "application/octet-stream",
+        encrypted: a.encrypted as boolean | undefined,
+      };
+    }),
+    readBy: (m.readBy as string[]) || [],
+    encrypted: (m.encrypted as boolean) || false,
+    createdAt: new Date(m.createdAt as string | Date),
+    updatedAt: new Date(m.updatedAt as string | Date),
+  };
+}
+
 class MessagingClient {
   private executor: ResilientExecutor;
   private bulkhead: ConcurrencyLimiter;
@@ -63,7 +107,7 @@ class MessagingClient {
     return this.executor.executeWithCriticality(
       async () => {
         const threads = await getUserThreadsAction();
-        return { success: true, data: threads as any };
+        return { success: true, data: threads.map(normalizeConversation) };
       },
       "normal",
       "getConversations"
@@ -79,7 +123,7 @@ class MessagingClient {
     return this.executor.executeWithCriticality(
       async () => {
         const thread = await createThreadAction(data.participants, data.projectId);
-        return { success: true, data: thread as any };
+        return { success: true, data: normalizeConversation(thread) };
       },
       "normal",
       "createConversation"
@@ -94,7 +138,7 @@ class MessagingClient {
       async () => {
         const thread = await getThreadAction(id);
         if (!thread) throw new Error("Conversation not found");
-        return { success: true, data: thread as any };
+        return { success: true, data: normalizeConversation(thread) };
       },
       "normal",
       "getConversation"
@@ -106,13 +150,13 @@ class MessagingClient {
    */
   async markConversationAsRead(
     id: string,
-    payload: MarkAsRead
+    // payload: MarkAsRead
   ): Promise<ApiResponse<Conversation>> {
     return this.executor.executeWithCriticality(
       async () => {
         const { markThreadAsReadAction } = await import("@/app/actions/messaging");
         await markThreadAsReadAction(id);
-        return { success: true, data: {} as any };
+        return { success: true, data: {} as Conversation };
       },
       "background",
       "markConversationAsRead"
@@ -149,7 +193,9 @@ class MessagingClient {
           const thread = await getThreadAction(conversationId);
           if (!thread) throw new Error("Conversation not found");
           
-          const messages = (thread as any).messages || [];
+          // Cast to unknown then properties to access messages which might have Prisma type incompatible with Message
+          const rawMessages = (thread as Record<string, unknown>).messages as unknown[] || [];
+          const messages = rawMessages.map(normalizeMessage);
           
           return {
             success: true,
@@ -177,7 +223,7 @@ class MessagingClient {
     return this.executor.executeWithCriticality(
       async () => {
         const message = await sendMessageAction(data.conversationId, data.content);
-        return { success: true, data: message as any };
+        return { success: true, data: normalizeMessage(message) };
       },
       "critical", // Critical operation, fast fail if needed, but we want high reliability
       "sendMessage"
@@ -193,7 +239,7 @@ class MessagingClient {
         const { getMessageAction } = await import("@/app/actions/messaging");
         const message = await getMessageAction(id);
         if (!message) throw new Error("Message not found");
-        return { success: true, data: message as any };
+        return { success: true, data: normalizeMessage(message) };
       },
       "normal",
       "getMessage"
@@ -208,7 +254,7 @@ class MessagingClient {
       async () => {
         const { markMessageAsReadAction } = await import("@/app/actions/messaging");
         await markMessageAsReadAction(id);
-        return { success: true, data: {} as any };
+        return { success: true, data: {} as Message };
       },
       "background",
       "markMessageAsRead"
@@ -233,11 +279,14 @@ class MessagingClient {
   /**
    * Check messaging service health
    */
-  async checkHealth(): Promise<any> {
+  async checkHealth(): Promise<{ status: string; metrics: Record<string, unknown>; circuitBreakers: Record<string, unknown> }> {
     return { 
       status: "ok",
-      metrics: this.executor.getMetrics(),
-      circuitBreakers: this.executor.getCircuitBreakerStates()
+      metrics: this.executor.getMetrics().reduce((acc: Record<string, unknown>, m: Metric) => {
+        acc[m.name] = m.value;
+        return acc;
+      }, {}),
+      circuitBreakers: Object.fromEntries(this.executor.getCircuitBreakerStates())
     };
   }
 }

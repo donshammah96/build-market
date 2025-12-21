@@ -13,7 +13,7 @@ import { Property } from '@/components/real-estate/Property';
 
 
 export default function Home() {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm] = useState('');
 
   return (
     <main className="overflow-hidden mx-auto max-w-screen-2xl bg-white">

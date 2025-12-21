@@ -154,7 +154,7 @@ export const VendorsSection: React.FC<{ searchTerm?: string; stores?: VendorCard
 
         <div className="mt-12 text-center">
             <Button variant="ghost" size="lg" className="text-zinc-500 hover:text-emerald-600" asChild>
-                <Link href={ROUTES.hardwareShops}>
+                <Link href={ROUTES.stores}>
                    Browse all suppliers <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
             </Button>

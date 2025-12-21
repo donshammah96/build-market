@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Card, CardContent } from '../ui/card'; // We only need Content and strict styling
+import { Card } from '../ui/card'; // We only need Card and strict styling
 import { Avatar, AvatarImage, AvatarFallback } from '../ui/avatar';
 import { Star, Quote, BadgeCheck } from 'lucide-react';
 import { cn } from '@/lib/utils'; // Assuming you have a cn utility from shadcn

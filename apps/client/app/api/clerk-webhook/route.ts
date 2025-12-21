@@ -9,6 +9,32 @@ import { initializeCorrelationId, getClientLogger } from '@/app/lib/resilient-ap
 
 const logger = getClientLogger();
 
+// Clerk webhook event types
+interface ClerkEmailAddress {
+  email_address: string;
+}
+
+interface ClerkPhoneNumber {
+  phone_number: string;
+}
+
+interface ClerkUserData {
+  id: string;
+  email_addresses?: ClerkEmailAddress[];
+  first_name?: string | null;
+  last_name?: string | null;
+  phone_numbers?: ClerkPhoneNumber[];
+}
+
+interface ClerkWebhookEvent {
+  type: string;
+  data: ClerkUserData;
+}
+
+interface PrismaError extends Error {
+  code?: string;
+}
+
 /**
  * POST /api/clerk-webhook
  * Handle Clerk webhook events for user creation and updates
@@ -45,10 +71,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     // Verify webhook signature
     const wh = new Webhook(env.CLERK_WEBHOOK_SECRET);
-    let evt: any;
+    let evt: ClerkWebhookEvent;
 
     try {
-      evt = wh.verify(payload, headers);
+      evt = wh.verify(payload, headers) as ClerkWebhookEvent;
     } catch (verifyError) {
       logger.error('Webhook signature verification failed', verifyError instanceof Error ? verifyError : new Error(String(verifyError)), { correlationId });
       return apiError('Invalid webhook signature', HttpStatus.UNAUTHORIZED);
@@ -89,7 +115,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { message: `Event ${evt.type} acknowledged` },
       HttpStatus.OK
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error('Webhook processing failed', err instanceof Error ? err : new Error(String(err)), { correlationId });
     return apiError('Webhook processing failed', HttpStatus.INTERNAL_SERVER_ERROR);
   }
@@ -98,7 +124,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 /**
  * Handle user.created webhook event
  */
-async function handleUserCreated(evt: any, userRepo: UserRepository, correlationId: string) {
+async function handleUserCreated(evt: ClerkWebhookEvent, userRepo: UserRepository, correlationId: string) {
   const { id, email_addresses, first_name, last_name, phone_numbers } = evt.data;
 
   if (!id || !email_addresses?.[0]?.email_address) {
@@ -139,14 +165,15 @@ async function handleUserCreated(evt: any, userRepo: UserRepository, correlation
       },
       HttpStatus.OK
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const prismaErr = err as PrismaError;
     logger.error('User creation failed', err instanceof Error ? err : new Error(String(err)), {
       correlationId,
       clerkId: id,
-      errorCode: err.code,
+      errorCode: prismaErr.code,
     });
 
-    if (err.code === 'P2002') {
+    if (prismaErr.code === 'P2002') {
       return apiError('User already exists', HttpStatus.CONFLICT);
     }
 
@@ -157,7 +184,7 @@ async function handleUserCreated(evt: any, userRepo: UserRepository, correlation
 /**
  * Handle user.updated webhook event
  */
-async function handleUserUpdated(evt: any, userRepo: UserRepository, correlationId: string) {
+async function handleUserUpdated(evt: ClerkWebhookEvent, userRepo: UserRepository, correlationId: string) {
   const { id, email_addresses, first_name, last_name, phone_numbers } = evt.data;
 
   if (!id) {
@@ -187,14 +214,15 @@ async function handleUserUpdated(evt: any, userRepo: UserRepository, correlation
       },
       HttpStatus.OK
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const prismaErr = err as PrismaError;
     logger.error('User update failed', err instanceof Error ? err : new Error(String(err)), {
       correlationId,
       clerkId: id,
-      errorCode: err.code,
+      errorCode: prismaErr.code,
     });
 
-    if (err.code === 'P2025') {
+    if (prismaErr.code === 'P2025') {
       return apiError('User not found', HttpStatus.NOT_FOUND);
     }
 
@@ -205,7 +233,7 @@ async function handleUserUpdated(evt: any, userRepo: UserRepository, correlation
 /**
  * Handle user.deleted webhook event
  */
-async function handleUserDeleted(evt: any, userRepo: UserRepository, correlationId: string) {
+async function handleUserDeleted(evt: ClerkWebhookEvent, userRepo: UserRepository, correlationId: string) {
   const { id } = evt.data;
 
   if (!id) {
@@ -226,7 +254,7 @@ async function handleUserDeleted(evt: any, userRepo: UserRepository, correlation
       },
       HttpStatus.OK
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error('User deletion failed', err instanceof Error ? err : new Error(String(err)), {
       correlationId,
       clerkId: id,

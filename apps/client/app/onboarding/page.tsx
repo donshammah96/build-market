@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useUser, useClerk } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -11,7 +11,6 @@ import ProfessionalForm from "@/components/forms/ProfessionalForm";
 import { Home, Briefcase, ArrowLeft, Loader2, CheckCircle2, X, ChevronRight } from "lucide-react";
 import { OnboardingData } from '@repo/types';
 import { motion, AnimatePresence } from "framer-motion";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
     Breadcrumb,
@@ -34,13 +33,31 @@ import {
 } from "@/components/ui/alert-dialogue";
 
 export default function Onboarding() {
-    const { user } = useUser();
+    const { user, isLoaded: userLoaded } = useUser();
     const { signOut } = useClerk();
+    // const { session } = useSession();
     const router = useRouter();
     const [step, setStep] = useState(1);
     const [role, setRole] = useState<'client' | 'professional' | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [showCancelDialog, setShowCancelDialog] = useState(false);
+
+    // Redirect if user is already onboarded (check Clerk metadata)
+    useEffect(() => {
+        if (!userLoaded || !user) return;
+        
+        const metadata = user.publicMetadata as { 
+            isOnboarded?: boolean; 
+            role?: string;
+        } | undefined;
+        
+        if (metadata?.isOnboarded) {
+            const dashboardPath = metadata.role === 'professional' 
+                ? '/professional-portal/dashboard' 
+                : '/dashboard';
+            router.replace(dashboardPath);
+        }
+    }, [userLoaded, user, router]);
 
     // Handle cancel onboarding - sign out and redirect to homepage
     const handleCancelOnboarding = async () => {
@@ -62,11 +79,16 @@ export default function Onboarding() {
                 throw new Error(data.error || 'Failed to skip onboarding');
             }
 
-            toast.info('Welcome! You can complete your profile anytime from the dashboard.');
-            router.push('/dashboard');
+            toast.info('Welcome! Redirecting to your dashboard...');
+            
+            // Wait for Clerk metadata to propagate before navigation
+            // Clerk needs time to sync isOnboarded flag to edge servers
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Hard navigation to ensure fresh JWT from Clerk
+            window.location.href = '/dashboard';
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
-        } finally {
             setSubmitting(false);
         }
     };
@@ -96,11 +118,15 @@ export default function Onboarding() {
 
         if (!response.ok) throw new Error('Failed to complete onboarding');
         
-        toast.success('Welcome home! Profile created.');
-        router.push('/dashboard');
-      } catch (error) {
+        toast.success('Welcome home! Redirecting to your dashboard...');
+        
+        // Wait for Clerk metadata to propagate
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Hard navigation to ensure fresh JWT from Clerk
+        window.location.href = '/dashboard';
+      } catch {
         toast.error('Something went wrong. Please try again.');
-      } finally {
         setSubmitting(false);
       }
     };
@@ -116,11 +142,15 @@ export default function Onboarding() {
         
         if (!response.ok) throw new Error('Failed to create professional profile');
         
-        toast.success('Professional account verified!');
-        router.push('/professional-portal/dashboard');
-      } catch (error) {
+        toast.success('Professional account verified! Redirecting...');
+        
+        // Wait for Clerk metadata to propagate
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Hard navigation to ensure fresh JWT from Clerk
+        window.location.href = '/professional-portal/dashboard';
+      } catch {
         toast.error('Could not verify profile. Please try again.');
-      } finally {
         setSubmitting(false);
       }
     };
@@ -189,7 +219,7 @@ export default function Onboarding() {
                             <AlertDialogHeader>
                                 <AlertDialogTitle className="text-white">Cancel Onboarding?</AlertDialogTitle>
                                 <AlertDialogDescription className="text-zinc-400">
-                                    Are you sure you want to cancel the onboarding process? Your progress will not be saved and you'll be redirected to the homepage.
+                                    Are you sure you want to cancel the onboarding process? Your progress will not be saved and you&apos;ll be redirected to the homepage.
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -350,7 +380,16 @@ const StepIndicator = ({ current, stepNumber, label }: { current: number, stepNu
     );
 };
 
-const RoleCard = ({ icon, title, description, onClick, delay, highlight }: any) => (
+interface RoleCardProps {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+  delay: number;
+  highlight?: boolean;
+}
+
+const RoleCard = ({ icon, title, description, onClick, delay, highlight }: RoleCardProps) => (
     <motion.button
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
