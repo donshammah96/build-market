@@ -4,13 +4,13 @@ Multi-channel notification service supporting email, push, and in-app notificati
 
 ## Features
 
-- ✅ Email notifications via Nodemailer
-- ✅ In-app notifications
-- ✅ Push notifications (TODO)
-- ✅ Notification history
-- ✅ Read/unread status
-- ✅ Bulk operations
-- ✅ MongoDB persistence
+- Email notifications via Nodemailer
+- In-app notifications
+- Push notifications (TODO)
+- Notification history
+- Read/unread status
+- Bulk operations
+- MongoDB persistence
 
 ## Setup
 
@@ -22,7 +22,7 @@ pnpm install
 2. Configure environment variables:
 ```bash
 PORT=3011
-MONGODB_URI=mongodb://localhost:27017/notifications
+MONGODB_URI=
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your-email@gmail.com
