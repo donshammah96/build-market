@@ -143,7 +143,7 @@ function ValueProposition() {
     {
       icon: ShieldCheck,
       title: "Built on Trust",
-      description: "Stand out from the 'quack' fundis. Our verification badge signals competence and safety to wary clients."
+      description: "Stand out from the 'quack' artisans. Our verification badge signals competence and safety to wary clients."
     },
     {
       icon: BarChart3,

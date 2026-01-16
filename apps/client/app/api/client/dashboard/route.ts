@@ -1,16 +1,20 @@
-import { NextRequest } from 'next/server';
-import { prisma } from '@repo/db';
-import { withAuth } from '@/app/lib/api-middleware';
-import { apiError, HttpStatus } from '@/app/lib/api-response';
-import { initializeCorrelationId, executeResilient, getClientLogger } from '@/app/lib/resilient-api';
-import { ClientRepository } from '@/app/lib/repositories/client.repository';
-import { checkRateLimit, getRateLimitIdentifier, RateLimits } from '@/app/lib/rate-limit';
+import { NextRequest } from "next/server";
+import { prisma } from "@repo/db";
+import { withAuth } from "@/app/lib/api-middleware";
+import { apiError, HttpStatus } from "@/app/lib/api-response";
+import {
+  initializeCorrelationId,
+  executeResilient,
+  getClientLogger,
+} from "@/app/lib/resilient-api";
+import { ClientRepository } from "@/app/lib/repositories/client.repository";
+import {
+  checkRateLimit,
+  getRateLimitIdentifier,
+  RateLimits,
+} from "@/app/lib/rate-limit";
 
 const logger = getClientLogger();
-
-interface IdeaBookItem {
-  imageUrl?: string;
-}
 
 /**
  * GET /api/client/dashboard
@@ -29,10 +33,16 @@ export const GET = withAuth(async (request: NextRequest, { dbUserId }) => {
   );
 
   if (!rateLimitResult.success) {
-    return apiError('Too many requests. Please try again later.', HttpStatus.TOO_MANY_REQUESTS);
+    return apiError(
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS
+    );
   }
 
-  logger.info('Fetching client dashboard data', { correlationId, userId: dbUserId });
+  logger.info("Fetching client dashboard data", {
+    correlationId,
+    userId: dbUserId,
+  });
 
   return executeResilient(
     async () => {
@@ -43,9 +53,10 @@ export const GET = withAuth(async (request: NextRequest, { dbUserId }) => {
       // Calculate stats
       const stats = {
         activeProjects: projects.filter(
-          (p) => p.status === 'in_progress' || p.status === 'planning'
+          (p) => p.status === "in_progress" || p.status === "planning"
         ).length,
-        completedProjects: projects.filter((p) => p.status === 'completed').length,
+        completedProjects: projects.filter((p) => p.status === "completed")
+          .length,
         savedProfessionals: 0, // TODO: Calculate from preferences
         ideaBooks: ideaBooks.length,
       };
@@ -58,27 +69,33 @@ export const GET = withAuth(async (request: NextRequest, { dbUserId }) => {
         status: project.status,
         progress: repo.calculateProgress(project),
         budget: project.budget,
+        milestoneCount: project._count?.milestones ?? 0,
         professional: project.professional
           ? {
-              name: `${project.professional.user.firstName} ${project.professional.user.lastName}`.trim(),
-              title: project.professional.servicesOffered[0] || 'Professional',
+              id: project.professional.userId,
+              name: `${project.professional.user.firstName ?? ""} ${project.professional.user.lastName ?? ""}`.trim(),
+              // Use services relation (ServiceCategory[]) instead of non-existent servicesOffered
+              title: project.professional.services?.[0]?.name ?? "Professional",
             }
           : null,
-        startDate: project.startDate?.toISOString(),
-        estimatedEndDate: project.endDate?.toISOString(),
+        startDate: project.startDate?.toISOString() ?? null,
+        estimatedEndDate: project.endDate?.toISOString() ?? null,
       }));
 
       // Transform idea books for frontend
-      const transformedIdeaBooks = ideaBooks.map((book) => ({
-        id: book.id,
-        title: book.title,
-        itemCount: Array.isArray(book.items) ? book.items.length : 0,
-        coverImage: (Array.isArray(book.items) && book.items.length > 0)
-          ? (book.items[0] as IdeaBookItem)?.imageUrl || '/placeholder.jpg'
-          : '/placeholder.jpg',
-      }));
+      const transformedIdeaBooks = ideaBooks.map((book) => {
+        const itemsList = Array.isArray(book.items) ? book.items : [];
+        return {
+          id: book.id,
+          title: book.title,
+          itemCount: itemsList.length,
+          attachmentCount: book._count?.attachments ?? 0,
+          // Use attachments for cover image (aligned with IdeaBookAttachment model)
+          coverImage: book.attachments?.[0]?.url ?? "/placeholder.jpg",
+        };
+      });
 
-      logger.info('Client dashboard data fetched successfully', {
+      logger.info("Client dashboard data fetched successfully", {
         correlationId,
         userId: dbUserId,
         projectCount: projects.length,
@@ -93,7 +110,7 @@ export const GET = withAuth(async (request: NextRequest, { dbUserId }) => {
       };
     },
     {
-      operationName: 'get_client_dashboard',
+      operationName: "get_client_dashboard",
       successStatus: HttpStatus.OK,
     }
   );

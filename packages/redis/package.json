@@ -1,0 +1,24 @@
+{
+  "name": "@repo/redis",
+  "version": "1.0.0",
+  "description": "Redis client and caching utilities for the monorepo",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "0.0.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.3"
+  }
+}

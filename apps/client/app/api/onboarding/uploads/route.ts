@@ -49,7 +49,65 @@ interface FileValidationResult {
   error?: string;
 }
 
-function validateFile(file: File): FileValidationResult {
+/**
+ * Magic bytes (file signatures) for allowed file types.
+ * This provides deeper validation than just checking MIME type/extension.
+ */
+const FILE_SIGNATURES: Record<string, { bytes: number[]; offset?: number }[]> = {
+  'image/jpeg': [
+    { bytes: [0xFF, 0xD8, 0xFF] }, // JPEG/JFIF/Exif
+  ],
+  'image/png': [
+    { bytes: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] }, // PNG
+  ],
+  'image/webp': [
+    { bytes: [0x52, 0x49, 0x46, 0x46] }, // RIFF header (WebP starts with RIFF)
+  ],
+  'application/pdf': [
+    { bytes: [0x25, 0x50, 0x44, 0x46] }, // %PDF
+  ],
+};
+
+/**
+ * Verify file content matches claimed type by checking magic bytes
+ */
+async function verifyFileSignature(file: File): Promise<{ valid: boolean; detectedType?: string }> {
+  try {
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer.slice(0, 16)); // Read first 16 bytes
+    
+    for (const [mimeType, signatures] of Object.entries(FILE_SIGNATURES)) {
+      for (const sig of signatures) {
+        const offset = sig.offset || 0;
+        let match = true;
+        
+        for (let i = 0; i < sig.bytes.length; i++) {
+          if (bytes[offset + i] !== sig.bytes[i]) {
+            match = false;
+            break;
+          }
+        }
+        
+        if (match) {
+          // Special check for WebP - must have WEBP at bytes 8-11
+          if (mimeType === 'image/webp') {
+            const webpMarker = new TextDecoder().decode(buffer.slice(8, 12));
+            if (webpMarker !== 'WEBP') {
+              continue;
+            }
+          }
+          return { valid: true, detectedType: mimeType };
+        }
+      }
+    }
+    
+    return { valid: false };
+  } catch {
+    return { valid: false };
+  }
+}
+
+async function validateFile(file: File): Promise<FileValidationResult> {
   // Check MIME type
   const mimeType = file.type.toLowerCase();
   const extension = path.extname(file.name).toLowerCase();
@@ -67,6 +125,15 @@ function validateFile(file: File): FileValidationResult {
     return { 
       valid: false, 
       error: `File too large: ${file.name} (${sizeMB}MB). Maximum: 10MB` 
+    };
+  }
+
+  // Verify magic bytes match claimed type
+  const signatureCheck = await verifyFileSignature(file);
+  if (!signatureCheck.valid) {
+    return {
+      valid: false,
+      error: `File content does not match type: ${file.name}. File may be corrupted or spoofed.`
     };
   }
 
@@ -139,7 +206,7 @@ export async function POST(req: NextRequest) {
     // Validate all files before writing any
     const validationErrors: string[] = [];
     for (const { file } of files) {
-      const result = validateFile(file);
+      const result = await validateFile(file);
       if (!result.valid && result.error) {
         validationErrors.push(result.error);
       }

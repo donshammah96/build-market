@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@repo/db";
 import { ProfessionalSidebar } from "@/components/layout/ProfessionalSidebar";
 import { ProfessionalNavbar } from "@/components/layout/ProfessionalNavbar";
+import { ProfileCompletionWidgetWrapper } from "@/components/shared/ProfileCompletionWidgetWrapper";
 
 export default async function ProfessionalPortalLayout({ children }: { children: ReactNode }) {
   const { userId } = await auth();
@@ -28,6 +29,9 @@ export default async function ProfessionalPortalLayout({ children }: { children:
           {children}
         </main>
       </div>
+
+      {/* Floating Profile Completion Widget */}
+      <ProfileCompletionWidgetWrapper />
     </div>
   );
 }

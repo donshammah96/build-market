@@ -110,7 +110,7 @@ export default function ReviewsPage() {
                 Real Stories. <span className="text-emerald-500">Real Homes.</span>
               </h1>
               <p className="text-lg text-zinc-300 leading-relaxed">
-                See what your neighbors in Nairobi, Mombasa, and beyond are saying about the architects, fundis, and suppliers on Build Market.
+                See what your neighbors in Nairobi, Mombasa, and beyond are saying about the architects, artisans, and suppliers on Build Market.
               </p>
             </motion.div>
           </div>

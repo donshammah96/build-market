@@ -37,7 +37,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import PropertyCard, { PropertyCardData } from "@/components/real-estate/PropertyCard";
+import PropertyCard from "@/components/real-estate/PropertyCard";
+import {
+  PropertyCardData,
+  PROPERTY_TYPE_LABELS,
+  PROPERTY_CATEGORY_LABELS,
+  PROPERTY_STATUS_LABELS,
+} from "@/types/property";
+import { COUNTY_LABELS } from "@/types/store";
 import { ROUTES } from "@/lib/links";
 
 // Type definitions
@@ -76,6 +83,8 @@ interface PropertyDetail {
   bathrooms?: number | null;
   areaSqFt?: number | null;
   lotSize?: number | null;
+  yearBuilt?: number | null;
+  parkingSpaces?: number | null;
   images: string[];
   floorPlan?: string | null;
   videoUrl?: string | null;
@@ -132,7 +141,8 @@ const MOCK_PROPERTIES: Record<string, PropertyDetail> = {
   "1": {
     id: "1",
     title: "Luxury 4-Bed Villa in Karen",
-    description: "Experience luxury living in this stunning 4-bedroom villa nestled in the serene Karen neighborhood. This exquisite property features spacious living areas with high ceilings, a modern open-plan kitchen, and panoramic garden views. The master suite includes a walk-in closet and en-suite bathroom. Perfect for families seeking comfort and elegance.",
+    description:
+      "Experience luxury living in this stunning 4-bedroom villa nestled in the serene Karen neighborhood. This exquisite property features spacious living areas with high ceilings, a modern open-plan kitchen, and panoramic garden views. The master suite includes a walk-in closet and en-suite bathroom. Perfect for families seeking comfort and elegance.",
     price: 85000000,
     currency: "KES",
     location: "Karen, Nairobi",
@@ -144,12 +154,21 @@ const MOCK_PROPERTIES: Record<string, PropertyDetail> = {
     bathrooms: 5,
     areaSqFt: 4500,
     lotSize: 10000,
+    yearBuilt: 2020,
+    parkingSpaces: 2,
     images: [
       "https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=800&q=80",
       "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80",
-      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800&q=80"
+      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800&q=80",
     ],
-    features: ["Swimming Pool", "Garden", "Security", "Parking", "Staff Quarters", "Gym"],
+    features: [
+      "Swimming Pool",
+      "Garden",
+      "Security",
+      "Parking",
+      "Staff Quarters",
+      "Gym",
+    ],
     featured: true,
     agent: {
       userId: "mock-agent-1",
@@ -166,17 +185,18 @@ const MOCK_PROPERTIES: Record<string, PropertyDetail> = {
         lastName: "Golding",
         email: "pam@example.com",
         phone: "+254700000001",
-        avatar: "https://i.pravatar.cc/150?u=pg"
-      }
+        avatar: "https://i.pravatar.cc/150?u=pg",
+      },
     },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    propertyUrl: "/properties/1"
+    propertyUrl: "/properties/1",
   },
   "2": {
     id: "2",
     title: "Modern Apartment in Kilimani",
-    description: "Contemporary 2-bedroom apartment in the heart of Kilimani. Features include modern finishes, spacious balcony with city views, fully fitted kitchen, and access to building amenities including a rooftop pool and gym. Walking distance to shopping centers and restaurants.",
+    description:
+      "Contemporary 2-bedroom apartment in the heart of Kilimani. Features include modern finishes, spacious balcony with city views, fully fitted kitchen, and access to building amenities including a rooftop pool and gym. Walking distance to shopping centers and restaurants.",
     price: 120000,
     currency: "KES",
     location: "Kilimani, Nairobi",
@@ -187,11 +207,21 @@ const MOCK_PROPERTIES: Record<string, PropertyDetail> = {
     bedrooms: 2,
     bathrooms: 2,
     areaSqFt: 1200,
+    lotSize: 1200,
+    yearBuilt: 2021,
+    parkingSpaces: 1,
     images: [
       "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&q=80",
-      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80"
+      "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80",
     ],
-    features: ["Rooftop Pool", "Gym", "Parking", "24/7 Security", "Balcony", "Modern Kitchen"],
+    features: [
+      "Rooftop Pool",
+      "Gym",
+      "Parking",
+      "24/7 Security",
+      "Balcony",
+      "Modern Kitchen",
+    ],
     featured: true,
     agent: {
       userId: "mock-agent-2",
@@ -208,17 +238,18 @@ const MOCK_PROPERTIES: Record<string, PropertyDetail> = {
         lastName: "Hass",
         email: "john@hassconsult.co.ke",
         phone: "+254700000002",
-        avatar: "https://i.pravatar.cc/150?u=hc"
-      }
+        avatar: "https://i.pravatar.cc/150?u=hc",
+      },
     },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    propertyUrl: "/properties/2"
+    propertyUrl: "/properties/2",
   },
   "3": {
     id: "3",
     title: "Prime Commercial Space",
-    description: "Premium commercial office space in the bustling Westlands business district. This open-plan space offers flexibility for various business setups. Features include fiber optic internet connectivity, backup power, modern lifts, and ample parking. Ideal for corporates and startups.",
+    description:
+      "Premium commercial office space in the bustling Westlands business district. This open-plan space offers flexibility for various business setups. Features include fiber optic internet connectivity, backup power, modern lifts, and ample parking. Ideal for corporates and startups.",
     price: 250000,
     currency: "KES",
     location: "Westlands, Nairobi",
@@ -227,11 +258,21 @@ const MOCK_PROPERTIES: Record<string, PropertyDetail> = {
     category: "COMMERCIAL",
     status: "UNDER_OFFER",
     areaSqFt: 2000,
+    lotSize: 2000,
+    yearBuilt: 2022,
+    parkingSpaces: 1,
     images: [
       "https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80",
-      "https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800&q=80"
+      "https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800&q=80",
     ],
-    features: ["Fiber Internet", "Backup Power", "Parking", "24/7 Security", "Modern Lifts", "Air Conditioning"],
+    features: [
+      "Fiber Internet",
+      "Backup Power",
+      "Parking",
+      "24/7 Security",
+      "Modern Lifts",
+      "Air Conditioning",
+    ],
     featured: true,
     agent: {
       userId: "mock-agent-3",
@@ -248,17 +289,18 @@ const MOCK_PROPERTIES: Record<string, PropertyDetail> = {
         lastName: "Knight",
         email: "sarah@knightfrank.co.ke",
         phone: "+254700000003",
-        avatar: "https://i.pravatar.cc/150?u=kf"
-      }
+        avatar: "https://i.pravatar.cc/150?u=kf",
+      },
     },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    propertyUrl: "/properties/3"
+    propertyUrl: "/properties/3",
   },
   "4": {
     id: "4",
     title: "Half Acre Land",
-    description: "Prime half-acre plot in the rapidly developing Ruaka area. Perfect for residential development or investment. The land has a clean title deed, is within a gated community, and has access to utilities including water and electricity. Great potential for appreciation.",
+    description:
+      "Prime half-acre plot in the rapidly developing Ruaka area. Perfect for residential development or investment. The land has a clean title deed, is within a gated community, and has access to utilities including water and electricity. Great potential for appreciation.",
     price: 15000000,
     currency: "KES",
     location: "Ruaka, Kiambu",
@@ -268,10 +310,19 @@ const MOCK_PROPERTIES: Record<string, PropertyDetail> = {
     status: "AVAILABLE",
     areaSqFt: 21780,
     lotSize: 21780,
+    yearBuilt: 2023,
+    parkingSpaces: 4,
     images: [
-      "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800&q=80"
+      "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800&q=80",
     ],
-    features: ["Clean Title", "Gated Community", "Water Access", "Electricity Access", "Near Town Centre", "Ready for Development"],
+    features: [
+      "Clean Title",
+      "Gated Community",
+      "Water Access",
+      "Electricity Access",
+      "Near Town Centre",
+      "Ready for Development",
+    ],
     featured: true,
     agent: {
       userId: "mock-agent-4",
@@ -288,36 +339,69 @@ const MOCK_PROPERTIES: Record<string, PropertyDetail> = {
         lastName: "Wachiuri",
         email: "info@optiven.co.ke",
         phone: "+254700000004",
-        avatar: "https://i.pravatar.cc/150?u=op"
-      }
+        avatar: "https://i.pravatar.cc/150?u=op",
+      },
     },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    propertyUrl: "/properties/4"
+    propertyUrl: "/properties/4",
+  },
+};
+
+// Helper to convert county string to County enum
+const getCountyEnum = (
+  countyStr: string | null | undefined
+): keyof typeof COUNTY_LABELS => {
+  if (!countyStr) return "NAIROBI";
+  const upperCounty = countyStr.toUpperCase();
+  // Check if it's a valid County enum value
+  if (upperCounty in COUNTY_LABELS) {
+    return upperCounty as keyof typeof COUNTY_LABELS;
   }
+  // Default to NAIROBI if not found
+  return "NAIROBI";
 };
 
 // Get mock similar properties (excluding the current property)
 const getMockSimilarProperties = (currentId: string): PropertyCardData[] => {
   return Object.values(MOCK_PROPERTIES)
-    .filter(p => p.id !== currentId)
+    .filter((p) => p.id !== currentId)
     .slice(0, 3)
-    .map(p => ({
-      id: p.id,
-      title: p.title,
-      price: p.price,
-      currency: p.currency,
-      location: p.location,
-      type: p.type,
-      category: p.category,
-      status: p.status,
-      beds: p.bedrooms ?? undefined,
-      baths: p.bathrooms ?? undefined,
-      area: p.areaSqFt ?? undefined,
-      image: p.images[0] || "/hero-realestate.jpg",
-      featured: p.featured,
-      agent: p.agent.user.avatar ? { name: p.agent.name, image: p.agent.user.avatar } : { name: p.agent.name }
-    }));
+    .map((p) => {
+      const county = getCountyEnum(p.agent.county);
+
+      return {
+        id: p.id,
+        title: p.title,
+        price: p.price,
+        currency: p.currency,
+        location: p.location,
+        county: county,
+        countyLabel: COUNTY_LABELS[county],
+        type: p.type,
+        typeLabel: PROPERTY_TYPE_LABELS[p.type],
+        category: p.category,
+        categoryLabel: PROPERTY_CATEGORY_LABELS[p.category],
+        status: p.status,
+        statusLabel: PROPERTY_STATUS_LABELS[p.status],
+        beds: p.bedrooms ?? undefined,
+        baths: p.bathrooms ?? undefined,
+        area: p.areaSqFt ?? undefined,
+        lotSize: p.lotSize ?? undefined,
+        yearBuilt: p.yearBuilt ?? undefined,
+        parkingSpaces: p.parkingSpaces ?? undefined,
+        image: p.images[0] || "/hero-realestate.jpg",
+        featured: p.featured,
+        verified: p.agent.verified,
+        agent: {
+          id: p.agent.user.id,
+          name: p.agent.name,
+          image: p.agent.user.avatar ?? undefined,
+          companyName: p.agent.companyName,
+        },
+        createdAt: p.createdAt,
+      };
+    });
 };
 
 export default function PropertyDetailPage() {
@@ -325,7 +409,9 @@ export default function PropertyDetailPage() {
   const id = params.id as string;
 
   const [property, setProperty] = useState<PropertyDetail | null>(null);
-  const [similarProperties, setSimilarProperties] = useState<PropertyCardData[]>([]);
+  const [similarProperties, setSimilarProperties] = useState<
+    PropertyCardData[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -339,11 +425,17 @@ export default function PropertyDetailPage() {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`http://localhost:3500/api/properties/${id}`);
+        const response = await fetch(
+          `http://localhost:3500/api/properties/${id}`
+        );
         const data: ApiResponse = await response.json();
 
         if (!response.ok || !data.success) {
-          throw new Error(data.success === false ? "Property not found" : "Failed to fetch property");
+          throw new Error(
+            data.success === false
+              ? "Property not found"
+              : "Failed to fetch property"
+          );
         }
 
         setProperty(data.data.property);
@@ -358,7 +450,9 @@ export default function PropertyDetailPage() {
         } else {
           // If no mock data for this ID, show the first mock property
           const firstMockId = Object.keys(MOCK_PROPERTIES)[0];
-          const firstMockProperty = firstMockId ? MOCK_PROPERTIES[firstMockId] : undefined;
+          const firstMockProperty = firstMockId
+            ? MOCK_PROPERTIES[firstMockId]
+            : undefined;
           if (firstMockProperty) {
             setProperty(firstMockProperty);
             setSimilarProperties(getMockSimilarProperties(firstMockId || ""));
@@ -386,7 +480,9 @@ export default function PropertyDetailPage() {
 
   const prevImage = () => {
     if (property) {
-      setCurrentImageIndex((prev) => (prev - 1 + property.images.length) % property.images.length);
+      setCurrentImageIndex(
+        (prev) => (prev - 1 + property.images.length) % property.images.length
+      );
     }
   };
 
@@ -446,8 +542,13 @@ export default function PropertyDetailPage() {
             <div className="h-24 w-24 mx-auto mb-6 rounded-full bg-red-100 flex items-center justify-center">
               <Home className="h-12 w-12 text-red-500" />
             </div>
-            <h1 className="text-2xl font-bold text-zinc-900 mb-4">Property Not Found</h1>
-            <p className="text-zinc-600 mb-8">{error || "The property you're looking for doesn't exist or has been removed."}</p>
+            <h1 className="text-2xl font-bold text-zinc-900 mb-4">
+              Property Not Found
+            </h1>
+            <p className="text-zinc-600 mb-8">
+              {error ||
+                "The property you're looking for doesn't exist or has been removed."}
+            </p>
             <Button asChild>
               <Link href={ROUTES.properties}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -470,7 +571,12 @@ export default function PropertyDetailPage() {
       <main className="flex-1 pt-24">
         {/* Back Button */}
         <div className="container mx-auto px-4 pt-6 max-w-7xl">
-          <Button variant="ghost" size="sm" asChild className="text-zinc-600 hover:text-zinc-900">
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            className="text-zinc-600 hover:text-zinc-900"
+          >
             <Link href={ROUTES.properties}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Properties
@@ -492,7 +598,10 @@ export default function PropertyDetailPage() {
                 {/* Main Image */}
                 <div className="relative aspect-[16/10] rounded-2xl overflow-hidden bg-zinc-200">
                   <Image
-                    src={property.images[currentImageIndex] || "/placeholder-property.jpg"}
+                    src={
+                      property.images[currentImageIndex] ||
+                      "/placeholder-property.jpg"
+                    }
                     alt={property.title}
                     fill
                     className="object-cover"
@@ -505,9 +614,13 @@ export default function PropertyDetailPage() {
                       {typeLabels[property.type]}
                     </Badge>
                     {property.featured && (
-                      <Badge className="bg-emerald-600 text-white border-0 shadow-sm">Featured</Badge>
+                      <Badge className="bg-emerald-600 text-white border-0 shadow-sm">
+                        Featured
+                      </Badge>
                     )}
-                    <Badge className={`${statusColors[property.status]} border-0 shadow-sm`}>
+                    <Badge
+                      className={`${statusColors[property.status]} border-0 shadow-sm`}
+                    >
                       {property.status.replace("_", " ")}
                     </Badge>
                   </div>
@@ -517,10 +630,14 @@ export default function PropertyDetailPage() {
                     <button
                       onClick={() => setIsFavorite(!isFavorite)}
                       className={`p-2 rounded-full backdrop-blur-sm transition-colors ${
-                        isFavorite ? "bg-red-500 text-white" : "bg-black/20 text-white hover:bg-black/40"
+                        isFavorite
+                          ? "bg-red-500 text-white"
+                          : "bg-black/20 text-white hover:bg-black/40"
                       }`}
                     >
-                      <Heart className={`h-5 w-5 ${isFavorite ? "fill-current" : ""}`} />
+                      <Heart
+                        className={`h-5 w-5 ${isFavorite ? "fill-current" : ""}`}
+                      />
                     </button>
                     <button
                       onClick={handleShare}
@@ -570,15 +687,24 @@ export default function PropertyDetailPage() {
                         key={idx}
                         onClick={() => setCurrentImageIndex(idx)}
                         className={`relative h-20 w-20 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all ${
-                          idx === currentImageIndex ? "border-emerald-600 ring-2 ring-emerald-200" : "border-transparent opacity-60 hover:opacity-100"
+                          idx === currentImageIndex
+                            ? "border-emerald-600 ring-2 ring-emerald-200"
+                            : "border-transparent opacity-60 hover:opacity-100"
                         }`}
                       >
-                        <Image src={img} alt={`View ${idx + 1}`} fill className="object-cover" />
+                        <Image
+                          src={img}
+                          alt={`View ${idx + 1}`}
+                          fill
+                          className="object-cover"
+                        />
                       </button>
                     ))}
                     {property.floorPlan && (
                       <button className="relative h-20 w-20 flex-shrink-0 rounded-lg overflow-hidden border-2 border-dashed border-zinc-300 flex items-center justify-center bg-zinc-100 hover:bg-zinc-200 transition-colors">
-                        <span className="text-xs text-zinc-600 font-medium">Floor Plan</span>
+                        <span className="text-xs text-zinc-600 font-medium">
+                          Floor Plan
+                        </span>
                       </button>
                     )}
                   </div>
@@ -596,12 +722,16 @@ export default function PropertyDetailPage() {
                     {/* Header */}
                     <div className="flex items-start justify-between mb-4">
                       <div>
-                        <h1 className="text-2xl font-bold text-zinc-900 mb-2">{property.title}</h1>
+                        <h1 className="text-2xl font-bold text-zinc-900 mb-2">
+                          {property.title}
+                        </h1>
                         <div className="flex items-center text-zinc-600">
                           <MapPin className="h-4 w-4 mr-1" />
                           <span>{property.location}</span>
                           {property.address && (
-                            <span className="ml-2 text-zinc-400">• {property.address}</span>
+                            <span className="ml-2 text-zinc-400">
+                              • {property.address}
+                            </span>
                           )}
                         </div>
                       </div>
@@ -623,7 +753,9 @@ export default function PropertyDetailPage() {
                             <Bed className="h-5 w-5 text-emerald-600" />
                           </div>
                           <div>
-                            <p className="text-lg font-bold text-zinc-900">{property.bedrooms}</p>
+                            <p className="text-lg font-bold text-zinc-900">
+                              {property.bedrooms}
+                            </p>
                             <p className="text-xs text-zinc-500">Bedrooms</p>
                           </div>
                         </div>
@@ -634,7 +766,9 @@ export default function PropertyDetailPage() {
                             <Bath className="h-5 w-5 text-emerald-600" />
                           </div>
                           <div>
-                            <p className="text-lg font-bold text-zinc-900">{property.bathrooms}</p>
+                            <p className="text-lg font-bold text-zinc-900">
+                              {property.bathrooms}
+                            </p>
                             <p className="text-xs text-zinc-500">Bathrooms</p>
                           </div>
                         </div>
@@ -645,7 +779,9 @@ export default function PropertyDetailPage() {
                             <Square className="h-5 w-5 text-emerald-600" />
                           </div>
                           <div>
-                            <p className="text-lg font-bold text-zinc-900">{property.areaSqFt.toLocaleString()}</p>
+                            <p className="text-lg font-bold text-zinc-900">
+                              {property.areaSqFt.toLocaleString()}
+                            </p>
                             <p className="text-xs text-zinc-500">Sq Ft</p>
                           </div>
                         </div>
@@ -655,7 +791,9 @@ export default function PropertyDetailPage() {
                           <CategoryIcon className="h-5 w-5 text-emerald-600" />
                         </div>
                         <div>
-                          <p className="text-lg font-bold text-zinc-900 capitalize">{property.category.toLowerCase()}</p>
+                          <p className="text-lg font-bold text-zinc-900 capitalize">
+                            {property.category.toLowerCase()}
+                          </p>
                           <p className="text-xs text-zinc-500">Category</p>
                         </div>
                       </div>
@@ -664,18 +802,27 @@ export default function PropertyDetailPage() {
                     {/* Description */}
                     {property.description && (
                       <div className="py-6 border-b border-zinc-100">
-                        <h2 className="text-lg font-bold text-zinc-900 mb-3">Description</h2>
-                        <p className="text-zinc-600 leading-relaxed whitespace-pre-line">{property.description}</p>
+                        <h2 className="text-lg font-bold text-zinc-900 mb-3">
+                          Description
+                        </h2>
+                        <p className="text-zinc-600 leading-relaxed whitespace-pre-line">
+                          {property.description}
+                        </p>
                       </div>
                     )}
 
                     {/* Features */}
                     {property.features.length > 0 && (
                       <div className="py-6">
-                        <h2 className="text-lg font-bold text-zinc-900 mb-4">Features & Amenities</h2>
+                        <h2 className="text-lg font-bold text-zinc-900 mb-4">
+                          Features & Amenities
+                        </h2>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                           {property.features.map((feature, idx) => (
-                            <div key={idx} className="flex items-center gap-2 text-zinc-700">
+                            <div
+                              key={idx}
+                              className="flex items-center gap-2 text-zinc-700"
+                            >
                               <Check className="h-4 w-4 text-emerald-600" />
                               <span className="text-sm">{feature}</span>
                             </div>
@@ -717,10 +864,15 @@ export default function PropertyDetailPage() {
               >
                 <Card className="border-zinc-200 sticky top-24">
                   <CardContent className="p-6">
-                    <h3 className="text-lg font-bold text-zinc-900 mb-4">Contact Agent</h3>
-                    
+                    <h3 className="text-lg font-bold text-zinc-900 mb-4">
+                      Contact Agent
+                    </h3>
+
                     {/* Agent Info */}
-                    <Link href={property.agent.profileUrl} className="flex items-center gap-4 mb-6 group">
+                    <Link
+                      href={property.agent.profileUrl}
+                      className="flex items-center gap-4 mb-6 group"
+                    >
                       <div className="relative h-16 w-16 rounded-full bg-zinc-200 overflow-hidden">
                         {property.agent.user.avatar ? (
                           <Image
@@ -744,10 +896,14 @@ export default function PropertyDetailPage() {
                             <Shield className="h-4 w-4 text-emerald-600" />
                           )}
                         </div>
-                        <p className="text-sm text-zinc-600">{property.agent.companyName}</p>
+                        <p className="text-sm text-zinc-600">
+                          {property.agent.companyName}
+                        </p>
                         {(property.agent.city || property.agent.county) && (
                           <p className="text-xs text-zinc-500">
-                            {[property.agent.city, property.agent.county].filter(Boolean).join(", ")}
+                            {[property.agent.city, property.agent.county]
+                              .filter(Boolean)
+                              .join(", ")}
                           </p>
                         )}
                       </div>
@@ -756,20 +912,33 @@ export default function PropertyDetailPage() {
                     {/* Contact Buttons */}
                     <div className="space-y-3">
                       {property.agent.user.phone && (
-                        <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white" asChild>
+                        <Button
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                          asChild
+                        >
                           <a href={`tel:${property.agent.user.phone}`}>
                             <Phone className="mr-2 h-4 w-4" />
                             Call Agent
                           </a>
                         </Button>
                       )}
-                      <Button variant="outline" className="w-full border-zinc-200" asChild>
-                        <a href={`mailto:${property.agent.user.email}?subject=Inquiry about ${property.title}`}>
+                      <Button
+                        variant="outline"
+                        className="w-full border-zinc-200"
+                        asChild
+                      >
+                        <a
+                          href={`mailto:${property.agent.user.email}?subject=Inquiry about ${property.title}`}
+                        >
                           <Mail className="mr-2 h-4 w-4" />
                           Send Email
                         </a>
                       </Button>
-                      <Button variant="outline" className="w-full border-zinc-200" asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full border-zinc-200"
+                        asChild
+                      >
                         <Link href={`/messages?to=${property.agent.userId}`}>
                           <MessageSquare className="mr-2 h-4 w-4" />
                           Send Message
@@ -781,7 +950,10 @@ export default function PropertyDetailPage() {
                     <div className="mt-6 pt-4 border-t border-zinc-100">
                       <div className="flex items-center gap-2 text-sm text-zinc-500">
                         <Calendar className="h-4 w-4" />
-                        <span>Posted {new Date(property.createdAt).toLocaleDateString()}</span>
+                        <span>
+                          Posted{" "}
+                          {new Date(property.createdAt).toLocaleDateString()}
+                        </span>
                       </div>
                     </div>
                   </CardContent>
@@ -797,9 +969,15 @@ export default function PropertyDetailPage() {
                 >
                   <Card className="border-zinc-200">
                     <CardContent className="p-6">
-                      <h3 className="text-lg font-bold text-zinc-900 mb-4">Video Tour</h3>
+                      <h3 className="text-lg font-bold text-zinc-900 mb-4">
+                        Video Tour
+                      </h3>
                       <Button variant="outline" className="w-full" asChild>
-                        <a href={property.videoUrl} target="_blank" rel="noopener noreferrer">
+                        <a
+                          href={property.videoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
                           <Play className="mr-2 h-4 w-4" />
                           Watch Video Tour
                         </a>
@@ -819,7 +997,9 @@ export default function PropertyDetailPage() {
               transition={{ delay: 0.4 }}
               className="mt-16"
             >
-              <h2 className="text-2xl font-bold text-zinc-900 mb-6">Similar Properties</h2>
+              <h2 className="text-2xl font-bold text-zinc-900 mb-6">
+                Similar Properties
+              </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {similarProperties.map((prop) => (
                   <PropertyCard key={prop.id} property={prop} />
@@ -855,7 +1035,10 @@ export default function PropertyDetailPage() {
 
             <div className="relative w-full h-full max-w-5xl max-h-[80vh] mx-4">
               <Image
-                src={property.images[currentImageIndex] || "/placeholder-property.jpg"}
+                src={
+                  property.images[currentImageIndex] ||
+                  "/placeholder-property.jpg"
+                }
                 alt={property.title}
                 fill
                 className="object-contain"

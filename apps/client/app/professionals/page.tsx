@@ -1,8 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  Suspense,
+  memo,
+} from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
   Star,
@@ -30,42 +36,24 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import ProfessionalCard from "@/components/professional/ProfessionalCard";
 import { ProfessionalCardData } from "@/types/professional";
-import { 
-  CATEGORIES,
-} from "@/lib/constants/professionalCategories";
+import { CATEGORIES } from "@/lib/constants/professionalCategories";
+import {
+  useShouldAnimate,
+  useIntersectionObserver,
+} from "@/lib/hooks/usePerformance";
+import { cn } from "@/lib/utils";
 
 const SORT_OPTIONS = [
   { value: "rating", label: "Top Rated", icon: Star },
   { value: "experience", label: "Most Experienced", icon: Award },
   { value: "reviews", label: "Most Reviewed", icon: Users },
-];
+] as const;
 
 // =============================================================================
-// Animation Variants
+// Sub-components (Memoized for performance)
 // =============================================================================
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05 },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1.0] as const },
-  },
-};
-
-// =============================================================================
-// Sub-components
-// =============================================================================
-
-function ProfessionalsSkeleton() {
+const ProfessionalsSkeleton = memo(function ProfessionalsSkeleton() {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {Array.from({ length: 8 }).map((_, i) => (
@@ -93,9 +81,9 @@ function ProfessionalsSkeleton() {
       ))}
     </div>
   );
-}
+});
 
-function EmptyState({
+const EmptyState = memo(function EmptyState({
   search,
   category,
   onClear,
@@ -104,11 +92,14 @@ function EmptyState({
   category: string;
   onClear: () => void;
 }) {
+  const shouldAnimate = useShouldAnimate();
+
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="text-center py-20 px-4"
+    <div
+      className={cn(
+        "text-center py-20 px-4",
+        shouldAnimate && "animate-scale-in"
+      )}
     >
       <div className="w-20 h-20 bg-zinc-100 rounded-full flex items-center justify-center mx-auto mb-6">
         <Search className="w-10 h-10 text-zinc-400" />
@@ -126,11 +117,11 @@ function EmptyState({
         <X className="h-4 w-4" />
         Clear Filters
       </Button>
-    </motion.div>
+    </div>
   );
-}
+});
 
-function CategoryTabs({
+const CategoryTabs = memo(function CategoryTabs({
   selected,
   onChange,
 }: {
@@ -154,15 +145,13 @@ function CategoryTabs({
             <button
               key={category.slug}
               onClick={() => onChange(category.slug)}
-              className={`
-                flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap
-                transition-all duration-200 snap-start shrink-0
-                ${
-                  isSelected
-                    ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
-                    : "bg-white text-zinc-600 border border-zinc-200 hover:border-emerald-300 hover:text-emerald-600"
-                }
-              `}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap",
+                "transition-all duration-200 snap-start shrink-0",
+                isSelected
+                  ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+                  : "bg-white text-zinc-600 border border-zinc-200 hover:border-emerald-300 hover:text-emerald-600"
+              )}
             >
               <Icon className="h-4 w-4" />
               <span className="text-sm font-medium">{category.name}</span>
@@ -172,9 +161,15 @@ function CategoryTabs({
       </div>
     </div>
   );
-}
+});
 
-function StatsBar({ count, category }: { count: number; category: string }) {
+const StatsBar = memo(function StatsBar({
+  count,
+  category,
+}: {
+  count: number;
+  category: string;
+}) {
   const categoryName =
     CATEGORIES.find((c) => c.slug === category)?.name || "All Professionals";
 
@@ -193,7 +188,86 @@ function StatsBar({ count, category }: { count: number; category: string }) {
       </div>
     </div>
   );
-}
+});
+
+// Memoized professional card wrapper
+const ProfessionalCardItem = memo(function ProfessionalCardItem({
+  professional,
+  index,
+  shouldAnimate,
+  isInView,
+}: {
+  professional: ProfessionalCardData;
+  index: number;
+  shouldAnimate: boolean;
+  isInView: boolean;
+}) {
+  return (
+    <div
+      className={cn(isInView && shouldAnimate && "animate-fade-in-up")}
+      style={{
+        animationDelay:
+          isInView && shouldAnimate ? `${(index % 8) * 50}ms` : "0ms",
+      }}
+    >
+      <ProfessionalCard professional={professional} />
+    </div>
+  );
+});
+
+// Category section component
+const CategorySection = memo(function CategorySection({
+  category,
+  professionals,
+  onViewAll,
+}: {
+  category: string;
+  professionals: ProfessionalCardData[];
+  onViewAll: (category: string) => void;
+}) {
+  const [ref, isInView] = useIntersectionObserver();
+  const shouldAnimate = useShouldAnimate();
+
+  if (professionals.length === 0) return null;
+
+  return (
+    <section
+      ref={ref as React.RefObject<HTMLElement>}
+      className={cn(isInView && shouldAnimate && "animate-fade-in-up")}
+    >
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-zinc-900">{category}</h2>
+        <Badge variant="secondary" className="text-zinc-600">
+          {professionals.length}{" "}
+          {professionals.length === 1 ? "Professional" : "Professionals"}
+        </Badge>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {professionals.slice(0, 4).map((professional, index) => (
+          <ProfessionalCardItem
+            key={professional.id}
+            professional={professional}
+            index={index}
+            shouldAnimate={shouldAnimate}
+            isInView={isInView}
+          />
+        ))}
+      </div>
+      {professionals.length > 4 && (
+        <div className="mt-6 text-center">
+          <Button
+            variant="outline"
+            onClick={() =>
+              onViewAll(category.toLowerCase().replace(/\s+/g, "-"))
+            }
+          >
+            View All {category} ({professionals.length})
+          </Button>
+        </div>
+      )}
+    </section>
+  );
+});
 
 // =============================================================================
 // Main Component
@@ -203,15 +277,21 @@ function ProfessionalsPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const shouldAnimate = useShouldAnimate();
+  const [heroRef, heroInView] = useIntersectionObserver();
 
   // URL state
   const urlSearch = searchParams.get("search") || "";
   const urlCategory = searchParams.get("category") || "all";
-  const urlSort = (searchParams.get("sortBy") as "rating" | "experience" | "reviews") || "rating";
+  const urlSort =
+    (searchParams.get("sortBy") as "rating" | "experience" | "reviews") ||
+    "rating";
 
   // Local state
   const [searchInput, setSearchInput] = useState(urlSearch);
-  const [professionals, setProfessionals] = useState<ProfessionalCardData[]>([]);
+  const [professionals, setProfessionals] = useState<ProfessionalCardData[]>(
+    []
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -224,7 +304,11 @@ function ProfessionalsPageContent() {
       const params = new URLSearchParams(searchParams.toString());
 
       Object.entries(updates).forEach(([key, value]) => {
-        if (value === null || value === "" || (key === "category" && value === "all")) {
+        if (
+          value === null ||
+          value === "" ||
+          (key === "category" && value === "all")
+        ) {
           params.delete(key);
         } else {
           params.set(key, value);
@@ -247,7 +331,8 @@ function ProfessionalsPageContent() {
 
       const params = new URLSearchParams();
       if (urlSearch) params.set("search", urlSearch);
-      if (urlCategory && urlCategory !== "all") params.set("category", urlCategory);
+      if (urlCategory && urlCategory !== "all")
+        params.set("category", urlCategory);
       if (urlSort) params.set("sortBy", urlSort);
 
       const response = await fetch(`/api/professionals?${params.toString()}`);
@@ -257,7 +342,6 @@ function ProfessionalsPageContent() {
       }
 
       const result = await response.json();
-      // API returns { success: true, data: [...] } - extract the data array
       setProfessionals(Array.isArray(result) ? result : result.data || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
@@ -272,52 +356,67 @@ function ProfessionalsPageContent() {
   }, [fetchProfessionals]);
 
   // Handle search input with debounce
-  const handleSearchChange = (value: string) => {
-    setSearchInput(value);
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchInput(value);
 
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
 
-    searchTimeoutRef.current = setTimeout(() => {
-      updateParams({ search: value || null });
-    }, 300);
-  };
+      searchTimeoutRef.current = setTimeout(() => {
+        updateParams({ search: value || null });
+      }, 300);
+    },
+    [updateParams]
+  );
 
   // Handle category change
-  const handleCategoryChange = (slug: string) => {
-    updateParams({ category: slug === "all" ? null : slug });
-  };
+  const handleCategoryChange = useCallback(
+    (slug: string) => {
+      updateParams({ category: slug === "all" ? null : slug });
+    },
+    [updateParams]
+  );
 
   // Handle sort change
-  const handleSortChange = (value: string) => {
-    updateParams({ sortBy: value });
-  };
+  const handleSortChange = useCallback(
+    (value: string) => {
+      updateParams({ sortBy: value });
+    },
+    [updateParams]
+  );
 
   // Clear all filters
-  const handleClearFilters = () => {
+  const handleClearFilters = useCallback(() => {
     setSearchInput("");
     updateParams({ search: null, category: null, sortBy: null });
-  };
+  }, [updateParams]);
 
   // Group professionals by primary service for category sections
-  const groupedProfessionals = professionals.reduce((acc, prof) => {
-    const primaryService = prof.servicesOffered[0] || "Other";
-    if (!acc[primaryService]) {
-      acc[primaryService] = [];
-    }
-    acc[primaryService].push(prof);
-    return acc;
-  }, {} as Record<string, ProfessionalCardData[]>);
+  const groupedProfessionals = professionals.reduce(
+    (acc, prof) => {
+      const primaryService = prof.services?.[0]?.name || "Other";
+      if (!acc[primaryService]) {
+        acc[primaryService] = [];
+      }
+      acc[primaryService].push(prof);
+      return acc;
+    },
+    {} as Record<string, ProfessionalCardData[]>
+  );
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      <Navbar />
+      <Navbar variant="default" />
 
       {/* Hero Section */}
-      <section className="relative bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 pt-32 pb-16 overflow-hidden">
+      <section
+        ref={heroRef as React.RefObject<HTMLElement>}
+        className="relative bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 pt-32 pb-16 overflow-hidden"
+      >
         {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-10">
+        <div className="absolute inset-0 opacity-10" aria-hidden="true">
           <div
             className="absolute inset-0"
             style={{
@@ -327,11 +426,11 @@ function ProfessionalsPageContent() {
         </div>
 
         <div className="relative container mx-auto px-4 md:px-8 max-w-7xl">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="text-center max-w-3xl mx-auto"
+          <div
+            className={cn(
+              "text-center max-w-3xl mx-auto",
+              heroInView && shouldAnimate && "animate-fade-in-up"
+            )}
           >
             <Badge className="mb-4 bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
               <Briefcase className="h-3 w-3 mr-1" />
@@ -361,19 +460,21 @@ function ProfessionalsPageContent() {
                 value={searchInput}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 className="w-full h-14 pl-14 pr-6 text-lg bg-white border-0 rounded-full shadow-xl focus-visible:ring-2 focus-visible:ring-emerald-500"
+                aria-label="Search professionals"
               />
               {searchInput && (
                 <button
                   onClick={() => handleSearchChange("")}
                   className="absolute inset-y-0 right-4 flex items-center"
+                  aria-label="Clear search"
                 >
-                  <X className="h-5 w-5 text-zinc-400 hover:text-zinc-600" />
+                  <X className="h-5 w-5 text-zinc-400 hover:text-zinc-600 transition-colors" />
                 </button>
               )}
             </div>
 
             {/* Quick Stats */}
-            <div className="flex items-center justify-center gap-8 mt-10 text-sm">
+            <div className="flex items-center justify-center gap-8 mt-10 text-sm flex-wrap">
               <div className="flex items-center gap-2 text-zinc-400">
                 <Award className="h-4 w-4 text-emerald-400" />
                 <span>100+ Verified Pros</span>
@@ -387,16 +488,22 @@ function ProfessionalsPageContent() {
                 <span>1000+ Happy Clients</span>
               </div>
             </div>
-          </motion.div>
+          </div>
         </div>
       </section>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 md:px-8 max-w-7xl py-10">
+      <main
+        className="container mx-auto px-4 md:px-8 max-w-7xl py-10"
+        id="results"
+      >
         {/* Filters Bar */}
         <div className="mb-8">
           {/* Category Tabs */}
-          <CategoryTabs selected={urlCategory} onChange={handleCategoryChange} />
+          <CategoryTabs
+            selected={urlCategory}
+            onChange={handleCategoryChange}
+          />
 
           {/* Sort & Filters Row */}
           <div className="flex items-center justify-between mt-6 gap-4 flex-wrap">
@@ -425,10 +532,11 @@ function ProfessionalsPageContent() {
 
         {/* Results */}
         {error ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-20"
+          <div
+            className={cn(
+              "text-center py-20",
+              shouldAnimate && "animate-fade-in"
+            )}
           >
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <X className="w-8 h-8 text-red-500" />
@@ -440,7 +548,7 @@ function ProfessionalsPageContent() {
             <Button onClick={fetchProfessionals} variant="outline">
               Try Again
             </Button>
-          </motion.div>
+          </div>
         ) : loading ? (
           <ProfessionalsSkeleton />
         ) : professionals.length === 0 ? (
@@ -452,80 +560,21 @@ function ProfessionalsPageContent() {
         ) : urlCategory === "all" && !urlSearch ? (
           // Grouped by category view
           <div className="space-y-12">
-            {Object.entries(groupedProfessionals).map(
-              ([category, profs]) =>
-                profs.length > 0 && (
-                  <motion.section
-                    key={category}
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.5 }}
-                  >
-                    <div className="flex items-center justify-between mb-6">
-                      <h2 className="text-2xl font-bold text-zinc-900">
-                        {category}
-                      </h2>
-                      <Badge variant="secondary" className="text-zinc-600">
-                        {profs.length}{" "}
-                        {profs.length === 1 ? "Professional" : "Professionals"}
-                      </Badge>
-                    </div>
-                    <motion.div
-                      variants={containerVariants}
-                      initial="hidden"
-                      whileInView="visible"
-                      viewport={{ once: true }}
-                      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-                    >
-                      {profs.slice(0, 4).map((professional) => (
-                        <motion.div
-                          key={professional.id}
-                          variants={itemVariants}
-                        >
-                          <ProfessionalCard professional={professional} />
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                    {profs.length > 4 && (
-                      <div className="mt-6 text-center">
-                        <Button
-                          variant="outline"
-                          onClick={() =>
-                            handleCategoryChange(
-                              category.toLowerCase().replace(/\s+/g, "-")
-                            )
-                          }
-                        >
-                          View All {category} ({profs.length})
-                        </Button>
-                      </div>
-                    )}
-                  </motion.section>
-                )
-            )}
+            {Object.entries(groupedProfessionals).map(([category, profs]) => (
+              <CategorySection
+                key={category}
+                category={category}
+                professionals={profs}
+                onViewAll={handleCategoryChange}
+              />
+            ))}
           </div>
         ) : (
           // Flat grid view (when filtered)
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-          >
-            <AnimatePresence mode="popLayout">
-              {professionals.map((professional) => (
-                <motion.div
-                  key={professional.id}
-                  variants={itemVariants}
-                  layout
-                  exit={{ opacity: 0, scale: 0.9 }}
-                >
-                  <ProfessionalCard professional={professional} />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </motion.div>
+          <ProfessionalsGrid
+            professionals={professionals}
+            shouldAnimate={shouldAnimate}
+          />
         )}
       </main>
 
@@ -533,6 +582,34 @@ function ProfessionalsPageContent() {
     </div>
   );
 }
+
+// Separate grid component for filtered view
+const ProfessionalsGrid = memo(function ProfessionalsGrid({
+  professionals,
+  shouldAnimate,
+}: {
+  professionals: ProfessionalCardData[];
+  shouldAnimate: boolean;
+}) {
+  const [ref, isInView] = useIntersectionObserver();
+
+  return (
+    <div
+      ref={ref as React.RefObject<HTMLDivElement>}
+      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+    >
+      {professionals.map((professional, index) => (
+        <ProfessionalCardItem
+          key={professional.id}
+          professional={professional}
+          index={index}
+          shouldAnimate={shouldAnimate}
+          isInView={isInView}
+        />
+      ))}
+    </div>
+  );
+});
 
 // Wrap with Suspense for useSearchParams
 export default function ProfessionalsPage() {

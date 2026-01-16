@@ -175,6 +175,58 @@ export const getProfessionalCertificateUrl = (id: string) => `/professional-port
 export const getProfessionalMessageThreadUrl = (threadId: string) => `/professional-portal/messages/${threadId}`;
 export const getProfessionalTransactionUrl = (id: string) => `/professional-portal/finance/transactions/${id}`;
 export const getProfessionalClientUrl = (clientId: string) => `/professional-portal/clients/${clientId}`;
+export const getProfessionalCalendarUrl = (id: string) => `/professional-portal/calendar/${id}`;
+
+// ============================================================================
+// API ROUTES
+// ============================================================================
+
+export const API_ROUTES = {
+  // Auth
+  clerkWebhook: '/api/clerk-webhook',
+  
+  // Users
+  users: '/api/users',
+  userDetail: (id: string) => `/api/users/${id}`,
+
+  // Onboarding
+  onboarding: '/api/onboarding',
+  onboardingSkip: '/api/onboarding/skip',
+  onboardingSkipProfessional: '/api/onboarding/skip-professional',
+
+  // Professionals
+  professionals: '/api/professionals',
+  professionalDetail: (id: string) => `/api/professionals/${id}`,
+  professionalOnboarding: '/api/professional/onboarding',
+  
+  // Professional Portal
+  professionalPortal: '/api/professional-portal',
+  professionalPortalDetail: (id: string) => `/api/professional-portal/${id}`,
+  professionalPortalCalendar: '/api/professional-portal/calendar',
+  professionalPortalLeads: '/api/professional-portal/leads',
+  professionalPortalQuotes: '/api/professional-portal/quotes',
+  professionalPortalCertificates: '/api/professional-portal/certificates',
+  professionalPortalMessages: '/api/professional-portal/messages',
+  professionalPortalFinance: '/api/professional-portal/finance',
+  professionalPortalClients: '/api/professional-portal/clients',
+  
+  // Stores
+  stores: '/api/stores',
+  storeDetail: (id: string) => `/api/stores/${id}`,
+  
+  // Uploads
+  uploads: '/api/uploads',
+  onboardingUploads: '/api/onboarding/uploads',
+  
+  // Profile
+  profileComplete: '/api/profile/complete',
+  profileStatus: '/api/profile/status',
+} as const;
+
+// API Helper Functions
+export const getApiStoresUrl = () => API_ROUTES.stores;
+export const getApiStoreDetailUrl = (id: string) => API_ROUTES.storeDetail(id);
+export const getApiProfessionalDetailUrl = (id: string) => API_ROUTES.professionalDetail(id);
 
 // ============================================================================
 // UTILITY FUNCTIONS

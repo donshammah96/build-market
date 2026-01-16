@@ -1,19 +1,17 @@
 "use client";
 
-
-import { useState, useEffect, useRef } from "react";
-import { motion, useInView } from "framer-motion";
-import { 
-  Star, 
-  Award, 
-  Briefcase, 
-  Mail, 
-  Phone, 
+import { useState, useEffect, memo, useCallback } from "react";
+import {
+  Star,
+  Award,
+  Briefcase,
+  Mail,
+  Phone,
   ExternalLink,
   Calendar,
   CheckCircle,
   MessageSquare,
-  Loader2
+  Loader2,
 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -25,7 +23,13 @@ import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -39,7 +43,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Form,
@@ -58,6 +61,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  useShouldAnimate,
+  useIntersectionObserver,
+} from "@/lib/hooks/usePerformance";
 
 const contactSchema = z.object({
   clientName: z.string().min(1, "Name is required"),
@@ -71,15 +78,325 @@ const contactSchema = z.object({
 
 type ContactFormValues = z.infer<typeof contactSchema>;
 
-export default function ProfessionalProfilePage() {
-  const params = useParams();
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, margin: "-100px" });
-  
-  const [professional, setProfessional] = useState<ProfessionalProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isContactOpen, setIsContactOpen] = useState(false);
+// =============================================================================
+// Loading and Error States (Memoized)
+// =============================================================================
+
+const LoadingState = memo(function LoadingState() {
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <Navbar variant="light" />
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-emerald-600 mx-auto mb-4" />
+          <p className="text-slate-600">Loading professional profile...</p>
+        </div>
+      </div>
+      <Footer />
+    </div>
+  );
+});
+
+const ErrorState = memo(function ErrorState({ message }: { message: string }) {
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <Navbar variant="light" />
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="max-w-md">
+          <CardContent className="p-6 text-center">
+            <p className="text-red-600 mb-4">{message}</p>
+            <Button onClick={() => window.history.back()}>Go Back</Button>
+          </CardContent>
+        </Card>
+      </div>
+      <Footer />
+    </div>
+  );
+});
+
+// =============================================================================
+// Profile Header Section (Memoized)
+// =============================================================================
+
+interface ProfileHeaderProps {
+  professional: ProfessionalProfile;
+  fullName: string;
+  averageRating: string | null;
+  onContactOpen: () => void;
+}
+
+const ProfileHeader = memo(function ProfileHeader({
+  professional,
+  fullName,
+  averageRating,
+  onContactOpen,
+}: ProfileHeaderProps) {
+  const shouldAnimate = useShouldAnimate();
+  const [ref, isInView] = useIntersectionObserver();
+  const user = professional.user;
+
+  return (
+    <div
+      ref={ref as React.RefObject<HTMLDivElement>}
+      className={cn(isInView && shouldAnimate && "animate-fade-in-up")}
+    >
+      <Card className="mb-8">
+        <CardContent className="p-8">
+          <div className="flex flex-col md:flex-row gap-8">
+            {/* Profile Image */}
+            <div className="flex-shrink-0">
+              <Avatar className="h-32 w-32 rounded-lg">
+                <AvatarImage
+                  src={professional.portfolios?.[0]?.images?.[0]?.url ?? ""}
+                  alt={fullName}
+                />
+                <AvatarFallback className="rounded-lg text-3xl">
+                  {user?.firstName?.[0]}
+                  {user?.lastName?.[0]}
+                </AvatarFallback>
+              </Avatar>
+            </div>
+
+            {/* Profile Info */}
+            <div className="flex-1">
+              <div className="flex items-start justify-between flex-wrap gap-4">
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <h1 className="text-3xl font-bold text-slate-900">
+                      {fullName}
+                    </h1>
+                    {professional.verified && (
+                      <div className="bg-emerald-600 text-white px-3 py-1 rounded-full flex items-center gap-1 text-sm font-medium">
+                        <Award className="h-4 w-4" />
+                        Verified
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xl text-slate-600 font-medium mb-2">
+                    {professional.companyName}
+                  </p>
+                  {professional.licenseNumber && (
+                    <p className="text-sm text-slate-500">
+                      License: {professional.licenseNumber}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  {averageRating && (
+                    <div className="flex items-center gap-2 bg-amber-50 px-4 py-2 rounded-lg">
+                      <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+                      <span className="text-lg font-bold">{averageRating}</span>
+                      <span className="text-sm text-slate-600">
+                        ({professional._count?.reviews || 0} reviews)
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <Separator className="my-4" />
+
+              {/* Quick Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                <div className="flex items-center gap-2">
+                  <Briefcase className="h-5 w-5 text-slate-400" />
+                  <div>
+                    <p className="text-sm text-slate-600">Experience</p>
+                    <p className="font-semibold">
+                      {professional.yearsExperience}+ years
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-slate-400" />
+                  <div>
+                    <p className="text-sm text-slate-600">Projects</p>
+                    <p className="font-semibold">
+                      {professional._count?.projects || 0} completed
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Star className="h-5 w-5 text-slate-400" />
+                  <div>
+                    <p className="text-sm text-slate-600">Rating</p>
+                    <p className="font-semibold">
+                      {averageRating || "N/A"} / 5.0
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap gap-3">
+                <Button size="lg" className="gap-2" onClick={onContactOpen}>
+                  <MessageSquare className="h-4 w-4" />
+                  Contact Professional
+                </Button>
+
+                <Button size="lg" variant="outline" className="gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Schedule Consultation
+                </Button>
+                {professional.portfolioUrl &&
+                  professional.portfolioUrl.trim() !== "" && (
+                    <a
+                      href={professional.portfolioUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cn(
+                        buttonVariants({ variant: "outline", size: "lg" }),
+                        "gap-2"
+                      )}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Portfolio
+                    </a>
+                  )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+});
+
+// =============================================================================
+// Portfolio Card (Memoized)
+// =============================================================================
+
+interface PortfolioCardProps {
+  portfolio: NonNullable<ProfessionalProfile["portfolios"]>[number];
+  index: number;
+  shouldAnimate: boolean;
+  isInView: boolean;
+}
+
+const PortfolioCard = memo(function PortfolioCard({
+  portfolio,
+  index,
+  shouldAnimate,
+  isInView,
+}: PortfolioCardProps) {
+  return (
+    <div
+      className={cn(isInView && shouldAnimate && "animate-fade-in-up")}
+      style={{
+        animationDelay: isInView && shouldAnimate ? `${index * 100}ms` : "0ms",
+      }}
+    >
+      <Card className="overflow-hidden hover-lift h-full">
+        <div className="aspect-video overflow-hidden bg-slate-200">
+          <ImageWithFallback
+            src={portfolio?.images?.[0]?.url ?? ""}
+            alt={portfolio.title}
+            className="w-full h-full object-cover img-zoom transition-transform duration-300"
+          />
+        </div>
+        <CardHeader>
+          <div className="flex items-start justify-between gap-2">
+            <CardTitle className="text-xl">{portfolio.title}</CardTitle>
+            <Badge variant="outline">{portfolio.projectType}</Badge>
+          </div>
+          {portfolio.description && (
+            <CardDescription>{portfolio.description}</CardDescription>
+          )}
+        </CardHeader>
+        {portfolio.clientTestimonial && (
+          <CardContent>
+            <div className="bg-slate-50 p-4 rounded-lg">
+              <p className="text-sm text-slate-600 italic">
+                &quot;{portfolio.clientTestimonial}&quot;
+              </p>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+    </div>
+  );
+});
+
+// =============================================================================
+// Review Card (Memoized)
+// =============================================================================
+
+interface ReviewCardProps {
+  review: NonNullable<ProfessionalProfile["reviews"]>[number];
+  index: number;
+  isLast: boolean;
+  shouldAnimate: boolean;
+  isInView: boolean;
+}
+
+const ReviewCard = memo(function ReviewCard({
+  review,
+  index,
+  isLast,
+  shouldAnimate,
+  isInView,
+}: ReviewCardProps) {
+  return (
+    <div
+      className={cn(isInView && shouldAnimate && "animate-fade-in-up")}
+      style={{
+        animationDelay: isInView && shouldAnimate ? `${index * 100}ms` : "0ms",
+      }}
+    >
+      <div className="flex gap-4">
+        <Avatar>
+          <AvatarFallback>
+            {review.reviewer.firstName?.[0]}
+            {review.reviewer.lastName?.[0]}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <p className="font-semibold">
+                {review.reviewer.firstName} {review.reviewer.lastName}
+              </p>
+              <p className="text-sm text-slate-500">
+                {new Date(review.createdAt).toLocaleDateString()}
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              {[...Array(5)].map((_, i) => (
+                <Star
+                  key={i}
+                  className={`h-4 w-4 ${
+                    i < review.rating
+                      ? "fill-amber-400 text-amber-400"
+                      : "text-slate-300"
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+          {review.comment && <p className="text-slate-600">{review.comment}</p>}
+        </div>
+      </div>
+      {!isLast && <Separator className="mt-6" />}
+    </div>
+  );
+});
+
+// =============================================================================
+// Contact Dialog (Memoized)
+// =============================================================================
+
+interface ContactDialogProps {
+  professional: ProfessionalProfile;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+const ContactDialog = memo(function ContactDialog({
+  professional,
+  open,
+  onOpenChange,
+}: ContactDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<ContactFormValues>({
@@ -94,35 +411,6 @@ export default function ProfessionalProfilePage() {
       message: "",
     },
   });
-
-  useEffect(() => {
-    const fetchProfessional = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        const response = await fetch(`/api/professionals/${params.id}`);
-        
-        if (!response.ok) {
-          if (response.status === 404) {
-            throw new Error('Professional not found');
-          }
-          throw new Error('Failed to fetch professional');
-        }
-
-        const data = await response.json();
-        setProfessional(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (params.id) {
-      fetchProfessional();
-    }
-  }, [params.id]);
 
   const onSubmit = async (data: ContactFormValues) => {
     if (!professional) return;
@@ -144,508 +432,416 @@ export default function ProfessionalProfilePage() {
       }
 
       toast.success("Message sent successfully!");
-      setIsContactOpen(false);
+      onOpenChange(false);
       form.reset();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to send message");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to send message"
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <Navbar variant="light" />
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-slate-600">Loading professional profile...</p>
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Contact {professional.companyName}</DialogTitle>
+          <DialogDescription>
+            Send a message to discuss your project.
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="clientName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Your Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="John Doe" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="clientEmail"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input placeholder="don@example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="clientPhone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone (Optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="+254..." {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="projectType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Project Type</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Residential Construction">
+                          Residential Construction
+                        </SelectItem>
+                        <SelectItem value="Commercial Construction">
+                          Commercial Construction
+                        </SelectItem>
+                        <SelectItem value="Renovation">Renovation</SelectItem>
+                        <SelectItem value="Interior Design">
+                          Interior Design
+                        </SelectItem>
+                        <SelectItem value="Landscaping">Landscaping</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="budget"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Budget (Optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. 500k - 1M" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <FormField
+              control={form.control}
+              name="location"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Project Location (Optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Nairobi, Westlands" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="message"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Message</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Describe your project..."
+                      className="min-h-[100px]"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DialogFooter>
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-emerald-600 hover:bg-emerald-700"
+              >
+                {isSubmitting && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Send Message
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+});
+
+// =============================================================================
+// Profile Tabs (Memoized)
+// =============================================================================
+
+interface ProfileTabsProps {
+  professional: ProfessionalProfile;
+}
+
+const ProfileTabs = memo(function ProfileTabs({
+  professional,
+}: ProfileTabsProps) {
+  const shouldAnimate = useShouldAnimate();
+  const [tabsRef, tabsInView] = useIntersectionObserver();
+  const [portfolioRef, portfolioInView] = useIntersectionObserver();
+  const [reviewsRef, reviewsInView] = useIntersectionObserver();
+  const user = professional.user;
+
+  return (
+    <div
+      ref={tabsRef as React.RefObject<HTMLDivElement>}
+      className={cn(tabsInView && shouldAnimate && "animate-fade-in-up")}
+      style={{ animationDelay: "200ms" }}
+    >
+      <Tabs defaultValue="about" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+          <TabsTrigger value="about">About</TabsTrigger>
+          <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
+          <TabsTrigger value="reviews">Reviews</TabsTrigger>
+        </TabsList>
+
+        {/* About Tab */}
+        <TabsContent value="about" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>About</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Professional Bio</h3>
+                <p className="text-slate-600 leading-relaxed">
+                  {professional.bio}
+                </p>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Services Offered</h3>
+                <div className="flex flex-wrap gap-2">
+                  {professional.services && professional.services.length > 0 ? (
+                    professional.services.map((service, index) => (
+                      <Badge
+                        key={index}
+                        variant="secondary"
+                        className="text-sm px-3 py-1"
+                      >
+                        {service.name ?? ""}
+                      </Badge>
+                    ))
+                  ) : (
+                    <p className="text-slate-500">No services listed.</p>
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="text-lg font-semibold mb-4">
+                  Contact Information
+                </h3>
+                <div className="space-y-3">
+                  {user?.email && (
+                    <div className="flex items-center gap-3">
+                      <Mail className="h-5 w-5 text-slate-400" />
+                      <span className="text-slate-600">{user.email}</span>
+                    </div>
+                  )}
+                  {user?.phone && (
+                    <div className="flex items-center gap-3">
+                      <Phone className="h-5 w-5 text-slate-400" />
+                      <span className="text-slate-600">{user.phone}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Portfolio Tab */}
+        <TabsContent value="portfolio" className="space-y-6">
+          <div
+            ref={portfolioRef as React.RefObject<HTMLDivElement>}
+            className="grid md:grid-cols-2 gap-6"
+          >
+            {professional.portfolios && professional.portfolios.length > 0 ? (
+              professional.portfolios.map((portfolio, index) => (
+                <PortfolioCard
+                  key={portfolio.id}
+                  portfolio={portfolio}
+                  index={index}
+                  shouldAnimate={shouldAnimate}
+                  isInView={portfolioInView}
+                />
+              ))
+            ) : (
+              <p className="col-span-full text-center text-slate-600 py-8">
+                No portfolio items available yet.
+              </p>
+            )}
           </div>
-        </div>
-        <Footer />
-      </div>
-    );
+        </TabsContent>
+
+        {/* Reviews Tab */}
+        <TabsContent value="reviews" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Client Reviews</CardTitle>
+              <CardDescription>
+                See what clients have to say about working with{" "}
+                {user?.firstName || professional.companyName}
+              </CardDescription>
+            </CardHeader>
+            <CardContent
+              ref={reviewsRef as React.RefObject<HTMLDivElement>}
+              className="space-y-6"
+            >
+              {professional.reviews && professional.reviews.length > 0 ? (
+                professional.reviews.map((review, index) => (
+                  <ReviewCard
+                    key={review.id}
+                    review={review}
+                    index={index}
+                    isLast={index === professional.reviews!.length - 1}
+                    shouldAnimate={shouldAnimate}
+                    isInView={reviewsInView}
+                  />
+                ))
+              ) : (
+                <p className="text-center text-slate-600 py-8">
+                  No reviews available yet.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+});
+
+// =============================================================================
+// Main Component
+// =============================================================================
+
+export default function ProfessionalProfilePage() {
+  const params = useParams();
+  const [professional, setProfessional] = useState<ProfessionalProfile | null>(
+    null
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isContactOpen, setIsContactOpen] = useState(false);
+
+  const fetchProfessional = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(`/api/professionals/${params.id}`);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error("Professional not found");
+        }
+        throw new Error("Failed to fetch professional");
+      }
+
+      const data = await response.json();
+      setProfessional(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  }, [params.id]);
+
+  useEffect(() => {
+    if (params.id) {
+      fetchProfessional();
+    }
+  }, [params.id, fetchProfessional]);
+
+  const handleContactOpen = useCallback(() => {
+    setIsContactOpen(true);
+  }, []);
+
+  if (loading) {
+    return <LoadingState />;
   }
 
   if (error) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <Navbar variant="light" />
-        <div className="min-h-screen flex items-center justify-center">
-          <Card className="max-w-md">
-            <CardContent className="p-6 text-center">
-              <p className="text-red-600 mb-4">{error}</p>
-              <Button onClick={() => window.history.back()}>Go Back</Button>
-            </CardContent>
-          </Card>
-        </div>
-        <Footer />
-      </div>
-    );
+    return <ErrorState message={error} />;
   }
 
   if (!professional) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <Navbar variant="light" />
-        <div className="min-h-screen flex items-center justify-center">
-          <Card className="max-w-md">
-            <CardContent className="p-6 text-center">
-              <p className="text-slate-600 mb-4">Professional not found</p>
-              <Button onClick={() => window.history.back()}>Go Back</Button>
-            </CardContent>
-          </Card>
-        </div>
-        <Footer />
-      </div>
-    );
+    return <ErrorState message="Professional not found" />;
   }
 
   // Safely access user properties with fallbacks
   const user = professional.user;
-  const fullName = user 
-    ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || professional.companyName
+  const fullName = user
+    ? `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
+      professional.companyName
     : professional.companyName;
-  const averageRating = professional.reviews && professional.reviews.length > 0
-    ? (professional.reviews.reduce((sum, review) => sum + review.rating, 0) / professional.reviews.length).toFixed(1)
-    : null;
+  const averageRating =
+    professional.reviews && professional.reviews.length > 0
+      ? (
+          professional.reviews.reduce((sum, review) => sum + review.rating, 0) /
+          professional.reviews.length
+        ).toFixed(1)
+      : null;
 
   return (
     <div className="min-h-screen bg-slate-50">
       <Navbar variant="light" />
 
-      <main className="max-w-7xl mx-auto px-4 py-12">
+      <main className="max-w-7xl mx-auto px-4 py-12 pt-28">
         {/* Header Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-        >
-          <Card className="mb-8">
-            <CardContent className="p-8">
-              <div className="flex flex-col md:flex-row gap-8">
-                {/* Profile Image */}
-                <div className="flex-shrink-0">
-                  <Avatar className="h-32 w-32 rounded-lg">
-                    <AvatarImage src={professional.portfolios?.[0]?.images?.[0] ?? ""} alt={fullName} />
-                    <AvatarFallback className="rounded-lg text-3xl">
-                      {user?.firstName?.[0]}{user?.lastName?.[0]}
-                    </AvatarFallback>
-                  </Avatar>
-                </div>
-
-                {/* Profile Info */}
-                <div className="flex-1">
-                  <div className="flex items-start justify-between flex-wrap gap-4">
-                    <div>
-                      <div className="flex items-center gap-3 mb-2">
-                        <h1 className="text-3xl font-bold text-slate-900">{fullName}</h1>
-                        {professional.verified && (
-                          <div className="bg-blue-600 text-white px-3 py-1 rounded-full flex items-center gap-1 text-sm font-medium">
-                            <Award className="h-4 w-4" />
-                            Verified
-                          </div>
-                        )}
-                      </div>
-                      <p className="text-xl text-slate-600 font-medium mb-2">
-                        {professional.companyName}
-                      </p>
-                      {professional.licenseNumber && (
-                        <p className="text-sm text-slate-500">
-                          License: {professional.licenseNumber}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      {averageRating && (
-                        <div className="flex items-center gap-2 bg-amber-50 px-4 py-2 rounded-lg">
-                          <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
-                          <span className="text-lg font-bold">{averageRating}</span>
-                          <span className="text-sm text-slate-600">
-                            ({professional._count?.reviews || 0} reviews)
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <Separator className="my-4" />
-
-                  {/* Quick Stats */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
-                    <div className="flex items-center gap-2">
-                      <Briefcase className="h-5 w-5 text-slate-400" />
-                      <div>
-                        <p className="text-sm text-slate-600">Experience</p>
-                        <p className="font-semibold">{professional.yearsExperience}+ years</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-5 w-5 text-slate-400" />
-                      <div>
-                        <p className="text-sm text-slate-600">Projects</p>
-                        <p className="font-semibold">{professional._count?.projects || 0} completed</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Star className="h-5 w-5 text-slate-400" />
-                      <div>
-                        <p className="text-sm text-slate-600">Rating</p>
-                        <p className="font-semibold">{averageRating || 'N/A'} / 5.0</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex flex-wrap gap-3">
-                    <Dialog open={isContactOpen} onOpenChange={setIsContactOpen}>
-                      <DialogTrigger asChild>
-                        <Button size="lg" className="gap-2">
-                          <MessageSquare className="h-4 w-4" />
-                          Contact Professional
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-                        <DialogHeader>
-                          <DialogTitle>Contact {professional.companyName}</DialogTitle>
-                          <DialogDescription>
-                            Send a message to discuss your project.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <Form {...form}>
-                          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                            <FormField
-                              control={form.control}
-                              name="clientName"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Your Name</FormLabel>
-                                  <FormControl>
-                                    <Input placeholder="John Doe" {...field} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <div className="grid grid-cols-2 gap-4">
-                              <FormField
-                                control={form.control}
-                                name="clientEmail"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Email</FormLabel>
-                                    <FormControl>
-                                      <Input placeholder="don@example.com" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={form.control}
-                                name="clientPhone"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Phone (Optional)</FormLabel>
-                                    <FormControl>
-                                      <Input placeholder="+254..." {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <FormField
-                                control={form.control}
-                                name="projectType"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Project Type</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                      <FormControl>
-                                        <SelectTrigger>
-                                          <SelectValue placeholder="Select type" />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent>
-                                        <SelectItem value="Residential Construction">Residential Construction</SelectItem>
-                                        <SelectItem value="Commercial Construction">Commercial Construction</SelectItem>
-                                        <SelectItem value="Renovation">Renovation</SelectItem>
-                                        <SelectItem value="Interior Design">Interior Design</SelectItem>
-                                        <SelectItem value="Landscaping">Landscaping</SelectItem>
-                                        <SelectItem value="Other">Other</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={form.control}
-                                name="budget"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Budget (Optional)</FormLabel>
-                                    <FormControl>
-                                      <Input placeholder="e.g. 500k - 1M" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
-                            <FormField
-                              control={form.control}
-                              name="location"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Project Location (Optional)</FormLabel>
-                                  <FormControl>
-                                    <Input placeholder="e.g. Nairobi, Westlands" {...field} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name="message"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Message</FormLabel>
-                                  <FormControl>
-                                    <Textarea 
-                                      placeholder="Describe your project..." 
-                                      className="min-h-[100px]"
-                                      {...field} 
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <DialogFooter>
-                              <Button type="submit" disabled={isSubmitting} className="w-full">
-                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Send Message
-                              </Button>
-                            </DialogFooter>
-                          </form>
-                        </Form>
-                      </DialogContent>
-                    </Dialog>
-
-                    <Button size="lg" variant="outline" className="gap-2">
-                      <Calendar className="h-4 w-4" />
-                      Schedule Consultation
-                    </Button>
-                    {professional.portfolioUrl && professional.portfolioUrl.trim() !== '' && (
-                      <a 
-                        href={professional.portfolioUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className={cn(buttonVariants({ variant: "outline", size: "lg" }), "gap-2")}
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        Portfolio
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+        <ProfileHeader
+          professional={professional}
+          fullName={fullName}
+          averageRating={averageRating}
+          onContactOpen={handleContactOpen}
+        />
 
         {/* Content Tabs */}
-        <motion.div
-          ref={ref}
-          initial={{ opacity: 0, y: 20 }}
-          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-        >
-          <Tabs defaultValue="about" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
-              <TabsTrigger value="about">About</TabsTrigger>
-              <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
-              <TabsTrigger value="reviews">Reviews</TabsTrigger>
-            </TabsList>
-
-            {/* About Tab */}
-            <TabsContent value="about" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>About</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold mb-2">Professional Bio</h3>
-                    <p className="text-slate-600 leading-relaxed">{professional.bio}</p>
-                  </div>
-
-                  <Separator />
-
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4">Services Offered</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {professional.servicesOffered && professional.servicesOffered.length > 0 ? (
-                        professional.servicesOffered.map((service, index) => (
-                          <Badge key={index} variant="secondary" className="text-sm px-3 py-1">
-                            {service}
-                          </Badge>
-                        ))
-                      ) : (
-                        <p className="text-slate-500">No services listed</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4">Contact Information</h3>
-                    <div className="space-y-3">
-                      {user?.email && (
-                        <div className="flex items-center gap-3">
-                          <Mail className="h-5 w-5 text-slate-400" />
-                          <span className="text-slate-600">{user.email}</span>
-                        </div>
-                      )}
-                      {user?.phone && (
-                        <div className="flex items-center gap-3">
-                          <Phone className="h-5 w-5 text-slate-400" />
-                          <span className="text-slate-600">{user.phone}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Portfolio Tab */}
-            <TabsContent value="portfolio" className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-6">
-                {professional.portfolios && professional.portfolios.length > 0 ? (
-                  professional.portfolios.map((portfolio, index) => (
-                    <motion.div
-                      key={portfolio.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.5, delay: index * 0.1 }}
-                    >
-                      <Card className="overflow-hidden hover:shadow-lg transition-shadow h-full">
-                        <div className="aspect-video overflow-hidden bg-slate-200">
-                          <ImageWithFallback
-                            src={portfolio?.images?.[0] ?? ""}
-                            alt={portfolio.title}
-                            className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                          />
-                        </div>
-                        <CardHeader>
-                          <div className="flex items-start justify-between gap-2">
-                            <CardTitle className="text-xl">{portfolio.title}</CardTitle>
-                            <Badge variant="outline">{portfolio.projectType}</Badge>
-                          </div>
-                          {portfolio.description && (
-                            <CardDescription>{portfolio.description}</CardDescription>
-                          )}
-                        </CardHeader>
-                        {portfolio.clientTestimonial && (
-                          <CardContent>
-                            <div className="bg-slate-50 p-4 rounded-lg">
-                              <p className="text-sm text-slate-600 italic">
-                                &quot;{portfolio.clientTestimonial}&quot;
-                              </p>
-                            </div>
-                          </CardContent>
-                        )}
-                      </Card>
-                    </motion.div>
-                  ))
-                ) : (
-                  <p className="col-span-full text-center text-slate-600 py-8">
-                    No portfolio items available yet.
-                  </p>
-                )}
-              </div>
-            </TabsContent>
-
-            {/* Reviews Tab */}
-            <TabsContent value="reviews" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Client Reviews</CardTitle>
-                  <CardDescription>
-                    See what clients have to say about working with {user?.firstName || professional.companyName}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {professional.reviews && professional.reviews.length > 0 ? (
-                    professional.reviews.map((review, index) => (
-                      <motion.div
-                        key={review.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.5, delay: index * 0.1 }}
-                      >
-                        <div className="flex gap-4">
-                          <Avatar>
-                            <AvatarFallback>
-                              {review.reviewer.firstName?.[0]}{review.reviewer.lastName?.[0]}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between mb-2">
-                              <div>
-                                <p className="font-semibold">
-                                  {review.reviewer.firstName} {review.reviewer.lastName}
-                                </p>
-                                <p className="text-sm text-slate-500">
-                                  {new Date(review.createdAt).toLocaleDateString()}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                {[...Array(5)].map((_, i) => (
-                                  <Star
-                                    key={i}
-                                    className={`h-4 w-4 ${
-                                      i < review.rating
-                                        ? "fill-amber-400 text-amber-400"
-                                        : "text-slate-300"
-                                    }`}
-                                  />
-                                ))}
-                              </div>
-                            </div>
-                            {review.comment && (
-                              <p className="text-slate-600">{review.comment}</p>
-                            )}
-                          </div>
-                        </div>
-                        {index < professional.reviews!.length - 1 && (
-                          <Separator className="mt-6" />
-                        )}
-                      </motion.div>
-                    ))
-                  ) : (
-                    <p className="text-center text-slate-600 py-8">
-                      No reviews available yet.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </motion.div>
+        <ProfileTabs professional={professional} />
       </main>
+
+      {/* Contact Dialog */}
+      <ContactDialog
+        professional={professional}
+        open={isContactOpen}
+        onOpenChange={setIsContactOpen}
+      />
 
       <Footer />
     </div>
   );
 }
-
-

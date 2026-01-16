@@ -6,9 +6,18 @@ import {
   UserCheck,
   Settings,
   ShieldCheck,
+  ClipboardCheck,
+  FolderKanban,
+  Store,
+  Building2,
+  MessageSquare,
+  BarChart3,
+  Wrench,
+  FileText,
 } from "lucide-react";
 import { syncUserRole } from "@/lib/auth-sync";
 import { currentUser } from "@clerk/nextjs/server";
+import { getPendingVerifications } from "@/actions/admin";
 
 export default async function DashboardLayout({
   children,
@@ -17,6 +26,10 @@ export default async function DashboardLayout({
 }) {
   await syncUserRole();
   const user = await currentUser();
+
+  // Get pending verification count for badge
+  const pendingResponse = await getPendingVerifications({ status: "PENDING", limit: 1 });
+  const pendingCount = pendingResponse.success ? pendingResponse.data?.pagination.total || 0 : 0;
 
   return (
     <div className="flex min-h-screen bg-zinc-50 font-sans">
@@ -48,6 +61,23 @@ export default async function DashboardLayout({
             Dashboard
           </Link>
           
+          <p className="px-3 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 mt-6">Verification</p>
+
+          <Link 
+            href="/verifications" 
+            className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all group"
+          >
+            <span className="flex items-center gap-3">
+              <ClipboardCheck className="h-4 w-4 group-hover:text-amber-400 transition-colors" />
+              Verifications
+            </span>
+            {pendingCount > 0 && (
+              <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                {pendingCount > 99 ? "99+" : pendingCount}
+              </span>
+            )}
+          </Link>
+
           <p className="px-3 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 mt-6">Management</p>
 
           <Link 
@@ -61,15 +91,60 @@ export default async function DashboardLayout({
             href="/professionals" 
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all group"
           >
-            <UserCheck className="h-4 w-4 group-hover:text-amber-400 transition-colors" />
+            <UserCheck className="h-4 w-4 group-hover:text-purple-400 transition-colors" />
             Professionals
           </Link>
           <Link 
             href="/projects" 
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all group"
           >
-            <UserCheck className="h-4 w-4 group-hover:text-amber-400 transition-colors" />
+            <FolderKanban className="h-4 w-4 group-hover:text-cyan-400 transition-colors" />
             Projects
+          </Link>
+          <Link 
+            href="/stores" 
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all group"
+          >
+            <Store className="h-4 w-4 group-hover:text-orange-400 transition-colors" />
+            Stores
+          </Link>
+          <Link 
+            href="/properties" 
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all group"
+          >
+            <Building2 className="h-4 w-4 group-hover:text-teal-400 transition-colors" />
+            Properties
+          </Link>
+          <Link 
+            href="/leads" 
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all group"
+          >
+            <MessageSquare className="h-4 w-4 group-hover:text-pink-400 transition-colors" />
+            Leads
+          </Link>
+          <Link 
+            href="/services" 
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all group"
+          >
+            <Wrench className="h-4 w-4 group-hover:text-indigo-400 transition-colors" />
+            Services
+          </Link>
+
+          <p className="px-3 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 mt-6">Analytics & System</p>
+
+          <Link 
+            href="/analytics" 
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all group"
+          >
+            <BarChart3 className="h-4 w-4 group-hover:text-emerald-400 transition-colors" />
+            Analytics
+          </Link>
+          <Link 
+            href="/audit" 
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all group"
+          >
+            <FileText className="h-4 w-4 group-hover:text-yellow-400 transition-colors" />
+            Audit Logs
           </Link>
           <Link 
             href="/settings" 

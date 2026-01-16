@@ -1,8 +1,16 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@repo/db";
-import { apiError, HttpStatus } from '@/app/lib/api-response';
-import { initializeCorrelationId, executeResilient, getClientLogger } from '@/app/lib/resilient-api';
-import { checkRateLimit, getRateLimitIdentifier, RateLimits } from '@/app/lib/rate-limit';
+import { apiError, HttpStatus } from "@/app/lib/api-response";
+import {
+  initializeCorrelationId,
+  executeResilient,
+  getClientLogger,
+} from "@/app/lib/resilient-api";
+import {
+  checkRateLimit,
+  getRateLimitIdentifier,
+  RateLimits,
+} from "@/app/lib/rate-limit";
 
 const logger = getClientLogger();
 
@@ -26,10 +34,16 @@ export async function GET(
   );
 
   if (!rateLimitResult.success) {
-    return apiError('Too many requests. Please try again later.', HttpStatus.TOO_MANY_REQUESTS);
+    return apiError(
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS
+    );
   }
 
-  logger.info('Fetching professional profile by ID', { correlationId, professionalId: id });
+  logger.info("Fetching professional profile by ID", {
+    correlationId,
+    professionalId: id,
+  });
 
   return executeResilient(
     async () => {
@@ -44,29 +58,64 @@ export async function GET(
               avatar: true,
             },
           },
+          // Include related services from ServiceCategory
+          services: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              icon: true,
+            },
+          },
+          // Include profile images (main image first)
+          images: {
+            orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }],
+            take: 5,
+            select: {
+              id: true,
+              url: true,
+              caption: true,
+              isMain: true,
+            },
+          },
           portfolios: {
             take: 6,
-            orderBy: { createdAt: 'desc' },
+            orderBy: { createdAt: "desc" },
             select: {
               id: true,
               title: true,
               description: true,
               projectType: true,
-              images: true,
+              completedAt: true,
+              // Include portfolio images properly
+              images: {
+                orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }],
+                take: 4,
+                select: {
+                  id: true,
+                  url: true,
+                  caption: true,
+                  isMain: true,
+                  isBefore: true,
+                  isAfter: true,
+                },
+              },
             },
           },
           certificates: {
-            where: { verificationStatus: 'verified' },
+            where: { verificationStatus: "verified" },
             select: {
               id: true,
               name: true,
               issuer: true,
               issueDate: true,
+              expiryDate: true,
             },
           },
           reviews: {
+            where: { approved: true },
             take: 5,
-            orderBy: { createdAt: 'desc' },
+            orderBy: { createdAt: "desc" },
             select: {
               id: true,
               rating: true,
@@ -92,16 +141,24 @@ export async function GET(
       });
 
       if (!professional) {
-        logger.warn('Professional profile not found', { correlationId, professionalId: id });
+        logger.warn("Professional profile not found", {
+          correlationId,
+          professionalId: id,
+        });
         return apiError("Professional not found", HttpStatus.NOT_FOUND);
       }
 
-      // Calculate average rating
-      const avgRating = professional.reviews.length > 0
-        ? professional.reviews.reduce((sum, r) => sum + r.rating, 0) / professional.reviews.length
-        : null;
+      // Calculate average rating from approved reviews
+      const avgRating =
+        professional.reviews.length > 0
+          ? professional.reviews.reduce((sum, r) => sum + r.rating, 0) /
+            professional.reviews.length
+          : null;
 
-      logger.info('Professional profile fetched successfully', { correlationId, professionalId: id });
+      logger.info("Professional profile fetched successfully", {
+        correlationId,
+        professionalId: id,
+      });
 
       return {
         ...professional,
@@ -109,7 +166,7 @@ export async function GET(
       };
     },
     {
-      operationName: 'get_professional_profile_by_id',
+      operationName: "get_professional_profile_by_id",
       successStatus: HttpStatus.OK,
     }
   );

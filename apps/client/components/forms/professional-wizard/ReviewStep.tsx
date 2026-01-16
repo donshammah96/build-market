@@ -1,0 +1,388 @@
+"use client";
+
+import React from "react";
+import { motion } from "framer-motion";
+import {
+  CheckCircle2,
+  Briefcase,
+  Building2,
+  Store,
+  FileText,
+  ShieldCheck,
+  ArrowLeft,
+  Edit2,
+  Loader2,
+  Sparkles,
+  MapPin,
+  Clock,
+  Globe,
+  IdCard,
+  Award,
+} from "lucide-react";
+
+import { cn } from "@/lib/utils";
+import {
+  PROFESSION_OPTIONS,
+  isSupplierProfession,
+  isRealEstateProfession,
+  getProfessionRegulatoryBody,
+} from "@/lib/constants/professionOptions";
+import { StepComponentProps, WIZARD_STYLES } from "./types";
+
+// ============================================================================
+// REVIEW SECTION COMPONENT
+// ============================================================================
+
+interface ReviewSectionProps {
+  title: string;
+  icon: React.ReactNode;
+  onEdit?: () => void;
+  children: React.ReactNode;
+  isComplete?: boolean;
+}
+
+const ReviewSection: React.FC<ReviewSectionProps> = ({
+  title,
+  icon,
+  onEdit,
+  children,
+  isComplete = true,
+}) => (
+  <motion.div
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    className={cn(
+      "bg-white/5 border rounded-xl p-5",
+      isComplete ? "border-emerald-500/30" : "border-amber-500/30"
+    )}
+  >
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-3">
+        <div
+          className={cn(
+            "p-2 rounded-lg",
+            isComplete
+              ? "bg-emerald-500/20 text-emerald-400"
+              : "bg-amber-500/20 text-amber-400"
+          )}
+        >
+          {icon}
+        </div>
+        <h3 className="font-medium text-white">{title}</h3>
+        {isComplete && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
+      </div>
+      {onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          className="text-sm text-zinc-400 hover:text-white flex items-center gap-1 transition-colors"
+        >
+          <Edit2 className="h-3.5 w-3.5" />
+          Edit
+        </button>
+      )}
+    </div>
+    <div className="space-y-2">{children}</div>
+  </motion.div>
+);
+
+// ============================================================================
+// REVIEW ITEM COMPONENT
+// ============================================================================
+
+interface ReviewItemProps {
+  label: string;
+  value: string | undefined;
+  icon?: React.ReactNode;
+  highlight?: boolean;
+}
+
+const ReviewItem: React.FC<ReviewItemProps> = ({
+  label,
+  value,
+  icon,
+  highlight,
+}) => (
+  <div className="flex items-center justify-between py-1.5">
+    <span className="text-sm text-zinc-400 flex items-center gap-2">
+      {icon}
+      {label}
+    </span>
+    <span
+      className={cn(
+        "text-sm font-medium",
+        highlight ? "text-emerald-400" : "text-white",
+        !value && "text-zinc-500 italic"
+      )}
+    >
+      {value || "Not provided"}
+    </span>
+  </div>
+);
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+
+export default function ReviewStep({
+  data,
+  onUpdate,
+  onNext,
+  onBack,
+  isSubmitting,
+}: StepComponentProps) {
+  // Get profession info
+  const professionLabel =
+    PROFESSION_OPTIONS.find((p) => p.value === data.profession)?.label ||
+    data.profession;
+  const regulatoryBody = data.profession
+    ? getProfessionRegulatoryBody(data.profession)
+    : null;
+  const isSupplier = isSupplierProfession(data.profession || "");
+  const isRealEstate = isRealEstateProfession(data.profession || "");
+
+  // Count documents
+  const certificateCount = data.certificates?.length || 0;
+  const idDocumentCount = data.idDocuments?.length || 0;
+  const totalDocuments = certificateCount + idDocumentCount;
+
+  // Navigation helpers (step indices)
+  const goToStep = (stepIndex: number) => {
+    // Navigate back to a specific step
+    // This will be handled by the parent wizard
+    for (let i = 0; i < stepIndex; i++) {
+      onBack();
+    }
+  };
+
+  const handleSubmit = () => {
+    onNext(); // This triggers the form submission in the parent wizard
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-center"
+      >
+        <div className="inline-flex items-center justify-center gap-2 mb-4">
+          <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+          <Sparkles className="h-5 w-5 text-amber-400 animate-pulse" />
+        </div>
+        <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">
+          Review Your Application
+        </h2>
+        <p className="text-zinc-400 max-w-md mx-auto">
+          Please review your information before submitting. You can edit any
+          section.
+        </p>
+      </motion.div>
+
+      {/* Review Sections */}
+      <div className="space-y-4">
+        {/* Profession Section */}
+        <ReviewSection
+          title="Profession"
+          icon={<Briefcase className="h-5 w-5" />}
+          onEdit={onBack} // Go back multiple steps
+        >
+          <ReviewItem
+            label="Selected Profession"
+            value={professionLabel}
+            highlight
+          />
+          {regulatoryBody && (
+            <ReviewItem label="Regulatory Body" value={regulatoryBody} />
+          )}
+        </ReviewSection>
+
+        {/* Business Details Section */}
+        <ReviewSection
+          title="Business Details"
+          icon={<Building2 className="h-5 w-5" />}
+          onEdit={onBack}
+        >
+          <ReviewItem
+            label="Company Name"
+            value={data.companyName}
+            icon={<Building2 className="h-3.5 w-3.5" />}
+          />
+          <ReviewItem
+            label="License Number"
+            value={data.licenseNumber}
+            icon={<ShieldCheck className="h-3.5 w-3.5" />}
+          />
+          <ReviewItem
+            label="Years of Experience"
+            value={data.yearsExperience?.toString()}
+            icon={<Clock className="h-3.5 w-3.5" />}
+          />
+          <ReviewItem
+            label="Website"
+            value={data.website}
+            icon={<Globe className="h-3.5 w-3.5" />}
+          />
+          {data.bio && (
+            <div className="pt-2 mt-2 border-t border-white/10">
+              <p className="text-sm text-zinc-400 mb-1">Bio</p>
+              <p className="text-sm text-white line-clamp-3">{data.bio}</p>
+            </div>
+          )}
+        </ReviewSection>
+
+        {/* Store Section (Suppliers only) */}
+        {isSupplier && (
+          <ReviewSection
+            title="Store Information"
+            icon={<Store className="h-5 w-5" />}
+            onEdit={onBack}
+            isComplete={!!data.storeData}
+          >
+            {data.storeData ? (
+              <>
+                <ReviewItem
+                  label="Store Name"
+                  value={data.storeData.name}
+                  highlight
+                />
+                <ReviewItem
+                  label="Location"
+                  value={`${data.storeData.city}, ${data.storeData.county}`}
+                  icon={<MapPin className="h-3.5 w-3.5" />}
+                />
+                <ReviewItem
+                  label="Categories"
+                  value={`${data.storeData.categories?.length || 0} selected`}
+                />
+              </>
+            ) : (
+              <p className="text-sm text-amber-400 italic">
+                No store added — you can add one from your dashboard
+              </p>
+            )}
+          </ReviewSection>
+        )}
+
+        {/* Real Estate Credentials (Real Estate only) */}
+        {isRealEstate && (
+          <ReviewSection
+            title="EARB Credentials"
+            icon={<Award className="h-5 w-5" />}
+            onEdit={onBack}
+            isComplete={!!data.earbNumber}
+          >
+            <ReviewItem
+              label="EARB Number"
+              value={data.earbNumber}
+              icon={<ShieldCheck className="h-3.5 w-3.5" />}
+              highlight={!!data.earbNumber}
+            />
+          </ReviewSection>
+        )}
+
+        {/* Documents Section */}
+        <ReviewSection
+          title="Verification Documents"
+          icon={<FileText className="h-5 w-5" />}
+          onEdit={onBack}
+          isComplete={totalDocuments > 0}
+        >
+          <ReviewItem
+            label="Certificates"
+            value={
+              certificateCount > 0
+                ? `${certificateCount} file(s) uploaded`
+                : undefined
+            }
+            icon={<FileText className="h-3.5 w-3.5" />}
+          />
+          <ReviewItem
+            label="ID Documents"
+            value={
+              idDocumentCount > 0
+                ? `${idDocumentCount} file(s) uploaded`
+                : undefined
+            }
+            icon={<IdCard className="h-3.5 w-3.5" />}
+          />
+          {totalDocuments === 0 && (
+            <p className="text-sm text-amber-400 italic pt-2">
+              No documents uploaded — you can upload them from your dashboard
+            </p>
+          )}
+        </ReviewSection>
+      </div>
+
+      {/* Submission Info */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.3 }}
+        className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4"
+      >
+        <div className="flex items-start gap-3">
+          <ShieldCheck className="h-5 w-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm text-emerald-400 font-medium">
+              What happens next?
+            </p>
+            <p className="text-xs text-zinc-400 mt-1">
+              After submitting, our team will review your application and
+              documents. You&apos;ll receive an email notification once your
+              profile is verified (typically within 3 business days).
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Navigation */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.4 }}
+        className="flex items-center justify-between pt-4"
+      >
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={isSubmitting}
+          className={cn(
+            WIZARD_STYLES.secondaryButton,
+            "flex items-center gap-2"
+          )}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </button>
+
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={isSubmitting}
+          className={cn(
+            "font-bold py-3.5 px-8 rounded-lg text-white",
+            "bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600",
+            "hover:from-amber-400 hover:via-yellow-400 hover:to-amber-500",
+            "transition-all duration-200 shadow-lg hover:shadow-amber-500/30",
+            "hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed",
+            "disabled:hover:scale-100 flex items-center justify-center gap-2"
+          )}
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Submitting...
+            </>
+          ) : (
+            <>
+              <ShieldCheck className="h-5 w-5" />
+              Submit Application
+            </>
+          )}
+        </button>
+      </motion.div>
+    </div>
+  );
+}

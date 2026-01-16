@@ -24,6 +24,11 @@ interface ClerkUserData {
   first_name?: string | null;
   last_name?: string | null;
   phone_numbers?: ClerkPhoneNumber[];
+  public_metadata?: {
+    role?: 'client' | 'professional';
+    isOnboarded?: boolean;
+    isVerified?: boolean;
+  };
 }
 
 interface ClerkWebhookEvent {
@@ -185,7 +190,7 @@ async function handleUserCreated(evt: ClerkWebhookEvent, userRepo: UserRepositor
  * Handle user.updated webhook event
  */
 async function handleUserUpdated(evt: ClerkWebhookEvent, userRepo: UserRepository, correlationId: string) {
-  const { id, email_addresses, first_name, last_name, phone_numbers } = evt.data;
+  const { id, email_addresses, first_name, last_name, phone_numbers, public_metadata } = evt.data;
 
   if (!id) {
     logger.error('Missing user ID in update event', undefined, { correlationId });
@@ -195,7 +200,7 @@ async function handleUserUpdated(evt: ClerkWebhookEvent, userRepo: UserRepositor
   const email = email_addresses?.[0]?.email_address;
   const phone = phone_numbers?.[0]?.phone_number;
 
-  logger.info('Processing user update', { correlationId, clerkId: id });
+  logger.info('Processing user update', { correlationId, clerkId: id, hasMetadata: !!public_metadata });
 
   try {
     const user = await userRepo.update(id, {
@@ -204,6 +209,11 @@ async function handleUserUpdated(evt: ClerkWebhookEvent, userRepo: UserRepositor
       ...(last_name !== undefined && { lastName: last_name || null }),
       ...(phone !== undefined && { phone: phone || null }),
     });
+
+    // Sync professional verification status if metadata contains isVerified
+    if (public_metadata?.isVerified !== undefined) {
+      await syncProfessionalVerification(id, public_metadata.isVerified, correlationId);
+    }
 
     logger.info('User updated successfully', { correlationId, userId: user.id });
 
@@ -263,3 +273,56 @@ async function handleUserDeleted(evt: ClerkWebhookEvent, userRepo: UserRepositor
   }
 }
 
+/**
+ * Sync professional verification status from Clerk metadata to database
+ * Called when user.updated event contains verification metadata changes
+ */
+async function syncProfessionalVerification(
+  clerkId: string,
+  isVerified: boolean,
+  correlationId: string
+) {
+  try {
+    // Find user by clerkId
+    const user = await prisma.user.findUnique({
+      where: { clerkId },
+      select: { id: true },
+    });
+
+    if (!user) {
+      logger.warn('User not found for verification sync', { correlationId, clerkId });
+      return;
+    }
+
+    // Update professional profile verification status
+    const profile = await prisma.professionalProfile.findUnique({
+      where: { userId: user.id },
+      select: { verified: true },
+    });
+
+    if (!profile) {
+      logger.debug('No professional profile found for verification sync', { correlationId, clerkId });
+      return;
+    }
+
+    // Only update if status changed
+    if (profile.verified !== isVerified) {
+      await prisma.professionalProfile.update({
+        where: { userId: user.id },
+        data: { verified: isVerified },
+      });
+
+      logger.info('Professional verification status synced', {
+        correlationId,
+        clerkId,
+        userId: user.id,
+        verified: isVerified,
+      });
+    }
+  } catch (err) {
+    logger.error('Failed to sync professional verification', err instanceof Error ? err : new Error(String(err)), {
+      correlationId,
+      clerkId,
+    });
+  }
+}

@@ -30,6 +30,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialogue";
+import { API_ROUTES } from '@/lib/links';
 
 export default function Onboarding() {
     const { user } = useUser();
@@ -59,13 +60,32 @@ export default function Onboarding() {
     const handleProfessionalSubmit = async (data: OnboardingData) => {
       setSubmitting(true);
       try {
-        const response = await fetch('/api/onboarding', {
+        const response = await fetch(API_ROUTES.onboarding, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ clerkId: user?.id, ...data }),
         });
         
         if (!response.ok) throw new Error('Failed to create professional profile');
+        
+        // If store data was collected, create the store
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const storeData = (data as any).storeData;
+        if (storeData) {
+          try {
+            const storeResponse = await fetch(API_ROUTES.stores, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(storeData),
+            });
+            
+            if (!storeResponse.ok) {
+              console.error('Failed to create store, but professional profile was created');
+            }
+          } catch (storeError) {
+            console.error('Store creation error:', storeError);
+          }
+        }
         
         toast.success('Professional account verified!');
         router.push('/professional-portal/dashboard');

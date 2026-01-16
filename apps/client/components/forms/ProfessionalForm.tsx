@@ -1,549 +1,682 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useForm, Controller } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { motion, AnimatePresence } from "framer-motion";
+import { Award, Loader2 } from "lucide-react";
 
-import { ShieldCheck, CheckCircle2, Loader2, Award, Sparkles, AlertCircle } from 'lucide-react';
-import { ProfessionalOnboardingData } from '@repo/types';
-import { Combobox, ComboboxOption } from '../ui/combobox';
-import { cn } from '@/lib/utils';
-import { professionalOnboardingSchema, type ProfessionalOnboardingData as FormData } from '@/lib/schemas/onboarding';
+import { ProfessionalOnboardingData } from "@repo/types";
+import {
+  StepProgress,
+  CompactStepProgress,
+} from "@/components/ui/step-progress";
+import { API_ROUTES } from "@/lib/links";
 
-// ============================================================================
-// CONSTANTS
-// ============================================================================
-
-const PROFESSION_OPTIONS: ComboboxOption[] = [
-  // Architecture & Design
-  { value: "architect", label: "Architect" },
-  { value: "interior_designer", label: "Interior Designer" },
-  { value: "landscape_architect", label: "Landscape Architect" },
-  { value: "urban_planner", label: "Urban Planner" },
-  { value: "draftsman", label: "Draftsman / CAD Technician" },
-  
-  // Engineering
-  { value: "structural_engineer", label: "Structural Engineer" },
-  { value: "civil_engineer", label: "Civil Engineer" },
-  { value: "mechanical_engineer", label: "Mechanical Engineer (HVAC)" },
-  { value: "electrical_engineer", label: "Electrical Engineer" },
-  { value: "geotechnical_engineer", label: "Geotechnical Engineer" },
-  { value: "environmental_engineer", label: "Environmental Engineer" },
-  { value: "water_engineer", label: "Water & Sanitation Engineer" },
-  
-  // Construction Management
-  { value: "construction_manager", label: "Construction Manager" },
-  { value: "project_manager", label: "Project Manager" },
-  { value: "site_supervisor", label: "Site Supervisor / Foreman" },
-  { value: "quantity_surveyor", label: "Quantity Surveyor" },
-  { value: "estimator", label: "Construction Estimator" },
-  { value: "clerk_of_works", label: "Clerk of Works" },
-  
-  // Contractors
-  { value: "general_contractor", label: "General Contractor" },
-  { value: "building_contractor", label: "Building Contractor" },
-  { value: "roofing_contractor", label: "Roofing Contractor" },
-  { value: "flooring_contractor", label: "Flooring Contractor" },
-  { value: "painting_contractor", label: "Painting Contractor" },
-  { value: "demolition_contractor", label: "Demolition Contractor" },
-  
-  // Specialized Trades
-  { value: "plumber", label: "Plumber" },
-  { value: "electrician", label: "Electrician" },
-  { value: "hvac_technician", label: "HVAC Technician" },
-  { value: "mason", label: "Mason / Bricklayer" },
-  { value: "carpenter", label: "Carpenter" },
-  { value: "welder", label: "Welder / Fabricator" },
-  { value: "glazier", label: "Glazier (Glass Work)" },
-  { value: "tiler", label: "Tiler" },
-  { value: "plasterer", label: "Plasterer" },
-  { value: "waterproofing_specialist", label: "Waterproofing Specialist" },
-  
-  // Real Estate
-  { value: "real_estate_agent", label: "Real Estate Agent" },
-  { value: "realtor", label: "Realtor" },
-  { value: "realty_company", label: "Realty Company" },
-  { value: "property_developer", label: "Property Developer" },
-  { value: "land_surveyor", label: "Land Surveyor" },
-  { value: "property_valuator", label: "Property Valuator" },
-  
-  // Specialists
-  { value: "solar_installer", label: "Solar Panel Installer" },
-  { value: "pool_builder", label: "Pool Builder" },
-  { value: "landscaper", label: "Landscaper" },
-  { value: "security_systems", label: "Security Systems Installer" },
-  { value: "smart_home_specialist", label: "Smart Home Specialist" },
-  { value: "fire_safety_specialist", label: "Fire Safety Specialist" },
-  { value: "acoustic_consultant", label: "Acoustic Consultant" },
-  
-  // Suppliers
-  { value: "building_materials_supplier", label: "Building Materials Supplier" },
-  { value: "hardware_supplier", label: "Hardware Supplier" },
-  { value: "sanitary_supplier", label: "Sanitary Ware Supplier" },
-  
-  // Other
-  { value: "other", label: "Other" },
-];
+import {
+  ProfessionStep,
+  DetailsStep,
+  StoreStep,
+  CredentialsStep,
+  DocumentsStep,
+  ReviewStep,
+  ProfessionalWizardData,
+  getActiveSteps,
+} from "./professional-wizard";
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-interface Props {
-  onBack: () => void;
-  onSubmit: (data: ProfessionalOnboardingData) => Promise<void>;
-  onAuthSuccess: (response: ProfessionalOnboardingData) => void;
-}
-
-type ToastType = 'success' | 'error' | 'info';
-
-interface ToastState {
-  type: ToastType;
-  message: string;
-}
+export type ProfessionalFormMode = "onboarding" | "completion";
+export type ProfessionalFormVariant = "dark" | "light";
 
 // ============================================================================
-// SUB-COMPONENTS
+// CONSTANTS
 // ============================================================================
 
-const Toast: React.FC<ToastState> = ({ type, message }) => {
-  const baseClasses = 'px-4 py-3 rounded-lg text-sm font-medium flex items-center gap-2 animate-in slide-in-from-top-2 duration-300';
-  const typeClasses: Record<ToastType, string> = {
-    success: 'bg-emerald-600/90 text-white border border-emerald-500/50',
-    error: 'bg-red-600/90 text-white border border-red-500/50',
-    info: 'bg-zinc-800/90 text-white border border-zinc-700/50',
+const STORAGE_KEYS = {
+  onboarding: "professional_onboarding_draft",
+  completion: "professional_completion_draft",
+} as const;
+
+// Theme-aware styles
+const createTheme = (variant: ProfessionalFormVariant) => {
+  const isDark = variant === "dark";
+  return {
+    container: isDark ? "max-w-2xl mx-auto" : "max-w-2xl mx-auto",
+    loadingOverlay: isDark
+      ? "fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-50 flex items-center justify-center"
+      : "fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center",
+    loadingSpinner: isDark ? "text-emerald-500" : "text-emerald-600",
+    loadingText: isDark
+      ? "text-emerald-500 font-medium animate-pulse"
+      : "text-emerald-600 font-medium animate-pulse",
   };
-  
-  return (
-    <div className={cn(baseClasses, typeClasses[type])}>
-      {type === 'info' && <Loader2 className="h-4 w-4 animate-spin" />}
-      {type === 'success' && <CheckCircle2 className="h-4 w-4" />}
-      {message}
-    </div>
-  );
 };
 
-const FormField: React.FC<{
-  label: string;
-  children: React.ReactNode;
-  hint?: React.ReactNode;
-  required?: boolean;
-  error?: string;
-}> = ({ label, children, hint, required, error }) => (
-  <div className="space-y-2">
-    <label className="flex items-center justify-between text-emerald-400 text-xs uppercase tracking-widest font-semibold">
-      <span className="flex items-center gap-2">
-        {label}
-        {required && <span className="text-amber-500">*</span>}
-      </span>
-      {hint}
-    </label>
-    {children}
-    {error && (
-      <p className="text-xs text-red-400 flex items-center gap-1">
-        <AlertCircle className="h-3 w-3" />
-        {error}
-      </p>
-    )}
-  </div>
-);
+// Animation variants for step transitions
+const stepVariants = {
+  enter: (direction: number) => ({
+    x: direction > 0 ? 50 : -50,
+    opacity: 0,
+  }),
+  center: {
+    x: 0,
+    opacity: 1,
+  },
+  exit: (direction: number) => ({
+    x: direction < 0 ? 50 : -50,
+    opacity: 0,
+  }),
+};
 
-const FileListItem: React.FC<{ file: File; onRemove: () => void }> = ({ file, onRemove }) => (
-  <div className="flex items-center justify-between bg-white/5 px-3 py-2 rounded-lg text-sm text-white border border-white/20">
-    <div className="truncate pr-2 flex items-center gap-2">
-      <div className="w-2 h-2 rounded-full bg-emerald-500" />
-      {file.name}
-    </div>
-    <button 
-      type="button" 
-      onClick={onRemove} 
-      className="text-xs text-slate-400 hover:text-red-400 ml-2 transition-colors"
-    >
-      Remove
-    </button>
-  </div>
-);
+interface Props {
+  /** Mode determines behavior: onboarding (new user) vs completion (existing profile) */
+  mode?: ProfessionalFormMode;
+  /** Theme variant */
+  variant?: ProfessionalFormVariant;
+  /** Initial data to pre-populate the form (for completion mode) */
+  initialData?: Partial<ProfessionalWizardData>;
+  /** Called when user clicks back on first step (onboarding mode only) */
+  onBack?: () => void;
+  /** Called to submit the form data */
+  onSubmit: (data: ProfessionalOnboardingData) => Promise<void>;
+  /** Called on successful submission */
+  onSuccess?: (data: ProfessionalOnboardingData) => void;
+  /** Deprecated: use onSuccess instead */
+  onAuthSuccess?: (response: ProfessionalOnboardingData) => void;
+}
 
-const GoldHeader: React.FC = () => (
-  <div className="text-center mb-8 relative">
-    {/* Decorative glow effect */}
-    <div className="absolute inset-0 -top-4 flex items-center justify-center pointer-events-none">
-      <div className="w-48 h-48 bg-amber-500/10 rounded-full blur-3xl" />
-    </div>
-    
-    {/* Gold decorative line with icon */}
-    <div className="relative inline-flex items-center justify-center gap-4 mb-4">
-      <div className="h-px w-16 bg-gradient-to-r from-transparent via-amber-500/50 to-amber-500" />
-      <div className="relative">
-        <div className="absolute inset-0 animate-pulse">
-          <Award className="h-10 w-10 text-amber-500/30" />
-        </div>
-        <Award className="h-10 w-10 text-amber-500 drop-shadow-[0_0_15px_rgba(245,158,11,0.6)]" />
-      </div>
-      <div className="h-px w-16 bg-gradient-to-l from-transparent via-amber-500/50 to-amber-500" />
-    </div>
-    
-    {/* Main heading with gradient */}
-    <h2 className="relative text-3xl md:text-4xl font-bold mb-3">
-      <span className="bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent drop-shadow-lg">
-        Join the Gold Standard
-      </span>
-      <Sparkles className="absolute -top-1 -right-6 h-5 w-5 text-amber-400 animate-pulse" />
-    </h2>
-    
-    {/* Subtitle */}
-    <p className="text-slate-300 text-sm max-w-sm mx-auto">
-      Verification is mandatory. Please have your{' '}
-      <span className="text-amber-400 font-medium">NCA</span> or{' '}
-      <span className="text-amber-400 font-medium">board registration</span> ready.
-    </p>
-    
-    {/* Trust indicators */}
-    <div className="flex items-center justify-center gap-6 mt-4 text-xs text-zinc-500">
-      <span className="flex items-center gap-1.5">
-        <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-        Verified Only
-      </span>
-      <span className="flex items-center gap-1.5">
-        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-        Quality Leads
-      </span>
-    </div>
-  </div>
-);
+// ============================================================================
+// SUCCESS CARD COMPONENT
+// ============================================================================
 
-const SuccessCard: React.FC<{ 
-  onEdit: () => void; 
+interface SuccessCardProps {
+  mode: ProfessionalFormMode;
+  variant: ProfessionalFormVariant;
+  onEdit: () => void;
   onGoDashboard: () => void;
   isNavigating?: boolean;
-}> = ({ onEdit, onGoDashboard, isNavigating }) => (
-  <div className="bg-white/5 backdrop-blur-sm border border-white/20 p-8 max-w-md mx-auto text-center rounded-xl">
-    <div className="mb-4 text-amber-500">
-      <Award className="w-12 h-12 inline-block drop-shadow-[0_0_15px_rgba(245,158,11,0.5)]" />
-    </div>
-    <h3 className="font-playfair text-2xl text-white mb-2 drop-shadow-lg">
-      Thanks — application received
-    </h3>
-    <p className="text-slate-200 mb-6">
-      Our team will review your documents and contact you within 3 business days for verification.
-    </p>
-    <div className="flex gap-4 justify-center">
-      <button 
-        onClick={onGoDashboard}
-        disabled={isNavigating}
-        className="text-sm border-b border-emerald-400/50 pb-1 text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50 flex items-center gap-2"
+}
+
+const SuccessCard: React.FC<SuccessCardProps> = ({
+  mode,
+  variant,
+  onEdit,
+  onGoDashboard,
+  isNavigating,
+}) => {
+  const isDark = variant === "dark";
+  const isCompletion = mode === "completion";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className={
+        isDark
+          ? "bg-white/5 backdrop-blur-sm border border-white/20 p-8 max-w-md mx-auto text-center rounded-xl"
+          : "bg-white border border-zinc-200 shadow-lg p-8 max-w-md mx-auto text-center rounded-xl"
+      }
+    >
+      <div className={isDark ? "mb-4 text-amber-500" : "mb-4 text-emerald-500"}>
+        <Award
+          className={`w-12 h-12 inline-block ${isDark ? "drop-shadow-[0_0_15px_rgba(245,158,11,0.5)]" : "drop-shadow-md"}`}
+        />
+      </div>
+      <h3
+        className={
+          isDark
+            ? "font-playfair text-2xl text-white mb-2 drop-shadow-lg"
+            : "font-semibold text-2xl text-zinc-900 mb-2"
+        }
       >
-        {isNavigating && <Loader2 className="h-3 w-3 animate-spin" />}
-        Go to Dashboard
-      </button>
-      <button 
-        onClick={onEdit} 
-        disabled={isNavigating}
-        className="text-sm text-slate-400 hover:text-white transition-colors disabled:opacity-50"
-      >
-        Edit application
-      </button>
-    </div>
-  </div>
-);
+        {isCompletion ? "Profile Updated!" : "Thanks — application received"}
+      </h3>
+      <p className={isDark ? "text-slate-200 mb-6" : "text-zinc-600 mb-6"}>
+        {isCompletion
+          ? "Your profile has been updated successfully. You're all set to start connecting with clients!"
+          : "Our team will review your documents and contact you within 3 business days for verification."}
+      </p>
+      <div className="flex gap-4 justify-center">
+        <button
+          onClick={onGoDashboard}
+          disabled={isNavigating}
+          className={
+            isDark
+              ? "text-sm border-b border-emerald-400/50 pb-1 text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50 flex items-center gap-2"
+              : "text-sm border-b border-emerald-600/50 pb-1 text-emerald-600 hover:text-emerald-500 transition-colors disabled:opacity-50 flex items-center gap-2"
+          }
+        >
+          {isNavigating && <Loader2 className="h-3 w-3 animate-spin" />}
+          Go to Dashboard
+        </button>
+        <button
+          onClick={onEdit}
+          disabled={isNavigating}
+          className={
+            isDark
+              ? "text-sm text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+              : "text-sm text-zinc-400 hover:text-zinc-900 transition-colors disabled:opacity-50"
+          }
+        >
+          {isCompletion ? "Make more changes" : "Edit application"}
+        </button>
+      </div>
+    </motion.div>
+  );
+};
 
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 
-const ProfessionalForm: React.FC<Props> = ({ onBack, onSubmit, onAuthSuccess }) => {
-  // React Hook Form with Zod validation
-  const {
-    register,
-    control,
-    handleSubmit: rhfHandleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<FormData>({
-    resolver: zodResolver(professionalOnboardingSchema),
-    defaultValues: {
-      profession: '',
-      companyName: '',
-      licenseNumber: '',
-    },
-  });
+const ProfessionalForm: React.FC<Props> = ({
+  mode = "onboarding",
+  variant = "dark",
+  initialData,
+  onBack,
+  onSubmit,
+  onSuccess,
+  onAuthSuccess,
+}) => {
+  const router = useRouter();
+  const storageKey = STORAGE_KEYS[mode];
+  const theme = createTheme(variant);
 
-  // File state (kept separate as files are complex objects)
-  const [certificates, setCertificates] = useState<File[] | null>(null);
-  const [idDocuments, setIdDocuments] = useState<File[] | null>(null);
+  // ========================================
+  // STATE
+  // ========================================
+
+  // Wizard step state
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [direction, setDirection] = useState(0); // For animation direction
+
+  // Form data state - merge initialData with localStorage draft
+  const [formData, setFormData] = useState<Partial<ProfessionalWizardData>>(
+    () => {
+      // Start with initial data if provided (completion mode)
+      const baseData: Partial<ProfessionalWizardData> = initialData
+        ? {
+            ...initialData,
+            // Don't restore File objects from initialData
+            certificates: [],
+            idDocuments: [],
+          }
+        : {
+            profession: "",
+            companyName: "",
+            licenseNumber: "",
+            certificates: [],
+            idDocuments: [],
+          };
+
+      // Try to restore from localStorage (may have more recent edits)
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            // Merge with base data, localStorage takes precedence for edited fields
+            return {
+              ...baseData,
+              ...parsed,
+              certificates: [],
+              idDocuments: [],
+            };
+          } catch {
+            // Invalid saved data, use base
+          }
+        }
+      }
+      return baseData;
+    }
+  );
 
   // UI state
-  const [toast, setToast] = useState<ToastState | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [navigating, setNavigating] = useState(false);
 
-  // Handle navigation to dashboard with hard refresh
-  const handleGoDashboard = useCallback(async () => {
-    setNavigating(true);
-    await new Promise(resolve => setTimeout(resolve, 4000));
-    window.location.href = '/professional-portal/dashboard';
-  }, []);
+  // ========================================
+  // COMPUTED VALUES
+  // ========================================
 
-  // Auto-dismiss toast
+  // Get active steps based on selected profession
+  const activeSteps = useMemo(() => getActiveSteps(formData), [formData]);
+
+  // Current step
+  const currentStep = activeSteps[currentStepIndex];
+
+  // Progress indicator steps (for UI)
+  const progressSteps = useMemo(
+    () =>
+      activeSteps.map((step) => ({
+        id: step.id,
+        label: step.label,
+        description: step.description,
+        optional: step.optional,
+      })),
+    [activeSteps]
+  );
+
+  // ========================================
+  // PERSISTENCE
+  // ========================================
+
+  // Save to localStorage when form data changes (excluding files)
   useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 6000);
-    return () => clearTimeout(timer);
-  }, [toast]);
-
-  const showToast = useCallback((type: ToastType, message: string) => {
-    setToast({ type, message });
-  }, []);
-
-  // File handlers
-  const onCertificatesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files ? Array.from(e.target.files) : [];
-    setCertificates(files.length ? files : null);
-  };
-
-  const onIdDocumentsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files ? Array.from(e.target.files) : [];
-    setIdDocuments(files.length ? files : null);
-  };
-
-  const removeCertificate = (index: number) => {
-    if (!certificates) return;
-    const next = certificates.filter((_, i) => i !== index);
-    setCertificates(next.length ? next : null);
-  };
-
-  const removeIdDocument = (index: number) => {
-    if (!idDocuments) return;
-    const next = idDocuments.filter((_, i) => i !== index);
-    setIdDocuments(next.length ? next : null);
-  };
-
-  // Upload helper
-  const uploadFiles = async (files: File[] | null, fieldName: string): Promise<string[]> => {
-    if (!files || files.length === 0) return [];
-    
-    const form = new FormData();
-    files.forEach((f) => form.append(fieldName, f));
-    
-    const res = await fetch('/api/onboarding/uploads', { method: 'POST', body: form });
-    
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      throw new Error(txt || `Upload failed with ${res.status}`);
+    if (typeof window !== "undefined" && formData.profession) {
+      const dataToSave = {
+        ...formData,
+        certificates: undefined,
+        idDocuments: undefined,
+        storeData: formData.storeData,
+      };
+      localStorage.setItem(storageKey, JSON.stringify(dataToSave));
     }
-    
-    const json = await res.json();
-    const uploaded = (json.uploaded && json.uploaded[fieldName]) 
-      ? json.uploaded[fieldName].map((i: { url: string }) => i.url) 
-      : [];
-    return uploaded;
+  }, [formData, storageKey]);
+
+  // Clear localStorage on successful submission
+  const clearSavedData = useCallback(() => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(storageKey);
+    }
+  }, [storageKey]);
+
+  // ========================================
+  // NAVIGATION
+  // ========================================
+
+  // Track if we should submit on next render (to avoid stale closure)
+  const [shouldSubmit, setShouldSubmit] = useState(false);
+
+  const handleNext = useCallback(() => {
+    if (currentStepIndex < activeSteps.length - 1) {
+      setDirection(1);
+      setCurrentStepIndex((prev) => prev + 1);
+    } else {
+      // Last step - trigger submission
+      setShouldSubmit(true);
+    }
+  }, [currentStepIndex, activeSteps.length]);
+
+  const handleBack = useCallback(() => {
+    if (currentStepIndex > 0) {
+      setDirection(-1);
+      setCurrentStepIndex((prev) => prev - 1);
+    } else if (onBack) {
+      // First step - go back to role selection (onboarding mode)
+      onBack();
+    } else if (mode === "completion") {
+      // In completion mode, go back to dashboard
+      router.push("/professional-portal/dashboard");
+    }
+  }, [currentStepIndex, onBack, mode, router]);
+
+  const handleStepClick = useCallback(
+    (stepIndex: number) => {
+      if (stepIndex < currentStepIndex) {
+        setDirection(-1);
+        setCurrentStepIndex(stepIndex);
+      }
+    },
+    [currentStepIndex]
+  );
+
+  // ========================================
+  // FORM DATA UPDATES
+  // ========================================
+
+  const handleUpdate = useCallback(
+    (updates: Partial<ProfessionalWizardData>) => {
+      setFormData((prev) => ({ ...prev, ...updates }));
+
+      // If profession changed, we might need to recalculate steps
+      // Reset to appropriate step if current step is no longer valid
+      if (updates.profession !== undefined) {
+        const newActiveSteps = getActiveSteps({ ...formData, ...updates });
+        if (currentStepIndex >= newActiveSteps.length) {
+          setCurrentStepIndex(newActiveSteps.length - 1);
+        }
+      }
+    },
+    [formData, currentStepIndex]
+  );
+
+  // ========================================
+  // TRIGGER SUBMISSION
+  // ========================================
+
+  useEffect(() => {
+    if (shouldSubmit && !isSubmitting) {
+      setShouldSubmit(false);
+      handleSubmitForm();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldSubmit, isSubmitting]);
+
+  // ========================================
+  // FILE UPLOAD HELPER
+  // ========================================
+
+  const uploadFiles = async (
+    files: File[],
+    fieldName: string,
+    signal?: AbortSignal,
+    onProgress?: (uploaded: number, total: number, fileName: string) => void
+  ): Promise<string[]> => {
+    if (files.length === 0) return [];
+
+    const urls: string[] = [];
+    const totalFiles = files.length;
+    let uploadedIndex = 0;
+
+    for (const file of files) {
+      if (signal?.aborted) {
+        throw new DOMException("Upload cancelled", "AbortError");
+      }
+
+      onProgress?.(uploadedIndex, totalFiles, file.name);
+
+      const form = new FormData();
+      form.append(fieldName, file);
+
+      try {
+        const res = await fetch(API_ROUTES.onboardingUploads, {
+          method: "POST",
+          body: form,
+          signal,
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text().catch(() => "");
+          throw new Error(
+            errorText || `Upload failed with status ${res.status}`
+          );
+        }
+
+        const json = await res.json();
+        const uploadedUrl = json.uploaded?.[fieldName]?.[0]?.url;
+
+        if (uploadedUrl) {
+          urls.push(uploadedUrl);
+        } else {
+          throw new Error("No URL returned from server");
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          throw err;
+        }
+        console.error(`Failed to upload ${file.name}:`, err);
+        toast.error(`Failed to upload "${file.name}"`);
+      }
+
+      uploadedIndex++;
+    }
+
+    onProgress?.(totalFiles, totalFiles, "");
+    return urls;
   };
 
-  // Form submission handler
-  const onFormSubmit = async (formData: FormData) => {
+  // ========================================
+  // FORM SUBMISSION
+  // ========================================
+
+  const handleSubmitForm = async () => {
+    setIsSubmitting(true);
+    const toastId = toast.loading("Preparing your application…");
+
     try {
-      showToast('info', 'Uploading documents and submitting your application…');
+      // Extract files from form data
+      const certificateFiles = formData.certificates?.map((c) => c.file) ?? [];
+      const idDocumentFiles = formData.idDocuments?.map((d) => d.file) ?? [];
+      const totalFiles = certificateFiles.length + idDocumentFiles.length;
 
       // Upload files
       let certificatesUrls: string[] = [];
       let idDocumentsUrls: string[] = [];
 
-      if (certificates?.length) {
-        certificatesUrls = await uploadFiles(certificates, 'certificates');
+      if (certificateFiles.length > 0) {
+        toast.loading("Uploading certificates…", { id: toastId });
+        certificatesUrls = await uploadFiles(
+          certificateFiles,
+          "certificates",
+          undefined,
+          (uploaded, total, fileName) => {
+            if (fileName) {
+              toast.loading(
+                `Uploading certificate ${uploaded + 1}/${total}: ${fileName}`,
+                { id: toastId }
+              );
+            }
+          }
+        );
       }
-      if (idDocuments?.length) {
-        idDocumentsUrls = await uploadFiles(idDocuments, 'idDocuments');
+
+      if (idDocumentFiles.length > 0) {
+        toast.loading("Uploading ID documents…", { id: toastId });
+        idDocumentsUrls = await uploadFiles(
+          idDocumentFiles,
+          "idDocuments",
+          undefined,
+          (uploaded, total, fileName) => {
+            if (fileName) {
+              toast.loading(
+                `Uploading ID document ${uploaded + 1}/${total}: ${fileName}`,
+                { id: toastId }
+              );
+            }
+          }
+        );
+      }
+
+      // Check for partial upload success
+      const uploadedCount = certificatesUrls.length + idDocumentsUrls.length;
+      if (totalFiles > 0 && uploadedCount < totalFiles) {
+        toast.loading(
+          `Submitting application (${uploadedCount}/${totalFiles} files uploaded)…`,
+          { id: toastId }
+        );
+      } else {
+        toast.loading("Submitting your application…", { id: toastId });
       }
 
       // Construct payload
       const payload: ProfessionalOnboardingData = {
-        role: 'professional',
-        profession: formData.profession,
-        companyName: formData.companyName,
-        licenseNumber: formData.licenseNumber,
-        yearsExperience: 0,
-        portfolio: '',
-        website: '',
-        bio: '',
+        role: "professional",
+        profession: formData.profession || "other",
+        companyName: formData.companyName || "",
+        licenseNumber: formData.licenseNumber || "",
+        yearsExperience: formData.yearsExperience,
+        website: formData.website,
+        bio: formData.bio,
         certificatesUrls,
         idDocumentsUrls,
+        // Include store data for suppliers
+        ...(formData.storeData && { storeData: formData.storeData }),
+        // Include EARB number for real estate professionals
+        ...(formData.earbNumber && { earbNumber: formData.earbNumber }),
       };
 
       await onSubmit(payload);
-      
-      setSuccess(true);
-      showToast('success', 'Application received. You will be contacted for verification.');
-      onAuthSuccess(payload);
 
+      // Success!
+      clearSavedData();
+      setSuccess(true);
+
+      // Show appropriate success message based on mode
+      if (mode === "completion") {
+        toast.success("Profile updated successfully!", { id: toastId });
+      } else {
+        toast.success(
+          "Application received. You will be contacted for verification.",
+          { id: toastId }
+        );
+      }
+
+      // Call success callback (support both new and deprecated)
+      if (onSuccess) {
+        onSuccess(payload);
+      } else if (onAuthSuccess) {
+        onAuthSuccess(payload);
+      }
     } catch (err) {
-      console.error('Professional submit error', err);
-      const message = err instanceof Error ? err.message : 'Failed to submit. Please try again.';
-      showToast('error', message);
+      if (err instanceof Error && err.name === "AbortError") {
+        toast.dismiss(toastId);
+        return;
+      }
+
+      console.error("Professional submit error", err);
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Failed to submit. Please try again.";
+      toast.error(message, { id: toastId });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
+  // ========================================
+  // POST-SUCCESS NAVIGATION
+  // ========================================
+
+  const handleGoDashboard = useCallback(() => {
+    setNavigating(true);
+    if (formData.storeData) {
+      router.push("/professional-portal/settings/stores");
+    } else {
+      router.push("/professional-portal/dashboard");
+    }
+  }, [formData.storeData, router]);
+
+  // ========================================
+  // RENDER SUCCESS STATE
+  // ========================================
+
   if (success) {
+    // In completion mode, skip success card and go directly to dashboard
+    if (mode === "completion") {
+      return (
+        <SuccessCard
+          mode={mode}
+          variant={variant}
+          onEdit={() => setSuccess(false)}
+          onGoDashboard={handleGoDashboard}
+          isNavigating={navigating}
+        />
+      );
+    }
+
     return (
-      <SuccessCard 
-        onEdit={() => setSuccess(false)} 
+      <SuccessCard
+        mode={mode}
+        variant={variant}
+        onEdit={() => setSuccess(false)}
         onGoDashboard={handleGoDashboard}
         isNavigating={navigating}
       />
     );
   }
 
+  // ========================================
+  // RENDER STEP CONTENT
+  // ========================================
+
+  const renderStepContent = () => {
+    const stepProps = {
+      data: formData,
+      onUpdate: handleUpdate,
+      onNext: handleNext,
+      onBack: handleBack,
+      isFirstStep: currentStepIndex === 0,
+      isLastStep: currentStepIndex === activeSteps.length - 1,
+      isSubmitting,
+    };
+
+    switch (currentStep?.id) {
+      case "profession":
+        return <ProfessionStep {...stepProps} />;
+      case "details":
+        return <DetailsStep {...stepProps} />;
+      case "store":
+        return <StoreStep {...stepProps} />;
+      case "credentials":
+        return <CredentialsStep {...stepProps} />;
+      case "documents":
+        return <DocumentsStep {...stepProps} />;
+      case "review":
+        return <ReviewStep {...stepProps} />;
+      default:
+        return <ProfessionStep {...stepProps} />;
+    }
+  };
+
+  // ========================================
+  // MAIN RENDER
+  // ========================================
+
   return (
-    <form onSubmit={rhfHandleSubmit(onFormSubmit)} className="max-w-md mx-auto">
-      {/* Toast notification */}
-      {toast && (
-        <div className="mb-4">
-          <Toast type={toast.type} message={toast.message} />
+    <div className={theme.container}>
+      {/* Progress Indicator */}
+      <div className="mb-8">
+        {/* Desktop: Full step progress */}
+        <div className="hidden md:block">
+          <StepProgress
+            steps={progressSteps}
+            currentStep={currentStepIndex}
+            onStepClick={handleStepClick}
+            allowClickOnCompleted
+            theme={variant}
+          />
         </div>
-      )}
 
-      {/* Gold themed header */}
-      <GoldHeader />
-
-      {/* Form fields */}
-      <div className="space-y-6">
-        {/* Profession */}
-        <FormField label="Profession" required error={errors.profession?.message}>
-          <Controller
-            name="profession"
-            control={control}
-            render={({ field }) => (
-              <Combobox
-                options={PROFESSION_OPTIONS}
-                value={field.value}
-                onChange={field.onChange}
-                placeholder="Search or select profession..."
-                searchPlaceholder="Type to search professions..."
-                emptyMessage="No matching profession found."
-                className={cn(
-                  "w-full bg-white/5 border text-white hover:bg-white/10",
-                  errors.profession ? "border-red-500/50" : "border-white/30"
-                )}
-              />
-            )}
+        {/* Mobile: Compact progress bar */}
+        <div className="md:hidden">
+          <CompactStepProgress
+            currentStep={currentStepIndex}
+            totalSteps={activeSteps.length}
+            variant={variant}
           />
-        </FormField>
-
-        {/* Company Name */}
-        <FormField label="Company Name" required error={errors.companyName?.message}>
-          <input
-            type="text"
-            placeholder="Your Firm's Legal Name"
-            {...register('companyName')}
-            className={cn(
-              "w-full bg-white/5 p-3 text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors rounded-md border",
-              errors.companyName ? "border-red-500/50" : "border-white/30"
-            )}
-          />
-        </FormField>
-
-        {/* License Number */}
-        <FormField 
-          label="NCA / Board License #" 
-          required
-          error={errors.licenseNumber?.message}
-          hint={
-            <span className="text-[10px] text-amber-400 flex items-center gap-1 font-normal normal-case tracking-normal">
-              <ShieldCheck className="h-3 w-3" />
-              Required for Verification
-            </span>
-          }
-        >
-          <input
-            type="text"
-            placeholder="e.g. NCA/1234/5678"
-            {...register('licenseNumber')}
-            className={cn(
-              "w-full bg-white/5 p-3 text-white placeholder:text-slate-400 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors rounded-md border",
-              errors.licenseNumber ? "border-red-500/50" : "border-white/30"
-            )}
-          />
-        </FormField>
-
-        {/* Certificates upload */}
-        <FormField label="Certificates (NCA / Board) — optional">
-          <input
-            type="file"
-            accept=".pdf,.jpg,.jpeg,.png"
-            multiple
-            onChange={onCertificatesChange}
-            className="block w-full text-sm text-white bg-white/5 p-2 rounded-md border border-white/30 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 file:cursor-pointer file:transition-colors"
-          />
-          <div className="mt-2 space-y-2">
-            {certificates?.length ? (
-              certificates.map((f, i) => (
-                <FileListItem key={`${f.name}-${i}`} file={f} onRemove={() => removeCertificate(i)} />
-              ))
-            ) : (
-              <div className="text-xs text-slate-500 italic">
-                No certificates uploaded — you can submit and upload later.
-              </div>
-            )}
-          </div>
-        </FormField>
-
-        {/* ID documents upload */}
-        <FormField label="ID / Registration Documents — optional">
-          <input
-            type="file"
-            accept=".pdf,.jpg,.jpeg,.png"
-            multiple
-            onChange={onIdDocumentsChange}
-            className="block w-full text-sm text-white bg-white/5 p-2 rounded-md border border-white/30 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 file:cursor-pointer file:transition-colors"
-          />
-          <div className="mt-2 space-y-2">
-            {idDocuments?.length ? (
-              idDocuments.map((f, i) => (
-                <FileListItem key={`${f.name}-${i}`} file={f} onRemove={() => removeIdDocument(i)} />
-              ))
-            ) : (
-              <div className="text-xs text-slate-500 italic">
-                No ID documents uploaded — you can submit and upload later.
-              </div>
-            )}
-          </div>
-        </FormField>
-
-        {/* Actions */}
-        <div className="pt-4 space-y-4">
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className={cn(
-              "w-full font-bold py-3.5 px-6 rounded-lg text-white",
-              "bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600",
-              "hover:from-amber-400 hover:via-yellow-400 hover:to-amber-500",
-              "transition-all duration-200 shadow-lg",
-              "hover:shadow-amber-500/30 hover:scale-[1.02]",
-              "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-            )}
-          >
-            {isSubmitting ? (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Submitting…
-              </span>
-            ) : (
-              <span className="flex items-center justify-center gap-2">
-                <ShieldCheck className="h-5 w-5" />
-                Apply for Verification
-              </span>
-            )}
-          </button>
-          
-          <button 
-            type="button" 
-            onClick={onBack} 
-            className="w-full text-center text-slate-400 text-xs hover:text-white transition-colors py-2"
-          >
-            ← Go Back
-          </button>
         </div>
       </div>
-    </form>
+
+      {/* Step Content with Animation */}
+      <AnimatePresence mode="wait" custom={direction}>
+        <motion.div
+          key={currentStep?.id}
+          custom={direction}
+          variants={stepVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{
+            x: { type: "spring", stiffness: 300, damping: 30 },
+            opacity: { duration: 0.2 },
+          }}
+        >
+          {renderStepContent()}
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Loading Overlay */}
+      {isSubmitting && (
+        <div className={theme.loadingOverlay}>
+          <div className="flex flex-col items-center gap-3">
+            <Loader2
+              className={`h-8 w-8 animate-spin ${theme.loadingSpinner}`}
+            />
+            <span className={theme.loadingText}>
+              {mode === "completion"
+                ? "Updating Profile..."
+                : "Creating Profile..."}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 

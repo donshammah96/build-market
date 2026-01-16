@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@repo/db';
-import { PropertyRepository } from '@/app/lib/repositories/property.repository';
+import { PropertyRepository, PropertyFilters } from '@/app/lib/repositories/property.repository';
 import { checkRateLimit, getRateLimitIdentifier, RateLimits } from '@/app/lib/rate-limit';
 import { env } from '@/app/lib/env';
 import {
@@ -38,10 +38,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // Parse and validate query parameters
   const type = searchParams.get('type') as PropertyType | null;
   const category = searchParams.get('category') as PropertyCategory | null;
+  const county = searchParams.get('county')?.trim().toUpperCase() || undefined;
+  const constituency = searchParams.get('constituency')?.trim().slice(0, 100) || undefined;
+  const neighbourhood = searchParams.get('neighbourhood')?.trim().slice(0, 100) || undefined;
   const location = searchParams.get('location')?.trim().slice(0, 100) || undefined;
   const minPrice = searchParams.get('minPrice') ? Number(searchParams.get('minPrice')) : undefined;
   const maxPrice = searchParams.get('maxPrice') ? Number(searchParams.get('maxPrice')) : undefined;
   const minBedrooms = searchParams.get('beds') ? Number(searchParams.get('beds')) : undefined;
+  const minBathrooms = searchParams.get('baths') ? Number(searchParams.get('baths')) : undefined;
+  const verified = searchParams.get('verified') === 'true' ? true : 
+                   searchParams.get('verified') === 'false' ? false : undefined;
   const featured = searchParams.get('featured') === 'true' ? true : undefined;
   const sortBy = (searchParams.get('sortBy') || 'newest') as 'price_asc' | 'price_desc' | 'newest' | 'oldest';
   const limit = Math.min(Number(searchParams.get('limit')) || 20, 50);
@@ -70,10 +76,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const result = await repo.findMany({
         type: type || undefined,
         category: category || undefined,
+        county: county as PropertyFilters['county'],
+        constituency,
+        neighbourhood,
         location,
         minPrice,
         maxPrice,
         minBedrooms,
+        minBathrooms,
+        verified,
         featured,
         sortBy,
         limit,
@@ -88,19 +99,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           ? `${property.agent.user.firstName || ''} ${property.agent.user.lastName || ''}`.trim() || property.agent.companyName
           : property.agent?.companyName || 'Unknown';
 
+        // Get main image URL from images relation
+        const mainImage = property.images?.find((img) => img.isMain) || property.images?.[0];
+        const imageUrl = mainImage?.url || '/placeholder-property.jpg';
+
         return {
           id: property.id,
           title: property.title,
           price: Number(property.price),
           currency: property.currency,
           location: property.location,
+          county: property.county,
           type: property.type,
           category: property.category,
           status: property.status,
           beds: property.bedrooms || undefined,
           baths: property.bathrooms || undefined,
           area: property.areaSqFt || undefined,
-          image: property.images[0] || '/placeholder-property.jpg',
+          image: imageUrl,
+          images: property.images?.map((img) => ({
+            id: img.id,
+            url: img.url,
+            caption: img.caption,
+            isMain: img.isMain,
+            sortOrder: img.sortOrder,
+          })),
           featured: property.featured,
           agent: property.agent ? {
             name: agentName,
@@ -114,7 +137,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         correlationId,
         count: properties.length,
         total: result.total,
-        filters: { type, category, location, minPrice, maxPrice, sortBy },
+        filters: { type, category, county, location, minPrice, maxPrice, minBedrooms, minBathrooms, verified, featured, sortBy },
       });
 
       return {

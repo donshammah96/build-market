@@ -1,19 +1,20 @@
-import { NextRequest } from 'next/server';
-import { prisma } from '@repo/db';
-import { withAuth } from '@/app/lib/api-middleware';
-import { apiError, apiSuccess, HttpStatus } from '@/app/lib/api-response';
-import { 
-  calculateProfileCompletion, 
-  getMissingFieldLabels 
-} from '@/app/lib/profile-completion';
-import { 
-  StructuredLogger, 
+import { NextRequest } from "next/server";
+import { prisma } from "@repo/db";
+import { withAuth } from "@/app/lib/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api-response";
+import {
+  calculateProfileCompletion,
+  getMissingFieldLabels,
+} from "@/app/lib/profile-completion";
+import {
+  StructuredLogger,
   CorrelationIdManager,
   withFallback,
   withTimeout,
-} from '@repo/resilience';
+} from "@repo/resilience";
+import { ProfessionalProfile } from "@prisma/client";
 
-const logger = new StructuredLogger('profile-api');
+const logger = new StructuredLogger("profile-api");
 
 /**
  * GET /api/user/profile
@@ -26,7 +27,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
   CorrelationIdManager.set(correlationId);
 
   try {
-    logger.info('Fetching user profile', { userId: dbUserId, correlationId });
+    logger.info("Fetching user profile", { userId: dbUserId, correlationId });
 
     // Fetch user with their profile based on role with timeout
     const { value: user, usedFallback } = await withFallback(
@@ -65,7 +66,6 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
                     companyName: true,
                     licenseNumber: true,
                     yearsExperience: true,
-                    servicesOffered: true,
                     portfolioUrl: true,
                     website: true,
                     bio: true,
@@ -81,7 +81,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
             });
           },
           10000, // 10 second timeout
-          'fetch-user-profile'
+          "fetch-user-profile"
         );
       },
       {
@@ -90,18 +90,25 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     );
 
     if (usedFallback) {
-      logger.warn('Profile fetch used fallback', { userId: dbUserId, correlationId });
+      logger.warn("Profile fetch used fallback", {
+        userId: dbUserId,
+        correlationId,
+      });
     }
 
     if (!user) {
-      logger.info('User not found in database', { userId: dbUserId, correlationId });
-      return apiError('User not found', HttpStatus.NOT_FOUND);
+      logger.info("User not found in database", {
+        userId: dbUserId,
+        correlationId,
+      });
+      return apiError("User not found", HttpStatus.NOT_FOUND);
     }
 
     // Get the appropriate profile based on role
-    const profile = user.role === 'client' 
-      ? user.clientProfile 
-      : user.professionalProfile;
+    const profile =
+      user.role === "client"
+        ? user.clientProfile
+        : (user.professionalProfile as ProfessionalProfile);
 
     // Calculate profile completion
     const completion = calculateProfileCompletion(
@@ -110,13 +117,13 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         lastName: user.lastName,
         phone: user.phone,
         avatar: user.avatar,
-        role: user.role as 'client' | 'professional',
+        role: user.role as "client" | "professional",
       },
       profile
     );
 
-    logger.info('Profile fetched successfully', { 
-      userId: dbUserId, 
+    logger.info("Profile fetched successfully", {
+      userId: dbUserId,
       correlationId,
       isComplete: completion.isComplete,
       percentage: completion.percentage,
@@ -143,7 +150,9 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
           percentage: completion.percentage,
           isComplete: completion.isComplete,
           missingRequired: completion.missingRequired,
-          missingRequiredLabels: getMissingFieldLabels(completion.missingRequired),
+          missingRequiredLabels: getMissingFieldLabels(
+            completion.missingRequired
+          ),
           missingOptional: completion.missingOptional,
           filledFields: completion.filledFields,
           requiredPercentage: completion.requiredPercentage,
@@ -153,17 +162,20 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       HttpStatus.OK
     );
   } catch (err) {
-    logger.error('Profile fetch error', err instanceof Error ? err : new Error(String(err)), { 
-      userId: dbUserId, 
-      correlationId 
-    });
+    logger.error(
+      "Profile fetch error",
+      err instanceof Error ? err : new Error(String(err)),
+      {
+        userId: dbUserId,
+        correlationId,
+      }
+    );
     return apiError(
-      'Failed to fetch profile. Please try again.',
+      "Failed to fetch profile. Please try again.",
       HttpStatus.INTERNAL_SERVER_ERROR
     );
   }
 });
-
 
 /**
  * PATCH /api/user/profile
@@ -190,14 +202,14 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
         phone: true,
         avatar: true,
         role: true,
-      }
+      },
     });
 
     return apiSuccess({ success: true, user: updatedUser });
   } catch (err) {
-    console.error('Profile update error:', err);
+    console.error("Profile update error:", err);
     return apiError(
-      'Failed to update profile. Please try again.',
+      "Failed to update profile. Please try again.",
       HttpStatus.INTERNAL_SERVER_ERROR
     );
   }

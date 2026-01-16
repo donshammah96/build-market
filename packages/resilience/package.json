@@ -17,7 +17,8 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "lru-cache": "^11.2.2"
+    "lru-cache": "^11.2.2",
+    "@repo/redis": "workspace:*"
   },
   "devDependencies": {
     "@repo/typescript-config": "0.0.0",
