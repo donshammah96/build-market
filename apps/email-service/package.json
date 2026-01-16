@@ -11,12 +11,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@repo/kafka": "0.0.1",
-    "@repo/types": "0.0.1",
+    "@repo/kafka": "workspace:*",
+    "@repo/types": "workspace:*",
     "nodemailer": "^7.0.6"
   },
   "devDependencies": {
-    "@repo/typescript-config": "0.0.0",
+    "@repo/typescript-config": "workspace:*",
     "@types/node": "^24.8.1",
     "@types/nodemailer": "^7.0.1"
   }
