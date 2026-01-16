@@ -1,11 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { safeAction } from "./shared";
-import { prisma } from "@repo/db";
 import { assertAdmin, type SystemSettingsInput } from "./shared";
 import { SystemSettingsSchema } from "./types";
-
+import { prisma } from "@repo/db";
 // ============================================================================
 // Types
 // ============================================================================
@@ -95,8 +93,8 @@ export async function updateSystemSettings(data: SystemSettingsInput) {
       },
       timestamp: new Date().toISOString(),
     };
-  } catch (error) {
-    console.error("Failed to update settings:", error);
+  } catch {
+    console.error("Failed to update settings:");
     return { success: false, error: "Failed to update settings" };
   }
 }
@@ -112,7 +110,7 @@ export async function clearSystemCache() {
       success: true,
       timestamp: new Date().toISOString(),
     };
-  } catch (error) {
+  } catch {
     return { success: false, error: "Failed to clear cache" };
   }
 }

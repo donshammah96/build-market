@@ -38,12 +38,16 @@ export async function getProfessionals(page = 1, limit = 10, search = "") {
     const valid = PaginationSchema.parse({ page, limit, search });
     const skip = (valid.page - 1) * valid.limit;
 
-    const where: Prisma.ProfessionalProfileWhereInput = valid.search ? {
-      OR: [
-        { companyName: { contains: valid.search, mode: "insensitive" } },
-        { user: { email: { contains: valid.search, mode: "insensitive" } } },
-      ],
-    } : {};
+    const where: Prisma.ProfessionalProfileWhereInput = valid.search
+      ? {
+          OR: [
+            { companyName: { contains: valid.search, mode: "insensitive" } },
+            {
+              user: { email: { contains: valid.search, mode: "insensitive" } },
+            },
+          ],
+        }
+      : {};
 
     const [professionals, total] = await Promise.all([
       prisma.professionalProfile.findMany({
@@ -63,7 +67,7 @@ export async function getProfessionals(page = 1, limit = 10, search = "") {
         page: valid.page,
         limit: valid.limit,
         totalPages: Math.ceil(total / valid.limit),
-      }
+      },
     };
   });
 }
@@ -80,14 +84,22 @@ export async function getProfessionalDetails(userId: string) {
         certificates: true,
         portfolios: true,
         reviews: true,
-        orders: {
+        services: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            icon: true,
+          },
+        },
+        projects: {
           take: 10,
-          orderBy: { createdAt: 'desc' },
-          include: { payments: true }
-        }
-      }
+          orderBy: { createdAt: "desc" },
+          include: { client: true },
+        },
+      },
     });
-    
+
     if (!professional) throw new Error("Professional profile not found");
     return professional;
   });
@@ -108,13 +120,13 @@ export async function verifyProfessional(userId: string) {
       data: { verified: true },
       include: {
         user: {
-          select: { email: true, firstName: true, lastName: true }
-        }
-      }
+          select: { email: true, firstName: true, lastName: true },
+        },
+      },
     });
-    
+
     revalidatePath("/professionals");
-    
+
     // Return full entity for optimistic updates
     return {
       userId: professional.userId,
@@ -136,13 +148,13 @@ export async function rejectProfessional(userId: string) {
       data: { verified: false },
       include: {
         user: {
-          select: { email: true, firstName: true, lastName: true }
-        }
-      }
+          select: { email: true, firstName: true, lastName: true },
+        },
+      },
     });
-    
+
     revalidatePath("/professionals");
-    
+
     // Return full entity for optimistic updates
     return {
       userId: professional.userId,
@@ -161,7 +173,10 @@ export async function rejectProfessional(userId: string) {
  * Updates professional profile fields.
  * Returns the updated profile for optimistic UI updates.
  */
-export async function updateProfessionalProfile(userId: string, formData: unknown) {
+export async function updateProfessionalProfile(
+  userId: string,
+  formData: unknown
+) {
   return safeAction("updateProfessionalProfile", async () => {
     const data = UpdateProfileSchema.parse(formData);
 
@@ -175,16 +190,16 @@ export async function updateProfessionalProfile(userId: string, formData: unknow
         yearsExperience: true,
         bio: true,
         website: true,
-        servicesOffered: true,
+        services: true,
         city: true,
         county: true,
         country: true,
         verified: true,
-      }
+      },
     });
 
     revalidatePath(`/professionals/${userId}`);
-    
+
     // Return updated entity for optimistic updates
     return {
       updated: true,
@@ -205,13 +220,13 @@ export async function deleteCertificate(certificateId: string) {
         id: true,
         name: true,
         professionalId: true,
-      }
+      },
     });
-    
+
     revalidatePath(`/professionals/${certificate.professionalId}`);
-    
+
     // Return deleted certificate info for optimistic updates
-    return { 
+    return {
       deleted: true,
       certificateId: certificate.id,
       certificateName: certificate.name,
