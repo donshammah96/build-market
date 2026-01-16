@@ -5,8 +5,55 @@ import { usePathname } from "next/navigation";
 import { ChevronRight, Home } from "lucide-react";
 import { Fragment } from "react";
 
-export function Breadcrumbs() {
+export interface BreadcrumbItem {
+  label: string;
+  href?: string;
+}
+
+export interface BreadcrumbsProps {
+  items?: BreadcrumbItem[];
+}
+
+export function Breadcrumbs({ items }: BreadcrumbsProps = {}) {
   const pathname = usePathname();
+  
+  // If custom items are provided, use them
+  if (items && items.length > 0) {
+    return (
+      <nav aria-label="Breadcrumb" className="mb-4 flex items-center space-x-2 text-sm text-muted-foreground">
+        <Link 
+          href="/" 
+          className="flex items-center hover:text-foreground transition-colors"
+        >
+          <Home className="h-4 w-4" />
+        </Link>
+        
+        {items.map((item, index) => {
+          const isLast = index === items.length - 1;
+          
+          return (
+            <Fragment key={item.label}>
+              <ChevronRight className="h-4 w-4 text-muted-foreground/50" />
+              {item.href && !isLast ? (
+                <Link
+                  href={item.href}
+                  className="hover:text-foreground transition-colors"
+                >
+                  {item.label}
+                </Link>
+              ) : (
+                <span className={`${isLast ? "font-medium text-foreground" : ""}`}>
+                  {item.label}
+                </span>
+              )}
+            </Fragment>
+          );
+        })}
+      </nav>
+    );
+  }
+
+  // Otherwise, auto-generate from pathname
   const segments = pathname.split("/").filter((segment) => segment !== "");
 
   return (
@@ -24,10 +71,6 @@ export function Breadcrumbs() {
         const path = `/${segments.slice(0, index + 1).join("/")}`;
         const isLast = index === segments.length - 1;
         const displayName = segment.replace(/-/g, " ").replace(/^\w/, c => c.toUpperCase());
-
-        // Don't format UUIDs strictly, but maybe truncate? 
-        // For now, if it looks like a long ID, we might keep it or label it.
-        // Simple capitalization is fine for now.
 
         return (
           <Fragment key={path}>
