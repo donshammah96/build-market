@@ -10,8 +10,8 @@ import ProfessionalForm from "@/components/forms/ProfessionalForm";
 import { Home, Briefcase, ArrowLeft, Loader2, CheckCircle2 } from "lucide-react";
 import { OnboardingData } from '@repo/types';
 import { motion, AnimatePresence } from "framer-motion";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { API_ROUTES } from '@/lib/links';
 
 export default function Onboarding() {
     const { user } = useUser();
@@ -30,7 +30,7 @@ export default function Onboarding() {
     const handleHomeownerSubmit = async (data: OnboardingData) => {
       setSubmitting(true);
       try {
-        const response = await fetch('/api/onboarding', {
+        const response = await fetch(API_ROUTES.onboarding, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ clerkId: user?.id, ...data }),
@@ -40,7 +40,7 @@ export default function Onboarding() {
         
         toast.success('Welcome home! Profile created.');
         router.push('/dashboard');
-      } catch (error) {
+      } catch {
         toast.error('Something went wrong. Please try again.');
       } finally {
         setSubmitting(false);
@@ -50,7 +50,7 @@ export default function Onboarding() {
     const handleProfessionalSubmit = async (data: OnboardingData) => {
       setSubmitting(true);
       try {
-        const response = await fetch('/api/onboarding', {
+        const response = await fetch(API_ROUTES.onboarding, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ clerkId: user?.id, ...data }),
@@ -58,9 +58,28 @@ export default function Onboarding() {
         
         if (!response.ok) throw new Error('Failed to create professional profile');
         
+        // If store data was collected, create the store
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const storeData = (data as any).storeData;
+        if (storeData) {
+          try {
+            const storeResponse = await fetch(API_ROUTES.stores, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(storeData),
+            });
+            
+            if (!storeResponse.ok) {
+              console.error('Failed to create store, but professional profile was created');
+            }
+          } catch (storeError) {
+            console.error('Store creation error:', storeError);
+          }
+        }
+        
         toast.success('Professional account verified!');
         router.push('/professional-portal/dashboard');
-      } catch (error) {
+      } catch {
         toast.error('Could not verify profile. Please try again.');
       } finally {
         setSubmitting(false);
@@ -207,7 +226,16 @@ const StepIndicator = ({ current, stepNumber, label }: { current: number, stepNu
     );
 };
 
-const RoleCard = ({ icon, title, description, onClick, delay, highlight }: any) => (
+interface RoleCardProps {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+  delay: number;
+  highlight?: boolean;
+}
+
+const RoleCard = ({ icon, title, description, onClick, delay, highlight }: RoleCardProps) => (
     <motion.button
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

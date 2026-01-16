@@ -1,8 +1,7 @@
-
 "use client";
 
 import { useState } from "react";
-import { Bell, Check, Loader2 } from "lucide-react";
+import { Bell, Loader2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -35,10 +34,18 @@ export function NotificationsPopover() {
     queryFn: async () => {
       const res = await fetch("/api/notifications");
       if (!res.ok) throw new Error("Failed to fetch notifications");
-      return res.json();
+      const json = await res.json();
+      // API returns { success: true, data: { data: notifications[], unreadCount, pagination } }
+      // Ensure we always return an array, even if the structure is unexpected
+      const notificationsArray = Array.isArray(json.data?.data)
+        ? json.data.data
+        : Array.isArray(json.data)
+          ? json.data
+          : [];
+      return notificationsArray;
     },
     // Refetch every minute to keep notifications fresh
-    refetchInterval: 60000, 
+    refetchInterval: 60000,
   });
 
   const markAsReadMutation = useMutation({
@@ -56,7 +63,10 @@ export function NotificationsPopover() {
     },
   });
 
-  const unreadCount = notifications?.filter((n) => !n.read).length || 0;
+  // Ensure notifications is an array before calling filter
+  const unreadCount = Array.isArray(notifications)
+    ? notifications.filter((n) => !n.read).length
+    : 0;
 
   const handleNotificationClick = (notification: Notification) => {
     if (!notification.read) {
@@ -75,7 +85,11 @@ export function NotificationsPopover() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="text-zinc-500 hover:text-zinc-900 relative">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-zinc-500 hover:text-zinc-900 relative"
+        >
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <span className="absolute top-2.5 right-2.5 h-2 w-2 bg-red-500 rounded-full border border-white" />
@@ -86,9 +100,9 @@ export function NotificationsPopover() {
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100">
           <h4 className="font-semibold text-sm">Notifications</h4>
           {unreadCount > 0 && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               className="h-auto px-2 py-1 text-xs text-zinc-500 hover:text-zinc-900"
               onClick={handleMarkAllRead}
               disabled={markAsReadMutation.isPending}
@@ -119,19 +133,28 @@ export function NotificationsPopover() {
                   )}
                   onClick={() => handleNotificationClick(notification)}
                 >
-                  <div className={cn(
-                    "h-2 w-2 mt-1.5 rounded-full flex-shrink-0",
-                    !notification.read ? "bg-blue-500" : "bg-transparent"
-                  )} />
+                  <div
+                    className={cn(
+                      "h-2 w-2 mt-1.5 rounded-full flex-shrink-0",
+                      !notification.read ? "bg-blue-500" : "bg-transparent"
+                    )}
+                  />
                   <div className="flex-1 space-y-1">
-                    <p className={cn("text-sm font-medium leading-none", !notification.read ? "text-zinc-900" : "text-zinc-600")}>
+                    <p
+                      className={cn(
+                        "text-sm font-medium leading-none",
+                        !notification.read ? "text-zinc-900" : "text-zinc-600"
+                      )}
+                    >
                       {notification.title}
                     </p>
                     <p className="text-xs text-zinc-500 line-clamp-2">
                       {notification.message}
                     </p>
                     <p className="text-[10px] text-zinc-400">
-                      {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                      {formatDistanceToNow(new Date(notification.createdAt), {
+                        addSuffix: true,
+                      })}
                     </p>
                   </div>
                 </button>

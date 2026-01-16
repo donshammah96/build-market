@@ -1,10 +1,9 @@
 'use client';
 
 import Image from 'next/image';
-import { FC } from "react";
+import { FC, memo, useCallback } from "react";
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@clerk/nextjs';
-import { motion } from 'framer-motion';
 import { Card, CardContent } from '../ui/card';
 import {
   Carousel,
@@ -13,8 +12,8 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from '../ui/carousel';
-import { ArrowRight, ChevronRight, ChevronLeft } from 'lucide-react';
-import { cn } from "@/lib/utils";
+import { ArrowRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface Feature {
   title: string;
@@ -25,30 +24,44 @@ interface Feature {
   images?: string[]; 
 }
 
-const FeatureCard: FC<Feature> = ({ title, description, image, imageAlt, href, images }) => {
+const FeatureCard: FC<Feature> = memo(function FeatureCard({ 
+  title, 
+  description, 
+  image, 
+  imageAlt, 
+  href, 
+  images 
+}) {
   const router = useRouter();
   const { isSignedIn } = useAuth();
   
   const allImages = images && images.length > 0 ? [image, ...images] : [image];
   const hasMultipleImages = allImages.length > 1;
 
-  const handleCardClick = () => {
+  const handleCardClick = useCallback(() => {
     if (!isSignedIn) {
       router.push(`/sign-in?redirect_url=${encodeURIComponent(href)}`);
     } else {
       router.push(href);
     }
-  };
+  }, [isSignedIn, router, href]);
 
   return (
-    <motion.div
-      whileHover={{ y: -8 }}
-      transition={{ type: "spring", stiffness: 300 }}
-      className="h-full group"
-    >
+    <div className="h-full group hover-lift">
       <Card 
-        className="h-full flex flex-col border-0 shadow-sm hover:shadow-xl transition-shadow duration-300 bg-white overflow-hidden rounded-2xl cursor-pointer"
+        className={cn(
+          "h-full flex flex-col border-0 shadow-sm bg-white overflow-hidden rounded-2xl cursor-pointer",
+          "transition-shadow duration-300 hover:shadow-xl"
+        )}
         onClick={handleCardClick}
+        role="article"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleCardClick();
+          }
+        }}
       >
         {/* Image Area */}
         <div className="relative h-64 overflow-hidden bg-zinc-100">
@@ -60,17 +73,24 @@ const FeatureCard: FC<Feature> = ({ title, description, image, imageAlt, href, i
                     <div className="relative h-64 w-full">
                       <Image
                         src={img}
-                        alt={`${imageAlt} - ${index}`}
+                        alt={`${imageAlt} - ${index + 1}`}
                         fill
-                        className="object-cover transition-transform duration-700 group-hover:scale-105"
+                        className="object-cover img-zoom"
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        loading="lazy"
                       />
                     </div>
                   </CarouselItem>
                 ))}
               </CarouselContent>
-              {/* Custom Carousel Controls */}
-              <CarouselPrevious className="left-2 bg-white/80 hover:bg-white border-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <CarouselNext className="right-2 bg-white/80 hover:bg-white border-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <CarouselPrevious 
+                className="left-2 bg-white/80 hover:bg-white border-0 opacity-0 group-hover:opacity-100 transition-opacity" 
+                aria-label="Previous image"
+              />
+              <CarouselNext 
+                className="right-2 bg-white/80 hover:bg-white border-0 opacity-0 group-hover:opacity-100 transition-opacity" 
+                aria-label="Next image"
+              />
             </Carousel>
           ) : (
             <div className="relative h-full w-full">
@@ -78,18 +98,23 @@ const FeatureCard: FC<Feature> = ({ title, description, image, imageAlt, href, i
                 src={image}
                 alt={imageAlt}
                 fill
-                className="object-cover transition-transform duration-700 group-hover:scale-105"
+                className="object-cover img-zoom"
+                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                loading="lazy"
               />
             </div>
           )}
           
           {/* Overlay Gradient on hover */}
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300 pointer-events-none" />
+          <div 
+            className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300 pointer-events-none" 
+            aria-hidden="true"
+          />
         </div>
 
         {/* Content Area */}
         <CardContent className="flex flex-col flex-grow p-6">
-          <h3 className="text-xl font-bold text-zinc-900 mb-2 font-inter group-hover:text-emerald-600 transition-colors">
+          <h3 className="text-xl font-bold text-zinc-900 mb-2 group-hover:text-emerald-600 transition-colors">
             {title}
           </h3>
           <p className="text-zinc-500 text-sm leading-relaxed line-clamp-2 mb-4">
@@ -97,12 +122,12 @@ const FeatureCard: FC<Feature> = ({ title, description, image, imageAlt, href, i
           </p>
           
           <div className="mt-auto flex items-center text-sm font-semibold text-emerald-600 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
-            Explore <ArrowRight className="ml-1 h-4 w-4" />
+            Explore <ArrowRight className="ml-1 h-4 w-4" aria-hidden="true" />
           </div>
         </CardContent>
       </Card>
-    </motion.div>
+    </div>
   );
-};
+});
 
 export default FeatureCard;

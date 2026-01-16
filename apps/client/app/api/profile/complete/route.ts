@@ -1,386 +1,333 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { prisma } from '@repo/db';
-import { z } from 'zod';
+import { NextRequest } from "next/server";
+import { prisma } from "@repo/db";
+import { Profession } from "@prisma/client";
+import { z } from "zod";
+import { withAuth } from "@/app/lib/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api-response";
+import {
+  calculateProfileCompletion,
+  getMissingFieldLabels,
+} from "@/app/lib/profile-completion";
+import {
+  StructuredLogger,
+  CorrelationIdManager,
+  ResilientExecutor,
+} from "@repo/resilience";
+import { clerkClient } from "@clerk/nextjs/server";
+import { isSupplierProfession } from "@/lib/constants/professionOptions";
 
-// Validation schemas
-const ClientProfileSchema = z.object({
-  firstName: z.string().min(1, 'First name is required'),
-  lastName: z.string().min(1, 'Last name is required'),
-  phone: z.string().min(10, 'Phone number is required'),
-  address: z.string().optional(),
-  city: z.string().optional(),
-  county: z.string().optional(),
-  zipCode: z.string().optional(),
+const logger = new StructuredLogger("profile-complete-wizard-api");
+const executor = new ResilientExecutor("profile-complete-service");
+
+// Schema for professional profile completion via wizard
+const ProfileCompleteSchema = z.object({
+  // Profession selection
+  profession: z.string().min(1, "Profession is required"),
+
+  // Professional details
+  companyName: z.string().min(1, "Company name is required"),
+  licenseNumber: z.string().optional().nullable(),
+  yearsExperience: z.number().int().min(0).optional().nullable(),
+  website: z.string().url().optional().nullable().or(z.literal("")),
+  bio: z.string().max(1000).optional().nullable(),
+
+  // EARB credentials for real estate professionals
+  earbNumber: z.string().optional().nullable(),
+
+  // Store data for suppliers (optional)
+  storeData: z
+    .object({
+      name: z.string().min(1),
+      description: z.string().optional(),
+      address: z.string().optional(),
+      city: z.string().optional(),
+      categories: z.array(z.string()).optional(),
+      images: z.array(z.string()).optional(),
+    })
+    .optional()
+    .nullable(),
+
+  // Documents
+  certificatesUrls: z.array(z.string()).optional(),
+  idDocumentsUrls: z.array(z.string()).optional(),
 });
 
-const ProfessionalProfileSchema = z.object({
-  firstName: z.string().min(1, 'First name is required'),
-  lastName: z.string().min(1, 'Last name is required'),
-  phone: z.string().min(10, 'Phone number is required'),
-  companyName: z.string().min(1, 'Company name is required'),
-  licenseNumber: z.string().optional(),
-  yearsExperience: z.number().int().min(0).optional(),
-  servicesOffered: z.array(z.string()).min(1, 'Select at least one service'),
-  bio: z.string().optional(),
-  city: z.string().optional(),
-  county: z.string().optional(),
-  country: z.string().optional(),
-});
+/**
+ * POST /api/profile/complete
+ * Complete professional profile via wizard for users who skipped initial onboarding.
+ *
+ * This endpoint:
+ * - Updates profession, company name, license, experience, bio
+ * - Handles EARB credentials for real estate professionals
+ * - Creates store for suppliers (if storeData provided)
+ * - Stores verification documents
+ * - Marks profile as complete
+ */
+export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
+  const correlationId = CorrelationIdManager.generate();
+  CorrelationIdManager.set(correlationId);
 
-export async function POST(req: NextRequest) {
-  console.log('===============================================');
-  console.log('Profile Completion Request Started');
-  console.log('===============================================');
-  
   try {
-    // Step 1: Authenticate user
-    const { userId: clerkId } = await auth();
+    const body = await req.json();
 
-    if (!clerkId) {
-      console.error('Unauthorized: No clerkId found in session');
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    logger.info("Profile completion wizard request received", {
+      userId: dbUserId,
+      correlationId,
+      fieldsReceived: Object.keys(body),
+    });
 
-    console.log(`User authenticated: ${clerkId}`);
+    // Validate input
+    const validationResult = ProfileCompleteSchema.safeParse(body);
 
-    // Step 2: Parse request body
-    let body: any;
-    try {
-      body = await req.json();
-      console.log('Request body received:', {
-        role: body.role,
-        hasFirstName: !!body.firstName,
-        hasLastName: !!body.lastName,
-        hasPhone: !!body.phone,
+    if (!validationResult.success) {
+      logger.warn("Profile completion validation failed", {
+        userId: dbUserId,
+        correlationId,
+        errors: validationResult.error.issues,
       });
-    } catch (err) {
-      console.error('Failed to parse request body:', err);
-      return NextResponse.json(
-        { error: 'Invalid request body', details: 'Could not parse JSON' },
-        { status: 400 }
+      return apiError(
+        "Validation failed",
+        HttpStatus.BAD_REQUEST,
+        validationResult.error.issues
       );
     }
 
-    const { role, ...profileData } = body;
+    const data = validationResult.data;
 
-    // Step 3: Validate role
-    if (!role || !['client', 'professional'].includes(role)) {
-      console.error('Invalid role:', role);
-      return NextResponse.json(
-        { error: 'Invalid role', details: 'Role must be either "client" or "professional"' },
-        { status: 400 }
+    // Verify this is a professional user
+    const currentUser = await prisma.user.findUnique({
+      where: { id: dbUserId },
+      select: {
+        id: true,
+        clerkId: true,
+        role: true,
+        professionalProfile: {
+          select: { userId: true },
+        },
+      },
+    });
+
+    if (!currentUser) {
+      return apiError("User not found", HttpStatus.NOT_FOUND);
+    }
+
+    if (currentUser.role !== "professional") {
+      return apiError(
+        "This endpoint is only for professional users",
+        HttpStatus.FORBIDDEN
       );
     }
 
-    // Step 4: Get or create user from database (handles webhook race condition)
-    let user;
+    // Execute update with resilience patterns
+    const result = await executor.execute(
+      async () => {
+        return await prisma.$transaction(
+          async (tx) => {
+            // Update professional profile
+            const professionEnum = data.profession as Profession;
+
+            const professionalProfile = await tx.professionalProfile.upsert({
+              where: { userId: dbUserId },
+              update: {
+                profession: professionEnum,
+                companyName: data.companyName,
+                licenseNumber: data.licenseNumber || null,
+                yearsExperience: data.yearsExperience || null,
+                website: data.website || null,
+                bio: data.bio || null,
+                // Store EARB number in a metadata field or license number
+                ...(data.earbNumber && { licenseNumber: data.earbNumber }),
+              },
+              create: {
+                userId: dbUserId,
+                profession: professionEnum,
+                companyName: data.companyName,
+                licenseNumber: data.licenseNumber || data.earbNumber || null,
+                yearsExperience: data.yearsExperience || null,
+                website: data.website || null,
+                bio: data.bio || null,
+              },
+            });
+
+            // Handle store creation for suppliers
+            if (data.storeData && isSupplierProfession(data.profession)) {
+              // Generate a unique slug from store name
+              const baseSlug = data.storeData.name
+                .toLowerCase()
+                .replace(/[^a-z0-9\s-]/g, "")
+                .replace(/\s+/g, "-")
+                .replace(/-+/g, "-")
+                .substring(0, 50);
+              const uniqueSlug = `${baseSlug}-${Date.now().toString(36)}`;
+
+              await tx.store.create({
+                data: {
+                  name: data.storeData.name,
+                  slug: uniqueSlug,
+                  description: data.storeData.description || undefined,
+                  address: data.storeData.address || "",
+                  city: data.storeData.city || "",
+                  county: "NAIROBI", // Default county, can be updated later
+                  professionalId: dbUserId,
+                },
+              });
+
+              logger.info("Store created for supplier", {
+                userId: dbUserId,
+                correlationId,
+                storeName: data.storeData.name,
+              });
+            }
+
+            // Handle certificates
+            if (data.certificatesUrls && data.certificatesUrls.length > 0) {
+              const certPromises = data.certificatesUrls.map((url) =>
+                tx.certificate.create({
+                  data: {
+                    name: "Professional Certificate",
+                    issuer: "Self-reported",
+                    fileUrl: url,
+                    professionalId: professionalProfile.userId,
+                  },
+                })
+              );
+              await Promise.all(certPromises);
+            }
+
+            // Handle ID documents
+            if (data.idDocumentsUrls && data.idDocumentsUrls.length > 0) {
+              const idPromises = data.idDocumentsUrls.map((url) =>
+                tx.certificate.create({
+                  data: {
+                    name: "ID Document",
+                    issuer: "Government/Official",
+                    fileUrl: url,
+                    professionalId: professionalProfile.userId,
+                  },
+                })
+              );
+              await Promise.all(idPromises);
+            }
+
+            // Mark profile as complete
+            const updatedUser = await tx.user.update({
+              where: { id: dbUserId },
+              data: { isProfileComplete: true },
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                phone: true,
+                avatar: true,
+                role: true,
+                isProfileComplete: true,
+              },
+            });
+
+            return {
+              user: updatedUser,
+              profile: professionalProfile,
+            };
+          },
+          {
+            maxWait: 10000,
+            timeout: 30000,
+          }
+        );
+      },
+      {
+        timeout: "normal",
+        retry: { maxAttempts: 3 },
+        circuitBreaker: true,
+        operationName: "complete-profile-wizard",
+      }
+    );
+
+    if (!result.success) {
+      logger.error(
+        "Profile completion failed",
+        result.error || new Error("Unknown error"),
+        {
+          userId: dbUserId,
+          correlationId,
+        }
+      );
+      return apiError(
+        "Failed to complete profile",
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+
+    const { user, profile } = result.data!;
+
+    // Update Clerk metadata to reflect profile is complete
     try {
-      user = await prisma.user.findUnique({
-        where: { clerkId },
-        include: {
-          clientProfile: true,
-          professionalProfile: true,
+      const client = await clerkClient();
+      await client.users.updateUserMetadata(currentUser.clerkId, {
+        publicMetadata: {
+          role: "professional",
+          isOnboarded: true,
+          isProfileComplete: true,
         },
       });
-      
-      if (!user) {
-        console.warn(`User not found in database for clerkId: ${clerkId}`);
-        console.log('⚠️ Webhook may not have fired yet. Fetching from Clerk...');
-        
-        // Get user data from Clerk as fallback
-        try {
-          const { clerkClient } = await import('@clerk/nextjs/server');
-          const client = await clerkClient();
-          const clerkUserData = await client.users.getUser(clerkId);
-          const userEmail = clerkUserData.emailAddresses[0]?.emailAddress || '';
-          
-          console.log('✓ Fetched user data from Clerk');
-          
-          // Check if user exists by email (webhook may have created it)
-          const existingUserByEmail = await prisma.user.findUnique({
-            where: { email: userEmail },
-            include: {
-              clientProfile: true,
-              professionalProfile: true,
-            },
-          });
-
-          if (existingUserByEmail) {
-            console.log('✓ User found by email, updating clerkId');
-            // Update the existing user with the correct clerkId
-            user = await prisma.user.update({
-              where: { email: userEmail },
-              data: {
-                clerkId: clerkId,
-                firstName: clerkUserData.firstName || existingUserByEmail.firstName,
-                lastName: clerkUserData.lastName || existingUserByEmail.lastName,
-                phone: clerkUserData.phoneNumbers[0]?.phoneNumber || existingUserByEmail.phone,
-              },
-              include: {
-                clientProfile: true,
-                professionalProfile: true,
-              },
-            });
-            console.log(`✓ User updated successfully: ${user.id}`);
-          } else {
-            // Create new user
-            user = await prisma.user.create({
-              data: {
-                id: crypto.randomUUID(),
-                clerkId: clerkId,
-                email: userEmail,
-                firstName: clerkUserData.firstName || undefined,
-                lastName: clerkUserData.lastName || undefined,
-                phone: clerkUserData.phoneNumbers[0]?.phoneNumber || undefined,
-                role: role,
-                isProfileComplete: false,
-              },
-            });
-            console.log(`✓ User created successfully: ${user.id}`);
-          }
-        } catch (clerkErr: any) {
-          console.error('Failed to create/update user from Clerk data:', clerkErr);
-          
-          // Check if this is a unique constraint error
-          if (clerkErr?.code === 'P2002') {
-            return NextResponse.json(
-              { 
-                error: 'User creation conflict', 
-                details: 'Your account is being set up. Please try again in a moment.' 
-              },
-              { status: 409 }
-            );
-          }
-          
-          return NextResponse.json(
-            { 
-              error: 'User not found', 
-              details: 'Please wait a moment and try again. Your account is being set up.' 
-            },
-            { status: 404 }
-          );
-        }
-      } else {
-        console.log(`✓ User found in database: ${user.id}`);
-      }
-    } catch (err) {
-      console.error('Database error while fetching user:', err);
-      return NextResponse.json(
-        { error: 'Database error', details: err instanceof Error ? err.message : 'Unknown error' },
-        { status: 500 }
+    } catch (clerkError) {
+      // Log but don't fail - DB is source of truth
+      logger.error(
+        "Failed to update Clerk metadata",
+        clerkError instanceof Error ? clerkError : new Error(String(clerkError)),
+        { correlationId, userId: dbUserId }
       );
     }
 
-    // Step 5: Process based on role
-    if (role === 'client') {
-      console.log('Processing CLIENT profile...');
-      
-      try {
-        // Validate client data
-        const validatedData = ClientProfileSchema.parse(profileData);
-        console.log('Client data validated');
-
-        // Update user in transaction
-        await prisma.$transaction(async (tx) => {
-          // Update user
-          await tx.user.update({
-            where: { id: user.id },
-            data: {
-              firstName: validatedData.firstName,
-              lastName: validatedData.lastName,
-              phone: validatedData.phone,
-              role: 'client',
-              isProfileComplete: true,
-            },
-          });
-
-          // Create or update client profile
-          await tx.clientProfile.upsert({
-            where: { userId: user.id },
-            update: {
-              address: validatedData.address,
-              city: validatedData.city,
-              county: validatedData.county,
-              zipCode: validatedData.zipCode,
-            },
-            create: {
-              userId: user.id,
-              address: validatedData.address,
-              city: validatedData.city,
-              county: validatedData.county,
-              zipCode: validatedData.zipCode,
-            },
-          });
-        });
-
-        console.log('Client profile completed successfully');
-        console.log('===============================================\n');
-
-        return NextResponse.json({ 
-          success: true, 
-          message: 'Profile completed successfully',
-          role: 'client'
-        });
-
-      } catch (err) {
-        console.error('Error processing client profile:', err);
-        
-        if (err instanceof z.ZodError) {
-          console.error('Validation errors:', JSON.stringify(err.issues, null, 2));
-          return NextResponse.json(
-            { 
-              error: 'Validation error', 
-              details: err.issues.map((issue: any) => ({
-                field: issue.path.join('.'),
-                message: issue.message
-              }))
-            },
-            { status: 400 }
-          );
-        }
-
-        return NextResponse.json(
-          { error: 'Failed to complete client profile', details: err instanceof Error ? err.message : 'Unknown error' },
-          { status: 500 }
-        );
-      }
-
-    } else if (role === 'professional') {
-      console.log('Processing PROFESSIONAL profile...');
-      
-      try {
-        // Validate professional data
-        const validatedData = ProfessionalProfileSchema.parse(profileData);
-        console.log('Professional data validated');
-
-        // Update user in transaction
-        await prisma.$transaction(async (tx) => {
-          // Update user
-          await tx.user.update({
-            where: { id: user.id },
-            data: {
-              firstName: validatedData.firstName,
-              lastName: validatedData.lastName,
-              phone: validatedData.phone,
-              role: 'professional',
-              isProfileComplete: true,
-            },
-          });
-
-          // Create or update professional profile
-          await tx.professionalProfile.upsert({
-            where: { userId: user.id },
-            update: {
-              companyName: validatedData.companyName,
-              licenseNumber: validatedData.licenseNumber,
-              yearsExperience: validatedData.yearsExperience,
-              servicesOffered: validatedData.servicesOffered,
-              bio: validatedData.bio,
-              city: validatedData.city,
-              county: validatedData.county,
-              country: validatedData.country,
-            },
-            create: {
-              userId: user.id,
-              companyName: validatedData.companyName,
-              licenseNumber: validatedData.licenseNumber,
-              yearsExperience: validatedData.yearsExperience,
-              servicesOffered: validatedData.servicesOffered,
-              bio: validatedData.bio,
-              city: validatedData.city,
-              county: validatedData.county,
-              country: validatedData.country,
-            },
-          });
-        });
-
-        console.log('Professional profile completed successfully');
-        console.log('===============================================\n');
-
-        return NextResponse.json({ 
-          success: true, 
-          message: 'Profile completed successfully',
-          role: 'professional'
-        });
-
-      } catch (err) {
-        console.error('Error processing professional profile:', err);
-        
-        if (err instanceof z.ZodError) {
-          console.error('Validation errors:', JSON.stringify(err.issues, null, 2));
-          return NextResponse.json(
-            { 
-              error: 'Validation error', 
-              details: err.issues.map((e: any) => ({
-                field: e.path.join('.'),
-                message: e.message
-              }))
-            },
-            { status: 400 }
-          );
-        }
-
-        return NextResponse.json(
-          { error: 'Failed to complete professional profile', details: err instanceof Error ? err.message : 'Unknown error' },
-          { status: 500 }
-        );
-      }
-    }
-
-    return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
-
-  } catch (error) {
-    console.error('===============================================');
-    console.error('FATAL ERROR in Profile Completion');
-    console.error('===============================================');
-    console.error(error);
-    console.error('===============================================\n');
-    
-    return NextResponse.json(
-      { 
-        error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error occurred'
+    // Calculate completion for response
+    const completion = calculateProfileCompletion(
+      {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        phone: user.phone,
+        avatar: user.avatar,
+        role: user.role as "client" | "professional",
       },
-      { status: 500 }
+      profile
     );
-  }
-}
 
-// GET endpoint to check profile status
-export async function GET() {
-  try {
-    const { userId: clerkId } = await auth();
-
-    if (!clerkId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { clerkId },
-      include: {
-        clientProfile: true,
-        professionalProfile: true,
-      },
+    logger.info("Profile completed successfully via wizard", {
+      userId: dbUserId,
+      correlationId,
+      profession: data.profession,
+      hasStore: !!data.storeData,
     });
 
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    return apiSuccess({
+      success: true,
+      user,
+      profile,
+      completion: {
+        percentage: completion.percentage,
+        isComplete: completion.isComplete,
+        missingRequired: completion.missingRequired,
+        missingRequiredLabels: getMissingFieldLabels(completion.missingRequired),
+        missingOptional: completion.missingOptional,
+        filledFields: completion.filledFields,
+      },
+    });
+  } catch (err) {
+    logger.error(
+      "Profile complete wizard error",
+      err instanceof Error ? err : new Error(String(err)),
+      {
+        userId: dbUserId,
+        correlationId,
+      }
+    );
+
+    if (err instanceof z.ZodError) {
+      return apiError("Validation failed", HttpStatus.BAD_REQUEST, err.issues);
     }
 
-    return NextResponse.json({
-      isProfileComplete: user.isProfileComplete,
-      role: user.role,
-      hasProfile: user.role === 'client' 
-        ? !!user.clientProfile 
-        : !!user.professionalProfile,
-    });
-  } catch (error) {
-    console.error('Profile status error:', error);
-    return NextResponse.json(
-      { error: 'Failed to get profile status' },
-      { status: 500 }
+    return apiError(
+      "Failed to complete profile. Please try again.",
+      HttpStatus.INTERNAL_SERVER_ERROR
     );
   }
-}
-
+});
