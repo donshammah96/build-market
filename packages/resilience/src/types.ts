@@ -2,7 +2,7 @@
  * Core types for resilience patterns
  */
 
-export type OperationCriticality = 'critical' | 'normal' | 'background';
+export type OperationCriticality = "critical" | "normal" | "background";
 
 export interface TimeoutConfig {
   critical: number;
@@ -30,6 +30,11 @@ export interface CacheConfig {
   ttl: number;
   maxSize: number;
   staleWhileRevalidate?: number;
+  redis?: {
+    namespace?: string; // Defaults to cache name
+    ttlSeconds?: number; // defaults to ttl (converted from ms to seconds)
+    enabled?: boolean; // default false
+  };
 }
 
 export interface MetricData {
@@ -48,11 +53,11 @@ export interface LogContext {
 }
 
 export enum LogLevel {
-  DEBUG = 'debug',
-  INFO = 'info',
-  WARN = 'warn',
-  ERROR = 'error',
-  FATAL = 'fatal',
+  DEBUG = "debug",
+  INFO = "info",
+  WARN = "warn",
+  ERROR = "error",
+  FATAL = "fatal",
 }
 
 export interface Logger {
@@ -63,7 +68,7 @@ export interface Logger {
   fatal(message: string, error?: Error, context?: LogContext): void;
 }
 
-export type CircuitState = 'closed' | 'open' | 'half-open';
+export type CircuitState = "closed" | "open" | "half-open";
 
 export interface CircuitBreakerState {
   state: CircuitState;
