@@ -1,10 +1,22 @@
-import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@repo/db";
 import { z } from "zod";
-import { withAuth } from '@/app/lib/api-middleware';
-import { apiError, apiSuccess, HttpStatus } from '@/app/lib/api-response';
-import { checkRateLimit, getRateLimitIdentifier, RateLimits } from '@/app/lib/rate-limit';
+import { withAuth } from "@/app/lib/api-middleware";
+import { apiError, HttpStatus } from "@/app/lib/api-response";
+import {
+  initializeCorrelationId,
+  executeResilient,
+  getClientLogger,
+} from "@/app/lib/resilient-api";
+import {
+  checkRateLimit,
+  getRateLimitIdentifier,
+  RateLimits,
+} from "@/app/lib/rate-limit";
+
+const logger = getClientLogger();
+
+type ProjectStatus = "planning" | "in_progress" | "completed" | "archived";
 
 const updateProjectSchema = z.object({
   title: z.string().min(3).optional(),
@@ -12,44 +24,84 @@ const updateProjectSchema = z.object({
   budget: z.number().positive().optional(),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
-  status: z.enum(["planning", "in_progress", "completed", "archived"]).optional(),
+  status: z
+    .enum(["planning", "in_progress", "completed", "archived"])
+    .optional(),
 });
 
-export const GET = withAuth<{ id: string }>(async (req: NextRequest, { clerkId, dbUserId }, params) => {
-  try {
+export const GET = withAuth<{ id: string }>(
+  async (req: NextRequest, { dbUserId }, params) => {
+    const correlationId = initializeCorrelationId(req);
     const { id } = params!;
 
-    const project = await prisma.project.findUnique({
-      where: {
-        id: id as string,
-        professionalId: dbUserId,
-      },
-      include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            avatar: true,
-          },
-        },
-      },
-    });
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `project:${identifier}`,
+      RateLimits.READ.limit,
+      RateLimits.READ.window
+    );
 
-    if (!project) {
-      return apiError("Project not found", HttpStatus.NOT_FOUND);
+    if (!rateLimitResult.success) {
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS
+      );
     }
 
-    return apiSuccess(project);
-  } catch (error) {
-    console.error("Error fetching project:", error);
-    return apiError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR);
-  }
-});
+    logger.info("Fetching project", {
+      correlationId,
+      projectId: id,
+      userId: dbUserId,
+    });
 
-export const PATCH = withAuth<{ id: string }>(async (req: NextRequest, { clerkId, dbUserId }, params) => {
-  try {
+    return executeResilient(
+      async () => {
+        const project = await prisma.project.findUnique({
+          where: {
+            id: id as string,
+            professionalId: dbUserId,
+          },
+          include: {
+            client: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                avatar: true,
+              },
+            },
+          },
+        });
+
+        if (!project) {
+          logger.warn("Project not found", {
+            correlationId,
+            projectId: id,
+            userId: dbUserId,
+          });
+          return apiError("Project not found", HttpStatus.NOT_FOUND);
+        }
+
+        logger.info("Project fetched successfully", {
+          correlationId,
+          projectId: id,
+        });
+        return project;
+      },
+      {
+        operationName: "get_professional_project",
+        successStatus: HttpStatus.OK,
+      }
+    );
+  }
+);
+
+export const PATCH = withAuth<{ id: string }>(
+  async (req: NextRequest, { dbUserId }, params) => {
+    const correlationId = initializeCorrelationId(req);
+    const { id } = params!;
+
     const identifier = getRateLimitIdentifier(req);
     const rateLimitResult = await checkRateLimit(
       `project_update:${identifier}`,
@@ -58,77 +110,142 @@ export const PATCH = withAuth<{ id: string }>(async (req: NextRequest, { clerkId
     );
 
     if (!rateLimitResult.success) {
-      return apiError('Too many requests. Please try again later.', HttpStatus.TOO_MANY_REQUESTS);
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS
+      );
     }
 
-    const { id } = params!;
     const body = await req.json();
     const validation = updateProjectSchema.safeParse(body);
 
     if (!validation.success) {
-      return apiError("Invalid input", HttpStatus.BAD_REQUEST, validation.error.issues);
+      logger.warn("Project update validation failed", {
+        correlationId,
+        projectId: id,
+        errors: validation.error.issues,
+      });
+      return apiError(
+        "Invalid input",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues
+      );
     }
 
-    const { title, description, budget, startDate, endDate, status } = validation.data;
+    const { title, description, budget, startDate, endDate, status } =
+      validation.data;
 
-    // Verify ownership
-    const existingProject = await prisma.project.findUnique({
-      where: {
-        id: id as string,
-        professionalId: dbUserId,
-      },
+    logger.info("Updating project", {
+      correlationId,
+      projectId: id,
+      userId: dbUserId,
     });
 
-    if (!existingProject) {
-      return apiError("Project not found", HttpStatus.NOT_FOUND);
-    }
+    return executeResilient(
+      async () => {
+        const existingProject = await prisma.project.findUnique({
+          where: {
+            id: id as string,
+            professionalId: dbUserId,
+          },
+        });
 
-    const updatedProject = await prisma.project.update({
-      where: {
-        id: id as string,
-      },
-      data: {
-        title,
-        description,
-        budget,
-        startDate: startDate ? new Date(startDate) : undefined,
-        endDate: endDate ? new Date(endDate) : undefined,
-        status: status as any,
-      },
-    });
+        if (!existingProject) {
+          logger.warn("Project not found for update", {
+            correlationId,
+            projectId: id,
+            userId: dbUserId,
+          });
+          return apiError("Project not found", HttpStatus.NOT_FOUND);
+        }
 
-    return apiSuccess(updatedProject);
-  } catch (error) {
-    console.error("Error updating project:", error);
-    return apiError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR);
+        const updatedProject = await prisma.project.update({
+          where: {
+            id: id as string,
+          },
+          data: {
+            title,
+            description,
+            budget,
+            startDate: startDate ? new Date(startDate) : undefined,
+            endDate: endDate ? new Date(endDate) : undefined,
+            status: status as ProjectStatus | undefined,
+          },
+        });
+
+        logger.info("Project updated successfully", {
+          correlationId,
+          projectId: id,
+        });
+        return updatedProject;
+      },
+      {
+        operationName: "update_professional_project",
+        successStatus: HttpStatus.OK,
+      }
+    );
   }
-});
+);
 
-export const DELETE = withAuth<{ id: string }>(async (req: NextRequest, { clerkId, dbUserId }, params) => {
-  try {
+export const DELETE = withAuth<{ id: string }>(
+  async (req: NextRequest, { dbUserId }, params) => {
+    const correlationId = initializeCorrelationId(req);
     const { id } = params!;
 
-    // Verify ownership
-    const existingProject = await prisma.project.findUnique({
-      where: {
-        id: id as string,
-        professionalId: dbUserId,
-      },
-    });
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `project_delete:${identifier}`,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window
+    );
 
-    if (!existingProject) {
-      return apiError("Project not found", HttpStatus.NOT_FOUND);
+    if (!rateLimitResult.success) {
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS
+      );
     }
 
-    await prisma.project.delete({
-      where: {
-        id: id as string,
-      },
+    logger.info("Deleting project", {
+      correlationId,
+      projectId: id,
+      userId: dbUserId,
     });
 
-    return apiSuccess({ message: "Project deleted successfully" });
-  } catch (error) {
-    console.error("Error deleting project:", error);
-    return apiError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR);
+    return executeResilient(
+      async () => {
+        const existingProject = await prisma.project.findUnique({
+          where: {
+            id: id as string,
+            professionalId: dbUserId,
+          },
+        });
+
+        if (!existingProject) {
+          logger.warn("Project not found for deletion", {
+            correlationId,
+            projectId: id,
+            userId: dbUserId,
+          });
+          return apiError("Project not found", HttpStatus.NOT_FOUND);
+        }
+
+        await prisma.project.delete({
+          where: {
+            id: id as string,
+          },
+        });
+
+        logger.info("Project deleted successfully", {
+          correlationId,
+          projectId: id,
+        });
+        return { message: "Project deleted successfully" };
+      },
+      {
+        operationName: "delete_professional_project",
+        successStatus: HttpStatus.OK,
+      }
+    );
   }
-});
+);
