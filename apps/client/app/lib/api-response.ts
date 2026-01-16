@@ -1,4 +1,24 @@
-import { NextResponse } from 'next/server';
+/**
+ * Unified API Response utilities
+ *
+ * This module re-exports response helpers from resilient-api.ts for backward compatibility.
+ * The resilient-api version includes enhanced features like correlation ID tracking.
+ *
+ * @module api-response
+ */
+
+// Re-export response functions from resilient-api (single source of truth)
+export { apiSuccess, apiError } from "./resilient-api";
+
+/**
+ * Pagination information for list responses
+ */
+export interface PaginationInfo {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
 
 /**
  * Standard API error response format
@@ -6,8 +26,10 @@ import { NextResponse } from 'next/server';
 export interface ApiErrorResponse {
   success: false;
   error: string;
-  details?: any;
+  code?: string;
+  details?: unknown;
   timestamp: string;
+  correlationId?: string;
 }
 
 /**
@@ -17,51 +39,24 @@ export interface ApiSuccessResponse<T> {
   success: true;
   data: T;
   timestamp: string;
+  correlationId?: string;
 }
 
 /**
- * Returns a standardized error response
- * @param message - Error message for the client
- * @param status - HTTP status code (default: 500)
- * @param details - Additional error details (only included in development)
+ * Standard API list response format with pagination
  */
-export function apiError(
-  message: string,
-  status: number = 500,
-  details?: any
-): NextResponse<ApiErrorResponse> {
-  const isDevelopment = process.env.NODE_ENV === 'development';
-
-  return NextResponse.json(
-    {
-      success: false,
-      error: message,
-      // Only include details in development to avoid exposing sensitive info
-      ...(isDevelopment && details && { details }),
-      timestamp: new Date().toISOString(),
-    },
-    { status }
-  );
+export interface ApiListResponse<T> {
+  success: true;
+  data: T[];
+  pagination: PaginationInfo;
+  timestamp: string;
+  correlationId?: string;
 }
 
 /**
- * Returns a standardized success response
- * @param data - Response data
- * @param status - HTTP status code (default: 200)
+ * Standard API response type union
  */
-export function apiSuccess<T>(
-  data: T,
-  status: number = 200
-): NextResponse<ApiSuccessResponse<T>> {
-  return NextResponse.json(
-    {
-      success: true,
-      data,
-      timestamp: new Date().toISOString(),
-    },
-    { status }
-  );
-}
+export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 
 /**
  * Common HTTP status codes
@@ -81,3 +76,87 @@ export const HttpStatus = {
   SERVICE_UNAVAILABLE: 503,
 } as const;
 
+/**
+ * Standard error codes for client-side handling
+ */
+export const ErrorCodes = {
+  // Validation errors
+  VALIDATION_FAILED: "VALIDATION_FAILED",
+  INVALID_INPUT: "INVALID_INPUT",
+  MISSING_REQUIRED_FIELD: "MISSING_REQUIRED_FIELD",
+
+  // Authentication/Authorization
+  UNAUTHORIZED: "UNAUTHORIZED",
+  FORBIDDEN: "FORBIDDEN",
+  SESSION_EXPIRED: "SESSION_EXPIRED",
+
+  // Resource errors
+  NOT_FOUND: "NOT_FOUND",
+  ALREADY_EXISTS: "ALREADY_EXISTS",
+  CONFLICT: "CONFLICT",
+
+  // Rate limiting
+  RATE_LIMITED: "RATE_LIMITED",
+
+  // Server errors
+  INTERNAL_ERROR: "INTERNAL_ERROR",
+  SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
+
+  // Business logic errors
+  INSUFFICIENT_PERMISSIONS: "INSUFFICIENT_PERMISSIONS",
+  INVALID_STATE_TRANSITION: "INVALID_STATE_TRANSITION",
+  VERIFICATION_REQUIRED: "VERIFICATION_REQUIRED",
+} as const;
+
+export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
+
+/**
+ * Build a standardized success response
+ */
+export function buildSuccessResponse<T>(
+  data: T,
+  correlationId?: string
+): ApiSuccessResponse<T> {
+  return {
+    success: true,
+    data,
+    timestamp: new Date().toISOString(),
+    correlationId,
+  };
+}
+
+/**
+ * Build a standardized list response with pagination
+ */
+export function buildListResponse<T>(
+  data: T[],
+  pagination: PaginationInfo,
+  correlationId?: string
+): ApiListResponse<T> {
+  return {
+    success: true,
+    data,
+    pagination,
+    timestamp: new Date().toISOString(),
+    correlationId,
+  };
+}
+
+/**
+ * Build a standardized error response
+ */
+export function buildErrorResponse(
+  error: string,
+  code?: ErrorCode,
+  details?: unknown,
+  correlationId?: string
+): ApiErrorResponse {
+  return {
+    success: false,
+    error,
+    code,
+    details,
+    timestamp: new Date().toISOString(),
+    correlationId,
+  };
+}

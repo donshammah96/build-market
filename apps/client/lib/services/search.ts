@@ -8,7 +8,14 @@ export async function searchProfessionals(query: string) {
       OR: [
         { companyName: { contains: query, mode: 'insensitive' } },
         { bio: { contains: query, mode: 'insensitive' } },
-        { servicesOffered: { has: query } }, // Exact match for array element
+        // Search in services relation (many-to-many)
+        {
+          services: {
+            some: {
+              name: { contains: query, mode: 'insensitive' },
+            },
+          },
+        },
       ],
       verified: true,
     },

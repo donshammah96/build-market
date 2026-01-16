@@ -1,55 +1,76 @@
-import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/app/lib/auth";
+import { NextRequest } from "next/server";
+import { withAuth } from "@/app/lib/api-middleware";
+import { apiError, HttpStatus } from "@/app/lib/api-response";
+import {
+  initializeCorrelationId,
+  executeResilient,
+  resilientFetch,
+  getClientLogger,
+} from "@/app/lib/resilient-api";
+import {
+  checkRateLimit,
+  getRateLimitIdentifier,
+  RateLimits,
+} from "@/app/lib/rate-limit";
 
-const MESSAGING_SERVICE_URL = process.env.MESSAGING_SERVICE_URL || "http://localhost:3010";
+const MESSAGING_SERVICE_URL =
+  process.env.MESSAGING_SERVICE_URL || "http://localhost:3010";
+const logger = getClientLogger();
 
 /**
  * POST /api/messaging/conversations/[id]/read
- * Mark conversation as read
+ * Mark conversation as read for the authenticated user
  */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const session = await auth();
+export const POST = withAuth<{ id: string }>(
+  async (req: NextRequest, { dbUserId }, params) => {
+    const correlationId = initializeCorrelationId(req);
+    const { id: conversationId } = params!;
 
-    if (!session || !session.user?.id) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
+    const identifier = getRateLimitIdentifier(req);
+    const { success } = await checkRateLimit(
+      identifier,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window
+    );
+
+    if (!success) {
+      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    const conversationId = params.id;
-    const userId = session.user.id;
+    logger.info("Marking conversation as read", {
+      correlationId,
+      conversationId,
+      userId: dbUserId,
+    });
 
-    // Forward request to messaging service
-    const response = await fetch(
-      `${MESSAGING_SERVICE_URL}/api/conversations/${conversationId}/read`,
+    return executeResilient(
+      async () => {
+        const data = await resilientFetch(
+          `${MESSAGING_SERVICE_URL}/api/conversations/${conversationId}/read`,
+          {
+            method: "POST",
+            headers: {
+              "X-User-Id": dbUserId,
+              "X-Correlation-ID": correlationId,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ userId: dbUserId }),
+            timeout: 5000,
+            retry: false,
+            operationName: "mark-conversation-read",
+          }
+        );
+
+        logger.info("Conversation marked as read", {
+          correlationId,
+          conversationId,
+        });
+        return data;
+      },
       {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ userId }),
+        operationName: "post-conversation-read",
+        successStatus: HttpStatus.OK,
       }
     );
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: "Failed to mark as read" }));
-      return NextResponse.json(error, { status: response.status });
-    }
-
-    const data = await response.json();
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error("Error marking conversation as read:", error);
-    return NextResponse.json(
-      { success: false, error: "Internal server error" },
-      { status: 500 }
-    );
   }
-}
-
+);

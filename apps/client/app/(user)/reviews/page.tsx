@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Star, 
@@ -21,7 +22,6 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -110,7 +110,7 @@ export default function ReviewsPage() {
                 Real Stories. <span className="text-emerald-500">Real Homes.</span>
               </h1>
               <p className="text-lg text-zinc-300 leading-relaxed">
-                See what your neighbors in Nairobi, Mombasa, and beyond are saying about the architects, fundis, and suppliers on Build Market.
+                See what your neighbors in Nairobi, Mombasa, and beyond are saying about the architects, artisans, and suppliers on Build Market.
               </p>
             </motion.div>
           </div>
@@ -134,7 +134,7 @@ export default function ReviewsPage() {
                 </div>
 
                 {/* Tabs */}
-                <Tabs defaultValue="all" className="w-full md:w-auto" onValueChange={(v) => setActiveTab(v as any)}>
+                <Tabs defaultValue="all" className="w-full md:w-auto" onValueChange={(v) => setActiveTab(v as ReviewType | 'all')}>
                   <TabsList className="grid w-full grid-cols-3 md:w-[400px]">
                     <TabsTrigger value="all">All Reviews</TabsTrigger>
                     <TabsTrigger value="professional">Pros</TabsTrigger>
@@ -232,7 +232,7 @@ function ReviewListCard({ review, index }: { review: ReviewWithRelations; index:
           <div className="relative mb-6 flex-1">
             <Quote className="absolute -top-1 -left-1 h-6 w-6 text-zinc-100 fill-zinc-100 transform -scale-x-100" />
             <p className="relative z-10 text-zinc-600 leading-relaxed pt-2">
-              "{review.comment}"
+              &quot;{review.comment}&quot;
             </p>
           </div>
 
@@ -247,7 +247,7 @@ function ReviewListCard({ review, index }: { review: ReviewWithRelations; index:
                 <div className="h-10 w-10 relative rounded overflow-hidden bg-white border border-zinc-200 shrink-0">
                    {/* Fallback visual if no image */}
                    {targetImage ? (
-                      <img src={targetImage} alt={targetName} className="object-cover h-full w-full" />
+                      <Image src={targetImage} alt={targetName || ''} fill className="object-cover" />
                    ) : (
                       <div className="h-full w-full flex items-center justify-center bg-zinc-100 text-zinc-400">
                          {review.type === 'professional' ? <HardHat className="h-5 w-5" /> : <StoreIcon className="h-5 w-5" />}

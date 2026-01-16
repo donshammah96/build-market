@@ -1,0 +1,51 @@
+{
+  "validProfessional": {
+    "profession": "Architect",
+    "companyName": "Acme Architecture Ltd",
+    "licenseNumber": "NCA/2024/12345",
+    "yearsExperience": 10,
+    "website": "https://acme-arch.com",
+    "bio": "Professional architecture firm specializing in residential and commercial projects. Over 10 years of experience delivering quality designs."
+  },
+  "minimalProfessional": {
+    "profession": "Contractor",
+    "companyName": "Quick Build Co",
+    "licenseNumber": "NCA/2024/54321"
+  },
+  "realEstateAgent": {
+    "profession": "Real Estate Agent",
+    "companyName": "Prime Properties Kenya",
+    "licenseNumber": "EARB/2024/9999",
+    "yearsExperience": 5,
+    "website": "https://primeproperties.co.ke",
+    "bio": "Licensed real estate agent with focus on Nairobi metropolitan area."
+  },
+  "supplier": {
+    "profession": "Building Materials Supplier",
+    "companyName": "BuildMart Supplies",
+    "licenseNumber": "BIZ/2024/1111",
+    "yearsExperience": 15,
+    "website": "https://buildmart.co.ke",
+    "bio": "Leading supplier of construction materials in East Africa."
+  },
+  "testStore": {
+    "name": "BuildMart Hardware",
+    "address": "123 Industrial Area, Nairobi",
+    "city": "Nairobi",
+    "county": "NAIROBI",
+    "categories": ["hardware", "building_materials"],
+    "storeType": "retail"
+  },
+  "uploadResponse": {
+    "certificates": [
+      { "url": "https://res.cloudinary.com/test/cert1.pdf" },
+      { "url": "https://res.cloudinary.com/test/cert2.pdf" }
+    ],
+    "idDocuments": [{ "url": "https://res.cloudinary.com/test/id1.pdf" }]
+  },
+  "submissionResponse": {
+    "success": true,
+    "message": "Application received successfully",
+    "professionalId": "prof_123456"
+  }
+}

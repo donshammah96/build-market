@@ -1,62 +1,154 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import {
-  ClerkProvider
-} from '@clerk/nextjs'
-import { Inter, Roboto} from 'next/font/google'
-import { ToastContainer } from 'react-toastify';
-import { QueryProvider } from '@/components/providers/QueryProvider';
+import { ClerkProvider } from "@clerk/nextjs";
+import { DM_Sans } from "next/font/google";
+import { ToastContainer } from "react-toastify";
+import { QueryProvider } from "@/components/providers/QueryProvider";
+import { AccessibilityProvider } from "@/components/accessibility";
 
-const inter = Inter({ subsets: ["latin"] });
-const roboto = Roboto({ subsets: ["latin"], weight: "400" });
+// Single, distinctive font with multiple weights for better performance
+// DM Sans is modern, geometric, and works well for both headings and body
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap", // Ensures text remains visible during font load
+  variable: "--font-dm-sans",
+  preload: true,
+});
 
+// Viewport configuration for mobile optimization
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#10b981", // Emerald-500 for mobile browser chrome
+};
 
 export const metadata: Metadata = {
-  title: 'Build Market',
-  description: 'Find the best professionals for your building project',
-  metadataBase: new URL('https://build-market.vercel.app'),
-  icons: {
-    icon: '/favicon.ico',
+  title: {
+    default: "Build Market",
+    template: "%s | Build Market",
   },
+  description: "Find the best professionals for your building project in Kenya",
+  metadataBase: new URL("https://build-market.vercel.app"),
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
+  manifest: "/manifest.json",
   openGraph: {
-    title: 'Build Market',
-    description: 'Find the best professionals for your building project',
-    url: 'https://build-market.vercel.app',
-    siteName: 'Build Market',
+    title: "Build Market",
+    description: "Find the best professionals for your building project",
+    url: "https://build-market.vercel.app",
+    siteName: "Build Market",
     images: [
       {
-        url: '/hero-desktop1.png',
+        url: "/hero-desktop1.png",
         width: 1200,
         height: 630,
-        alt: 'Build Market',
+        alt: "Build Market - Connect with Kenya's top verified professionals",
       },
     ],
-    locale: 'en-KE',
-    type: 'website',
+    locale: "en_KE",
+    type: "website",
   },
   twitter: {
-    card: 'summary_large_image',
-    title: 'Build Market',
-    description: 'Find the best professionals for your building project',
-    images: ['/hero-mobile.png'],
+    card: "summary_large_image",
+    title: "Build Market",
+    description: "Find the best professionals for your building project",
+    images: ["/hero-mobile.png"],
+    creator: "@buildmarket",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
   },
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: React.ReactNode;
 }>) {
   return (
     <ClerkProvider>
-      <html lang="en">
-      <body className={`${inter.className} ${roboto.className} antialiased bg-white`}>
-        <QueryProvider>
-          {children}
-          <ToastContainer position="bottom-right" />
-        </QueryProvider>
-      </body>
-    </html>
+      <html lang="en" className={dmSans.variable}>
+        <head>
+          {/* Preconnect to critical third-party origins */}
+          <link rel="preconnect" href="https://clerk.com" />
+          <link rel="preconnect" href="https://images.unsplash.com" />
+          <link rel="dns-prefetch" href="https://res.cloudinary.com" />
+        </head>
+        <body
+          className={`${dmSans.className} antialiased bg-white`}
+          suppressHydrationWarning
+        >
+          {/* SVG Filters for Color Blind Modes */}
+          <svg
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              width: 0,
+              height: 0,
+              overflow: "hidden",
+            }}
+          >
+            <defs>
+              {/* Protanopia (Red-blind) filter */}
+              <filter id="protanopia-filter">
+                <feColorMatrix
+                  type="matrix"
+                  values="0.567, 0.433, 0,     0, 0
+                          0.558, 0.442, 0,     0, 0
+                          0,     0.242, 0.758, 0, 0
+                          0,     0,     0,     1, 0"
+                />
+              </filter>
+              {/* Deuteranopia (Green-blind) filter */}
+              <filter id="deuteranopia-filter">
+                <feColorMatrix
+                  type="matrix"
+                  values="0.625, 0.375, 0,   0, 0
+                          0.7,   0.3,   0,   0, 0
+                          0,     0.3,   0.7, 0, 0
+                          0,     0,     0,   1, 0"
+                />
+              </filter>
+              {/* Tritanopia (Blue-blind) filter */}
+              <filter id="tritanopia-filter">
+                <feColorMatrix
+                  type="matrix"
+                  values="0.95, 0.05,  0,     0, 0
+                          0,    0.433, 0.567, 0, 0
+                          0,    0.475, 0.525, 0, 0
+                          0,    0,     0,     1, 0"
+                />
+              </filter>
+            </defs>
+          </svg>
+
+          <QueryProvider>
+            <AccessibilityProvider>
+              <div id="main-content">{children}</div>
+              <ToastContainer
+                position="bottom-right"
+                autoClose={4000}
+                hideProgressBar={false}
+                closeOnClick
+                pauseOnHover
+                limit={3}
+              />
+            </AccessibilityProvider>
+          </QueryProvider>
+        </body>
+      </html>
     </ClerkProvider>
   );
 }
