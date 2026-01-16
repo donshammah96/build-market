@@ -17,7 +17,7 @@
     "dotenv": "^17.2.3",
     "cors": "^2.8.5",
     "zod": "^4.1.9",
-    "@repo/types": "0.0.1",
+    "@repo/types": "workspace:*",
     "@repo/nats": "workspace:*"
   },
   "devDependencies": {

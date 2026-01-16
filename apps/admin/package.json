@@ -27,8 +27,8 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.0",
-    "@repo/db": "1.0.0",
-    "@repo/ui": "0.0.0",
+    "@repo/db": "workspace:*",
+    "@repo/ui": "workspace:*",
     "@tanstack/react-query": "^5.90.5",
     "@tanstack/react-table": "^8.21.3",
     "class-variance-authority": "^0.7.1",
@@ -48,9 +48,9 @@
     "zod": "^4.1.9"
   },
   "devDependencies": {
-    "@repo/eslint-config": "0.0.0",
-    "@repo/types": "0.0.1",
-    "@repo/typescript-config": "0.0.0",
+    "@repo/eslint-config": "workspace:*",
+    "@repo/types": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24.8.1",
     "@types/react": "19.1.0",

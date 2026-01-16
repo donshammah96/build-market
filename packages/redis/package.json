@@ -17,7 +17,7 @@
     "ioredis": "^5.4.1"
   },
   "devDependencies": {
-    "@repo/typescript-config": "0.0.0",
+    "@repo/typescript-config": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "^5.9.3"
   }
