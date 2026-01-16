@@ -56,6 +56,8 @@ export {
 // Metrics and observability
 export {
   MetricsCollector,
+  Metric,
+  MetricType,
   getGlobalMetricsCollector,
   setGlobalMetricsCollector,
 } from './metrics';

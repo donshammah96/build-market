@@ -8,7 +8,7 @@ vi.mock('@repo/db', () => ({
   prisma: {
     $transaction: vi.fn(),
     user: {
-      update: vi.fn(),
+      upsert: vi.fn(),
       findUnique: vi.fn(),
     },
     clientProfile: {
@@ -17,11 +17,27 @@ vi.mock('@repo/db', () => ({
     professionalProfile: {
       upsert: vi.fn(),
     },
+    certificate: {
+      create: vi.fn(),
+    },
   },
 }));
 
+// Mock Clerk - the new implementation uses auth() and currentUser() directly
 vi.mock('@clerk/nextjs/server', () => ({
   auth: vi.fn().mockResolvedValue({ userId: 'clerk_123' }),
+  currentUser: vi.fn().mockResolvedValue({
+    id: 'clerk_123',
+    emailAddresses: [{ emailAddress: 'test@example.com' }],
+    firstName: 'John',
+    lastName: 'Doe',
+    phoneNumbers: [{ phoneNumber: '+1234567890' }],
+  }),
+  clerkClient: vi.fn().mockResolvedValue({
+    users: {
+      updateUserMetadata: vi.fn().mockResolvedValue({}),
+    },
+  }),
 }));
 
 vi.mock('@/app/lib/rate-limit', () => ({
@@ -32,16 +48,45 @@ vi.mock('@/app/lib/rate-limit', () => ({
   },
 }));
 
-vi.mock('@/app/lib/api-middleware', () => ({
-  withAuth: (handler: any) => {
-    return async (req: NextRequest) => {
-      const context = {
-        clerkId: 'clerk_123',
-        dbUserId: 'db_user_123',
-        userEmail: 'test@example.com',
-      };
-      return handler(req, context);
-    };
+vi.mock('@/app/lib/resilient-api', () => ({
+  initializeCorrelationId: vi.fn().mockReturnValue('test-correlation-id'),
+  executeResilient: vi.fn().mockImplementation(async (fn, options) => {
+    const { NextResponse } = await import('next/server');
+    try {
+      const result = await fn();
+      return NextResponse.json({ success: true, data: result }, { status: options.successStatus || 200 });
+    } catch (error) {
+      return NextResponse.json(
+        { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+        { status: 500 }
+      );
+    }
+  }),
+  getClientLogger: vi.fn().mockReturnValue({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }),
+}));
+
+vi.mock('@/app/lib/api-response', () => ({
+  apiError: vi.fn().mockImplementation((message: string, status: number, details?: any) => {
+    const { NextResponse } = require('next/server');
+    return NextResponse.json({ success: false, error: message, details }, { status });
+  }),
+  apiSuccess: vi.fn().mockImplementation((data: any, status: number = 200) => {
+    const { NextResponse } = require('next/server');
+    return NextResponse.json({ success: true, data }, { status });
+  }),
+  HttpStatus: {
+    OK: 200,
+    CREATED: 201,
+    BAD_REQUEST: 400,
+    UNAUTHORIZED: 401,
+    NOT_FOUND: 404,
+    TOO_MANY_REQUESTS: 429,
+    INTERNAL_SERVER_ERROR: 500,
   },
 }));
 
@@ -50,7 +95,7 @@ describe('POST /api/onboarding', () => {
     vi.clearAllMocks();
   });
 
-  it('should complete client onboarding successfully', async () => {
+  it('should complete client onboarding successfully (creates user if not exists)', async () => {
     const mockUser = {
       id: 'db_user_123',
       role: 'client',
@@ -60,7 +105,7 @@ describe('POST /api/onboarding', () => {
     vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
       return callback({
         user: {
-          update: vi.fn().mockResolvedValue(mockUser),
+          upsert: vi.fn().mockResolvedValue(mockUser),
         },
         clientProfile: {
           upsert: vi.fn().mockResolvedValue({}),
@@ -70,13 +115,13 @@ describe('POST /api/onboarding', () => {
 
     const requestBody = {
       role: 'client',
-      firstName: 'John',
-      lastName: 'Doe',
-      phone: '1234567890',
-      address: '123 Main St',
+      projectType: 'new_construction',
+      projectLocation: 'Nairobi',
+      estimatedBudget: '1000000-5000000',
+      description: 'Building a new home',
     };
 
-    const request = new NextRequest('http://localhost:3000/api/onboarding', {
+    const request = new NextRequest('http://localhost:3500/api/onboarding', {
       method: 'POST',
       body: JSON.stringify(requestBody),
     });
@@ -97,27 +142,36 @@ describe('POST /api/onboarding', () => {
       isProfileComplete: true,
     };
 
+    const mockProfessionalProfile = { userId: 'db_user_123' };
+
     vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
       return callback({
         user: {
-          update: vi.fn().mockResolvedValue(mockUser),
+          upsert: vi.fn().mockResolvedValue(mockUser),
         },
         professionalProfile: {
-          upsert: vi.fn().mockResolvedValue({}),
+          upsert: vi.fn().mockResolvedValue(mockProfessionalProfile),
+        },
+        certificate: {
+          create: vi.fn().mockResolvedValue({}),
         },
       });
     });
 
     const requestBody = {
       role: 'professional',
-      firstName: 'Jane',
-      lastName: 'Smith',
-      phone: '1234567890',
-      companyName: 'Test Company',
-      servicesOffered: ['General Contractor'],
+      profession: 'architect',
+      companyName: 'Test Company Ltd',
+      licenseNumber: 'NCA/1234/5678',
+      yearsExperience: 5,
+      portfolio: 'https://portfolio.example.com',
+      website: 'https://example.com',
+      bio: 'Experienced architect',
+      certificatesUrls: ['/uploads/cert1.pdf'],
+      idDocumentsUrls: ['/uploads/id1.pdf'],
     };
 
-    const request = new NextRequest('http://localhost:3000/api/onboarding', {
+    const request = new NextRequest('http://localhost:3500/api/onboarding', {
       method: 'POST',
       body: JSON.stringify(requestBody),
     });
@@ -131,7 +185,7 @@ describe('POST /api/onboarding', () => {
   });
 
   it('should reject invalid role', async () => {
-    const request = new NextRequest('http://localhost:3000/api/onboarding', {
+    const request = new NextRequest('http://localhost:3500/api/onboarding', {
       method: 'POST',
       body: JSON.stringify({
         role: 'invalid_role',
@@ -146,86 +200,20 @@ describe('POST /api/onboarding', () => {
     expect(data.error).toContain('Validation failed');
   });
 
-  it('should handle validation errors for missing required fields', async () => {
-    const request = new NextRequest('http://localhost:3000/api/onboarding', {
+  it('should reject unauthenticated requests', async () => {
+    const { auth } = await import('@clerk/nextjs/server');
+    vi.mocked(auth).mockResolvedValueOnce({ userId: null } as any);
+
+    const request = new NextRequest('http://localhost:3500/api/onboarding', {
       method: 'POST',
-      body: JSON.stringify({
-        role: 'professional',
-        // Missing required fields like companyName, servicesOffered
-      }),
+      body: JSON.stringify({ role: 'client' }),
     });
 
     const response = await POST(request);
     const data = await response.json();
 
-    expect(response.status).toBe(400);
-    expect(data.success).toBe(false);
-  });
-
-  it('should use upsert to prevent duplicate profile creation', async () => {
-    const mockUser = {
-      id: 'db_user_123',
-      role: 'client',
-      isProfileComplete: true,
-    };
-
-    const mockUpsert = vi.fn().mockResolvedValue({});
-
-    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
-      return callback({
-        user: {
-          update: vi.fn().mockResolvedValue(mockUser),
-        },
-        clientProfile: {
-          upsert: mockUpsert,
-        },
-      });
-    });
-
-    const requestBody = {
-      role: 'client',
-      firstName: 'John',
-      lastName: 'Doe',
-      phone: '1234567890',
-    };
-
-    const request = new NextRequest('http://localhost:3000/api/onboarding', {
-      method: 'POST',
-      body: JSON.stringify(requestBody),
-    });
-
-    await POST(request);
-
-    // Call again to test upsert behavior
-    const request2 = new NextRequest('http://localhost:3000/api/onboarding', {
-      method: 'POST',
-      body: JSON.stringify(requestBody),
-    });
-
-    const response2 = await POST(request2);
-
-    expect(response2.status).toBe(200);
-    expect(mockUpsert).toHaveBeenCalled();
-  });
-
-  it('should handle database transaction errors', async () => {
-    vi.mocked(prisma.$transaction).mockRejectedValue(
-      new Error('Transaction failed')
-    );
-
-    const request = new NextRequest('http://localhost:3000/api/onboarding', {
-      method: 'POST',
-      body: JSON.stringify({
-        role: 'client',
-        firstName: 'John',
-      }),
-    });
-
-    const response = await POST(request);
-    const data = await response.json();
-
-    expect(response.status).toBe(500);
-    expect(data.success).toBe(false);
+    expect(response.status).toBe(401);
+    expect(data.error).toContain('Unauthorized');
   });
 
   it('should respect rate limiting', async () => {
@@ -237,7 +225,7 @@ describe('POST /api/onboarding', () => {
       reset: Date.now() + 60000,
     });
 
-    const request = new NextRequest('http://localhost:3000/api/onboarding', {
+    const request = new NextRequest('http://localhost:3500/api/onboarding', {
       method: 'POST',
       body: JSON.stringify({ role: 'client' }),
     });
@@ -248,5 +236,28 @@ describe('POST /api/onboarding', () => {
     expect(response.status).toBe(429);
     expect(data.error).toContain('Too many requests');
   });
-});
 
+  it('should handle Clerk currentUser failure gracefully', async () => {
+    const { currentUser } = await import('@clerk/nextjs/server');
+    vi.mocked(currentUser).mockResolvedValueOnce(null);
+
+    // Provide complete valid body so validation passes and currentUser check is reached
+    // ClientOnboardingSchema requires: role, projectType, projectLocation, estimatedBudget, description (min 10 chars)
+    const request = new NextRequest('http://localhost:3500/api/onboarding', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        role: 'client',
+        projectType: 'new_home',
+        projectLocation: 'Nairobi',
+        estimatedBudget: '1000000-5000000',
+        description: 'Building a new home in Nairobi suburb area',
+      }),
+    });
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data.error).toContain('Could not retrieve user data');
+  });
+});

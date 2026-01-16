@@ -1,9 +1,20 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@repo/db";
 import { z } from "zod";
 import { withAuth } from '@/app/lib/api-middleware';
-import { apiError, apiSuccess, HttpStatus } from '@/app/lib/api-response';
+import { apiError, HttpStatus } from '@/app/lib/api-response';
+import { initializeCorrelationId, executeResilient, getClientLogger } from '@/app/lib/resilient-api';
 import { checkRateLimit, getRateLimitIdentifier, RateLimits } from '@/app/lib/rate-limit';
+
+const logger = getClientLogger();
+
+interface CalendarWhereClause {
+  professionalId: string;
+  startDate?: {
+    gte: Date;
+    lte: Date;
+  };
+}
 
 const createEventSchema = z.object({
   title: z.string().min(3),
@@ -17,103 +28,129 @@ const createEventSchema = z.object({
   projectId: z.string().uuid().optional(),
 });
 
-export const GET = withAuth(async (req: NextRequest, { clerkId, dbUserId }) => {
-  try {
-    const identifier = getRateLimitIdentifier(req);
-    const rateLimitResult = await checkRateLimit(
-      `calendar:${identifier}`,
-      RateLimits.AUTH.limit,
-      RateLimits.AUTH.window
-    );
+/**
+ * GET /api/professional-portal/calendar
+ * Get calendar events for the authenticated professional
+ * Supports optional date range filtering via ?start=&end= query params
+ */
+export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
+  const correlationId = initializeCorrelationId(req);
 
-    if (!rateLimitResult.success) {
-      return apiError('Too many requests. Please try again later.', HttpStatus.TOO_MANY_REQUESTS);
-    }
-    
-    const { searchParams } = new URL(req.url);
-    const start = searchParams.get("start");
-    const end = searchParams.get("end");
+  const identifier = getRateLimitIdentifier(req);
+  const rateLimitResult = await checkRateLimit(
+    `calendar:${identifier}`,
+    RateLimits.READ.limit,
+    RateLimits.READ.window
+  );
 
-    const where: any = {
-      professionalId: dbUserId,
-    };
-
-    if (start && end) {
-      where.startDate = {
-        gte: new Date(start),
-        lte: new Date(end),
-      };
-    }
-
-    const events = await prisma.calendarEvent.findMany({
-      where,
-      include: {
-        client: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-        project: {
-          select: {
-            id: true,
-            title: true,
-          },
-        },
-      },
-      orderBy: {
-        startDate: "asc",
-      },
-    });
-
-    return apiSuccess(events);
-  } catch (error) {
-    console.error("Error fetching events:", error);
-    return apiError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR);
+  if (!rateLimitResult.success) {
+    return apiError('Too many requests. Please try again later.', HttpStatus.TOO_MANY_REQUESTS);
   }
+
+  const { searchParams } = new URL(req.url);
+  const start = searchParams.get("start");
+  const end = searchParams.get("end");
+
+  logger.info('Fetching calendar events', { correlationId, userId: dbUserId, dateRange: { start, end } });
+
+  return executeResilient(
+    async () => {
+      const where: CalendarWhereClause = {
+        professionalId: dbUserId,
+      };
+
+      if (start && end) {
+        where.startDate = {
+          gte: new Date(start),
+          lte: new Date(end),
+        };
+      }
+
+      const events = await prisma.calendarEvent.findMany({
+        where,
+        include: {
+          client: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+          project: {
+            select: {
+              id: true,
+              title: true,
+            },
+          },
+        },
+        orderBy: {
+          startDate: "asc",
+        },
+      });
+
+      logger.info('Calendar events fetched successfully', { correlationId, userId: dbUserId, count: events.length });
+      return events;
+    },
+    {
+      operationName: 'get_calendar_events',
+      successStatus: HttpStatus.OK,
+    }
+  );
 });
 
-export const POST = withAuth(async (req: NextRequest, { clerkId, dbUserId }) => {
-  try {
-    const identifier = getRateLimitIdentifier(req);
-    const rateLimitResult = await checkRateLimit(
-      `calendar:${identifier}`,
-      RateLimits.AUTH.limit,
-      RateLimits.AUTH.window
-    );
+/**
+ * POST /api/professional-portal/calendar
+ * Create a new calendar event
+ */
+export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
+  const correlationId = initializeCorrelationId(req);
 
-    if (!rateLimitResult.success) {
-      return apiError('Too many requests. Please try again later.', HttpStatus.TOO_MANY_REQUESTS);
-    }
-    
-    const body = await req.json();
-    const validation = createEventSchema.safeParse(body);
+  const identifier = getRateLimitIdentifier(req);
+  const rateLimitResult = await checkRateLimit(
+    `calendar:${identifier}`,
+    RateLimits.WRITE.limit,
+    RateLimits.WRITE.window
+  );
 
-    if (!validation.success) {
-      return apiError("Invalid input", HttpStatus.BAD_REQUEST, validation.error.issues);
-    }
-
-    const { title, description, startDate, endDate, location, type, status, clientId, projectId } = validation.data;
-
-    const event = await prisma.calendarEvent.create({
-      data: {
-        professionalId: dbUserId,
-        title,
-        description,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        location,
-        type,
-        status,
-        clientId,
-        projectId,
-      },
-    });
-
-    return apiSuccess(event);
-  } catch (error) {
-    console.error("Error creating event:", error);
-    return apiError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR);
+  if (!rateLimitResult.success) {
+    return apiError('Too many requests. Please try again later.', HttpStatus.TOO_MANY_REQUESTS);
   }
+
+  const body = await req.json();
+  const validation = createEventSchema.safeParse(body);
+
+  if (!validation.success) {
+    logger.warn('Calendar event validation failed', { correlationId, userId: dbUserId, errors: validation.error.issues });
+    return apiError("Invalid input", HttpStatus.BAD_REQUEST, validation.error.issues);
+  }
+
+  const { title, description, startDate, endDate, location, type, status, clientId, projectId } = validation.data;
+
+  logger.info('Creating calendar event', { correlationId, userId: dbUserId, title, startDate });
+
+  return executeResilient(
+    async () => {
+      const event = await prisma.calendarEvent.create({
+        data: {
+          professionalId: dbUserId,
+          title,
+          description,
+          startDate: new Date(startDate),
+          endDate: new Date(endDate),
+          location,
+          type,
+          status,
+          clientId,
+          projectId,
+        },
+      });
+
+      logger.info('Calendar event created successfully', { correlationId, userId: dbUserId, eventId: event.id });
+      return event;
+    },
+    {
+      operationName: 'create_calendar_event',
+      successStatus: HttpStatus.CREATED,
+    }
+  );
 });

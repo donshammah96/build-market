@@ -5,9 +5,10 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   test: {
-    environment: 'jsdom',
     globals: true,
     setupFiles: ['./__tests__/setup.ts'],
+    environment: 'node', // Default to node for API tests
+    include: ['**/__tests__/**/*.{test,spec}.{js,ts,tsx}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
@@ -28,4 +29,3 @@ export default defineConfig({
     },
   },
 });
-

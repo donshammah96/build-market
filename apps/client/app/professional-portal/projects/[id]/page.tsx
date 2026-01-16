@@ -8,11 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { 
   ArrowLeft, 
-  Calendar, 
   DollarSign, 
-  MapPin, 
-  User, 
-  Save, 
   Trash2,
   Loader2
 } from "lucide-react";
@@ -234,6 +230,7 @@ export default function ProjectDetailsPage() {
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Status</label>
                       <Select 
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         onValueChange={(value) => form.setValue("status", value as any)} 
                         defaultValue={project.status}
                       >

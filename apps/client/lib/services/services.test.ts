@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createThread, sendMessage, getThread, getUserThreads } from './messaging';
-import { createProject, getProject, getUserProjects } from './projects';
+import { createThread, sendMessage } from './messaging';
+import { createProject, getUserProjects } from './projects';
 import { searchProfessionals } from './search';
 
 // Mock the prisma client

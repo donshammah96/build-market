@@ -40,7 +40,7 @@ vi.mock('@/app/lib/rate-limit', () => ({
 vi.mock('@/app/lib/env', () => ({
   env: {
     CLERK_WEBHOOK_SECRET: 'test_webhook_secret',
-    NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
+    NEXT_PUBLIC_APP_URL: 'http://localhost:3500',
   },
 }));
 
@@ -58,7 +58,7 @@ describe('POST /api/clerk-webhook', () => {
 
     vi.mocked(prisma.user.upsert).mockResolvedValue(mockUser as any);
 
-    const request = new NextRequest('http://localhost:3000/api/clerk-webhook', {
+    const request = new NextRequest('http://localhost:3500/api/clerk-webhook', {
       method: 'POST',
       body: JSON.stringify({
         type: 'user.created',
@@ -103,7 +103,7 @@ describe('POST /api/clerk-webhook', () => {
 
     vi.mocked(prisma.user.update).mockResolvedValue(mockUser as any);
 
-    const request = new NextRequest('http://localhost:3000/api/clerk-webhook', {
+    const request = new NextRequest('http://localhost:3500/api/clerk-webhook', {
       method: 'POST',
       body: JSON.stringify({
         type: 'user.updated',
@@ -136,7 +136,7 @@ describe('POST /api/clerk-webhook', () => {
       throw new Error('Invalid signature');
     });
 
-    const request = new NextRequest('http://localhost:3000/api/clerk-webhook', {
+    const request = new NextRequest('http://localhost:3500/api/clerk-webhook', {
       method: 'POST',
       body: JSON.stringify({ type: 'user.created', data: {} }),
       headers: {
@@ -167,7 +167,7 @@ describe('POST /api/clerk-webhook', () => {
       },
     } as any);
 
-    const request = new NextRequest('http://localhost:3000/api/clerk-webhook', {
+    const request = new NextRequest('http://localhost:3500/api/clerk-webhook', {
       method: 'POST',
       body: JSON.stringify({ type: 'user.created', data: {} }),
       headers: {
@@ -189,7 +189,7 @@ describe('POST /api/clerk-webhook', () => {
       new Error('Database connection failed')
     );
 
-    const request = new NextRequest('http://localhost:3000/api/clerk-webhook', {
+    const request = new NextRequest('http://localhost:3500/api/clerk-webhook', {
       method: 'POST',
       body: JSON.stringify({ type: 'user.created', data: {} }),
       headers: {
@@ -225,7 +225,7 @@ describe('POST /api/clerk-webhook', () => {
 
     vi.mocked(prisma.user.upsert).mockRejectedValue(prismaError);
 
-    const request = new NextRequest('http://localhost:3000/api/clerk-webhook', {
+    const request = new NextRequest('http://localhost:3500/api/clerk-webhook', {
       method: 'POST',
       body: JSON.stringify({ type: 'user.created', data: {} }),
       headers: {
@@ -254,7 +254,7 @@ describe('POST /api/clerk-webhook', () => {
       data: {},
     } as any);
 
-    const request = new NextRequest('http://localhost:3000/api/clerk-webhook', {
+    const request = new NextRequest('http://localhost:3500/api/clerk-webhook', {
       method: 'POST',
       body: JSON.stringify({ type: 'user.something_else', data: {} }),
       headers: {

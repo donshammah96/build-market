@@ -46,7 +46,7 @@ export default function OnboardingForm() {
 
   return (
     <form onSubmit={handleSubmit}>
-      <select value={role} onChange={(e) => setRole(e.target.value as any)} disabled={isSubmitting}>
+      <select value={role} onChange={(e) => setRole(e.target.value as 'client' | 'professional')} disabled={isSubmitting}>
         <option value="client">Client</option>
         <option value="professional">Professional</option>
       </select>

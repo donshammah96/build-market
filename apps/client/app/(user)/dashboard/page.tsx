@@ -4,14 +4,12 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useUser } from "@clerk/nextjs";
-import { motion } from "framer-motion";
+
 import { 
   Plus, 
-  ArrowRight, 
   MessageSquare, 
   Clock, 
   Calendar, 
-  CheckCircle2,
   MoreHorizontal,
   Search,
   LayoutTemplate,
@@ -26,6 +24,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ProfileCompletionBanner } from "@/components/shared/ProfileCompletionBanner";
+import { useProfileStatus } from "@/hooks/useProfileStatus";
 import { cn } from "@/lib/utils";
 import { ROUTES, getProjectUrl, getIdeaBookUrl } from "@/lib/links";
 
@@ -66,6 +66,9 @@ interface ActivityMock {
 export default function UserDashboardPage() {
   const { user, isLoaded } = useUser();
   const [loading, setLoading] = useState(true);
+  
+  // Profile completion status
+  const { completion, isLoading: profileLoading } = useProfileStatus();
   
   // Mock Data State
   const [activeProject, setActiveProject] = useState<ProjectMock | null>(null);
@@ -119,6 +122,15 @@ export default function UserDashboardPage() {
       <ClientNavbar />
       
       <main className="container mx-auto px-4 md:px-8 py-8 pt-24 max-w-7xl">
+        
+        {/* Profile Completion Banner */}
+        {!profileLoading && completion && !completion.isComplete && (
+          <ProfileCompletionBanner 
+            percentage={completion.percentage}
+            missingFields={completion.missingRequiredLabels || []}
+            profileType="client"
+          />
+        )}
         
         {/* --- Header Section --- */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
@@ -378,7 +390,7 @@ export default function UserDashboardPage() {
 
 // --- Sub-Components ---
 
-function QuickLink({ icon, label, href, count, badgeColor = "bg-zinc-100 text-zinc-600" }: any) {
+function QuickLink({ icon, label, href, count, badgeColor = "bg-zinc-100 text-zinc-600" }: { icon: React.ReactNode, label: string, href: string, count?: string, badgeColor?: string }) {
   return (
     <Link 
       href={href} 

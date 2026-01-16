@@ -1,5 +1,4 @@
 import type { NextAuthConfig } from 'next-auth';
-import type { Session } from 'next-auth';
  
 export const authConfig: NextAuthConfig = {
   pages: {

@@ -32,7 +32,7 @@ export default function CredentialsSignInPage() {
       } else {
         router.push("/onboarding");
       }
-    } catch (err) {
+    } catch {
       setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
@@ -151,7 +151,7 @@ export default function CredentialsSignInPage() {
           </div>
 
           <div className="mt-6 text-center text-sm">
-            <span className="text-gray-600">Don't have an account? </span>
+            <span className="text-gray-600">Don&apos;t have an account? </span>
             <Link
               href="/sign-up"
               className="font-medium text-emerald-600 hover:text-emerald-500"

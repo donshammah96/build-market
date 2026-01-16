@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { io, Socket } from "socket.io-client";
+import { Socket } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
 import { messagingClient } from "@/lib/messaging-client";
 import type { Message, Conversation } from "@repo/types";
@@ -37,7 +37,6 @@ interface ChatWindowProps {
 
 export default function ChatWindow({
   conversationId,
-  otherUserId,
   otherUserName = "User",
   otherUserAvatar,
 }: ChatWindowProps) {
@@ -48,14 +47,14 @@ export default function ChatWindow({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // State
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const [socket] = useState<Socket | null>(null);
   const [newMessage, setNewMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [otherUserTyping, setOtherUserTyping] = useState(false);
+  const [otherUserTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch conversation details
-  const { data: conversation } = useQuery<Conversation>({
+  useQuery<Conversation>({
     queryKey: ["conversation", conversationId],
     queryFn: async () => {
       const result = await messagingClient.getConversation(conversationId);
@@ -122,7 +121,7 @@ export default function ChatWindow({
         updatedAt: new Date(),
       };
 
-      queryClient.setQueryData(["messages", conversationId], (old: any) => ({
+      queryClient.setQueryData(["messages", conversationId], (old: { items: Message[] } | undefined) => ({
         ...old,
         items: [...(old?.items || []), optimisticMessage],
       }));
@@ -153,9 +152,7 @@ export default function ChatWindow({
       if (!user?.id) {
         throw new Error("User not authenticated");
       }
-      return messagingClient.markConversationAsRead(conversationId, {
-        userId: user.id,
-      });
+      return messagingClient.markConversationAsRead(conversationId);
     },
   });
 
@@ -187,7 +184,7 @@ export default function ChatWindow({
     if (messages.length > 0 && user?.id) {
       markAsReadMutation.mutate();
     }
-  }, [messages.length, user?.id]);
+  }, [messages.length, user?.id, markAsReadMutation]);
 
   // Handle typing
   const handleTyping = (value: string) => {

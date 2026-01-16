@@ -22,8 +22,22 @@ vi.mock('@/app/lib/rate-limit', () => ({
 
 vi.mock('@/app/lib/env', () => ({
   env: {
-    NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
+    NEXT_PUBLIC_APP_URL: 'http://localhost:3500',
   },
+}));
+
+// Mock the category mapping utilities
+vi.mock('@/lib/constants/professionalCategories', () => ({
+  getProfessionsForCategory: vi.fn((slug: string) => {
+    const mapping: Record<string, string[]> = {
+      'all': [],
+      'plumbing': ['plumber', 'waterproofing_specialist'],
+      'architecture': ['architect', 'draftsman'],
+    };
+    return mapping[slug] || [];
+  }),
+  getProfessionLabel: vi.fn((profession: string) => profession),
+  isValidCategory: vi.fn(() => true),
 }));
 
 describe('GET /api/professionals', () => {
@@ -69,7 +83,7 @@ describe('GET /api/professionals', () => {
       mockProfessionals as any
     );
 
-    const request = new NextRequest('http://localhost:3000/api/professionals');
+    const request = new NextRequest('http://localhost:3500/api/professionals');
     const response = await GET(request);
     const data = await response.json();
 
@@ -84,7 +98,7 @@ describe('GET /api/professionals', () => {
     vi.mocked(prisma.professionalProfile.findMany).mockResolvedValue([]);
 
     const request = new NextRequest(
-      'http://localhost:3000/api/professionals?search=carpenter'
+      'http://localhost:3500/api/professionals?search=carpenter'
     );
 
     await GET(request);
@@ -101,8 +115,9 @@ describe('GET /api/professionals', () => {
   it('should filter professionals by category', async () => {
     vi.mocked(prisma.professionalProfile.findMany).mockResolvedValue([]);
 
+    // Use valid category slug format
     const request = new NextRequest(
-      'http://localhost:3000/api/professionals?category=Plumber'
+      'http://localhost:3500/api/professionals?category=plumbing'
     );
 
     await GET(request);
@@ -112,7 +127,7 @@ describe('GET /api/professionals', () => {
 
   it('should reject invalid sort options', async () => {
     const request = new NextRequest(
-      'http://localhost:3000/api/professionals?sortBy=invalid'
+      'http://localhost:3500/api/professionals?sortBy=invalid'
     );
 
     const response = await GET(request);
@@ -128,7 +143,7 @@ describe('GET /api/professionals', () => {
       new Error('Database connection failed')
     );
 
-    const request = new NextRequest('http://localhost:3000/api/professionals');
+    const request = new NextRequest('http://localhost:3500/api/professionals');
     const response = await GET(request);
     const data = await response.json();
 
@@ -140,7 +155,7 @@ describe('GET /api/professionals', () => {
   it('should return empty array when no professionals found', async () => {
     vi.mocked(prisma.professionalProfile.findMany).mockResolvedValue([]);
 
-    const request = new NextRequest('http://localhost:3000/api/professionals');
+    const request = new NextRequest('http://localhost:3500/api/professionals');
     const response = await GET(request);
     const data = await response.json();
 
@@ -154,7 +169,7 @@ describe('GET /api/professionals', () => {
     vi.mocked(prisma.professionalProfile.findMany).mockResolvedValue([]);
 
     const request = new NextRequest(
-      `http://localhost:3000/api/professionals?search=${encodeURIComponent(longSearch)}`
+      `http://localhost:3500/api/professionals?search=${encodeURIComponent(longSearch)}`
     );
 
     await GET(request);
@@ -204,7 +219,7 @@ describe('GET /api/professionals', () => {
     );
 
     const request = new NextRequest(
-      'http://localhost:3000/api/professionals?sortBy=rating'
+      'http://localhost:3500/api/professionals?sortBy=rating'
     );
 
     const response = await GET(request);
@@ -222,7 +237,7 @@ describe('GET /api/professionals', () => {
       reset: Date.now() + 60000,
     });
 
-    const request = new NextRequest('http://localhost:3000/api/professionals');
+    const request = new NextRequest('http://localhost:3500/api/professionals');
     const response = await GET(request);
     const data = await response.json();
 

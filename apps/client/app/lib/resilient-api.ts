@@ -46,6 +46,7 @@ export function apiSuccess<T>(
 export function apiError(
   message: string,
   status: number = 500,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   details?: any
 ): NextResponse {
   const correlationId = CorrelationIdManager.get();
@@ -137,6 +138,7 @@ export async function executeResilient<T>(
 /**
  * Resilient fetch with timeout and retry
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function resilientFetch<T = any>(
   url: string,
   options: RequestInit & {

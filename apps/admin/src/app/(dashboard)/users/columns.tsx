@@ -123,46 +123,45 @@ export const columns: ColumnDef<UserData>[] = [
   },
   {
     id: "actions",
-    cell: ({ row }) => {
-      const user = row.original;
-      const router = useRouter();
-
-      const handleDelete = async () => {
-          if(!confirm("Are you sure you want to delete this user?")) return;
-          const res = await deleteUser(user.id);
-          if (res.success) {
-              toast.success("User deleted");
-              router.refresh();
-          } else {
-              toast.error(res.error);
-          }
-      }
-
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-8 w-8 p-0">
-              <span className="sr-only">Open menu</span>
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-            <DropdownMenuItem
-              onClick={() => navigator.clipboard.writeText(user.id)}
-            >
-              Copy user ID
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href={`/users/${user.id}`}>View Details</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleDelete} className="text-red-600 focus:text-red-600">
-                Delete User
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      );
-    },
+    cell: ({ row }) => <UserActionsCell user={row.original} />,
   },
 ];
+
+function UserActionsCell({ user }: { user: UserData }) {
+  const router = useRouter();
+
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to delete this user?")) return;
+    const res = await deleteUser(user.id);
+    if (res.success) {
+      toast.success("User deleted");
+      router.refresh();
+    } else {
+      toast.error(res.error);
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" className="h-8 w-8 p-0">
+          <span className="sr-only">Open menu</span>
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+        <DropdownMenuItem onClick={() => navigator.clipboard.writeText(user.id)}>
+          Copy user ID
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href={`/users/${user.id}`}>View Details</Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={handleDelete} className="text-red-600 focus:text-red-600">
+          Delete User
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

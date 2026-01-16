@@ -73,8 +73,8 @@ export function ProfessionalProfileEditor({ userId, initialData }: ProfessionalP
       } else {
         toast.error(result.error || "Failed to update profile");
       }
-    } catch (error) {
-      toast.error("An error occurred");
+    } catch {
+      toast.error("Failed to update profile");
     } finally {
       setIsSaving(false);
     }

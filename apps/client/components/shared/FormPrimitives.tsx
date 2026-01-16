@@ -28,7 +28,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({ classN
 
   return (
     <button
-      ref={ref as any}
+      ref={ref}
       className={cn(
         'inline-flex items-center justify-center whitespace-nowrap rounded-none ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0C9A6] disabled:opacity-50',
         variants[variant],
@@ -43,7 +43,7 @@ Button.displayName = 'Button';
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(({ className, type, ...props }, ref) => (
   <input
-    ref={ref as any}
+    ref={ref}
     type={type}
     className={cn(
       'flex h-12 w-full rounded-none border border-[#E0C9A6]/30 bg-[#0F1D18] px-4 py-2 text-sm text-[#E0C9A6] placeholder:text-[#E0C9A6]/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#E0C9A6]',
@@ -56,7 +56,7 @@ Input.displayName = 'Input';
 
 export const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(({ className, ...props }, ref) => (
   <select
-    ref={ref as any}
+    ref={ref}
     className={cn(
       'flex h-12 w-full rounded-none border border-[#E0C9A6]/30 bg-[#0F1D18] px-4 py-2 text-sm text-[#E0C9A6] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#E0C9A6] appearance-none',
       className ?? ''

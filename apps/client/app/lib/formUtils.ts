@@ -3,7 +3,7 @@ export const validateEmail = (value: string): string => {
     if (!trimmed) return 'Email is required';
     if (trimmed.length > 254) return 'Email is too long';
     // Basic RFC 5322-like check with additional subdomain support
-    const emailRegex = /^(?=.{1,254}$)(?=.{1,64}@)[A-Za-z0-9.!#$%&'*+\/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+    const emailRegex = /^(?=.{1,254}$)(?=.{1,64}@)[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
     return emailRegex.test(trimmed) ? '' : 'Invalid email format';
   };
   

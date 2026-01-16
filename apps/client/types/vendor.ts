@@ -1,65 +1,24 @@
-// Type definitions aligned with Store schema
-export interface Store {
-  id: string;
-  name: string;
-  description?: string | null;
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  categories: string[];
-  verified: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-  products?: Product[];
-  reviews?: StoreReview[];
-  _count?: {
-    products: number;
-    reviews: number;
-    orders: number;
-  };
-}
+// Vendor types - Re-exports from store.ts for backwards compatibility
+// The Vendor concept is implemented as Store in the schema
 
-export interface Product {
-  id: string;
-  storeId: string;
-  name: string;
-  description?: string | null;
-  price: number;
-  imageUrl?: string | null;
-  category: string;
-  inStock: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
+export {
+  type Store,
+  type StoreCategory,
+  type StoreType,
+  type County,
+  type StoreImage,
+  type Product,
+  type ProductImage,
+  type StoreReview,
+  type StoreCardData,
+  type StoreListResponse,
+  type StoreFilters,
+  STORE_CATEGORY_LABELS,
+  STORE_TYPE_LABELS,
+  COUNTY_LABELS,
+  toStoreCardData,
+} from "./store";
 
-export interface StoreReview {
-  id: string;
-  reviewerId: string;
-  reviewer: {
-    firstName?: string | null;
-    lastName?: string | null;
-  };
-  rating: number;
-  comment?: string | null;
-  approved: boolean;
-  createdAt: Date;
-}
-
-// For display purposes in cards/lists
-export interface VendorCardData {
-  id: string;
-  name: string;
-  description?: string;
-  categories: string[];
-  verified: boolean;
-  rating?: number;
-  reviewCount?: number;
-  productCount?: number;
-  imageUrl?: string;
-  location?: string; // Formatted: "City, State" or full address
-  address?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-}
+// Alias for backwards compatibility
+export type Vendor = import("./store").Store;
+export type VendorCardData = import("./store").StoreCardData;

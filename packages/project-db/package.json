@@ -8,8 +8,8 @@
     "db:deploy": "prisma migrate deploy"
   },
   "devDependencies": {
-    "@repo/typescript-config": "workspace:*",
-    "@types/node": "^24.3.1",
+    "@repo/typescript-config": "0.0.0",
+    "@types/node": "^24.8.1",
     "prisma": "^6.19.0"
   },
   "dependencies": {

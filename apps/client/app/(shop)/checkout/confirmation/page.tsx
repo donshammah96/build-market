@@ -39,10 +39,10 @@ export default function ConfirmationPage() {
       </div>
 
       <div className="bg-gray-50 p-6 rounded-lg mb-8 text-left">
-        <h2 className="font-bold mb-2">What's Next?</h2>
+        <h2 className="font-bold mb-2">What&apos;s Next?</h2>
         <ul className="space-y-2 text-gray-600">
-          <li>• You'll receive an order confirmation email shortly</li>
-          <li>• We'll notify you when your order ships</li>
+          <li>• You&apos;ll receive an order confirmation email shortly</li>
+          <li>• We&apos;ll notify you when your order ships</li>
           <li>• Track your order status in your account</li>
         </ul>
       </div>

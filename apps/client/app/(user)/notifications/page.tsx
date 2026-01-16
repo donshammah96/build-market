@@ -10,16 +10,13 @@ import {
   Calendar, 
   AlertCircle,
   Clock,
-  Filter,
   Check
 } from "lucide-react";
 
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
 import { Footer } from "@/components/layout/Footer";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 

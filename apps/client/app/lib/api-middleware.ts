@@ -16,6 +16,7 @@ export interface AuthContext {
 /**
  * Handler function with authentication context
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AuthenticatedHandler<T = any> = (
   req: NextRequest,
   context: AuthContext,
@@ -26,8 +27,11 @@ type AuthenticatedHandler<T = any> = (
  * Middleware that ensures the request is authenticated via Clerk
  * and provides the database user ID in the context
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
-  return async (req: NextRequest, routeContext?: { params: Promise<T> }) => {
+  // Using rest parameters to handle both static and dynamic routes
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const routeHandler = async (req: NextRequest, ...args: any[]): Promise<NextResponse> => {
     try {
       // Get Clerk user ID
       const { userId: clerkId } = await auth();
@@ -52,7 +56,8 @@ export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
         userEmail: user.email,
       };
 
-      // Resolve params if provided
+      // Resolve params if provided (for dynamic routes)
+      const routeContext = args[0] as { params?: Promise<T> } | undefined;
       const params = routeContext?.params ? await routeContext.params : undefined;
 
       return handler(req, context, params);
@@ -61,6 +66,8 @@ export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
       return apiError('Authentication failed', 401);
     }
   };
+
+  return routeHandler;
 }
 
 /**
@@ -86,7 +93,9 @@ export function withValidation<T extends z.ZodType>(schema: T) {
 /**
  * Combine multiple middleware functions
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function compose(...middlewares: any[]) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (handler: any) => {
     return middlewares.reduceRight((acc, middleware) => middleware(acc), handler);
   };
