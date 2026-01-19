@@ -12,7 +12,7 @@
  */
 
 // Core types
-export * from './types';
+export type * from './types';
 
 // Timeout utilities
 export {
@@ -56,10 +56,13 @@ export {
 // Metrics and observability
 export {
   MetricsCollector,
-  Metric,
-  MetricType,
   getGlobalMetricsCollector,
   setGlobalMetricsCollector,
+} from './metrics';
+
+export type {
+  Metric,
+  MetricType,
 } from './metrics';
 
 // Logging
