@@ -91,7 +91,7 @@ async function AuditStats() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-sm font-medium text-zinc-600">
-            Today's Activity
+            Today&#39;s Activity
           </CardTitle>
           <Clock className="h-4 w-4 text-zinc-400" />
         </CardHeader>

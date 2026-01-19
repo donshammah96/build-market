@@ -18,7 +18,7 @@ export type PropertyListItem = {
   category: string;
   status: string;
   location: string;
-  county: string;
+  county: string | null;
   bedrooms: number | null;
   bathrooms: number | null;
   areaSqFt: number | null;
@@ -344,7 +344,7 @@ export async function getPropertyDetails(propertyId: string) {
       status: property.status,
       location: property.location,
       address: property.address,
-      county: property.county,
+      county: property.county || "Unknown",
       constituency: property.constituency,
       neighbourhood: property.neighbourhood,
       latitude: property.latitude,
@@ -457,7 +457,7 @@ export async function verifyProperty(propertyId: string, notes?: string) {
         action: "VERIFY_PROPERTY",
         entityType: "property",
         entityId: propertyId,
-        newStatus: "VERIFIED",
+        details: { newStatus: "VERIFIED" },
       },
     });
 
@@ -493,7 +493,7 @@ export async function rejectProperty(propertyId: string, reason: string) {
         action: "REJECT_PROPERTY",
         entityType: "property",
         entityId: propertyId,
-        newStatus: "REJECTED",
+        details: { newStatus: "REJECTED" },
       },
     });
 
