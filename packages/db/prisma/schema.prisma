@@ -54,6 +54,12 @@ enum CertificateVerificationStatus {
   rejected
 }
 
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
 enum LeadStatus {
   NEW
   CONTACTED
@@ -96,99 +102,254 @@ enum PropertyStatus {
 }
 
 enum StoreCategory {
-  hardware              // Tools, fasteners, nails, screws
-  building_materials    // Cement, sand, bricks, blocks
-  tiles_and_ceramics    // Floor tiles, wall tiles, mosaics
-  electrical            // Cables, switches, lighting
-  plumbing              // Pipes, fittings, sanitaryware
-  paints_and_finishes   // Paints, varnishes, coatings
-  roofing               // Metal sheets, tiles, gutters
-  timber_and_wood       // Lumber, plywood, doors
-  glass_and_aluminum    // Windows, mirrors, aluminum profiles
-  kitchen_and_bath      // Cabinets, sinks, fixtures
-  landscaping           // Pavers, outdoor materials
-  steel_and_metals      // Reinforcement bars, structural steel
-  safety_and_tools      // PPE, power tools, hand tools
-  hvac                  // Air conditioning, ventilation
+  hardware // Tools, fasteners, nails, screws
+  building_materials // Cement, sand, bricks, blocks
+  tiles_and_ceramics // Floor tiles, wall tiles, mosaics
+  electrical // Cables, switches, lighting
+  plumbing // Pipes, fittings, sanitaryware
+  paints_and_finishes // Paints, varnishes, coatings
+  roofing // Metal sheets, tiles, gutters
+  timber_and_wood // Lumber, plywood, doors
+  glass_and_aluminum // Windows, mirrors, aluminum profiles
+  kitchen_and_bath // Cabinets, sinks, fixtures
+  landscaping // Pavers, outdoor materials
+  steel_and_metals // Reinforcement bars, structural steel
+  safety_and_tools // PPE, power tools, hand tools
+  hvac // Air conditioning, ventilation
 }
 
 enum StoreType {
-  retail               // Direct consumer sales
-  wholesale            // Bulk/trade sales
-  manufacturer         // Factory/producer
-  distributor          // Official distributor
-  online_only          // E-commerce only
+  retail // Direct consumer sales
+  wholesale // Bulk/trade sales
+  manufacturer // Factory/producer
+  distributor // Official distributor
+  online_only // E-commerce only
+}
+
+enum County {
+  BARINGO
+  BOMET
+  BUNGOMA
+  BUSIA
+  ELGEYO_MARAKWET
+  EMBU
+  GARISSA
+  HOMA_BAY
+  ISIOLO
+  KAJIADO
+  KAKAMEGA
+  KERICHO
+  KIAMBU
+  KILIFI
+  KIRINYAGA
+  KISII
+  KISUMU
+  KITUI
+  KWALE
+  LAIKIPIA
+  LAMU
+  MACHAKOS
+  MAKUENI
+  MANDERA
+  MARSABIT
+  MERU
+  MIGORI
+  MOMBASA
+  MURANGA
+  NAIROBI
+  NAKURU
+  NANDI
+  NAROK
+  NYAMIRA
+  NYANDARUA
+  NYERI
+  SAMBURU
+  SIAYA
+  TAITA_TAVETA
+  TANA_RIVER
+  THARAKA_NITHI
+  TRANS_NZOIA
+  TURKANA
+  UASIN_GISHU
+  VIHIGA
+  WAJIR
+  WEST_POKOT
+}
+
+enum Profession {
+  GENERAL_CONTRACTOR
+  ELECTRICIAN
+  PLUMBER
+  CARPENTER
+  MASON
+  INTERIOR_DESIGNER
+  ARCHITECT
+  LANDSCAPER
+  PAINTER
+  HVAC_TECHNICIAN
+  ROOFER
+  GLAZIER
+  WELDER
+  OTHER
+}
+
+model ServiceCategory {
+  id             String      @id @default(uuid())
+  name           String
+  slug           String      @unique
+  description    String?
+  icon           String?
+  professionType Profession?
+  isActive       Boolean     @default(true)
+  sortOrder      Int         @default(0)
+
+  // Relations
+  professionals ProfessionalProfile[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PropertyImage {
+  id         String   @id @default(uuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  url        String
+  caption    String?
+  isMain     Boolean  @default(false)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([propertyId])
+}
+
+model PropertyAttachment {
+  id         String   @id @default(uuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  fileUrl    String
+  type       String // e.g. "title_deed", "floor_plan"
+  isVerified Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([propertyId])
+}
+
+model Service {
+  id            String                @id @default(uuid())
+  name          String
+  slug          String                @unique
+  icon          String?
+  professionals ProfessionalProfile[] // Implicit many-to-many relation
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
 }
 
 model Property {
-  id          String              @id @default(uuid())
+  id          String           @id @default(uuid())
   title       String
   description String?
-  price       Decimal             @db.Decimal(12, 2)
-  currency    String              @default("KES")
-  type        PropertyType        // SALE, RENT, LEASE
+  price       Decimal          @db.Decimal(12, 2)
+  currency    String           @default("KES")
+  type        PropertyType // SALE, RENT, LEASE
   category    PropertyCategory
-  
+
   // Location
-  location    String              // e.g. "Kilimani, Nairobi"
-  address     String?
-  coordinates Json?               // { lat: number, lng: number }
+  location      String // e.g. "Kilimani, Nairobi"
+  address       String?
+  county        County?
+  constituency  String?
+  neighbourhood String?
+  coordinates   Json?
+  latitude      Float?
+  longitude     Float?
 
   // Details
-  bedrooms    Int?
-  bathrooms   Int?
-  areaSqFt    Float?
-  lotSize     Float?              // For land
-  
+  bedrooms      Int?
+  bathrooms     Int?
+  areaSqFt      Float?
+  lotSize       Float? // For land
+  parkingSpaces Int?
+  yearBuilt     Int?
+
   // Media
-  images      String[]
+  images      PropertyImage[]
+  attachments PropertyAttachment[]
   floorPlan   String?
   videoUrl    String?
 
   // Meta
-  features    String[]            // ["Swimming Pool", "Gym", "Borehole"]
-  status      PropertyStatus      @default(AVAILABLE)
-  featured    Boolean             @default(false)
+  features String[] // ["Swimming Pool", "Gym", "Borehole"]
+  status   PropertyStatus @default(AVAILABLE)
+  featured Boolean        @default(false)
+
+  // Verification
+  verified           Boolean            @default(false)
+  verifiedAt         DateTime?
+  rejectionReason    String?
+  verificationStatus VerificationStatus @default(PENDING)
+  verificationNotes  String?
 
   // Relations
-  agentId     String
-  agent       ProfessionalProfile @relation(fields: [agentId], references: [userId], onDelete: Cascade)
-  
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  agentId String
+  agent   ProfessionalProfile @relation(fields: [agentId], references: [userId], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([type])
   @@index([location])
   @@index([price])
   @@index([agentId])
+  @@index([verified])
+  @@index([county])
+}
+
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  adminId    String
+  admin      User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  action     String
+  entityType String
+  entityId   String
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([adminId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
 }
 
 model User {
-  id                  String               @id @default(uuid())
-  clerkId             String               @unique
-  email               String               @unique
-  firstName           String?
-  lastName            String?
-  phone               String?
-  avatar              String?
-  role                UserRole             @default(client)
-  isProfileComplete   Boolean              @default(false)
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  clientProfile       ClientProfile?
-  professionalProfile ProfessionalProfile?
-  adminProfile        AdminProfile?
-  projects            Project[]            @relation("ClientProjects")
-  orders              Order[]              @relation("ClientOrders")
-  reviews             Review[]             @relation("Reviewer")
-  ideaBooks           IdeaBook[]           @relation("IdeaBookOwner")
-  sharedIdeaBooks     IdeaBook[]           @relation("IdeaBookShares")
-  messageThreads      MessageThread[]      @relation("MessageThreadUsers")
-  messages            Message[]            @relation("Sender")
-  analytics           UserAnalytics[]
-  verifiedCertificates Certificate[]       @relation("CertificateVerifier")
-  calendarEvents      CalendarEvent[]
-  notifications       Notification[]
+  id                   String               @id @default(uuid())
+  clerkId              String               @unique
+  email                String               @unique
+  firstName            String?
+  lastName             String?
+  phone                String?
+  avatar               String?
+  role                 UserRole             @default(client)
+  isProfileComplete    Boolean              @default(false)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  clientProfile        ClientProfile?
+  professionalProfile  ProfessionalProfile?
+  adminProfile         AdminProfile?
+  projects             Project[]            @relation("ClientProjects")
+  orders               Order[]              @relation("ClientOrders")
+  reviews              Review[]             @relation("Reviewer")
+  ideaBooks            IdeaBook[]           @relation("IdeaBookOwner")
+  sharedIdeaBooks      IdeaBook[]           @relation("IdeaBookShares")
+  messageThreads       MessageThread[]      @relation("MessageThreadUsers")
+  messages             Message[]            @relation("Sender")
+  analytics            UserAnalytics[]
+  verifiedCertificates Certificate[]        @relation("CertificateVerifier")
+  calendarEvents       CalendarEvent[]
+  notifications        Notification[]
+  adminAuditLogs       AdminAuditLog[]
 
   @@index([clerkId])
   @@index([email])
@@ -221,33 +382,39 @@ model ClientProfile {
 }
 
 model ProfessionalProfile {
-  userId          String        @id
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyName     String
-  licenseNumber   String?       @unique
-  yearsExperience Int?
-  servicesOffered String[]
-  images          String[]
-  portfolioUrl    String?
-  website         String?
-  bio             String?
-  city            String?
-  county          String?
-  country         String?
-  verified        Boolean       @default(false)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  portfolios      Portfolio[]
-  stores          Store[]       @relation("ProfessionalStores")
-  projects        Project[]     @relation("ProfessionalProjects")
-  orders          Order[]       @relation("ProfessionalOrders")
-  reviews         Review[]      @relation("ProfessionalReviews")
-  certificates    Certificate[]
-  calendarEvents  CalendarEvent[]
-  leads           Lead[]
-  transactions    ProfessionalTransaction[]
-  quotes          Quote[]
-  properties      Property[]
+  userId             String                    @id
+  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName        String
+  profession         String?
+  licenseNumber      String?                   @unique
+  yearsExperience    Int?
+  servicesOffered    String[]
+  services           ServiceCategory[]
+  images             String[]
+  portfolioUrl       String?
+  website            String?
+  bio                String?
+  city               String?
+  county             String?
+  country            String?
+  verified           Boolean                   @default(false)
+  verificationStatus VerificationStatus        @default(PENDING)
+  verificationNotes  String?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  portfolios         Portfolio[]
+  stores             Store[]                   @relation("ProfessionalStores")
+  projects           Project[]                 @relation("ProfessionalProjects")
+  orders             Order[]                   @relation("ProfessionalOrders")
+  reviews            Review[]                  @relation("ProfessionalReviews")
+  certificates       Certificate[]
+  calendarEvents     CalendarEvent[]
+  leads              Lead[]
+  transactions       ProfessionalTransaction[]
+  quotes             Quote[]
+  properties         Property[]
+  service            Service?                  @relation(fields: [serviceId], references: [id])
+  serviceId          String?
 
   @@index([verified])
   @@index([city])
@@ -262,25 +429,25 @@ model AdminProfile {
 }
 
 model Project {
-  id             String               @id @default(uuid())
-  clientId       String
-  client         User                 @relation(fields: [clientId], references: [id], onDelete: Cascade, name: "ClientProjects")
-  professionalId String?              @map("professionalId")
-  professional   ProfessionalProfile? @relation(fields: [professionalId], references: [userId], onDelete: SetNull, name: "ProfessionalProjects")
+  id                       String                    @id @default(uuid())
+  clientId                 String
+  client                   User                      @relation(fields: [clientId], references: [id], onDelete: Cascade, name: "ClientProjects")
+  professionalId           String?                   @map("professionalId")
+  professional             ProfessionalProfile?      @relation(fields: [professionalId], references: [userId], onDelete: SetNull, name: "ProfessionalProjects")
   professionalTransactions ProfessionalTransaction[]
-  title          String
-  description    String?
-  status         ProjectStatus        @default(planning)
-  budget         Decimal?             @db.Decimal(10, 2)
-  startDate      DateTime?
-  endDate        DateTime?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  milestones     ProjectMilestone[]
-  messageThreads MessageThread[]
-  calendarEvents CalendarEvent[]
-  reviews        Review[]
-  quotes         Quote[]
+  title                    String
+  description              String?
+  status                   ProjectStatus             @default(planning)
+  budget                   Decimal?                  @db.Decimal(10, 2)
+  startDate                DateTime?
+  endDate                  DateTime?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  milestones               ProjectMilestone[]
+  messageThreads           MessageThread[]
+  calendarEvents           CalendarEvent[]
+  reviews                  Review[]
+  quotes                   Quote[]
 
   @@index([clientId])
   @@index([professionalId])
@@ -362,18 +529,29 @@ model Store {
   professionalId String
   professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade, name: "ProfessionalStores")
   name           String
+  slug           String              @unique // Added
   description    String?
   address        String
   city           String
-  state          String
-  zipCode        String
-  images         String[]
-  categories     StoreCategory[]     // Building material categories
-  storeType      StoreType           @default(retail) // Business model type
-  verified       Boolean             @default(false)
+  county         County?             // Ensure this uses the County enum
+  zipCode        String?
+  
+  images         StoreImage[]
+  
+  categories     StoreCategory[]
+  storeType      StoreType           @default(retail)
+  
+  // Verification
+  verified            Boolean             @default(false)
+  verificationStatus  VerificationStatus  @default(PENDING)
+  verificationNotes   String?
+  verifiedAt          DateTime?           // Added
+  rejectionReason     String?             // Added
+  
   featured       Boolean             @default(false)
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
+  
   products       Product[]
   orders         Order[]             @relation("StoreOrders")
   reviews        Review[]            @relation("StoreReviews")
@@ -381,8 +559,21 @@ model Store {
   @@index([professionalId])
   @@index([verified])
   @@index([storeType])
+  @@index([county])
 }
 
+model StoreImage {
+  id        String   @id @default(uuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  url       String
+  caption   String?
+  isMain    Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([storeId])
+}
 
 model Product {
   id          String      @id @default(uuid())
@@ -572,6 +763,8 @@ model Lead {
   budget         String?
   status         LeadStatus          @default(NEW)
   notes          String?
+  source         String?
+  followUpDate   DateTime?
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
