@@ -389,7 +389,7 @@ export async function getGeographicDistribution(
           orderBy: { _count: { id: "desc" } },
         });
         distribution = storeDist.map((d) => ({
-          county: d.county,
+          county: d.county || "Unknown",
           count: d._count.id,
         }));
         break;
@@ -402,7 +402,7 @@ export async function getGeographicDistribution(
           orderBy: { _count: { id: "desc" } },
         });
         distribution = propDist.map((d) => ({
-          county: d.county,
+          county: d.county || "Unknown",
           count: d._count.id,
         }));
         break;

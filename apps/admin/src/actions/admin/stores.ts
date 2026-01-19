@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma, prisma, County, StoreType, StoreCategory } from "@repo/db";
 import { safeAction, safeVerificationAction } from "./shared";
 import { z } from "zod";
+import { notStrictEqual } from "assert";
 
 // ============================================================================
 // Types
@@ -15,7 +16,7 @@ export type StoreListItem = {
   slug: string;
   description: string | null;
   city: string;
-  county: string;
+  county: string | null;
   categories: string[];
   storeType: string;
   verified: boolean;
@@ -42,7 +43,7 @@ export type StoreDetails = {
   description: string | null;
   address: string;
   city: string;
-  county: string;
+  county: string | null;
   zipCode: string | null;
   phone: string | null;
   email: string | null;
@@ -307,7 +308,7 @@ export async function getStoreDetails(storeId: string) {
       description: store.description,
       address: store.address,
       city: store.city,
-      county: store.county,
+      county: store.county || "Unknown",
       zipCode: store.zipCode,
       phone: null,
       email: null,
@@ -444,10 +445,12 @@ export async function verifyStore(storeId: string, notes?: string) {
         action: "VERIFY_STORE",
         entityType: "store",
         entityId: storeId,
-        oldStatus: currentStore?.verificationStatus || null,
-        newStatus: "VERIFIED",
-        reason: notes || null,
-        metadata: { storeName: store.name },
+        details: {
+          oldStatus: currentStore?.verificationStatus || null,
+          newStatus: "VERIFIED",
+          reason: notes || null,
+          metadata: { storeName: store.name },
+        },
       },
     });
 
@@ -468,7 +471,7 @@ export async function verifyStore(storeId: string, notes?: string) {
 /**
  * Rejects store verification.
  */
-export async function rejectStore(storeId: string, reason: string) {
+export async function rejectStore(storeId: string, reason: string, notes?: string) {
   return safeVerificationAction("rejectStore", async ({ adminUserId }) => {
     if (!reason) throw new Error("Rejection reason is required");
 
@@ -497,10 +500,12 @@ export async function rejectStore(storeId: string, reason: string) {
         action: "REJECT_STORE",
         entityType: "store",
         entityId: storeId,
-        oldStatus: currentStore.verificationStatus,
-        newStatus: "REJECTED",
-        reason: reason,
-        metadata: { storeName: store.name },
+        details: {
+          oldStatus: currentStore?.verificationStatus || null,
+          newStatus: "REJECTED",
+          reason: notes || null,
+          metadata: { storeName: store.name },
+        },
       },
     });
 
