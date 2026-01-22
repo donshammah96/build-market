@@ -1,86 +1,245 @@
+// --------------------------------------------------------
+// BUILD MARKET SCHEMA - PRODUCTION READY (v2.0)
+// Optimized for: Kenya Construction Industry, M-Pesa, & SEO
+// --------------------------------------------------------
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "postgresql" // or "mysql"
   url      = env("DATABASE_URL")
 }
 
+// ========================================================
+// 1. ENUMS (STRICT TYPING & WORKFLOWS)
+// ========================================================
+
 enum UserRole {
-  client
-  professional
-  admin
+  CLIENT
+  PROFESSIONAL
+  ADMIN
 }
 
-enum ProjectStatus {
-  planning
-  in_progress
-  completed
-  archived
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  ARCHIVED
 }
 
-enum OrderStatus {
-  pending
-  paid
-  shipped
-  delivered
-  cancelled
+enum ClientType {
+  HOMEOWNER
+  CORPORATE_DEVELOPER
+  INTERIOR_DESIGN_FIRM
+  GOVERNMENT_ENTITY
+  OTHER
 }
 
-enum ReviewType {
-  professional
-  store
+enum AdminRole {
+  SUPER_ADMIN
+  CONTENT_MODERATOR
+  SUPPORT_AGENT
+  FINANCE_MANAGER
+  SYSTEM_ADMIN
 }
 
-enum PaymentStatus {
-  success
-  failed
-  refunded
-  pending
+enum AuditSeverity {
+  INFO
+  WARNING
+  CRITICAL
 }
 
-enum MessageType {
-  text
-  image
-  file
-  pdf
-  system
+enum AuditStatus {
+  SUCCESS
+  FAILURE
+  DENIED
 }
 
-enum CertificateVerificationStatus {
-  pending
-  verified
-  rejected
+// --- PROFESSIONAL & SERVICES ---
+enum Profession {
+  ARCHITECT
+  INTERIOR_DESIGNER
+  LANDSCAPE_ARCHITECT
+  URBAN_PLANNER
+  STRUCTURAL_ENGINEER
+  CIVIL_ENGINEER
+  MECHANICAL_ENGINEER
+  ELECTRICAL_ENGINEER
+  QUANTITY_SURVEYOR
+  LAND_SURVEYOR
+  REAL_ESTATE_VALUER
+  GENERAL_CONTRACTOR
+  MASON
+  ELECTRICIAN
+  PLUMBER
+  CARPENTER
+  JOINER
+  PAINTER
+  WELDER
+  GLAZIER
+  ROOFER
+  STEEL_FIXER
+  FLOORING_SPECIALIST
+  PLASTERER
+  HVAC_TECHNICIAN
+  SOLAR_ENERGY_TECHNICIAN
+  BOREHOLE_DRILLER
+  CCTV_AND_SECURITY_PRO
+  INTERNET_AND_NETWORK_PRO
+  PROJECT_MANAGER
+  CLERK_OF_WORKS
+  OTHER
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  BUSY
+  UNAVAILABLE
 }
 
 enum VerificationStatus {
   PENDING
+  UNVERIFIED
   VERIFIED
+  NEEDS_CORRECTION
   REJECTED
 }
 
-enum LeadStatus {
-  NEW
-  CONTACTED
-  PROPOSAL
-  WON
-  LOST
+// --- PROJECT & CONTRACTS ---
+enum ProjectType {
+  RESIDENTIAL
+  COMMERCIAL
+  RENOVATION
+  INTERIOR_DESIGN
+  LANDSCAPING
+  INFRASTRUCTURE
+  OTHER
 }
 
-enum TransactionType {
-  INCOME
-  WITHDRAWAL
-  EXPENSE
-}
-
-enum TransactionStatus {
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  PAUSED
   COMPLETED
-  PENDING
-  FAILED
+  ARCHIVED
   CANCELLED
 }
 
+enum ContractType {
+  LABOR_ONLY
+  FULL_CONTRACT
+  DESIGN_ONLY
+  CONSULTANCY
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  IN_REVIEW
+  COMPLETED
+  DELAYED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REQUESTED_CHANGE
+}
+
+enum ProjectDocumentType {
+  CONTRACT_AGREEMENT
+  BOQ
+  INVOICE
+  RECEIPT
+  BLUEPRINT_ARCHITECTURAL
+  BLUEPRINT_STRUCTURAL
+  NCA_PERMIT
+  SITE_INSTRUCTION
+  HANDOVER_CERTIFICATE
+  OTHER
+}
+
+enum ProjectImageCategory {
+  SITE_PREPARATION
+  FOUNDATION
+  WALLING
+  ROOFING
+  FINISHING
+  SNAG_LIST
+  MATERIAL_DELIVERY
+  OTHER
+}
+
+// --- COMMERCE (STORE & PRODUCTS) ---
+enum StoreCategory {
+  HARDWARE
+  BUILDING_MATERIALS
+  TILES_AND_CERAMICS
+  ELECTRICAL
+  PLUMBING
+  PAINTS_AND_FINISHES
+  ROOFING
+  TIMBER_AND_WOOD
+  GLASS_AND_ALUMINUM
+  KITCHEN_AND_BATH
+  LANDSCAPING
+  STEEL_AND_METALS
+  SAFETY_AND_TOOLS
+  HVAC
+  SOLAR_AND_ENERGY
+  WATER_STORAGE
+  SECURITY_SYSTEMS
+  DECOR_AND_LIGHTING
+  HEAVY_MACHINERY
+  WINDOWS_AND_DOORS
+  AUTOMOTIVE
+}
+
+enum StoreType {
+  RETAIL
+  WHOLESALE
+  MANUFACTURER
+  DISTRIBUTOR
+  ONLINE_ONLY
+}
+
+enum DeliveryOption {
+  PICKUP_ONLY
+  DELIVERY_AVAILABLE
+  THIRD_PARTY_LOGISTICS
+  DIGITAL_DELIVERY
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  RETURNED
+}
+
+enum StoreDocumentType {
+  BUSINESS_PERMIT
+  KRA_TAX_COMPLIANCE
+  CR12
+  DISTRIBUTOR_LICENSE
+  KEBS_CERTIFICATE
+}
+
+enum StoreImageCategory {
+  LOGO
+  STOREFRONT
+  INTERIOR
+  WAREHOUSE
+  TEAM
+}
+
+// --- REAL ESTATE (PROPERTY) ---
 enum PropertyType {
   SALE
   RENT
@@ -99,33 +258,304 @@ enum PropertyStatus {
   SOLD
   RENTED
   UNDER_OFFER
+  OFF_MARKET
 }
 
-enum StoreCategory {
-  hardware // Tools, fasteners, nails, screws
-  building_materials // Cement, sand, bricks, blocks
-  tiles_and_ceramics // Floor tiles, wall tiles, mosaics
-  electrical // Cables, switches, lighting
-  plumbing // Pipes, fittings, sanitaryware
-  paints_and_finishes // Paints, varnishes, coatings
-  roofing // Metal sheets, tiles, gutters
-  timber_and_wood // Lumber, plywood, doors
-  glass_and_aluminum // Windows, mirrors, aluminum profiles
-  kitchen_and_bath // Cabinets, sinks, fixtures
-  landscaping // Pavers, outdoor materials
-  steel_and_metals // Reinforcement bars, structural steel
-  safety_and_tools // PPE, power tools, hand tools
-  hvac // Air conditioning, ventilation
+enum PropertyTenure {
+  FREEHOLD
+  LEASEHOLD
+  SECTIONAL_TITLE
+  SUB_LEASE
 }
 
-enum StoreType {
-  retail // Direct consumer sales
-  wholesale // Bulk/trade sales
-  manufacturer // Factory/producer
-  distributor // Official distributor
-  online_only // E-commerce only
+enum FurnishingStatus {
+  UNFURNISHED
+  SEMI_FURNISHED
+  FURNISHED
+  SERVICED
 }
 
+enum CompletionStatus {
+  READY_TO_MOVE
+  UNDER_CONSTRUCTION
+  OFF_PLAN
+}
+
+enum AreaUnit {
+  SQ_METERS
+  SQ_FEET
+  ACRES
+  HECTARES
+}
+
+enum PropertyDocumentType {
+  TITLE_DEED
+  OFFICIAL_SEARCH
+  LAND_RATES_CLEARANCE
+  LAND_RENT_CLEARANCE
+  ID_COPY
+  KRA_PIN
+  AUTHORITY_TO_SELL
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum AttachmentType {
+  FLOOR_PLAN
+  BROCHURE
+  ENERGY_CERTIFICATE
+  SITE_MAP
+  SALE_AGREEMENT_DRAFT
+}
+
+enum ImageCategory {
+  EXTERIOR
+  LIVING_ROOM
+  KITCHEN
+  BEDROOM
+  BATHROOM
+  AERIAL_VIEW
+  AMENITIES
+  PLAN
+}
+
+// --- CRM (LEADS & CALENDAR) ---
+enum LeadStatus {
+  NEW
+  CONTACTED
+  PROPOSAL
+  WON
+  LOST
+}
+
+enum LeadSource {
+  PLATFORM_SEARCH
+  PROFILE_VIEW
+  DIRECT_MESSAGE
+  PHONE_REVEAL
+  REFERRAL
+  EXTERNAL_IMPORT
+}
+
+enum LeadPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum LostReason {
+  PRICE_TOO_HIGH
+  GHOSTED
+  COMPETITOR_WON
+  TIMELINE_MISMATCH
+  OUT_OF_SCOPE
+  OTHER
+}
+
+enum CalendarEventType {
+  MEETING
+  SITE_VISIT
+  DEADLINE
+  PAYMENT_DUE
+  MATERIAL_DELIVERY
+  INSPECTION_NCA
+  INSPECTION_INTERNAL
+}
+
+enum CalendarEventStatus {
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+  NO_SHOW
+}
+
+// --- FINANCIALS & QUOTES ---
+enum TransactionType {
+  INCOME
+  WITHDRAWAL
+  EXPENSE
+}
+
+enum TransactionCategory {
+  PROJECT_PAYMENT
+  SUBSCRIPTION_FEE
+  LEAD_PURCHASE
+  VERIFICATION_FEE
+  WITHDRAWAL
+  REFUND
+  PENALTY
+}
+
+enum TransactionStatus {
+  COMPLETED
+  PENDING
+  FAILED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  MPESA
+  BANK_TRANSFER
+  CARD
+  WALLET
+  CASH
+}
+
+enum PaymentStatus {
+  SUCCESS
+  FAILED
+  REFUNDED
+  PENDING
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  VIEWED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  REVISED
+}
+
+// --- COMMUNICATION & SOCIAL ---
+enum ReviewType {
+  PROFESSIONAL
+  STORE
+}
+
+enum ReviewStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
+  DISPUTED
+  ARCHIVED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  PDF
+  SYSTEM
+}
+
+enum ThreadType {
+  DIRECT
+  GROUP
+  PROJECT
+  SUPPORT
+}
+
+enum ParticipantRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  PAYMENT
+  MESSAGE
+  PROJECT
+  LEAD
+  SECURITY
+  SYSTEM
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum NotificationPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum NotificationDeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+}
+
+enum IdeaBookCategory {
+  LIVING_ROOM
+  KITCHEN
+  BATHROOM
+  BEDROOM
+  OUTDOOR_LANDSCAPING
+  COMMERCIAL_OFFICE
+  RETAIL_SHOP
+  WHOLE_HOUSE
+}
+
+enum IdeaBookPrivacy {
+  PUBLIC
+  SHARED_LINK
+  PRIVATE
+}
+
+enum PortfolioImageCategory {
+  FINISHED_WORK
+  BEFORE_STATE
+  WORK_IN_PROGRESS
+  BLUEPRINT_OR_PLAN
+  MATERIAL_BOARD
+}
+
+enum ProjectDurationUnit {
+  DAYS
+  WEEKS
+  MONTHS
+  YEARS
+}
+
+enum AnalyticsPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum AnalyticsEntityType {
+  PROFILE
+  STORE
+  PROJECT
+  PRODUCT
+  PROPERTY
+}
+
+enum AnalyticsEventType {
+  VIEW
+  CONTACT_CLICK
+  SEARCH_IMPRESSION
+  BOOKMARK
+  SHARE
+}
+
+enum CertificateVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+// --- GEOGRAPHY (KENYA) ---
 enum County {
   BARINGO
   BOMET
@@ -176,385 +606,674 @@ enum County {
   WEST_POKOT
 }
 
-enum Profession {
-  GENERAL_CONTRACTOR
-  ELECTRICIAN
-  PLUMBER
-  CARPENTER
-  MASON
-  INTERIOR_DESIGNER
-  ARCHITECT
-  LANDSCAPER
-  PAINTER
-  HVAC_TECHNICIAN
-  ROOFER
-  GLAZIER
-  WELDER
-  OTHER
-}
+// ========================================================
+// 2. CORE SYSTEM MODELS
+// ========================================================
 
-model ServiceCategory {
-  id             String      @id @default(uuid())
-  name           String
-  slug           String      @unique
-  description    String?
-  icon           String?
-  professionType Profession?
-  isActive       Boolean     @default(true)
-  sortOrder      Int         @default(0)
+model SystemSettings {
+  id String @id @default("global")
 
-  // Relations
-  professionals ProfessionalProfile[]
+  // Availability
+  maintenanceMode    Boolean  @default(false)
+  maintenanceMessage String?
+  allowedIPs         String[]
 
-  createdAt DateTime @default(now())
+  // Onboarding
+  publicSignup              Boolean @default(true)
+  allowProfessionalSignup   Boolean @default(true)
+  emailVerificationRequired Boolean @default(true)
+
+  // Financials
+  currency            String  @default("KES")
+  commissionRate      Decimal @default(10.00) @db.Decimal(5, 2)
+  vatPercentage       Decimal @default(16.00) @db.Decimal(5, 2)
+  withholdingTaxRate  Decimal @default(5.00) @db.Decimal(5, 2)
+  minWithdrawalAmount Decimal @default(1000.00) @db.Decimal(12, 2)
+
+  // Verification & Compliance
+  enforceStrictVerification   Boolean @default(true)
+  enforceProfessionalLicenses Boolean @default(true)
+  enableAutoVerifyNCA         Boolean @default(false)
+  enableAutoVerifyERC         Boolean @default(false)
+  enableAutoVerifyBORAQS      Boolean @default(false)
+  enforcePropertyDocuments    Boolean @default(true)
+  enableLandRegistryCheck     Boolean @default(false)
+  enforceStorePermits         Boolean @default(true)
+  requireTaxCompliance        Boolean @default(false)
+
+  // Dynamic Rules (JSON)
+  verificationRules Json @default("{}")
+  featureFlags      Json @default("{}")
+
+  // Support
+  supportEmail   String  @default("support@buildmarket.co.ke")
+  supportPhone   String?
+  whatsappNumber String?
+
+  // Security
+  securityMFA        Boolean  @default(true)
+  adminEmailAlerts   Boolean  @default(true)
+  sessionTimeoutMins Int      @default(60)
+  maxUploadSizeMB    Int      @default(10)
+  allowedFileTypes   String[] @default(["application/pdf", "image/jpeg", "image/png", "image/webp"])
+
+  // Versions
+  termsVersion         String @default("1.0")
+  privacyPolicyVersion String @default("1.0")
+  minAppVersion        String @default("1.0.0")
+
   updatedAt DateTime @updatedAt
-}
-
-model PropertyImage {
-  id         String   @id @default(uuid())
-  propertyId String
-  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  url        String
-  caption    String?
-  isMain     Boolean  @default(false)
-  sortOrder  Int      @default(0)
-  createdAt  DateTime @default(now())
-
-  @@index([propertyId])
-}
-
-model PropertyAttachment {
-  id         String   @id @default(uuid())
-  propertyId String
-  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  fileUrl    String
-  type       String // e.g. "title_deed", "floor_plan"
-  isVerified Boolean  @default(false)
-  createdAt  DateTime @default(now())
-
-  @@index([propertyId])
-}
-
-model Service {
-  id            String                @id @default(uuid())
-  name          String
-  slug          String                @unique
-  icon          String?
-  professionals ProfessionalProfile[] // Implicit many-to-many relation
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
-}
-
-model Property {
-  id          String           @id @default(uuid())
-  title       String
-  description String?
-  price       Decimal          @db.Decimal(12, 2)
-  currency    String           @default("KES")
-  type        PropertyType // SALE, RENT, LEASE
-  category    PropertyCategory
-
-  // Location
-  location      String // e.g. "Kilimani, Nairobi"
-  address       String?
-  county        County?
-  constituency  String?
-  neighbourhood String?
-  coordinates   Json?
-  latitude      Float?
-  longitude     Float?
-
-  // Details
-  bedrooms      Int?
-  bathrooms     Int?
-  areaSqFt      Float?
-  lotSize       Float? // For land
-  parkingSpaces Int?
-  yearBuilt     Int?
-
-  // Media
-  images      PropertyImage[]
-  attachments PropertyAttachment[]
-  floorPlan   String?
-  videoUrl    String?
-
-  // Meta
-  features String[] // ["Swimming Pool", "Gym", "Borehole"]
-  status   PropertyStatus @default(AVAILABLE)
-  featured Boolean        @default(false)
-
-  // Verification
-  verified           Boolean            @default(false)
-  verifiedAt         DateTime?
-  rejectionReason    String?
-  verificationStatus VerificationStatus @default(PENDING)
-  verificationNotes  String?
-
-  // Relations
-  agentId String
-  agent   ProfessionalProfile @relation(fields: [agentId], references: [userId], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([type])
-  @@index([location])
-  @@index([price])
-  @@index([agentId])
-  @@index([verified])
-  @@index([county])
-}
-
-model AdminAuditLog {
-  id         String   @id @default(uuid())
-  adminId    String
-  admin      User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  action     String
-  entityType String
-  entityId   String
-  details    Json?
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime @default(now())
-
-  @@index([adminId])
-  @@index([action])
-  @@index([entityType])
-  @@index([createdAt])
 }
 
 model User {
-  id                   String               @id @default(uuid())
-  clerkId              String               @unique
-  email                String               @unique
-  firstName            String?
-  lastName             String?
-  phone                String?
-  avatar               String?
-  role                 UserRole             @default(client)
-  isProfileComplete    Boolean              @default(false)
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
-  clientProfile        ClientProfile?
-  professionalProfile  ProfessionalProfile?
-  adminProfile         AdminProfile?
-  projects             Project[]            @relation("ClientProjects")
-  orders               Order[]              @relation("ClientOrders")
-  reviews              Review[]             @relation("Reviewer")
-  ideaBooks            IdeaBook[]           @relation("IdeaBookOwner")
-  sharedIdeaBooks      IdeaBook[]           @relation("IdeaBookShares")
-  messageThreads       MessageThread[]      @relation("MessageThreadUsers")
-  messages             Message[]            @relation("Sender")
+  id        String  @id @default(uuid())
+  clerkId   String  @unique
+  email     String  @unique
+  firstName String?
+  lastName  String?
+  phone     String?
+  avatar    String?
+
+  // Status
+  role              UserRole   @default(CLIENT)
+  status            UserStatus @default(ACTIVE)
+  isProfileComplete Boolean    @default(false)
+  isEmailVerified   Boolean    @default(false)
+  isPhoneVerified   Boolean    @default(false)
+
+  // Legal
+  termsAcceptedAt  DateTime?
+  termsVersion     String?
+  marketingConsent Boolean   @default(false)
+
+  // Activity
+  lastLoginAt  DateTime?
+  lastActiveAt DateTime?
+  metadata     Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Profiles
+  clientProfile       ClientProfile?
+  professionalProfile ProfessionalProfile?
+  adminProfile        AdminProfile?
+
+  // Relations
+  projects        Project[]              @relation("ClientProjects")
+  orders          Order[]                @relation("ClientOrders")
+  reviews         Review[]               @relation("Reviewer")
+  ideaBooks       IdeaBook[]             @relation("IdeaBookOwner")
+  sharedIdeaBooks IdeaBookCollaborator[]
+
+  // Messaging
+  threadParticipants ThreadParticipant[]
+  messages           Message[]           @relation("Sender")
+  readReceipts       ReadReceipt[]
+
+  // System
   analytics            UserAnalytics[]
-  verifiedCertificates Certificate[]        @relation("CertificateVerifier")
-  calendarEvents       CalendarEvent[]
+  verifiedCertificates Certificate[]     @relation("CertificateVerifier")
+  calendarEvents       CalendarEvent[]   @relation("ClientCalendarEvents")
   notifications        Notification[]
-  adminAuditLogs       AdminAuditLog[]
+  adminAuditLogs       AdminAuditLog[]   @relation("AdminActions") // Relation to logs created by this admin
+  propertyInquiries    PropertyInquiry[] @relation("InquirySender")
+
+  // Upload Tracking
+  uploadedProjectDocuments    ProjectDocument[]
+  uploadedProjectImages       ProjectImage[]
+  uploadedStoreDocuments      StoreDocument[]
+  uploadedStoreImages         StoreImage[]
+  uploadedPropertyDocuments   PropertyDocument[]
+  uploadedPropertyImages      PropertyImage[]
+  uploadedPortfolioImages     PortfolioImage[]
+  uploadedIdeaBookAttachments IdeaBookAttachment[]
+  uploadedPropertyAttachments PropertyAttachment[]
+  leads                       Lead[]
 
   @@index([clerkId])
   @@index([email])
   @@index([role])
-}
-
-model SystemSettings {
-  id               String   @id @default("global")
-  maintenanceMode  Boolean  @default(false)
-  publicSignup     Boolean  @default(true)
-  autoVerifyNCA    Boolean  @default(false)
-  commissionRate   Decimal  @default(10.0) @db.Decimal(5, 2)
-  supportEmail     String   @default("support@buildmarket.co.ke")
-  adminEmailAlerts Boolean  @default(true)
-  securityMFA      Boolean  @default(true)
-  updatedAt        DateTime @updatedAt
-}
-
-model ClientProfile {
-  userId      String   @id
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  address     String?
-  city        String?
-  county      String?
-  zipCode     String?
-  preferences Json?
-  quotes      Quote[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model ProfessionalProfile {
-  userId             String                    @id
-  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyName        String
-  profession         String?
-  licenseNumber      String?                   @unique
-  yearsExperience    Int?
-  servicesOffered    String[]
-  services           ServiceCategory[]
-  images             String[]
-  portfolioUrl       String?
-  website            String?
-  bio                String?
-  city               String?
-  county             String?
-  country            String?
-  verified           Boolean                   @default(false)
-  verificationStatus VerificationStatus        @default(PENDING)
-  verificationNotes  String?
-  createdAt          DateTime                  @default(now())
-  updatedAt          DateTime                  @updatedAt
-  portfolios         Portfolio[]
-  stores             Store[]                   @relation("ProfessionalStores")
-  projects           Project[]                 @relation("ProfessionalProjects")
-  orders             Order[]                   @relation("ProfessionalOrders")
-  reviews            Review[]                  @relation("ProfessionalReviews")
-  certificates       Certificate[]
-  calendarEvents     CalendarEvent[]
-  leads              Lead[]
-  transactions       ProfessionalTransaction[]
-  quotes             Quote[]
-  properties         Property[]
-  service            Service?                  @relation(fields: [serviceId], references: [id])
-  serviceId          String?
-
-  @@index([verified])
-  @@index([city])
-  @@index([county])
-  @@index([companyName])
+  @@index([status])
+  @@index([phone])
 }
 
 model AdminProfile {
-  userId      String   @id
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  permissions String[]
+  userId        String    @id
+  user          User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  role          AdminRole @default(SUPPORT_AGENT)
+  permissions   String[]
+  department    String?
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  lastActiveAt  DateTime?
+  internalNotes String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
+model AdminAuditLog {
+  id      String  @id @default(uuid())
+  adminId String?
+  admin   User?   @relation("AdminActions", fields: [adminId], references: [id], onDelete: SetNull)
+
+  adminName  String // Snapshot
+  adminEmail String // Snapshot
+  adminRole  String // Snapshot
+
+  action   String
+  severity AuditSeverity @default(INFO)
+  status   AuditStatus   @default(SUCCESS)
+
+  targetId   String
+  targetType String
+  details    Json?
+  reason     String?
+
+  ipAddress String?
+  userAgent String?
+  requestId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([severity])
+}
+
+// ========================================================
+// 3. PROFILES (CLIENT & PROFESSIONAL)
+// ========================================================
+
+model ClientProfile {
+  userId String     @id
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type   ClientType @default(HOMEOWNER)
+
+  companyName        String?
+  kraPin             String?
+  registrationNumber String?
+  website            String?
+
+  address      String?
+  city         String?
+  county       County?
+  neighborhood String?
+  landmark     String?
+  zipCode      String?
+  latitude     Float?
+  longitude    Float?
+
+  interests     String[]
+  typicalBudget Decimal? @db.Decimal(12, 2)
+  preferences   Json?
+
+  isVerified     Boolean   @default(false)
+  verifiedAt     DateTime?
+  loyaltyPoints  Int       @default(0)
+  membershipTier String    @default("STANDARD")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quotes Quote[]
+}
+
+model ProfessionalProfile {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  companyName     String
+  profession      Profession?
+  specializations String[]
+  bio             String?     @db.Text
+  website         String?
+  portfolioUrl    String?
+  socials         Json?
+
+  city            String?
+  county          County?
+  country         String? @default("Kenya")
+  latitude        Float?
+  longitude       Float?
+  serviceRadiusKm Int?    @default(20)
+
+  availability   AvailabilityStatus @default(AVAILABLE)
+  operatingHours Json?
+
+  licenseNumber    String? @unique
+  kraPin           String?
+  isInsured        Boolean @default(false)
+  insuranceDetails Json?
+  yearsExperience  Int?
+
+  verified           Boolean            @default(false)
+  verificationStatus VerificationStatus @default(PENDING)
+  verificationNotes  String?
+  submittedAt        DateTime?
+  verifiedAt         DateTime?
+  verifiedById       String?
+
+  rating            Decimal @default(0.0) @db.Decimal(3, 2)
+  reviewCount       Int     @default(0)
+  completedProjects Int     @default(0)
+  responseRate      Int     @default(100)
+
+  minProjectBudget Decimal? @db.Decimal(12, 2)
+  hourlyRate       Decimal? @db.Decimal(10, 2)
+  acceptedPayments String[] @default(["MPESA", "BANK", "CASH"])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  services   ServiceCategory[]
+  documents  ProfessionalDocument[]
+  portfolios Portfolio[]
+
+  stores         Store[]                   @relation("ProfessionalStores")
+  projects       Project[]                 @relation("ProfessionalProjects")
+  orders         Order[]                   @relation("ProfessionalOrders")
+  reviews        Review[]                  @relation("ProfessionalReviews")
+  certificates   Certificate[]
+  calendarEvents CalendarEvent[]
+  leads          Lead[]
+  transactions   ProfessionalTransaction[]
+  quotes         Quote[]
+  properties     Property[]                @relation("AgentProperties")
+
+  serviceId String?
+  service   Service? @relation(fields: [serviceId], references: [id])
+
+  @@index([verified])
+  @@index([profession])
+  @@index([county])
+  @@index([rating])
+  @@index([availability])
+}
+
+model ProfessionalDocument {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+  type           String
+  url            String
+  fileKey        String              @unique
+  mimeType       String
+  size           Int
+  verified       Boolean             @default(false)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  verifiedAt     DateTime?
+  notes          String?
+
+  @@index([professionalId])
+}
+
+model Certificate {
+  id                 String                        @id @default(uuid())
+  professionalId     String
+  professional       ProfessionalProfile           @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+  name               String
+  fileKey            String                        @unique
+  mimeType           String?
+  size               Int?
+  issuer             String
+  issueDate          DateTime?
+  expiryDate         DateTime?
+  fileUrl            String
+  verificationStatus CertificateVerificationStatus @default(PENDING)
+  verifiedAt         DateTime?
+  verifiedById       String?
+  verifiedBy         User?                         @relation("CertificateVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+  notes              String?
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+
+  @@index([professionalId])
+}
+
+// ========================================================
+// 4. SERVICES & CATEGORIES
+// ========================================================
+
+model ServiceCategory {
+  id          String  @id @default(uuid())
+  name        String
+  slug        String  @unique
+  description String? @db.Text
+  icon        String?
+  imageUrl    String?
+
+  professionType Profession?
+  isActive       Boolean     @default(true)
+  sortOrder      Int         @default(0)
+  isFeatured     Boolean     @default(false)
+
+  metaTitle       String?
+  metaDescription String?
+  keywords        String[]
+
+  services      Service[]
+  professionals ProfessionalProfile[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+}
+
+model Service {
+  id         String          @id @default(uuid())
+  categoryId String
+  category   ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  name        String
+  slug        String  @unique
+  description String?
+  icon        String?
+
+  defaultUnit String?
+  avgPriceMin Decimal? @db.Decimal(10, 2)
+  avgPriceMax Decimal? @db.Decimal(10, 2)
+
+  searchKeywords  String[]
+  popularityScore Int      @default(0)
+
+  professionals ProfessionalProfile[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  deletedAt     DateTime?
+
+  @@index([categoryId])
+  @@index([slug])
+}
+
+// ========================================================
+// 5. PROJECTS (MANAGEMENT & CONTRACTS)
+// ========================================================
+
 model Project {
-  id                       String                    @id @default(uuid())
-  clientId                 String
-  client                   User                      @relation(fields: [clientId], references: [id], onDelete: Cascade, name: "ClientProjects")
-  professionalId           String?                   @map("professionalId")
-  professional             ProfessionalProfile?      @relation(fields: [professionalId], references: [userId], onDelete: SetNull, name: "ProfessionalProjects")
+  id String @id @default(uuid())
+
+  clientId String
+  client   User   @relation("ClientProjects", fields: [clientId], references: [id], onDelete: Restrict)
+
+  professionalId String?              @map("professionalId")
+  professional   ProfessionalProfile? @relation("ProfessionalProjects", fields: [professionalId], references: [userId], onDelete: SetNull)
+
+  portfolioId String?    @unique
+  portfolio   Portfolio? @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
+
+  title        String
+  description  String?       @db.Text
+  type         ProjectType   @default(RESIDENTIAL)
+  contractType ContractType  @default(FULL_CONTRACT)
+  status       ProjectStatus @default(PLANNING)
+  isDisputed   Boolean       @default(false)
+
+  location    String?
+  siteAddress String?
+  county      County?
+  coordinates Json?
+
+  budget   Decimal? @db.Decimal(12, 2)
+  currency String   @default("KES")
+
+  totalPaid            Decimal   @default(0) @db.Decimal(12, 2)
+  totalInvoiced        Decimal   @default(0) @db.Decimal(12, 2)
+  retentionPercentage  Decimal   @default(0) @db.Decimal(5, 2)
+  retentionAmount      Decimal   @default(0) @db.Decimal(12, 2)
+  retentionReleaseDate DateTime?
+
+  startDate            DateTime?
+  endDate              DateTime?
+  actualCompletionDate DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  milestones ProjectMilestone[]
+  images     ProjectImage[]
+  documents  ProjectDocument[]
+
   professionalTransactions ProfessionalTransaction[]
-  title                    String
-  description              String?
-  status                   ProjectStatus             @default(planning)
-  budget                   Decimal?                  @db.Decimal(10, 2)
-  startDate                DateTime?
-  endDate                  DateTime?
-  createdAt                DateTime                  @default(now())
-  updatedAt                DateTime                  @updatedAt
-  milestones               ProjectMilestone[]
   messageThreads           MessageThread[]
   calendarEvents           CalendarEvent[]
   reviews                  Review[]
   quotes                   Quote[]
+  savedInIdeaBooks         SavedProject[]
 
   @@index([clientId])
   @@index([professionalId])
   @@index([status])
-  @@index([createdAt])
+  @@index([county])
 }
 
 model ProjectMilestone {
-  id          String    @id @default(uuid())
-  projectId   String
-  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
   title       String
   description String?
+
+  amount        Decimal? @db.Decimal(12, 2)
+  isPaid        Boolean  @default(false)
+  fundsInEscrow Boolean  @default(false)
+
+  status          MilestoneStatus @default(PENDING)
+  approvalStatus  ApprovalStatus  @default(PENDING)
+  approvedAt      DateTime?
+  rejectionReason String?
+
   dueDate     DateTime?
-  completed   Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  proofImages ProjectImage[]
+  documents   ProjectDocument[]
 }
 
-model IdeaBook {
-  id          String               @id @default(uuid())
-  clientId    String
-  client      User                 @relation(fields: [clientId], references: [id], onDelete: Cascade, name: "IdeaBookOwner")
-  title       String
-  description String?
-  items       Json // Stores IdeaBookItem array as JSONB
-  sharedWith  User[]               @relation("IdeaBookShares")
-  attachments IdeaBookAttachment[]
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+model ProjectDocument {
+  id        String  @id @default(uuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@index([clientId])
-  @@index([createdAt])
-}
+  title String
+  type  ProjectDocumentType
 
-model IdeaBookAttachment {
-  id         String   @id @default(uuid())
-  ideaBookId String
-  ideaBook   IdeaBook @relation(fields: [ideaBookId], references: [id], onDelete: Cascade)
-  url        String // URL to the uploaded file
-  filename   String // Original filename
-  size       Int // File size in bytes
-  mimeType   String // e.g., "image/jpeg", "image/png"
-  caption    String? // Optional caption/description for the image
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  fileUrl  String
+  fileKey  String @unique
+  mimeType String
+  size     Int
 
-  @@index([ideaBookId])
-  @@index([createdAt])
-}
+  version  Int     @default(1)
+  isLatest Boolean @default(true)
 
-model Review {
-  id             String               @id @default(uuid())
-  reviewerId     String
-  reviewer       User                 @relation(fields: [reviewerId], references: [id], onDelete: Cascade, name: "Reviewer")
-  professionalId String?
-  storeId        String?
-  professional   ProfessionalProfile? @relation(fields: [professionalId], references: [userId], onDelete: Cascade, name: "ProfessionalReviews")
-  store          Store?               @relation(fields: [storeId], references: [id], onDelete: Cascade, name: "StoreReviews")
-  projectId      String?
-  project        Project?             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  type           ReviewType
-  rating         Int // 1-5 rating scale
-  comment        String?
-  approved       Boolean              @default(false)
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  milestoneId String?
+  milestone   ProjectMilestone? @relation(fields: [milestoneId], references: [id])
+  status      ApprovalStatus    @default(APPROVED)
 
-  @@index([type])
-  @@index([rating])
-  @@index([approved])
-  @@index([professionalId])
-  @@index([storeId])
+  uploadedById String
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([projectId])
+  @@index([milestoneId])
+  @@index([type])
 }
+
+model ProjectImage {
+  id        String  @id @default(uuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  milestoneId String?
+  milestone   ProjectMilestone? @relation(fields: [milestoneId], references: [id])
+
+  fileUrl String
+  fileKey String  @unique
+  caption String?
+
+  mimeType    String
+  size        Int
+  width       Int?
+  height      Int?
+  blurDataUrl String?
+
+  category ProjectImageCategory?
+
+  uploadedById String
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+  @@index([milestoneId])
+  @@index([category])
+}
+
+// ========================================================
+// 6. PORTFOLIOS (CASE STUDIES)
+// ========================================================
+
+model Portfolio {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+
+  title       String
+  slug        String      @unique
+  description String?     @db.Text
+  projectType ProjectType @default(RESIDENTIAL)
+  tags        String[]
+
+  location String?
+  county   County?
+
+  budget   Decimal? @db.Decimal(12, 2)
+  currency String   @default("KES")
+
+  durationValue  Int?
+  durationUnit   ProjectDurationUnit @default(WEEKS)
+  completionDate DateTime?
+
+  linkedProjectId String?  @unique
+  linkedProject   Project?
+  isVerified      Boolean  @default(false)
+
+  clientTestimonial String? @db.Text
+  clientName        String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  images PortfolioImage[]
+
+  @@index([professionalId])
+  @@index([projectType])
+}
+
+model PortfolioImage {
+  id          String    @id @default(uuid())
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  fileKey     String  @unique
+  fileUrl     String
+  mimeType    String
+  size        Int
+  width       Int
+  height      Int
+  blurDataUrl String?
+
+  caption   String?
+  category  PortfolioImageCategory @default(FINISHED_WORK)
+  isMain    Boolean                @default(false)
+  sortOrder Int                    @default(0)
+
+  uploadedById String?
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  savedInIdeaBooks SavedImage[]
+
+  @@index([portfolioId])
+  @@index([category])
+}
+
+// ========================================================
+// 7. STORE & E-COMMERCE
+// ========================================================
 
 model Store {
   id             String              @id @default(uuid())
   professionalId String
-  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade, name: "ProfessionalStores")
-  name           String
-  slug           String              @unique // Added
-  description    String?
-  address        String
-  city           String
-  county         County?             // Ensure this uses the County enum
-  zipCode        String?
-  
-  images         StoreImage[]
-  
-  categories     StoreCategory[]
-  storeType      StoreType           @default(retail)
-  
-  // Verification
-  verified            Boolean             @default(false)
-  verificationStatus  VerificationStatus  @default(PENDING)
-  verificationNotes   String?
-  verifiedAt          DateTime?           // Added
-  rejectionReason     String?             // Added
-  
-  featured       Boolean             @default(false)
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  
-  products       Product[]
-  orders         Order[]             @relation("StoreOrders")
-  reviews        Review[]            @relation("StoreReviews")
+  professional   ProfessionalProfile @relation("ProfessionalStores", fields: [professionalId], references: [userId], onDelete: Cascade)
+
+  name        String
+  slug        String  @unique
+  description String? @db.Text
+  logoUrl     String?
+  bannerUrl   String?
+
+  contactPhone   String?
+  whatsappNumber String?
+  email          String?
+  website        String?
+
+  mpesaTillNumber String?
+  mpesaPaybill    String?
+  acceptsCard     Boolean @default(false)
+  acceptsCash     Boolean @default(true)
+
+  address      String
+  city         String
+  county       County?
+  neighborhood String?
+  zipCode      String?
+  coordinates  Json?
+  latitude     Float?
+  longitude    Float?
+
+  storeType        StoreType       @default(RETAIL)
+  categories       StoreCategory[]
+  deliveryOption   DeliveryOption  @default(PICKUP_ONLY)
+  deliveryRadiusKm Int?
+  baseDeliveryFee  Decimal?        @default(0) @db.Decimal(10, 2)
+  minOrderValue    Decimal?        @default(0) @db.Decimal(10, 2)
+  operatingHours   Json?
+  isOpen           Boolean         @default(true)
+
+  businessRegNo      String?
+  kraPin             String?
+  verified           Boolean            @default(false)
+  verificationStatus VerificationStatus @default(PENDING)
+  verificationNotes  String?
+  verifiedAt         DateTime?
+  rejectionReason    String?
+
+  featured    Boolean @default(false)
+  rating      Decimal @default(0.0) @db.Decimal(3, 2)
+  reviewCount Int     @default(0)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  submittedAt DateTime?
+  deletedAt   DateTime?
+
+  images    StoreImage[]
+  documents StoreDocument[]
+  products  Product[]
+  orders    Order[]         @relation("StoreOrders")
+  reviews   Review[]        @relation("StoreReviews")
 
   @@index([professionalId])
   @@index([verified])
@@ -562,62 +1281,109 @@ model Store {
   @@index([county])
 }
 
+model StoreDocument {
+  id       String            @id @default(uuid())
+  storeId  String
+  store    Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  type     StoreDocumentType
+  fileKey  String            @unique
+  fileUrl  String
+  mimeType String
+  size     Int
+
+  status          DocumentStatus @default(PENDING)
+  verified        Boolean        @default(false)
+  verifiedAt      DateTime?
+  rejectionReason String?
+  issueDate       DateTime?
+  expiryDate      DateTime?
+
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([storeId])
+  @@index([status])
+}
+
 model StoreImage {
-  id        String   @id @default(uuid())
-  storeId   String
-  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  url       String
+  id          String  @id @default(uuid())
+  storeId     String
+  store       Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  fileKey     String  @unique
+  fileUrl     String
+  mimeType    String
+  size        Int
+  width       Int?
+  height      Int?
+  blurDataUrl String?
+
+  category  StoreImageCategory @default(INTERIOR)
   caption   String?
-  isMain    Boolean  @default(false)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
+  isMain    Boolean            @default(false)
+  sortOrder Int                @default(0)
+
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  createdAt    DateTime @default(now())
 
   @@index([storeId])
 }
 
 model Product {
-  id          String      @id @default(uuid())
+  id          String    @id @default(uuid())
   storeId     String
-  store       Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store       Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
   name        String
   description String?
-  price       Decimal     @db.Decimal(10, 2)
+  price       Decimal   @db.Decimal(12, 2)
   imageUrl    String?
   category    String
-  inStock     Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  orderItems  OrderItem[]
+  inStock     Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  orderItems       OrderItem[]
+  reviews          Review[]
+  savedInIdeaBooks SavedProduct[]
 }
 
 model Order {
   id             String               @id @default(uuid())
   clientId       String
-  client         User                 @relation(fields: [clientId], references: [id], onDelete: Cascade, name: "ClientOrders")
+  client         User                 @relation("ClientOrders", fields: [clientId], references: [id], onDelete: Cascade)
   storeId        String?
-  store          Store?               @relation(fields: [storeId], references: [id], onDelete: SetNull, name: "StoreOrders")
+  store          Store?               @relation("StoreOrders", fields: [storeId], references: [id], onDelete: SetNull)
   professionalId String?
-  professional   ProfessionalProfile? @relation(fields: [professionalId], references: [userId], onDelete: SetNull, name: "ProfessionalOrders")
-  items          OrderItem[]
-  totalAmount    Decimal              @db.Decimal(10, 2)
-  status         OrderStatus          @default(pending)
-  paymentMethod  String?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  payments       Payment[]
+  professional   ProfessionalProfile? @relation("ProfessionalOrders", fields: [professionalId], references: [userId], onDelete: SetNull)
+
+  items         OrderItem[]
+  totalAmount   Decimal     @db.Decimal(12, 2)
+  status        OrderStatus @default(PENDING)
+  paymentMethod String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments Payment[]
+  reviews  Review[]
 }
 
 model OrderItem {
-  id        String   @id @default(uuid())
-  orderId   String
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId String?
-  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
-  name      String // Snapshot of product name
-  price     Decimal  @db.Decimal(10, 2) // Snapshot of product price
-  quantity  Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(uuid())
+  orderId          String
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId        String?
+  product          Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  name             String
+  price            Decimal  @db.Decimal(12, 2)
+  quantity         Int
+  snapshotImageUrl String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([orderId])
   @@index([productId])
@@ -627,201 +1393,685 @@ model Payment {
   id            String        @id @default(uuid())
   orderId       String
   order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  amount        Decimal       @db.Decimal(10, 2)
+  amount        Decimal       @db.Decimal(12, 2)
   transactionId String        @unique
-  status        PaymentStatus @default(pending)
+  status        PaymentStatus @default(PENDING)
   createdAt     DateTime      @default(now())
 
   @@index([orderId])
-  @@index([status])
   @@index([transactionId])
 }
 
-model Portfolio {
-  id                String              @id @default(uuid())
-  professionalId    String
-  professional      ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
-  title             String
-  description       String?
-  images            String[]
-  projectType       String
-  clientTestimonial String?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-}
+// ========================================================
+// 8. REAL ESTATE (PROPERTIES)
+// ========================================================
 
-model MessageThread {
-  id            String    @id @default(uuid())
-  users         User[]    @relation("MessageThreadUsers")
-  projectId     String?
-  project       Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  lastMessage   String?
-  lastMessageAt DateTime?
-  unreadCount   Json? // Map of userId -> unread count
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  messages      Message[]
+model Property {
+  id          String           @id @default(uuid())
+  title       String
+  slug        String           @unique
+  description String?          @db.Text
+  type        PropertyType
+  category    PropertyCategory
 
-  @@index([lastMessageAt])
-}
+  price           Decimal  @db.Decimal(12, 2)
+  currency        String   @default("KES")
+  priceNegotiable Boolean  @default(false)
+  serviceCharge   Decimal? @default(0) @db.Decimal(10, 2)
+  depositRequired String?
+  paymentTerms    String?
 
-model Message {
-  id          String        @id @default(uuid())
-  threadId    String
-  thread      MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  senderId    String
-  sender      User          @relation(fields: [senderId], references: [id], name: "Sender")
-  content     String // Encrypted in messaging-service
-  type        MessageType   @default(text)
-  readBy      String[]      @default([]) // UUIDs of users
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  attachments Attachment[]
+  tenure              PropertyTenure? @default(FREEHOLD)
+  leaseYearsRemaining Int?
+  titleDeedReady      Boolean         @default(false)
 
-  @@index([threadId, createdAt])
-  @@index([senderId])
-  @@index([createdAt])
-}
+  bedrooms         Int?
+  bathrooms        Int?
+  parkingSpaces    Int?
+  buildingSize     Float?
+  plotSize         Float?
+  areaUnit         AreaUnit         @default(SQ_METERS)
+  yearBuilt        Int?
+  furnishing       FurnishingStatus @default(UNFURNISHED)
+  completionStatus CompletionStatus @default(READY_TO_MOVE)
 
-model Attachment {
-  id        String   @id @default(uuid())
-  messageId String
-  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  url       String // Encrypted in messaging-service
-  filename  String // Encrypted in messaging-service
-  size      Int
-  mimeType  String
-  createdAt DateTime @default(now())
+  location        String
+  address         String?
+  county          County?
+  constituency    String?
+  neighbourhood   String?
+  coordinates     Json?
+  latitude        Float?
+  longitude       Float?
+  nearbyLandmarks Json?
 
-  @@index([messageId])
-}
+  hasBorehole        Boolean  @default(false)
+  hasBackupGenerator Boolean  @default(false)
+  hasElevator        Boolean  @default(false)
+  hasCCTV            Boolean  @default(false)
+  isGatedCommunity   Boolean  @default(false)
+  features           String[]
 
-model UserAnalytics {
-  id       String   @id @default(uuid())
-  userId   String
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  metrics  Json // Stores AnalyticsMetric array as JSONB
-  fromDate DateTime
-  toDate   DateTime
-}
-
-model Certificate {
-  id                 String                        @id @default(uuid())
-  professionalId     String
-  professional       ProfessionalProfile           @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
-  name               String
-  issuer             String
-  issueDate          DateTime?
-  expiryDate         DateTime?
-  fileUrl            String
-  verificationStatus CertificateVerificationStatus @default(pending)
+  status             PropertyStatus     @default(AVAILABLE)
+  featured           Boolean            @default(false)
+  verified           Boolean            @default(false)
   verifiedAt         DateTime?
-  verifiedById       String?
-  verifiedBy         User?                         @relation(fields: [verifiedById], references: [id], onDelete: SetNull, name: "CertificateVerifier")
-  notes              String?
-  createdAt          DateTime                      @default(now())
-  updatedAt          DateTime                      @updatedAt
+  submittedAt        DateTime?
+  rejectionReason    String?
+  verificationStatus VerificationStatus @default(PENDING)
+  verificationNotes  String?
 
-  @@index([professionalId])
-  @@index([createdAt])
-  @@index([updatedAt])
-  @@index([verificationStatus])
-  @@index([verifiedById])
+  viewCount    Int @default(0)
+  inquiryCount Int @default(0)
+
+  agentId String
+  agent   ProfessionalProfile @relation("AgentProperties", fields: [agentId], references: [userId], onDelete: Restrict)
+
+  images      PropertyImage[]
+  attachments PropertyAttachment[]
+  documents   PropertyDocument[]
+  inquiries   PropertyInquiry[]
+
+  floorPlanUrl   String?
+  videoUrl       String?
+  virtualTourUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([location])
+  @@index([price])
+  @@index([county])
+  @@index([status])
+  @@index([completionStatus])
 }
 
-model CalendarEvent {
-  id             String              @id @default(uuid())
-  professionalId String
-  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
-  title          String
-  description    String?
-  startDate      DateTime
-  endDate        DateTime
-  location       String?
-  type           String              @default("meeting") // meeting, site_visit, deadline, etc.
-  status         String              @default("scheduled") // scheduled, completed, cancelled
-  clientId       String?
-  client         User?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  projectId      String?
-  project        Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+model PropertyDocument {
+  id         String               @id @default(uuid())
+  propertyId String
+  property   Property             @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  type       PropertyDocumentType
+  fileKey    String               @unique
+  url        String
+  mimeType   String
+  size       Int
 
-  @@index([professionalId])
-  @@index([startDate])
-}
+  status          DocumentStatus @default(PENDING)
+  rejectionReason String?
+  verifiedAt      DateTime?
+  verifiedById    String?
+  issueDate       DateTime?
+  expiryDate      DateTime?
+  isPrivate       Boolean        @default(true)
 
-model Lead {
-  id             String              @id @default(uuid())
-  professionalId String
-  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
-  clientName     String
-  clientEmail    String?
-  clientPhone    String?
-  projectType    String
-  location       String?
-  budget         String?
-  status         LeadStatus          @default(NEW)
-  notes          String?
-  source         String?
-  followUpDate   DateTime?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  @@index([professionalId])
+  @@index([propertyId])
   @@index([status])
 }
 
-model ProfessionalTransaction {
-  id             String              @id @default(uuid())
-  professionalId String
-  projectId      String?
-  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
-  project        Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  description    String
-  amount         Decimal             @db.Decimal(10, 2)
-  type           TransactionType
-  status         TransactionStatus   @default(PENDING)
-  date           DateTime            @default(now())
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+model PropertyImage {
+  id          String   @id @default(uuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  fileKey     String   @unique
+  url         String
+  mimeType    String
+  size        Int
+  width       Int?
+  height      Int?
+  blurDataUrl String?
 
-  @@index([professionalId])
-  @@index([date])
-  @@index([projectId])
+  caption   String?
+  category  ImageCategory @default(EXTERIOR)
+  tags      String[]
+  isMain    Boolean       @default(false)
+  sortOrder Int           @default(0)
+
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  createdAt    DateTime @default(now())
+
+  @@index([propertyId])
+  @@index([category])
 }
 
-model Notification {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String
+model PropertyAttachment {
+  id            String         @id @default(uuid())
+  propertyId    String
+  property      Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  title         String
+  type          AttachmentType
+  fileKey       String         @unique
+  fileUrl       String
+  mimeType      String
+  size          Int
+  downloadCount Int            @default(0)
+  uploadedById  String
+  uploadedBy    User           @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([propertyId])
+}
+
+model PropertyInquiry {
+  id         String   @id @default(uuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  senderId String?
+  sender   User?   @relation("InquirySender", fields: [senderId], references: [id], onDelete: SetNull)
+
+  name      String?
+  email     String?
+  phone     String?
   message   String
-  type      String   @default("info") // info, success, warning, error
-  read      Boolean  @default(false)
-  link      String?
+  status    String   @default("PENDING")
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@index([userId])
-  @@index([read])
-  @@index([createdAt])
+  @@index([propertyId])
 }
+
+// ========================================================
+// 9. FINANCIALS & QUOTES
+// ========================================================
 
 model Quote {
   id             String              @id @default(uuid())
   projectId      String
   project        Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
   clientId       String
   client         ClientProfile       @relation(fields: [clientId], references: [userId], onDelete: Cascade)
-  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
-  amount         Decimal             @db.Decimal(10, 2)
-  description    String?
-  status         String              @default("pending") // pending, accepted, rejected
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+
+  version         Int     @default(1)
+  isLatest        Boolean @default(true)
+  previousQuoteId String?
+
+  materialsTotal Decimal @default(0) @db.Decimal(12, 2)
+  laborTotal     Decimal @default(0) @db.Decimal(12, 2)
+  logisticsTotal Decimal @default(0) @db.Decimal(12, 2)
+  taxTotal       Decimal @default(0) @db.Decimal(12, 2)
+  totalAmount    Decimal @db.Decimal(12, 2)
+  currency       String  @default("KES")
+
+  title             String
+  description       String?  @db.Text
+  validUntil        DateTime
+  paymentTerms      String?  @db.Text
+  estimatedDuration Int?
+
+  status          QuoteStatus @default(DRAFT)
+  viewedAt        DateTime?
+  respondedAt     DateTime?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items       QuoteItem[]
+  attachments QuoteAttachment[]
 
   @@index([projectId])
+  @@index([status])
+}
+
+model QuoteItem {
+  id          String  @id @default(uuid())
+  quoteId     String
+  quote       Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Decimal @db.Decimal(10, 2)
+  unit        String
+  unitPrice   Decimal @db.Decimal(12, 2)
+  totalPrice  Decimal @db.Decimal(12, 2)
+  category    String?
+  sortOrder   Int     @default(0)
+
+  @@index([quoteId])
+}
+
+model QuoteAttachment {
+  id        String   @id @default(uuid())
+  quoteId   String
+  quote     Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  fileKey   String   @unique
+  fileUrl   String
+  title     String
+  mimeType  String
+  size      Int
+  createdAt DateTime @default(now())
+
+  @@index([quoteId])
+}
+
+model ProfessionalTransaction {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+  projectId      String?
+  project        Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  leadId         String?
+  subscriptionId String?
+
+  description String
+  type        TransactionType
+  category    TransactionCategory @default(PROJECT_PAYMENT)
+  method      PaymentMethod       @default(MPESA)
+
+  amount      Decimal @db.Decimal(12, 2)
+  platformFee Decimal @default(0) @db.Decimal(12, 2)
+  taxAmount   Decimal @default(0) @db.Decimal(12, 2)
+  netAmount   Decimal @default(0) @db.Decimal(12, 2)
+  currency    String  @default("KES")
+
+  referenceCode    String? @unique
+  providerMetadata Json?
+
+  status       TransactionStatus @default(PENDING)
+  failedReason String?
+  date         DateTime          @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
   @@index([professionalId])
+  @@index([referenceCode])
+}
+
+// ========================================================
+// 10. CRM & CALENDAR
+// ========================================================
+
+model Lead {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+  clientId       String?
+  client         User?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  clientName  String
+  clientEmail String?
+  clientPhone String?
+  title       String
+  description String?     @db.Text
+  projectType ProjectType @default(RESIDENTIAL)
+
+  location String?
+  county   County?
+
+  budget    Decimal? @db.Decimal(12, 2)
+  budgetMin Decimal? @db.Decimal(12, 2)
+  budgetMax Decimal? @db.Decimal(12, 2)
+  currency  String   @default("KES")
+
+  status     LeadStatus   @default(NEW)
+  priority   LeadPriority @default(MEDIUM)
+  source     LeadSource   @default(PLATFORM_SEARCH)
+  lostReason LostReason?
+  wonAt      DateTime?
+
+  notes           String?   @db.Text
+  lastContactedAt DateTime?
+  followUpDate    DateTime?
+  reminderSent    Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([professionalId])
+  @@index([status])
+  @@index([county])
+}
+
+model CalendarEvent {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+  clientId       String?
+  client         User?               @relation("ClientCalendarEvents", fields: [clientId], references: [id], onDelete: SetNull)
+  guestEmails    String[]
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  title       String
+  description String?             @db.Text
+  type        CalendarEventType   @default(MEETING)
+  status      CalendarEventStatus @default(SCHEDULED)
+
+  startDate      DateTime
+  endDate        DateTime
+  isAllDay       Boolean  @default(false)
+  timeZone       String   @default("Africa/Nairobi")
+  recurrenceRule String?
+
+  location   String?
+  meetingUrl String?
+  reminders  Int[]   @default([30])
+
+  externalEventId String? @unique
+  color           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([professionalId])
+  @@index([startDate])
+}
+
+// ========================================================
+// 11. COMMUNICATION & IDEAS
+// ========================================================
+
+model MessageThread {
+  id            String     @id @default(uuid())
+  type          ThreadType @default(DIRECT)
+  subject       String?
+  projectId     String?
+  project       Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  lastMessage   String?    @db.Text
+  lastMessageAt DateTime?
+  metadata      Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  participants ThreadParticipant[]
+  messages     Message[]
+
+  @@index([lastMessageAt])
+}
+
+model ThreadParticipant {
+  id       String        @id @default(uuid())
+  threadId String
+  thread   MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  nickname String?
+  role     ParticipantRole @default(MEMBER)
+  joinedAt DateTime        @default(now())
+
+  unreadCount Int       @default(0)
+  lastReadAt  DateTime?
+  isMuted     Boolean   @default(false)
+  isArchived  Boolean   @default(false)
+  isPinned    Boolean   @default(false)
+
+  @@unique([threadId, userId])
+  @@index([userId, unreadCount])
+}
+
+model Message {
+  id       String        @id @default(uuid())
+  threadId String
+  thread   MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId String
+  sender   User          @relation("Sender", fields: [senderId], references: [id])
+
+  content String      @db.Text
+  type    MessageType @default(TEXT)
+
+  replyToId    String?
+  replyTo      Message?      @relation("ReplyHistory", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies      Message[]     @relation("ReplyHistory")
+  readReceipts ReadReceipt[]
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+  attachments Attachment[]
+
+  @@index([threadId, createdAt])
+}
+
+model ReadReceipt {
+  id        String   @id @default(uuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt    DateTime @default(now())
+
+  @@unique([messageId, userId])
+}
+
+model Attachment {
+  id        String   @id @default(uuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  fileUrl   String
+  fileKey   String?  @unique
+  filename  String
+  size      Int?
+  mimeType  String?
+  createdAt DateTime @default(now())
+
+  @@index([messageId])
+}
+
+model Notification {
+  id       String                @id @default(uuid())
+  userId   String
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title    String
+  message  String                @db.Text
+  type     NotificationType      @default(INFO)
+  priority NotificationPriority  @default(MEDIUM)
+  channels NotificationChannel[] @default([IN_APP])
+
+  metadata       Json?
+  link           String?
+  isRead         Boolean                    @default(false)
+  readAt         DateTime?
+  deliveryStatus NotificationDeliveryStatus @default(QUEUED)
+  error          String?
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  @@index([userId, isRead])
+}
+
+model Review {
+  id         String @id @default(uuid())
+  reviewerId String
+  reviewer   User   @relation("Reviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  professionalId String?
+  professional   ProfessionalProfile? @relation("ProfessionalReviews", fields: [professionalId], references: [userId], onDelete: Cascade)
+  storeId        String?
+  store          Store?               @relation("StoreReviews", fields: [storeId], references: [id], onDelete: Cascade)
+  productId      String?
+  product        Product?             @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  isVerified Boolean  @default(false)
+  projectId  String?
+  project    Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  orderId    String?
+  order      Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  type       ReviewType
+  rating     Int
+  subRatings Json?
+  title      String?
+  comment    String?    @db.Text
+
+  images        ReviewImage[]
+  status        ReviewStatus  @default(PENDING)
+  replyComment  String?       @db.Text
+  replyAt       DateTime?
+  helpfulCount  Int           @default(0)
+  reportedCount Int           @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([professionalId])
+  @@index([storeId])
+}
+
+model ReviewImage {
+  id          String   @id @default(uuid())
+  reviewId    String
+  review      Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  fileKey     String   @unique
+  fileUrl     String
+  mimeType    String
+  size        Int
+  width       Int?
+  height      Int?
+  blurDataUrl String?
+  createdAt   DateTime @default(now())
+
+  @@index([reviewId])
+}
+
+model IdeaBook {
+  id       String @id @default(uuid())
+  clientId String
+  client   User   @relation("IdeaBookOwner", fields: [clientId], references: [id], onDelete: Cascade)
+
+  title       String
+  slug        String           @unique
+  description String?          @db.Text
+  category    IdeaBookCategory @default(WHOLE_HOUSE)
+  privacy     IdeaBookPrivacy  @default(PUBLIC)
+
+  collaborators IdeaBookCollaborator[]
+  savedProducts SavedProduct[]
+  savedProjects SavedProject[]
+  savedImages   SavedImage[]
+  attachments   IdeaBookAttachment[]
+
+  viewCount Int      @default(0)
+  likes     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([clientId])
+  @@index([category])
+}
+
+model IdeaBookCollaborator {
+  id         String   @id @default(uuid())
+  ideaBookId String
+  ideaBook   IdeaBook @relation(fields: [ideaBookId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  canEdit    Boolean  @default(false)
+  addedAt    DateTime @default(now())
+
+  @@unique([ideaBookId, userId])
+}
+
+model SavedProduct {
+  id         String   @id @default(uuid())
+  ideaBookId String
+  ideaBook   IdeaBook @relation(fields: [ideaBookId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  note       String?
+  savedAt    DateTime @default(now())
+
+  @@unique([ideaBookId, productId])
+}
+
+model SavedProject {
+  id         String   @id @default(uuid())
+  ideaBookId String
+  ideaBook   IdeaBook @relation(fields: [ideaBookId], references: [id], onDelete: Cascade)
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  note       String?
+  savedAt    DateTime @default(now())
+
+  @@unique([ideaBookId, projectId])
+}
+
+model SavedImage {
+  id               String         @id @default(uuid())
+  ideaBookId       String
+  ideaBook         IdeaBook       @relation(fields: [ideaBookId], references: [id], onDelete: Cascade)
+  portfolioImageId String
+  portfolioImage   PortfolioImage @relation(fields: [portfolioImageId], references: [id], onDelete: Cascade)
+  note             String?
+  savedAt          DateTime       @default(now())
+
+  @@unique([ideaBookId, portfolioImageId])
+}
+
+model IdeaBookAttachment {
+  id           String   @id @default(uuid())
+  ideaBookId   String
+  ideaBook     IdeaBook @relation(fields: [ideaBookId], references: [id], onDelete: Cascade)
+  sourceUrl    String?
+  fileKey      String   @unique
+  fileUrl      String
+  mimeType     String
+  size         Int
+  width        Int?
+  height       Int?
+  blurDataUrl  String?
+  caption      String?
+  uploadedById String?
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([ideaBookId])
+}
+
+// ========================================================
+// 12. ANALYTICS
+// ========================================================
+
+model UserAnalytics {
+  id          String              @id @default(uuid())
+  userId      String
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entityType  AnalyticsEntityType @default(PROFILE)
+  entityId    String?
+  period      AnalyticsPeriod     @default(DAILY)
+  startDate   DateTime
+  endDate     DateTime
+  views       Int                 @default(0)
+  uniqueViews Int                 @default(0)
+  clicks      Int                 @default(0)
+  impressions Int                 @default(0)
+  revenue     Decimal             @default(0) @db.Decimal(12, 2)
+  metadata    Json?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@unique([userId, entityType, entityId, period, startDate])
+  @@index([userId, startDate])
+}
+
+model AnalyticsEvent {
+  id         String              @id @default(uuid())
+  ownerId    String
+  entityType AnalyticsEntityType
+  entityId   String?
+  eventType  AnalyticsEventType
+  viewerId   String?
+  sessionId  String?
+  ipAddress  String?
+  userAgent  String?
+  source     String?
+  metadata   Json?
+  createdAt  DateTime            @default(now())
+
+  @@index([ownerId, createdAt])
 }
