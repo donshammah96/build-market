@@ -1,10 +1,10 @@
-import { CartStoreActionsType, CartStoreStateType } from "@repo/types";
+import { CartStoreActionsType, CartStoreStateType } from "@build/types";
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 // Extended interface to include all methods used by shop pages
 interface ExtendedCartStoreState extends CartStoreStateType {
-  items: CartStoreStateType['cart']; // Alias for cart
+  items: CartStoreStateType["cart"]; // Alias for cart
 }
 
 interface ExtendedCartStoreActions extends CartStoreActionsType {
@@ -13,7 +13,9 @@ interface ExtendedCartStoreActions extends CartStoreActionsType {
   getTotal: () => number;
 }
 
-const useCartStore = create<ExtendedCartStoreState & ExtendedCartStoreActions>()(
+const useCartStore = create<
+  ExtendedCartStoreState & ExtendedCartStoreActions
+>()(
   persist(
     (set, get) => ({
       cart: [],
@@ -25,7 +27,7 @@ const useCartStore = create<ExtendedCartStoreState & ExtendedCartStoreActions>()
             (p) =>
               p.id === product.id &&
               p.selectedSize === product.selectedSize &&
-              p.selectedColor === product.selectedColor
+              p.selectedColor === product.selectedColor,
           );
 
           if (existingIndex !== -1) {
@@ -53,7 +55,7 @@ const useCartStore = create<ExtendedCartStoreState & ExtendedCartStoreActions>()
                 p.id === product.id &&
                 p.selectedSize === product.selectedSize &&
                 p.selectedColor === product.selectedColor
-              )
+              ),
           );
           return { cart: newCart, items: newCart };
         }),
@@ -70,13 +72,16 @@ const useCartStore = create<ExtendedCartStoreState & ExtendedCartStoreActions>()
             return { cart: newCart, items: newCart };
           }
           const newCart = state.cart.map((p) =>
-            p.id === id ? { ...p, quantity } : p
+            p.id === id ? { ...p, quantity } : p,
           );
           return { cart: newCart, items: newCart };
         }),
       getTotal: () => {
         const state = get();
-        return state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        return state.cart.reduce(
+          (sum, item) => sum + item.price * item.quantity,
+          0,
+        );
       },
       clearCart: () => set({ cart: [], items: [] }),
     }),
@@ -90,8 +95,8 @@ const useCartStore = create<ExtendedCartStoreState & ExtendedCartStoreActions>()
           state.items = state.cart;
         }
       },
-    }
-  )
+    },
+  ),
 );
 
 // Export both as default and named export for flexibility

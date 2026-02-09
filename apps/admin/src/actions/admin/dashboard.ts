@@ -1,7 +1,7 @@
 "use server";
 
 import { safeAction } from "./shared";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 
 // ============================================================================
 // Dashboard Statistics

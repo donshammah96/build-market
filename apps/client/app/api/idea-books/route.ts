@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
+import { generateIdeaBookSlug } from "@/app/lib/slug-generator";
 import { withAuth } from "@/app/lib/api-middleware";
 import { apiError, HttpStatus } from "@/app/lib/api-response";
 import {
@@ -111,6 +112,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         return {
           id: book.id,
           title: book.title,
+          slug: book.slug,
           description: book.description,
           items: itemsList,
           itemCount: itemsList.length,
@@ -183,7 +185,9 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
 
   const { title, description } = validation.data;
 
-  logger.info("Creating idea book", { correlationId, userId: dbUserId, title });
+  const slug = generateIdeaBookSlug(title);
+  
+  logger.info("Creating idea book", { correlationId, userId: dbUserId, title, slug });
 
   return executeResilient(
     async () => {
@@ -192,6 +196,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
           title,
           description,
           clientId: dbUserId,
+          slug,
           items: [],
         },
         include: {

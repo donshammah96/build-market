@@ -143,7 +143,7 @@ describe("Notification Service", () => {
         expect.objectContaining({
           method: "POST",
           body: expect.stringContaining("user_123"),
-        })
+        }),
       );
     });
 
@@ -151,7 +151,7 @@ describe("Notification Service", () => {
       const { prisma } = await import("@repo/db");
 
       vi.mocked(prisma.notification.create).mockRejectedValue(
-        new Error("Database error")
+        new Error("Database error"),
       );
 
       const result: VerificationResult = {
@@ -165,7 +165,7 @@ describe("Notification Service", () => {
 
       // Should not throw
       await expect(
-        notifyVerificationResult(result, "user_123")
+        notifyVerificationResult(result, "user_123"),
       ).resolves.not.toThrow();
     });
   });
@@ -184,11 +184,7 @@ describe("Notification Service", () => {
 
       // Should not throw - just logs for now
       await expect(
-        publishVerificationEvent(
-          result,
-          "user@example.com",
-          "John Doe"
-        )
+        publishVerificationEvent(result, "user@example.com", "John Doe"),
       ).resolves.not.toThrow();
     });
   });

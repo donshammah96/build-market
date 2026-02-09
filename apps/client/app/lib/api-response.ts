@@ -1,14 +1,69 @@
 /**
  * Unified API Response utilities
  *
- * This module re-exports response helpers from resilient-api.ts for backward compatibility.
- * The resilient-api version includes enhanced features like correlation ID tracking.
+ * This module provides types, constants, and utility functions for API responses.
+ * For the actual response functions (apiSuccess, apiError), import from resilient-api.ts
+ * which includes enhanced features like correlation ID tracking and observability.
  *
  * @module api-response
  */
 
-// Re-export response functions from resilient-api (single source of truth)
-export { apiSuccess, apiError } from "./resilient-api";
+import { NextResponse } from 'next/server';
+
+/**
+ * Build API success response with correlation ID
+ * @deprecated Import from resilient-api.ts instead for better observability
+ */
+export function apiSuccess<T>(
+  data: T,
+  status: number = 200,
+  correlationId?: string
+): NextResponse {
+  return NextResponse.json(
+    {
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+      ...(correlationId && { correlationId }),
+    },
+    { status, headers: correlationId ? { 'X-Correlation-ID': correlationId } : {} }
+  );
+}
+
+/**
+ * Build API error response with correlation ID
+ * @deprecated Import from resilient-api.ts instead for better observability
+ */
+export function apiError(
+  message: string,
+  status: number = 500,
+  details?: unknown,
+  correlationId?: string
+): NextResponse {
+  const response: {
+    success: false;
+    error: string;
+    timestamp: string;
+    details?: unknown;
+    correlationId?: string;
+  } = {
+    success: false,
+    error: message,
+    timestamp: new Date().toISOString(),
+  };
+
+  if (details !== undefined) {
+    response.details = details;
+  }
+  if (correlationId) {
+    response.correlationId = correlationId;
+  }
+
+  return NextResponse.json(
+    response,
+    { status, headers: correlationId ? { 'X-Correlation-ID': correlationId } : {} }
+  );
+}
 
 /**
  * Pagination information for list responses
@@ -64,12 +119,15 @@ export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 export const HttpStatus = {
   OK: 200,
   CREATED: 201,
+  ACCEPTED: 202,
   NO_CONTENT: 204,
+  MULTI_STATUS: 207,
   BAD_REQUEST: 400,
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   NOT_FOUND: 404,
   CONFLICT: 409,
+  GONE: 410,
   UNPROCESSABLE_ENTITY: 422,
   TOO_MANY_REQUESTS: 429,
   INTERNAL_SERVER_ERROR: 500,

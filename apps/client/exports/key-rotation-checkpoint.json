@@ -1,0 +1,22 @@
+{
+  "startedAt": "2026-02-03T13:21:21.962Z",
+  "lastUpdatedAt": "2026-02-03T13:21:23.064Z",
+  "targetVersion": "v1",
+  "currentModel": "Property",
+  "currentField": "titleDeedNumber",
+  "lastProcessedId": null,
+  "processedCount": 0,
+  "skippedCount": 12,
+  "errorCount": 0,
+  "completedModels": [
+    "User.phone",
+    "ClientProfile.kraPin",
+    "ProfessionalProfile.kraPin",
+    "Store.mpesaTillNumber",
+    "Store.mpesaPaybill",
+    "Store.mpesaPasskey",
+    "ProfessionalLicense.licenseNumber",
+    "Property.titleDeedNumber"
+  ],
+  "errors": []
+}

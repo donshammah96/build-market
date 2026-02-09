@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@clerk/nextjs";
 import { motion, AnimatePresence } from "framer-motion";
 import { messagingClient } from "@/lib/messaging-client";
-import type { Conversation } from "@repo/types";
+import type { Conversation } from "@build/types";
 
 // UI Components
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

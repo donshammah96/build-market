@@ -67,7 +67,12 @@ export interface ConsumerOptions {
   /** Filter by subject */
   filterSubject?: string;
   /** Delivery policy for new consumers */
-  deliverPolicy?: "all" | "last" | "new" | "by_start_sequence" | "by_start_time";
+  deliverPolicy?:
+    | "all"
+    | "last"
+    | "new"
+    | "by_start_sequence"
+    | "by_start_time";
   /** Acknowledgment policy */
   ackPolicy?: "explicit" | "none" | "all";
   /** Max number of delivery attempts */
@@ -135,6 +140,32 @@ export interface PublishOptions {
 }
 
 /**
+ * Connection health metrics
+ */
+export interface ConnectionMetrics {
+  reconnectAttempts: number;
+  lastReconnectAt?: Date;
+  lastDisconnectAt?: Date;
+  totalDisconnects: number;
+  connectedAt?: Date;
+  errors: Array<{ timestamp: Date; error: string }>;
+}
+
+/**
+ * Connection status information
+ */
+export interface ConnectionStatus {
+  connected: boolean;
+  server?: string;
+  metrics: ConnectionMetrics;
+  config: {
+    servers: string | string[];
+    name: string;
+    environment: string;
+  };
+}
+
+/**
  * NATS client wrapper interface
  */
 export interface NatsClient {
@@ -148,6 +179,10 @@ export interface NatsClient {
   close: () => Promise<void>;
   /** Check if connected */
   isConnected: () => boolean;
+  /** Get detailed connection status */
+  getStatus: () => ConnectionStatus;
+  /** Get connection health metrics */
+  getMetrics: () => ConnectionMetrics;
 }
 
 /**
@@ -226,7 +261,13 @@ export interface UserEvent {
 
 export interface OrderEvent {
   orderId: string;
-  action: "created" | "updated" | "paid" | "shipped" | "delivered" | "cancelled";
+  action:
+    | "created"
+    | "updated"
+    | "paid"
+    | "shipped"
+    | "delivered"
+    | "cancelled";
   userId: string;
   amount?: number;
   metadata?: Record<string, unknown>;
@@ -243,7 +284,13 @@ export interface ProjectEvent {
 export interface NotificationEvent {
   userId: string;
   type: "email" | "push" | "in_app";
-  category: "order" | "message" | "project" | "review" | "system" | "verification";
+  category:
+    | "order"
+    | "message"
+    | "project"
+    | "review"
+    | "system"
+    | "verification";
   title: string;
   content: string;
   data?: Record<string, unknown>;

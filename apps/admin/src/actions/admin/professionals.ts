@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, prisma } from "@repo/db";
+import { Prisma, prisma } from "@build/db";
 import { safeAction } from "./shared";
 import { PaginationSchema, UpdateProfileSchema } from "./types";
 

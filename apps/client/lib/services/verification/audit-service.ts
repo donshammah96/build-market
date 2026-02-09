@@ -3,8 +3,8 @@
  * Centralized audit logging for admin verification actions
  */
 
-import { prisma } from "@repo/db";
-import { StructuredLogger } from "@repo/resilience";
+import { prisma } from "@build/db";
+import { StructuredLogger } from "@build/resilience";
 
 const logger = new StructuredLogger("audit-service");
 

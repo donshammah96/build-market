@@ -10,7 +10,7 @@ cd c:\Users\User\build-market
 pnpm install
 ```
 
-This will install the `@repo/resilience` package across all workspaces.
+This will install the `@build/resilience` package across all workspaces.
 
 ### Step 2: Build the Resilience Package
 
@@ -28,7 +28,7 @@ pnpm build
 
 ```powershell
 # Check that the package is properly linked
-pnpm list @repo/resilience
+pnpm list @build/resilience
 ```
 
 ## 🚀 Quick Start - Next.js API Routes
@@ -37,13 +37,13 @@ pnpm list @repo/resilience
 
 ```typescript
 // apps/client/app/api/your-route/route.ts
-import { NextRequest } from 'next/server';
+import { NextRequest } from "next/server";
 import {
   executeResilient,
   initializeCorrelationId,
   apiError,
   getClientLogger,
-} from '@/app/lib/resilient-api';
+} from "@/app/lib/resilient-api";
 ```
 
 ### 2. Basic API Route
@@ -61,8 +61,8 @@ export async function GET(request: NextRequest) {
       return data;
     },
     {
-      criticality: 'normal',
-      operationName: 'fetch-your-data',
+      criticality: "normal",
+      operationName: "fetch-your-data",
       cache: {
         ttl: 60000, // 1 minute
         staleWhileRevalidate: 30000, // Serve stale for 30s
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
         // Return empty array if service fails
         return [];
       },
-    }
+    },
   );
 }
 ```
@@ -80,13 +80,13 @@ export async function GET(request: NextRequest) {
 
 ```typescript
 // apps/client/app/api/health/route.ts
-import { healthCheck } from '@/app/lib/resilient-api';
-import { prisma } from '@repo/db';
+import { healthCheck } from "@/app/lib/resilient-api";
+import { prisma } from "@build/db";
 
 export async function GET() {
-  return healthCheck('your-service', [
+  return healthCheck("your-service", [
     {
-      name: 'database',
+      name: "database",
       check: async () => {
         await prisma.$queryRaw`SELECT 1`;
         return true;
@@ -101,8 +101,8 @@ export async function GET() {
 
 ```typescript
 // apps/client/app/api/metrics/route.ts
-import { NextResponse } from 'next/server';
-import { getResilientExecutor } from '@/app/lib/resilient-api';
+import { NextResponse } from "next/server";
+import { getResilientExecutor } from "@/app/lib/resilient-api";
 
 export async function GET() {
   const executor = getResilientExecutor();
@@ -124,7 +124,7 @@ export async function GET() {
 // apps/your-service/package.json
 {
   "dependencies": {
-    "@repo/resilience": "workspace:*"
+    "@build/resilience": "workspace:*"
   }
 }
 ```
@@ -137,19 +137,19 @@ import {
   ResilientExecutor,
   StructuredLogger,
   CorrelationIdManager,
-} from '@repo/resilience';
+} from "@build/resilience";
 
-export const executor = new ResilientExecutor('your-service');
-export const logger = new StructuredLogger('your-service');
+export const executor = new ResilientExecutor("your-service");
+export const logger = new StructuredLogger("your-service");
 
 // Express middleware for correlation IDs
 export function correlationMiddleware(req: any, res: any, next: any) {
   const correlationId =
-    req.headers['x-correlation-id'] || CorrelationIdManager.generate();
-  
+    req.headers["x-correlation-id"] || CorrelationIdManager.generate();
+
   CorrelationIdManager.set(correlationId);
-  res.setHeader('X-Correlation-ID', correlationId);
-  
+  res.setHeader("X-Correlation-ID", correlationId);
+
   next();
 }
 ```
@@ -158,8 +158,8 @@ export function correlationMiddleware(req: any, res: any, next: any) {
 
 ```typescript
 // apps/your-service/src/routes/api.ts
-import express from 'express';
-import { executor, logger, correlationMiddleware } from '../utils/resilience';
+import express from "express";
+import { executor, logger, correlationMiddleware } from "../utils/resilience";
 
 const router = express.Router();
 
@@ -167,20 +167,17 @@ const router = express.Router();
 router.use(correlationMiddleware);
 
 // Example route
-router.get('/data', async (req, res) => {
-  const result = await executor.execute(
-    async () => fetchData(),
-    {
-      criticality: 'normal',
-      operationName: 'fetch-data',
-      cache: { ttl: 60000 },
-    }
-  );
+router.get("/data", async (req, res) => {
+  const result = await executor.execute(async () => fetchData(), {
+    criticality: "normal",
+    operationName: "fetch-data",
+    cache: { ttl: 60000 },
+  });
 
   if (result.success) {
     res.json({ success: true, data: result.data });
   } else {
-    logger.error('Failed to fetch data', result.error);
+    logger.error("Failed to fetch data", result.error);
     res.status(500).json({ success: false, error: result.error?.message });
   }
 });
@@ -201,6 +198,7 @@ curl http://localhost:3030/api/health
 ```
 
 **Expected Response:**
+
 ```json
 {
   "service": "build-market-client",
@@ -225,6 +223,7 @@ curl http://localhost:3030/api/metrics
 ```
 
 **Expected Response:**
+
 ```json
 {
   "timestamp": "2025-11-24T10:00:00.000Z",
@@ -244,13 +243,13 @@ Create a simple monitoring script:
 while ($true) {
   Write-Host "`n=== Resilience Metrics ===" -ForegroundColor Green
   $response = Invoke-RestMethod -Uri "http://localhost:3030/api/metrics"
-  
+
   Write-Host "`nCircuit Breakers:" -ForegroundColor Yellow
   $response.circuitBreakers | ConvertTo-Json
-  
+
   Write-Host "`nCache Stats:" -ForegroundColor Yellow
   $response.cacheStats | ConvertTo-Json
-  
+
   Start-Sleep -Seconds 5
 }
 ```
@@ -263,16 +262,16 @@ while ($true) {
 // Make multiple failing requests to open circuit
 for (let i = 0; i < 6; i++) {
   try {
-    await fetch('http://localhost:3030/api/failing-endpoint');
+    await fetch("http://localhost:3030/api/failing-endpoint");
   } catch (error) {
     console.log(`Attempt ${i + 1} failed`);
   }
 }
 
 // Check circuit breaker state
-const metrics = await fetch('http://localhost:3030/api/metrics');
+const metrics = await fetch("http://localhost:3030/api/metrics");
 const data = await metrics.json();
-console.log('Circuit Breakers:', data.circuitBreakers);
+console.log("Circuit Breakers:", data.circuitBreakers);
 ```
 
 ### 2. Test Retry Logic
@@ -284,17 +283,17 @@ const result = await executeResilient(
   async () => {
     attempts++;
     if (attempts < 3) {
-      throw new Error('Temporary failure');
+      throw new Error("Temporary failure");
     }
-    return 'success';
+    return "success";
   },
   {
     retry: { maxAttempts: 3 },
-    operationName: 'test-retry',
-  }
+    operationName: "test-retry",
+  },
 );
 
-console.log('Succeeded after', attempts, 'attempts');
+console.log("Succeeded after", attempts, "attempts");
 ```
 
 ### 3. Test Caching
@@ -302,18 +301,18 @@ console.log('Succeeded after', attempts, 'attempts');
 ```typescript
 // First request - cache miss
 const start1 = Date.now();
-const result1 = await fetch('http://localhost:3030/api/cached-endpoint');
-console.log('First request:', Date.now() - start1, 'ms');
+const result1 = await fetch("http://localhost:3030/api/cached-endpoint");
+console.log("First request:", Date.now() - start1, "ms");
 
 // Second request - cache hit
 const start2 = Date.now();
-const result2 = await fetch('http://localhost:3030/api/cached-endpoint');
-console.log('Second request (cached):', Date.now() - start2, 'ms');
+const result2 = await fetch("http://localhost:3030/api/cached-endpoint");
+console.log("Second request (cached):", Date.now() - start2, "ms");
 
 // Check cache stats
-const metrics = await fetch('http://localhost:3030/api/metrics');
+const metrics = await fetch("http://localhost:3030/api/metrics");
 const data = await metrics.json();
-console.log('Cache Stats:', data.cacheStats);
+console.log("Cache Stats:", data.cacheStats);
 ```
 
 ## 🎯 Configuration Examples
@@ -321,44 +320,35 @@ console.log('Cache Stats:', data.cacheStats);
 ### Critical Operation (Payment)
 
 ```typescript
-await executeResilient(
-  async () => processPayment(data),
-  {
-    criticality: 'critical',
-    operationName: 'process-payment',
-    // Automatically: 3s timeout, no retry, no cache
-  }
-);
+await executeResilient(async () => processPayment(data), {
+  criticality: "critical",
+  operationName: "process-payment",
+  // Automatically: 3s timeout, no retry, no cache
+});
 ```
 
 ### Normal Operation (User Data)
 
 ```typescript
-await executeResilient(
-  async () => fetchUserProfile(userId),
-  {
-    criticality: 'normal',
-    operationName: 'fetch-user-profile',
-    cache: { ttl: 30000 },
-    fallback: async () => cachedProfile,
-  }
-);
+await executeResilient(async () => fetchUserProfile(userId), {
+  criticality: "normal",
+  operationName: "fetch-user-profile",
+  cache: { ttl: 30000 },
+  fallback: async () => cachedProfile,
+});
 ```
 
 ### Background Operation (Analytics)
 
 ```typescript
-await executeResilient(
-  async () => sendAnalytics(events),
-  {
-    criticality: 'background',
-    operationName: 'send-analytics',
-    fallback: async () => {
-      logger.warn('Analytics service unavailable');
-      return { queued: true };
-    },
-  }
-);
+await executeResilient(async () => sendAnalytics(events), {
+  criticality: "background",
+  operationName: "send-analytics",
+  fallback: async () => {
+    logger.warn("Analytics service unavailable");
+    return { queued: true };
+  },
+});
 ```
 
 ## 🔍 Debugging
@@ -367,11 +357,11 @@ await executeResilient(
 
 ```typescript
 // Set environment variable
-process.env.LOG_LEVEL = 'debug';
+process.env.LOG_LEVEL = "debug";
 
 // Or in code
-const logger = new StructuredLogger('my-service');
-logger.debug('Debug message', { extra: 'data' });
+const logger = new StructuredLogger("my-service");
+logger.debug("Debug message", { extra: "data" });
 ```
 
 ### View Detailed Metrics
@@ -380,10 +370,10 @@ logger.debug('Debug message', { extra: 'data' });
 const executor = getResilientExecutor();
 
 // Get stats for specific operation
-const stats = executor.getOperationStats('operation-name');
-console.log('P50:', stats.summary?.quantiles.get(0.5));
-console.log('P95:', stats.summary?.quantiles.get(0.95));
-console.log('P99:', stats.summary?.quantiles.get(0.99));
+const stats = executor.getOperationStats("operation-name");
+console.log("P50:", stats.summary?.quantiles.get(0.5));
+console.log("P95:", stats.summary?.quantiles.get(0.95));
+console.log("P99:", stats.summary?.quantiles.get(0.99));
 
 // Get all circuit breaker states
 const cbStates = executor.getCircuitBreakerStates();
@@ -462,39 +452,36 @@ pnpm build
 // Make sure you're importing from the right location
 
 // For Next.js API routes:
-import { executeResilient } from '@/app/lib/resilient-api';
+import { executeResilient } from "@/app/lib/resilient-api";
 
 // For other services:
-import { ResilientExecutor } from '@repo/resilience';
+import { ResilientExecutor } from "@build/resilience";
 ```
 
 ### Circuit Breaker Not Working
 
 ```typescript
 // Check that you're using the same operation name
-const result1 = await executor.execute(op, { operationName: 'test' });
-const result2 = await executor.execute(op, { operationName: 'test' }); // Same name!
+const result1 = await executor.execute(op, { operationName: "test" });
+const result2 = await executor.execute(op, { operationName: "test" }); // Same name!
 
 // Check circuit breaker state
-const state = executor.getCircuitBreakerStates().get('test');
-console.log('Circuit state:', state);
+const state = executor.getCircuitBreakerStates().get("test");
+console.log("Circuit state:", state);
 ```
 
 ### Cache Not Working
 
 ```typescript
 // Ensure cache is enabled
-await executeResilient(
-  async () => operation(),
-  {
-    cache: { ttl: 60000 }, // Must specify cache config
-    operationName: 'my-op', // Must specify operation name
-  }
-);
+await executeResilient(async () => operation(), {
+  cache: { ttl: 60000 }, // Must specify cache config
+  operationName: "my-op", // Must specify operation name
+});
 
 // Check cache stats
 const stats = executor.getCacheStats();
-console.log('Cache stats:', stats);
+console.log("Cache stats:", stats);
 ```
 
 ## ✅ Next Steps
@@ -510,6 +497,7 @@ console.log('Cache stats:', stats);
 **Installation Complete!** 🎉
 
 You now have a fully functional resilience framework with:
+
 - ⏱️ Timeouts
 - 🔄 Retries
 - 🔌 Circuit Breakers

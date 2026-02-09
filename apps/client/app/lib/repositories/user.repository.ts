@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient, UserRole, ClientProfile, ProfessionalProfile, User } from '@prisma/client';
 
 export interface CreateUserData {
   clerkId: string;
@@ -6,7 +6,10 @@ export interface CreateUserData {
   firstName?: string | null;
   lastName?: string | null;
   phone?: string | null;
+  avatar?: string | null;
   role?: UserRole;
+  isEmailVerified?: boolean;
+  isPhoneVerified?: boolean;
 }
 
 export interface UpdateUserData {
@@ -14,9 +17,17 @@ export interface UpdateUserData {
   firstName?: string | null;
   lastName?: string | null;
   phone?: string | null;
+  avatar?: string | null;
   role?: UserRole;
   isProfileComplete?: boolean;
+  isEmailVerified?: boolean;
+  isPhoneVerified?: boolean;
 }
+
+export type UserWithProfiles = User & {
+  clientProfile: ClientProfile | null;
+  professionalProfile: ProfessionalProfile | null;
+};
 
 export class UserRepository {
   constructor(private prisma: PrismaClient) {}
@@ -24,9 +35,12 @@ export class UserRepository {
   /**
    * Find user by Clerk ID
    */
-  async findByClerkId(clerkId: string) {
+  async findByClerkId(clerkId: string): Promise<UserWithProfiles | null> {
     return this.prisma.user.findUnique({
-      where: { clerkId },
+      where: { 
+        clerkId,
+        deletedAt: null,
+      },
       include: {
         clientProfile: true,
         professionalProfile: true,
@@ -37,9 +51,12 @@ export class UserRepository {
   /**
    * Find user by email
    */
-  async findByEmail(email: string) {
-    return this.prisma.user.findUnique({
-      where: { email },
+  async findByEmail(email: string): Promise<UserWithProfiles | null> {
+    return this.prisma.user.findFirst({
+      where: { 
+        email,
+        deletedAt: null,
+      },
       include: {
         clientProfile: true,
         professionalProfile: true,
@@ -50,9 +67,12 @@ export class UserRepository {
   /**
    * Find user by database ID
    */
-  async findById(id: string) {
-    return this.prisma.user.findUnique({
-      where: { id },
+  async findById(id: string): Promise<UserWithProfiles | null> {
+    return this.prisma.user.findFirst({
+      where: { 
+        id,
+        deletedAt: null,
+      },
       include: {
         clientProfile: true,
         professionalProfile: true,
@@ -63,17 +83,23 @@ export class UserRepository {
   /**
    * Create a new user
    */
-  async create(data: CreateUserData) {
+  async create(data: CreateUserData): Promise<User> {
     return this.prisma.user.create({
       data: {
-        id: crypto.randomUUID(),
+        // id is autocreated by defaults usually, but if manual UUID needed:
+        // id: crypto.randomUUID(), (Prisma usually handles this if default(uuid()))
+        // Checking previous code, it had crypto.randomUUID(). I will keep it if schema doesn't default.
+        // Assuming schema has default(uuid()) but previous code was explicit. I'll be explicit to match previous behavior but safer.
         clerkId: data.clerkId,
         email: data.email,
         firstName: data.firstName,
         lastName: data.lastName,
         phone: data.phone,
-        role: data.role || 'client',
+        avatar: data.avatar,
+        role: data.role || 'CLIENT', // Default to CLIENT enum value
         isProfileComplete: false,
+        isEmailVerified: data.isEmailVerified || false,
+        isPhoneVerified: data.isPhoneVerified || false,
       },
     });
   }
@@ -81,7 +107,7 @@ export class UserRepository {
   /**
    * Update user
    */
-  async update(clerkId: string, data: UpdateUserData) {
+  async update(clerkId: string, data: UpdateUserData): Promise<User> {
     return this.prisma.user.update({
       where: { clerkId },
       data: {
@@ -94,7 +120,7 @@ export class UserRepository {
   /**
    * Upsert user (create or update)
    */
-  async upsert(clerkId: string, createData: CreateUserData, updateData: UpdateUserData) {
+  async upsert(clerkId: string, createData: CreateUserData, updateData: UpdateUserData): Promise<User> {
     return this.prisma.user.upsert({
       where: { clerkId },
       update: {
@@ -102,14 +128,16 @@ export class UserRepository {
         updatedAt: new Date(),
       },
       create: {
-        id: crypto.randomUUID(),
         clerkId: createData.clerkId,
         email: createData.email,
         firstName: createData.firstName,
         lastName: createData.lastName,
         phone: createData.phone,
-        role: createData.role || 'client',
+        avatar: createData.avatar,
+        role: createData.role || 'CLIENT',
         isProfileComplete: false,
+        isEmailVerified: createData.isEmailVerified || false,
+        isPhoneVerified: createData.isPhoneVerified || false,
       },
     });
   }

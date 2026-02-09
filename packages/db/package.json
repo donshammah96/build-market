@@ -1,5 +1,5 @@
 {
-  "name": "@repo/db",
+  "name": "@build/db",
   "version": "1.0.0",
   "description": "BuildMarket Database",
   "main": "./lib/prisma.ts",

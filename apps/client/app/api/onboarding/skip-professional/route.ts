@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { auth, currentUser, clerkClient } from "@clerk/nextjs/server";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 import { apiError, HttpStatus } from "@/app/lib/api-response";
 import {
   initializeCorrelationId,

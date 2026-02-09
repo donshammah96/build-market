@@ -1,7 +1,8 @@
-import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@build/db";
 import { z } from "zod";
 import { withAuth } from "@/app/lib/api-middleware";
+import { generateFileKey } from "@/app/lib/file-keys";
 import { apiError, HttpStatus } from "@/app/lib/api-response";
 import {
   initializeCorrelationId,
@@ -16,6 +17,18 @@ import {
 
 const logger = getClientLogger();
 
+const STORAGE_BASE_URL = process.env.STORAGE_BASE_URL || "https://bucket-url.com";
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const ALLOWED_MIME_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]
+
 const AttachmentTypeEnum = z.enum([
   "TITLE_DEED",
   "OFFICIAL_SEARCH",
@@ -24,11 +37,21 @@ const AttachmentTypeEnum = z.enum([
   "KRA_PIN",
   "EARB_CERTIFICATE",
   "PRACTICING_LICENCE",
+  "NCA CERTIFICATE",
+  "OTHER",
 ]);
 
 const createDocumentSchema = z.object({
-  fileUrl: z.string().url("Invalid file URL"),
-  fileKey: z.string().optional(),
+  originalFileName: z.string().min(1, "File nameis required"),
+  mimeType: z.string().refine(
+    (type) => ALLOWED_MIME_TYPES.includes(type),
+    {
+      message: `Invalid file type. Allowed types: ${ALLOWED_MIME_TYPES.join(", ")}`,
+    }
+  ),
+
+  size: z.number().max(MAX_FILE_SIZE, `File size exceeds the limit of ${MAX_FILE_SIZE / (1024 * 1024)} MB`),
+
   type: AttachmentTypeEnum,
 });
 
@@ -111,7 +134,12 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
     );
   }
 
-  const { fileUrl, fileKey, type } = validation.data;
+  const { originalFileName, mimeType, size, type } = validation.data;
+
+  // Generate a unique file key
+  // Format: "documents/{userId}/{uuid}-{sanitizedFilename}.ext"
+  const fileKey = generateFileKey("documents", originalFileName, dbUserId);
+  const fileUrl = `${STORAGE_BASE_URL}/${fileKey}`;
 
   logger.info("Creating professional document", {
     correlationId,
@@ -125,7 +153,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       await prisma.professionalProfile.update({
         where: { userId: dbUserId },
         data: {
-          status: "PENDING",
+          verificationStatus: "PENDING",
           submittedAt: new Date(),
         },
       });
@@ -133,10 +161,12 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       const document = await prisma.professionalDocument.create({
         data: {
           professionalId: dbUserId,
-          fileUrl,
-          fileKey: fileKey || null,
+          url: fileUrl,
+          fileKey: fileKey || "",
           type,
-          isVerified: false,
+          verified: false,
+          mimeType: mimeType,
+          size: size,
         },
       });
 
@@ -146,7 +176,13 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
         documentId: document.id,
       });
 
-      return { data: document };
+      return { 
+        data: document,
+        meta: {
+          uploadKey: fileKey,
+          uploadUrl: fileUrl,
+        } 
+      };
     },
     {
       operationName: "create_professional_document",

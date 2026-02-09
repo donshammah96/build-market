@@ -1,87 +1,163 @@
 import { z } from 'zod';
 
-// Conversation (Thread) Schemas
-export const ConversationSchema = z.object({
-  id: z.string(),
-  participants: z.array(z.string()),
+// ========================================================
+// 11. COMMUNICATION ENUMS
+// ========================================================
+
+export const MessageTypeEnum = z.enum(["TEXT", "IMAGE", "FILE", "PDF", "SYSTEM"]);
+export type MessageType = z.infer<typeof MessageTypeEnum>;
+
+export const ThreadTypeEnum = z.enum(["DIRECT", "GROUP", "PROJECT", "SUPPORT"]);
+export type ThreadType = z.infer<typeof ThreadTypeEnum>;
+
+export const ParticipantRoleEnum = z.enum(["OWNER", "ADMIN", "MEMBER"]);
+export type ParticipantRole = z.infer<typeof ParticipantRoleEnum>;
+
+export const NotificationTypeEnum = z.enum([
+  "INFO", "SUCCESS", "WARNING", "ERROR", "PAYMENT", "MESSAGE", "PROJECT", "LEAD", "SECURITY", "SYSTEM"
+]);
+export type NotificationType = z.infer<typeof NotificationTypeEnum>;
+
+export const NotificationChannelEnum = z.enum(["IN_APP", "EMAIL", "SMS", "PUSH"]);
+export type NotificationChannel = z.infer<typeof NotificationChannelEnum>;
+
+export const NotificationPriorityEnum = z.enum(["LOW", "MEDIUM", "HIGH"]);
+export type NotificationPriority = z.infer<typeof NotificationPriorityEnum>;
+
+export const NotificationDeliveryStatusEnum = z.enum(["QUEUED", "SENT", "DELIVERED", "FAILED"]);
+export type NotificationDeliveryStatus = z.infer<typeof NotificationDeliveryStatusEnum>;
+
+// ========================================================
+// DB MODELS
+// ========================================================
+
+export const MessageThreadSchema = z.object({
+  id: z.string().uuid(),
+  type: ThreadTypeEnum.default("DIRECT"),
+  subject: z.string().optional().nullable(),
+  projectId: z.string().optional().nullable(),
   lastMessage: z.string().optional().nullable(),
   lastMessageAt: z.date().optional().nullable(),
-  unreadCount: z.record(z.string(), z.number()).optional(),
-  projectId: z.string().optional(),
+  metadata: z.any().optional().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
+  deletedAt: z.date().optional().nullable(),
 });
+export type MessageThread = z.infer<typeof MessageThreadSchema>;
 
-export const CreateConversationSchema = z.object({
-  participants: z.array(z.string()).min(2, 'At least 2 participants required'),
-  projectId: z.string().optional(),
+export const ThreadParticipantSchema = z.object({
+  id: z.string().uuid(),
+  threadId: z.string(),
+  userId: z.string(),
+  nickname: z.string().optional().nullable(),
+  role: ParticipantRoleEnum.default("MEMBER"),
+  joinedAt: z.date(),
+  unreadCount: z.number().int().default(0),
+  lastReadAt: z.date().optional().nullable(),
+  isMuted: z.boolean().default(false),
+  isArchived: z.boolean().default(false),
+  isPinned: z.boolean().default(false),
 });
+export type ThreadParticipant = z.infer<typeof ThreadParticipantSchema>;
 
-// Message Schemas
 export const AttachmentSchema = z.object({
-  url: z.string(),
+  id: z.string().uuid(),
+  messageId: z.string(),
+  fileUrl: z.string().url(),
+  fileKey: z.string().optional().nullable(),
   filename: z.string(),
-  size: z.number(),
-  mimeType: z.string(),
-  encrypted: z.boolean().optional(),
+  size: z.number().int().optional().nullable(),
+  mimeType: z.string().optional().nullable(),
+  createdAt: z.date(),
 });
+export type Attachment = z.infer<typeof AttachmentSchema>;
 
 export const MessageSchema = z.object({
-  id: z.string(),
-  conversationId: z.string(),
+  id: z.string().uuid(),
+  threadId: z.string(),
   senderId: z.string(),
-  content: z.string().min(1, 'Message content is required'),
-  type: z.enum(['text', 'image', 'file']).default('text'),
-  attachments: z.array(AttachmentSchema).optional().default([]),
-  readBy: z.array(z.string()).default([]),
-  encrypted: z.boolean().default(false),
+  content: z.string(),
+  type: MessageTypeEnum.default("TEXT"),
+  replyToId: z.string().optional().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
+  deletedAt: z.date().optional().nullable(),
+  // Relations often sent with message
+  attachments: z.array(AttachmentSchema).optional(),
 });
+export type Message = z.infer<typeof MessageSchema>;
+
+export const ReadReceiptSchema = z.object({
+  id: z.string().uuid(),
+  messageId: z.string(),
+  userId: z.string(),
+  readAt: z.date(),
+});
+export type ReadReceipt = z.infer<typeof ReadReceiptSchema>;
+
+export const NotificationSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string(),
+  title: z.string(),
+  message: z.string(),
+  type: NotificationTypeEnum.default("INFO"),
+  priority: NotificationPriorityEnum.default("MEDIUM"),
+  channels: z.array(NotificationChannelEnum).default(["IN_APP"]),
+  metadata: z.any().optional().nullable(),
+  link: z.string().optional().nullable(),
+  isRead: z.boolean().default(false),
+  readAt: z.date().optional().nullable(),
+  deliveryStatus: NotificationDeliveryStatusEnum.default("QUEUED"),
+  error: z.string().optional().nullable(),
+  createdAt: z.date(),
+  expiresAt: z.date().optional().nullable(),
+});
+export type Notification = z.infer<typeof NotificationSchema>;
+
+// ========================================================
+// DTOs / INPUTS
+// ========================================================
+
+export const CreateConversationSchema = z.object({
+  type: ThreadTypeEnum.default("DIRECT"),
+  subject: z.string().optional(),
+  participants: z.array(z.string()).min(1, 'At least 1 participant required'),
+  projectId: z.string().optional(),
+  initialMessage: z.string().optional(), 
+});
+export type CreateConversation = z.infer<typeof CreateConversationSchema>;
 
 export const CreateMessageSchema = z.object({
-  conversationId: z.string().min(1, 'Conversation ID is required'),
-  senderId: z.string().min(1, 'Sender ID is required'),
+  threadId: z.string().min(1, 'Thread ID is required'),
   content: z.string().min(1, 'Message content is required'),
-  type: z.enum(['text', 'image', 'file']).default('text'),
-  attachments: z.array(AttachmentSchema).optional(),
+  type: MessageTypeEnum.default("TEXT"),
+  replyToId: z.string().optional(),
+  attachments: z.array(z.object({
+    fileUrl: z.string().url(),
+    filename: z.string(),
+    size: z.number().optional(),
+    mimeType: z.string().optional(),
+  })).optional(),
 });
+export type CreateMessage = z.infer<typeof CreateMessageSchema>;
 
 export const MarkAsReadSchema = z.object({
-  userId: z.string().min(1, 'User ID is required'),
+  threadId: z.string(),
+  messageIds: z.array(z.string()).optional(), 
 });
-
-// WebSocket Event Schemas
-export const TypingEventSchema = z.object({
-  conversationId: z.string(),
-  userId: z.string(),
-});
-
-export const MessageSendEventSchema = z.object({
-  conversationId: z.string(),
-  senderId: z.string(),
-  content: z.string().min(1),
-  type: z.enum(['text', 'image', 'file']).optional(),
-  attachments: z.array(AttachmentSchema).optional(),
-});
-
-export const MessagesReadEventSchema = z.object({
-  conversationId: z.string(),
-  userId: z.string(),
-});
-
-// Types
-export type Conversation = z.infer<typeof ConversationSchema>;
-export type CreateConversation = z.infer<typeof CreateConversationSchema>;
-export type Message = z.infer<typeof MessageSchema>;
-export type CreateMessage = z.infer<typeof CreateMessageSchema>;
-export type Attachment = z.infer<typeof AttachmentSchema>;
 export type MarkAsRead = z.infer<typeof MarkAsReadSchema>;
-export type TypingEvent = z.infer<typeof TypingEventSchema>;
-export type MessageSendEvent = z.infer<typeof MessageSendEventSchema>;
-export type MessagesReadEvent = z.infer<typeof MessagesReadEventSchema>;
 
-// API Response Types
+// ========================================================
+// ALIASES (Legacy Support)
+// ========================================================
+
+export const ConversationSchema = MessageThreadSchema;
+export type Conversation = MessageThread;
+
+// ========================================================
+// API RESPONSES
+// ========================================================
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
@@ -103,7 +179,3 @@ export interface PaginatedResponse<T> {
   error?: string;
   message?: string;
 }
-
-// Legacy types (for backward compatibility)
-export const MessageThreadSchema = ConversationSchema;
-export type MessageThread = Conversation;

@@ -1,11 +1,10 @@
-import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
-import { z } from "zod";
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@build/db";
 import { withAuth } from "@/app/lib/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
+  getResilientExecutor,
   getClientLogger,
 } from "@/app/lib/resilient-api";
 import {
@@ -13,180 +12,21 @@ import {
   getRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/rate-limit";
+import { getRequestMetadata } from "@/app/lib/request-utils";
+import {
+  CreateStoreSchema,
+  BatchCreateStoresSchema,
+  StoreQuerySchema,
+  storeListSelect,
+  generateSlug,
+} from "@/app/lib/stores-validation";
+import { Prisma, UserStatus, ConsentType } from "@prisma/client";
+
+// Extracted services
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { checkBodySize } from "@/app/lib/api-guards";
 
 const logger = getClientLogger();
-
-// Store Category enum matching Prisma schema
-const StoreCategoryEnum = z.enum([
-  "hardware",
-  "building_materials",
-  "tiles_and_ceramics",
-  "electrical",
-  "plumbing",
-  "paints_and_finishes",
-  "roofing",
-  "timber_and_wood",
-  "glass_and_aluminum",
-  "kitchen_and_bath",
-  "landscaping",
-  "steel_and_metals",
-  "safety_and_tools",
-  "hvac",
-]);
-
-// Store Type enum matching Prisma schema
-const StoreTypeEnum = z.enum([
-  "retail",
-  "wholesale",
-  "manufacturer",
-  "distributor",
-  "online_only",
-]);
-
-// County enum matching Prisma schema
-const CountyEnum = z.enum([
-  "MOMBASA",
-  "KWALE",
-  "KILIFI",
-  "TANA_RIVER",
-  "LAMU",
-  "TAITA_TAVETA",
-  "GARISSA",
-  "WAJIR",
-  "MANDERA",
-  "MARSABIT",
-  "ISIOLO",
-  "MERU",
-  "THARAKA_NITHI",
-  "EMBU",
-  "KITUI",
-  "MACHAKOS",
-  "MAKUENI",
-  "NYANDARUA",
-  "NYERI",
-  "KIRINYAGA",
-  "MURANGA",
-  "KIAMBU",
-  "TURKANA",
-  "WEST_POKOT",
-  "SAMBURU",
-  "TRANS_NZOIA",
-  "UASIN_GISHU",
-  "ELGEYO_MARAKWET",
-  "NANDI",
-  "BARINGO",
-  "LAIKIPIA",
-  "NAKURU",
-  "NAROK",
-  "KAJIADO",
-  "KERICHO",
-  "BOMET",
-  "KAKAMEGA",
-  "VIHIGA",
-  "BUNGOMA",
-  "BUSIA",
-  "SIAYA",
-  "KISUMU",
-  "HOMA_BAY",
-  "MIGORI",
-  "KISII",
-  "NYAMIRA",
-  "NAIROBI",
-]);
-
-// Helper function to generate URL-safe slug from store name
-function generateSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, "") // Remove special characters
-    .replace(/\s+/g, "-") // Replace spaces with hyphens
-    .replace(/-+/g, "-") // Replace multiple hyphens with single
-    .substring(0, 100); // Limit length
-}
-
-const createStoreSchema = z.object({
-  name: z.string().min(1, "Store name is required").max(100),
-  description: z.string().max(1000).optional(),
-  slug: z.string().max(100).optional(), // Auto-generated if not provided
-  address: z.string().min(1, "Address is required"),
-  city: z.string().min(1, "City is required"),
-  county: CountyEnum,
-  zipCode: z.string().optional(), // Optional in Prisma schema
-  categories: z
-    .array(StoreCategoryEnum)
-    .min(1, "At least one category is required"),
-  storeType: StoreTypeEnum,
-  images: z.array(z.string().url()).optional().default([]),
-});
-
-// Schema for batch creating multiple stores
-const batchCreateStoresSchema = z.object({
-  stores: z
-    .array(createStoreSchema)
-    .min(1)
-    .max(5, "Maximum 5 stores per request"),
-});
-
-// Optimized select for store list queries (minimal data needed)
-const storeListSelect = {
-  id: true,
-  name: true,
-  slug: true,
-  description: true,
-  address: true,
-  city: true,
-  county: true,
-  zipCode: true,
-  categories: true,
-  storeType: true,
-  verified: true,
-  featured: true,
-  images: {
-    select: {
-      id: true,
-      url: true,
-      key: true,
-      caption: true,
-      isMain: true,
-      isLogo: true,
-      sortOrder: true,
-    },
-    orderBy: { sortOrder: "asc" as const },
-  },
-  createdAt: true,
-  updatedAt: true,
-  professional: {
-    select: {
-      userId: true,
-      companyName: true,
-      user: {
-        select: {
-          firstName: true,
-          lastName: true,
-          avatar: true,
-        },
-      },
-    },
-  },
-  _count: {
-    select: {
-      products: true,
-      reviews: true,
-      orders: true,
-    },
-  },
-} as const;
-
-const querySchema = z.object({
-  category: StoreCategoryEnum.optional(),
-  storeType: StoreTypeEnum.optional(),
-  city: z.string().optional(),
-  verified: z.enum(["true", "false"]).optional(),
-  featured: z.enum(["true", "false"]).optional(),
-  page: z.string().regex(/^\d+$/).optional().default("1"),
-  limit: z.string().regex(/^\d+$/).optional().default("20"),
-});
 
 /**
  * GET /api/stores
@@ -200,13 +40,13 @@ export async function GET(req: NextRequest) {
   const rateLimitResult = await checkRateLimit(
     `stores-read:${identifier}`,
     RateLimits.READ.limit,
-    RateLimits.READ.window
+    RateLimits.READ.window,
   );
 
   if (!rateLimitResult.success) {
     return apiError(
       "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS
+      HttpStatus.TOO_MANY_REQUESTS,
     );
   }
 
@@ -222,7 +62,7 @@ export async function GET(req: NextRequest) {
     limit: searchParams.get("limit") || "20",
   };
 
-  const queryValidation = querySchema.safeParse(queryParams);
+  const queryValidation = StoreQuerySchema.safeParse(queryParams);
   if (!queryValidation.success) {
     logger.warn("Store query validation failed", {
       correlationId,
@@ -231,7 +71,7 @@ export async function GET(req: NextRequest) {
     return apiError(
       "Invalid query parameters",
       HttpStatus.BAD_REQUEST,
-      queryValidation.error.issues
+      queryValidation.error.issues,
     );
   }
 
@@ -246,11 +86,13 @@ export async function GET(req: NextRequest) {
     filters: { category, storeType, city, verified, featured },
   });
 
-  return executeResilient(
+  const resilientExecutor = getResilientExecutor();
+  return resilientExecutor.execute(
     async () => {
-      // Build where clause dynamically
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const where: any = {};
+      // Build where clause dynamically with soft delete support
+      const where: Prisma.StoreWhereInput = {
+        deletedAt: null, // Respect soft delete
+      };
 
       if (category) {
         where.categories = { has: category };
@@ -297,8 +139,7 @@ export async function GET(req: NextRequest) {
     },
     {
       operationName: "get_stores",
-      successStatus: HttpStatus.OK,
-    }
+    },
   );
 }
 
@@ -306,88 +147,189 @@ export async function GET(req: NextRequest) {
  * POST /api/stores
  * Create store(s) for the authenticated professional
  *
+ * Features:
+ * - Single or batch store creation
+ * - GDPR consent tracking
+ * - Account suspension checks
+ * - Asset-based image handling
+ * - Request metadata logging
+ * - Resilient execution
+ *
  * Supports two modes:
- * 1. Single store: { name, address, ... }
+ * 1. Single store: { name, address, ..., images: [{ assetId, category, ... }] }
  * 2. Batch stores: { stores: [{ name, address, ... }, ...] }
  */
 export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
   const correlationId = initializeCorrelationId(req);
+  const resilientExecutor = getResilientExecutor();
+  const { ipAddress, userAgent } = getRequestMetadata(req);
+
+  const sizeError = checkBodySize(req);
+  if (sizeError) return sizeError;
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+  }
+
+  // Detect batch mode by checking for 'stores' array
+  const isBatchMode =
+    typeof body === "object" &&
+    body !== null &&
+    "stores" in body &&
+    Array.isArray((body as { stores?: unknown }).stores);
+
+  const batchValidation = isBatchMode
+    ? BatchCreateStoresSchema.safeParse(body)
+    : undefined;
+  const singleValidation = !isBatchMode
+    ? CreateStoreSchema.safeParse(body)
+    : undefined;
+
+  const batchData = batchValidation?.success ? batchValidation.data : null;
+  const singleData = singleValidation?.success ? singleValidation.data : null;
+
+  if (isBatchMode && !batchValidation?.success) {
+    logger.warn("Batch store creation validation failed", {
+      correlationId,
+      userId: dbUserId,
+      errors: batchValidation?.error.issues,
+    });
+    return apiError(
+      "Invalid input",
+      HttpStatus.BAD_REQUEST,
+      batchValidation?.error.issues,
+    );
+  }
+
+  if (!isBatchMode && !singleValidation?.success) {
+    logger.warn("Store creation validation failed", {
+      correlationId,
+      userId: dbUserId,
+      errors: singleValidation?.error.issues,
+    });
+    return apiError(
+      "Invalid input",
+      HttpStatus.BAD_REQUEST,
+      singleValidation?.error.issues,
+    );
+  }
+
+  const validatedPayload = isBatchMode
+    ? { mode: "batch", ...batchData! }
+    : { mode: "single", ...singleData! };
+
+  const idempotencyKey =
+    req.headers.get("Idempotency-Key") ||
+    IdempotencyService.generateKey(dbUserId, "POST", validatedPayload);
+
+  const idempotencyCheck = await IdempotencyService.checkOrCreate(
+    idempotencyKey,
+    "store",
+    dbUserId,
+    "POST",
+  );
+
+  if (!idempotencyCheck) {
+    return apiError(
+      "Failed to process idempotency key",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  if (idempotencyCheck.status === "completed") {
+    return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+  }
+
+  if (idempotencyCheck.status === "pending") {
+    return apiError(
+      "Request is being processed. Please wait.",
+      HttpStatus.CONFLICT,
+    );
+  }
 
   const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
     `stores-write:${identifier}`,
     RateLimits.WRITE.limit,
-    RateLimits.WRITE.window
+    RateLimits.WRITE.window,
   );
 
   if (!rateLimitResult.success) {
+    await IdempotencyService.fail(idempotencyKey);
     return apiError(
       "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS
+      HttpStatus.TOO_MANY_REQUESTS,
     );
   }
 
-  const body = await req.json();
-
-  // Detect batch mode by checking for 'stores' array
-  const isBatchMode = "stores" in body && Array.isArray(body.stores);
-
   if (isBatchMode) {
-    // Batch create mode
-    const batchValidation = batchCreateStoresSchema.safeParse(body);
-
-    if (!batchValidation.success) {
-      logger.warn("Batch store creation validation failed", {
-        correlationId,
-        userId: dbUserId,
-        errors: batchValidation.error.issues,
-      });
-      return apiError(
-        "Invalid input",
-        HttpStatus.BAD_REQUEST,
-        batchValidation.error.issues
-      );
-    }
-
-    const { stores: storeDataList } = batchValidation.data;
+    const { stores: storeDataList } = batchData!;
 
     logger.info("Creating stores (batch)", {
       correlationId,
       userId: dbUserId,
       count: storeDataList.length,
+      ipAddress,
     });
 
-    return executeResilient(
-      async () => {
-        // Verify user has a professional profile
-        const professional = await prisma.professionalProfile.findUnique({
-          where: { userId: dbUserId },
+    // Check user account status
+    const user = await prisma.user.findUnique({
+      where: { id: dbUserId },
+      select: {
+        status: true,
+        professionalProfile: {
           select: { userId: true },
-        });
+        },
+      },
+    });
 
-        if (!professional) {
-          logger.warn("Non-professional tried to create stores", {
-            correlationId,
-            userId: dbUserId,
-          });
-          return apiError(
-            "Only professionals can create stores",
-            HttpStatus.FORBIDDEN
-          );
-        }
+    if (!user) {
+      logger.error("User not found", new Error("User not found"), {
+        correlationId,
+        userId: dbUserId,
+      });
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError("User not found", HttpStatus.NOT_FOUND);
+    }
 
-        // Generate unique slugs for each store
-        const storesWithSlugs = await Promise.all(
-          storeDataList.map(async (storeData, index) => {
-            const baseSlug = storeData.slug || generateSlug(storeData.name);
-            // Add timestamp suffix to ensure uniqueness in batch
-            const uniqueSlug = `${baseSlug}-${Date.now()}-${index}`;
-            return { ...storeData, slug: uniqueSlug };
-          })
-        );
+    if (user.status === UserStatus.SUSPENDED) {
+      logger.warn("Suspended user tried to create stores", {
+        correlationId,
+        userId: dbUserId,
+      });
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        "Account suspended. Cannot create stores.",
+        HttpStatus.FORBIDDEN,
+      );
+    }
 
+    if (!user.professionalProfile) {
+      logger.warn("Non-professional tried to create stores", {
+        correlationId,
+        userId: dbUserId,
+      });
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        "Only professionals can create stores",
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    // Generate unique slugs for each store (timestamp-based for batch uniqueness)
+    const timestamp = Date.now();
+    const storesWithSlugs = storeDataList.map((storeData, index) => {
+      const baseSlug = storeData.slug || generateSlug(storeData.name);
+      const uniqueSlug = `${baseSlug}-${timestamp}-${index}`;
+      return { ...storeData, slug: uniqueSlug };
+    });
+
+    const result = await resilientExecutor.execute(
+      async () => {
         // Create all stores atomically in a transaction
-        // Note: slug field will be available after running `npx prisma generate`
         const createdStores = await prisma.$transaction(
           storesWithSlugs.map((storeData) =>
             prisma.store.create({
@@ -396,18 +338,39 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
                 name: storeData.name,
                 slug: storeData.slug,
                 description: storeData.description,
+                contactPhone: storeData.contactPhone,
+                whatsappNumber: storeData.whatsappNumber,
+                email: storeData.email,
+                website: storeData.website,
                 address: storeData.address,
                 city: storeData.city,
                 county: storeData.county,
+                neighborhood: storeData.neighborhood,
                 zipCode: storeData.zipCode,
+                latitude: storeData.latitude,
+                longitude: storeData.longitude,
                 categories: storeData.categories,
                 storeType: storeData.storeType,
+                mpesaTillNumber: storeData.mpesaTillNumber,
+                mpesaPaybill: storeData.mpesaPaybill,
+                acceptsCard: storeData.acceptsCard,
+                acceptsCash: storeData.acceptsCash,
+                deliveryRadiusKm: storeData.deliveryRadiusKm,
+                baseDeliveryFee: storeData.baseDeliveryFee,
+                minOrderValue: storeData.minOrderValue,
+                operatingHours:
+                  storeData.operatingHours as Prisma.InputJsonValue,
+                businessRegNo: storeData.businessRegNo,
+                kraPin: storeData.kraPin,
                 images: storeData.images?.length
                   ? {
-                      create: storeData.images.map((url, index) => ({
-                        url,
-                        isMain: index === 0,
-                        sortOrder: index,
+                      create: storeData.images.map((img) => ({
+                        assetId: img.assetId,
+                        category: img.category,
+                        caption: img.caption,
+                        isMain: img.isMain,
+                        sortOrder: img.sortOrder,
+                        uploadedBy: { connect: { id: dbUserId } },
                       })),
                     }
                   : undefined,
@@ -422,9 +385,26 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
                 categories: true,
                 createdAt: true,
               },
-            })
-          )
+            }),
+          ),
         );
+
+        // Record GDPR consent for each store
+        await prisma.consentRecord.createMany({
+          data: createdStores.map((store) => ({
+            userId: dbUserId,
+            type: ConsentType.PRIVACY_POLICY,
+            documentVersion: "1.0",
+            granted: true,
+            grantedAt: new Date(),
+            ipAddress,
+            userAgent,
+            metadata: {
+              storeId: store.id,
+              storeName: store.name,
+            } as Prisma.InputJsonValue,
+          })),
+        });
 
         logger.info("Stores created successfully (batch)", {
           correlationId,
@@ -432,146 +412,331 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
           storeIds: createdStores.map((s) => s.id),
         });
 
-        return apiSuccess(
-          { stores: createdStores, count: createdStores.length },
-          HttpStatus.CREATED
-        );
+        return { stores: createdStores, count: createdStores.length };
       },
       {
         operationName: "create_stores_batch",
-        successStatus: HttpStatus.CREATED,
-      }
+      },
     );
+
+    if (!result.success || !result.data) {
+      logger.error(
+        "Batch store creation failed",
+        result.error || new Error("Unknown error"),
+        { correlationId, userId: dbUserId },
+      );
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        "Failed to create stores",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    await IdempotencyService.complete(idempotencyKey, result.data);
+    return apiSuccess(result.data, HttpStatus.CREATED);
   }
 
-  // Single store mode (original behavior)
-  const validation = createStoreSchema.safeParse(body);
-
-  if (!validation.success) {
-    logger.warn("Store creation validation failed", {
-      correlationId,
-      userId: dbUserId,
-      errors: validation.error.issues,
-    });
-    return apiError(
-      "Invalid input",
-      HttpStatus.BAD_REQUEST,
-      validation.error.issues
-    );
-  }
-
-  const {
-    name,
-    description,
-    slug: providedSlug,
-    address,
-    city,
-    county,
-    zipCode,
-    categories,
-    storeType,
-    images,
-  } = validation.data;
+  // Single store mode
+  const storeData = singleData!;
 
   logger.info("Creating store", {
     correlationId,
     userId: dbUserId,
-    name,
-    storeType,
+    name: storeData.name,
+    storeType: storeData.storeType,
+    ipAddress,
   });
 
-  return executeResilient(
-    async () => {
-      // Verify user has a professional profile
-      const professional = await prisma.professionalProfile.findUnique({
-        where: { userId: dbUserId },
-        select: { userId: true }, // Optimized: only need to check existence
-      });
+  // Check user account status
+  const user = await prisma.user.findUnique({
+    where: { id: dbUserId },
+    select: {
+      status: true,
+      professionalProfile: {
+        select: { userId: true },
+      },
+    },
+  });
 
-      if (!professional) {
-        logger.warn("Non-professional tried to create store", {
+  if (!user) {
+    logger.error("User not found", new Error("User not found"), {
+      correlationId,
+      userId: dbUserId,
+    });
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError("User not found", HttpStatus.NOT_FOUND);
+  }
+
+  if (user.status === UserStatus.SUSPENDED) {
+    logger.warn("Suspended user tried to create store", {
+      correlationId,
+      userId: dbUserId,
+    });
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      "Account suspended. Cannot create stores.",
+      HttpStatus.FORBIDDEN,
+    );
+  }
+
+  if (!user.professionalProfile) {
+    logger.warn("Non-professional tried to create store", {
+      correlationId,
+      userId: dbUserId,
+    });
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      "Only professionals can create stores",
+      HttpStatus.FORBIDDEN,
+    );
+  }
+
+  // Generate unique slug
+  const baseSlug = storeData.slug || generateSlug(storeData.name);
+  let slug = baseSlug;
+  const attempt = 0;
+
+  const result = await resilientExecutor.execute(
+    async () => {
+      // Try to create with unique slug (database-level constraint will catch duplicates)
+      try {
+        const store = await prisma.store.create({
+          data: {
+            professionalId: dbUserId,
+            name: storeData.name,
+            slug,
+            description: storeData.description,
+            contactPhone: storeData.contactPhone,
+            whatsappNumber: storeData.whatsappNumber,
+            email: storeData.email,
+            website: storeData.website,
+            address: storeData.address,
+            city: storeData.city,
+            county: storeData.county,
+            neighborhood: storeData.neighborhood,
+            zipCode: storeData.zipCode,
+            latitude: storeData.latitude,
+            longitude: storeData.longitude,
+            categories: storeData.categories,
+            storeType: storeData.storeType,
+            mpesaTillNumber: storeData.mpesaTillNumber,
+            mpesaPaybill: storeData.mpesaPaybill,
+            acceptsCard: storeData.acceptsCard,
+            acceptsCash: storeData.acceptsCash,
+            deliveryRadiusKm: storeData.deliveryRadiusKm,
+            baseDeliveryFee: storeData.baseDeliveryFee,
+            minOrderValue: storeData.minOrderValue,
+            operatingHours: storeData.operatingHours as Prisma.InputJsonValue,
+            businessRegNo: storeData.businessRegNo,
+            kraPin: storeData.kraPin,
+            images: storeData.images?.length
+              ? {
+                  create: storeData.images.map((img) => ({
+                    assetId: img.assetId,
+                    category: img.category,
+                    caption: img.caption,
+                    isMain: img.isMain,
+                    sortOrder: img.sortOrder,
+                    uploadedBy: { connect: { id: dbUserId } },
+                  })),
+                }
+              : undefined,
+          },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            description: true,
+            address: true,
+            city: true,
+            county: true,
+            zipCode: true,
+            latitude: true,
+            longitude: true,
+            categories: true,
+            storeType: true,
+            images: {
+              select: {
+                id: true,
+                category: true,
+                caption: true,
+                isMain: true,
+                sortOrder: true,
+                asset: {
+                  select: {
+                    id: true,
+                    cdnUrl: true,
+                    thumbnailUrl: true,
+                    blurHash: true,
+                  },
+                },
+              },
+              orderBy: { sortOrder: "asc" },
+            },
+            createdAt: true,
+          },
+        });
+
+        // Record GDPR consent
+        await prisma.consentRecord.create({
+          data: {
+            userId: dbUserId,
+            type: ConsentType.PRIVACY_POLICY,
+            documentVersion: "1.0",
+            granted: true,
+            grantedAt: new Date(),
+            metadata: {
+              storeId: store.id,
+              storeName: store.name,
+            } as Prisma.InputJsonValue,
+          },
+        });
+
+        logger.info("Store created successfully", {
           correlationId,
           userId: dbUserId,
+          storeId: store.id,
         });
-        return apiError(
-          "Only professionals can create stores",
-          HttpStatus.FORBIDDEN
-        );
-      }
 
-      // Generate unique slug if not provided
-      const baseSlug = providedSlug || generateSlug(name);
-      let slug = baseSlug;
-      let slugSuffix = 0;
+        return store;
+      } catch (error: unknown) {
+        // Handle slug uniqueness constraint violation
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          error.code === "P2002"
+        ) {
+          // Prisma unique constraint violation
+          logger.warn("Slug already exists, retrying with suffix", {
+            correlationId,
+            slug,
+            attempt,
+          });
 
-      // Ensure slug uniqueness
-      while (true) {
-        const existingStore = await prisma.store.findUnique({
-          where: { slug },
-          select: { id: true },
-        });
-        if (!existingStore) break;
-        slugSuffix++;
-        slug = `${baseSlug}-${slugSuffix}`;
-      }
+          // Retry with timestamp suffix
+          slug = `${baseSlug}-${Date.now()}`;
 
-      const store = await prisma.store.create({
-        data: {
-          professionalId: dbUserId,
-          name,
-          slug,
-          description,
-          address,
-          city,
-          county,
-          zipCode,
-          categories,
-          storeType,
-          images: images?.length
-            ? {
-                create: images.map((url, index) => ({
-                  url,
-                  isMain: index === 0,
-                  sortOrder: index,
-                })),
-              }
-            : undefined,
-        },
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          description: true,
-          address: true,
-          city: true,
-          county: true,
-          zipCode: true,
-          categories: true,
-          storeType: true,
-          images: {
+          const store = await prisma.store.create({
+            data: {
+              professionalId: dbUserId,
+              name: storeData.name,
+              slug,
+              description: storeData.description,
+              contactPhone: storeData.contactPhone,
+              whatsappNumber: storeData.whatsappNumber,
+              email: storeData.email,
+              website: storeData.website,
+              address: storeData.address,
+              city: storeData.city,
+              county: storeData.county,
+              neighborhood: storeData.neighborhood,
+              zipCode: storeData.zipCode,
+              latitude: storeData.latitude,
+              longitude: storeData.longitude,
+              categories: storeData.categories,
+              storeType: storeData.storeType,
+              mpesaTillNumber: storeData.mpesaTillNumber,
+              mpesaPaybill: storeData.mpesaPaybill,
+              acceptsCard: storeData.acceptsCard,
+              acceptsCash: storeData.acceptsCash,
+              deliveryRadiusKm: storeData.deliveryRadiusKm,
+              baseDeliveryFee: storeData.baseDeliveryFee,
+              minOrderValue: storeData.minOrderValue,
+              operatingHours: storeData.operatingHours as Prisma.InputJsonValue,
+              businessRegNo: storeData.businessRegNo,
+              kraPin: storeData.kraPin,
+              images: storeData.images?.length
+                ? {
+                    create: storeData.images.map((img) => ({
+                      assetId: img.assetId,
+                      category: img.category,
+                      caption: img.caption,
+                      isMain: img.isMain,
+                      sortOrder: img.sortOrder,
+                      uploadedBy: { connect: { id: dbUserId } },
+                    })),
+                  }
+                : undefined,
+            },
             select: {
               id: true,
-              url: true,
-              isMain: true,
-              isLogo: true,
-              sortOrder: true,
+              name: true,
+              slug: true,
+              description: true,
+              address: true,
+              city: true,
+              county: true,
+              zipCode: true,
+              latitude: true,
+              longitude: true,
+              categories: true,
+              storeType: true,
+              images: {
+                select: {
+                  id: true,
+                  category: true,
+                  caption: true,
+                  isMain: true,
+                  sortOrder: true,
+                  asset: {
+                    select: {
+                      id: true,
+                      cdnUrl: true,
+                      thumbnailUrl: true,
+                      blurHash: true,
+                    },
+                  },
+                },
+                orderBy: { sortOrder: "asc" },
+              },
+              createdAt: true,
             },
-            orderBy: { sortOrder: "asc" },
-          },
-          createdAt: true,
-        },
-      });
+          });
 
-      logger.info("Store created successfully", {
-        correlationId,
-        userId: dbUserId,
-        storeId: store.id,
-      });
-      return apiSuccess(store, HttpStatus.CREATED);
+          // Record GDPR consent
+          await prisma.consentRecord.create({
+            data: {
+              userId: dbUserId,
+              type: ConsentType.PRIVACY_POLICY,
+              documentVersion: "1.0",
+              granted: true,
+              grantedAt: new Date(),
+              metadata: {
+                storeId: store.id,
+                storeName: store.name,
+              } as Prisma.InputJsonValue,
+            },
+          });
+
+          logger.info("Store created successfully (with slug retry)", {
+            correlationId,
+            userId: dbUserId,
+            storeId: store.id,
+          });
+
+          return store;
+        }
+
+        // Re-throw other errors
+        throw error;
+      }
     },
     {
       operationName: "create_store",
-      successStatus: HttpStatus.CREATED,
-    }
+    },
   );
+
+  if (!result.success || !result.data) {
+    logger.error(
+      "Store creation failed",
+      result.error || new Error("Unknown error"),
+      { correlationId, userId: dbUserId },
+    );
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError("Failed to create store", HttpStatus.INTERNAL_SERVER_ERROR);
+  }
+
+  await IdempotencyService.complete(idempotencyKey, result.data);
+  return apiSuccess(result.data, HttpStatus.CREATED);
 });

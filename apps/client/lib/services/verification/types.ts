@@ -3,7 +3,7 @@
  * Type definitions for the admin verification system
  */
 
-import { VerificationStatus } from "@repo/db";
+import { VerificationStatus } from "@build/db";
 
 export type EntityType = "professional" | "store" | "property" | "certificate";
 

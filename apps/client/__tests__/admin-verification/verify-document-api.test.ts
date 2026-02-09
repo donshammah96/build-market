@@ -56,10 +56,18 @@ vi.mock("@/app/lib/resilient-api", async () => {
     executeResilient: vi.fn().mockImplementation(async (operation) => {
       try {
         const result = await operation();
-        return NextResponse.json({ success: true, data: result.data || result, message: result.message });
+        return NextResponse.json({
+          success: true,
+          data: result.data || result,
+          message: result.message,
+        });
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error";
-        return NextResponse.json({ success: false, error: message }, { status: 500 });
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
+        return NextResponse.json(
+          { success: false, error: message },
+          { status: 500 },
+        );
       }
     }),
     getClientLogger: vi.fn().mockReturnValue({
@@ -80,7 +88,9 @@ describe("POST /api/admin/verify-document", () => {
     const { auth } = await import("@clerk/nextjs/server");
     const { prisma } = await import("@repo/db");
 
-    vi.mocked(auth).mockResolvedValue({ userId: TEST_UUIDS.ADMIN_CLERK } as any);
+    vi.mocked(auth).mockResolvedValue({
+      userId: TEST_UUIDS.ADMIN_CLERK,
+    } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
       role: "admin",
@@ -110,7 +120,7 @@ describe("POST /api/admin/verify-document", () => {
           action: "APPROVE",
           notes: "Document approved",
         }),
-      }
+      },
     );
 
     const response = await POST(request, { dbUserId: TEST_UUIDS.ADMIN_DB });
@@ -125,7 +135,7 @@ describe("POST /api/admin/verify-document", () => {
           isVerified: true,
           notes: "Document approved",
         }),
-      })
+      }),
     );
   });
 
@@ -133,7 +143,9 @@ describe("POST /api/admin/verify-document", () => {
     const { auth } = await import("@clerk/nextjs/server");
     const { prisma } = await import("@repo/db");
 
-    vi.mocked(auth).mockResolvedValue({ userId: TEST_UUIDS.ADMIN_CLERK } as any);
+    vi.mocked(auth).mockResolvedValue({
+      userId: TEST_UUIDS.ADMIN_CLERK,
+    } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
       role: "admin",
@@ -163,7 +175,7 @@ describe("POST /api/admin/verify-document", () => {
           action: "REJECT",
           notes: "Certificate expired",
         }),
-      }
+      },
     );
 
     const response = await POST(request, { dbUserId: TEST_UUIDS.ADMIN_DB });
@@ -178,7 +190,7 @@ describe("POST /api/admin/verify-document", () => {
           verificationStatus: "rejected",
           notes: "Certificate expired",
         }),
-      })
+      }),
     );
   });
 
@@ -186,7 +198,9 @@ describe("POST /api/admin/verify-document", () => {
     const { auth } = await import("@clerk/nextjs/server");
     const { prisma } = await import("@repo/db");
 
-    vi.mocked(auth).mockResolvedValue({ userId: TEST_UUIDS.ADMIN_CLERK } as any);
+    vi.mocked(auth).mockResolvedValue({
+      userId: TEST_UUIDS.ADMIN_CLERK,
+    } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
       role: "admin",
@@ -197,13 +211,19 @@ describe("POST /api/admin/verify-document", () => {
         id: TEST_UUIDS.DOCUMENT_1,
         professionalId: TEST_UUIDS.PROFESSIONAL,
         isVerified: true,
-        professional: { userId: TEST_UUIDS.PROFESSIONAL, companyName: "Company 1" },
+        professional: {
+          userId: TEST_UUIDS.PROFESSIONAL,
+          companyName: "Company 1",
+        },
       } as any)
       .mockResolvedValueOnce({
         id: TEST_UUIDS.DOCUMENT_2,
         professionalId: TEST_UUIDS.PROFESSIONAL,
         isVerified: true,
-        professional: { userId: TEST_UUIDS.PROFESSIONAL, companyName: "Company 1" },
+        professional: {
+          userId: TEST_UUIDS.PROFESSIONAL,
+          companyName: "Company 1",
+        },
       } as any);
 
     vi.mocked(prisma.adminAuditLog.create).mockResolvedValue({} as any);
@@ -226,7 +246,7 @@ describe("POST /api/admin/verify-document", () => {
             },
           ],
         }),
-      }
+      },
     );
 
     const response = await POST(request, { dbUserId: TEST_UUIDS.ADMIN_DB });
@@ -242,7 +262,9 @@ describe("POST /api/admin/verify-document", () => {
     const { auth } = await import("@clerk/nextjs/server");
     const { prisma } = await import("@repo/db");
 
-    vi.mocked(auth).mockResolvedValue({ userId: TEST_UUIDS.ADMIN_CLERK } as any);
+    vi.mocked(auth).mockResolvedValue({
+      userId: TEST_UUIDS.ADMIN_CLERK,
+    } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
       role: "admin",
@@ -257,7 +279,7 @@ describe("POST /api/admin/verify-document", () => {
           documentId: TEST_UUIDS.DOCUMENT_1,
           action: "APPROVE",
         }),
-      }
+      },
     );
 
     const response = await POST(request, { dbUserId: TEST_UUIDS.ADMIN_DB });

@@ -6,9 +6,9 @@
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 import { withRole } from "@/app/lib/api-middleware";
-import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api-response";
+import { apiError, HttpStatus } from "@/app/lib/api-response";
 import {
   initializeCorrelationId,
   executeResilient,
@@ -26,7 +26,7 @@ const logger = getClientLogger();
 const documentVerificationSchema = z.object({
   documentType: z.enum([
     "professional_document",
-    "property_attachment",
+    "property_document",
     "certificate",
   ]),
   documentId: z.string().uuid("Invalid document ID format"),
@@ -40,7 +40,7 @@ const batchDocumentVerificationSchema = z.object({
     z.object({
       documentType: z.enum([
         "professional_document",
-        "property_attachment",
+        "property_document",
         "certificate",
       ]),
       documentId: z.string().uuid(),
@@ -131,7 +131,7 @@ async function verifyDocument(
       updated = await prisma.professionalDocument.update({
         where: { id: documentId },
         data: {
-          isVerified: isApproved,
+          verified: isApproved,
           verifiedAt,
           notes,
         },
@@ -148,11 +148,11 @@ async function verifyDocument(
       entityId = updated.professionalId;
       break;
 
-    case "property_attachment":
-      updated = await prisma.propertyAttachment.update({
+    case "property_document":
+      updated = await prisma.propertyDocument.update({
         where: { id: documentId },
         data: {
-          isVerified: isApproved,
+          verified: isApproved,
           verifiedAt,
           notes,
         },

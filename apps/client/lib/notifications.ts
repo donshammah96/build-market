@@ -1,5 +1,5 @@
 
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 
 export type NotificationType = "info" | "success" | "warning" | "error";
 

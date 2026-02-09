@@ -4,7 +4,7 @@ import {
   initializeCorrelationId,
   getClientLogger,
 } from "@/app/lib/resilient-api";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 
 const logger = getClientLogger();
 const MESSAGING_SERVICE_URL =

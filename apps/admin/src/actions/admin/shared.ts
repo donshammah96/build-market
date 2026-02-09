@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 import { auth } from "@clerk/nextjs/server";
 import { syncUserRole } from "../../lib/auth-sync";
 import type { ActionResponse } from "./types";

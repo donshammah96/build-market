@@ -6,6 +6,7 @@ import { LRUCache } from "lru-cache";
 import { CacheConfig } from "./types";
 import { Logger } from "./logger";
 import { RedisCache } from "@repo/redis";
+import { getDefaultCacheConfig } from "./config";
 
 export interface CacheEntry<T> {
   value: T;
@@ -13,7 +14,10 @@ export interface CacheEntry<T> {
   staleAt?: number;
 }
 
-// Default cache configuration
+/**
+ * Default cache configuration
+ * @deprecated Use getDefaultCacheConfig() for environment-aware defaults
+ */
 export const DEFAULT_CACHE_CONFIG: CacheConfig = {
   ttl: 60000, // 60s default TTL
   maxSize: 1000, // 1000 entries max
@@ -33,7 +37,7 @@ export class ResilientCache<T = any> {
   constructor(
     private readonly name: string,
     config: Partial<CacheConfig> = {},
-    logger?: Logger
+    logger?: Logger,
   ) {
     this.config = { ...DEFAULT_CACHE_CONFIG, ...config };
     this.logger = logger;
@@ -145,7 +149,7 @@ export class ResilientCache<T = any> {
   async getOrCompute(
     key: string,
     computer: () => Promise<T>,
-    ttl?: number
+    ttl?: number,
   ): Promise<{ value: T; fromCache: boolean; isStale: boolean }> {
     // L1: Check in-memory cache first
     const cachedEntry = this.memoryCache.get(key);
@@ -194,7 +198,7 @@ export class ResilientCache<T = any> {
   private revalidateInBackground(
     key: string,
     computer: () => Promise<T>,
-    ttl?: number
+    ttl?: number,
   ): void {
     // Check if revalidation is already in progress
     if (this.revalidationPromises.has(key)) {
@@ -209,7 +213,7 @@ export class ResilientCache<T = any> {
           {
             cacheName: this.name,
             key,
-          }
+          },
         );
         return value;
       })
@@ -296,13 +300,13 @@ export class CacheRegistry {
    */
   getCache<T = any>(
     name: string,
-    config?: Partial<CacheConfig>
+    config?: Partial<CacheConfig>,
   ): ResilientCache<T> {
     if (!this.caches.has(name)) {
       const cacheConfig = { ...this.defaultConfig, ...config };
       this.caches.set(
         name,
-        new ResilientCache<T>(name, cacheConfig, this.logger)
+        new ResilientCache<T>(name, cacheConfig, this.logger),
       );
     }
     return this.caches.get(name)! as ResilientCache<T>;
@@ -313,7 +317,7 @@ export class CacheRegistry {
    */
   async clearAll(): Promise<void> {
     const clearPromises = Array.from(this.caches.values()).map((cache) =>
-      cache.clear()
+      cache.clear(),
     );
     await Promise.all(clearPromises);
   }

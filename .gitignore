@@ -5,12 +5,18 @@ node_modules
 .pnp
 .pnp.js
 
-# Local env files
+# Local env files (NEVER commit secrets!)
 .env
 .env.local
+.env.*.local
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Keep .env.example and non-secret defaults committed
+!.env.example
+!.env.development
+!.env.test
 
 # Testing
 coverage

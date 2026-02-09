@@ -9,11 +9,11 @@
   * Supports exponential backoff retries, dead letter queue, and manual requeueing.
  */
 
-import { StructuredLogger } from "@repo/resilience";
+import { StructuredLogger } from "@build/resilience";
 import { VerificationResult, type EntityType } from "./types";
 import { PrismaClient } from "@prisma/client";
 import { Queue, Worker, Job } from "bullmq";
-import type { VerificationStatus } from "@repo/db";
+import type { VerificationStatus } from "@build/db";
 
 // Config and Types
 const logger = new StructuredLogger("notification-queue-service");

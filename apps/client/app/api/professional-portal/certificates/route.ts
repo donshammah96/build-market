@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 import { z } from "zod";
 import { withAuth } from "@/app/lib/api-middleware";
 import { apiError, HttpStatus } from "@/app/lib/api-response";
@@ -123,7 +123,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
           issueDate: issueDate ? new Date(issueDate) : null,
           expiryDate: expiryDate ? new Date(expiryDate) : null,
           fileUrl,
-          fileKey: fileKey || null,
+          fileKey: fileKey || "",
           verificationStatus: "pending",
         },
       });

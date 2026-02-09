@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Socket } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
 import { messagingClient } from "@/lib/messaging-client";
-import type { Message, Conversation } from "@repo/types";
+import type { Message, Conversation } from "@build/types";
 
 // UI Components
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

@@ -3,9 +3,9 @@
  * Handles notification dispatch for verification events
  */
 
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 import { VerificationResult, type EntityType } from "./types";
-import { StructuredLogger } from "@repo/resilience";
+import { StructuredLogger } from "@build/resilience";
 import {
   getVerificationTemplate,
   type NotificationType,
@@ -15,7 +15,7 @@ import {
   createProducer,
   type JetStreamProducer,
   type VerificationEvent,
-} from "@repo/nats";
+} from "@build/nats";
 
 const logger = new StructuredLogger("verification-notification-service");
 

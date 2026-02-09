@@ -25,7 +25,7 @@ import {
 import { Button } from "./ui/button";
 import { useAuth } from "@clerk/nextjs";
 import { useMutation } from "@tanstack/react-query";
-import { UserFormSchema } from "@repo/types";
+import { UserFormSchema } from "@build/types";
 import { toast } from "react-toastify";
 
 const AddUser = () => {

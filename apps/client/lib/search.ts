@@ -1,4 +1,4 @@
-// import { SearchFilters } from "@repo/types";
+// import { SearchFilters } from "@build/types";
 import { searchProfessionalsAction } from "@/app/actions/search";
 
 export async function searchProfessionals(query: string) {

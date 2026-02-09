@@ -1,4 +1,8 @@
-import { createConsumer, createKafkaClient, createProducer } from "@repo/kafka";
+import {
+  createConsumer,
+  createKafkaClient,
+  createProducer,
+} from "@repo/kafka";
 
 const kafka = createKafkaClient("project-service");
 

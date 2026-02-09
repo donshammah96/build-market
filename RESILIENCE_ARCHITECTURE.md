@@ -197,6 +197,7 @@
 ## Key Components
 
 ### 1. Request Flow
+
 - Correlation ID initialization
 - Rate limiting
 - Cache lookup
@@ -208,6 +209,7 @@
 - Logging
 
 ### 2. Resilience Patterns
+
 - **Timeout**: Prevents hanging requests
 - **Retry**: Handles transient failures
 - **Circuit Breaker**: Prevents cascading failures
@@ -215,11 +217,13 @@
 - **Fallback**: Provides graceful degradation
 
 ### 3. Observability
+
 - **Metrics**: Counters, histograms, gauges
 - **Logging**: Structured with correlation IDs
 - **Tracing**: Request tracking across services
 
 ### 4. State Management
+
 - Circuit breaker states (CLOSED → OPEN → HALF-OPEN)
 - Cache states (EMPTY → FRESH → STALE → REVALIDATING)
 - Retry backoff progression
@@ -242,7 +246,7 @@ Next.js API Route (apps/client/app/api/*)
      ↓
 Resilient API Utilities (apps/client/lib/resilient-api.ts)
      ↓
-Resilience Package (@repo/resilience)
+Resilience Package (@build/resilience)
      ↓
 External Services / Database
 ```

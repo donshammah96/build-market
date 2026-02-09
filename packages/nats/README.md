@@ -1,4 +1,4 @@
-# @repo/nats
+# @build/nats
 
 A NATS JetStream messaging package for Build Market's event-driven architecture. Provides reliable, scalable message streaming between microservices.
 
@@ -18,7 +18,7 @@ The package is included in the monorepo. Add it to your service's `package.json`
 ```json
 {
   "dependencies": {
-    "@repo/nats": "workspace:*"
+    "@build/nats": "workspace:*"
   }
 }
 ```
@@ -64,7 +64,7 @@ NATS_PASS=your-password           # Optional
 Before publishing/consuming, ensure streams exist:
 
 ```typescript
-import { createNatsClient, initializeStreams } from "@repo/nats";
+import { createNatsClient, initializeStreams } from "@build/nats";
 
 // Connect to NATS
 await createNatsClient();
@@ -76,7 +76,7 @@ await initializeStreams();
 ### 2. Publish Events
 
 ```typescript
-import { createProducer, type VerificationEvent } from "@repo/nats";
+import { createProducer, type VerificationEvent } from "@build/nats";
 
 // Create producer for your service
 const producer = createProducer("my-service");
@@ -118,7 +118,7 @@ import {
   type TopicConfig,
   type MessagePayload,
   type VerificationEvent,
-} from "@repo/nats";
+} from "@build/nats";
 
 // Ensure streams exist
 await initializeStreams();
@@ -135,22 +135,25 @@ const topics: TopicConfig[] = [
       console.log("Received verification event:", message.data);
       console.log("Subject:", message.subject);
       console.log("Sequence:", message.seq);
-      
+
       // Process the event...
-      
+
       // Message is auto-acked on success
       // To manually control: message.ack(), message.nak(), message.term()
     },
     consumerOptions: {
       durableName: "my-verification-consumer",
       deliverPolicy: "new", // Only new messages
-      maxDeliver: 5,        // Max retry attempts
+      maxDeliver: 5, // Max retry attempts
     },
   },
   {
     subject: "user.created",
     handler: async (message) => {
-      const { userId, email } = message.data as { userId: string; email: string };
+      const { userId, email } = message.data as {
+        userId: string;
+        email: string;
+      };
       // Send welcome email...
     },
   },
@@ -175,7 +178,7 @@ import {
   isNatsConnected,
   closeNatsConnection,
   createServiceClient,
-} from "@repo/nats";
+} from "@build/nats";
 
 // Create/get singleton client
 const client = await createNatsClient({
@@ -201,7 +204,7 @@ await closeNatsConnection();
 ### Producer
 
 ```typescript
-import { createProducer, publishMessage, JetStreamProducer } from "@repo/nats";
+import { createProducer, publishMessage, JetStreamProducer } from "@build/nats";
 
 const producer = createProducer("service-name");
 await producer.connect();
@@ -211,11 +214,15 @@ const ack = await producer.publish("subject.name", { data: "value" });
 console.log(`Published to stream ${ack.stream}, seq: ${ack.seq}`);
 
 // Publish with retry
-await producer.publishWithRetry("subject.name", { data: "value" }, {
-  maxRetries: 3,
-  retryDelay: 1000,
-  msgId: "unique-id-for-dedup",
-});
+await producer.publishWithRetry(
+  "subject.name",
+  { data: "value" },
+  {
+    maxRetries: 3,
+    retryDelay: 1000,
+    msgId: "unique-id-for-dedup",
+  },
+);
 
 // Fire-and-forget (no JetStream ack)
 await producer.publishFast("subject.name", { data: "value" });
@@ -227,25 +234,29 @@ await publishMessage("subject.name", { data: "value" });
 ### Consumer
 
 ```typescript
-import { createConsumer, JetStreamConsumer, type TopicConfig } from "@repo/nats";
+import {
+  createConsumer,
+  JetStreamConsumer,
+  type TopicConfig,
+} from "@build/nats";
 
 const consumer = createConsumer(
-  "service-name",    // Service identifier
-  "consumer-group"   // Consumer group for load balancing
+  "service-name", // Service identifier
+  "consumer-group", // Consumer group for load balancing
 );
 
 await consumer.connect();
 
 const topics: TopicConfig[] = [
   {
-    subject: "orders.>",           // Subject pattern (supports *, >)
-    handler: async (msg) => { },   // Message handler
+    subject: "orders.>", // Subject pattern (supports *, >)
+    handler: async (msg) => {}, // Message handler
     consumerOptions: {
       durableName: "order-processor",
-      deliverPolicy: "all",        // "all" | "last" | "new"
-      ackPolicy: "explicit",       // "explicit" | "none" | "all"
-      maxDeliver: 5,               // Max redelivery attempts
-      ackWait: 30000000000,        // 30s in nanoseconds
+      deliverPolicy: "all", // "all" | "last" | "new"
+      ackPolicy: "explicit", // "explicit" | "none" | "all"
+      maxDeliver: 5, // Max redelivery attempts
+      ackWait: 30000000000, // 30s in nanoseconds
       maxAckPending: 1000,
     },
   },
@@ -267,7 +278,7 @@ import {
   createStreamManager,
   initializeStreams,
   type StreamOptions,
-} from "@repo/nats";
+} from "@build/nats";
 
 const manager = createStreamManager();
 
@@ -275,8 +286,8 @@ const manager = createStreamManager();
 await manager.ensureStream({
   name: "MY_STREAM",
   subjects: ["myservice.>"],
-  retention: "limits",      // "limits" | "interest" | "workqueue"
-  storage: "file",          // "file" | "memory"
+  retention: "limits", // "limits" | "interest" | "workqueue"
+  storage: "file", // "file" | "memory"
   maxAge: 7 * 24 * 60 * 60 * 1000000000, // 7 days in nanoseconds
   maxMsgs: 1000000,
   replicas: 1,
@@ -306,12 +317,12 @@ await initializeStreams();
 
 The package includes predefined stream configurations in `StreamPresets`:
 
-| Stream | Subjects | Retention | Max Age |
-|--------|----------|-----------|---------|
-| `VERIFICATION` | `verification.>` | limits | 7 days |
-| `USERS` | `user.>` | limits | 30 days |
-| `ORDERS` | `order.>` | limits | 90 days |
-| `PROJECTS` | `project.>` | limits | 90 days |
+| Stream          | Subjects         | Retention | Max Age  |
+| --------------- | ---------------- | --------- | -------- |
+| `VERIFICATION`  | `verification.>` | limits    | 7 days   |
+| `USERS`         | `user.>`         | limits    | 30 days  |
+| `ORDERS`        | `order.>`        | limits    | 90 days  |
+| `PROJECTS`      | `project.>`      | limits    | 90 days  |
 | `NOTIFICATIONS` | `notification.>` | workqueue | 24 hours |
 
 Use `initializeStreams()` to create all of them.
@@ -327,7 +338,7 @@ import type {
   OrderEvent,
   ProjectEvent,
   NotificationEvent,
-} from "@repo/nats";
+} from "@build/nats";
 
 // VerificationEvent
 const event: VerificationEvent = {
@@ -390,6 +401,7 @@ Follow this pattern for subjects:
 ```
 
 Examples:
+
 - `verification.professional.verified`
 - `verification.store.rejected`
 - `user.created`
@@ -400,6 +412,7 @@ Examples:
 - `notification.email.send`
 
 Wildcards:
+
 - `*` - Matches single token: `verification.*.verified` matches `verification.professional.verified`
 - `>` - Matches multiple tokens: `verification.>` matches all verification events
 
@@ -435,7 +448,7 @@ handler: async (msg) => {
     // Auto-NAK'd, will be redelivered
     throw error;
   }
-}
+};
 ```
 
 For manual control:
@@ -452,7 +465,7 @@ handler: async (msg) => {
       msg.nak(5000); // Retry after 5 seconds
     }
   }
-}
+};
 ```
 
 ## Integration Example
@@ -467,7 +480,7 @@ import {
   initializeStreams,
   type MessagePayload,
   type VerificationEvent,
-} from "@repo/nats";
+} from "@build/nats";
 import { sendEmail } from "./emailService";
 
 export async function initializeNatsConsumer() {
@@ -482,12 +495,12 @@ export async function initializeNatsConsumer() {
       subject: "verification.>",
       handler: async (msg: MessagePayload<VerificationEvent>) => {
         const event = msg.data;
-        
+
         if (event.metadata?.email) {
           await sendEmail(
             event.metadata.email as string,
             `${event.entityType} Verification Update`,
-            `Status: ${event.newStatus}. ${event.message}`
+            `Status: ${event.newStatus}. ${event.message}`,
           );
         }
       },
@@ -500,7 +513,7 @@ export async function initializeNatsConsumer() {
 
 ```typescript
 // apps/client/lib/services/verification/notification.service.ts
-import { createProducer, type VerificationEvent } from "@repo/nats";
+import { createProducer, type VerificationEvent } from "@build/nats";
 
 let producer: ReturnType<typeof createProducer> | null = null;
 
@@ -514,7 +527,7 @@ async function getProducer() {
 
 export async function publishVerificationEvent(
   result: VerificationResult,
-  userEmail: string
+  userEmail: string,
 ) {
   const p = await getProducer();
 
@@ -530,7 +543,7 @@ export async function publishVerificationEvent(
 
   await p.publishWithRetry(
     `verification.${result.entityType}.${result.newStatus.toLowerCase()}`,
-    event
+    event,
   );
 }
 ```
@@ -564,6 +577,7 @@ await initializeStreams();
 ### Message Not Delivered
 
 Check if:
+
 1. Stream exists and covers the subject
 2. Consumer is subscribed to the correct subject pattern
 3. Producer is publishing to a subject that matches a stream

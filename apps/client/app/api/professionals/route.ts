@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 import { Profession, PROFESSION_LABELS } from "../../../types/professional";
 import { ProfessionalRepository } from "@/app/lib/repositories/professional.repository";
 import {

@@ -1,6 +1,7 @@
 # Vercel Deployment Error Fixes
 
 ## Summary
+
 Fixed all build errors preventing Vercel deployment of the admin application.
 
 ## Issues Identified and Fixed
@@ -8,9 +9,11 @@ Fixed all build errors preventing Vercel deployment of the admin application.
 ### 1. **Missing Response Validation in Fetch Calls**
 
 #### Problem
+
 Multiple fetch calls across the application weren't validating `res.ok` before parsing JSON responses. When APIs returned error status codes (4xx, 5xx), the code attempted to parse error responses as valid data, causing build failures and runtime errors.
 
 #### Files Fixed
+
 - ✅ `apps/admin/src/app/(dashboard)/page.tsx` - Order chart data fetch
 - ✅ `apps/admin/src/app/(dashboard)/users/page.tsx` - Users list fetch
 - ✅ `apps/admin/src/app/(dashboard)/users/[id]/page.tsx` - User detail fetch
@@ -18,6 +21,7 @@ Multiple fetch calls across the application weren't validating `res.ok` before p
 - ✅ `apps/admin/src/app/(dashboard)/users/data-table.tsx` - User deletion
 
 #### Solution Applied
+
 ```typescript
 // Before
 const data = await fetch(url).then((res) => res.json());
@@ -32,6 +36,7 @@ const data = await fetch(url).then((res) => {
 ```
 
 This ensures:
+
 - Error responses are caught and handled properly
 - Components receive valid data types
 - Build process doesn't fail on prerendering
@@ -40,12 +45,15 @@ This ensures:
 ### 2. **Types Package Build Configuration**
 
 #### Problem
-The `@repo/types` package was:
+
+The `@build/types` package was:
+
 - Building output files to the `src/` directory instead of `dist/`
-- Causing Turbo warning: "no output files found for task @repo/types#build"
+- Causing Turbo warning: "no output files found for task @build/types#build"
 - Not following standard TypeScript package structure
 
 #### Files Fixed
+
 - ✅ `packages/types/tsconfig.json` - Added outDir and rootDir configuration
 - ✅ `packages/types/package.json` - Updated exports to point to dist folder
 - ✅ Cleaned up old build artifacts from src directory
@@ -53,9 +61,10 @@ The `@repo/types` package was:
 #### Solution Applied
 
 **tsconfig.json:**
+
 ```json
 {
-  "extends": "@repo/typescript-config/base.json",
+  "extends": "@build/typescript-config/base.json",
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src"
@@ -66,6 +75,7 @@ The `@repo/types` package was:
 ```
 
 **package.json:**
+
 ```json
 {
   "main": "./dist/index.js",
@@ -83,26 +93,32 @@ The `@repo/types` package was:
 ### 3. **ESLint Configuration**
 
 #### Problem
+
 ESLint config file was using ES module syntax without proper file extension, causing "Cannot use import statement outside a module" error.
 
 #### Solution
+
 - ✅ Renamed `apps/admin/eslint.config.js` → `apps/admin/eslint.config.mjs`
 
 ### 4. **Clerk Prerendering Issues**
 
 #### Problem
+
 Client components using Clerk hooks (`useAuth`) were being prerendered during build without `publishableKey` available.
 
 #### Files Fixed
+
 - ✅ `apps/admin/src/app/(auth)/unauthorized/page.tsx`
 - ✅ `apps/admin/src/app/(auth)/sign-in/[[...sign-in]]/page.tsx`
 
 #### Solution
+
 Added `export const dynamic = 'force-dynamic'` to skip static generation for auth-related pages.
 
 ## Build Verification
 
 ### Local Build Status: ✅ PASSING
+
 ```
 ✓ Compiled successfully in 26.0s
 ✓ Linting and checking validity of types
@@ -112,6 +128,7 @@ Added `export const dynamic = 'force-dynamic'` to skip static generation for aut
 ```
 
 ### Routes Generated
+
 - ƒ `/` - Dashboard (34.3 kB)
 - ○ `/_not-found` - 404 page (984 B)
 - ƒ `/sign-in/[[...sign-in]]` - Sign in (408 B)
@@ -140,6 +157,7 @@ Added `export const dynamic = 'force-dynamic'` to skip static generation for aut
 ## Monitoring
 
 After deployment, monitor for:
+
 - Any prerendering errors in Vercel logs
 - API response validation working correctly
 - Types package importing successfully
@@ -165,4 +183,3 @@ c704607 - chore: organize scripts into dedicated folder
 
 **Status**: All fixes committed and pushed to main branch
 **Ready for**: Vercel automatic deployment
-

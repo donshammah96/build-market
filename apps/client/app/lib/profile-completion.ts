@@ -1,55 +1,67 @@
 /**
  * Profile Completion Utilities
- * 
+ *
  * Provides functions for calculating profile completion percentage
  * and identifying missing required fields for both client and professional profiles.
  */
 
-import { 
-  StructuredLogger, 
-  CorrelationIdManager 
-} from '@repo/resilience';
+import { CorrelationIdManager } from "@build/resilience";
+import { getClientLogger } from "@/app/lib/resilient-api";
 
-const logger = new StructuredLogger('profile-completion');
+const logger = getClientLogger();
 
 // Define required fields for each profile type
 export const CLIENT_REQUIRED_FIELDS = {
-  user: ['firstName', 'lastName', 'phone'] as const,
-  profile: ['city'] as const,
+  user: ["firstName", "lastName", "phone"] as const,
+  profile: ["city"] as const,
 };
 
 export const CLIENT_OPTIONAL_FIELDS = {
-  user: ['avatar'] as const,
-  profile: ['address', 'county', 'zipCode'] as const,
+  user: ["avatar"] as const,
+  profile: ["address", "county", "zipCode", "interests"] as const,
 };
 
 export const PROFESSIONAL_REQUIRED_FIELDS = {
-  user: ['firstName', 'lastName', 'phone'] as const,
-  profile: ['companyName', 'servicesOffered', 'city', 'bio'] as const,
+  user: ["firstName", "lastName", "phone"] as const,
+  profile: [
+    "companyName",
+    "profession",
+    "offeredServices",
+    "city",
+    "bio",
+  ] as const,
 };
 
 export const PROFESSIONAL_OPTIONAL_FIELDS = {
-  user: ['avatar'] as const,
-  profile: ['licenseNumber', 'yearsExperience', 'county', 'website', 'portfolioUrl'] as const,
+  user: ["avatar"] as const,
+  profile: [
+    "licenseNumber",
+    "yearsExperience",
+    "county",
+    "website",
+    "portfolioUrl",
+  ] as const,
 };
 
 // Field display names for UI
 export const FIELD_LABELS: Record<string, string> = {
-  firstName: 'First Name',
-  lastName: 'Last Name',
-  phone: 'Phone Number',
-  avatar: 'Profile Photo',
-  address: 'Address',
-  city: 'City',
-  county: 'County',
-  zipCode: 'ZIP Code',
-  companyName: 'Company Name',
-  licenseNumber: 'License Number',
-  yearsExperience: 'Years of Experience',
-  servicesOffered: 'Services Offered',
-  bio: 'Professional Bio',
-  website: 'Website',
-  portfolioUrl: 'Portfolio URL',
+  firstName: "First Name",
+  lastName: "Last Name",
+  phone: "Phone Number",
+  avatar: "Profile Photo",
+  address: "Address",
+  city: "City",
+  county: "County",
+  zipCode: "ZIP Code",
+  interests: "Interests",
+  companyName: "Company Name",
+  licenseNumber: "License Number",
+  yearsExperience: "Years of Experience",
+  profession: "Profession",
+  offeredServices: "Offered Services",
+  bio: "Professional Bio",
+  website: "Website",
+  portfolioUrl: "Portfolio URL",
 };
 
 interface UserData {
@@ -57,7 +69,7 @@ interface UserData {
   lastName?: string | null;
   phone?: string | null;
   avatar?: string | null;
-  role: 'client' | 'professional' | 'admin';
+  role: "client" | "professional" | "admin";
 }
 
 interface ClientProfileData {
@@ -65,13 +77,15 @@ interface ClientProfileData {
   city?: string | null;
   county?: string | null;
   zipCode?: string | null;
+  interests?: string[] | null;
 }
 
 interface ProfessionalProfileData {
   companyName?: string | null;
+  profession?: string | null;
   licenseNumber?: string | null;
   yearsExperience?: number | null;
-  servicesOffered?: string[] | null;
+  offeredServices?: string[] | null;
   bio?: string | null;
   city?: string | null;
   county?: string | null;
@@ -98,9 +112,9 @@ export interface ProfileCompletionResult {
  */
 function hasValue(value: unknown): boolean {
   if (value === null || value === undefined) return false;
-  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value === "string") return value.trim().length > 0;
   if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === 'number') return true;
+  if (typeof value === "number") return true;
   return Boolean(value);
 }
 
@@ -109,10 +123,10 @@ function hasValue(value: unknown): boolean {
  */
 export function calculateClientCompletion(
   user: UserData,
-  profile: ClientProfileData | null
+  profile: ClientProfileData | null,
 ): ProfileCompletionResult {
-  const correlationId = CorrelationIdManager.get() || 'unknown';
-  
+  const correlationId = CorrelationIdManager.get() || "unknown";
+
   const filledRequired: string[] = [];
   const missingRequired: string[] = [];
   const filledOptional: string[] = [];
@@ -154,17 +168,23 @@ export function calculateClientCompletion(
     }
   }
 
-  const totalRequired = CLIENT_REQUIRED_FIELDS.user.length + CLIENT_REQUIRED_FIELDS.profile.length;
-  const totalOptional = CLIENT_OPTIONAL_FIELDS.user.length + CLIENT_OPTIONAL_FIELDS.profile.length;
-  
+  const totalRequired =
+    CLIENT_REQUIRED_FIELDS.user.length + CLIENT_REQUIRED_FIELDS.profile.length;
+  const totalOptional =
+    CLIENT_OPTIONAL_FIELDS.user.length + CLIENT_OPTIONAL_FIELDS.profile.length;
+
   // Required fields count for 80%, optional for 20%
-  const requiredPercentage = Math.round((filledRequired.length / totalRequired) * 80);
-  const optionalPercentage = Math.round((filledOptional.length / totalOptional) * 20);
+  const requiredPercentage = Math.round(
+    (filledRequired.length / totalRequired) * 80,
+  );
+  const optionalPercentage = Math.round(
+    (filledOptional.length / totalOptional) * 20,
+  );
   const percentage = requiredPercentage + optionalPercentage;
-  
+
   const isComplete = missingRequired.length === 0;
 
-  logger.debug('Client profile completion calculated', {
+  logger.debug("Client profile completion calculated", {
     correlationId,
     percentage,
     isComplete,
@@ -192,10 +212,10 @@ export function calculateClientCompletion(
  */
 export function calculateProfessionalCompletion(
   user: UserData,
-  profile: ProfessionalProfileData | null
+  profile: ProfessionalProfileData | null,
 ): ProfileCompletionResult {
-  const correlationId = CorrelationIdManager.get() || 'unknown';
-  
+  const correlationId = CorrelationIdManager.get() || "unknown";
+
   const filledRequired: string[] = [];
   const missingRequired: string[] = [];
   const filledOptional: string[] = [];
@@ -237,17 +257,25 @@ export function calculateProfessionalCompletion(
     }
   }
 
-  const totalRequired = PROFESSIONAL_REQUIRED_FIELDS.user.length + PROFESSIONAL_REQUIRED_FIELDS.profile.length;
-  const totalOptional = PROFESSIONAL_OPTIONAL_FIELDS.user.length + PROFESSIONAL_OPTIONAL_FIELDS.profile.length;
-  
+  const totalRequired =
+    PROFESSIONAL_REQUIRED_FIELDS.user.length +
+    PROFESSIONAL_REQUIRED_FIELDS.profile.length;
+  const totalOptional =
+    PROFESSIONAL_OPTIONAL_FIELDS.user.length +
+    PROFESSIONAL_OPTIONAL_FIELDS.profile.length;
+
   // Required fields count for 80%, optional for 20%
-  const requiredPercentage = Math.round((filledRequired.length / totalRequired) * 80);
-  const optionalPercentage = Math.round((filledOptional.length / totalOptional) * 20);
+  const requiredPercentage = Math.round(
+    (filledRequired.length / totalRequired) * 80,
+  );
+  const optionalPercentage = Math.round(
+    (filledOptional.length / totalOptional) * 20,
+  );
   const percentage = requiredPercentage + optionalPercentage;
-  
+
   const isComplete = missingRequired.length === 0;
 
-  logger.debug('Professional profile completion calculated', {
+  logger.debug("Professional profile completion calculated", {
     correlationId,
     percentage,
     isComplete,
@@ -275,10 +303,13 @@ export function calculateProfessionalCompletion(
  */
 export function calculateProfileCompletion(
   user: UserData,
-  profile: ClientProfileData | ProfessionalProfileData | null
+  profile: ClientProfileData | ProfessionalProfileData | null,
 ): ProfileCompletionResult {
-  if (user.role === 'professional') {
-    return calculateProfessionalCompletion(user, profile as ProfessionalProfileData);
+  if (user.role === "professional") {
+    return calculateProfessionalCompletion(
+      user,
+      profile as ProfessionalProfileData,
+    );
   }
   return calculateClientCompletion(user, profile as ClientProfileData);
 }
@@ -287,5 +318,5 @@ export function calculateProfileCompletion(
  * Get human-readable labels for missing fields
  */
 export function getMissingFieldLabels(fields: string[]): string[] {
-  return fields.map(field => FIELD_LABELS[field] || field);
+  return fields.map((field) => FIELD_LABELS[field] || field);
 }

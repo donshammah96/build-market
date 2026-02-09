@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 import { withAuth } from "@/app/lib/api-middleware";
 import { apiError, HttpStatus } from "@/app/lib/api-response";
 import {
@@ -54,7 +54,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         return { data: {} };
       }
 
-      const group = getDashboardGroup(professional.profession);
+      const group = getDashboardGroup(professional.profession || "Unspecified");
 
       // Build metrics based on profession group
       const metrics: Record<string, unknown> = {};

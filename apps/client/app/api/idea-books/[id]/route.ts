@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 import { withAuth } from "@/app/lib/api-middleware";
 import { apiError, HttpStatus } from "@/app/lib/api-response";
 import {
@@ -399,7 +399,7 @@ export const POST = withAuth<{ id: string }>(
           data: {
             ideaBookId: id,
             url,
-            key, // Storage key for S3/Uploadthing
+            key: key ?? "", // Storage key for S3/Uploadthing; fallback to empty string if undefined
             filename,
             size,
             mimeType,

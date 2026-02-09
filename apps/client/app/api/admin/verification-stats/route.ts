@@ -5,7 +5,7 @@
  */
 
 import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 import { withRole } from "@/app/lib/api-middleware";
 import { apiSuccess, HttpStatus } from "@/app/lib/api-response";
 import {
@@ -82,17 +82,20 @@ export const GET = withRole(["admin"])(
         ] = await Promise.all([
           prisma.professionalProfile.count({ where: whereClause }),
           prisma.professionalProfile.count({
-            where: { ...whereClause, status: "VERIFIED" },
+            where: { ...whereClause, verificationStatus: "VERIFIED" },
           }),
           prisma.professionalProfile.count({
-            where: { ...whereClause, status: "PENDING" },
+            where: { ...whereClause, verificationStatus: "PENDING" },
           }),
           prisma.professionalProfile.count({
-            where: { ...whereClause, status: "REJECTED" },
+            where: { ...whereClause, verificationStatus: "REJECTED" },
           }),
           prisma.professionalProfile.count({
-            where: { ...whereClause, status: "NEEDS_CORRECTION" },
+            where: { ...whereClause, verificationStatus: "NEEDS_CORRECTION" },
           }),
+          prisma.professionalProfile.count({
+            where: { ...whereClause, verificationStatus: "REJECTED"}
+          })
         ]);
 
         // Fetch store stats
@@ -115,6 +118,9 @@ export const GET = withRole(["admin"])(
           }),
           prisma.store.count({
             where: { ...whereClause, verificationStatus: "NEEDS_CORRECTION" },
+          }),
+          prisma.store.count({
+            where: { ...whereClause, verificationStatus: "UNVERIFIED"}
           }),
         ]);
 
@@ -139,6 +145,9 @@ export const GET = withRole(["admin"])(
           prisma.property.count({
             where: { ...whereClause, verificationStatus: "NEEDS_CORRECTION" },
           }),
+          prisma.property.count({
+            where: { ...whereClause, verificationStatus: "UNVERIFIED"}
+          }),
         ]);
 
         // Fetch document stats
@@ -152,7 +161,7 @@ export const GET = withRole(["admin"])(
         ] = await Promise.all([
           prisma.professionalDocument.count({ where: whereClause }),
           prisma.professionalDocument.count({
-            where: { ...whereClause, isVerified: true },
+            where: { ...whereClause, verified: true },
           }),
           prisma.certificate.count({ where: whereClause }),
           prisma.certificate.count({
@@ -184,7 +193,7 @@ export const GET = withRole(["admin"])(
         // Calculate pending items needing immediate attention
         const urgentPending = await prisma.professionalProfile.count({
           where: {
-            status: "PENDING",
+            verificationStatus: "PENDING",
             submittedAt: {
               lte: new Date(Date.now() - 48 * 60 * 60 * 1000), // Older than 48 hours
             },
@@ -195,7 +204,7 @@ export const GET = withRole(["admin"])(
         const verifiedWithSubmission = await prisma.professionalProfile.findMany(
           {
             where: {
-              status: "VERIFIED",
+              verificationStatus: "VERIFIED",
               submittedAt: { not: null },
               verifiedAt: { not: null },
             },

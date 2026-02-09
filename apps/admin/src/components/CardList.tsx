@@ -1,7 +1,7 @@
 import Image from "next/image";
 import { Card, CardContent, CardFooter, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
-import { OrderType, ProductsType } from "@repo/types";
+import { OrderType, ProductsType } from "@build/types";
 import { auth } from "@clerk/nextjs/server";
 
 const CardList = async ({ title }: { title: string }) => {

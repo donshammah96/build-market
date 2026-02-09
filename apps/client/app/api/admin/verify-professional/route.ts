@@ -1,26 +1,29 @@
-import { NextRequest } from 'next/server';
-import { prisma } from '@repo/db';
-import { auth } from '@clerk/nextjs/server';
-import { z } from 'zod';
-import { apiError, apiSuccess, HttpStatus } from '@/app/lib/api-response';
-import { initializeCorrelationId, getClientLogger } from '@/app/lib/resilient-api';
+import { NextRequest } from "next/server";
+import { prisma } from "@build/db";
+import { auth } from "@clerk/nextjs/server";
+import { z } from "zod";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api-response";
+import {
+  initializeCorrelationId,
+  getClientLogger,
+} from "@/app/lib/resilient-api";
 
 const logger = getClientLogger();
 
 // Request body schema
 const verifySchema = z.object({
-  professionalId: z.string().min(10, 'Invalid professional ID'),
+  professionalId: z.string().min(10, "Invalid professional ID"),
   verified: z.boolean(),
 });
 
 /**
  * POST /api/admin/verify-professional
  * Admin endpoint to verify/unverify a professional profile
- * 
+ *
  * Request body:
  * - professionalId: The user ID of the professional
  * - verified: true to verify, false to unverify
- * 
+ *
  * IMPORTANT: In production, this endpoint should be protected with proper admin authentication.
  * For development purposes, it checks for an admin role in Clerk metadata.
  */
@@ -30,9 +33,9 @@ export async function POST(request: NextRequest) {
   try {
     // Authentication check
     const { userId: clerkId } = await auth();
-    
+
     if (!clerkId) {
-      return apiError('Unauthorized', HttpStatus.UNAUTHORIZED);
+      return apiError("Unauthorized", HttpStatus.UNAUTHORIZED);
     }
 
     // Check if user is admin (in production, implement proper admin check)
@@ -41,17 +44,25 @@ export async function POST(request: NextRequest) {
       select: { role: true },
     });
 
-    if (!user || user.role !== 'admin') {
+    if (!user || user.role !== "ADMIN") {
       // For development: Allow if DEV_ADMIN_BYPASS is set
-      const isDev = process.env.NODE_ENV === 'development';
-      const devBypass = process.env.DEV_ADMIN_BYPASS === 'true';
-      
+      const isDev = process.env.NODE_ENV === "development";
+      const devBypass = process.env.DEV_ADMIN_BYPASS === "true";
+
       if (!(isDev && devBypass)) {
-        logger.warn('Non-admin attempted to verify professional', { correlationId, clerkId });
-        return apiError('Forbidden. Admin access required.', HttpStatus.FORBIDDEN);
+        logger.warn("Non-admin attempted to verify professional", {
+          correlationId,
+          clerkId,
+        });
+        return apiError(
+          "Forbidden. Admin access required.",
+          HttpStatus.FORBIDDEN,
+        );
       }
-      
-      logger.info('DEV_ADMIN_BYPASS enabled, allowing verification', { correlationId });
+
+      logger.info("DEV_ADMIN_BYPASS enabled, allowing verification", {
+        correlationId,
+      });
     }
 
     // Parse and validate request body
@@ -69,7 +80,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    logger.info('Professional verification status updated', {
+    logger.info("Professional verification status updated", {
       correlationId,
       professionalId,
       verified,
@@ -77,7 +88,7 @@ export async function POST(request: NextRequest) {
     });
 
     return apiSuccess({
-      message: verified 
+      message: verified
         ? `Professional "${professional.companyName}" has been verified.`
         : `Professional "${professional.companyName}" has been unverified.`,
       professional: {
@@ -88,15 +99,22 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return apiError('Validation failed', HttpStatus.BAD_REQUEST, error.issues);
+      return apiError(
+        "Validation failed",
+        HttpStatus.BAD_REQUEST,
+        error.issues,
+      );
     }
-    
+
     logger.error(
-      'Failed to update verification status', 
+      "Failed to update verification status",
       error instanceof Error ? error : new Error(String(error)),
-      { correlationId }
+      { correlationId },
     );
-    
-    return apiError('Failed to update verification status', HttpStatus.INTERNAL_SERVER_ERROR);
+
+    return apiError(
+      "Failed to update verification status",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
   }
 }

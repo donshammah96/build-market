@@ -3,8 +3,8 @@
  * Handles verification logic for property listings
  */
 
-import { prisma } from "@repo/db";
-import { VerificationStatus } from "@repo/db";
+import { prisma } from "@build/db";
+import { VerificationStatus } from "@build/db";
 import {
   VerificationRequest,
   VerificationResult,
@@ -12,7 +12,7 @@ import {
   validateTransition,
 } from "./types";
 import { createAuditLog } from "./audit-service";
-import { StructuredLogger } from "@repo/resilience";
+import { StructuredLogger } from "@build/resilience";
 
 const logger = new StructuredLogger("property-verification-service");
 

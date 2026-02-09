@@ -1,5 +1,5 @@
 {
-  "name": "@repo/types",
+  "name": "@build/types",
   "version": "0.0.1",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -12,7 +12,7 @@
     "zod": "^4.1.9"
   },
   "devDependencies": {
-    "@repo/typescript-config": "workspace:*",
+    "@build/typescript-config": "workspace:*",
     "@types/node": "^24.8.1"
   },
   "exports": {

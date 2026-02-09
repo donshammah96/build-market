@@ -2,19 +2,26 @@
  * Timeout utilities with configurable strategies based on operation criticality
  */
 
-import { OperationCriticality, TimeoutConfig } from './types';
+import { OperationCriticality, TimeoutConfig } from "./types";
+import { getDefaultTimeouts } from "./config";
 
 export class TimeoutError extends Error {
-  constructor(message: string, public readonly timeoutMs: number) {
+  constructor(
+    message: string,
+    public readonly timeoutMs: number,
+  ) {
     super(message);
-    this.name = 'TimeoutError';
+    this.name = "TimeoutError";
   }
 }
 
-// Default timeout configurations based on criticality
+/**
+ * Default timeout configurations based on criticality
+ * @deprecated Use getDefaultTimeouts() for environment-aware defaults
+ */
 export const DEFAULT_TIMEOUTS: TimeoutConfig = {
-  critical: 3000,    // 3s for critical operations (auth, payments)
-  normal: 10000,     // 10s for normal operations (API calls)
+  critical: 3000, // 3s for critical operations (auth, payments)
+  normal: 10000, // 10s for normal operations (API calls)
   background: 30000, // 30s for background operations (analytics, logs)
 };
 
@@ -24,14 +31,16 @@ export const DEFAULT_TIMEOUTS: TimeoutConfig = {
 export async function withTimeout<T>(
   operation: () => Promise<T>,
   timeoutMs: number,
-  operationName: string = 'operation'
+  operationName: string = "operation",
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new TimeoutError(
-        `Operation '${operationName}' timed out after ${timeoutMs}ms`,
-        timeoutMs
-      ));
+      reject(
+        new TimeoutError(
+          `Operation '${operationName}' timed out after ${timeoutMs}ms`,
+          timeoutMs,
+        ),
+      );
     }, timeoutMs);
 
     operation()
@@ -48,12 +57,13 @@ export async function withTimeout<T>(
 
 /**
  * Get timeout duration based on criticality
+ * Uses environment-aware configuration
  */
 export function getTimeout(
   criticality: OperationCriticality,
-  customTimeouts?: Partial<TimeoutConfig>
+  customTimeouts?: Partial<TimeoutConfig>,
 ): number {
-  const timeouts = { ...DEFAULT_TIMEOUTS, ...customTimeouts };
+  const timeouts = { ...getDefaultTimeouts(), ...customTimeouts };
   return timeouts[criticality];
 }
 
@@ -64,7 +74,7 @@ export async function withCriticalityTimeout<T>(
   operation: () => Promise<T>,
   criticality: OperationCriticality,
   operationName?: string,
-  customTimeouts?: Partial<TimeoutConfig>
+  customTimeouts?: Partial<TimeoutConfig>,
 ): Promise<T> {
   const timeoutMs = getTimeout(criticality, customTimeouts);
   return withTimeout(operation, timeoutMs, operationName);

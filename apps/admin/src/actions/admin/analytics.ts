@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 import { safeAction } from "./shared";
 import { z } from "zod";
 

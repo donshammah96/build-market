@@ -1,6 +1,6 @@
 "use server";
 
-import { Prisma, prisma } from "@repo/db";
+import { Prisma, prisma } from "@build/db";
 import { safeAction } from "./shared";
 import { PaginationSchema } from "./types";
 

@@ -5,7 +5,7 @@
  */
 
 import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 import { withRole } from "@/app/lib/api-middleware";
 import { apiSuccess, HttpStatus } from "@/app/lib/api-response";
 import {
@@ -77,8 +77,8 @@ export const GET = withRole(["admin"])(
           entityType: "professional";
           entityId: string;
           companyName: string;
-          profession: string;
-          status: string;
+          profession: string | null;
+          verificationStatus: string | null;
           submittedAt: Date | null;
           createdAt: Date;
           user: {
@@ -97,7 +97,7 @@ export const GET = withRole(["admin"])(
           entityId: string;
           name: string;
           storeType: string;
-          status: string;
+          verificationStatus: string | null;
           submittedAt: Date | null;
           createdAt: Date;
           owner: {
@@ -119,7 +119,7 @@ export const GET = withRole(["admin"])(
           type: string;
           category: string;
           price: number;
-          status: string;
+          verificationStatus: string | null;
           submittedAt: Date | null;
           createdAt: Date;
           agent: {
@@ -131,7 +131,7 @@ export const GET = withRole(["admin"])(
           };
           attachmentCount: number;
           imageCount: number;
-          location: string;
+          location: string | null;
           county: string | null;
         }
 
@@ -145,7 +145,7 @@ export const GET = withRole(["admin"])(
         // Fetch based on entity type filter
         if (entityType === "all" || entityType === "professional") {
           const profWhere = {
-            ...whereStatus,
+            verificationStatus: status as any,
             ...(status === "PENDING" && { submittedAt: { not: null } }),
           };
 
@@ -183,8 +183,8 @@ export const GET = withRole(["admin"])(
             entityType: "professional",
             entityId: p.userId,
             companyName: p.companyName,
-            profession: p.profession,
-            status: p.status,
+            profession: p.profession || "Unspecified",
+            verificationStatus: p.verificationStatus || "UNVERIFIED",
             submittedAt: p.submittedAt,
             createdAt: p.createdAt,
             user: p.user,
@@ -241,7 +241,7 @@ export const GET = withRole(["admin"])(
             entityId: s.id,
             name: s.name,
             storeType: s.storeType,
-            status: s.verificationStatus,
+            verificationStatus: s.verificationStatus,
             submittedAt: s.submittedAt,
             createdAt: s.createdAt,
             owner: s.professional.user,
@@ -302,7 +302,7 @@ export const GET = withRole(["admin"])(
             type: p.type,
             category: p.category,
             price: p.price.toNumber(),
-            status: p.verificationStatus,
+            verificationStatus: p.verificationStatus,
             submittedAt: p.submittedAt,
             createdAt: p.createdAt,
             agent: p.agent.user,

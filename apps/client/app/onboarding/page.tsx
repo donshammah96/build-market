@@ -18,7 +18,7 @@ import {
   ChevronRight,
   FastForward,
 } from "lucide-react";
-import { OnboardingData } from "@repo/types";
+import { OnboardingData } from "@build/types";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {

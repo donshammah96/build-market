@@ -14,7 +14,7 @@ import {
   ProfessionalProfileData,
 } from "@/hooks/useProfileStatus";
 import { ProfessionalWizardData } from "@/components/forms/professional-wizard";
-import { ProfessionalOnboardingData } from "@repo/types";
+import { ProfessionalOnboardingData } from "@build/types";
 import { API_ROUTES } from "@/lib/links";
 
 // ============================================================================

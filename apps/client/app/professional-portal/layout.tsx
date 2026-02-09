@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { auth } from "@clerk/nextjs/server";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 import { ProfessionalSidebar } from "@/components/layout/ProfessionalSidebar";
 import { ProfessionalNavbar } from "@/components/layout/ProfessionalNavbar";
 import { ProfileCompletionWidgetWrapper } from "@/components/shared/ProfileCompletionWidgetWrapper";

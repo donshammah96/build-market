@@ -3,18 +3,18 @@
  * Integrates all resilience patterns into a simple API
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 import {
   ResilientExecutor,
   StructuredLogger,
   CorrelationIdManager,
   type OperationCriticality,
   type ResilienceOptions,
-} from '@repo/resilience';
+} from "@build/resilience";
 
 // Initialize global executor for the client app
-const executor = new ResilientExecutor('build-market-client');
-const logger = new StructuredLogger('build-market-client');
+const executor = new ResilientExecutor("build-market-client");
+const logger = new StructuredLogger("build-market-client");
 
 /**
  * API Response helpers with observability
@@ -22,10 +22,10 @@ const logger = new StructuredLogger('build-market-client');
 export function apiSuccess<T>(
   data: T,
   status: number = 200,
-  headers?: Record<string, string>
+  headers?: Record<string, string>,
 ): NextResponse {
   const correlationId = CorrelationIdManager.get();
-  
+
   return NextResponse.json(
     {
       success: true,
@@ -36,10 +36,10 @@ export function apiSuccess<T>(
     {
       status,
       headers: {
-        'X-Correlation-ID': correlationId || '',
+        "X-Correlation-ID": correlationId || "",
         ...headers,
       },
-    }
+    },
   );
 }
 
@@ -47,10 +47,10 @@ export function apiError(
   message: string,
   status: number = 500,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  details?: any
+  details?: any,
 ): NextResponse {
   const correlationId = CorrelationIdManager.get();
-  
+
   logger.error(message, undefined, {
     correlationId,
     statusCode: status,
@@ -68,9 +68,9 @@ export function apiError(
     {
       status,
       headers: {
-        'X-Correlation-ID': correlationId || '',
+        "X-Correlation-ID": correlationId || "",
       },
-    }
+    },
   );
 }
 
@@ -83,7 +83,7 @@ export async function executeResilient<T>(
     criticality?: OperationCriticality;
     successStatus?: number;
     errorStatus?: number;
-  } = {}
+  } = {},
 ): Promise<NextResponse> {
   try {
     const {
@@ -94,12 +94,12 @@ export async function executeResilient<T>(
     } = options;
 
     let result;
-    
+
     if (criticality) {
       result = await executor.executeWithCriticality(
         operation,
         criticality,
-        resilienceOptions.operationName
+        resilienceOptions.operationName,
       );
     } else {
       result = await executor.execute(operation, resilienceOptions);
@@ -107,26 +107,26 @@ export async function executeResilient<T>(
 
     if (result.success) {
       const headers: Record<string, string> = {};
-      
+
       if (result.fromCache) {
-        headers['X-Cache'] = 'HIT';
+        headers["X-Cache"] = "HIT";
       }
       if (result.fromFallback) {
-        headers['X-Fallback'] = 'true';
+        headers["X-Fallback"] = "true";
       }
       if (result.attempts && result.attempts > 1) {
-        headers['X-Retry-Attempts'] = String(result.attempts);
+        headers["X-Retry-Attempts"] = String(result.attempts);
       }
 
       return apiSuccess(result.data, successStatus, headers);
     } else {
       return apiError(
-        result.error?.message || 'Operation failed',
+        result.error?.message || "Operation failed",
         errorStatus,
         {
           attempts: result.attempts,
           duration: result.duration,
-        }
+        },
       );
     }
   } catch (error) {
@@ -145,23 +145,23 @@ export async function resilientFetch<T = any>(
     timeout?: number;
     retry?: boolean;
     operationName?: string;
-  } = {}
+  } = {},
 ): Promise<T> {
   const {
     timeout = 10000,
     retry = true,
-    operationName = 'fetch',
+    operationName = "fetch",
     ...fetchOptions
   } = options;
 
   const result = await executor.execute(
     async () => {
       const response = await fetch(url, fetchOptions);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      
+
       return response.json() as Promise<T>;
     },
     {
@@ -169,7 +169,7 @@ export async function resilientFetch<T = any>(
       retry: retry ? { maxAttempts: 3 } : false,
       operationName: `${operationName}:${url}`,
       metrics: true,
-    }
+    },
   );
 
   if (!result.success) {
@@ -183,16 +183,16 @@ export async function resilientFetch<T = any>(
  * Initialize correlation ID from request
  */
 export function initializeCorrelationId(request: NextRequest): string {
-  const existingId = request.headers.get('X-Correlation-ID');
+  const existingId = request.headers.get("X-Correlation-ID");
   const correlationId = existingId || CorrelationIdManager.generate();
   CorrelationIdManager.set(correlationId);
-  
-  logger.debug('Request received', {
+
+  logger.debug("Request received", {
     correlationId,
     method: request.method,
     url: request.url,
   });
-  
+
   return correlationId;
 }
 
@@ -219,38 +219,37 @@ export async function healthCheck(
     name: string;
     check: () => Promise<boolean>;
     critical?: boolean;
-  }>
+  }>,
 ): Promise<NextResponse> {
   const results = await Promise.all(
     checks.map(async ({ name, check, critical = false }) => {
       try {
-        const healthy = await executor.execute(
-          check,
-          {
-            timeout: 5000,
-            retry: false,
-            operationName: `health:${name}`,
-          }
-        );
+        const healthy = await executor.execute(check, {
+          timeout: 5000,
+          retry: false,
+          operationName: `health:${name}`,
+        });
 
         return {
           name,
-          status: healthy.success && healthy.data ? 'healthy' : 'unhealthy',
+          status: healthy.success && healthy.data ? "healthy" : "unhealthy",
           critical,
         };
       } catch (error) {
         return {
           name,
-          status: 'unhealthy',
+          status: "unhealthy",
           critical,
           error: error instanceof Error ? error.message : String(error),
         };
       }
-    })
+    }),
   );
 
-  const allHealthy = results.every((r) => r.status === 'healthy');
-  const criticalUnhealthy = results.some((r) => r.critical && r.status === 'unhealthy');
+  const allHealthy = results.every((r) => r.status === "healthy");
+  const criticalUnhealthy = results.some(
+    (r) => r.critical && r.status === "unhealthy",
+  );
 
   const circuitBreakerStates = executor.getCircuitBreakerStates();
   const cacheStats = executor.getCacheStats();
@@ -258,7 +257,11 @@ export async function healthCheck(
   return NextResponse.json(
     {
       service: serviceName,
-      status: criticalUnhealthy ? 'critical' : allHealthy ? 'healthy' : 'degraded',
+      status: criticalUnhealthy
+        ? "critical"
+        : allHealthy
+          ? "healthy"
+          : "degraded",
       timestamp: new Date().toISOString(),
       checks: results,
       circuitBreakers: Object.fromEntries(circuitBreakerStates),
@@ -266,6 +269,6 @@ export async function healthCheck(
     },
     {
       status: criticalUnhealthy ? 503 : allHealthy ? 200 : 207,
-    }
+    },
   );
 }

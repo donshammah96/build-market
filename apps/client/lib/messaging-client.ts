@@ -7,7 +7,7 @@ import type {
   // MarkAsRead,
   ApiResponse,
   PaginatedResponse,
-} from "@repo/types";
+} from "@build/types";
 
 import {
   createThreadAction,
@@ -20,7 +20,7 @@ import {
   ResilientExecutor,
   getGlobalExecutor,
   type Metric,
-} from "@repo/resilience";
+} from "@build/resilience";
 
 // Simple Concurrency Limiter (Bulkhead pattern)
 class ConcurrencyLimiter {

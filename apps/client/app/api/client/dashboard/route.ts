@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
+import { prisma, ProjectStatus } from "@build/db";
 import { withAuth } from "@/app/lib/api-middleware";
 import { apiError, HttpStatus } from "@/app/lib/api-response";
 import {
@@ -48,66 +48,16 @@ export const GET = withAuth(async (request: NextRequest, { dbUserId }) => {
     async () => {
       // Use repository to fetch dashboard data
       const repo = new ClientRepository(prisma);
-      const { projects, ideaBooks } = await repo.getDashboardData(dbUserId);
-
-      // Calculate stats
-      const stats = {
-        activeProjects: projects.filter(
-          (p) => p.status === "in_progress" || p.status === "planning"
-        ).length,
-        completedProjects: projects.filter((p) => p.status === "completed")
-          .length,
-        savedProfessionals: 0, // TODO: Calculate from preferences
-        ideaBooks: ideaBooks.length,
-      };
-
-      // Transform projects for frontend
-      const transformedProjects = projects.map((project) => ({
-        id: project.id,
-        title: project.title,
-        description: project.description,
-        status: project.status,
-        progress: repo.calculateProgress(project),
-        budget: project.budget,
-        milestoneCount: project._count?.milestones ?? 0,
-        professional: project.professional
-          ? {
-              id: project.professional.userId,
-              name: `${project.professional.user.firstName ?? ""} ${project.professional.user.lastName ?? ""}`.trim(),
-              // Use services relation (ServiceCategory[]) instead of non-existent servicesOffered
-              title: project.professional.services?.[0]?.name ?? "Professional",
-            }
-          : null,
-        startDate: project.startDate?.toISOString() ?? null,
-        estimatedEndDate: project.endDate?.toISOString() ?? null,
-      }));
-
-      // Transform idea books for frontend
-      const transformedIdeaBooks = ideaBooks.map((book) => {
-        const itemsList = Array.isArray(book.items) ? book.items : [];
-        return {
-          id: book.id,
-          title: book.title,
-          itemCount: itemsList.length,
-          attachmentCount: book._count?.attachments ?? 0,
-          // Use attachments for cover image (aligned with IdeaBookAttachment model)
-          coverImage: book.attachments?.[0]?.url ?? "/placeholder.jpg",
-        };
-      });
+      const dashboardData = await repo.getDashboardData(dbUserId);
 
       logger.info("Client dashboard data fetched successfully", {
         correlationId,
         userId: dbUserId,
-        projectCount: projects.length,
-        ideaBookCount: ideaBooks.length,
+        projectCount: dashboardData.projects.length,
+        ideaBookCount: dashboardData.ideaBooks.length,
       });
 
-      return {
-        stats,
-        projects: transformedProjects,
-        ideaBooks: transformedIdeaBooks,
-        savedProfessionals: [], // TODO: Implement saved professionals
-      };
+      return dashboardData;
     },
     {
       operationName: "get_client_dashboard",

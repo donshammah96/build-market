@@ -16,13 +16,11 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
-    "@repo/kafka": "workspace:*",
-    "@repo/types": "workspace:*"
+    "@build/types": "workspace:*"
   },
   "devDependencies": {
-    "@repo/typescript-config": "workspace:*",
+    "@build/typescript-config": "workspace:*",
     "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.3",
-    "@repo/kafka": "0.0.1"
+    "@types/express": "^5.0.3"
   }
 }

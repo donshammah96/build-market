@@ -90,6 +90,9 @@ export const RateLimits = {
   // Strict limits for auth endpoints
   AUTH: { limit: 5, window: 60000 }, // 5 requests per minute
 
+  // Export limits
+  EXPORT: { limit: 1, window: 24 * 60 * 60 * 1000 }, // 1 request per 24 hours
+
   // Standard API limits
   API: { limit: 30, window: 60000 }, // 30 requests per minute
 

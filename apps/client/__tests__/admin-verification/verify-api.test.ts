@@ -64,10 +64,18 @@ vi.mock("@/app/lib/resilient-api", async () => {
     executeResilient: vi.fn().mockImplementation(async (operation) => {
       try {
         const result = await operation();
-        return NextResponse.json({ success: true, data: result.data || result, message: result.message });
+        return NextResponse.json({
+          success: true,
+          data: result.data || result,
+          message: result.message,
+        });
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error";
-        return NextResponse.json({ success: false, error: message }, { status: 500 });
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
+        return NextResponse.json(
+          { success: false, error: message },
+          { status: 500 },
+        );
       }
     }),
     getClientLogger: vi.fn().mockReturnValue({
@@ -95,7 +103,9 @@ describe("POST /api/admin/verify", () => {
     const { prisma } = await import("@repo/db");
 
     // Setup mocks
-    vi.mocked(auth).mockResolvedValue({ userId: TEST_UUIDS.ADMIN_CLERK } as any);
+    vi.mocked(auth).mockResolvedValue({
+      userId: TEST_UUIDS.ADMIN_CLERK,
+    } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
       email: "admin@test.com",
@@ -154,7 +164,7 @@ describe("POST /api/admin/verify", () => {
           verified: true,
           verifiedById: TEST_UUIDS.ADMIN_DB,
         }),
-      })
+      }),
     );
   });
 
@@ -162,7 +172,9 @@ describe("POST /api/admin/verify", () => {
     const { auth } = await import("@clerk/nextjs/server");
     const { prisma } = await import("@repo/db");
 
-    vi.mocked(auth).mockResolvedValue({ userId: TEST_UUIDS.ADMIN_CLERK } as any);
+    vi.mocked(auth).mockResolvedValue({
+      userId: TEST_UUIDS.ADMIN_CLERK,
+    } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
       role: "admin",
@@ -188,7 +200,9 @@ describe("POST /api/admin/verify", () => {
     const { auth } = await import("@clerk/nextjs/server");
     const { prisma } = await import("@repo/db");
 
-    vi.mocked(auth).mockResolvedValue({ userId: TEST_UUIDS.ADMIN_CLERK } as any);
+    vi.mocked(auth).mockResolvedValue({
+      userId: TEST_UUIDS.ADMIN_CLERK,
+    } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
       role: "admin",
@@ -221,7 +235,9 @@ describe("POST /api/admin/verify", () => {
     const { auth } = await import("@clerk/nextjs/server");
     const { prisma } = await import("@repo/db");
 
-    vi.mocked(auth).mockResolvedValue({ userId: TEST_UUIDS.ADMIN_CLERK } as any);
+    vi.mocked(auth).mockResolvedValue({
+      userId: TEST_UUIDS.ADMIN_CLERK,
+    } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
       role: "admin",

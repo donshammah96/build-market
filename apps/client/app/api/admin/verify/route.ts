@@ -7,7 +7,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { withRole } from "@/app/lib/api-middleware";
-import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api-response";
+import { apiError, HttpStatus } from "@/app/lib/api-response";
 import {
   initializeCorrelationId,
   executeResilient,
@@ -15,7 +15,6 @@ import {
 } from "@/app/lib/resilient-api";
 import {
   checkRateLimit,
-  RateLimits,
   getRateLimitIdentifier,
 } from "@/app/lib/rate-limit";
 import { verifyProfessional } from "@/lib/services/verification/professional-verification.service";
@@ -92,10 +91,10 @@ export const POST = withRole(["admin"])(
             recipientUserId = validated.entityId; // Professional userId
             break;
 
-          case "store":
+          case "store": {
             result = await verifyStore(verificationRequest);
             // Get store owner's userId
-            const store = await import("@repo/db").then((m) =>
+            const store = await import("@build/db").then((m) =>
               m.prisma.store.findUnique({
                 where: { id: validated.entityId },
                 select: { professionalId: true },
@@ -103,11 +102,12 @@ export const POST = withRole(["admin"])(
             );
             recipientUserId = store!.professionalId;
             break;
+          }
 
-          case "property":
+          case "property": {
             result = await verifyProperty(verificationRequest);
             // Get property agent's userId
-            const property = await import("@repo/db").then((m) =>
+            const property = await import("@build/db").then((m) =>
               m.prisma.property.findUnique({
                 where: { id: validated.entityId },
                 select: { agentId: true },
@@ -115,6 +115,7 @@ export const POST = withRole(["admin"])(
             );
             recipientUserId = property!.agentId;
             break;
+          }
 
           default:
             throw new Error("Invalid entity type");

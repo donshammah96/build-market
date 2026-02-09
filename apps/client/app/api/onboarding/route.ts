@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 import { County, Profession } from "@prisma/client";
-import { OnboardingSchema } from "@repo/types";
+import { OnboardingSchema } from "@build/types";
 import { z } from "zod";
 import { apiError, HttpStatus } from "@/app/lib/api-response";
 import {
@@ -89,23 +89,57 @@ export async function POST(req: NextRequest) {
     return executeResilient(
       async () => {
         // Use transaction with extended timeout for database operations
-        const result = await prisma.$transaction(
-          async (tx) => {
+        interface ClientData {
+          county?: string;
+          city?: string;
+          address?: string;
+          zipCode?: string;
+          projectType: string;
+          projectLocation: string;
+          estimatedBudget: number;
+          description: string;
+        }
+
+        interface ProfessionalData {
+          profession: string;
+          companyName?: string;
+          licenseNumber?: string;
+          yearsExperience?: number;
+          portfolio?: string;
+          website?: string;
+          bio?: string;
+          certificatesUrls?: string[];
+          idDocumentsUrls?: string[];
+        }
+
+        interface UserResult {
+          id: string;
+          clerkId: string;
+          email: string;
+          firstName: string | null;
+          lastName: string | null;
+          phone: string | null;
+          role: string;
+          isProfileComplete: boolean;
+        }
+
+        const result: UserResult = await prisma.$transaction<UserResult>(
+          async (tx): Promise<UserResult> => {
             // Create or update user - handles the case where webhook didn't fire
             const user = await tx.user.upsert({
               where: { clerkId },
               create: {
-                clerkId,
-                email: clerkUserData.emailAddresses[0]?.emailAddress || "",
-                firstName: clerkUserData.firstName || null,
-                lastName: clerkUserData.lastName || null,
-                phone: clerkUserData.phoneNumbers?.[0]?.phoneNumber || null,
-                role,
-                isProfileComplete: true,
+          clerkId,
+          email: clerkUserData.emailAddresses[0]?.emailAddress || "",
+          firstName: clerkUserData.firstName || null,
+          lastName: clerkUserData.lastName || null,
+          phone: clerkUserData.phoneNumbers?.[0]?.phoneNumber || null,
+          role,
+          isProfileComplete: true,
               },
               update: {
-                role,
-                isProfileComplete: true,
+          role,
+          isProfileComplete: true,
               },
             });
 
@@ -113,119 +147,124 @@ export async function POST(req: NextRequest) {
             if (role === "client") {
               // Access properties with type assertion since schema was updated
               // but TypeScript may be using cached types
-              const clientData = validatedData as typeof validatedData & {
-                county: string;
-                city?: string;
-                address?: string;
-                zipCode?: string;
-              };
+              const clientData = validatedData as typeof validatedData & ClientData;
 
               const {
-                projectType,
-                projectLocation,
-                estimatedBudget,
-                description,
-              } = validatedData;
+          projectType,
+          projectLocation,
+          estimatedBudget,
+          description,
+              } = {
+          ...validatedData,
+          estimatedBudget: Number(validatedData.estimatedBudget),
+              } as ClientData;
 
               // Extract location fields with proper typing
-              const county = clientData.county;
-              const city = clientData.city;
-              const address = clientData.address;
-              const zipCode = clientData.zipCode;
+              const county: string | undefined = clientData.county;
+              const city: string | undefined = clientData.city;
+              const address: string | undefined = clientData.address;
+              const zipCode: string | undefined = clientData.zipCode;
 
-              const preferences = {
-                projectType,
-                projectLocation,
-                estimatedBudget,
-                description,
+              const preferences: {
+          projectType: string;
+          projectLocation: string;
+          estimatedBudget: number;
+          description: string;
+              } = {
+          projectType,
+          projectLocation,
+          estimatedBudget,
+          description,
               };
 
               await tx.clientProfile.upsert({
-                where: { userId: user.id },
-                update: {
-                  preferences,
-                  county: county as County,
-                  city: city || null,
-                  address: address || null,
-                  zipCode: zipCode || null,
-                },
-                create: {
-                  userId: user.id,
-                  county: county as County,
-                  city: city || null,
-                  address: address || null,
-                  zipCode: zipCode || null,
-                  preferences,
-                },
+          where: { userId: user.id },
+          update: {
+            preferences,
+            county: county as County | undefined,
+            city: city || null,
+            address: address || null,
+            zipCode: zipCode || null,
+          },
+          create: {
+            userId: user.id,
+            county: county as County,
+            city: city || null,
+            address: address || null,
+            zipCode: zipCode || null,
+            preferences,
+          },
               });
             } else if (role === "professional") {
               const {
-                profession,
-                companyName,
-                licenseNumber,
-                yearsExperience,
-                portfolio,
-                website,
-                bio,
-                certificatesUrls,
-                idDocumentsUrls,
-              } = validatedData;
+          profession,
+          companyName,
+          licenseNumber,
+          yearsExperience,
+          portfolio,
+          website,
+          bio,
+          certificatesUrls,
+          idDocumentsUrls,
+              } = validatedData as ProfessionalData;
 
               // Type assertion for profession enum
-              const professionEnum = profession as Profession;
+              const professionEnum: Profession = profession as Profession;
 
               const professionalProfile = await tx.professionalProfile.upsert({
-                where: { userId: user.id },
-                update: {
-                  profession: professionEnum,
-                  companyName,
-                  licenseNumber,
-                  yearsExperience,
-                  website,
-                  bio,
-                  portfolioUrl: portfolio,
-                  verified: false,
-                },
-                create: {
-                  userId: user.id,
-                  profession: professionEnum,
-                  companyName,
-                  licenseNumber,
-                  yearsExperience,
-                  website,
-                  bio,
-                  portfolioUrl: portfolio,
-                  verified: false,
-                },
+          where: { userId: user.id },
+          update: {
+            profession: professionEnum,
+            companyName,
+            licenseNumber,
+            yearsExperience,
+            website,
+            bio,
+            portfolioUrl: portfolio,
+            verified: false,
+          },
+          create: {
+            userId: user.id,
+            profession: professionEnum,
+            companyName: companyName || "",
+            licenseNumber,
+            yearsExperience,
+            website,
+            bio,
+            portfolioUrl: portfolio,
+            verified: false,
+          },
               });
 
               // Handle certificates and documents
-              const certPromises = (certificatesUrls || []).map((url) =>
-                tx.certificate.create({
-                  data: {
-                    name: "Professional Certificate",
-                    issuer: "Self-reported",
-                    fileUrl: url,
-                    professionalId: professionalProfile.userId,
-                  },
-                })
+              const certPromises: Promise<unknown>[] = (certificatesUrls || []).map((url: string) =>
+          tx.certificate.create({
+            data: {
+              name: "Professional Certificate",
+              issuer: "Self-reported",
+              fileUrl: url,
+              fileKey: "",
+              professionalId: professionalProfile.userId,
+            },
+          })
               );
 
-              const idPromises = (idDocumentsUrls || []).map((url) =>
-                tx.certificate.create({
-                  data: {
-                    name: "ID Document",
-                    issuer: "Government/Official",
-                    fileUrl: url,
-                    professionalId: professionalProfile.userId,
-                  },
-                })
+              const idPromises: Promise<unknown>[] = (idDocumentsUrls || []).map((url: string) =>
+          tx.certificate.create({
+            data: {
+              name: "ID Document",
+              issuer: "Government/Official",
+              fileUrl: url,
+              fileKey: "",
+              professionalId: professionalProfile.userId,
+            },
+          })
               );
 
               await Promise.all([...certPromises, ...idPromises]);
             }
 
-            return user;
+            return user as UserResult;
           },
           {
             // Extended timeout for slow database connections

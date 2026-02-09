@@ -1,6 +1,6 @@
 /**
  * Resilience utilities for distributed systems
- * 
+ *
  * Provides comprehensive resilience patterns:
  * - Timeouts: Criticality-based timeout strategies
  * - Retries: Intelligent retry with exponential backoff and jitter
@@ -12,7 +12,7 @@
  */
 
 // Core types
-export type * from './types';
+export type * from "./types";
 
 // Timeout utilities
 export {
@@ -21,7 +21,7 @@ export {
   withTimeout,
   getTimeout,
   withCriticalityTimeout,
-} from './timeout';
+} from "./timeout";
 
 // Retry utilities
 export {
@@ -29,7 +29,7 @@ export {
   DEFAULT_RETRY_CONFIG,
   withRetry,
   createRetryWrapper,
-} from './retry';
+} from "./retry";
 
 // Circuit breaker
 export {
@@ -37,33 +37,26 @@ export {
   DEFAULT_CIRCUIT_BREAKER_CONFIG,
   CircuitBreaker,
   CircuitBreakerRegistry,
-} from './circuit-breaker';
+} from "./circuit-breaker";
 
 // Caching
-export {
-  DEFAULT_CACHE_CONFIG,
-  ResilientCache,
-  CacheRegistry,
-} from './cache';
+export { DEFAULT_CACHE_CONFIG, ResilientCache, CacheRegistry } from "./cache";
 
 // Fallback mechanisms
 export {
   withFallback,
   createFallbackWrapper,
   withGracefulDegradation,
-} from './fallback';
+} from "./fallback";
 
 // Metrics and observability
 export {
   MetricsCollector,
   getGlobalMetricsCollector,
   setGlobalMetricsCollector,
-} from './metrics';
+} from "./metrics";
 
-export type {
-  Metric,
-  MetricType,
-} from './metrics';
+export type { Metric, MetricType } from "./metrics";
 
 // Logging
 export {
@@ -72,11 +65,25 @@ export {
   createLogger,
   getGlobalLogger,
   setGlobalLogger,
-} from './logger';
+} from "./logger";
+
+// Configuration
+export {
+  getConfig,
+  getResilienceConfig,
+  resetConfig,
+  setConfig,
+  getDefaultTimeouts,
+  getDefaultRetryConfig,
+  getDefaultCircuitBreakerConfig,
+  getDefaultCacheConfig,
+} from "./config";
+
+export type { ResilienceEnvConfig } from "./config";
 
 // High-level executor
 export {
   ResilientExecutor,
   getGlobalExecutor,
   setGlobalExecutor,
-} from './executor';
+} from "./executor";

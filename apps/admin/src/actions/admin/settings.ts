@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { assertAdmin, type SystemSettingsInput } from "./shared";
 import { SystemSettingsSchema } from "./types";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 // ============================================================================
 // Types
 // ============================================================================

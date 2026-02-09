@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { Award, Loader2 } from "lucide-react";
 
-import { ProfessionalOnboardingData } from "@repo/types";
+import { ProfessionalOnboardingData } from "@build/types";
 import {
   StepProgress,
   CompactStepProgress,

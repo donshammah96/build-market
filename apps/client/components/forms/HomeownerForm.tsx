@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { OnboardingData } from "@repo/types";
+import { OnboardingData } from "@build/types";
 import { Combobox, ComboboxOption } from "../ui/combobox";
 
 import {

@@ -1,5 +1,5 @@
-import { prisma } from '../db';
-import { ProjectStatus } from '@repo/db'; // Assuming types are exported from @repo/db or generated client
+import { prisma } from "../db";
+import { ProjectStatus } from "@build/db"; // Assuming types are exported from @repo/db or generated client
 
 export interface CreateProjectInput {
   clientId: string;
@@ -33,17 +33,20 @@ export async function getProject(id: string) {
   });
 }
 
-export async function getUserProjects(userId: string, role: 'client' | 'professional' = 'client') {
-  if (role === 'client') {
+export async function getUserProjects(
+  userId: string,
+  role: "client" | "professional" = "client",
+) {
+  if (role === "client") {
     return await prisma.project.findMany({
       where: { clientId: userId },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { updatedAt: "desc" },
       include: { professional: true },
     });
   } else {
     return await prisma.project.findMany({
       where: { professionalId: userId },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { updatedAt: "desc" },
       include: { client: true },
     });
   }
