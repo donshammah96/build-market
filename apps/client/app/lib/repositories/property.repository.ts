@@ -31,6 +31,7 @@ export interface PropertyFilters {
 export interface PropertyListItem {
   id: string;
   title: string;
+  slug: string;
   price: Prisma.Decimal;
   currency: string;
   location: string;
@@ -222,6 +223,7 @@ export class PropertyRepository {
       take: limit,
       select: {
         id: true,
+        slug: true,
         title: true,
         price: true,
         currency: true,
@@ -280,6 +282,7 @@ export class PropertyRepository {
       return {
         id: p.id,
         title: p.title,
+        slug: p.slug,
         price: p.price,
         currency: p.currency,
         location: p.location,

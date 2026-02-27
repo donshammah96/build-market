@@ -2,7 +2,6 @@ import { PrismaClient, Prisma, County, Profession } from "@prisma/client";
 import { prisma } from "@build/db";
 import {
   REGULATORY_AUTHORITIES,
-  type RegulatoryAuthority,
   DOCUMENT_BADGE_MAP,
   hasValidLicense,
   AUTHORITY_BADGE_MAP,
@@ -16,6 +15,10 @@ import {
 export interface ProfessionalCardDTO {
   id: string;
   companyName: string | null;
+  profession: Profession | null;
+  yearsExperience: number | null;
+  bio: string | null;
+  portfolioUrl: string | null;
   user: {
     id: string;
     firstName: string | null;
@@ -27,10 +30,20 @@ export interface ProfessionalCardDTO {
   verified: boolean;
   city: string | null;
   county: County | null;
+  country: string | null;
   avatar: string | null;
   skills: string[];
   authorities: string[];
   documents: string[];
+  _count?: {
+    reviews: number;
+    projects: number;
+    stores: number;
+    properties: number;
+  };
+  portfolios?: {
+    images: { asset?: { cdnUrl?: string; thumbnailUrl?: string } }[];
+  }[];
 }
 
 export interface ServiceDTO {
@@ -50,10 +63,10 @@ export interface CategoryDTO {
   icon: string | null;
 }
 
-
 export interface ProfessionalDetailDTO {
   userId: string;
   companyName: string | null;
+  profession?: Profession | null;
   bio: string | null;
   rating: number | null;
   reviewCount: number;
@@ -61,7 +74,10 @@ export interface ProfessionalDetailDTO {
   yearsExperience: number | null;
   city: string | null;
   county: County | null;
+  country?: string | null;
   isInsured: boolean;
+  portfolioUrl?: string | null;
+  website?: string | null;
   user: {
     id: string;
     firstName: string | null;
@@ -87,7 +103,6 @@ export interface PaginatedResult<T> {
   offset: number;
   hasMore: boolean;
 }
-
 
 export interface ProfessionalFilters {
   search?: string;
@@ -116,7 +131,7 @@ export interface ProfessionalFilters {
 
 /**
  * Defines the exact shape of data needed for the Card View.
- * We define the `select/include` here to ensure the generic `GetPayload` 
+ * We define the `select/include` here to ensure the generic `GetPayload`
  * matches the actual query.
  */
 const professionalCardInclude = {
@@ -129,7 +144,6 @@ const professionalCardInclude = {
     },
   },
   offeredServices: {
-    take: 5,
     where: { isPrimary: true },
     include: {
       service: {
@@ -140,21 +154,36 @@ const professionalCardInclude = {
       },
     },
   },
-  reviews: {
-    take: 1,
-    where: { status: "PUBLISHED" },
-    select: {
-      rating: true,
-    },
-  },
   documents: {
-    select: {
-      category: true,
-    },
+    where: { status: "VERIFIED" },
+    select: { category: true },
   },
   licenses: {
+    where: {
+      status: "VERIFIED",
+      OR: [{ validUntil: { gt: new Date() } }, { validUntil: null }],
+    },
+    select: { authority: true },
+  },
+  portfolios: {
+    take: 1,
+    orderBy: { createdAt: "desc" as const },
+    include: {
+      images: {
+        take: 1,
+        select: {
+          id: true,
+          asset: { select: { cdnUrl: true, thumbnailUrl: true } },
+        },
+      },
+    },
+  },
+  _count: {
     select: {
-      authority: true,
+      reviews: true,
+      projects: true,
+      stores: true,
+      properties: true,
     },
   },
 } satisfies Prisma.ProfessionalProfileInclude;
@@ -188,23 +217,23 @@ const professionalDetailInclude = {
     },
   },
   licenses: {
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: "desc" as const },
     select: {
       authority: true,
       status: true,
       validUntil: true,
       category: true,
-    }
+    },
   },
   portfolios: {
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: "desc" as const },
     take: 6,
     include: {
       images: { take: 1 },
     },
   },
   reviews: {
-    take: 5,
+    take: 10,
     where: { status: "PUBLISHED" },
     include: {
       reviewer: {
@@ -214,7 +243,7 @@ const professionalDetailInclude = {
         },
       },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: "desc" as const },
   },
   documents: {
     where: { category: { not: "ID_OR_PASSPORT" } }, // Exclude sensitive docs
@@ -225,7 +254,7 @@ const professionalDetailInclude = {
       fileUrl: true,
       status: true,
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: "desc" as const },
   },
 } satisfies Prisma.ProfessionalProfileInclude;
 
@@ -233,154 +262,104 @@ type ProfessionalDetailPayload = Prisma.ProfessionalProfileGetPayload<{
   include: typeof professionalDetailInclude;
 }>;
 
-
 export class ProfessionalRepository {
-  constructor(private prisma: PrismaClient) {}
+  private pendingSearch: Promise<PaginatedResult<ProfessionalCardDTO>> | null =
+    null;
+  private inFlightRequests = new Map<
+    string,
+    Promise<PaginatedResult<ProfessionalCardDTO>>
+  >();
+
+  constructor(private readonly prisma: PrismaClient) {}
 
   /**
    * Find professionals with filters and includes
    */
-  async findMany(filters: ProfessionalFilters = {}): Promise<PaginatedResult<ProfessionalCardDTO>> {
-    try {
-      const {
-        search = "",
-        serviceSlugs,
-        categorySlug,
-        profession,
-        county,
-        city,
-        sortBy = "rating",
-        verifiedOnly = true,
-        minRating,
-        limit = 50,
-        offset = 0,
-      } = filters;
+  async findMany(
+    filters: ProfessionalFilters = {},
+  ): Promise<PaginatedResult<ProfessionalCardDTO>> {
+    // 1. GENERATE KEY
+    const {
+      search,
+      serviceSlugs,
+      categorySlug,
+      profession,
+      county,
+      city,
+      sortBy = "rating",
+      verifiedOnly = true,
+      minRating,
+      limit = 50,
+      offset = 0,
+    } = filters;
 
-    // Build where clause
-    const where: Prisma.ProfessionalProfileWhereInput = {
-      // Base filters
-      ...(verifiedOnly ? { verified: true } : {}),
-      ...(minRating ? { rating: { gte: minRating } } : {}),
-      ...(county ? { county } : {}),
-      ...(profession ? { profession } : {}),
-    };
+    const cacheKey = JSON.stringify({
+      search,
+      serviceSlugs,
+      categorySlug,
+      profession,
+      county,
+      city,
+      sortBy,
+      verifiedOnly,
+      minRating,
+      limit,
+      offset,
+    });
 
-    // Location filters
-    if (city) {
-      where.city = { contains: city, mode: "insensitive" };
-    }
+    // 2. CHECK IN-FLIGHT
+    const existingRequest = this.inFlightRequests.get(cacheKey);
+    if (existingRequest) return existingRequest;
 
-    // Search filter
-    if (search) {
-      where.OR = [
-        { companyName: { contains: search, mode: "insensitive" } },
-        { bio: { contains: search, mode: "insensitive" } },
-        {
-          // Search user name
-          user: {
-            OR: [
-              { firstName: { contains: search, mode: "insensitive" } },
-              { lastName: { contains: search, mode: "insensitive" } },
-            ],
-          },
-        },
-        // Search for specific skills
-        {
-          offeredServices: {
-            some: {
-              service: {
-                name: { contains: search, mode: "insensitive" },
-              },
-            },
-          },
-        },
-      ];
-    }
+    // 3. EXECUTE & CACHE
+    const requestPromise = (async () => {
+      try {
+        const where: Prisma.ProfessionalProfileWhereInput = {
+          ...(verifiedOnly && { verified: true }),
+          ...(minRating && { rating: { gte: minRating } }),
+          ...(county && { county }),
+          ...(profession && { profession }),
+          ...(city && { city: { contains: city, mode: "insensitive" } }),
+          ...(search && this._buildSearchClause(search)),
+          ...this._buildCategoryFilter(categorySlug, serviceSlugs),
+        };
 
-    // Category & Service Filtering (The Rational Logic)
-    if (serviceSlugs && serviceSlugs.length > 0) {
-      // Find pros who offer ANY of these specific services
-      where.offeredServices = {
-        some: {
-          service: {
-            slug: { in: serviceSlugs },
-          },
-        },
-      };
-    } else if (categorySlug && categorySlug !== "all") {
-      // Find pros in this category
-      where.offeredServices = {
-        some: {
-          service: {
-            category: {
-              slug: categorySlug,
-            },
-          },
-        },
-      };
-    }
-    
-    // --- BUILD ORDER BY ---
-    let orderBy: Prisma.ProfessionalProfileOrderByWithRelationInput = {};
-    switch (sortBy) {
-      case "experience":
-        orderBy = { yearsExperience: "desc" };
-        break;
-      case "reviews":
-        orderBy = { reviewCount: "desc" };
-        break;
-      case "rating":
-        orderBy = { rating: "desc" };
-        break;
-      case "newest":
-        orderBy = { createdAt: "desc" };
-        break;
-      default:
-        orderBy = { createdAt: "desc" };
-    }
+        const [rawProfiles, total] = await this.prisma.$transaction([
+          this.prisma.professionalProfile.findMany({
+            where,
+            orderBy: this._getOrderBy(sortBy),
+            skip: offset,
+            take: limit,
+            include: professionalCardInclude,
+          }),
+          this.prisma.professionalProfile.count({ where }),
+        ]);
 
-    // --- EXECUTE QUERY ---
-    const [rawProfiles, total] = await Promise.all([
-      this.prisma.professionalProfile.findMany({
-        where,
-        orderBy,
-        skip: offset,
-        take: limit,
-        // Smart Select: Fetch only what's needed for the card
-        include: {
-          ...professionalCardInclude,
-          licenses: {
-            where: {
-              status: "VERIFIED",
-              OR: [
-                { validUntil: { gt: new Date() } },
-                { validUntil: null }
-              ]
-            },
-            select: {
-              authority: true,
-            },
-            orderBy: { createdAt: "desc" },
-          },
-        },
-      }),
-      this.prisma.professionalProfile.count({ where }),
-    ]);
+        const professionals = rawProfiles.map((p) =>
+          this._transformForCard(p as ProfessionalCardPayload),
+        );
 
-    // TRANSFORM & RETURN
-    const professionals = rawProfiles.map(this._transformForCard);
+        return {
+          data: professionals,
+          total,
+          limit,
+          offset,
+          hasMore: offset + professionals.length < total,
+        };
+      } catch (error) {
+        console.error(
+          "[ProfessionalRepository.findMany] Critical query failure:",
+          error,
+        );
+        throw new Error("Professional search is currently unavailable.");
+      } finally {
+        // 4. CLEANUP
+        this.inFlightRequests.delete(cacheKey);
+      }
+    })();
 
-      return {
-        data: professionals,
-        total,
-        limit,
-        offset,
-        hasMore: offset + professionals.length < total,
-      };
-    } catch (error) {
-      console.error("[ProfessionalRepository.findMany] Error:", error);
-      throw new Error("Failed to fetch professionals");
-    }
+    this.inFlightRequests.set(cacheKey, requestPromise);
+    return requestPromise;
   }
 
   /**
@@ -389,39 +368,49 @@ export class ProfessionalRepository {
   async findByUserId(userId: string): Promise<ProfessionalDetailDTO | null> {
     try {
       const rawProfile = await this.prisma.professionalProfile.findUnique({
-      where: { userId },
-      include: professionalDetailInclude,
-    });
+        where: { userId },
+        include: professionalDetailInclude,
+      });
 
       if (!rawProfile) return null;
 
-      return this._transformProfile(rawProfile);
+      return this._transformProfile(rawProfile as ProfessionalDetailPayload);
     } catch (error) {
-      console.error("[ProfessionalRepository.findByUserId] Error:", error);
-      throw new Error(`Failed to fetch professional profile for user: ${userId}`);
+      console.error(
+        "[ProfessionalRepository.findByUserId] Critical query failure:",
+        error,
+      );
+      throw new Error(
+        `Failed to fetch professional profile for user: ${userId}`,
+      );
     }
   }
 
   /**
-   * Create or update professional profile
+   * Create or update a professional profile
    */
   async upsert(
     userId: string,
-    data: Prisma.ProfessionalProfileUpdateInput
-  ): Promise<Prisma.ProfessionalProfileGetPayload<object>> {
+    data: Omit<Prisma.ProfessionalProfileUncheckedCreateInput, "userId"> &
+      Prisma.ProfessionalProfileUpdateInput,
+  ) {
     try {
       return await this.prisma.professionalProfile.upsert({
         where: { userId },
         update: data,
         create: {
           userId,
-          companyName: (data.companyName as string) ?? "Unnamed Professional",
-          ...data,
-        } as Prisma.ProfessionalProfileUncheckedCreateInput,
+          ...(data as any),
+        },
       });
     } catch (error) {
-      console.error("[ProfessionalRepository.upsert] Error:", error);
-      throw new Error(`Failed to upsert professional profile for user: ${userId}`);
+      console.error(
+        "[ProfessionalRepository.upsert] Critical query failure:",
+        error,
+      );
+      throw new Error(
+        `Failed to upsert professional profile for user: ${userId}`,
+      );
     }
   }
 
@@ -429,92 +418,181 @@ export class ProfessionalRepository {
   /**
    * Transforms the deep nested DB structure into a clean UI object
    */
-  private _transformProfile(profile: ProfessionalDetailPayload): ProfessionalDetailDTO {
-  // Group Services by Category
-  const categoryMap = new Map();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const serviceList: any[] = [];
+  private _transformProfile(
+    profile: ProfessionalDetailPayload,
+  ): ProfessionalDetailDTO {
+    const categories: Record<string, CategoryDTO> = {};
 
-  profile.offeredServices.forEach((os) => {
-    serviceList.push({
-      id: os.service.id,
-      name: os.service.name,
-      slug: os.service.slug,
-      price: os.price,
-      unit: os.pricingUnit || os.service.defaultUnit,
-      isPrimary: os.isPrimary,
-      yearsExperience: os.yearsExperience,
+    const services: ServiceDTO[] = profile.offeredServices.map((os) => {
+      const cat = os.service.category;
+      if (!categories[cat.id]) {
+        categories[cat.id] = {
+          id: cat.id,
+          name: cat.name,
+          slug: cat.slug,
+          icon: cat.icon,
+        };
+      }
+      return {
+        id: os.service.id,
+        name: os.service.name,
+        slug: os.service.slug,
+        price: os.price ? os.price.toNumber() : null,
+        unit: os.pricingUnit || os.service.defaultUnit,
+        isPrimary: os.isPrimary,
+        yearsExperience: os.yearsExperience,
+      };
     });
 
-    const cat = os.service.category;
-    if (!categoryMap.has(cat.id)) {
-      categoryMap.set(cat.id, {
-        id: cat.id,
-        name: cat.name,
-        slug: cat.slug,
-        icon: cat.icon
-      });
-    }
-  });
-
-  // Use imported utilities from license.types.ts
-  const licenseVerifications = Object.fromEntries(
-    REGULATORY_AUTHORITIES.map((auth) => [
-      AUTHORITY_BADGE_MAP[auth],
-      hasValidLicense(profile.licenses as any, auth),
-    ])
-  ) as Record<string, boolean>;
-
-  const documentVerifications = Object.entries(DOCUMENT_BADGE_MAP).reduce(
-    (acc, [category, badgeKey]) => {
-      acc[badgeKey] = profile.documents.some(
-        (d) =>
-          d.category === category && d.status === "VERIFIED"
-      );
-      return acc;
-    },
-    {} as Record<string, boolean>
-  );
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { offeredServices, ...rest } = profile;
-
-  return {
-    ...rest,
-    rating: profile.rating.toNumber(),
-    derivedCategories: Array.from(categoryMap.values()),
-    services: serviceList,
-    badges: {
-      ...licenseVerifications,
-      ...documentVerifications,
-      isVerified: profile.verified
-    } as unknown as ProfessionalBadges,
-  };
+    return {
+      ...profile,
+      rating: profile.rating.toNumber(),
+      derivedCategories: Object.values(categories),
+      services,
+      badges: this._computeBadges(profile),
+      // Map JSON/Prisma objects to pure objects for serialization
+      portfolios: profile.portfolios,
+      reviews: profile.reviews,
+      documents: profile.documents,
+      licenses: profile.licenses,
+    };
   }
-
 
   /**
    * Lightweight transform for list views
    */
-  private _transformForCard(profile: ProfessionalCardPayload): ProfessionalCardDTO {
+  private _transformForCard(
+    profile: ProfessionalCardPayload,
+  ): ProfessionalCardDTO {
     return {
       id: profile.userId,
       companyName: profile.companyName,
-      user: profile.user ?? { id: profile.userId, firstName: null, lastName: null, avatar: null },
-      rating: profile.rating.toNumber(),
+      profession: profile.profession ?? null,
+      yearsExperience: profile.yearsExperience ?? null,
+      bio: profile.bio ?? null,
+      portfolioUrl: profile.portfolioUrl ?? null,
+      user: profile.user ?? {
+        id: profile.userId,
+        firstName: null,
+        lastName: null,
+        avatar: null,
+      },
+      rating: profile.rating != null ? Number(profile.rating) : null,
       reviewCount: profile.reviewCount ?? 0,
       verified: profile.verified ?? false,
       city: profile.city,
       county: profile.county,
+      country: profile.country ?? null,
       avatar: profile.user?.avatar ?? null,
-      // Flatten skills for the card tags
-      skills: (profile.offeredServices ?? []).map((os) => os.service?.name).filter(Boolean),
-      authorities: (profile.licenses ?? []).map((l) => l.authority).filter(Boolean),
-      documents: (profile.documents ?? []).map((d) => d.category).filter(Boolean),
+      skills: (profile.offeredServices ?? [])
+        .map((os) => os.service?.name)
+        .filter(Boolean),
+      authorities: (profile.licenses ?? [])
+        .map((l) => l.authority)
+        .filter(Boolean),
+      documents: (profile.documents ?? [])
+        .map((d) => d.category)
+        .filter(Boolean),
+      _count: (
+        profile as {
+          _count?: {
+            reviews: number;
+            projects: number;
+            stores: number;
+            properties: number;
+          };
+        }
+      )._count,
+      portfolios: profile.portfolios.map((p) => ({
+        images: p.images.map((img) => ({
+          asset: img.asset
+            ? {
+                cdnUrl: img.asset.cdnUrl,
+                thumbnailUrl: img.asset.thumbnailUrl ?? undefined,
+              }
+            : undefined,
+        })),
+      })),
     };
   }
-}
 
+  // ============================================================================
+  // 4. PRIVATE UTILITIES
+  // ============================================================================
+
+  private _buildSearchClause(
+    search: string,
+  ): Prisma.ProfessionalProfileWhereInput {
+    const term = { contains: search, mode: "insensitive" as const };
+    return {
+      OR: [
+        { companyName: term },
+        { bio: term },
+        { user: { OR: [{ firstName: term }, { lastName: term }] } },
+        { offeredServices: { some: { service: { name: term } } } },
+      ],
+    };
+  }
+
+  private _buildCategoryFilter(
+    catSlug?: string,
+    svcSlugs?: string[],
+  ): Prisma.ProfessionalProfileWhereInput {
+    if (svcSlugs?.length) {
+      return {
+        offeredServices: { some: { service: { slug: { in: svcSlugs } } } },
+      };
+    }
+    if (catSlug && catSlug !== "all") {
+      return {
+        offeredServices: { some: { service: { category: { slug: catSlug } } } },
+      };
+    }
+    return {};
+  }
+
+  private _getOrderBy(
+    sortBy: string,
+  ): Prisma.ProfessionalProfileOrderByWithRelationInput {
+    const map: Record<
+      string,
+      Prisma.ProfessionalProfileOrderByWithRelationInput
+    > = {
+      experience: { yearsExperience: "desc" },
+      reviews: { reviewCount: "desc" },
+      rating: { rating: "desc" },
+      newest: { createdAt: "desc" },
+    };
+    return map[sortBy] || { createdAt: "desc" };
+  }
+
+  private _computeBadges(
+    profile: ProfessionalDetailPayload,
+  ): ProfessionalBadges {
+    const licenseBadges = Object.fromEntries(
+      REGULATORY_AUTHORITIES.map((auth) => [
+        AUTHORITY_BADGE_MAP[auth],
+        hasValidLicense(profile.licenses, auth),
+      ]),
+    );
+
+    const documentBadges = Object.entries(DOCUMENT_BADGE_MAP).reduce(
+      (acc, [category, badgeKey]) => {
+        acc[badgeKey] = profile.documents.some(
+          (d) => d.category === category && d.status === "VERIFIED",
+        );
+        return acc;
+      },
+      {} as Record<string, boolean>,
+    );
+
+    return {
+      ...licenseBadges,
+      ...documentBadges,
+      isVerified: profile.verified,
+    } as unknown as ProfessionalBadges;
+  }
+}
 // ============================================================================
 // Singleton Export - Use this in your routes and components
 // ============================================================================

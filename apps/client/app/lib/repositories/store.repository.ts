@@ -287,7 +287,7 @@ export class StoreRepository {
             stock: p.stockQuantity,
             lowStock: p.stockQuantity <= p.lowStockAlert,
             image: cover,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            // eslint-disable-next-line /typescript-eslint/no-explicit-any
             category: String(p.category),
             storeId: p.store.id,
             storeName: p.store.name
