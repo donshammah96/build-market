@@ -6,8 +6,8 @@ import {
   ComplianceJobs,
 } from "@/app/lib/queues/compliance.queue";
 import { prisma } from "@build/db";
-import { sendEmail } from "@/app/lib/mailer";
-import { sendSMS } from "@/app/lib/sms";
+import { sendEmail } from "@/app/lib/infrastructure/mailer";
+import { sendSMS } from "@/app/lib/infrastructure/sms";
 import { IncidentSeverity } from "@prisma/client";
 
 export const incidentWorker = new Worker<IncidentJobData>(
