@@ -82,19 +82,13 @@ export default function Onboarding() {
       const storeData = (data as any).storeData;
       if (storeData) {
         try {
-          const storeResponse = await fetch(API_ROUTES.stores, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(storeData),
-          });
-
-          if (!storeResponse.ok) {
-            console.error(
-              "Failed to create store, but professional profile was created",
-            );
-          }
+          const { createStoreAction } = await import("@/app/actions/stores");
+          await createStoreAction(storeData);
         } catch (storeError) {
-          console.error("Store creation error:", storeError);
+          console.error(
+            "Failed to create store, but professional profile was created",
+            storeError,
+          );
         }
       }
 

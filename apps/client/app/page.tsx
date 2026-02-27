@@ -52,7 +52,7 @@ const VendorsSection = dynamic(
 
 const ReviewsSection = dynamic(
   () =>
-    import("@/components/reviews/ReviewsSection").then((mod) => ({
+    import("@/components/reviews").then((mod) => ({
       default: mod.ReviewsSection,
     })),
   {

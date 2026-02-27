@@ -1,5 +1,7 @@
 # Build Market — Copilot Instructions
 
+> **Agent guideline:** For API-to-frontend architecture (service layer, Server Actions, client facade, hooks) and changelog of bug fixes, see [`.agent/API-TO-FRONTEND-ARCHITECTURE.md`](../.agent/API-TO-FRONTEND-ARCHITECTURE.md).
+
 ## Architecture Overview
 
 Turborepo monorepo for a **Kenya-focused construction marketplace** connecting primarily homeowners and related entities with verified professionals, vendors, and suppliers. Two Next.js 15 App Router frontends (`apps/client` on port 3500, `apps/admin` on port 3005) with shared packages under `packages/`. Package manager: **pnpm 10.20**.
@@ -82,16 +84,16 @@ export const POST = withAuth(async (req, { dbUserId }) => {
 
 **API routes** (`app/api/`) are thin HTTP adapters — they handle auth, rate limiting, validation, and response formatting. **Domain logic and reusable services** live in `app/lib/services/` and are imported by routes. **Server-only data access** (`lib/services/`) is for server components.
 
-| Use case                      | Pattern                                                          |
-| ----------------------------- | ---------------------------------------------------------------- |
-| Client-side data fetching     | React Query hook → `fetch("/api/...")` → API route               |
-| Server component data         | Direct import from `lib/services/` or Prisma                     |
-| Complex queries in API routes | `app/lib/repositories/` (e.g., `store.repository.ts`)            |
-| Mutation deduplication        | `IdempotencyService` from `app/lib/services/idempotency.service` |
-| Optimistic locking / events   | `StoreEventService` + `store-operations.service`                 |
+| Use case                      | Pattern                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| Client-side data fetching     | React Query hook → `fetch("/api/...")` → API route                        |
+| Server component data         | Direct import from `lib/services/` or Prisma                              |
+| Complex queries in API routes | `app/lib/repositories/` (e.g., `store.repository.ts`)                     |
+| Mutation deduplication        | `IdempotencyService` from `app/lib/services/idempotency.service`          |
+| Optimistic locking / events   | `StoreEventService` + `store-operations.service`                          |
 | Request validation guards     | `checkBodySize`, `checkImageCount`, `isValidId` from `app/lib/api-guards` |
-| Shared constants              | `app/lib/config/store.config.ts` (or domain-specific config)     |
-| Cross-service events          | NATS JetStream producer (see below)                              |
+| Shared constants              | `app/lib/config/store.config.ts` (or domain-specific config)              |
+| Cross-service events          | NATS JetStream producer (see below)                                       |
 
 Service files export plain async functions with typed inputs — see `lib/services/projects.ts`, `lib/services/upload.ts`.
 
@@ -140,7 +142,15 @@ Append-only event log with version-based optimistic locking for the `Store` mode
 import { StoreEventService } from "@/app/lib/services/store-event.service";
 
 // Inside a $transaction:
-const newVersion = await StoreEventService.append(tx, storeId, StoreEventType.STORE_UPDATED, payload, metadata, userId, expectedVersion);
+const newVersion = await StoreEventService.append(
+  tx,
+  storeId,
+  StoreEventType.STORE_UPDATED,
+  payload,
+  metadata,
+  userId,
+  expectedVersion,
+);
 
 // Outside transactions:
 const version = await StoreEventService.getCurrentVersion(storeId);
@@ -170,11 +180,16 @@ Exported types: `StoreOperationContext`, `OptimisticLockResult<T>`, `StoreOperat
 Reusable validation guards that return `null` (pass) or `NextResponse` (fail). Use these instead of defining inline guards in route files:
 
 ```typescript
-import { checkBodySize, checkImageCount, isValidId } from "@/app/lib/api-guards";
+import {
+  checkBodySize,
+  checkImageCount,
+  isValidId,
+} from "@/app/lib/api-guards";
 
-const sizeError = checkBodySize(req);           // uses STORE_CONFIG.MAX_BODY_SIZE default
-const imgError = checkImageCount(data.images);  // uses STORE_CONFIG.MAX_IMAGES_PER_REQUEST default
-if (!isValidId(params?.id)) return apiError("Invalid ID", HttpStatus.BAD_REQUEST);
+const sizeError = checkBodySize(req); // uses STORE_CONFIG.MAX_BODY_SIZE default
+const imgError = checkImageCount(data.images); // uses STORE_CONFIG.MAX_IMAGES_PER_REQUEST default
+if (!isValidId(params?.id))
+  return apiError("Invalid ID", HttpStatus.BAD_REQUEST);
 ```
 
 ## Auth (Clerk)
@@ -340,14 +355,29 @@ export async function getUsers(page = 1, limit = 10, search = "") {
 
 **UI stack**: `@tanstack/react-table` for data tables, `recharts` for charts, `lucide-react` icons, `@build/ui` components
 
+## Staff Engineer Mandate
+
+When making **any** architectural or design decision, **always act as a staff-level engineer**:
+
+- Prioritize **consistency** with existing patterns over local optimizations
+- Apply **idempotency**, **optimistic locking**, and **GDPR consent** to all mutation endpoints
+- Extract domain logic into `app/lib/services/<domain>-operations.service.ts` — never inline
+- Use `getResilientExecutor()` (not legacy `executeResilient`) for all API operations
+- Every new API domain must have: validation schemas, domain config, operations service, README
+- When in doubt, refer to the stores API (`app/api/stores/`) as the canonical reference implementation
+
 ## Project-Specific Conventions
 
 - **Kenya context**: Counties (not states), M-Pesa payments, NCA/EBK/BORAQS license authorities, KRA tax compliance
 - **Admin app uses `src/`** directory; client app does **not**
 - **Env validation**: `lib/env.ts` exports `envConfig` with grouped, validated env vars — use it instead of raw `process.env`
 - **Event sourcing**: `StoreEventService` in `app/lib/services/store-event.service.ts` — append-only events with version-based optimistic locking
-- **Idempotency**: `IdempotencyService` in `app/lib/services/idempotency.service.ts` — SHA-256 key hashing for mutation deduplication
+- **Idempotency**: `IdempotencyService` in `app/lib/services/idempotency.service.ts` — SHA-256 key hashing for mutation deduplication; supports `store` and `property` scopes
 - **Store operations**: `app/lib/services/store-operations.service.ts` — ownership checks, payload building, transactional update/delete with optimistic locking
+- **Property operations**: `app/lib/services/property-operations.service.ts` — mirrors store-operations for the property domain (agentId-based ownership, version-based locking)
+- **Validation schemas**: `app/lib/stores-validation.ts` and `app/lib/properties-validation.ts` — Zod schemas using `@prisma/client` enums
+- **Server Action Boundaries**: When Next.js API actions return Prisma generated types across boundaries, do NOT rely on implicit `ReturnType` inference. Next.js serialization strips complex classes (like `Date`). Always explicitly define a Data Transfer Object interface mapping `Date` -> `string` and explicitly assert it in both the action return signature and the client layer context (`bulkhead.run<ApiResponse<DTO>>`). See `.agent/PROPERTY-DTO-TYPE-FIX.md` for the blueprint implementation.
 - **API guards**: `app/lib/api-guards.ts` — reusable `checkBodySize`, `checkImageCount`, `isValidId`
-- **Route config**: `app/lib/config/store.config.ts` — shared constants; create `<domain>.config.ts` for new API domains
+- **Route config**: `app/lib/config/store.config.ts`, `app/lib/config/property.config.ts` — domain-specific constants; create `<domain>.config.ts` for new API domains
 - **No inline services**: Do not define service classes (e.g., `IdempotencyService`, `EventStore`) inside route files — import from `app/lib/services/`
+- **Onboarding and Form Payloads**: When processing unified arrays (like images or multiselect categories) for service operations, always explicitly extract and map the fields into the strict object formats expected by `Create<Entity>Input` interfaces. See `.agent/ONBOARDING-ACTIONS-BUG-FIX.md` for historical payload mapping pitfalls.

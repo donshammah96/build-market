@@ -1,33 +1,121 @@
+/**
+ * Messaging Client (browser-safe)
+ *
+ * - No Server Action imports
+ * - Uses REST fetch() against /api/messaging endpoints
+ * - Derives input types from zod validation
+ * - Normalizes ApiResponse<T>
+ */
 
 import type {
-  Conversation,
-  Message,
-  CreateConversation,
-  CreateMessage,
-  // MarkAsRead,
   ApiResponse,
   PaginatedResponse,
+  Conversation,
+  Message,
 } from "@build/types";
-
+import type { z } from "zod";
+import { API_ROUTES } from "@/lib/links";
 import {
-  createThreadAction,
-  sendMessageAction,
-  getThreadAction,
-  getUserThreadsAction,
-} from "@/app/actions/messaging";
+  ThreadQuerySchema,
+  CreateThreadSchema,
+  SendMessageSchema,
+  MessageQuerySchema,
+  UpdateMessageSchema,
+} from "@/app/lib/validation/messaging-validation";
+import { MESSAGING_CLIENT_CONFIG } from "@/app/lib/config/messaging.config";
 
-import {
-  ResilientExecutor,
-  getGlobalExecutor,
-  type Metric,
-} from "@build/resilience";
+export type ThreadQueryInput = z.infer<typeof ThreadQuerySchema>;
+export type CreateThreadInput = z.infer<typeof CreateThreadSchema>;
+export type SendMessageInput = z.infer<typeof SendMessageSchema>;
+export type MessageQueryInput = z.infer<typeof MessageQuerySchema>;
+export type UpdateMessageInput = z.infer<typeof UpdateMessageSchema>;
 
-// Simple Concurrency Limiter (Bulkhead pattern)
+export type SendMessageClientInput = SendMessageInput & {
+  idempotencyKey?: string;
+};
+
+const { BULKHEAD_CONCURRENCY } = MESSAGING_CLIENT_CONFIG;
+
+// ─── apiFetch ───────────────────────────────────────────────────────────────
+
+async function apiFetch<T>(
+  endpoint: string,
+  options?: RequestInit,
+): Promise<ApiResponse<T>> {
+  try {
+    const res = await fetch(endpoint, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    });
+
+    const json = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      return {
+        success: false,
+        error:
+          json?.error?.message ||
+          json?.error ||
+          json?.message ||
+          `API Error: ${res.statusText}`,
+      };
+    }
+
+    return { success: true, data: json?.data !== undefined ? json.data : json };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/** Paginated variant of apiFetch — returns PaginatedResponse<T>. */
+async function apiFetchPaginated<T>(
+  endpoint: string,
+  options?: RequestInit,
+): Promise<PaginatedResponse<T>> {
+  try {
+    const res = await fetch(endpoint, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    });
+
+    const json = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      return {
+        success: false,
+        error:
+          json?.error?.message ||
+          json?.error ||
+          json?.message ||
+          `API Error: ${res.statusText}`,
+      };
+    }
+
+    return { success: true, data: json?.data !== undefined ? json.data : json };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+// ─── Concurrency limiter (Bulkhead) ──────────────────────────────────────────
+
 class ConcurrencyLimiter {
   private active = 0;
   private queue: (() => void)[] = [];
 
-  constructor(private limit: number) {}
+  constructor(private readonly limit: number) {}
 
   async run<T>(fn: () => Promise<T>): Promise<T> {
     if (this.active >= this.limit) {
@@ -38,256 +126,139 @@ class ConcurrencyLimiter {
       return await fn();
     } finally {
       this.active--;
-      if (this.queue.length > 0) {
-        const next = this.queue.shift();
-        next?.();
-      }
+      const next = this.queue.shift();
+      next?.();
     }
   }
 }
 
-// Helper to normalize Prisma/Action result to Conversation type
-// Handles mismatch between Prisma JsonValue and Record<string, number>
-function normalizeConversation(thread: unknown): Conversation {
-  const t = thread as Record<string, unknown>;
-  return {
-    ...(t as unknown as Conversation),
-    unreadCount: t.unreadCount ? (t.unreadCount as Record<string, number>) : undefined,
-  };
-}
-
-// Helper to normalize Prisma Message to client Message type
-function normalizeMessage(msg: unknown): Message {
-  const m = msg as Record<string, unknown>;
-  return {
-    id: m.id as string,
-    conversationId: (m.threadId || m.conversationId) as string,
-    senderId: m.senderId as string,
-    content: m.content as string,
-    type: ((m.type as string)?.toLowerCase() as "text" | "image" | "file") || "text",
-    attachments: (Array.isArray(m.attachments) ? m.attachments : []).map((att: unknown) => {
-      if (typeof att === "string") {
-        return {
-          url: att,
-          filename: att.split("/").pop() || "unknown",
-          size: 0,
-          mimeType: "application/octet-stream",
-        };
-      }
-      const a = att as Record<string, unknown>;
-      return {
-        url: (a.url as string) || "",
-        filename: (a.filename as string) || "unknown",
-        size: (a.size as number) || 0,
-        mimeType: (a.mimeType as string) || "application/octet-stream",
-        encrypted: a.encrypted as boolean | undefined,
-      };
-    }),
-    readBy: (m.readBy as string[]) || [],
-    encrypted: (m.encrypted as boolean) || false,
-    createdAt: new Date(m.createdAt as string | Date),
-    updatedAt: new Date(m.updatedAt as string | Date),
-  };
-}
+// ─── Messaging Client ──────────────────────────────────────────────────────
 
 class MessagingClient {
-  private executor: ResilientExecutor;
-  private bulkhead: ConcurrencyLimiter;
+  private readonly bulkhead = new ConcurrencyLimiter(BULKHEAD_CONCURRENCY || 5);
 
-  constructor() {
-    this.executor = getGlobalExecutor("messaging-client");
-    // Limit concurrent heavy operations to prevent resource exhaustion
-    this.bulkhead = new ConcurrencyLimiter(10);
-  }
-
-  /**
-   * Get all conversations for the authenticated user
-   */
-  async getConversations(): Promise<ApiResponse<Conversation[]>> {
-    return this.executor.executeWithCriticality(
-      async () => {
-        const threads = await getUserThreadsAction();
-        return { success: true, data: threads.map(normalizeConversation) };
-      },
-      "normal",
-      "getConversations"
-    ).then(res => res.success ? res.data! : { success: false, error: res.error?.message });
-  }
-
-  /**
-   * Create or get a conversation
-   */
-  async createConversation(
-    data: CreateConversation
-  ): Promise<ApiResponse<Conversation>> {
-    return this.executor.executeWithCriticality(
-      async () => {
-        const thread = await createThreadAction(data.participants, data.projectId);
-        return { success: true, data: normalizeConversation(thread) };
-      },
-      "normal",
-      "createConversation"
-    ).then(res => res.success ? res.data! : { success: false, error: res.error?.message });
-  }
-
-  /**
-   * Get a specific conversation
-   */
-  async getConversation(id: string): Promise<ApiResponse<Conversation>> {
-    return this.executor.executeWithCriticality(
-      async () => {
-        const thread = await getThreadAction(id);
-        if (!thread) throw new Error("Conversation not found");
-        return { success: true, data: normalizeConversation(thread) };
-      },
-      "normal",
-      "getConversation"
-    ).then(res => res.success ? res.data! : { success: false, error: res.error?.message });
-  }
-
-  /**
-   * Mark conversation as read
-   */
-  async markConversationAsRead(
-    id: string,
-    // payload: MarkAsRead
-  ): Promise<ApiResponse<Conversation>> {
-    return this.executor.executeWithCriticality(
-      async () => {
-        const { markThreadAsReadAction } = await import("@/app/actions/messaging");
-        await markThreadAsReadAction(id);
-        return { success: true, data: {} as Conversation };
-      },
-      "background",
-      "markConversationAsRead"
-    ).then(res => res.success ? res.data! : { success: false, error: res.error?.message });
-  }
-
-  /**
-   * Leave/delete a conversation
-   */
-  async deleteConversation(id: string): Promise<ApiResponse<void>> {
-    return this.executor.executeWithCriticality(
-      async () => {
-        const { deleteThreadAction } = await import("@/app/actions/messaging");
-        await deleteThreadAction(id);
-        return { success: true, data: undefined };
-      },
-      "normal",
-      "deleteConversation"
-    ).then(res => res.success ? res.data! : { success: false, error: res.error?.message });
-  }
-
-  /**
-   * Get messages for a conversation (paginated)
-   */
-  async getMessages(
-    conversationId: string,
-    page: number = 1,
-    limit: number = 50
-  ): Promise<PaginatedResponse<Message>> {
-    return this.executor.executeWithCriticality(
-      async () => {
-        // Use bulkhead for potentially heavy message fetching
-        return this.bulkhead.run(async () => {
-          const thread = await getThreadAction(conversationId);
-          if (!thread) throw new Error("Conversation not found");
-          
-          // Cast to unknown then properties to access messages which might have Prisma type incompatible with Message
-          const rawMessages = (thread as Record<string, unknown>).messages as unknown[] || [];
-          const messages = rawMessages.map(normalizeMessage);
-          
-          return {
-            success: true,
-            data: {
-              items: messages,
-              pagination: {
-                total: messages.length,
-                page,
-                limit,
-                totalPages: 1,
-              },
-            },
-          };
+  async getConversations(
+    filters?: Partial<ThreadQueryInput>,
+  ): Promise<ApiResponse<Conversation[]>> {
+    return this.bulkhead.run(() => {
+      const search = new URLSearchParams();
+      if (filters) {
+        Object.entries(filters).forEach(([k, v]) => {
+          if (v !== undefined) search.append(k, String(v));
         });
-      },
-      "normal",
-      "getMessages"
-    ).then(res => res.success ? res.data! : { success: false, error: res.error?.message } as PaginatedResponse<Message>);
+      }
+      return apiFetch<Conversation[]>(
+        `${API_ROUTES.messagingConversations}?${search.toString()}`,
+      );
+    });
   }
 
-  /**
-   * Send a message
-   */
-  async sendMessage(data: CreateMessage): Promise<ApiResponse<Message>> {
-    return this.executor.executeWithCriticality(
-      async () => {
-        const message = await sendMessageAction(data.conversationId, data.content);
-        return { success: true, data: normalizeMessage(message) };
-      },
-      "critical", // Critical operation, fast fail if needed, but we want high reliability
-      "sendMessage"
-    ).then(res => res.success ? res.data! : { success: false, error: res.error?.message });
+  async getConversation(
+    conversationId: string,
+  ): Promise<ApiResponse<Conversation>> {
+    if (!conversationId)
+      return { success: false, error: "Invalid conversation ID" };
+    return this.bulkhead.run(() =>
+      apiFetch<Conversation>(
+        API_ROUTES.messagingConversationDetail(conversationId),
+      ),
+    );
   }
 
-  /**
-   * Get a specific message
-   */
-  async getMessage(id: string): Promise<ApiResponse<Message>> {
-    return this.executor.executeWithCriticality(
-      async () => {
-        const { getMessageAction } = await import("@/app/actions/messaging");
-        const message = await getMessageAction(id);
-        if (!message) throw new Error("Message not found");
-        return { success: true, data: normalizeMessage(message) };
-      },
-      "normal",
-      "getMessage"
-    ).then(res => res.success ? res.data! : { success: false, error: res.error?.message });
+  async createThread(
+    input: CreateThreadInput & { idempotencyKey?: string },
+  ): Promise<ApiResponse<Conversation>> {
+    return this.bulkhead.run(() =>
+      apiFetch<Conversation>(API_ROUTES.messagingConversations, {
+        method: "POST",
+        body: JSON.stringify(input),
+        headers: input.idempotencyKey
+          ? { "Idempotency-Key": input.idempotencyKey }
+          : undefined,
+      }),
+    );
   }
 
-  /**
-   * Mark message as read
-   */
-  async markMessageAsRead(id: string): Promise<ApiResponse<Message>> {
-    return this.executor.executeWithCriticality(
-      async () => {
-        const { markMessageAsReadAction } = await import("@/app/actions/messaging");
-        await markMessageAsReadAction(id);
-        return { success: true, data: {} as Message };
-      },
-      "background",
-      "markMessageAsRead"
-    ).then(res => res.success ? res.data! : { success: false, error: res.error?.message });
+  async sendMessage(
+    input: SendMessageClientInput,
+  ): Promise<ApiResponse<Message>> {
+    return this.bulkhead.run(() =>
+      apiFetch<Message>(API_ROUTES.messagingMessages, {
+        method: "POST",
+        body: JSON.stringify(input),
+        headers: input.idempotencyKey
+          ? { "Idempotency-Key": input.idempotencyKey }
+          : undefined,
+      }),
+    );
   }
 
-  /**
-   * Delete a message
-   */
-  async deleteMessage(id: string): Promise<ApiResponse<void>> {
-    return this.executor.executeWithCriticality(
-      async () => {
-        const { deleteMessageAction } = await import("@/app/actions/messaging");
-        await deleteMessageAction(id);
-        return { success: true, data: undefined };
-      },
-      "normal",
-      "deleteMessage"
-    ).then(res => res.success ? res.data! : { success: false, error: res.error?.message });
+  async getMessages(
+    threadId: string,
+    opts?: Partial<MessageQueryInput>,
+  ): Promise<PaginatedResponse<Message>> {
+    if (!threadId)
+      return {
+        success: false,
+        error: "Invalid thread ID",
+      } as PaginatedResponse<Message>;
+    return this.bulkhead.run(() => {
+      const params = new URLSearchParams();
+      params.append("threadId", threadId);
+      if (opts?.cursor) params.append("cursor", String(opts.cursor));
+      if (opts?.limit) params.append("limit", String(opts.limit));
+      if (opts && "direction" in opts)
+        params.append(
+          "direction",
+          String((opts as Record<string, unknown>).direction),
+        );
+      return apiFetchPaginated<Message>(
+        `${API_ROUTES.messagingMessages}?${params.toString()}`,
+      );
+    });
   }
 
-  /**
-   * Check messaging service health
-   */
-  async checkHealth(): Promise<{ status: string; metrics: Record<string, unknown>; circuitBreakers: Record<string, unknown> }> {
-    return { 
-      status: "ok",
-      metrics: this.executor.getMetrics().reduce((acc: Record<string, unknown>, m: Metric) => {
-        acc[m.name] = m.value;
-        return acc;
-      }, {}),
-      circuitBreakers: Object.fromEntries(this.executor.getCircuitBreakerStates())
-    };
+  async markConversationAsRead(threadId: string): Promise<ApiResponse<void>> {
+    if (!threadId) return { success: false, error: "Invalid thread ID" };
+    return this.bulkhead.run(() =>
+      apiFetch<void>(API_ROUTES.messagingConversationRead(threadId), {
+        method: "POST",
+      }),
+    );
+  }
+
+  async deleteConversation(threadId: string): Promise<ApiResponse<void>> {
+    if (!threadId) return { success: false, error: "Invalid thread ID" };
+    return this.bulkhead.run(() =>
+      apiFetch<void>(API_ROUTES.messagingConversationDetail(threadId), {
+        method: "DELETE",
+      }),
+    );
+  }
+
+  async getMessage(messageId: string): Promise<ApiResponse<Message>> {
+    if (!messageId) return { success: false, error: "Invalid message ID" };
+    return this.bulkhead.run(() =>
+      apiFetch<Message>(API_ROUTES.messagingMessageDetail(messageId)),
+    );
+  }
+
+  async markMessageAsRead(messageId: string): Promise<ApiResponse<void>> {
+    if (!messageId) return { success: false, error: "Invalid message ID" };
+    return this.bulkhead.run(() =>
+      apiFetch<void>(API_ROUTES.messagingMessageRead(messageId), {
+        method: "POST",
+      }),
+    );
+  }
+
+  async deleteMessage(messageId: string): Promise<ApiResponse<void>> {
+    if (!messageId) return { success: false, error: "Invalid message ID" };
+    return this.bulkhead.run(() =>
+      apiFetch<void>(API_ROUTES.messagingMessageDetail(messageId), {
+        method: "DELETE",
+      }),
+    );
   }
 }
 

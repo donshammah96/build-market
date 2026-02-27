@@ -5,7 +5,7 @@
  * Wraps the base mailer with domain-specific templates and logic.
  */
 
-import { sendEmail as baseSendEmail } from "@/app/lib/mailer";
+import { sendEmail as baseSendEmail } from "@/app/lib/infrastructure/mailer";
 
 export interface EmailOptions {
   to: string | string[];
@@ -106,7 +106,7 @@ export async function sendBreachNotificationEmail(
           
           <div style="background-color: #f0f9ff; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0;">
             <p style="margin: 0;"><strong>Need Help?</strong></p>
-            <p style="margin: 5px 0 0 0;">Contact our Data Protection Officer at dpo@buildmarket.co.ke or visit our Help Center.</p>
+            <p style="margin: 5px 0 0 0;">Contact our Data Protection Officer at dpo/buildmarket.co.ke or visit our Help Center.</p>
           </div>
           
           <p>We sincerely apologize for this incident and any inconvenience it may cause. Your trust and security are our top priorities.</p>
@@ -117,7 +117,7 @@ export async function sendBreachNotificationEmail(
           <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
           <p style="font-size: 12px; color: #6b7280;">
             This is an important security notification. If you have any questions about this incident, 
-            please contact us immediately at security@buildmarket.co.ke.
+            please contact us immediately at security/buildmarket.co.ke.
           </p>
         </div>
       </body>
@@ -150,7 +150,7 @@ WHAT YOU SHOULD DO:
 - Monitor your accounts for suspicious activity
 - Be cautious of phishing attempts
 
-Need help? Contact our Data Protection Officer at dpo@buildmarket.co.ke
+Need help? Contact our Data Protection Officer at dpo/buildmarket.co.ke
 
 We sincerely apologize for this incident and any inconvenience it may cause.
 
@@ -182,7 +182,7 @@ export async function sendODPCNotificationEmail(
     description,
   } = data;
 
-  const odpcEmail = process.env.ODPC_EMAIL || "dpo@odpc.go.ke";
+  const odpcEmail = process.env.ODPC_EMAIL || "dpo/odpc.go.ke";
   const subject = `MANDATORY NOTIFICATION: Data Breach - ${incidentId}`;
 
   const body = `
@@ -217,7 +217,7 @@ IMMEDIATE ACTIONS TAKEN:
 CONTACT INFORMATION:
 ===================
 Data Protection Officer
-Email: dpo@buildmarket.co.ke
+Email: dpo/buildmarket.co.ke
 Phone: +254 XXX XXX XXX
 
 This notification is submitted within 72 hours as required by Section 43 of the Data Protection Act, 2019.
@@ -245,7 +245,7 @@ export async function sendDPOEscalationEmail(
   severity: string,
   metadata: any,
 ): Promise<void> {
-  const dpoEmail = process.env.DPO_EMAIL || "security@buildmarket.co.ke";
+  const dpoEmail = process.env.DPO_EMAIL || "security/buildmarket.co.ke";
 
   await sendEmail({
     to: dpoEmail,

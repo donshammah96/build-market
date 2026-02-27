@@ -5,7 +5,7 @@
  * Wraps the base SMS service with domain-specific templates and logic.
  */
 
-import { sendSMS as baseSendSMS } from "@/app/lib/sms";
+import { sendSMS as baseSendSMS } from "@/app/lib/infrastructure/sms";
 
 export interface SMSOptions {
   to: string;

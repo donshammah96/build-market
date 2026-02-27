@@ -5,7 +5,7 @@
 import { LRUCache } from "lru-cache";
 import { CacheConfig } from "./types";
 import { Logger } from "./logger";
-import { RedisCache } from "@repo/redis";
+import { RedisCache } from "@build/redis";
 import { getDefaultCacheConfig } from "./config";
 
 export interface CacheEntry<T> {

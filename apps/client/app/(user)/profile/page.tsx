@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
 import { 
   User as UserIcon, 
@@ -23,8 +23,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/text-area";
+import { useProfileStatus, type ClientProfileData } from "@/hooks/useProfileStatus";
+import { useClientDashboard } from "@/hooks/useClientDashboard";
 
-// --- Types based on Schema ---
 interface UserProfileData {
   firstName: string;
   lastName: string;
@@ -37,31 +38,60 @@ interface UserProfileData {
 }
 
 export default function ProfilePage() {
-  const { user, isLoaded } = useUser();
+  const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
+  const { user, profile, isLoading: profileLoading, updateProfile, isUpdating } = useProfileStatus();
+  const { data: dashboardData } = useClientDashboard();
+
   const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
-  
-  // Mock Data (Initialize with user data or defaults)
   const [formData, setFormData] = useState<UserProfileData>({
-    firstName: user?.firstName || "",
-    lastName: user?.lastName || "",
-    email: user?.emailAddresses[0]?.emailAddress || "",
-    phone: "+254 712 345 678",
-    address: "P.O Box 4039",
-    city: "Nairobi",
-    county: "Nairobi",
-    bio: "Homeowner passionate about modern architecture and sustainable living."
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    address: "",
+    city: "",
+    county: "",
+    bio: "",
   });
 
+  useEffect(() => {
+    if (user || clerkUser) {
+      const clientProfile = profile as ClientProfileData | null;
+      setFormData({
+        firstName: user?.firstName ?? clerkUser?.firstName ?? "",
+        lastName: user?.lastName ?? clerkUser?.lastName ?? "",
+        email: clerkUser?.emailAddresses?.[0]?.emailAddress ?? user?.email ?? "",
+        phone: user?.phone ?? "",
+        address: clientProfile?.address ?? "",
+        city: clientProfile?.city ?? "",
+        county: clientProfile?.county ?? "",
+        bio: user?.bio ?? "",
+      });
+    }
+  }, [user, profile, clerkUser]);
+
   const handleSave = async () => {
-    setLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setLoading(false);
-    setIsEditing(false);
+    try {
+      await updateProfile({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.phone || undefined,
+        address: formData.address || undefined,
+        city: formData.city || undefined,
+        county: formData.county || undefined,
+        bio: formData.bio || undefined,
+      });
+      setIsEditing(false);
+    } catch {
+      // Error surfaced via updateError from hook if needed
+    }
   };
 
-  if (!isLoaded) return <ProfileSkeleton />;
+  const stats = dashboardData?.stats;
+  const activeProjects = stats?.activeProjects ?? 0;
+  const ideaBooksCount = stats?.ideaBooks ?? 0;
+
+  if (!clerkLoaded || profileLoading) return <ProfileSkeleton />;
 
   return (
     <div className="min-h-screen bg-zinc-50/50 flex flex-col">
@@ -86,9 +116,9 @@ export default function ProfilePage() {
               <div className="px-6 pb-6 relative">
                 <div className="relative -mt-12 mb-4 inline-block">
                   <Avatar className="h-24 w-24 border-4 border-white shadow-md">
-                    <AvatarImage src={user?.imageUrl} />
+                    <AvatarImage src={clerkUser?.imageUrl ?? user?.avatar ?? undefined} />
                     <AvatarFallback className="bg-zinc-100 text-zinc-500 text-2xl font-bold">
-                      {user?.firstName?.charAt(0)}
+                      {formData.firstName?.charAt(0) ?? clerkUser?.firstName?.charAt(0) ?? "?"}
                     </AvatarFallback>
                   </Avatar>
                   <button className="absolute bottom-0 right-0 p-1.5 bg-white rounded-full border border-zinc-200 shadow-sm text-zinc-500 hover:text-emerald-600 transition-colors">
@@ -98,7 +128,7 @@ export default function ProfilePage() {
                 
                 <div>
                   <h2 className="text-xl font-bold text-zinc-900 flex items-center gap-2">
-                    {user?.fullName}
+                    {(clerkUser?.fullName ?? `${formData.firstName} ${formData.lastName}`.trim()) || "Account"}
                     <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 text-[10px] px-1.5 py-0 h-5">
                       Client
                     </Badge>
@@ -127,11 +157,11 @@ export default function ProfilePage() {
               <h3 className="font-semibold text-zinc-900 mb-4 text-sm uppercase tracking-wider">Account Stats</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-zinc-50 rounded-lg text-center border border-zinc-100">
-                  <span className="block text-2xl font-bold text-zinc-900">2</span>
+                  <span className="block text-2xl font-bold text-zinc-900">{activeProjects}</span>
                   <span className="text-xs text-zinc-500 font-medium">Active Projects</span>
                 </div>
                 <div className="p-3 bg-zinc-50 rounded-lg text-center border border-zinc-100">
-                  <span className="block text-2xl font-bold text-zinc-900">14</span>
+                  <span className="block text-2xl font-bold text-zinc-900">{ideaBooksCount}</span>
                   <span className="text-xs text-zinc-500 font-medium">Idea Books</span>
                 </div>
               </div>
@@ -153,9 +183,9 @@ export default function ProfilePage() {
                     </Button>
                   ) : (
                     <div className="flex gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>Cancel</Button>
-                      <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={handleSave} disabled={loading}>
-                        {loading ? "Saving..." : <><Save className="mr-2 h-4 w-4" /> Save Changes</>}
+                      <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)} disabled={isUpdating}>Cancel</Button>
+                      <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={handleSave} disabled={isUpdating}>
+                        {isUpdating ? "Saving..." : <><Save className="mr-2 h-4 w-4" /> Save Changes</>}
                       </Button>
                     </div>
                   )}

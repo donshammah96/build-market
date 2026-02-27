@@ -1,82 +1,165 @@
-'use server';
+"use server";
 
-import { createThread, sendMessage, getThread, getUserThreads } from '@/lib/services/messaging';
-import { auth } from '@clerk/nextjs/server';
-import { revalidatePath } from 'next/cache';
+import {
+  createThread,
+  sendMessage,
+  getThread,
+  getThreadMessages,
+  getUserThreads,
+  markThreadAsRead,
+  deleteThread,
+  getMessage,
+  markMessageAsRead,
+  deleteMessage,
+  verifyParticipant,
+} from "@/lib/services/messaging";
+import { auth } from "@clerk/nextjs/server";
+import { prisma } from "@build/db";
+import { revalidatePath } from "next/cache";
 
-export async function createThreadAction(participantIds: string[], projectId?: string) {
-  const { userId } = await auth();
-  if (!userId) throw new Error('Unauthorized');
+/**
+ * Resolve Clerk userId to database user ID.
+ * Server actions receive Clerk IDs, but the messaging service
+ * operates on database UUIDs.
+ */
+async function resolveDbUserId(): Promise<string> {
+  const { userId: clerkId } = await auth();
+  if (!clerkId) throw new Error("Unauthorized");
 
-  // Ensure current user is in participants
-  const allParticipants = Array.from(new Set([...participantIds, userId]));
-  
-  const thread = await createThread(allParticipants, projectId);
-  revalidatePath('/messages');
+  const user = await prisma.user.findUnique({
+    where: { clerkId },
+    select: { id: true },
+  });
+  if (!user) throw new Error("User not found");
+
+  return user.id;
+}
+
+export async function createThreadAction(
+  participantIds: string[],
+  projectId?: string,
+) {
+  const dbUserId = await resolveDbUserId();
+  const thread = await createThread(dbUserId, participantIds, { projectId });
+  revalidatePath("/messages");
   return thread;
 }
 
-export async function sendMessageAction(threadId: string, content: string) {
-  const { userId } = await auth();
-  if (!userId) throw new Error('Unauthorized');
+export async function sendMessageAction(
+  threadId: string,
+  content: string,
+  options?: {
+    type?: "TEXT" | "IMAGE" | "FILE" | "PDF" | "SYSTEM";
+    attachmentIds?: string[];
+  },
+) {
+  const dbUserId = await resolveDbUserId();
 
-  const message = await sendMessage(threadId, userId, content);
+  // Verify participant before sending
+  const participant = await verifyParticipant(threadId, dbUserId);
+  if (!participant) throw new Error("Not a participant in this thread");
+
+  const message = await sendMessage(threadId, dbUserId, content, options);
   revalidatePath(`/messages/${threadId}`);
   return message;
 }
 
 export async function getThreadAction(threadId: string) {
-  const { userId } = await auth();
-  if (!userId) throw new Error('Unauthorized');
-  
-  // In a real app, verify user is participant
+  const dbUserId = await resolveDbUserId();
+
+  // Verify participant
+  const participant = await verifyParticipant(threadId, dbUserId);
+  if (!participant) throw new Error("Not a participant in this thread");
+
   return await getThread(threadId);
 }
 
 export async function getUserThreadsAction() {
-  const { userId } = await auth();
-  if (!userId) throw new Error('Unauthorized');
+  const dbUserId = await resolveDbUserId();
+  const result = await getUserThreads(dbUserId);
+  return result.threads;
+}
 
-  return await getUserThreads(userId);
+export async function getThreadMessagesAction(
+  threadId: string,
+  options?: { cursor?: string; limit?: number; direction?: "before" | "after" },
+) {
+  const dbUserId = await resolveDbUserId();
+
+  const participant = await verifyParticipant(threadId, dbUserId);
+  if (!participant) throw new Error("Not a participant in this thread");
+
+  return await getThreadMessages(threadId, options);
 }
 
 export async function markThreadAsReadAction(threadId: string) {
-  const { userId } = await auth();
-  if (!userId) throw new Error('Unauthorized');
+  const dbUserId = await resolveDbUserId();
 
-  const result = await import('@/lib/services/messaging').then(m => m.markThreadAsRead(threadId, userId));
-  revalidatePath('/messages');
+  const participant = await verifyParticipant(threadId, dbUserId);
+  if (!participant) throw new Error("Not a participant in this thread");
+
+  const result = await markThreadAsRead(threadId, dbUserId);
+  revalidatePath("/messages");
   return result;
 }
 
 export async function deleteThreadAction(threadId: string) {
-  const { userId } = await auth();
-  if (!userId) throw new Error('Unauthorized');
+  const dbUserId = await resolveDbUserId();
 
-  await import('@/lib/services/messaging').then(m => m.deleteThread(threadId));
-  revalidatePath('/messages');
+  const participant = await verifyParticipant(threadId, dbUserId);
+  if (!participant) throw new Error("Not a participant in this thread");
+  if (participant.role !== "OWNER" && participant.role !== "ADMIN") {
+    throw new Error("Only thread owners or admins can delete threads");
+  }
+
+  await deleteThread(threadId);
+  revalidatePath("/messages");
 }
 
 export async function getMessageAction(messageId: string) {
-  const { userId } = await auth();
-  if (!userId) throw new Error('Unauthorized');
+  const dbUserId = await resolveDbUserId();
 
-  return await import('@/lib/services/messaging').then(m => m.getMessage(messageId));
+  const message = await getMessage(messageId);
+  if (!message) throw new Error("Message not found");
+
+  // Verify user is in the thread
+  const participant = await verifyParticipant(message.threadId, dbUserId);
+  if (!participant) throw new Error("Not a participant in this thread");
+
+  return message;
 }
 
 export async function markMessageAsReadAction(messageId: string) {
-  const { userId } = await auth();
-  if (!userId) throw new Error('Unauthorized');
+  const dbUserId = await resolveDbUserId();
 
-  const result = await import('@/lib/services/messaging').then(m => m.markMessageAsRead(messageId, userId));
-  revalidatePath('/messages');
+  const message = await getMessage(messageId);
+  if (!message) throw new Error("Message not found");
+
+  const participant = await verifyParticipant(message.threadId, dbUserId);
+  if (!participant) throw new Error("Not a participant in this thread");
+
+  const result = await markMessageAsRead(messageId, dbUserId);
+  revalidatePath("/messages");
   return result;
 }
 
 export async function deleteMessageAction(messageId: string) {
-  const { userId } = await auth();
-  if (!userId) throw new Error('Unauthorized');
+  const dbUserId = await resolveDbUserId();
 
-  await import('@/lib/services/messaging').then(m => m.deleteMessage(messageId));
-  revalidatePath('/messages');
+  const message = await getMessage(messageId);
+  if (!message) throw new Error("Message not found");
+
+  // Only sender or thread owner/admin can delete
+  const participant = await verifyParticipant(message.threadId, dbUserId);
+  if (!participant) throw new Error("Not a participant in this thread");
+  if (
+    message.senderId !== dbUserId &&
+    participant.role !== "OWNER" &&
+    participant.role !== "ADMIN"
+  ) {
+    throw new Error("Only the sender or thread admins can delete messages");
+  }
+
+  await deleteMessage(messageId);
+  revalidatePath("/messages");
 }

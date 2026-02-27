@@ -6,6 +6,7 @@
  * - Profession selection
  * - File uploads
  * - Store integration
+ * - Property integration
  * - Form submission
  * - Navigation after success
  */

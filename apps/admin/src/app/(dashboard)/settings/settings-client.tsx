@@ -26,8 +26,8 @@ type SettingsProps = {
   initialSettings: {
     maintenanceMode: boolean;
     publicSignup: boolean;
-    autoVerifyNCA: boolean;
-    commissionRate: number;
+    enableAutoVerifyNCA: boolean;
+    platformCommission: number;
     supportEmail: string;
     adminEmailAlerts: boolean;
     securityMFA: boolean;
@@ -165,8 +165,8 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
                   <p className="text-sm text-zinc-500">Automatically mark professionals as verified if NCA API returns valid.</p>
                 </div>
                 <Switch 
-                  checked={settings.autoVerifyNCA}
-                  onCheckedChange={(c) => handleChange('autoVerifyNCA', c)}
+                  checked={settings.enableAutoVerifyNCA}
+                  onCheckedChange={(c) => handleChange('enableAutoVerifyNCA', c)}
                   className="data-[state=checked]:bg-emerald-600"
                 />
               </div>
@@ -190,8 +190,8 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
                 <div className="flex items-center gap-2">
                   <Input 
                     type="number" 
-                    value={settings.commissionRate}
-                    onChange={(e) => handleChange('commissionRate', Number(e.target.value))}
+                    value={settings.platformCommission}
+                    onChange={(e) => handleChange('platformCommission', Number(e.target.value))}
                     className="w-20 text-right bg-zinc-50 border-zinc-200"
                   />
                   <span className="text-zinc-500 font-medium">%</span>

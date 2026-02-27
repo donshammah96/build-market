@@ -1,7 +1,4 @@
-
-import { prisma } from "@build/db";
-
-export type NotificationType = "info" | "success" | "warning" | "error";
+import { prisma, NotificationType } from "@build/db";
 
 interface CreateNotificationParams {
   userId: string;
@@ -11,11 +8,20 @@ interface CreateNotificationParams {
   link?: string;
 }
 
+/**
+ * Create an in-app notification for a user.
+ *
+ * This is a fire-and-forget helper — it catches and logs errors
+ * internally so callers can safely ignore the return value.
+ *
+ * @param params.type - NotificationType enum value (e.g., INFO, LEAD, MESSAGE).
+ *                      Defaults to INFO.
+ */
 export async function createNotification({
   userId,
   title,
   message,
-  type = "info",
+  type = "INFO",
   link,
 }: CreateNotificationParams) {
   try {
@@ -31,7 +37,7 @@ export async function createNotification({
     return notification;
   } catch (error) {
     console.error("Failed to create notification:", error);
-    // We don't want to throw here to avoid breaking the main flow if notification fails
+    // Don't throw — notification failure should never break the main flow
     return null;
   }
 }

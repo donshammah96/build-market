@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Bell, 
-  CheckCircle2, 
-  Package, 
-  MessageSquare, 
-  Calendar, 
+import { formatDistanceToNow } from "date-fns";
+import {
+  Bell,
+  CheckCircle2,
+  Package,
+  MessageSquare,
+  Calendar,
   AlertCircle,
   Clock,
-  Check
+  Check,
 } from "lucide-react";
 
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
@@ -19,88 +20,45 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import {
+  useNotifications,
+  useMarkNotificationRead,
+} from "@/hooks/useNotifications";
+import type { NotificationListItem } from "@/lib/notifications-client";
 
-// --- Types (Mocking a missing Notification model in Schema) ---
-type NotificationType = 'order' | 'message' | 'project' | 'system' | 'alert';
+type NotificationTypeKey = "order" | "message" | "project" | "system" | "alert" | "default";
 
-interface Notification {
-  id: string;
-  type: NotificationType;
-  title: string;
-  message: string;
-  timestamp: string;
-  read: boolean;
-  actionUrl?: string;
+function mapApiTypeToKey(type: string): NotificationTypeKey {
+  const map: Record<string, NotificationTypeKey> = {
+    PROJECT: "project",
+    MESSAGE: "message",
+    PAYMENT: "order",
+    SYSTEM: "system",
+    ALERT: "alert",
+    LEAD: "project",
+  };
+  return map[type] ?? "default";
 }
 
 export default function NotificationsPage() {
-  const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [filter, setFilter] = useState<"all" | "unread">("all");
 
-  useEffect(() => {
-    // Simulate API fetch
-    const timer = setTimeout(() => {
-      setNotifications([
-        {
-          id: "1",
-          type: "project",
-          title: "Milestone Completed",
-          message: "The 'Foundation Laying' milestone for Kileleshwa Project has been marked as complete by Evans Ndegwa.",
-          timestamp: "2 hours ago",
-          read: false,
-        },
-        {
-          id: "2",
-          type: "order",
-          title: "Order Shipped",
-          message: "Your order #ORD-2024-001 containing 'Ceramic Tiles' is on its way.",
-          timestamp: "5 hours ago",
-          read: false,
-        },
-        {
-          id: "3",
-          type: "message",
-          title: "New Message",
-          message: "Don Shammah sent you a new file: 'Revised_Floor_Plans_v2.pdf'",
-          timestamp: "1 day ago",
-          read: true,
-        },
-        {
-          id: "4",
-          type: "system",
-          title: "Profile Verified",
-          message: "Your account verification is complete. You can now leave reviews.",
-          timestamp: "2 days ago",
-          read: true,
-        },
-        {
-          id: "5",
-          type: "alert",
-          title: "Payment Pending",
-          message: "Invoice #INV-099 is due tomorrow. Please clear the outstanding balance.",
-          timestamp: "3 days ago",
-          read: true,
-        },
-      ]);
-      setLoading(false);
-    }, 800);
-    return () => clearTimeout(timer);
-  }, []);
+  const { data, isLoading } = useNotifications({
+    unreadOnly: filter === "unread",
+    limit: 50,
+  });
+  const markReadMutation = useMarkNotificationRead();
+
+  const notifications = data?.data ?? [];
+  const unreadCount = data?.unreadCount ?? 0;
 
   const handleMarkAllRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    markReadMutation.mutate({ id: "all" });
   };
 
   const handleMarkAsRead = (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    markReadMutation.mutate({ id, isRead: true });
   };
-
-  const filteredNotifications = filter === 'all' 
-    ? notifications 
-    : notifications.filter(n => !n.read);
-
-  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <div className="min-h-screen bg-zinc-50/50 flex flex-col">
@@ -144,11 +102,12 @@ export default function NotificationsPage() {
               </button>
             </div>
             
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               className="h-9 border-zinc-200 text-zinc-600 hover:text-emerald-600 hover:border-emerald-200"
               onClick={handleMarkAllRead}
+              disabled={unreadCount === 0 || markReadMutation.isPending}
             >
               <CheckCircle2 className="mr-2 h-4 w-4" />
               Mark all read
@@ -158,11 +117,11 @@ export default function NotificationsPage() {
 
         {/* Content */}
         <div className="space-y-4">
-          {loading ? (
+          {isLoading ? (
             <NotificationsSkeleton />
-          ) : filteredNotifications.length > 0 ? (
+          ) : notifications.length > 0 ? (
             <AnimatePresence>
-              {filteredNotifications.map((notification) => (
+              {notifications.map((notification) => (
                 <NotificationItem 
                   key={notification.id} 
                   notification={notification} 
@@ -182,8 +141,15 @@ export default function NotificationsPage() {
 
 // --- Sub-Components ---
 
-function NotificationItem({ notification, onRead }: { notification: Notification, onRead: () => void }) {
-  const getIcon = (type: NotificationType) => {
+function NotificationItem({
+  notification,
+  onRead,
+}: {
+  notification: NotificationListItem;
+  onRead: () => void;
+}) {
+  const typeKey = mapApiTypeToKey(notification.type);
+  const getIcon = (type: NotificationTypeKey) => {
     switch (type) {
       case 'order': return <Package className="h-5 w-5 text-blue-600" />;
       case 'message': return <MessageSquare className="h-5 w-5 text-indigo-600" />;
@@ -193,7 +159,7 @@ function NotificationItem({ notification, onRead }: { notification: Notification
     }
   };
 
-  const getBackground = (type: NotificationType) => {
+  const getBackground = (type: NotificationTypeKey) => {
     switch (type) {
       case 'order': return "bg-blue-50 border-blue-100";
       case 'message': return "bg-indigo-50 border-indigo-100";
@@ -211,25 +177,25 @@ function NotificationItem({ notification, onRead }: { notification: Notification
       exit={{ opacity: 0, scale: 0.95 }}
       className={cn(
         "group relative p-4 rounded-xl border transition-all duration-200",
-        notification.read ? "bg-white border-zinc-200" : "bg-white border-emerald-200 shadow-sm ring-1 ring-emerald-500/10"
+        notification.isRead ? "bg-white border-zinc-200" : "bg-white border-emerald-200 shadow-sm ring-1 ring-emerald-500/10"
       )}
     >
       <div className="flex gap-4">
-        <div className={cn("h-10 w-10 rounded-full flex items-center justify-center shrink-0 border", getBackground(notification.type))}>
-          {getIcon(notification.type)}
+        <div className={cn("h-10 w-10 rounded-full flex items-center justify-center shrink-0 border", getBackground(typeKey))}>
+          {getIcon(typeKey)}
         </div>
         
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <h3 className={cn("text-sm font-semibold", notification.read ? "text-zinc-700" : "text-zinc-900")}>
+              <h3 className={cn("text-sm font-semibold", notification.isRead ? "text-zinc-700" : "text-zinc-900")}>
                 {notification.title}
               </h3>
               <p className="text-sm text-zinc-500 mt-1 leading-relaxed">
                 {notification.message}
               </p>
             </div>
-            {!notification.read && (
+            {!notification.isRead && (
               <Button 
                 variant="ghost" 
                 size="icon" 
@@ -245,18 +211,21 @@ function NotificationItem({ notification, onRead }: { notification: Notification
           <div className="flex items-center gap-4 mt-3">
             <span className="flex items-center text-xs text-zinc-400">
               <Clock className="h-3 w-3 mr-1" />
-              {notification.timestamp}
+              {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
             </span>
-            {notification.actionUrl && (
-              <button className="text-xs font-medium text-emerald-600 hover:underline">
+            {notification.link && (
+              <a
+                href={notification.link}
+                className="text-xs font-medium text-emerald-600 hover:underline"
+              >
                 View Details
-              </button>
+              </a>
             )}
           </div>
         </div>
       </div>
       
-      {!notification.read && (
+      {!notification.isRead && (
         <span className="absolute top-4 right-4 h-2 w-2 rounded-full bg-emerald-500" />
       )}
     </motion.div>

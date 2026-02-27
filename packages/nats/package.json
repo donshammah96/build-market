@@ -1,5 +1,5 @@
 {
-  "name": "@repo/nats",
+  "name": "@build/nats",
   "version": "1.0.0",
   "description": "NATS JetStream messaging package for Build Market",
   "main": "./src/index.ts",
