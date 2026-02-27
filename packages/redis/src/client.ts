@@ -57,6 +57,34 @@ let verboseLogging = false;
 let isClientReady = false;
 
 /**
+ * If Redis is disabled via env, provide a no-op in-memory client to avoid
+ * attempting network connections during builds or in environments without Redis.
+ */
+function createNoopClient(): RedisClient {
+  const noop = {
+    status: "ready",
+    get: async (_: string) => null,
+    set: async (_: string, __: string) => "OK",
+    setex: async (_: string, __: number, ___: string) => "OK",
+    del: async (..._: any[]) => 0,
+    keys: async (_: string) => [] as string[],
+    exists: async (_: string) => 0,
+    ttl: async (_: string) => -2,
+    ping: async () => "PONG",
+    connect: async () => {},
+    disconnect: () => {},
+    quit: async () => {},
+    on: (_: string, __: any) => noop,
+    off: (_: string, __: any) => noop,
+    sendCommand: function (..._args: any[]) {
+      return Promise.resolve();
+    },
+  } as unknown as RedisClient;
+
+  return noop;
+}
+
+/**
  * Get environment-aware default configuration
  */
 function getDefaultConfig(): RedisConfig {
@@ -124,6 +152,19 @@ export function getRedisClient(
 ): RedisClient {
   if (client) {
     log("info", "Reusing existing Redis connection");
+    return client;
+  }
+
+  // If Redis is disabled via environment, return a noop client to avoid
+  // attempting to open network connections (useful during builds/tests).
+  const redisEnabled =
+    process.env.CACHE_REDIS_ENABLED === "true" ||
+    process.env.REDIS_ENABLED === "true";
+
+  if (!redisEnabled) {
+    log("info", "Redis disabled by env; returning noop client");
+    client = createNoopClient();
+    isClientReady = false;
     return client;
   }
 

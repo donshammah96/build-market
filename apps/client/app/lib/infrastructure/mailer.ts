@@ -16,7 +16,7 @@ interface SendEmailOptions {
 
 export async function sendEmail({ to, subject, html, attachments }: SendEmailOptions) {
   await resend.emails.send({ 
-    from: 'no-reply@buildmarket.com', 
+    from: 'no-reply/buildmarket.com', 
     to, 
     subject, 
     html,

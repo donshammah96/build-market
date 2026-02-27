@@ -259,6 +259,11 @@ export const envConfig = {
   appUrl: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3500",
   apiUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3500/api",
 
+  // Clerk
+  clerk: {
+    webhookSecret: process.env.CLERK_WEBHOOK_SECRET || "",
+  },
+
   // Database
   databaseUrl: process.env.DATABASE_URL || "",
 
@@ -372,4 +377,5 @@ if (typeof window === "undefined" && process.env.NODE_ENV !== "test") {
   }
 }
 
+export const env = envConfig;
 export default envConfig;

@@ -20,10 +20,10 @@ export interface SMSResponse {
 /**
  * Sends an SMS message to the specified phone number.
  * 
- * @param payload - The SMS payload containing recipient and message
- * @returns Promise resolving to the SMS response
+ * /param payload - The SMS payload containing recipient and message
+ * /returns Promise resolving to the SMS response
  * 
- * @example
+ * /example
  * ```typescript
  * await sendSMS({
  *   to: '+254712345678',
@@ -80,9 +80,9 @@ export async function sendSMS(payload: SMSPayload): Promise<SMSResponse> {
 /**
  * Sends bulk SMS messages to multiple recipients.
  * 
- * @param recipients - Array of phone numbers
- * @param message - The message to send
- * @returns Promise resolving to an array of SMS responses
+ * /param recipients - Array of phone numbers
+ * /param message - The message to send
+ * /returns Promise resolving to an array of SMS responses
  */
 export async function sendBulkSMS(
   recipients: string[],

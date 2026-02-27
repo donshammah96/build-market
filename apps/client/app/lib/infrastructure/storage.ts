@@ -144,7 +144,7 @@ class LocalStorageProvider implements StorageProvider {
  * TODO: Implement using AWS SDK or MinIO client
  */
 class S3StorageProvider implements StorageProvider {
-  /* eslint-disable @typescript-eslint/no-unused-vars */
+  /* eslint-disable /typescript-eslint/no-unused-vars */
   constructor(_config: StorageConfig) {
     // TODO: Initialize S3 client
     throw new Error(
@@ -173,7 +173,7 @@ class S3StorageProvider implements StorageProvider {
   ): Promise<{ size: number; mimeType: string; createdAt: Date }> {
     throw new Error("Not implemented");
   }
-  /* eslint-enable @typescript-eslint/no-unused-vars */
+  /* eslint-enable /typescript-eslint/no-unused-vars */
 }
 
 /**

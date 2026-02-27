@@ -9,8 +9,8 @@ let socket: Socket | null = null;
 
 /**
  * Initialize and return the socket connection
- * @param token - JWT token for authentication
- * @returns Socket instance
+ * /param token - JWT token for authentication
+ * /returns Socket instance
  */
 export function getSocket(token?: string): Socket | null {
   if (!token) {
