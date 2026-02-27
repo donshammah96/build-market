@@ -29,7 +29,7 @@ vi.mock("@clerk/nextjs/server", () => ({
   }),
 }));
 
-vi.mock("@/app/lib/rate-limit", () => ({
+vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
   getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
   RateLimits: {
@@ -37,7 +37,7 @@ vi.mock("@/app/lib/rate-limit", () => ({
   },
 }));
 
-vi.mock("@/app/lib/resilient-api", () => ({
+vi.mock("@/app/lib/api/resilient-api", () => ({
   initializeCorrelationId: vi.fn().mockReturnValue("test-correlation-id"),
   executeResilient: vi.fn().mockImplementation(async (fn, options) => {
     const { NextResponse } = await import("next/server");
@@ -66,7 +66,7 @@ vi.mock("@/app/lib/resilient-api", () => ({
   }),
 }));
 
-vi.mock("@/app/lib/api-response", () => ({
+vi.mock("@/app/lib/api/api-response", () => ({
   apiError: vi
     .fn()
     .mockImplementation((message: string, status: number, details?: any) => {
@@ -206,7 +206,7 @@ describe("POST /api/onboarding/skip", () => {
   });
 
   it("should respect rate limiting", async () => {
-    const { checkRateLimit } = await import("@/app/lib/rate-limit");
+    const { checkRateLimit } = await import("@/app/lib/api/rate-limit");
     vi.mocked(checkRateLimit).mockResolvedValueOnce({
       success: false,
       limit: 5,

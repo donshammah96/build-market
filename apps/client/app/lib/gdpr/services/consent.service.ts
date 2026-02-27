@@ -146,9 +146,9 @@ export class ConsentService {
     return await prisma.$transaction(async (tx) => {
       // 1. Create/Update ConsentRecord
       // We use upsert to track the LATEST status in the unique record?
-      // Wait, schema has @@unique([userId, type]). So we overwrite.
+      // Wait, schema has //unique([userId, type]). So we overwrite.
       // But we lose history!
-      // The prompt said: "consents ConsentRecord[] ... @@unique([userId, type])"
+      // The prompt said: "consents ConsentRecord[] ... //unique([userId, type])"
       // This implies we store CURRENT state in this table.
       // But for AUDIT, we need history.
       // PROMPT: "AuditLog ... action CONSENT_GRANTED ... consentId Link to ConsentRecord"

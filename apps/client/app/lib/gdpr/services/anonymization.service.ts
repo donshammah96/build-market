@@ -125,7 +125,7 @@ export class AnonymizationService {
           await tx.user.update({
             where: { id: user.id },
             data: {
-              email: `ANONYMIZED-${anonId}@deleted.local`,
+              email: `ANONYMIZED-${anonId}/deleted.local`,
               firstName: `ANONYMIZED-${anonId}`,
               phone: `ANONYMIZED-${anonId}`,
               anonymizedAt: new Date(),
@@ -322,7 +322,7 @@ export class AnonymizationService {
           firstName: "Anonymized",
           lastName: "User",
           displayName: "Former User",
-          email: `${anonString}@deleted.local`, // Keep unique constraint satisfied
+          email: `${anonString}/deleted.local`, // Keep unique constraint satisfied
           phone: null, // Clear phone
           avatar: null,
           bio: null,
@@ -384,7 +384,7 @@ export class AnonymizationService {
       await tx.auditLog.create({
         data: {
           actorType: "SYSTEM",
-          actorEmail: "system@buildmarket.co.ke",
+          actorEmail: "system/buildmarket.co.ke",
           action: "ACCOUNT_ANONYMIZED",
           entityType: "User",
           entityId: userId,

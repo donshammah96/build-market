@@ -7,7 +7,7 @@ import {
   generateMockUser,
 } from "../../../mocks";
 
-vi.mock("@repo/db", () => ({
+vi.mock("@build/db", () => ({
   prisma: mockPrismaSuccess(),
 }));
 
@@ -18,7 +18,7 @@ describe("ConsentService", () => {
 
   beforeEach(async () => {
     mockPrisma = mockPrismaSuccess();
-    vi.doMock("@repo/db", () => ({
+    vi.doMock("@build/db", () => ({
       prisma: mockPrisma,
     }));
     const serviceModule = await import(
@@ -120,7 +120,7 @@ describe("ConsentService", () => {
       "should handle database errors during consent update",
       async () => {
         const mockErrorPrisma = mockPrismaWithDBError();
-        vi.doMock("@repo/db", () => ({
+        vi.doMock("@build/db", () => ({
           prisma: mockErrorPrisma,
         }));
         const serviceModule = await import(
@@ -136,7 +136,7 @@ describe("ConsentService", () => {
 
     it.concurrent("should rollback on transaction failure", async () => {
       const mockRollbackPrisma = mockPrismaWithTransactionRollback();
-      vi.doMock("@repo/db", () => ({
+      vi.doMock("@build/db", () => ({
         prisma: mockRollbackPrisma,
       }));
       const serviceModule = await import(
@@ -183,7 +183,7 @@ describe("ConsentService", () => {
       "should handle database errors during consent retrieval",
       async () => {
         const mockErrorPrisma = mockPrismaWithDBError();
-        vi.doMock("@repo/db", () => ({
+        vi.doMock("@build/db", () => ({
           prisma: mockErrorPrisma,
         }));
         const serviceModule = await import(
@@ -274,7 +274,7 @@ describe("ConsentService", () => {
       "should handle transaction rollback during bulk revoke",
       async () => {
         const mockRollbackPrisma = mockPrismaWithTransactionRollback();
-        vi.doMock("@repo/db", () => ({
+        vi.doMock("@build/db", () => ({
           prisma: mockRollbackPrisma,
         }));
         const serviceModule = await import(

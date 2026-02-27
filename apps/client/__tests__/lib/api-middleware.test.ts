@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { withAuth, withRole, withAdminRole } from "@/app/lib/api-middleware";
+import { withAuth, withRole, withAdminRole } from "@/app/lib/api/api-middleware";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@build/db";
 
@@ -40,7 +40,7 @@ vi.mock("@build/db", () => ({
   },
 }));
 
-vi.mock("@/app/lib/api-response", () => ({
+vi.mock("@/app/lib/api/api-response", () => ({
   apiError: vi.fn((message: string, status: number) =>
     NextResponse.json(
       { success: false, error: message, timestamp: new Date().toISOString() },
@@ -60,7 +60,7 @@ vi.mock("@/app/lib/api-response", () => ({
   },
 }));
 
-vi.mock("@/app/lib/resilient-api", () => ({
+vi.mock("@/app/lib/api/resilient-api", () => ({
   initializeCorrelationId: vi.fn().mockReturnValue("test-correlation-id"),
   getClientLogger: vi.fn().mockReturnValue({
     info: vi.fn(),

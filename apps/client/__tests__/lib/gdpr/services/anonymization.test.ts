@@ -9,7 +9,7 @@ import {
   generateTestDate,
 } from "../../../mocks";
 
-vi.mock("@repo/db", () => ({
+vi.mock("@build/db", () => ({
   prisma: mockPrismaSuccess(),
 }));
 
@@ -20,7 +20,7 @@ describe("AnonymizationService", () => {
 
   beforeEach(async () => {
     mockPrisma = mockPrismaSuccess();
-    vi.doMock("@repo/db", () => ({
+    vi.doMock("@build/db", () => ({
       prisma: mockPrisma,
     }));
     const serviceModule = await import(
@@ -64,7 +64,7 @@ describe("AnonymizationService", () => {
     it("should reject deletion if legal hold is active", async () => {
       const userId = "user_123";
       const mockLegalHoldPrisma = mockPrismaWithLegalHold();
-      vi.doMock("@repo/db", () => ({
+      vi.doMock("@build/db", () => ({
         prisma: mockLegalHoldPrisma,
       }));
       const serviceModule = await import(
@@ -130,7 +130,7 @@ describe("AnonymizationService", () => {
       "should handle database errors during deletion request",
       async () => {
         const mockErrorPrisma = mockPrismaWithDBError();
-        vi.doMock("@repo/db", () => ({
+        vi.doMock("@build/db", () => ({
           prisma: mockErrorPrisma,
         }));
         const serviceModule = await import(
@@ -276,7 +276,7 @@ describe("AnonymizationService", () => {
 
         (mockRollbackPrisma.user.findMany as Mock).mockResolvedValue([user]);
 
-        vi.doMock("@repo/db", () => ({
+        vi.doMock("@build/db", () => ({
           prisma: mockRollbackPrisma,
         }));
         const serviceModule = await import(

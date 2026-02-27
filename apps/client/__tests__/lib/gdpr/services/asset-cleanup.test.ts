@@ -8,7 +8,7 @@ import {
   generateTestDate,
 } from "../../../mocks";
 
-vi.mock("@repo/db", () => ({
+vi.mock("@build/db", () => ({
   prisma: mockPrismaSuccess(),
 }));
 
@@ -21,7 +21,7 @@ describe("AssetCleanupService", () => {
   beforeEach(async () => {
     mockPrisma = mockPrismaSuccess();
     mockS3 = mockS3Success();
-    vi.doMock("@repo/db", () => ({
+    vi.doMock("@build/db", () => ({
       prisma: mockPrisma,
     }));
     const serviceModule = await import(
@@ -152,7 +152,7 @@ describe("AssetCleanupService", () => {
       (mockPrisma.order.count as Mock).mockResolvedValue(0);
       (mockPrisma.user.count as Mock).mockResolvedValue(0);
 
-      vi.doMock("@repo/db", () => ({
+      vi.doMock("@build/db", () => ({
         prisma: mockPrisma,
       }));
       const serviceModule = await import(

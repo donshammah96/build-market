@@ -10,7 +10,7 @@ const mockLogger = vi.hoisted(() => ({
   debug: vi.fn(),
 }));
 
-vi.mock("@/app/lib/api-middleware", () => ({
+vi.mock("@/app/lib/api/api-middleware", () => ({
   withAuth: (handler: any) => {
     return async (req: NextRequest) =>
       handler(req, {
@@ -22,7 +22,7 @@ vi.mock("@/app/lib/api-middleware", () => ({
   },
 }));
 
-vi.mock("@repo/db", () => ({
+vi.mock("@build/db", () => ({
   prisma: {
     store: {
       findMany: vi.fn(),
@@ -33,7 +33,7 @@ vi.mock("@repo/db", () => ({
   },
 }));
 
-vi.mock("@/app/lib/rate-limit", () => ({
+vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
   getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
   RateLimits: {
@@ -41,14 +41,14 @@ vi.mock("@/app/lib/rate-limit", () => ({
   },
 }));
 
-vi.mock("@/app/lib/request-utils", () => ({
+vi.mock("@/app/lib/api/request-utils", () => ({
   getRequestMetadata: vi.fn().mockReturnValue({
     ipAddress: "127.0.0.1",
     userAgent: "test-agent",
   }),
 }));
 
-vi.mock("@/app/lib/resilient-api", () => ({
+vi.mock("@/app/lib/api/resilient-api", () => ({
   initializeCorrelationId: vi.fn().mockReturnValue("test-correlation-id"),
   getClientLogger: vi.fn().mockReturnValue(mockLogger),
 }));

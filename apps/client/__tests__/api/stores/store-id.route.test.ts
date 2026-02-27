@@ -10,25 +10,23 @@ const mockLogger = vi.hoisted(() => ({
   debug: vi.fn(),
 }));
 
-vi.mock("@build/db", () => ({
-  prisma: {
-    store: {
-      findUnique: vi.fn(),
+vi.mock("@build/db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@build/db")>();
+  return {
+    ...actual,
+    prisma: {
+      store: { findUnique: vi.fn() },
+      consentRecord: { create: vi.fn() },
+      user: { findUnique: vi.fn() },
     },
-    consentRecord: {
-      create: vi.fn(),
-    },
-    user: {
-      findUnique: vi.fn(),
-    },
-  },
-}));
+  };
+});
 
 vi.mock("@clerk/nextjs/server", () => ({
   auth: vi.fn().mockResolvedValue({ userId: "clerk_owner" }),
 }));
 
-vi.mock("@/app/lib/rate-limit", () => ({
+vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
   getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
   RateLimits: {
@@ -36,7 +34,7 @@ vi.mock("@/app/lib/rate-limit", () => ({
   },
 }));
 
-vi.mock("@/app/lib/resilient-api", () => ({
+vi.mock("@/app/lib/api/resilient-api", () => ({
   initializeCorrelationId: vi.fn().mockReturnValue("test-correlation-id"),
   getResilientExecutor: vi.fn().mockReturnValue({
     execute: vi.fn(async (fn: () => Promise<unknown>) => {
@@ -51,11 +49,15 @@ vi.mock("@/app/lib/resilient-api", () => ({
   getClientLogger: vi.fn().mockReturnValue(mockLogger),
 }));
 
-vi.mock("@/app/lib/request-utils", () => ({
+vi.mock("@/app/lib/api/request-utils", () => ({
   getRequestMetadata: vi.fn().mockReturnValue({
     ipAddress: "127.0.0.1",
     userAgent: "test-agent",
   }),
+}));
+
+vi.mock("@/lib/services/stores", () => ({
+  getStoreById: vi.fn(),
 }));
 
 describe("GET /api/stores/[id] owner access logging", () => {
@@ -64,7 +66,8 @@ describe("GET /api/stores/[id] owner access logging", () => {
   });
 
   it("records consent when owner reads store", async () => {
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
+    const { getStoreById } = await import("@/lib/services/stores");
+    vi.mocked(getStoreById).mockResolvedValue({
       id: "store_1",
       name: "Store One",
       professional: { userId: "db_owner" },
@@ -95,7 +98,8 @@ describe("GET /api/stores/[id] owner access logging", () => {
   });
 
   it("does not record consent when non-owner reads store", async () => {
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
+    const { getStoreById } = await import("@/lib/services/stores");
+    vi.mocked(getStoreById).mockResolvedValue({
       id: "store_2",
       name: "Store Two",
       professional: { userId: "db_owner" },

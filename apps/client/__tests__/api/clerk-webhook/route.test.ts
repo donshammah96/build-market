@@ -29,7 +29,7 @@ vi.mock("svix", () => ({
   })),
 }));
 
-vi.mock("@/app/lib/rate-limit", () => ({
+vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
   getRateLimitIdentifier: vi.fn().mockReturnValue("webhook-ip"),
   RateLimits: {
@@ -37,7 +37,7 @@ vi.mock("@/app/lib/rate-limit", () => ({
   },
 }));
 
-vi.mock("@/app/lib/env", () => ({
+vi.mock("@/app/lib/infrastructure/env", () => ({
   env: {
     CLERK_WEBHOOK_SECRET: "test_webhook_secret",
     NEXT_PUBLIC_APP_URL: "http://localhost:3500",

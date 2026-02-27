@@ -18,7 +18,7 @@ import {
 } from "@/__tests__/mocks";
 
 // Mock dependencies
-vi.mock("@repo/db", () => ({
+vi.mock("@build/db", () => ({
   prisma: mockPrismaSuccess(),
 }));
 
@@ -34,7 +34,7 @@ describe("ExportService", () => {
 
   describe("requestExport", () => {
     it.concurrent("should successfully create export request", async () => {
-      const { prisma } = await import("@repo/db");
+      const { prisma } = await import("@build/db");
       const { addExportJob } = await import("@/app/lib/queues/export.queue");
 
       const userId = generateTestUUID("user", 1);
@@ -70,7 +70,7 @@ describe("ExportService", () => {
     });
 
     it.concurrent("should reject duplicate export request", async () => {
-      const { prisma } = await import("@repo/db");
+      const { prisma } = await import("@build/db");
 
       const userId = generateTestUUID("user", 1);
       const existingExport = generateMockExport({
@@ -95,7 +95,7 @@ describe("ExportService", () => {
     });
 
     it.concurrent("should enforce rate limiting (1 per day)", async () => {
-      const { prisma } = await import("@repo/db");
+      const { prisma } = await import("@build/db");
 
       const userId = generateTestUUID("user", 1);
       const recentExport = generateMockExport({
@@ -123,11 +123,11 @@ describe("ExportService", () => {
 
     it.concurrent("should handle database errors gracefully", async () => {
       vi.resetModules();
-      vi.mock("@repo/db", () => ({
+      vi.mock("@build/db", () => ({
         prisma: mockPrismaWithDBError("Connection timeout"),
       }));
 
-      const { prisma } = await import("@repo/db");
+      const { prisma } = await import("@build/db");
       const userId = generateTestUUID("user", 1);
 
       await expect(
@@ -140,7 +140,7 @@ describe("ExportService", () => {
 
   describe("getExportStatus", () => {
     it.concurrent("should return export status", async () => {
-      const { prisma } = await import("@repo/db");
+      const { prisma } = await import("@build/db");
 
       const exportId = generateTestUUID("export", 1);
       const userId = generateTestUUID("user", 1);
@@ -164,7 +164,7 @@ describe("ExportService", () => {
     });
 
     it.concurrent("should mark expired exports", async () => {
-      const { prisma } = await import("@repo/db");
+      const { prisma } = await import("@build/db");
 
       const exportId = generateTestUUID("export", 1);
       const userId = generateTestUUID("user", 1);
@@ -193,7 +193,7 @@ describe("ExportService", () => {
     });
 
     it.concurrent("should return null for non-existent export", async () => {
-      const { prisma } = await import("@repo/db");
+      const { prisma } = await import("@build/db");
 
       vi.mocked(prisma.dataExport.findFirst).mockResolvedValue(null);
 
@@ -208,7 +208,7 @@ describe("ExportService", () => {
 
   describe("cancelExport", () => {
     it.concurrent("should cancel pending export", async () => {
-      const { prisma } = await import("@repo/db");
+      const { prisma } = await import("@build/db");
       const { exportQueue } = await import("@/app/lib/queues/export.queue");
 
       const exportId = generateTestUUID("export", 1);
@@ -244,7 +244,7 @@ describe("ExportService", () => {
     });
 
     it.concurrent("should not cancel completed export", async () => {
-      const { prisma } = await import("@repo/db");
+      const { prisma } = await import("@build/db");
 
       const exportId = generateTestUUID("export", 1);
       const userId = generateTestUUID("user", 1);
@@ -265,7 +265,7 @@ describe("ExportService", () => {
     });
 
     it.concurrent("should throw error for non-existent export", async () => {
-      const { prisma } = await import("@repo/db");
+      const { prisma } = await import("@build/db");
 
       vi.mocked(prisma.dataExport.findFirst).mockResolvedValue(null);
 
