@@ -94,16 +94,15 @@ export type ProjectImage = z.infer<typeof ProjectImageSchema>;
 export const ProjectMilestoneSchema = z.object({
   id: z.string().uuid(),
   projectId: z.string(),
-  title: z.string().min(1, 'Milestone title is required'),
+  title: z.string().min(1, "Milestone title is required"),
   description: z.string().optional().nullable(),
-  amount: z.number().optional().nullable(), // Decimal
+  amount: z.number().optional().nullable(),
+  isPaid: z.boolean().default(false),
   dueDate: z.date().optional().nullable(),
-  startDate: z.date().optional().nullable(),
-  endDate: z.date().optional().nullable(),
+  completedAt: z.date().optional().nullable(),
   status: MilestoneStatusEnum.default("PENDING"),
   approvalStatus: ApprovalStatusEnum.default("PENDING"),
   rejectionReason: z.string().optional().nullable(),
-  order: z.number().int().default(0),
   createdAt: z.date(),
   updatedAt: z.date(),
   // Relations
@@ -116,37 +115,29 @@ export const ProjectSchema = z.object({
   id: z.string().uuid(),
   clientId: z.string(),
   professionalId: z.string().optional().nullable(),
-  
-  title: z.string().min(1, 'Project title is required'),
-  slug: z.string(),
+
+  title: z.string().min(1, "Project title is required"),
   description: z.string().optional().nullable(),
   type: ProjectTypeEnum.default("RESIDENTIAL"),
   status: ProjectStatusEnum.default("PLANNING"),
   contractType: ContractTypeEnum.optional().nullable(),
-  
+
   location: z.string().optional().nullable(),
+  siteAddress: z.string().optional().nullable(),
   county: CountyEnum.optional().nullable(),
-  address: z.string().optional().nullable(),
-  coordinates: z.any().optional().nullable(),
-  latitude: z.number().optional().nullable(),
-  longitude: z.number().optional().nullable(),
-  
+  coordinates: z.unknown().optional().nullable(),
+
+  budgetMin: z.number().optional().nullable(),
+  budgetMax: z.number().optional().nullable(),
+  agreedPrice: z.number().optional().nullable(),
+
   startDate: z.date().optional().nullable(),
   endDate: z.date().optional().nullable(),
-  budget: z.number().optional().nullable(), // Decimal
-  currency: z.string().default("KES"),
-  
-  completionPercentage: z.number().int().default(0),
-  
-  clientRating: z.number().int().optional().nullable(),
-  clientReview: z.string().optional().nullable(),
-  professionalRating: z.number().int().optional().nullable(),
-  professionalReview: z.string().optional().nullable(),
-  
+
   createdAt: z.date(),
   updatedAt: z.date(),
   deletedAt: z.date().optional().nullable(),
-  
+
   // Relations
   milestones: z.array(ProjectMilestoneSchema).optional(),
   documents: z.array(ProjectDocumentSchema).optional(),

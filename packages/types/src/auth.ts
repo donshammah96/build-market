@@ -1,9 +1,88 @@
 import z from "zod";
 import { professionalLicenseSchema } from "./license";
+import { professionalDocumentSchema } from "./documents";
+import {
+  COUNTIES,
+  PROFESSIONS,
+  USER_STATUSES,
+  USER_ROLES,
+  CLIENT_TYPES,
+  VERIFICATION_STATUSES,
+  AVAILABILITY_STATUSES,
+  STORE_CATEGORIES,
+  STORE_CATEGORY_LABELS,
+  STORE_TYPE_LABELS,
+  DELIVERY_OPTIONS,
+  PROPERTY_TYPES,
+  PROPERTY_CATEGORIES,
+  PROPERTY_TENURES,
+  FURNISHING_STATUSES,
+  COMPLETION_STATUSES,
+  AREA_UNITS,
+  PROPERTY_DOCUMENT_TYPES,
+  STORE_DOCUMENT_TYPES,
+  type County,
+  type Profession,
+  type UserRole,
+  type UserStatus,
+  type ClientType,
+  type VerificationStatus,
+  type AvailabilityStatus,
+  type StoreCategory,
+  type StoreType,
+  type DeliveryOption,
+  type PropertyType,
+  type PropertyCategory,
+  type PropertyTenure,
+  type FurnishingStatus,
+  type CompletionStatus,
+  type AreaUnit,
+  type PropertyDocumentType,
+} from "@build/enums";
+
+export {
+  COUNTIES,
+  PROFESSIONS,
+  USER_STATUSES,
+  USER_ROLES,
+  CLIENT_TYPES,
+  VERIFICATION_STATUSES,
+  AVAILABILITY_STATUSES,
+  STORE_CATEGORIES,
+  STORE_TYPES,
+  DELIVERY_OPTIONS,
+  PROPERTY_TYPES,
+  PROPERTY_CATEGORIES,
+  PROPERTY_TENURES,
+  FURNISHING_STATUSES,
+  COMPLETION_STATUSES,
+  AREA_UNITS,
+  PROPERTY_DOCUMENT_TYPES,
+} from "@build/enums";
+
+export type {
+  County,
+  Profession,
+  UserStatus,
+  UserRole,
+  ClientType,
+  VerificationStatus,
+  AvailabilityStatus,
+  StoreCategory,
+  StoreType,
+  DeliveryOption,
+  PropertyType,
+  PropertyCategory,
+  PropertyTenure,
+  FurnishingStatus,
+  CompletionStatus,
+  AreaUnit,
+  PropertyDocumentType,
+} from "@build/enums";
 
 export interface CustomJwtSessionClaims {
   metadata?: {
-    role?: "CLIENT" | "PROFESSIONAL" | "ADMIN" | "SUPPORT";
+    role?: UserRole;
   };
 }
 
@@ -27,66 +106,6 @@ export const UserFormSchema = z.object({
     .max(50),
 });
 
-// County enum for ClientProfile (required field)
-export const CountyEnum = z.enum([
-  "BARINGO",
-  "BOMET",
-  "BUNGOMA",
-  "BUSIA",
-  "ELGEYO_MARAKWET",
-  "EMBU",
-  "GARISSA",
-  "HOMA_BAY",
-  "ISIOLO",
-  "KAJIADO",
-  "KAKAMEGA",
-  "KERICHO",
-  "KIAMBU",
-  "KILIFI",
-  "KIRINYAGA",
-  "KISII",
-  "KISUMU",
-  "KITUI",
-  "KWALE",
-  "LAIKIPIA",
-  "LAMU",
-  "MACHAKOS",
-  "MAKUENI",
-  "MANDERA",
-  "MARSABIT",
-  "MERU",
-  "MIGORI",
-  "MOMBASA",
-  "MURANGA",
-  "NAIROBI",
-  "NAKURU",
-  "NANDI",
-  "NAROK",
-  "NYAMIRA",
-  "NYANDARUA",
-  "NYERI",
-  "SAMBURU",
-  "SIAYA",
-  "TAITA_TAVETA",
-  "TANA_RIVER",
-  "THARAKA_NITHI",
-  "TRANS_NZOIA",
-  "TURKANA",
-  "UASIN_GISHU",
-  "VIHIGA",
-  "WAJIR",
-  "WEST_POKOT",
-]);
-
-export type UserRole = "CLIENT" | "PROFESSIONAL" | "ADMIN" | "SUPPORT";
-
-export type UserStatus =
-  | "ACTIVE"
-  | "SUSPENDED"
-  | "BANNED"
-  | "DEACTIVATED"
-  | "ARCHIVED";
-
 export const UserSchema = z.object({
   id: z.string(),
   clerkId: z.string(),
@@ -95,12 +114,8 @@ export const UserSchema = z.object({
   lastName: z.string().optional().nullable(),
   phone: z.string().optional().nullable(),
   avatar: z.string().optional().nullable(),
-  role: z
-    .enum(["CLIENT", "PROFESSIONAL", "ADMIN", "SUPPORT"])
-    .default("CLIENT"),
-  status: z
-    .enum(["ACTIVE", "SUSPENDED", "BANNED", "DEACTIVATED", "ARCHIVED"])
-    .default("ACTIVE"),
+  role: z.enum(USER_ROLES).default("CLIENT"),
+  status: z.enum(USER_STATUSES).default("ACTIVE"),
   isProfileComplete: z.boolean(),
   isEmailVerified: z.boolean(),
   isPhoneVerified: z.boolean(),
@@ -117,16 +132,7 @@ export const UserSchema = z.object({
 
 export type User = z.infer<typeof UserSchema>;
 
-export const ClientTypeEnum = z.enum([
-  "HOMEOWNER",
-  "CORPORATE_DEVELOPER",
-  "INTERIOR_DESIGN_FIRM",
-  "GOVERNMENT_ENTITY",
-  "OTHER",
-]);
-
-export type ClientType = z.infer<typeof ClientTypeEnum>;
-
+export const ClientTypeEnum = z.enum(CLIENT_TYPES);
 export const ClientProfileSchema = z.object({
   userId: z.string(),
   type: ClientTypeEnum.default("HOMEOWNER"),
@@ -137,7 +143,7 @@ export const ClientProfileSchema = z.object({
   website: z.string().optional().nullable(),
   address: z.string().optional().nullable(),
   city: z.string().optional().nullable(),
-  county: CountyEnum.optional().nullable(),
+  county: z.enum(COUNTIES).optional().nullable(),
   neighborhood: z.string().optional().nullable(),
   landmark: z.string().optional().nullable(),
   zipCode: z.string().optional().nullable(),
@@ -158,67 +164,17 @@ export const ClientProfileSchema = z.object({
 
 export type ClientProfile = z.infer<typeof ClientProfileSchema>;
 
-export const ProfessionEnum = z.enum([
-  "ARCHITECT",
-  "INTERIOR_DESIGNER",
-  "LANDSCAPE_ARCHITECT",
-  "URBAN_PLANNER",
-  "STRUCTURAL_ENGINEER",
-  "CIVIL_ENGINEER",
-  "MECHANICAL_ENGINEER",
-  "ELECTRICAL_ENGINEER",
-  "QUANTITY_SURVEYOR",
-  "LAND_SURVEYOR",
-  "REAL_ESTATE_VALUER",
-  "GENERAL_CONTRACTOR",
-  "MASON",
-  "ELECTRICIAN",
-  "PLUMBER",
-  "CARPENTER",
-  "JOINER",
-  "PAINTER",
-  "WELDER",
-  "GLAZIER",
-  "ROOFER",
-  "STEEL_FIXER",
-  "FLOORING_SPECIALIST",
-  "PLASTERER",
-  "HVAC_TECHNICIAN",
-  "SOLAR_ENERGY_TECHNICIAN",
-  "BOREHOLE_DRILLER",
-  "CCTV_AND_SECURITY_PRO",
-  "INTERNET_AND_NETWORK_PRO",
-  "PROJECT_MANAGER",
-  "CLERK_OF_WORKS",
-  "OTHER",
-]);
+export const CountyEnum = z.enum(COUNTIES);
+export const ProfessionEnum = z.enum(PROFESSIONS);
 
-export type Profession = z.infer<typeof ProfessionEnum>;
+export const AvailabilityStatusEnum = z.enum(AVAILABILITY_STATUSES);
 
-export const AvailabilityStatusEnum = z.enum([
-  "AVAILABLE",
-  "BUSY",
-  "UNAVAILABLE",
-]);
-
-export type AvailabilityStatus = z.infer<typeof AvailabilityStatusEnum>;
-
-export const VerificationStatusEnum = z.enum([
-  "PENDING",
-  "IN_REVIEW",
-  "VERIFIED",
-  "NEEDS_CORRECTION",
-  "REJECTED",
-  "EXPIRED",
-  "SUSPENDED",
-]);
-
-export type VerificationStatus = z.infer<typeof VerificationStatusEnum>;
+export const VerificationStatusEnum = z.enum(VERIFICATION_STATUSES);
 
 export const ProfessionalProfileSchema = z.object({
   userId: z.string(),
   companyName: z.string(),
-  profession: ProfessionEnum.optional().nullable(),
+  profession: z.enum(PROFESSIONS).optional().nullable(),
   slug: z.string().optional().nullable(),
   bio: z.string().optional().nullable(),
   portfolioUrl: z.string().optional().nullable(),
@@ -229,7 +185,7 @@ export const ProfessionalProfileSchema = z.object({
   socials: z.any().optional().nullable(), // {facebook, instagram, linkedin}
   // Location
   city: z.string().optional().nullable(),
-  county: CountyEnum.optional().nullable(),
+  county: z.enum(COUNTIES).optional().nullable(),
   country: z.string().default("Kenya").optional().nullable(),
   latitude: z.number().optional().nullable(),
   longitude: z.number().optional().nullable(),
@@ -263,103 +219,56 @@ export const ProfessionalProfileSchema = z.object({
   acceptedPayments: z.array(z.string()).default(["MPESA", "BANK", "CASH"]),
   createdAt: z.date().optional(),
   updatedAt: z.date().optional(),
+  license: z.any().optional().nullable(),
 });
 
 export type ProfessionalProfile = z.infer<typeof ProfessionalProfileSchema>;
 
 // --- Onboarding Schemas ---
 
-export const ClientOnboardingSchema = z.object({
-  role: z.literal("client"),
-  // Client type
-  type: ClientTypeEnum.default("HOMEOWNER"),
-  // Location fields (county is required for ClientProfile)
-  county: CountyEnum,
-  city: z.string().optional(),
-  neighborhood: z.string().optional(),
-  address: z.string().optional(),
-  zipCode: z.string().optional(),
-  // For corporate clients
-  companyName: z.string().optional(),
-  companyRegistration: z.string().optional(), // CR12 number
-  kraPin: z.string().optional(),
-  // Budget preferences (maps to budgetRangeMin/Max)
-  budgetRangeMin: z.number().positive().optional(),
-  budgetRangeMax: z.number().positive().optional(),
-  // Interests
-  interests: z.array(z.string()).optional(),
-});
-
-export const ProfessionalOnboardingSchema = z.object({
-  role: z.literal("professional"),
-  profession: ProfessionEnum,
-  companyName: z.string().min(1, "Company name is required"),
-  // Location (service area)
-  county: CountyEnum,
-  city: z.string().optional(),
-  serviceRadiusKm: z.number().int().positive().optional(),
-  // Profile info
-  yearsExperience: z.number().int().min(0).optional(),
-  bio: z.string().max(2000).optional(),
-  portfolioUrl: z.string().url().optional(),
-  website: z.string().url().optional(),
-  // License (required for verification - uses schema from license.ts)
-  license: professionalLicenseSchema,
-  // Supporting documents (maps to ProfessionalDocument)
-  certificatesUrls: z.array(z.string().url()).optional(),
-  idDocumentsUrls: z.array(z.string().url()).optional(),
-  // Upload status flags
-  certificatesPending: z.boolean().optional(),
-  idPending: z.boolean().optional(),
-});
-
 // Store Category enum matching Prisma schema
-export const StoreCategoryEnum = z.enum([
-  "HARDWARE",
-  "BUILDING_MATERIALS",
-  "TILES_AND_CERAMICS",
-  "ELECTRICAL",
-  "PLUMBING",
-  "PAINTS_AND_FINISHES",
-  "ROOFING",
-  "TIMBER_AND_WOOD",
-  "GLASS_AND_ALUMINUM",
-  "KITCHEN_AND_BATH",
-  "LANDSCAPING",
-  "STEEL_AND_METALS",
-  "SAFETY_AND_TOOLS",
-  "HVAC",
-  "SOLAR_AND_ENERGY",
-  "WATER_STORAGE",
-  "SECURITY_SYSTEMS",
-  "DECOR_AND_LIGHTING",
-  "HEAVY_MACHINERY",
-  "WINDOWS_AND_DOORS",
-  "AUTOMOTIVE",
-]);
-
-export type StoreCategory = z.infer<typeof StoreCategoryEnum>;
+export const StoreCategoryEnum = z.enum(STORE_CATEGORIES);
 
 // Store Type enum matching Prisma schema
-export const StoreTypeEnum = z.enum([
-  "RETAIL",
-  "WHOLESALE",
-  "MANUFACTURER",
-  "DISTRIBUTOR",
-  "ONLINE_ONLY",
-]);
-
-export type StoreType = z.infer<typeof StoreTypeEnum>;
+export const StoreTypeEnum = z.enum(STORE_TYPE_LABELS);
 
 // Delivery Option enum matching Prisma schema
-export const DeliveryOptionEnum = z.enum([
-  "PICKUP_ONLY",
-  "DELIVERY_AVAILABLE",
-  "THIRD_PARTY_LOGISTICS",
-  "DIGITAL_DELIVERY",
-]);
+export const DeliveryOptionEnum = z.enum(DELIVERY_OPTIONS);
 
-export type DeliveryOption = z.infer<typeof DeliveryOptionEnum>;
+// Convert STORE_CATEGORY_OPTIONS to array format for dropdown
+
+const STORE_CATEGORY_OPTIONS_ARRAY = STORE_CATEGORIES.map((value) => ({
+  value,
+  label: STORE_CATEGORY_LABELS[value as keyof typeof STORE_CATEGORY_LABELS],
+}));
+
+export const StoreDocumentTypeEnum = z.enum(STORE_DOCUMENT_TYPES);
+// Store document schema for onboarding (Verification)
+export const StoreDocumentSchema = z.object({
+  url: z.string().url("File URL must be a valid URL"),
+  type: StoreDocumentTypeEnum,
+});
+
+/** Maximum number of categories allowed */
+const MAX_CATEGORIES = 10;
+
+// Store Type options - using types from store.ts
+const STORE_TYPES: Array<{ value: StoreType; label: string }> = [
+  { value: "RETAIL", label: `Retail - ${STORE_TYPE_LABELS.RETAIL}` },
+  { value: "WHOLESALE", label: `Wholesale - ${STORE_TYPE_LABELS.WHOLESALE}` },
+  {
+    value: "MANUFACTURER",
+    label: `Manufacturer - ${STORE_TYPE_LABELS.MANUFACTURER}`,
+  },
+  {
+    value: "DISTRIBUTOR",
+    label: `Distributor - ${STORE_TYPE_LABELS.DISTRIBUTOR}`,
+  },
+  {
+    value: "ONLINE_ONLY",
+    label: `Online Only - ${STORE_TYPE_LABELS.ONLINE_ONLY}`,
+  },
+];
 
 export const StoreOnboardingSchema = z.object({
   role: z.literal("professional"),
@@ -371,11 +280,14 @@ export const StoreOnboardingSchema = z.object({
     .max(100)
     .regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
   storeType: StoreTypeEnum,
-  categories: z.array(StoreCategoryEnum).min(1, "Select at least one category"),
+  categories: z
+    .array(z.enum(STORE_CATEGORY_LABELS))
+    .min(1, "Select at least one category")
+    .max(MAX_CATEGORIES, `Maximum ${MAX_CATEGORIES} categories allowed`),
   // Location
   address: z.string().min(1, "Store address is required"),
   city: z.string().min(1, "Store city is required"),
-  county: CountyEnum,
+  county: z.enum(COUNTIES),
   neighborhood: z.string().optional(),
   zipCode: z.string().max(20).optional(),
   // Contact
@@ -392,60 +304,76 @@ export const StoreOnboardingSchema = z.object({
   description: z.string().max(1000).optional(),
   logoUrl: z.string().url().optional(),
   bannerUrl: z.string().url().optional(),
-  images: z.array(z.string().url()).optional(),
+  images: z
+    .array(
+      z.object({
+        assetId: z.string().uuid("Asset ID must be a valid UUID"),
+        category: z
+          .enum(["LOGO", "STOREFRONT", "INTERIOR", "WAREHOUSE", "TEAM"])
+          .optional(),
+        caption: z.string().max(500).optional(),
+        isMain: z.boolean().optional(),
+        sortOrder: z.number().int().min(0).optional(),
+      }),
+    )
+    .optional(),
+  documents: z.array(StoreDocumentSchema).optional(),
+
+  certificatesUrls: z.array(z.string().url()).optional(),
+  idDocumentsUrls: z.array(z.string().url()).optional(),
   // Business verification
   businessRegNo: z.string().optional(),
   kraPin: z.string().optional(),
+
+  // Payment methods
+  acceptsCard: z.boolean().default(false),
+  acceptsCash: z.boolean().default(true),
+});
+
+export const ClientOnboardingSchema = z.object({
+  role: z.literal("client"),
+  // Client type
+  type: ClientTypeEnum.default("HOMEOWNER"),
+  // Location fields (county is required for ClientProfile)
+  county: z.enum(COUNTIES),
+  city: z.string().optional(),
+  neighborhood: z.string().optional(),
+  address: z.string().optional(),
+  zipCode: z.string().optional(),
+  // For corporate clients
+  companyName: z.string().optional(),
+  companyRegistration: z.string().optional(), // CR12 number
+  kraPin: z.string().optional(),
+  // Budget preferences (maps to budgetRangeMin/Max)
+  budgetRangeMin: z.number().positive().optional(),
+  budgetRangeMax: z.number().positive().optional(),
+  // Interests
+  interests: z.array(z.string()).optional(),
+
+  // Homeowner specific fields (mapped to preferences or other fields)
+  projectType: z.string().optional(),
+  projectLocation: z.string().optional(), // Maps to neighborhood or preferences
+  estimatedBudget: z.string().optional(), // String representation of budget
+  description: z.string().optional(), // Project description
 });
 
 // Property Type enum matching Prisma schema
-export const PropertyTypeEnum = z.enum(["SALE", "RENT", "LEASE"]);
+// Property Type enum matching Prisma schema
+export const PropertyTypeEnum = z.enum(PROPERTY_TYPES);
 
 // Property Category enum matching Prisma schema
-export const PropertyCategoryEnum = z.enum([
-  "RESIDENTIAL",
-  "COMMERCIAL",
-  "LAND",
-  "INDUSTRIAL",
-]);
+export const PropertyCategoryEnum = z.enum(PROPERTY_CATEGORIES);
 
-export const PropertyTenureEnum = z.enum([
-  "FREEHOLD",
-  "LEASEHOLD",
-  "SECTIONAL_TITLE",
-  "SUB_LEASE",
-]);
+export const PropertyTenureEnum = z.enum(PROPERTY_TENURES);
 
-export const FurnishingStatusEnum = z.enum([
-  "UNFURNISHED",
-  "SEMI_FURNISHED",
-  "FURNISHED",
-  "SERVICED",
-]);
+export const FurnishingStatusEnum = z.enum(FURNISHING_STATUSES);
 
-export const CompletionStatusEnum = z.enum([
-  "READY_TO_MOVE",
-  "UNDER_CONSTRUCTION",
-  "OFF_PLAN",
-]);
+export const CompletionStatusEnum = z.enum(COMPLETION_STATUSES);
 
-export const AreaUnitEnum = z.enum([
-  "SQ_METERS",
-  "SQ_FEET",
-  "ACRES",
-  "HECTARES",
-]);
+export const AreaUnitEnum = z.enum(AREA_UNITS);
 
 // Property Document Type enum (verification documents) matches Prisma PropertyDocumentType
-export const PropertyDocumentTypeEnum = z.enum([
-  "TITLE_DEED",
-  "OFFICIAL_SEARCH",
-  "LAND_RATES_CLEARANCE",
-  "LAND_RENT_CLEARANCE",
-  "ID_COPY",
-  "KRA_PIN",
-  "AUTHORITY_TO_SELL",
-]);
+export const PropertyDocumentTypeEnum = z.enum(PROPERTY_DOCUMENT_TYPES);
 
 // Property document schema for onboarding (Verification)
 export const PropertyDocumentSchema = z.object({
@@ -464,7 +392,7 @@ export const PropertyOnboardingSchema = z.object({
   category: PropertyCategoryEnum,
   // Location
   location: z.string().min(1, "Location is required").max(255),
-  county: CountyEnum.optional(),
+  county: z.enum(COUNTIES).optional(),
   address: z.string().max(500).optional(),
   constituency: z.string().max(100).optional(),
   neighbourhood: z.string().max(100).optional(),
@@ -507,6 +435,43 @@ export const PropertyOnboardingSchema = z.object({
 
   // Property verification documents (Legal)
   documents: z.array(PropertyDocumentSchema).optional(),
+  certificatesUrls: z.array(z.string().url()).optional(),
+  idDocumentsUrls: z.array(z.string().url()).optional(),
+});
+
+export const ProfessionalOnboardingSchema = z.object({
+  role: z.literal("professional"),
+  profession: z.enum(PROFESSIONS),
+  companyName: z.string().min(1, "Company name is required"),
+  // Location (service area)
+  county: z.enum(COUNTIES),
+  city: z.string().optional(),
+  serviceRadiusKm: z.number().int().positive().optional(),
+  // Profile info
+  yearsExperience: z.number().int().min(0).optional(),
+  bio: z.string().max(2000).optional(),
+  portfolioUrl: z.string().url().optional(),
+  website: z.string().url().optional(),
+  // License (optional for professionals without a formal license)
+  license: professionalLicenseSchema.optional(),
+
+  // Board Registration Number
+  boardRegistrationNumber: z.string().optional(),
+
+  // Professional Verification Documents (e.g. NCA_ACCREDITATION, BUSINESS_REGISTRATION)
+  documents: z.array(professionalDocumentSchema).optional(),
+  certificatesUrls: z.array(z.string().url()).optional(),
+  idDocumentsUrls: z.array(z.string().url()).optional(),
+
+  // Upload status flags
+  documentsPending: z.boolean().optional(),
+  licensePending: z.boolean().optional(),
+
+  // Store data for suppliers
+  stores: z.array(StoreOnboardingSchema).optional(),
+
+  // Property data for realtors
+  properties: z.array(PropertyOnboardingSchema).optional(),
 });
 
 export type ProfessionalOnboardingData = z.infer<

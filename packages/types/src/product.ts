@@ -1,6 +1,6 @@
 import z from "zod";
 
-// Define Product and Category types locally since @repo/product-db doesn't exist yet
+// Define Product and Category types locally since @build/product-db doesn't exist yet
 export type Product = {
   id: string;
   name: string;

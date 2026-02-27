@@ -15,10 +15,15 @@ export type DeliveryOption = z.infer<typeof DeliveryOptionEnum>;
 
 export const StoreDocumentTypeEnum = z.enum([
   "BUSINESS_PERMIT",
+  "BUSINESS_REGISTRATION",
   "KRA_TAX_COMPLIANCE",
+  "KRA_PIN_CERTIFICATE",
   "CR12",
   "DISTRIBUTOR_LICENSE",
   "KEBS_CERTIFICATE",
+  "ID_OR_PASSPORT",
+  "LEASE_OR_OWNERSHIP",
+  "TRADING_LICENSE",
 ]);
 export type StoreDocumentType = z.infer<typeof StoreDocumentTypeEnum>;
 
