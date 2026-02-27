@@ -7,7 +7,7 @@ import { MapPin, Bed, Bath, Square, Heart, ArrowRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
+import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import { getPropertyUrl } from "@/lib/links";
 import { cn } from "@/lib/utils";
 import { PropertyCardData } from "@/types/property";

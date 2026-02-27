@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { API_ROUTES } from "@/lib/links";
+import { dashboardKeys } from "@/hooks/useDashboardData";
 import { cn } from "@/lib/utils";
 
 // ============================================================================
@@ -74,7 +75,7 @@ export function AgendaWidget({
 }: AgendaWidgetProps) {
   // Fetch events if not provided via props
   const { data: fetchedEvents, isLoading: fetchLoading } = useQuery({
-    queryKey: ["dashboard-agenda"],
+    queryKey: dashboardKeys.agenda(),
     queryFn: async () => {
       const start = new Date();
       start.setHours(0, 0, 0, 0);

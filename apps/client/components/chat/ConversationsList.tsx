@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@clerk/nextjs";
 import { motion, AnimatePresence } from "framer-motion";
-import { messagingClient } from "@/lib/messaging-client";
+import { useConversations, getOtherParticipantId } from "@/hooks/useMessaging";
+import { useProfileStatus } from "@/hooks/useProfileStatus";
 import type { Conversation } from "@build/types";
 
 // UI Components
@@ -22,44 +22,49 @@ import { Search, MessageSquare, Plus } from "lucide-react";
 interface ConversationsListProps {
   onSelectConversation: (conversationId: string, otherUserId: string) => void;
   selectedId?: string;
+  /** When true, renders only the list content (no Card wrapper) for embedding in parent layout */
+  embedded?: boolean;
+  /** Optional: parent-controlled search (used when embedded) */
+  searchQuery?: string;
+  onSearchChange?: (value: string) => void;
 }
 
 export function ConversationsList({
   onSelectConversation,
   selectedId,
+  embedded = false,
+  searchQuery: externalSearch,
+  onSearchChange,
 }: ConversationsListProps) {
   const { user } = useUser();
-  const [searchQuery, setSearchQuery] = useState("");
+  const { user: profileUser } = useProfileStatus();
+  const [internalSearch, setInternalSearch] = useState("");
+  const searchQuery =
+    externalSearch !== undefined ? externalSearch : internalSearch;
+  const setSearchQuery = onSearchChange ?? setInternalSearch;
 
-  const { data: conversations, isLoading } = useQuery({
-    queryKey: ["conversations"],
-    queryFn: async () => {
-      const result = await messagingClient.getConversations();
-      if (result.success && result.data) {
-        return result.data;
-      }
-      throw new Error("Failed to fetch conversations");
-    },
-    enabled: !!user,
-    refetchInterval: 30000, // Refetch every 30 seconds
+  const currentUserDbId = profileUser?.id ?? "";
+
+  const { data: conversations = [], isLoading } = useConversations(!!user);
+
+  const filteredConversations = conversations.filter((conv) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      conv.lastMessage?.toLowerCase().includes(q) ||
+      conv.subject?.toLowerCase().includes(q)
+    );
   });
 
-  // Filter conversations by search query
-  const filteredConversations = conversations?.filter(() => {
-    // You might want to fetch user details and search by name
-    return true; // Placeholder
-  }) || [];
+  // Get other participant ID (uses db user IDs from service)
+  const getOtherUserId = (conv: Conversation) =>
+    getOtherParticipantId(conv, currentUserDbId);
 
-  // Get other user ID
-  const getOtherUserId = (conv: Conversation) => {
-    return conv.participants.find((id) => id !== user?.id) || "";
-  };
-
-  // Get unread count for current user
+  // Get unread count for current user (keyed by db userId)
   const getUnreadCount = (conv: Conversation) => {
-    if (!user?.id || !conv.unreadCount) return 0;
+    if (!currentUserDbId || !conv.unreadCount) return 0;
     const unreadData = conv.unreadCount as Record<string, number>;
-    return unreadData[user.id] || 0;
+    return unreadData[currentUserDbId] ?? 0;
   };
 
   // Format timestamp
@@ -80,6 +85,115 @@ export function ConversationsList({
       return d.toLocaleDateString([], { month: "short", day: "numeric" });
     }
   };
+
+  const listContent = (
+    <ScrollArea className={embedded ? "h-full" : "h-full"}>
+      {isLoading ? (
+        // Loading skeleton
+        <div className="p-2 space-y-2">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex items-center gap-3 p-3">
+              <Skeleton className="w-12 h-12 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-[150px]" />
+                <Skeleton className="h-3 w-[200px]" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : filteredConversations.length === 0 ? (
+        // Empty state
+        <div className="flex flex-col items-center justify-center h-full text-center p-8">
+          <MessageSquare className="w-16 h-16 text-muted-foreground mb-4" />
+          <p className="text-muted-foreground font-medium">
+            No conversations yet
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Start a new conversation to get started
+          </p>
+        </div>
+      ) : (
+        // Conversations list
+        <AnimatePresence initial={false}>
+          {filteredConversations.map((conversation, index) => {
+            const otherUserId = getOtherUserId(conversation);
+            const unreadCount = getUnreadCount(conversation);
+            const isSelected = selectedId === conversation.id;
+
+            return (
+              <motion.div
+                key={conversation.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.2, delay: index * 0.05 }}
+              >
+                <motion.button
+                  whileHover={{ backgroundColor: "rgba(0,0,0,0.05)" }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() =>
+                    onSelectConversation(conversation.id, otherUserId)
+                  }
+                  className={`w-full p-3 border-b flex items-center gap-3 text-left transition-colors ${
+                    isSelected ? "bg-accent" : ""
+                  }`}
+                >
+                  <Avatar className="w-12 h-12">
+                    <AvatarImage src={undefined} alt="User" />
+                    <AvatarFallback>
+                      {otherUserId.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <p
+                        className={`font-medium text-sm truncate ${unreadCount > 0 ? "font-semibold" : ""}`}
+                      >
+                        User {otherUserId.slice(0, 8)}
+                      </p>
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {formatTime(conversation.lastMessageAt)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p
+                        className={`text-sm truncate ${
+                          unreadCount > 0
+                            ? "text-foreground font-medium"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {conversation.lastMessage || "No messages yet"}
+                      </p>
+                      {unreadCount > 0 && (
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          className="shrink-0"
+                        >
+                          <Badge
+                            variant="default"
+                            className="rounded-full h-5 min-w-5 px-1.5"
+                          >
+                            {unreadCount > 99 ? "99+" : unreadCount}
+                          </Badge>
+                        </motion.div>
+                      )}
+                    </div>
+                  </div>
+                </motion.button>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
+      )}
+    </ScrollArea>
+  );
+
+  if (embedded) {
+    return listContent;
+  }
 
   return (
     <Card className="h-[600px] flex flex-col">
@@ -104,103 +218,9 @@ export function ConversationsList({
           />
         </div>
       </CardHeader>
-
       <CardContent className="flex-1 p-0 overflow-hidden">
-        <ScrollArea className="h-full">
-          {isLoading ? (
-            // Loading skeleton
-            <div className="p-2 space-y-2">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center gap-3 p-3">
-                  <Skeleton className="w-12 h-12 rounded-full" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-[150px]" />
-                    <Skeleton className="h-3 w-[200px]" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : filteredConversations.length === 0 ? (
-            // Empty state
-            <div className="flex flex-col items-center justify-center h-full text-center p-8">
-              <MessageSquare className="w-16 h-16 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground font-medium">No conversations yet</p>
-              <p className="text-sm text-muted-foreground">
-                Start a new conversation to get started
-              </p>
-            </div>
-          ) : (
-            // Conversations list
-            <AnimatePresence initial={false}>
-              {filteredConversations.map((conversation, index) => {
-                const otherUserId = getOtherUserId(conversation);
-                const unreadCount = getUnreadCount(conversation);
-                const isSelected = selectedId === conversation.id;
-
-                return (
-                  <motion.div
-                    key={conversation.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 20 }}
-                    transition={{ duration: 0.2, delay: index * 0.05 }}
-                  >
-                    <motion.button
-                      whileHover={{ backgroundColor: "rgba(0,0,0,0.05)" }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => onSelectConversation(conversation.id, otherUserId)}
-                      className={`w-full p-3 border-b flex items-center gap-3 text-left transition-colors ${
-                        isSelected ? "bg-accent" : ""
-                      }`}
-                    >
-                      <Avatar className="w-12 h-12">
-                        <AvatarImage src={undefined} alt="User" />
-                        <AvatarFallback>
-                          {otherUserId.slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <p className={`font-medium text-sm truncate ${unreadCount > 0 ? "font-semibold" : ""}`}>
-                            User {otherUserId.slice(0, 8)}
-                          </p>
-                          <span className="text-xs text-muted-foreground shrink-0">
-                            {formatTime(conversation.lastMessageAt)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <p
-                            className={`text-sm truncate ${
-                              unreadCount > 0
-                                ? "text-foreground font-medium"
-                                : "text-muted-foreground"
-                            }`}
-                          >
-                            {conversation.lastMessage || "No messages yet"}
-                          </p>
-                          {unreadCount > 0 && (
-                            <motion.div
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              className="shrink-0"
-                            >
-                              <Badge variant="default" className="rounded-full h-5 min-w-5 px-1.5">
-                                {unreadCount > 99 ? "99+" : unreadCount}
-                              </Badge>
-                            </motion.div>
-                          )}
-                        </div>
-                      </div>
-                    </motion.button>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-          )}
-        </ScrollArea>
+        {listContent}
       </CardContent>
     </Card>
   );
 }
-

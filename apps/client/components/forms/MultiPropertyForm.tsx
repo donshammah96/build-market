@@ -5,54 +5,58 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
   Trash2,
-  Store as StoreIcon,
+  Home as HomeIcon,
   ChevronDown,
   AlertCircle,
   Check,
-  Building,
   Loader2,
   MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import StoreForm, { StoreFormSubmitData, StoreFormVariant } from "./StoreForm";
-
-// Re-export types for usage
-export type { StoreFormSubmitData } from "./StoreForm"; // Keep this
-// export type { StoreData } from "./MultiStoreForm"; // REMOVE THIS LINE
+import PropertyForm, { PropertyFormSubmitData } from "./PropertyForm";
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-// StoreData extends the submission type (images as string[])
-export interface StoreData extends StoreFormSubmitData {
+// PropertyData extends the submission type
+export interface PropertyData extends PropertyFormSubmitData {
   id?: string;
+  // Temporary ID for UI handling (not sent to backend)
+  _tempId?: string;
 }
 
-export interface MultiStoreFormProps {
-  initialStores?: StoreData[];
-  onSubmit: (stores: StoreData[]) => Promise<void> | void;
+export type PropertyFormVariant = "light" | "dark";
+
+export interface MultiPropertyFormProps {
+  initialProperties?: PropertyData[];
+  onSubmit: (properties: PropertyData[]) => Promise<void> | void;
   onCancel?: () => void;
-  maxStores?: number;
+  maxProperties?: number;
   isOnboarding?: boolean;
   startEmpty?: boolean;
   /** Theme variant - 'light' for standalone pages, 'dark' for wizard/onboarding */
-  variant?: StoreFormVariant;
+  variant?: PropertyFormVariant;
+}
+
+interface PropertyEntry {
+  id: string; // Internal UI ID
+  data: Partial<PropertyData>;
+  isExpanded: boolean;
+  isValid: boolean;
 }
 
 // ============================================================================
 // THEME
 // ============================================================================
 
-const createMultiStoreTheme = (variant: StoreFormVariant) => {
+const createMultiPropertyTheme = (variant: PropertyFormVariant) => {
   const isDark = variant === "dark";
 
   return {
     // Container
-    container: isDark
-      ? "max-w-4xl mx-auto space-y-8 pb-10"
-      : "max-w-4xl mx-auto space-y-8 pb-10",
+    container: "max-w-4xl mx-auto space-y-8 pb-10",
 
     // Header
     headerBorder: isDark
@@ -69,7 +73,6 @@ const createMultiStoreTheme = (variant: StoreFormVariant) => {
     addButton: isDark
       ? "bg-white/5 hover:bg-white/10 text-white border border-white/20 shadow-sm transition-all"
       : "bg-white hover:bg-zinc-50 text-zinc-900 border border-zinc-200 shadow-sm transition-all",
-
     addButtonIcon: isDark ? "text-emerald-400" : "text-emerald-600",
 
     // Error banner
@@ -77,16 +80,16 @@ const createMultiStoreTheme = (variant: StoreFormVariant) => {
       ? "bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl flex items-center gap-2 text-sm"
       : "bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg flex items-center gap-2 text-sm",
 
-    // Store card
-    storeCard: isDark
+    // Property card
+    propertyCard: isDark
       ? "group rounded-xl border transition-all duration-300 overflow-hidden bg-white/5 backdrop-blur-sm"
       : "group rounded-xl border transition-all duration-300 overflow-hidden bg-white",
 
-    storeCardExpanded: isDark
+    propertyCardExpanded: isDark
       ? "ring-1 ring-emerald-500/30 shadow-lg border-emerald-500/30"
       : "ring-1 ring-zinc-200 shadow-lg border-zinc-300",
 
-    storeCardCollapsed: isDark
+    propertyCardCollapsed: isDark
       ? "hover:border-white/20 hover:shadow-md border-white/10 shadow-sm"
       : "hover:border-zinc-300 hover:shadow-md border-zinc-200 shadow-sm",
 
@@ -104,9 +107,9 @@ const createMultiStoreTheme = (variant: StoreFormVariant) => {
       ? "bg-white/5 border-white/10 text-zinc-500 group-hover:bg-white/10"
       : "bg-zinc-50 border-zinc-100 text-zinc-400 group-hover:bg-zinc-100",
 
-    // Store name
-    storeName: isDark ? "text-white" : "text-zinc-900",
-    storeNameEmpty: isDark ? "text-zinc-500 italic" : "text-zinc-400 italic",
+    // Property name
+    propertyName: isDark ? "text-white" : "text-zinc-900",
+    propertyNameEmpty: isDark ? "text-zinc-500 italic" : "text-zinc-400 italic",
 
     // Status text
     statusValid: isDark
@@ -167,55 +170,49 @@ const createMultiStoreTheme = (variant: StoreFormVariant) => {
   } as const;
 };
 
-interface StoreEntry {
-  id: string;
-  data: Partial<StoreData>;
-  isExpanded: boolean;
-  isValid: boolean;
-}
-
 // ============================================================================
 // COMPONENT
 // ============================================================================
 
-export function MultiStoreForm({
-  initialStores = [],
+export function MultiPropertyForm({
+  initialProperties = [],
   onSubmit,
   onCancel,
-  maxStores = 5,
+  maxProperties = 5,
   isOnboarding = false,
   startEmpty = false,
   variant = "light",
-}: MultiStoreFormProps) {
+}: MultiPropertyFormProps) {
   // Create theme based on variant
-  const theme = useMemo(() => createMultiStoreTheme(variant), [variant]);
+  const theme = useMemo(() => createMultiPropertyTheme(variant), [variant]);
+
   // Validation Logic
-  function validateStore(data: Partial<StoreData>): boolean {
+  function validateProperty(data: Partial<PropertyData>): boolean {
     return !!(
-      data.name?.trim() &&
-      data.address?.trim() &&
-      data.city?.trim() &&
-      data.county &&
-      data.categories &&
-      data.categories.length > 0 &&
-      data.storeType
+      data.title?.trim() &&
+      data.price &&
+      data.price > 0 &&
+      data.currency &&
+      data.type &&
+      data.category &&
+      data.location?.trim()
     );
   }
 
   // State Initialization
-  const [stores, setStores] = useState<StoreEntry[]>(() => {
-    if (initialStores.length > 0) {
-      return initialStores.map((data, index) => ({
-        id: `store-${Date.now()}-${index}`,
+  const [properties, setProperties] = useState<PropertyEntry[]>(() => {
+    if (initialProperties.length > 0) {
+      return initialProperties.map((data, index) => ({
+        id: `property-${Date.now()}-${index}`,
         data,
         isExpanded: index === 0,
-        isValid: validateStore(data),
+        isValid: validateProperty(data),
       }));
     }
     if (startEmpty) return [];
     return [
       {
-        id: `store-${Date.now()}-0`,
+        id: `property-${Date.now()}-0`,
         data: {},
         isExpanded: true,
         isValid: false,
@@ -227,43 +224,43 @@ export function MultiStoreForm({
   const [error, setError] = useState<string | null>(null);
 
   // Handlers
-  const handleAddStore = useCallback(() => {
-    if (stores.length >= maxStores) return;
-    setStores((prev) => [
-      ...prev.map((s) => ({ ...s, isExpanded: false })), // Collapse others
+  const handleAddProperty = useCallback(() => {
+    if (properties.length >= maxProperties) return;
+    setProperties((prev) => [
+      ...prev.map((p) => ({ ...p, isExpanded: false })), // Collapse others
       {
-        id: `store-${Date.now()}-${prev.length}`,
+        id: `property-${Date.now()}-${prev.length}`,
         data: {},
         isExpanded: true,
         isValid: false,
       },
     ]);
-  }, [stores.length, maxStores]);
+  }, [properties.length, maxProperties]);
 
-  const handleRemoveStore = useCallback((storeId: string) => {
-    setStores((prev) => prev.filter((s) => s.id !== storeId));
+  const handleRemoveProperty = useCallback((propertyId: string) => {
+    setProperties((prev) => prev.filter((p) => p.id !== propertyId));
   }, []);
 
-  const handleToggleStore = useCallback((storeId: string) => {
-    setStores((prev) =>
-      prev.map((s) => ({
-        ...s,
-        isExpanded: s.id === storeId ? !s.isExpanded : false,
+  const handleToggleProperty = useCallback((propertyId: string) => {
+    setProperties((prev) =>
+      prev.map((p) => ({
+        ...p,
+        isExpanded: p.id === propertyId ? !p.isExpanded : false,
       })),
     );
   }, []);
 
-  const handleStoreUpdate = useCallback(
-    (storeId: string, data: Partial<StoreData>) => {
-      setStores((prev) =>
-        prev.map((s) =>
-          s.id === storeId
+  const handlePropertyUpdate = useCallback(
+    (propertyId: string, data: Partial<PropertyData>) => {
+      setProperties((prev) =>
+        prev.map((p) =>
+          p.id === propertyId
             ? {
-                ...s,
-                data: { ...s.data, ...data },
-                isValid: validateStore({ ...s.data, ...data }),
+                ...p,
+                data: { ...p.data, ...data },
+                isValid: validateProperty({ ...p.data, ...data }),
               }
-            : s,
+            : p,
         ),
       );
     },
@@ -271,16 +268,16 @@ export function MultiStoreForm({
   );
 
   const handleSubmit = async () => {
-    const invalidStores = stores.filter((s) => !s.isValid);
-    if (invalidStores.length > 0) {
+    const invalidProperties = properties.filter((p) => !p.isValid);
+    if (invalidProperties.length > 0) {
       setError(
-        `Please complete all required fields for ${invalidStores.length} store(s).`,
+        `Please complete all required fields for ${invalidProperties.length} property listing(s).`,
       );
-      // Expand the first invalid store
-      setStores((prev) =>
-        prev.map((s) => ({
-          ...s,
-          isExpanded: s.id === invalidStores[0]?.id,
+      // Expand the first invalid property
+      setProperties((prev) =>
+        prev.map((p) => ({
+          ...p,
+          isExpanded: p.id === invalidProperties[0]?.id,
         })),
       );
       return;
@@ -289,15 +286,17 @@ export function MultiStoreForm({
     setError(null);
     setIsSubmitting(true);
     try {
-      await onSubmit(stores.map((s) => s.data as StoreData));
+      await onSubmit(properties.map((p) => p.data as PropertyData));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save stores");
+      setError(
+        err instanceof Error ? err.message : "Failed to save property listings",
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const allValid = stores.length > 0 && stores.every((s) => s.isValid);
+  const allValid = properties.length > 0 && properties.every((p) => p.isValid);
 
   return (
     <div className={theme.container}>
@@ -310,18 +309,18 @@ export function MultiStoreForm({
       >
         <div>
           <h2 className={theme.headerTitle}>
-            {isOnboarding ? "Setup Your Stores" : "Manage Locations"}
+            {isOnboarding ? "Add Your Listings" : "Manage Properties"}
           </h2>
           <p className={theme.headerDescription}>
-            Add detailed information for each of your branches to help customers
-            find you easily.
+            Add detailed information for your property listings to verify your
+            professional portfolio.
           </p>
         </div>
 
-        {stores.length < maxStores && (
-          <Button onClick={handleAddStore} className={theme.addButton}>
+        {properties.length < maxProperties && (
+          <Button onClick={handleAddProperty} className={theme.addButton}>
             <Plus className={cn("h-4 w-4 mr-2", theme.addButtonIcon)} />
-            Add Another Branch
+            Add Another Listing
           </Button>
         )}
       </div>
@@ -341,27 +340,27 @@ export function MultiStoreForm({
         )}
       </AnimatePresence>
 
-      {/* Store List */}
+      {/* Property List */}
       <div className="space-y-4">
         <AnimatePresence initial={false} mode="popLayout">
-          {stores.map((store, index) => (
+          {properties.map((property, index) => (
             <motion.div
-              key={store.id}
+              key={property.id}
               layout
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}
               className={cn(
-                theme.storeCard,
-                store.isExpanded
-                  ? theme.storeCardExpanded
-                  : theme.storeCardCollapsed,
+                theme.propertyCard,
+                property.isExpanded
+                  ? theme.propertyCardExpanded
+                  : theme.propertyCardCollapsed,
               )}
             >
               {/* Card Header (Clickable) */}
               <div
-                onClick={() => handleToggleStore(store.id)}
+                onClick={() => handleToggleProperty(property.id)}
                 className={theme.cardHeader}
               >
                 <div className="flex items-center gap-4">
@@ -369,15 +368,15 @@ export function MultiStoreForm({
                   <div
                     className={cn(
                       "w-12 h-12 rounded-full flex items-center justify-center border transition-colors",
-                      store.isValid
+                      property.isValid
                         ? theme.statusIndicatorValid
                         : theme.statusIndicatorInvalid,
                     )}
                   >
-                    {store.isValid ? (
+                    {property.isValid ? (
                       <Check className="h-6 w-6" />
                     ) : (
-                      <Building className="h-6 w-6" />
+                      <HomeIcon className="h-6 w-6" />
                     )}
                   </div>
 
@@ -385,12 +384,12 @@ export function MultiStoreForm({
                     <h3
                       className={cn(
                         "font-semibold text-lg transition-colors",
-                        !store.data.name
-                          ? theme.storeNameEmpty
-                          : theme.storeName,
+                        !property.data.title
+                          ? theme.propertyNameEmpty
+                          : theme.propertyName,
                       )}
                     >
-                      {store.data.name || `New Store Location ${index + 1}`}
+                      {property.data.title || `Property Listing ${index + 1}`}
                     </h3>
                     <div
                       className={cn(
@@ -398,7 +397,7 @@ export function MultiStoreForm({
                         theme.statusMeta,
                       )}
                     >
-                      {store.isValid ? (
+                      {property.isValid ? (
                         <span
                           className={cn(
                             "flex items-center gap-1",
@@ -418,7 +417,7 @@ export function MultiStoreForm({
                           Incomplete
                         </span>
                       )}
-                      {store.data.city && (
+                      {(property.data.location || property.data.price) && (
                         <>
                           <span
                             className={cn(
@@ -427,8 +426,21 @@ export function MultiStoreForm({
                             )}
                           />
                           <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            {store.data.city}, {store.data.county}
+                            {property.data.location && (
+                              <>
+                                <MapPin className="h-3 w-3" />{" "}
+                                {property.data.location}
+                              </>
+                            )}
+                            {property.data.location &&
+                              property.data.price &&
+                              ", "}
+                            {property.data.price && (
+                              <>
+                                {property.data.currency || "KES"}{" "}
+                                {property.data.price.toLocaleString()}
+                              </>
+                            )}
                           </span>
                         </>
                       )}
@@ -443,7 +455,7 @@ export function MultiStoreForm({
                     className={theme.removeButton}
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleRemoveStore(store.id);
+                      handleRemoveProperty(property.id);
                     }}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -452,7 +464,7 @@ export function MultiStoreForm({
                     className={cn(
                       "transition-transform duration-300",
                       theme.chevron,
-                      store.isExpanded && "rotate-180",
+                      property.isExpanded && "rotate-180",
                     )}
                   >
                     <ChevronDown className="h-5 w-5" />
@@ -462,7 +474,7 @@ export function MultiStoreForm({
 
               {/* Accordion Content */}
               <AnimatePresence>
-                {store.isExpanded && (
+                {property.isExpanded && (
                   <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
@@ -470,13 +482,17 @@ export function MultiStoreForm({
                     transition={{ duration: 0.3, ease: "easeInOut" }}
                   >
                     <div className={theme.accordionContent}>
-                      <StoreForm
-                        defaultValues={store.data}
-                        isEditing={!!store.data.id}
+                      <PropertyForm
+                        defaultValues={property.data}
+                        isEditing={!!property.data.id}
                         hideSubmitButton
-                        onChange={(data) => handleStoreUpdate(store.id, data)}
+                        onChange={(data) =>
+                          handlePropertyUpdate(property.id, data)
+                        }
                         onSubmit={async () => {}} // No-op, handled by parent
-                        variant={variant}
+                        // We do not pass variant here as PropertyForm has its own dark/light logic
+                        // but usually it adapts to parents via Tailwind classes if set up correctly
+                        // If PropertyForm needs explicit mode, we might need to add it to props.
                       />
                     </div>
                   </motion.div>
@@ -486,19 +502,24 @@ export function MultiStoreForm({
           ))}
         </AnimatePresence>
 
-        {stores.length === 0 && (
+        {properties.length === 0 && (
           <div className={theme.emptyState}>
-            <StoreIcon
+            <HomeIcon
               className={cn("mx-auto h-12 w-12 mb-4", theme.emptyStateIcon)}
             />
-            <h3 className={theme.emptyStateTitle}>No stores added yet</h3>
+            <h3 className={theme.emptyStateTitle}>
+              No detailed listings added
+            </h3>
             <p className={theme.emptyStateDescription}>
-              Get started by adding your first store location to the Build
-              Market platform.
+              Get started by adding your first property listing to your
+              professional portfolio.
             </p>
-            <Button onClick={handleAddStore} className={theme.emptyStateButton}>
+            <Button
+              onClick={handleAddProperty}
+              className={theme.emptyStateButton}
+            >
               <Plus className="h-4 w-4 mr-2" />
-              Add First Store
+              Add First Listing
             </Button>
           </div>
         )}
@@ -507,8 +528,8 @@ export function MultiStoreForm({
       {/* Footer Actions */}
       <div className={theme.footer}>
         <div className={cn("hidden sm:block", theme.footerMeta)}>
-          {stores.filter((s) => s.isValid).length}/{stores.length} locations
-          ready
+          {properties.filter((p) => p.isValid).length}/{properties.length}{" "}
+          listings ready
         </div>
 
         <div className="flex items-center gap-3 w-full sm:w-auto justify-end">

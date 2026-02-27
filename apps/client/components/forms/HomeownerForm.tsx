@@ -35,7 +35,7 @@ const COUNTY_OPTIONS: ComboboxOption[] = Object.entries(COUNTY_LABELS).map(
   ([value, label]) => ({
     value: value as County,
     label,
-  })
+  }),
 );
 
 const LOCATION_OPTIONS: ComboboxOption[] = [
@@ -183,7 +183,7 @@ const FormField: React.FC<{
             "transition-colors",
             error
               ? "text-red-500"
-              : "text-emerald-500 group-focus-within:text-emerald-400"
+              : "text-emerald-500 group-focus-within:text-emerald-400",
           )}
         >
           {icon}
@@ -255,7 +255,7 @@ const SuccessCard: React.FC<{
             "hover:from-emerald-400 hover:to-emerald-500",
             "transition-all duration-200 hover:scale-[1.02]",
             "flex items-center justify-center gap-2",
-            "disabled:opacity-50 disabled:cursor-not-allowed"
+            "disabled:opacity-50 disabled:cursor-not-allowed",
           )}
         >
           {isNavigating && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -380,6 +380,8 @@ const HomeownerForm: React.FC<Props> = ({
 
     const data: OnboardingData = {
       role: "client",
+      type: "HOMEOWNER",
+      county: formData.county,
       projectType: finalProjectType!,
       projectLocation: formData.projectLocation || "",
       estimatedBudget: formData.estimatedBudget || "",
@@ -419,7 +421,7 @@ const HomeownerForm: React.FC<Props> = ({
     "border border-white/10 hover:border-white/20",
     "focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20",
     "placeholder:text-zinc-500",
-    "transition-all duration-200"
+    "transition-all duration-200",
   );
 
   return (
@@ -461,7 +463,7 @@ const HomeownerForm: React.FC<Props> = ({
                     ? "border-red-500/50"
                     : "border-white/10 hover:border-white/20",
                   "text-white hover:bg-white/10",
-                  "focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20"
+                  "focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20",
                 )}
               />
             )}
@@ -493,7 +495,7 @@ const HomeownerForm: React.FC<Props> = ({
                     ? "border-red-500/50"
                     : "border-white/10 hover:border-white/20",
                   "text-white hover:bg-white/10",
-                  "focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20"
+                  "focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20",
                 )}
               />
             )}
@@ -506,7 +508,7 @@ const HomeownerForm: React.FC<Props> = ({
                 {...register("customProjectType")}
                 className={cn(
                   inputStyles,
-                  errors.customProjectType && "border-red-500/50"
+                  errors.customProjectType && "border-red-500/50",
                 )}
               />
               {errors.customProjectType && (
@@ -537,7 +539,7 @@ const HomeownerForm: React.FC<Props> = ({
                 className={cn(
                   "w-full rounded-xl",
                   "bg-white/5 border border-white/10 hover:border-white/20",
-                  "text-white hover:bg-white/10"
+                  "text-white hover:bg-white/10",
                 )}
               />
             )}
@@ -568,7 +570,7 @@ const HomeownerForm: React.FC<Props> = ({
             className={cn(
               inputStyles,
               "min-h-[140px] resize-none leading-relaxed",
-              errors.description && "border-red-500/50"
+              errors.description && "border-red-500/50",
             )}
             placeholder="Describe your vision, timeline, requirements, and any specific details that would help professionals understand your needs..."
             {...register("description")}
@@ -588,7 +590,7 @@ const HomeownerForm: React.FC<Props> = ({
               "hover:shadow-xl hover:shadow-emerald-500/30",
               "transition-all duration-300 hover:scale-[1.02]",
               "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100",
-              "disabled:shadow-none"
+              "disabled:shadow-none",
             )}
           >
             {isSubmitting ? (
@@ -625,7 +627,7 @@ const HomeownerForm: React.FC<Props> = ({
                 className={cn(
                   "text-sm font-medium transition-all duration-200",
                   "text-zinc-400 hover:text-emerald-400",
-                  "disabled:opacity-50"
+                  "disabled:opacity-50",
                 )}
               >
                 Skip for now →
@@ -642,7 +644,7 @@ const HomeownerForm: React.FC<Props> = ({
             className={cn(
               "w-full py-3 text-center text-sm",
               "text-zinc-500 hover:text-white",
-              "transition-colors duration-200"
+              "transition-colors duration-200",
             )}
           >
             ← Back to role selection

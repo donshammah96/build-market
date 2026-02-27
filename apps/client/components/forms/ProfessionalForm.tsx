@@ -6,22 +6,32 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { Award, Loader2 } from "lucide-react";
 
-import { ProfessionalOnboardingData } from "@build/types";
+import {
+  ProfessionalOnboardingData,
+  Profession,
+  County,
+  type AreaUnit,
+  type PropertyType,
+  type PropertyCategory,
+  type PropertyDocumentType,
+} from "@build/types";
+import { PropertyTenure } from "@build/enums";
 import {
   StepProgress,
   CompactStepProgress,
 } from "@/components/ui/step-progress";
 import { API_ROUTES } from "@/lib/links";
-
+import { getRegulatoryAuthorityCode } from "@/lib/constants/professionOptions";
 import {
   ProfessionStep,
   DetailsStep,
   StoreStep,
+  PropertyStep,
   CredentialsStep,
   DocumentsStep,
   ReviewStep,
-  ProfessionalWizardData,
   getActiveSteps,
+  ProfessionalWizardData,
 } from "./professional-wizard";
 
 // ============================================================================
@@ -231,7 +241,7 @@ const ProfessionalForm: React.FC<Props> = ({
         }
       }
       return baseData;
-    }
+    },
   );
 
   // UI state
@@ -258,7 +268,7 @@ const ProfessionalForm: React.FC<Props> = ({
         description: step.description,
         optional: step.optional,
       })),
-    [activeSteps]
+    [activeSteps],
   );
 
   // ========================================
@@ -272,7 +282,8 @@ const ProfessionalForm: React.FC<Props> = ({
         ...formData,
         certificates: undefined,
         idDocuments: undefined,
-        storeData: formData.storeData,
+        stores: formData.stores,
+        properties: formData.properties,
       };
       localStorage.setItem(storageKey, JSON.stringify(dataToSave));
     }
@@ -292,28 +303,30 @@ const ProfessionalForm: React.FC<Props> = ({
   // Track if we should submit on next render (to avoid stale closure)
   const [shouldSubmit, setShouldSubmit] = useState(false);
 
-  const handleNext = useCallback(() => {
-    if (currentStepIndex < activeSteps.length - 1) {
-      setDirection(1);
-      setCurrentStepIndex((prev) => prev + 1);
-    } else {
-      // Last step - trigger submission
-      setShouldSubmit(true);
-    }
-  }, [currentStepIndex, activeSteps.length]);
-
   const handleBack = useCallback(() => {
     if (currentStepIndex > 0) {
       setDirection(-1);
       setCurrentStepIndex((prev) => prev - 1);
     } else if (onBack) {
-      // First step - go back to role selection (onboarding mode)
       onBack();
     } else if (mode === "completion") {
-      // In completion mode, go back to dashboard
       router.push("/professional-portal/dashboard");
     }
   }, [currentStepIndex, onBack, mode, router]);
+
+  const goToStep = useCallback(
+    (stepId: string) => {
+      const stepIndex = activeSteps.findIndex((s) => s.id === stepId);
+      if (stepIndex !== -1) {
+        setDirection(stepIndex > currentStepIndex ? 1 : -1);
+        setCurrentStepIndex(stepIndex);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        console.error(`Step ${stepId} is currently not active.`);
+      }
+    },
+    [activeSteps, currentStepIndex],
+  );
 
   const handleStepClick = useCallback(
     (stepIndex: number) => {
@@ -322,7 +335,7 @@ const ProfessionalForm: React.FC<Props> = ({
         setCurrentStepIndex(stepIndex);
       }
     },
-    [currentStepIndex]
+    [currentStepIndex],
   );
 
   // ========================================
@@ -331,18 +344,16 @@ const ProfessionalForm: React.FC<Props> = ({
 
   const handleUpdate = useCallback(
     (updates: Partial<ProfessionalWizardData>) => {
-      setFormData((prev) => ({ ...prev, ...updates }));
-
-      // If profession changed, we might need to recalculate steps
-      // Reset to appropriate step if current step is no longer valid
-      if (updates.profession !== undefined) {
-        const newActiveSteps = getActiveSteps({ ...formData, ...updates });
+      setFormData((prev) => {
+        const newData = { ...prev, ...updates };
+        const newActiveSteps = getActiveSteps(newData);
         if (currentStepIndex >= newActiveSteps.length) {
           setCurrentStepIndex(newActiveSteps.length - 1);
         }
-      }
+        return newData;
+      });
     },
-    [formData, currentStepIndex]
+    [currentStepIndex],
   );
 
   // ========================================
@@ -361,196 +372,215 @@ const ProfessionalForm: React.FC<Props> = ({
   // FILE UPLOAD HELPER
   // ========================================
 
-  const uploadFiles = async (
-    files: File[],
-    fieldName: string,
-    signal?: AbortSignal,
-    onProgress?: (uploaded: number, total: number, fileName: string) => void
-  ): Promise<string[]> => {
-    if (files.length === 0) return [];
+  const uploadFiles = useCallback(
+    async (
+      files: File[],
+      fieldName: string,
+      signal?: AbortSignal,
+      onProgress?: (uploaded: number, total: number, fileName: string) => void,
+    ): Promise<string[]> => {
+      if (files.length === 0) return [];
 
-    const urls: string[] = [];
-    const totalFiles = files.length;
-    let uploadedIndex = 0;
+      const urls: string[] = [];
+      const totalFiles = files.length;
+      let uploadedIndex = 0;
 
-    for (const file of files) {
-      if (signal?.aborted) {
-        throw new DOMException("Upload cancelled", "AbortError");
+      for (const file of files) {
+        if (signal?.aborted) {
+          throw new DOMException("Upload cancelled", "AbortError");
+        }
+
+        onProgress?.(uploadedIndex, totalFiles, file.name);
+
+        const form = new FormData();
+        form.append(fieldName, file);
+
+        try {
+          const res = await fetch(API_ROUTES.onboardingUploads, {
+            method: "POST",
+            body: form,
+            signal,
+          });
+
+          if (!res.ok) {
+            const errorText = await res.text().catch(() => "");
+            throw new Error(
+              errorText || `Upload failed with status ${res.status}`,
+            );
+          }
+
+          const json = await res.json();
+          const uploadedUrl = json.uploaded?.[fieldName]?.[0]?.url;
+
+          if (uploadedUrl) {
+            urls.push(uploadedUrl);
+          } else {
+            throw new Error("No URL returned from server");
+          }
+        } catch (err) {
+          if (err instanceof Error && err.name === "AbortError") {
+            throw err;
+          }
+          console.error(`Failed to upload ${file.name}:`, err);
+          toast.error(`Failed to upload "${file.name}"`);
+        }
+
+        uploadedIndex++;
       }
 
-      onProgress?.(uploadedIndex, totalFiles, file.name);
-
-      const form = new FormData();
-      form.append(fieldName, file);
-
-      try {
-        const res = await fetch(API_ROUTES.onboardingUploads, {
-          method: "POST",
-          body: form,
-          signal,
-        });
-
-        if (!res.ok) {
-          const errorText = await res.text().catch(() => "");
-          throw new Error(
-            errorText || `Upload failed with status ${res.status}`
-          );
-        }
-
-        const json = await res.json();
-        const uploadedUrl = json.uploaded?.[fieldName]?.[0]?.url;
-
-        if (uploadedUrl) {
-          urls.push(uploadedUrl);
-        } else {
-          throw new Error("No URL returned from server");
-        }
-      } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") {
-          throw err;
-        }
-        console.error(`Failed to upload ${file.name}:`, err);
-        toast.error(`Failed to upload "${file.name}"`);
-      }
-
-      uploadedIndex++;
-    }
-
-    onProgress?.(totalFiles, totalFiles, "");
-    return urls;
-  };
+      onProgress?.(totalFiles, totalFiles, "");
+      return urls;
+    },
+    [],
+  );
 
   // ========================================
   // FORM SUBMISSION
   // ========================================
 
-  const handleSubmitForm = async () => {
+  const handleSubmitForm = useCallback(async () => {
     setIsSubmitting(true);
     const toastId = toast.loading("Preparing your application…");
 
     try {
-      // Extract files from form data
       const certificateFiles = formData.certificates?.map((c) => c.file) ?? [];
       const idDocumentFiles = formData.idDocuments?.map((d) => d.file) ?? [];
-      const totalFiles = certificateFiles.length + idDocumentFiles.length;
 
-      // Upload files
       let certificatesUrls: string[] = [];
       let idDocumentsUrls: string[] = [];
 
+      // 1. Upload Certificates
       if (certificateFiles.length > 0) {
-        toast.loading("Uploading certificates…", { id: toastId });
         certificatesUrls = await uploadFiles(
           certificateFiles,
           "certificates",
           undefined,
-          (uploaded, total, fileName) => {
-            if (fileName) {
-              toast.loading(
-                `Uploading certificate ${uploaded + 1}/${total}: ${fileName}`,
-                { id: toastId }
-              );
-            }
-          }
+          (up, tot, name) => {
+            if (name)
+              toast.loading(`Uploading certificate ${up + 1}/${tot}: ${name}`, {
+                id: toastId,
+              });
+          },
         );
       }
 
+      // 2. Upload IDs
       if (idDocumentFiles.length > 0) {
-        toast.loading("Uploading ID documents…", { id: toastId });
         idDocumentsUrls = await uploadFiles(
           idDocumentFiles,
           "idDocuments",
           undefined,
-          (uploaded, total, fileName) => {
-            if (fileName) {
-              toast.loading(
-                `Uploading ID document ${uploaded + 1}/${total}: ${fileName}`,
-                { id: toastId }
-              );
-            }
-          }
+          (up, tot, name) => {
+            if (name)
+              toast.loading(`Uploading ID document ${up + 1}/${tot}: ${name}`, {
+                id: toastId,
+              });
+          },
         );
       }
 
-      // Check for partial upload success
-      const uploadedCount = certificatesUrls.length + idDocumentsUrls.length;
-      if (totalFiles > 0 && uploadedCount < totalFiles) {
-        toast.loading(
-          `Submitting application (${uploadedCount}/${totalFiles} files uploaded)…`,
-          { id: toastId }
-        );
-      } else {
-        toast.loading("Submitting your application…", { id: toastId });
-      }
+      toast.loading("Submitting your application…", { id: toastId });
 
-      // Construct payload
+      // 3. Resolve Domain Logic
+      const professionEnum = (formData.profession as Profession) || "OTHER";
+      const authority =
+        formData.authority ||
+        getRegulatoryAuthorityCode(formData.profession || "") ||
+        "OTHER";
+
+      // STAFF FIX: Unified License Mapping
+      const finalLicenseNumber =
+        formData.boardRegistrationNumber || formData.licenseNumber || "PENDING";
+
+      // 4. Construct Payload
       const payload: ProfessionalOnboardingData = {
         role: "professional",
-        profession: formData.profession || "other",
+        profession: professionEnum,
         companyName: formData.companyName || "",
-        licenseNumber: formData.licenseNumber || "",
+        county: formData.county as County,
         yearsExperience: formData.yearsExperience,
         website: formData.website,
         bio: formData.bio,
-        certificatesUrls,
-        idDocumentsUrls,
-        // Include store data for suppliers
-        ...(formData.storeData && { storeData: formData.storeData }),
-        // Include EARB number for real estate professionals
-        ...(formData.earbNumber && { earbNumber: formData.earbNumber }),
+        license: {
+          authority,
+          licenseNumber: finalLicenseNumber,
+          certificateUrl: certificatesUrls[0] || "",
+        },
+        documents: idDocumentsUrls.map((url) => ({
+          category: "ID_OR_PASSPORT",
+          assetId: url,
+        })),
+        ...(formData.stores?.length && {
+          stores: formData.stores.map((s: any) => ({
+            ...s,
+            role: "professional",
+          })),
+        }),
+        ...(formData.properties?.length && {
+          properties: formData.properties.map((p: any) => ({
+            ...p,
+            role: "professional",
+          })),
+        }),
       };
 
+      // 5. Execute Parent Submit
       await onSubmit(payload);
 
-      // Success!
+      // 6. Cleanup & Success States
       clearSavedData();
       setSuccess(true);
+      toast.success(
+        mode === "completion"
+          ? "Profile updated successfully!"
+          : "Application received.",
+        { id: toastId },
+      );
 
-      // Show appropriate success message based on mode
-      if (mode === "completion") {
-        toast.success("Profile updated successfully!", { id: toastId });
-      } else {
-        toast.success(
-          "Application received. You will be contacted for verification.",
-          { id: toastId }
-        );
-      }
-
-      // Call success callback (support both new and deprecated)
-      if (onSuccess) {
-        onSuccess(payload);
-      } else if (onAuthSuccess) {
-        onAuthSuccess(payload);
-      }
+      // 7. Fire Callbacks
+      if (onSuccess) onSuccess(payload);
+      else if (onAuthSuccess) onAuthSuccess(payload);
     } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
-        toast.dismiss(toastId);
-        return;
-      }
-
-      console.error("Professional submit error", err);
-      const message =
+      toast.error(
         err instanceof Error
           ? err.message
-          : "Failed to submit. Please try again.";
-      toast.error(message, { id: toastId });
+          : "Failed to submit. Please try again.",
+        { id: toastId },
+      );
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [
+    // DEPENDENCY ARRAY: Everything external that this function relies on
+    formData,
+    mode,
+    uploadFiles,
+    onSubmit,
+    clearSavedData,
+    onSuccess,
+    onAuthSuccess,
+  ]);
 
   // ========================================
   // POST-SUCCESS NAVIGATION
   // ========================================
+  const handleNext = useCallback(() => {
+    if (currentStepIndex < activeSteps.length - 1) {
+      setDirection(1);
+      setCurrentStepIndex((prev) => prev + 1);
+    } else {
+      handleSubmitForm();
+    }
+  }, [currentStepIndex, activeSteps.length, handleSubmitForm]);
 
   const handleGoDashboard = useCallback(() => {
     setNavigating(true);
-    if (formData.storeData) {
+    if (formData.stores && formData.stores.length > 0) {
       router.push("/professional-portal/settings/stores");
     } else {
       router.push("/professional-portal/dashboard");
     }
-  }, [formData.storeData, router]);
+  }, [formData.stores, router]);
 
   // ========================================
   // RENDER SUCCESS STATE
@@ -585,17 +615,18 @@ const ProfessionalForm: React.FC<Props> = ({
   // RENDER STEP CONTENT
   // ========================================
 
-  const renderStepContent = () => {
-    const stepProps = {
-      data: formData,
-      onUpdate: handleUpdate,
-      onNext: handleNext,
-      onBack: handleBack,
-      isFirstStep: currentStepIndex === 0,
-      isLastStep: currentStepIndex === activeSteps.length - 1,
-      isSubmitting,
-    };
+  const stepProps = {
+    data: formData,
+    onUpdate: handleUpdate,
+    onNext: handleNext,
+    onBack: handleBack,
+    goToStep, // <--- PASSED DOWN HERE
+    isFirstStep: currentStepIndex === 0,
+    isLastStep: currentStepIndex === activeSteps.length - 1,
+    isSubmitting,
+  };
 
+  const renderStepContent = () => {
     switch (currentStep?.id) {
       case "profession":
         return <ProfessionStep {...stepProps} />;
@@ -603,6 +634,8 @@ const ProfessionalForm: React.FC<Props> = ({
         return <DetailsStep {...stepProps} />;
       case "store":
         return <StoreStep {...stepProps} />;
+      case "property":
+        return <PropertyStep {...stepProps} />;
       case "credentials":
         return <CredentialsStep {...stepProps} />;
       case "documents":
@@ -614,26 +647,23 @@ const ProfessionalForm: React.FC<Props> = ({
     }
   };
 
-  // ========================================
-  // MAIN RENDER
-  // ========================================
-
   return (
     <div className={theme.container}>
-      {/* Progress Indicator */}
       <div className="mb-8">
-        {/* Desktop: Full step progress */}
         <div className="hidden md:block">
           <StepProgress
-            steps={progressSteps}
+            steps={activeSteps}
             currentStep={currentStepIndex}
-            onStepClick={handleStepClick}
+            onStepClick={(idx) => {
+              const targetStepId = activeSteps[idx]?.id;
+              if (targetStepId) {
+                goToStep(targetStepId);
+              }
+            }}
             allowClickOnCompleted
             theme={variant}
           />
         </div>
-
-        {/* Mobile: Compact progress bar */}
         <div className="md:hidden">
           <CompactStepProgress
             currentStep={currentStepIndex}
@@ -643,7 +673,6 @@ const ProfessionalForm: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Step Content with Animation */}
       <AnimatePresence mode="wait" custom={direction}>
         <motion.div
           key={currentStep?.id}
@@ -661,7 +690,6 @@ const ProfessionalForm: React.FC<Props> = ({
         </motion.div>
       </AnimatePresence>
 
-      {/* Loading Overlay */}
       {isSubmitting && (
         <div className={theme.loadingOverlay}>
           <div className="flex flex-col items-center gap-3">

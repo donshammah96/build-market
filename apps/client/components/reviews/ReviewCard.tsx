@@ -1,12 +1,16 @@
 "use client";
 
-import React, { memo } from "react";
-import { Card } from "../ui/card";
-import { Avatar, AvatarImage, AvatarFallback } from "../ui/avatar";
+import { memo } from "react";
+import { Card } from "@/components/ui/card";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Star, Quote, BadgeCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface ReviewProps {
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export interface ReviewCardProps {
   quote: string;
   name: string;
   location?: string;
@@ -15,14 +19,18 @@ interface ReviewProps {
   rating?: number;
 }
 
-const ReviewCard: React.FC<ReviewProps> = memo(function ReviewCard({
+// ============================================================================
+// COMPONENT
+// ============================================================================
+
+export const ReviewCard = memo(function ReviewCard({
   quote,
   name,
   location = "Nairobi, Kenya",
   role = "Homeowner",
   image,
   rating = 5,
-}) {
+}: ReviewCardProps) {
   return (
     <div className="h-full hover-lift">
       <Card
@@ -68,7 +76,11 @@ const ReviewCard: React.FC<ReviewProps> = memo(function ReviewCard({
         {/* Footer: User Info */}
         <footer className="flex items-center gap-3 mt-auto pt-4 border-t border-zinc-50">
           <Avatar className="h-12 w-12 border-2 border-white shadow-sm">
-            <AvatarImage src={image} alt="" className="object-cover" />
+            <AvatarImage
+              src={image}
+              alt={name}
+              className="object-cover"
+            />
             <AvatarFallback className="bg-emerald-50 text-emerald-700 font-bold">
               {name.charAt(0)}
             </AvatarFallback>
@@ -94,5 +106,3 @@ const ReviewCard: React.FC<ReviewProps> = memo(function ReviewCard({
     </div>
   );
 });
-
-export default ReviewCard;

@@ -24,9 +24,19 @@ import {
   PROFESSION_GROUPS,
   isSupplierProfession,
   isRealEstateProfession,
+  isEngineeringProfession,
+  isArchitectureProfession,
+  isSpecialistProfession,
+  isSpecializedTradesProfession,
+  isConstructionManagementProfession,
+  getRegulatoryAuthorityCode,
   getProfessionRegulatoryBody,
 } from "@/lib/constants/professionOptions";
-import { StepComponentProps, professionStepSchema, WIZARD_STYLES } from "./types";
+import {
+  StepComponentProps,
+  professionStepSchema,
+  WIZARD_STYLES,
+} from "./types";
 
 // ============================================================================
 // TYPES
@@ -57,7 +67,7 @@ const CategoryCard: React.FC<CategoryCardProps> = ({
 }) => {
   const isActive = professions.includes(selectedProfession);
   const professionOptions = PROFESSION_OPTIONS.filter((opt) =>
-    professions.includes(opt.value)
+    professions.includes(opt.value),
   );
 
   return (
@@ -69,7 +79,7 @@ const CategoryCard: React.FC<CategoryCardProps> = ({
         "group p-4 rounded-xl border transition-all duration-300 cursor-pointer",
         isActive
           ? "bg-emerald-500/10 border-emerald-500/50 shadow-lg shadow-emerald-500/10"
-          : "bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8"
+          : "bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8",
       )}
     >
       <div className="flex items-center gap-3 mb-3">
@@ -78,7 +88,7 @@ const CategoryCard: React.FC<CategoryCardProps> = ({
             "p-2 rounded-lg transition-colors",
             isActive
               ? "bg-emerald-500/20 text-emerald-400"
-              : "bg-white/5 text-zinc-400 group-hover:text-zinc-300"
+              : "bg-white/5 text-zinc-400 group-hover:text-zinc-300",
           )}
         >
           {icon}
@@ -86,7 +96,7 @@ const CategoryCard: React.FC<CategoryCardProps> = ({
         <h3
           className={cn(
             "font-semibold transition-colors",
-            isActive ? "text-emerald-400" : "text-white"
+            isActive ? "text-emerald-400" : "text-white",
           )}
         >
           {title}
@@ -103,7 +113,7 @@ const CategoryCard: React.FC<CategoryCardProps> = ({
               "text-xs px-2.5 py-1 rounded-full transition-all",
               selectedProfession === opt.value
                 ? "bg-emerald-500 text-white"
-                : "bg-white/10 text-zinc-400 hover:bg-white/20 hover:text-white"
+                : "bg-white/10 text-zinc-400 hover:bg-white/20 hover:text-white",
             )}
           >
             {opt.label}
@@ -127,7 +137,6 @@ export default function ProfessionStep({
   data,
   onUpdate,
   onNext,
-  isFirstStep,
 }: StepComponentProps) {
   const {
     control,
@@ -144,12 +153,17 @@ export default function ProfessionStep({
 
   const selectedProfession = watch("profession");
 
-  // Get info about selected profession
-  const regulatoryBody = selectedProfession
+  // Get rich info about selected profession using the corrected helper
+  const regulatoryBodyFullName = selectedProfession
     ? getProfessionRegulatoryBody(selectedProfession)
     : null;
-  const isSupplier = isSupplierProfession(selectedProfession);
-  const isRealEstate = isRealEstateProfession(selectedProfession);
+
+  const isSupplier = selectedProfession
+    ? isSupplierProfession(selectedProfession)
+    : false;
+  const isRealEstate = selectedProfession
+    ? isRealEstateProfession(selectedProfession)
+    : false;
 
   const handleProfessionSelect = (profession: string) => {
     setValue("profession", profession, { shouldValidate: true });
@@ -176,7 +190,8 @@ export default function ProfessionStep({
           What do you do?
         </h2>
         <p className="text-zinc-400 max-w-md mx-auto">
-          Select your profession to customize your onboarding experience
+          Select your primary expertise to customize your onboarding
+          verification.
         </p>
       </motion.div>
 
@@ -202,7 +217,7 @@ export default function ProfessionStep({
               className={cn(
                 "w-full bg-white/5 border text-white hover:bg-white/10",
                 "focus:outline-none focus:ring-2 focus:ring-emerald-400",
-                errors.profession ? "border-red-500/50" : "border-white/30"
+                errors.profession ? "border-red-500/50" : "border-white/30",
               )}
             />
           )}
@@ -233,7 +248,7 @@ export default function ProfessionStep({
         <CategoryCard
           icon={<HardHat className="h-5 w-5" />}
           title="Construction"
-          professions={PROFESSION_GROUPS["Contractors"]}
+          professions={PROFESSION_GROUPS["Construction Management"]}
           selectedProfession={selectedProfession}
           onSelect={handleProfessionSelect}
           delay={0.25}
@@ -264,34 +279,50 @@ export default function ProfessionStep({
         />
       </div>
 
-      {/* Selected Profession Info */}
+      {/* Selected Profession Info (Dynamic Feedback) */}
       {selectedProfession && (
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
-          className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4"
+          className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 overflow-hidden"
         >
           <div className="flex items-start gap-3">
-            <div className="p-2 bg-emerald-500/20 rounded-lg">
+            <div className="p-2 bg-emerald-500/20 rounded-lg shrink-0">
               <Briefcase className="h-5 w-5 text-emerald-400" />
             </div>
             <div className="flex-1">
               <h4 className="font-medium text-emerald-400">
-                {PROFESSION_OPTIONS.find((p) => p.value === selectedProfession)?.label}
+                {
+                  PROFESSION_OPTIONS.find((p) => p.value === selectedProfession)
+                    ?.label
+                }
               </h4>
-              <p className="text-sm text-zinc-400 mt-1">
-                {regulatoryBody && (
-                  <span>Regulated by: {regulatoryBody}</span>
-                )}
-              </p>
+
+              {/* Conditional Regulatory Rendering */}
+              {regulatoryBodyFullName ? (
+                <p className="text-sm text-zinc-300 mt-1">
+                  Verified by:{" "}
+                  <span className="font-semibold text-white">
+                    {regulatoryBodyFullName}
+                  </span>
+                </p>
+              ) : (
+                <p className="text-sm text-zinc-400 mt-1">
+                  Standard identity and tax compliance verification required.
+                </p>
+              )}
+
+              {/* Contextual Hints */}
               {isSupplier && (
-                <p className="text-xs text-amber-400 mt-2">
-                  You&apos;ll be able to set up your store in the next steps
+                <p className="text-xs text-amber-400 mt-2 flex items-center gap-1">
+                  <Store className="h-3 w-3" /> You will be prompted to set up
+                  your merchant store in the next steps.
                 </p>
               )}
               {isRealEstate && (
-                <p className="text-xs text-amber-400 mt-2">
-                  You&apos;ll need to provide your EARB registration details
+                <p className="text-xs text-amber-400 mt-2 flex items-center gap-1">
+                  <Home className="h-3 w-3" /> Have your board registration
+                  documents ready for the credential step.
                 </p>
               )}
             </div>
@@ -311,7 +342,7 @@ export default function ProfessionStep({
           disabled={!selectedProfession}
           className={cn(
             WIZARD_STYLES.primaryButton,
-            "max-w-xs flex items-center justify-center gap-2"
+            "max-w-xs flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed",
           )}
         >
           Continue

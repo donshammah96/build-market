@@ -18,7 +18,7 @@ import {
   Clock,
   Archive,
 } from "lucide-react";
-import { ImageWithFallback } from "../../app/lib/ImageWithFallback";
+import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { ProjectCardData, ProjectStatus } from "../../types/project";
@@ -31,33 +31,47 @@ interface ProjectCardProps {
 
 const getStatusConfig = (status: ProjectStatus) => {
   switch (status) {
-    case "planning":
+    case "PLANNING":
       return {
         label: "Planning",
         icon: Clock,
         variant: "secondary" as const,
         className: "bg-blue-50 text-blue-700 border-blue-200",
       };
-    case "in_progress":
+    case "IN_PROGRESS":
       return {
         label: "In Progress",
         icon: Clock,
         variant: "default" as const,
         className: "bg-amber-50 text-amber-700 border-amber-200",
       };
-    case "completed":
+    case "PAUSED":
+      return {
+        label: "Paused",
+        icon: Clock,
+        variant: "outline" as const,
+        className: "bg-slate-50 text-slate-700 border-slate-200",
+      };
+    case "COMPLETED":
       return {
         label: "Completed",
         icon: CheckCircle2,
         variant: "default" as const,
         className: "bg-emerald-50 text-emerald-700 border-emerald-200",
       };
-    case "archived":
+    case "ARCHIVED":
       return {
         label: "Archived",
         icon: Archive,
         variant: "outline" as const,
         className: "bg-slate-50 text-slate-700 border-slate-200",
+      };
+    case "CANCELLED":
+      return {
+        label: "Cancelled",
+        icon: Archive,
+        variant: "outline" as const,
+        className: "bg-red-50 text-red-700 border-red-200",
       };
     default:
       return {
@@ -214,7 +228,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
                 View Details
               </Link>
             </Button>
-            {project.status === "in_progress" && (
+            {project.status === "IN_PROGRESS" && (
               <Button variant="outline" size="sm" className="flex-1" asChild>
                 <Link href={`/projects/${project.id}/milestones`}>
                   Milestones

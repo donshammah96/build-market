@@ -1,11 +1,12 @@
 "use client";
 
 import { memo, useMemo } from "react";
-import { reviews as allReviews } from "../../app/data/homeData";
-import ReviewCard from "./ReviewCard";
+import type { Review } from "@/app/data/homeData";
+import { reviews as allReviews } from "@/app/data/homeData";
+import { ReviewCard } from "./ReviewCard";
 import Link from "next/link";
 import { ROUTES } from "@/lib/links";
-import { Button } from "../ui/button";
+import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import {
   useIntersectionObserver,
@@ -44,20 +45,19 @@ export const ReviewsSection = memo(function ReviewsSection({
   const [ref, isInView] = useIntersectionObserver();
   const shouldAnimate = useShouldAnimate();
 
-  // Memoize filtered reviews
   const filteredReviews = useMemo(() => {
-    if (!searchTerm) return allReviews;
-    const term = searchTerm.toLowerCase();
+    if (!searchTerm.trim()) return allReviews;
+    const term = searchTerm.toLowerCase().trim();
     return allReviews.filter(
-      (review) =>
+      (review: Review) =>
         review.quote.toLowerCase().includes(term) ||
         review.name.toLowerCase().includes(term)
     );
   }, [searchTerm]);
 
-  // Fallback if filter returns empty
-  const displayReviews =
+  const displayReviews: Review[] =
     filteredReviews.length > 0 ? filteredReviews : allReviews;
+  const displaySlice = displayReviews.slice(0, 3);
 
   return (
     <section
@@ -101,9 +101,9 @@ export const ReviewsSection = memo(function ReviewsSection({
 
         {/* Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-          {displayReviews.slice(0, 3).map((review, index) => (
+          {displaySlice.map((review, index) => (
             <div
-              key={review.id || index}
+              key={review.id}
               className={cn(
                 "h-full",
                 isInView && shouldAnimate && "animate-fade-in-up"
@@ -113,7 +113,14 @@ export const ReviewsSection = memo(function ReviewsSection({
                   isInView && shouldAnimate ? `${index * 150}ms` : "0ms",
               }}
             >
-              <ReviewCard {...review} />
+              <ReviewCard
+                quote={review.quote}
+                name={review.name}
+                location={review.location}
+                role={review.role}
+                image={review.image}
+                rating={review.rating}
+              />
             </div>
           ))}
         </div>

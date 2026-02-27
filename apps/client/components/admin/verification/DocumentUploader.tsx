@@ -18,7 +18,13 @@ import { uploadFiles } from "@/lib/services/upload";
 
 interface Document {
   id: string;
-  fileUrl: string;
+  asset?: {
+    id: string;
+    cdnUrl: string;
+  } | null;
+  /** @deprecated prefer asset.cdnUrl */
+  fileUrl?: string | null;
+  /** @deprecated */
   fileKey?: string | null;
   type: string;
   isVerified?: boolean;
@@ -36,7 +42,7 @@ interface DocumentUploaderProps {
   onReplace: (
     documentId: string,
     fileUrl: string,
-    fileKey?: string
+    fileKey?: string,
   ) => Promise<void>;
   onDelete: (documentId: string) => Promise<void>;
   allowedTypes?: string[];
@@ -65,7 +71,7 @@ export function DocumentUploader({
     // Validate file type
     if (!allowedTypes.includes(file.type)) {
       toast.error(
-        `Invalid file type. Allowed types: ${allowedTypes.join(", ")}`
+        `Invalid file type. Allowed types: ${allowedTypes.join(", ")}`,
       );
       return;
     }
@@ -95,7 +101,7 @@ export function DocumentUploader({
       }
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to upload document"
+        error instanceof Error ? error.message : "Failed to upload document",
       );
     } finally {
       setUploading(false);
@@ -111,7 +117,7 @@ export function DocumentUploader({
     // Validate file type
     if (!allowedTypes.includes(file.type)) {
       toast.error(
-        `Invalid file type. Allowed types: ${allowedTypes.join(", ")}`
+        `Invalid file type. Allowed types: ${allowedTypes.join(", ")}`,
       );
       return;
     }
@@ -136,7 +142,7 @@ export function DocumentUploader({
       toast.success(`${documentTypeLabel} replaced successfully`);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to replace document"
+        error instanceof Error ? error.message : "Failed to replace document",
       );
     } finally {
       setReplacingId(null);
@@ -146,7 +152,7 @@ export function DocumentUploader({
   const handleDelete = async (documentId: string) => {
     if (
       !confirm(
-        `Are you sure you want to delete this ${documentTypeLabel.toLowerCase()}?`
+        `Are you sure you want to delete this ${documentTypeLabel.toLowerCase()}?`,
       )
     ) {
       return;
@@ -157,7 +163,7 @@ export function DocumentUploader({
       toast.success(`${documentTypeLabel} deleted successfully`);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete document"
+        error instanceof Error ? error.message : "Failed to delete document",
       );
     }
   };
@@ -274,7 +280,7 @@ export function DocumentUploader({
                     </Button>
                     <Button variant="ghost" size="sm" asChild>
                       <a
-                        href={doc.fileUrl}
+                        href={doc.asset?.cdnUrl || doc.fileUrl || "#"}
                         target="_blank"
                         rel="noopener noreferrer"
                       >

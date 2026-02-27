@@ -4,38 +4,36 @@ import React, { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { StoreFormSubmitData } from "../StoreForm";
-import { MultiStoreForm } from "../MultiStoreForm";
+import { PropertyFormSubmitData } from "../PropertyForm";
+import { MultiPropertyForm } from "../MultiPropertyForm";
 import { StepComponentProps, WIZARD_STYLES } from "./types";
 
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 
-export default function StoreStep({
+export default function PropertyStep({
   data,
   onUpdate,
   onNext,
   onBack,
 }: StepComponentProps) {
-  const [stores] = useState<StoreFormSubmitData[]>(data.stores || []);
+  const [properties] = useState<PropertyFormSubmitData[]>(
+    data.properties || [],
+  );
 
-  // Skip store setup
+  // Skip property setup
   const handleSkip = () => {
-    onUpdate({ stores: [] }); // Explicitly empty
+    onUpdate({ properties: [] });
     onNext();
   };
 
   return (
     <div className="space-y-8">
-      {/* Header handled inside MultiStoreForm or here? MultiStoreForm has a header. 
-          Let's use MultiStoreForm's internal header and layout for consistency.
-      */}
-
-      <MultiStoreForm
-        initialStores={stores}
-        onSubmit={(validStores) => {
-          onUpdate({ stores: validStores });
+      <MultiPropertyForm
+        initialProperties={properties}
+        onSubmit={(validProperties) => {
+          onUpdate({ properties: validProperties });
           onNext();
         }}
         onCancel={handleSkip}

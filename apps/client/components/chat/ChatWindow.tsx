@@ -2,11 +2,17 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useUser } from "@clerk/nextjs";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Socket } from "socket.io-client";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { messagingClient } from "@/lib/messaging-client";
-import type { Message, Conversation } from "@build/types";
+import {
+  useConversation,
+  useMessages,
+  useSendMessage,
+  useMarkConversationAsRead,
+  messagingKeys,
+} from "@/hooks/useMessaging";
+import { useProfileStatus } from "@/hooks/useProfileStatus";
+import type { Message } from "@build/types";
 
 // UI Components
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,103 +41,83 @@ interface ChatWindowProps {
   otherUserAvatar?: string;
 }
 
+type SendMessageContext = { previous: unknown };
+
 export default function ChatWindow({
   conversationId,
   otherUserName = "User",
   otherUserAvatar,
 }: ChatWindowProps) {
   const { user } = useUser();
+  const { user: profileUser } = useProfileStatus();
   const queryClient = useQueryClient();
+  const currentUserDbId = profileUser?.id ?? "";
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // State
-  const [socket] = useState<Socket | null>(null);
   const [newMessage, setNewMessage] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
   const [otherUserTyping] = useState(false);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch conversation details
-  useQuery<Conversation>({
-    queryKey: ["conversation", conversationId],
-    queryFn: async () => {
-      const result = await messagingClient.getConversation(conversationId);
-      if (result.success && result.data) {
-        return result.data;
-      }
-      throw new Error(result.error || "Failed to fetch conversation");
-    },
-    enabled: !!conversationId,
-  });
+  // Fetch conversation details (for metadata)
+  useConversation(conversationId);
 
-  // Fetch messages with pagination
+  // Fetch messages
   const {
     data: messagesData,
     isLoading,
     error,
-  } = useQuery({
-    queryKey: ["messages", conversationId],
-    queryFn: async () => {
-      const result = await messagingClient.getMessages(conversationId, 1, 100);
-      if (result.success && result.data) {
-        return result.data;
-      }
-      throw new Error("Failed to fetch messages");
-    },
+  } = useMessages({
+    conversationId,
+    limit: 100,
     enabled: !!conversationId,
-    refetchOnWindowFocus: false,
   });
 
-  const messages = messagesData?.items || [];
+  const messages = messagesData?.items ?? [];
 
-  // Send message mutation
-  const sendMutation = useMutation({
-    mutationFn: async (content: string) => {
-      if (!user?.id) {
-        throw new Error("User not authenticated");
-      }
-      const result = await messagingClient.sendMessage({
-        conversationId,
-        senderId: user.id,
-        content,
-        type: "text",
-      });
-      if (!result.success) {
-        throw new Error(result.error || "Failed to send message");
-      }
-      return result.data;
-    },
+  // Send message
+  const sendMutation = useSendMessage<SendMessageContext>(conversationId, {
     onMutate: async (content) => {
-      // Optimistic update
-      await queryClient.cancelQueries({ queryKey: ["messages", conversationId] });
-      const previousMessages = queryClient.getQueryData(["messages", conversationId]);
+      const previous = queryClient.getQueryData(
+        messagingKeys.messages(conversationId),
+      );
+      if (!currentUserDbId) return { previous };
+      await queryClient.cancelQueries({
+        queryKey: messagingKeys.messages(conversationId),
+      });
 
       const optimisticMessage: Message = {
         id: `temp-${Date.now()}`,
+        threadId: conversationId,
         conversationId,
-        senderId: user?.id || "",
-        content,
-        type: "text",
-        readBy: [user?.id || ""],
+        senderId: currentUserDbId,
+        content: typeof content === "string" ? content : content.content,
+        type: "TEXT",
+        readBy: [currentUserDbId],
         attachments: [],
-        encrypted: false,
+        reactions: [],
+        readReceipts: [],
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      queryClient.setQueryData(["messages", conversationId], (old: { items: Message[] } | undefined) => ({
-        ...old,
-        items: [...(old?.items || []), optimisticMessage],
-      }));
+      queryClient.setQueryData(
+        messagingKeys.messages(conversationId),
+        (old: { items: Message[] } | undefined) => ({
+          ...old,
+          items: [...(old?.items ?? []), optimisticMessage],
+        }),
+      );
 
-      return { previousMessages };
+      return { previous };
     },
     onError: (err, variables, context) => {
-      // Rollback on error
-      if (context?.previousMessages) {
-        queryClient.setQueryData(["messages", conversationId], context.previousMessages);
+      if (context?.previous) {
+        queryClient.setQueryData(
+          messagingKeys.messages(conversationId),
+          context.previous,
+        );
       }
       toast({
         variant: "destructive",
@@ -139,28 +125,18 @@ export default function ChatWindow({
         description: err instanceof Error ? err.message : "Please try again",
       });
     },
-    onSuccess: () => {
-      // Refetch to get real message with ID
-      queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-    },
   });
 
   // Mark conversation as read
-  const markAsReadMutation = useMutation({
-    mutationFn: () => {
-      if (!user?.id) {
-        throw new Error("User not authenticated");
-      }
-      return messagingClient.markConversationAsRead(conversationId);
-    },
-  });
+  const markAsReadMutation = useMarkConversationAsRead(conversationId);
 
   // Polling for new messages (MVP replacement for Socket.io)
   useEffect(() => {
     const interval = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
-    }, 5000); // Poll every 5 seconds
+      queryClient.invalidateQueries({
+        queryKey: messagingKeys.messages(conversationId),
+      });
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [conversationId, queryClient]);
@@ -181,39 +157,14 @@ export default function ChatWindow({
 
   // Mark as read when viewing
   useEffect(() => {
-    if (messages.length > 0 && user?.id) {
+    if (messages.length > 0 && currentUserDbId) {
       markAsReadMutation.mutate();
     }
-  }, [messages.length, user?.id, markAsReadMutation]);
+  }, [messages.length, currentUserDbId, markAsReadMutation]);
 
-  // Handle typing
+  // Handle typing (Socket.io removed for MVP; placeholder for future)
   const handleTyping = (value: string) => {
     setNewMessage(value);
-
-    if (!socket || !user?.id) return;
-
-    // Emit typing start
-    if (value.length > 0 && !isTyping) {
-      setIsTyping(true);
-      socket.emit("typing:start", {
-        conversationId,
-        userId: user.id,
-      });
-    }
-
-    // Clear previous timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    // Emit typing stop after 2 seconds of no typing
-    typingTimeoutRef.current = setTimeout(() => {
-      setIsTyping(false);
-      socket.emit("typing:stop", {
-        conversationId,
-        userId: user.id,
-      });
-    }, 2000);
   };
 
   // Send message
@@ -223,15 +174,6 @@ export default function ChatWindow({
     const messageToSend = newMessage.trim();
     setNewMessage("");
     inputRef.current?.focus();
-
-    // Stop typing indicator
-    if (socket && user?.id) {
-      socket.emit("typing:stop", {
-        conversationId,
-        userId: user.id,
-      });
-      setIsTyping(false);
-    }
 
     await sendMutation.mutateAsync(messageToSend);
   };
@@ -246,9 +188,9 @@ export default function ChatWindow({
       .slice(0, 2);
   };
 
-  // Check if message is read by other user
+  // Check if message is read by other user (readBy excludes sender)
   const isMessageRead = (message: Message) => {
-    return message.readBy.some((id) => id !== user?.id);
+    return message.readBy?.some((id) => id !== currentUserDbId) ?? false;
   };
 
   // Check if we have cached data but are currently in error state
@@ -259,7 +201,13 @@ export default function ChatWindow({
       <Card className="h-[600px] flex items-center justify-center">
         <div className="text-center">
           <p className="text-destructive mb-2">Failed to load conversation</p>
-          <Button onClick={() => queryClient.invalidateQueries({ queryKey: ["messages", conversationId] })}>
+          <Button
+            onClick={() =>
+              queryClient.invalidateQueries({
+                queryKey: messagingKeys.messages(conversationId),
+              })
+            }
+          >
             Retry
           </Button>
         </div>
@@ -296,7 +244,7 @@ export default function ChatWindow({
               {messages.length} messages
             </Badge>
           </div>
-          
+
           {/* Offline Banner */}
           {isOffline && (
             <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-xs px-3 py-1 rounded-md flex items-center gap-2">
@@ -315,7 +263,10 @@ export default function ChatWindow({
               // Loading skeleton
               <div className="space-y-4">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className={`flex ${i % 2 === 0 ? "justify-end" : "justify-start"}`}>
+                  <div
+                    key={i}
+                    className={`flex ${i % 2 === 0 ? "justify-end" : "justify-start"}`}
+                  >
                     <div className="space-y-2">
                       <Skeleton className="h-4 w-[200px]" />
                       <Skeleton className="h-4 w-[150px]" />
@@ -328,14 +279,18 @@ export default function ChatWindow({
               <div className="flex flex-col items-center justify-center h-full text-center py-12">
                 <div className="text-6xl mb-4">💬</div>
                 <p className="text-muted-foreground">No messages yet</p>
-                <p className="text-sm text-muted-foreground">Send a message to start the conversation</p>
+                <p className="text-sm text-muted-foreground">
+                  Send a message to start the conversation
+                </p>
               </div>
             ) : (
               // Messages list
               <AnimatePresence initial={false}>
                 {messages.map((message: Message, index: number) => {
-                  const isOwn = message.senderId === user?.id;
-                  const showAvatar = index === 0 || messages[index - 1]?.senderId !== message.senderId;
+                  const isOwn = message.senderId === currentUserDbId;
+                  const showAvatar =
+                    index === 0 ||
+                    messages[index - 1]?.senderId !== message.senderId;
                   const isRead = isMessageRead(message);
 
                   return (
@@ -349,7 +304,10 @@ export default function ChatWindow({
                     >
                       {!isOwn && showAvatar && (
                         <Avatar className="w-8 h-8">
-                          <AvatarImage src={otherUserAvatar} alt={otherUserName} />
+                          <AvatarImage
+                            src={otherUserAvatar}
+                            alt={otherUserName}
+                          />
                           <AvatarFallback className="text-xs">
                             {getInitials(otherUserName)}
                           </AvatarFallback>
@@ -368,14 +326,21 @@ export default function ChatWindow({
                               : "bg-muted"
                           }`}
                         >
-                          <p className="text-sm break-words">{message.content}</p>
+                          <p className="text-sm break-words">
+                            {message.content}
+                          </p>
                         </div>
-                        <div className={`flex items-center gap-1 mt-1 px-2 ${isOwn ? "justify-end" : "justify-start"}`}>
+                        <div
+                          className={`flex items-center gap-1 mt-1 px-2 ${isOwn ? "justify-end" : "justify-start"}`}
+                        >
                           <span className="text-xs text-muted-foreground">
-                            {new Date(message.createdAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                            {new Date(message.createdAt).toLocaleTimeString(
+                              [],
+                              {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              },
+                            )}
                           </span>
                           {isOwn && (
                             <motion.div
@@ -395,9 +360,14 @@ export default function ChatWindow({
 
                       {isOwn && showAvatar && (
                         <Avatar className="w-8 h-8">
-                          <AvatarImage src={user?.imageUrl || undefined} alt="You" />
+                          <AvatarImage
+                            src={user?.imageUrl || undefined}
+                            alt="You"
+                          />
                           <AvatarFallback className="text-xs">
-                            {getInitials(user?.fullName || user?.firstName || "You")}
+                            {getInitials(
+                              user?.fullName || user?.firstName || "You",
+                            )}
                           </AvatarFallback>
                         </Avatar>
                       )}
@@ -428,17 +398,29 @@ export default function ChatWindow({
                       <motion.div
                         className="w-2 h-2 bg-muted-foreground rounded-full"
                         animate={{ y: [0, -5, 0] }}
-                        transition={{ duration: 0.6, repeat: Infinity, delay: 0 }}
+                        transition={{
+                          duration: 0.6,
+                          repeat: Infinity,
+                          delay: 0,
+                        }}
                       />
                       <motion.div
                         className="w-2 h-2 bg-muted-foreground rounded-full"
                         animate={{ y: [0, -5, 0] }}
-                        transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }}
+                        transition={{
+                          duration: 0.6,
+                          repeat: Infinity,
+                          delay: 0.2,
+                        }}
                       />
                       <motion.div
                         className="w-2 h-2 bg-muted-foreground rounded-full"
                         animate={{ y: [0, -5, 0] }}
-                        transition={{ duration: 0.6, repeat: Infinity, delay: 0.4 }}
+                        transition={{
+                          duration: 0.6,
+                          repeat: Infinity,
+                          delay: 0.4,
+                        }}
                       />
                     </div>
                   </div>
@@ -464,7 +446,9 @@ export default function ChatWindow({
               type="text"
               value={newMessage}
               onChange={(e) => handleTyping(e.target.value)}
-              placeholder={isOffline ? "You are offline..." : "Type a message..."}
+              placeholder={
+                isOffline ? "You are offline..." : "Type a message..."
+              }
               disabled={sendMutation.isPending || isOffline}
               className="flex-1"
               maxLength={1000}

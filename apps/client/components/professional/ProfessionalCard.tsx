@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
+import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import { getProfessionalUrl } from "@/lib/links";
 import { ProfessionalCardData } from "@/types/professional";
 import { getProfessionLabel } from "@/lib/constants/professionalCategories";
