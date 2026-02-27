@@ -5,7 +5,6 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  url        = env("DATABASE_URL")
   // Enable PostGIS for location queries if needed, else use cube/earthdistance
   // extensions = [postgis] // Commented out - PostGIS not installed
   extensions = [citext]
@@ -72,6 +71,7 @@ enum Profession {
   QUANTITY_SURVEYOR
   LAND_SURVEYOR
   REAL_ESTATE_VALUER
+  REAL_ESTATE_AGENT
   GENERAL_CONTRACTOR
   MASON
   ELECTRICIAN
@@ -92,6 +92,8 @@ enum Profession {
   INTERNET_AND_NETWORK_PRO
   PROJECT_MANAGER
   CLERK_OF_WORKS
+  MATERIAL_SUPPLIER
+  EQUIPMENT_RENTER
   OTHER
 }
 
@@ -100,7 +102,9 @@ enum LicenseAuthority {
   EBK // Engineers Board of Kenya
   BORAQS // Board of Registration of Architects and Quantity Surveyors
   EARB // Estate Agents Registration Board
-  ERC // Energy and Petroleum Regulatory Authority (Electricians)
+  ERC // @deprecated Use EPRA instead. Energy and Petroleum Regulatory Authority (Electricians)
+  EPRA // Energy and Petroleum Regulatory Authority (replaces ERC)
+  VRB // Valuers Registration Board
   ISK // Institution of Surveyors of Kenya
   NEMA // National Environment Management Authority
   KEBS // Kenya Bureau of Standards
@@ -111,9 +115,14 @@ enum DocumentCategory {
   ID_OR_PASSPORT // Identity
   EDUCATION_CERT // Degree/Diploma (Was 'Certificate')
   AWARD_OR_RECOGNITION // "Best Architect" (Was 'Certificate')
-  TAX_COMPLIANCE // KRA TCC
+  TAX_COMPLIANCE // KRA TCC (legacy)
+  KRA_TAX_COMPLIANCE // KRA TCC (preferred)
   INSURANCE_POLICY // Professional Indemnity
   CV_OR_RESUME
+  PORTFOLIO_DOC // For Interior Designers/PMs
+  NCA_ACCREDITATION // For Artisans (Masons, Plumbers, etc.) - retained as it is a document, not a full license
+  BUSINESS_REGISTRATION // For firms/sole proprietorships
+  PROFESSIONAL_CERT // For PMs (PMP, PRINCE2, etc.)
   OTHER
 }
 
@@ -143,6 +152,8 @@ enum VerificationStatus {
 enum ProjectType {
   RESIDENTIAL
   COMMERCIAL
+  INDUSTRIAL
+  MIXED_USE
   RENOVATION
   INTERIOR_DESIGN
   LANDSCAPING
@@ -257,10 +268,15 @@ enum OrderStatus {
 
 enum StoreDocumentType {
   BUSINESS_PERMIT
+  BUSINESS_REGISTRATION
   KRA_TAX_COMPLIANCE
+  KRA_PIN_CERTIFICATE
   CR12
   DISTRIBUTOR_LICENSE
   KEBS_CERTIFICATE
+  ID_OR_PASSPORT
+  LEASE_OR_OWNERSHIP
+  TRADING_LICENSE
 }
 
 enum StoreImageCategory {
@@ -324,10 +340,17 @@ enum PropertyDocumentType {
   TITLE_DEED
   OFFICIAL_SEARCH
   LAND_RATES_CLEARANCE
+  LAND_RATES_COMPLIANCE
   LAND_RENT_CLEARANCE
   ID_COPY
+  ID_OR_PASSPORT
   KRA_PIN
   AUTHORITY_TO_SELL
+  MANDATE_LETTER
+  SALE_AGREEMENT
+  MUTATION_FORM
+  SECTIONAL_PROPERTIES_ACT_DOC
+  OTHER
 }
 
 enum DocumentStatus {
@@ -343,6 +366,8 @@ enum AttachmentType {
   ENERGY_CERTIFICATE
   SITE_MAP
   SALE_AGREEMENT_DRAFT
+  BUILDING_PERMIT
+  OTHER
 }
 
 enum ImageCategory {
@@ -796,7 +821,7 @@ model SystemSettings {
   enforceStrictVerification   Boolean @default(true)
   enforceProfessionalLicenses Boolean @default(true)
   enableAutoVerifyNCA         Boolean @default(false)
-  enableAutoVerifyERC         Boolean @default(false)
+  enableAutoVerifyEPRA        Boolean @default(false) // Renamed from ERC
   enableAutoVerifyBORAQS      Boolean @default(false)
   enforcePropertyDocuments    Boolean @default(true)
   enableLandRegistryCheck     Boolean @default(false)
@@ -831,16 +856,18 @@ model SystemSettings {
 model IdempotencyKey {
   id        String            @id @default(uuid())
   key       String            @unique // SHA256 of transaction details
-  scope     String // 'mpesa_stk', 'withdrawal', 'project_creation'
+  scope     String // 'mpesa_stk', 'withdrawal', 'project_creation', 'property'
   operation String // "PATCH", "DELETE", etc.
   status    IdempotencyStatus
   response  Json?             @db.JsonB
-  storeId   String?
+  storeId    String?
+  propertyId String?
   userId    String
   expiresAt DateTime
   createdAt DateTime          @default(now())
 
-  store Store? @relation(fields: [storeId], references: [id])
+  store    Store?    @relation(fields: [storeId], references: [id])
+  property Property? @relation(fields: [propertyId], references: [id])
 
   @@index([key, scope])
   @@index([expiresAt]) // For cleanup jobs
@@ -1397,6 +1424,7 @@ model Project {
   startDate            DateTime?
   endDate              DateTime?
   actualCompletionDate DateTime?
+  version              Int       @default(0)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -1442,6 +1470,7 @@ model ProjectMilestone {
 
   dueDate     DateTime?
   completedAt DateTime?
+  version     Int                  @default(1)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2012,6 +2041,7 @@ model Property {
   id          String           @id @default(uuid())
   title       String
   slug        String           @unique
+  version     Int              @default(0)
   description String?          @db.Text
   type        PropertyType
   category    PropertyCategory
@@ -2071,10 +2101,11 @@ model Property {
   agentId String
   agent   ProfessionalProfile @relation("AgentProperties", fields: [agentId], references: [userId], onDelete: Restrict)
 
-  images      PropertyImage[]
-  attachments PropertyAttachment[]
-  documents   PropertyDocument[]
-  inquiries   PropertyInquiry[]
+  images          PropertyImage[]
+  attachments     PropertyAttachment[]
+  documents       PropertyDocument[]
+  inquiries       PropertyInquiry[]
+  idempotencyKeys IdempotencyKey[]
 
   floorPlanUrl   String?
   videoUrl       String?
@@ -2097,6 +2128,7 @@ model PropertyDocument {
   propertyId String
   property   Property             @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   type       PropertyDocumentType
+  notes      String?
 
   // OLD (deprecating)
   fileKey  String? @unique
@@ -2176,6 +2208,8 @@ model PropertyAttachment {
 
   assetId String?
   asset   Asset?  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  notes String?
 
   // Additional logging for sensitive data access
   accessLog Json? // [{userId: "admin123", action: "VIEW", at: "2026-01-..."}]
