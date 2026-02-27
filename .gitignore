@@ -75,3 +75,5 @@ SETUP_DATABASE.md
 setup-database.ps1
 create-pr.ps1
 create-pr.sh
+docs
+.agent

@@ -1,13 +1,13 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
-  "globalDependencies": [ ".env*"],
+  "globalDependencies": [".env*"],
   "globalEnv": [
-    "NODE_ENV", 
-    "DATABASE_URL", 
-    "KAFKA_BROKERS", 
-    "DEV_ADMIN_BYPASS", 
-    "MESSAGING_SERVICE_URL", 
+    "NODE_ENV",
+    "DATABASE_URL",
+    "KAFKA_BROKERS",
+    "DEV_ADMIN_BYPASS",
+    "MESSAGING_SERVICE_URL",
     "INTERNAL_API_SECRET",
     "UPSTASH_REDIS_REST_URL",
     "UPSTASH_REDIS_REST_TOKEN",
@@ -35,13 +35,11 @@
     },
     "lint": {
       "dependsOn": ["^lint"],
-      "cache": true,
-      "inputs": ["src/**/*.ts", "src/**/*.tsx", "**/*.js", "**/*.jsx"]
+      "cache": true
     },
     "check-types": {
       "dependsOn": ["^check-types"],
-      "cache": true,
-      "inputs": ["src/**/*.ts", "src/**/*.tsx", "tsconfig.json"]
+      "cache": true
     },
     "dev": {
       "cache": false,
