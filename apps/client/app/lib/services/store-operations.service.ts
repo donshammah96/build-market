@@ -18,13 +18,13 @@ import {
   StoreEventType,
 } from "@prisma/client";
 import { z } from "zod";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { apiError, HttpStatus } from "@/app/lib/api/api-response";
 import {
   UpdateStoreSchema,
   storeDetailSelect,
-} from "@/app/lib/stores-validation";
+} from "@/app/lib/validation/stores-validation";
 import { StoreEventService } from "@/app/lib/services/store-event.service";
-import { getClientLogger } from "@/app/lib/resilient-api";
+import { getClientLogger } from "@/app/lib/api/resilient-api";
 
 const logger = getClientLogger();
 

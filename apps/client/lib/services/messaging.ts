@@ -1,155 +1,527 @@
-import { prisma } from '../db';
+/**
+ * Messaging Service Layer
+ *
+ * Provides business logic for messaging operations, queried via Prisma
+ * against MessageThread, ThreadParticipant, Message, ReadReceipt,
+ * MessageReaction, and MessageAttachment models.
+ *
+ * Used by both server actions and API routes.
+ */
+import { prisma } from "../db";
+import {
+  threadListSelect,
+  threadDetailSelect,
+  messageListSelect,
+} from "@/app/lib/validation/messaging-validation";
 
-export async function createThread(participantIds: string[], projectId?: string) {
-  const thread = await prisma.messageThread.create({
-    data: {
-      projectId,
-      users: {
-        connect: participantIds.map((id) => ({ id })),
-      },
-    },
-    include: {
-      users: true,
-    },
-  });
+// =============================================================================
+// Participant Verification
+// =============================================================================
 
-  return {
-    ...thread,
-    participants: thread.users.map(u => u.id),
-  };
-}
-
-export async function sendMessage(threadId: string, senderId: string, content: string) {
-  const message = await prisma.message.create({
-    data: {
-      threadId,
-      senderId,
-      content,
-      readBy: [senderId],
-    },
-  });
-
-  await prisma.messageThread.update({
-    where: { id: threadId },
-    data: {
-      lastMessage: content,
-      lastMessageAt: new Date(),
-    },
-  });
-
-  return message;
-}
-
-export async function getThread(threadId: string) {
-  const thread = await prisma.messageThread.findUnique({
-    where: { id: threadId },
-    include: {
-      messages: {
-        orderBy: { createdAt: 'asc' },
-      },
-      users: true,
-    },
-  });
-
-  if (!thread) return null;
-
-  return {
-    ...thread,
-    participants: thread.users.map(u => u.id),
-  };
-}
-
-export async function getUserThreads(userId: string) {
-  const threads = await prisma.messageThread.findMany({
+/**
+ * Verify a user is a participant in a thread.
+ * Returns the ThreadParticipant record or null.
+ */
+export async function verifyParticipant(threadId: string, userId: string) {
+  return prisma.threadParticipant.findUnique({
     where: {
-      users: {
-        some: {
-          id: userId,
-        },
-      },
+      threadId_userId: { threadId, userId },
     },
-    orderBy: {
-      lastMessageAt: 'desc',
-    },
-    include: {
-      users: true,
-    },
+    select: { id: true, role: true, userId: true, threadId: true },
   });
-
-  return threads.map(thread => ({
-    ...thread,
-    participants: thread.users.map(u => u.id),
-  }));
 }
 
-export async function markThreadAsRead(threadId: string, userId: string) {
-  // Update all messages in the thread to be read by the user
-  // This is a simplification; in a real app we might track per-message read status more granularly
-  // or have a lastReadAt timestamp on the thread-user relation.
-  // For this schema, we'll update unreadCount if it exists or just rely on message readBy.
-  
-  // Update all messages in thread where user is not in readBy
+// =============================================================================
+// Thread Operations
+// =============================================================================
+
+/**
+ * Create a new message thread with participants.
+ * The creator is automatically added as OWNER.
+ */
+export async function createThread(
+  creatorId: string,
+  participantIds: string[],
+  options?: {
+    type?: "DIRECT" | "GROUP" | "PROJECT" | "SUPPORT";
+    subject?: string;
+    projectId?: string;
+  },
+) {
+  const type = options?.type ?? "DIRECT";
+
+  // For DIRECT threads, check if one already exists between these two users
+  if (type === "DIRECT" && participantIds.length === 1) {
+    const otherUserId = participantIds[0] as string;
+    const existingThread = await prisma.messageThread.findFirst({
+      where: {
+        type: "DIRECT",
+        deletedAt: null,
+        AND: [
+          { participants: { some: { userId: creatorId } } },
+          { participants: { some: { userId: otherUserId } } },
+        ],
+        participants: { every: { userId: { in: [creatorId, otherUserId] } } },
+      },
+      select: threadDetailSelect,
+    });
+
+    if (existingThread) {
+      return existingThread;
+    }
+  }
+
+  // Deduplicate and include the creator
+  const allUserIds = Array.from(new Set([creatorId, ...participantIds]));
+
+  return prisma.messageThread.create({
+    data: {
+      type,
+      subject: options?.subject,
+      projectId: options?.projectId,
+      participants: {
+        create: allUserIds.map((userId) => ({
+          userId,
+          role: userId === creatorId ? "OWNER" : "MEMBER",
+        })),
+      },
+    },
+    select: threadDetailSelect,
+  });
+}
+
+/**
+ * Get threads for a user, filtered by their ThreadParticipant records.
+ */
+export async function getUserThreads(
+  userId: string,
+  options?: {
+    type?: "DIRECT" | "GROUP" | "PROJECT" | "SUPPORT";
+    isArchived?: boolean;
+    search?: string;
+    page?: number;
+    limit?: number;
+  },
+) {
+  const page = options?.page ?? 1;
+  const limit = options?.limit ?? 20;
+  const skip = (page - 1) * limit;
+
+  const where = {
+    deletedAt: null,
+    participants: {
+      some: {
+        userId,
+        ...(options?.isArchived !== undefined
+          ? { isArchived: options.isArchived }
+          : {}),
+      },
+    },
+    ...(options?.type ? { type: options.type } : {}),
+    ...(options?.search
+      ? {
+          OR: [
+            {
+              subject: {
+                contains: options.search,
+                mode: "insensitive" as const,
+              },
+            },
+            {
+              lastMessage: {
+                contains: options.search,
+                mode: "insensitive" as const,
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+
+  const [threads, total] = await Promise.all([
+    prisma.messageThread.findMany({
+      where,
+      select: threadListSelect,
+      orderBy: { lastMessageAt: { sort: "desc", nulls: "last" } },
+      skip,
+      take: limit,
+    }),
+    prisma.messageThread.count({ where }),
+  ]);
+
+  return {
+    threads,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
+
+/**
+ * Get a single thread by ID (with participant verification).
+ */
+export async function getThread(threadId: string) {
+  return prisma.messageThread.findFirst({
+    where: { id: threadId, deletedAt: null },
+    select: threadDetailSelect,
+  });
+}
+
+/**
+ * Update thread fields (subject, archive status).
+ */
+export async function updateThread(
+  threadId: string,
+  data: { subject?: string; isArchived?: boolean },
+) {
+  return prisma.messageThread.update({
+    where: { id: threadId },
+    data,
+    select: threadDetailSelect,
+  });
+}
+
+/**
+ * Soft-delete a thread.
+ */
+export async function deleteThread(threadId: string) {
+  return prisma.messageThread.update({
+    where: { id: threadId },
+    data: { deletedAt: new Date() },
+  });
+}
+
+// =============================================================================
+// Message Operations
+// =============================================================================
+
+/**
+ * Send a message in a thread.
+ * Creates Message, optional MessageAttachments, and updates thread metadata.
+ */
+export async function sendMessage(
+  threadId: string,
+  senderId: string,
+  content: string,
+  options?: {
+    type?: "TEXT" | "IMAGE" | "FILE" | "PDF" | "SYSTEM";
+    replyToId?: string;
+    attachmentIds?: string[];
+  },
+) {
+  return prisma.$transaction(async (tx) => {
+    // Create the message
+    const message = await tx.message.create({
+      data: {
+        threadId,
+        senderId,
+        content,
+        type: options?.type ?? "TEXT",
+        replyToId: options?.replyToId,
+        ...(options?.attachmentIds && options.attachmentIds.length > 0
+          ? {
+              attachments: {
+                create: options.attachmentIds.map((assetId) => ({
+                  assetId,
+                })),
+              },
+            }
+          : {}),
+      },
+      select: messageListSelect,
+    });
+
+    // Update thread's last message metadata
+    await tx.messageThread.update({
+      where: { id: threadId },
+      data: {
+        lastMessage: content.substring(0, 500),
+        lastMessageAt: new Date(),
+      },
+    });
+
+    // Increment unread count for all participants except sender
+    await tx.threadParticipant.updateMany({
+      where: {
+        threadId,
+        userId: { not: senderId },
+      },
+      data: {
+        unreadCount: { increment: 1 },
+      },
+    });
+
+    // Auto-create read receipt for sender
+    await tx.readReceipt.upsert({
+      where: {
+        messageId_userId: { messageId: message.id, userId: senderId },
+      },
+      update: { readAt: new Date() },
+      create: { messageId: message.id, userId: senderId },
+    });
+
+    return message;
+  });
+}
+
+/**
+ * Get messages in a thread with cursor-based pagination.
+ */
+export async function getThreadMessages(
+  threadId: string,
+  options?: {
+    cursor?: string;
+    limit?: number;
+    direction?: "before" | "after";
+  },
+) {
+  const limit = options?.limit ?? 50;
+  const direction = options?.direction ?? "before";
+
   const messages = await prisma.message.findMany({
     where: {
       threadId,
-      NOT: {
-        readBy: {
-          has: userId,
-        },
-      },
+      deletedAt: null,
+      ...(options?.cursor
+        ? {
+            createdAt:
+              direction === "before"
+                ? {
+                    lt: (
+                      await prisma.message.findUnique({
+                        where: { id: options.cursor },
+                        select: { createdAt: true },
+                      })
+                    )?.createdAt,
+                  }
+                : {
+                    gt: (
+                      await prisma.message.findUnique({
+                        where: { id: options.cursor },
+                        select: { createdAt: true },
+                      })
+                    )?.createdAt,
+                  },
+          }
+        : {}),
     },
-    select: { id: true, readBy: true },
+    select: messageListSelect,
+    orderBy: { createdAt: direction === "before" ? "desc" : "asc" },
+    take: limit + 1, // Fetch one extra to determine hasMore
   });
 
-  // Prisma doesn't support "add to array" in updateMany easily for scalar lists in all DBs,
-  // but for Postgres it does. However, to be safe and simple:
-  for (const msg of messages) {
-    await prisma.message.update({
-      where: { id: msg.id },
-      data: {
-        readBy: {
-          push: userId,
-        },
-      },
-    });
+  const hasMore = messages.length > limit;
+  const items = hasMore ? messages.slice(0, limit) : messages;
+
+  // For "before" direction, reverse to get chronological order
+  if (direction === "before") {
+    items.reverse();
   }
 
-  return { success: true };
+  return {
+    messages: items,
+    hasMore,
+    nextCursor: hasMore ? items[items.length - 1]?.id : undefined,
+  };
 }
 
-export async function deleteThread(threadId: string) {
-  return await prisma.messageThread.delete({
-    where: { id: threadId },
-  });
-}
-
+/**
+ * Get a single message by ID.
+ */
 export async function getMessage(messageId: string) {
-  return await prisma.message.findUnique({
-    where: { id: messageId },
+  return prisma.message.findFirst({
+    where: { id: messageId, deletedAt: null },
+    select: messageListSelect,
   });
 }
 
-export async function markMessageAsRead(messageId: string, userId: string) {
-  const message = await prisma.message.findUnique({
+/**
+ * Update message content (only sender can edit).
+ */
+export async function updateMessage(messageId: string, content: string) {
+  return prisma.message.update({
     where: { id: messageId },
-    select: { readBy: true },
+    data: { content },
+    select: messageListSelect,
   });
+}
 
-  if (!message) return null;
-  if (message.readBy.includes(userId)) return message;
-
-  return await prisma.message.update({
+/**
+ * Soft-delete a message.
+ */
+export async function deleteMessage(messageId: string) {
+  return prisma.message.update({
     where: { id: messageId },
-    data: {
-      readBy: {
-        push: userId,
+    data: { deletedAt: new Date() },
+    select: { id: true, deletedAt: true },
+  });
+}
+
+// =============================================================================
+// Read Receipt Operations
+// =============================================================================
+
+/**
+ * Mark all messages in a thread as read for a user.
+ * Creates ReadReceipt records and resets unreadCount.
+ */
+export async function markThreadAsRead(threadId: string, userId: string) {
+  return prisma.$transaction(async (tx) => {
+    // Find unread messages (where no ReadReceipt exists for this user)
+    const unreadMessages = await tx.message.findMany({
+      where: {
+        threadId,
+        deletedAt: null,
+        readReceipts: {
+          none: { userId },
+        },
       },
+      select: { id: true },
+    });
+
+    // Batch create read receipts
+    if (unreadMessages.length > 0) {
+      await tx.readReceipt.createMany({
+        data: unreadMessages.map((msg) => ({
+          messageId: msg.id,
+          userId,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    // Reset unread count for this participant
+    await tx.threadParticipant.update({
+      where: { threadId_userId: { threadId, userId } },
+      data: { unreadCount: 0, lastReadAt: new Date() },
+    });
+
+    return { markedCount: unreadMessages.length };
+  });
+}
+
+/**
+ * Mark a single message as read.
+ */
+export async function markMessageAsRead(messageId: string, userId: string) {
+  return prisma.readReceipt.upsert({
+    where: { messageId_userId: { messageId, userId } },
+    update: { readAt: new Date() },
+    create: { messageId, userId },
+    select: { id: true, messageId: true, userId: true, readAt: true },
+  });
+}
+
+// =============================================================================
+// Reaction Operations
+// =============================================================================
+
+/**
+ * Add a reaction to a message (unique per user+emoji).
+ */
+export async function addReaction(
+  messageId: string,
+  userId: string,
+  emoji: string,
+) {
+  return prisma.messageReaction.upsert({
+    where: {
+      messageId_userId_emoji: { messageId, userId, emoji },
+    },
+    update: {},
+    create: { messageId, userId, emoji },
+    select: {
+      id: true,
+      messageId: true,
+      userId: true,
+      emoji: true,
+      createdAt: true,
     },
   });
 }
 
-export async function deleteMessage(messageId: string) {
-  return await prisma.message.delete({
-    where: { id: messageId },
+/**
+ * Remove a reaction from a message.
+ */
+export async function removeReaction(
+  messageId: string,
+  userId: string,
+  emoji: string,
+) {
+  return prisma.messageReaction.delete({
+    where: {
+      messageId_userId_emoji: { messageId, userId, emoji },
+    },
+  });
+}
+
+// =============================================================================
+// Participant Operations
+// =============================================================================
+
+/**
+ * Add a participant to a thread.
+ */
+export async function addParticipant(
+  threadId: string,
+  userId: string,
+  role: "OWNER" | "ADMIN" | "MEMBER" = "MEMBER",
+) {
+  return prisma.threadParticipant.upsert({
+    where: { threadId_userId: { threadId, userId } },
+    update: { role },
+    create: { threadId, userId, role },
+    select: {
+      id: true,
+      userId: true,
+      role: true,
+      nickname: true,
+      joinedAt: true,
+      unreadCount: true,
+      isMuted: true,
+      isArchived: true,
+      isPinned: true,
+    },
+  });
+}
+
+/**
+ * Remove a participant from a thread.
+ */
+export async function removeParticipant(threadId: string, userId: string) {
+  return prisma.threadParticipant.delete({
+    where: { threadId_userId: { threadId, userId } },
+  });
+}
+
+/**
+ * Update participant settings (mute, archive, pin, nickname, role).
+ */
+export async function updateParticipant(
+  threadId: string,
+  userId: string,
+  data: {
+    role?: "OWNER" | "ADMIN" | "MEMBER";
+    isMuted?: boolean;
+    isArchived?: boolean;
+    isPinned?: boolean;
+    nickname?: string | null;
+  },
+) {
+  return prisma.threadParticipant.update({
+    where: { threadId_userId: { threadId, userId } },
+    data,
+    select: {
+      id: true,
+      userId: true,
+      role: true,
+      nickname: true,
+      isMuted: true,
+      isArchived: true,
+      isPinned: true,
+    },
   });
 }

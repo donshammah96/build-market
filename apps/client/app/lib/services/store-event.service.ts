@@ -15,14 +15,14 @@ export class StoreEventService {
    * Append an event to the store's event log and increment the store version.
    * Must be called within an existing Prisma transaction.
    *
-   * @param tx - Active transaction client
-   * @param storeId - Target store
-   * @param type - Event type enum value
-   * @param payload - Event-specific data (changes, previous state, etc.)
-   * @param metadata - Request context (IP, user agent, correlation ID)
-   * @param createdBy - User ID performing the action
-   * @param expectedVersion - Current version for optimistic lock check
-   * @returns The new version number
+   * /param tx - Active transaction client
+   * /param storeId - Target store
+   * /param type - Event type enum value
+   * /param payload - Event-specific data (changes, previous state, etc.)
+   * /param metadata - Request context (IP, user agent, correlation ID)
+   * /param createdBy - User ID performing the action
+   * /param expectedVersion - Current version for optimistic lock check
+   * /returns The new version number
    */
   static async append(
     tx: Prisma.TransactionClient,

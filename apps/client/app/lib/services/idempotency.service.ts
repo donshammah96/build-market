@@ -4,17 +4,17 @@
  * Provides SHA-256 key generation, check-or-create semantics, and
  * completion/failure tracking via the prisma IdempotencyKey model.
  *
- * Used by store routes (POST, PATCH, DELETE) and available for any
- * other API route that needs mutation deduplication.
+ * Used by store routes (POST, PATCH, DELETE) and property routes
+ * for mutation deduplication. Supports multiple scopes.
  */
 import crypto from "crypto";
 import { prisma } from "@build/db";
 import { Prisma, IdempotencyStatus } from "@prisma/client";
 import { STORE_CONFIG } from "@/app/lib/config/store.config";
 
-export type IdempotencyCheckResult = {
+export type IdempotencyCheckResult<T = unknown> = {
   status: "new" | "pending" | "completed";
-  response?: unknown;
+  response?: T;
 };
 
 export class IdempotencyService {
@@ -36,21 +36,21 @@ export class IdempotencyService {
    * Check if a key already exists and return its status.
    * If new, creates a PENDING record. If failed, deletes and recreates.
    *
-   * @param key - The idempotency key
-   * @param scope - Logical scope (e.g. "store")
-   * @param userId - The user performing the operation
-   * @param operation - HTTP method or operation name
-   * @param entityId - Optional entity ID to link (e.g. storeId)
-   * @param ttlHours - Key TTL in hours (defaults to STORE_CONFIG value)
+   * /param key - The idempotency key
+   * /param scope - Logical scope (e.g. "store")
+   * /param userId - The user performing the operation
+   * /param operation - HTTP method or operation name
+   * /param entityId - Optional entity ID to link (e.g. storeId)
+   * /param ttlHours - Key TTL in hours (defaults to STORE_CONFIG value)
    */
-  static async checkOrCreate(
+  static async checkOrCreate<T = unknown>(
     key: string,
     scope: string,
     userId: string,
     operation: string,
     entityId?: string,
     ttlHours: number = STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  ): Promise<IdempotencyCheckResult | null> {
+  ): Promise<IdempotencyCheckResult<T> | null> {
     const existing = await prisma.idempotencyKey.findUnique({
       where: { key },
     });
@@ -60,7 +60,7 @@ export class IdempotencyService {
         existing.status === IdempotencyStatus.COMPLETED &&
         existing.response
       ) {
-        return { status: "completed", response: existing.response };
+        return { status: "completed", response: existing.response as T };
       }
       if (existing.status === IdempotencyStatus.PENDING) {
         return { status: "pending" };
@@ -78,7 +78,10 @@ export class IdempotencyService {
         userId,
         scope,
         operation,
-        ...(entityId && { store: { connect: { id: entityId } } }),
+        ...(entityId &&
+          scope === "store" && { store: { connect: { id: entityId } } }),
+        ...(entityId &&
+          scope === "property" && { property: { connect: { id: entityId } } }),
         status: IdempotencyStatus.PENDING,
         expiresAt,
       },

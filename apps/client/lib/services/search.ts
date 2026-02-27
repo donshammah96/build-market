@@ -1,4 +1,4 @@
-import { prisma } from '../db';
+import { prisma } from "../db";
 
 export async function searchProfessionals(query: string) {
   // Simple search implementation using Prisma's contains
@@ -6,13 +6,13 @@ export async function searchProfessionals(query: string) {
   return await prisma.professionalProfile.findMany({
     where: {
       OR: [
-        { companyName: { contains: query, mode: 'insensitive' } },
-        { bio: { contains: query, mode: 'insensitive' } },
+        { companyName: { contains: query, mode: "insensitive" } },
+        { bio: { contains: query, mode: "insensitive" } },
         // Search in services relation (many-to-many)
         {
-          services: {
+          offeredServices: {
             some: {
-              name: { contains: query, mode: 'insensitive' },
+              service: { name: { contains: query, mode: "insensitive" } },
             },
           },
         },
