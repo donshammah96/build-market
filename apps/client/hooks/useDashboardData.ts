@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useProfileStatus } from "./useProfileStatus";
 import {
   getDashboardConfig,
@@ -15,7 +15,11 @@ import {
   PropertyListingData,
   PropertyInquiryData,
 } from "@/lib/dashboard";
+import type { InventoryAlert } from "@/lib/services/inventory";
 import { API_ROUTES } from "@/lib/links";
+import { storesClient } from "@/lib/stores-client";
+import { projectsClient } from "@/lib/projects-client";
+import { propertiesClient } from "@/lib/properties-client";
 
 // ============================================================================
 // TYPES
@@ -33,15 +37,6 @@ interface PortfolioItem {
   title: string;
   imageUrl: string;
   category?: string;
-}
-
-interface InventoryAlert {
-  id: string;
-  productName: string;
-  sku?: string;
-  currentStock: number;
-  threshold: number;
-  status: "low" | "out_of_stock";
 }
 
 interface TopProduct {
@@ -99,6 +94,27 @@ export interface DashboardData {
 }
 
 // ============================================================================
+// QUERY KEYS
+// ============================================================================
+
+export const dashboardKeys = {
+  all: ["dashboard"] as const,
+  metrics: (profession?: string) =>
+    [...dashboardKeys.all, "metrics", profession] as const,
+  agenda: () => [...dashboardKeys.all, "agenda"] as const,
+  leads: () => [...dashboardKeys.all, "leads"] as const,
+  projects: () => [...dashboardKeys.all, "projects"] as const,
+  portfolio: () => [...dashboardKeys.all, "portfolio"] as const,
+  stores: () => [...dashboardKeys.all, "stores"] as const,
+  orders: () => [...dashboardKeys.all, "orders"] as const,
+  inventoryAlerts: () => [...dashboardKeys.all, "inventory-alerts"] as const,
+  topProducts: () => [...dashboardKeys.all, "top-products"] as const,
+  properties: () => [...dashboardKeys.all, "properties"] as const,
+  propertyInquiries: () => [...dashboardKeys.all, "property-inquiries"] as const,
+  pipeline: () => [...dashboardKeys.all, "pipeline"] as const,
+};
+
+// ============================================================================
 // API FETCHERS
 // ============================================================================
 
@@ -115,67 +131,38 @@ async function fetchLeads(): Promise<LeadData[]> {
   );
   if (!res.ok) throw new Error("Failed to fetch leads");
   const json = await res.json();
-  // API returns { success: true, data: { data: leads[], pagination: {...} } }
-  const leadsArray = Array.isArray(json.data?.data)
-    ? json.data.data
-    : Array.isArray(json.data)
-      ? json.data
-      : [];
-  return leadsArray;
+  const leads = json.data?.leads;
+  return Array.isArray(leads) ? leads : [];
 }
 
 async function fetchProjects(): Promise<ProjectData[]> {
-  const res = await fetch(
-    "/api/professional-portal/projects?limit=4&status=active"
-  );
-  if (!res.ok) throw new Error("Failed to fetch projects");
-  const json = await res.json();
-  // API returns { success: true, data: { data: projects[], pagination: {...} } }
-  const projectsArray = Array.isArray(json.data?.data)
-    ? json.data.data
-    : Array.isArray(json.data)
-      ? json.data
-      : [];
-  return projectsArray;
+  const res = await projectsClient.getProjects({
+    limit: 4,
+    status: "active",
+  });
+  if (!res.success) throw new Error(res.error);
+  const projects = res.data?.projects;
+  return (Array.isArray(projects) ? projects : []) as ProjectData[];
 }
 
 async function fetchStores(): Promise<StoreData[]> {
-  const res = await fetch("/api/stores/my-stores");
-  if (!res.ok) throw new Error("Failed to fetch stores");
-  const json = await res.json();
-  // API returns { success: true, data: { data: stores[], pagination: {...} } }
-  const storesArray = Array.isArray(json.data?.data)
-    ? json.data.data
-    : Array.isArray(json.data)
-      ? json.data
-      : [];
-  return storesArray;
+  const res = await storesClient.getMyStores();
+  if (!res.success) throw new Error(res.error);
+  return res.data ?? [];
 }
 
 async function fetchOrders(): Promise<OrderData[]> {
   const res = await fetch("/api/professional-portal/orders?limit=5");
   if (!res.ok) throw new Error("Failed to fetch orders");
   const json = await res.json();
-  // API returns { success: true, data: { data: orders[], pagination: {...} } }
-  const ordersArray = Array.isArray(json.data?.data)
-    ? json.data.data
-    : Array.isArray(json.data)
-      ? json.data
-      : [];
-  return ordersArray;
+  const orders = json.data?.data;
+  return Array.isArray(orders) ? orders : [];
 }
 
 async function fetchProperties(): Promise<PropertyListingData[]> {
-  const res = await fetch("/api/properties/my-listings?limit=4");
-  if (!res.ok) throw new Error("Failed to fetch properties");
-  const json = await res.json();
-  // API returns { success: true, data: { data: properties[], pagination: {...} } }
-  const propertiesArray = Array.isArray(json.data?.data)
-    ? json.data.data
-    : Array.isArray(json.data)
-      ? json.data
-      : [];
-  return propertiesArray;
+  const res = await propertiesClient.getMyProperties({ limit: 4 });
+  if (!res.success) throw new Error(res.error);
+  return (res.data ?? []) as PropertyListingData[];
 }
 
 async function fetchPropertyInquiries(): Promise<PropertyInquiryData[]> {
@@ -184,13 +171,8 @@ async function fetchPropertyInquiries(): Promise<PropertyInquiryData[]> {
   );
   if (!res.ok) throw new Error("Failed to fetch inquiries");
   const json = await res.json();
-  // API returns { success: true, data: { data: inquiries[], pagination: {...} } }
-  const inquiriesArray = Array.isArray(json.data?.data)
-    ? json.data.data
-    : Array.isArray(json.data)
-      ? json.data
-      : [];
-  return inquiriesArray;
+  const inquiries = json.data?.data;
+  return Array.isArray(inquiries) ? inquiries : [];
 }
 
 async function fetchAgenda(): Promise<AgendaEvent[]> {
@@ -204,52 +186,32 @@ async function fetchAgenda(): Promise<AgendaEvent[]> {
   );
   if (!res.ok) throw new Error("Failed to fetch agenda");
   const json = await res.json();
-  // API returns { success: true, data: { data: events[], pagination: {...} } }
-  const eventsArray = Array.isArray(json.data?.data)
-    ? json.data.data
-    : Array.isArray(json.data)
-      ? json.data
-      : [];
-  return eventsArray;
+  const events = json.data;
+  return Array.isArray(events) ? events : [];
 }
 
 async function fetchPortfolio(): Promise<PortfolioItem[]> {
   const res = await fetch("/api/professional-portal/portfolio?limit=4");
   if (!res.ok) throw new Error("Failed to fetch portfolio");
   const json = await res.json();
-  // API returns { success: true, data: { data: portfolio[], pagination: {...} } }
-  const portfolioArray = Array.isArray(json.data?.data)
-    ? json.data.data
-    : Array.isArray(json.data)
-      ? json.data
-      : [];
-  return portfolioArray;
+  const portfolios = json.data?.portfolios;
+  return Array.isArray(portfolios) ? portfolios : [];
 }
 
 async function fetchInventoryAlerts(): Promise<InventoryAlert[]> {
   const res = await fetch("/api/professional-portal/inventory/alerts");
   if (!res.ok) throw new Error("Failed to fetch inventory alerts");
   const json = await res.json();
-  // API returns { success: true, data: { data: alerts[], pagination: {...} } }
-  const alertsArray = Array.isArray(json.data?.data)
-    ? json.data.data
-    : Array.isArray(json.data)
-      ? json.data
-      : [];
-  return alertsArray;
+  const alerts = json.data?.data;
+  return Array.isArray(alerts) ? alerts : [];
 }
 
 async function fetchTopProducts(): Promise<TopProduct[]> {
   const res = await fetch("/api/professional-portal/products/top?limit=5");
   if (!res.ok) throw new Error("Failed to fetch top products");
   const json = await res.json();
-  // API returns { success: true, data: { data: products[], pagination: {...} } }
-  const productsArray = Array.isArray(json.data?.data)
-    ? json.data.data
-    : Array.isArray(json.data)
-      ? json.data
-      : [];
-  return productsArray;
+  const products = json.data;
+  return Array.isArray(products) ? products : [];
 }
 
 async function fetchPipeline(): Promise<{
@@ -258,15 +220,22 @@ async function fetchPipeline(): Promise<{
 }> {
   const res = await fetch("/api/professional-portal/pipeline");
   if (!res.ok) throw new Error("Failed to fetch pipeline");
-  const data = await res.json();
-  return data.data || { stages: [], totalValue: 0 };
+  const json = await res.json();
+  const data = json.data;
+  return data && typeof data === "object"
+    ? {
+        stages: Array.isArray(data.stages) ? data.stages : [],
+        totalValue: typeof data.totalValue === "number" ? data.totalValue : 0,
+      }
+    : { stages: [], totalValue: 0 };
 }
 
 // ============================================================================
 // MAIN HOOK
 // ============================================================================
 
-export function useDashboardData(): DashboardData {
+export function useDashboardData(): DashboardData & { refetch: () => Promise<void> } {
+  const queryClient = useQueryClient();
   const { profile, isLoading: profileLoading } = useProfileStatus();
 
   // Only professional profiles have a profession field
@@ -286,7 +255,7 @@ export function useDashboardData(): DashboardData {
 
   // Always fetch metrics
   const metricsQuery = useQuery({
-    queryKey: ["dashboard-metrics", profession],
+    queryKey: dashboardKeys.metrics(profession),
     queryFn: fetchDashboardMetrics,
     enabled: !profileLoading && !!profession,
     staleTime: 60000, // 1 minute
@@ -294,7 +263,7 @@ export function useDashboardData(): DashboardData {
 
   // Always fetch agenda
   const agendaQuery = useQuery({
-    queryKey: ["dashboard-agenda"],
+    queryKey: dashboardKeys.agenda(),
     queryFn: fetchAgenda,
     enabled: !profileLoading,
     staleTime: 60000,
@@ -302,21 +271,21 @@ export function useDashboardData(): DashboardData {
 
   // Service Provider data
   const leadsQuery = useQuery({
-    queryKey: ["dashboard-leads"],
+    queryKey: dashboardKeys.leads(),
     queryFn: fetchLeads,
     enabled: !profileLoading && shouldFetchServiceProviderData,
     staleTime: 30000, // 30 seconds
   });
 
   const projectsQuery = useQuery({
-    queryKey: ["dashboard-projects"],
+    queryKey: dashboardKeys.projects(),
     queryFn: fetchProjects,
     enabled: !profileLoading && shouldFetchServiceProviderData,
     staleTime: 60000,
   });
 
   const portfolioQuery = useQuery({
-    queryKey: ["dashboard-portfolio"],
+    queryKey: dashboardKeys.portfolio(),
     queryFn: fetchPortfolio,
     enabled: !profileLoading && shouldFetchServiceProviderData,
     staleTime: 300000, // 5 minutes
@@ -324,28 +293,28 @@ export function useDashboardData(): DashboardData {
 
   // Store data
   const storesQuery = useQuery({
-    queryKey: ["dashboard-stores"],
+    queryKey: dashboardKeys.stores(),
     queryFn: fetchStores,
     enabled: !profileLoading && shouldFetchStoreData,
     staleTime: 60000,
   });
 
   const ordersQuery = useQuery({
-    queryKey: ["dashboard-orders"],
+    queryKey: dashboardKeys.orders(),
     queryFn: fetchOrders,
     enabled: !profileLoading && shouldFetchStoreData,
     staleTime: 30000,
   });
 
   const inventoryQuery = useQuery({
-    queryKey: ["dashboard-inventory-alerts"],
+    queryKey: dashboardKeys.inventoryAlerts(),
     queryFn: fetchInventoryAlerts,
     enabled: !profileLoading && shouldFetchStoreData,
     staleTime: 60000,
   });
 
   const topProductsQuery = useQuery({
-    queryKey: ["dashboard-top-products"],
+    queryKey: dashboardKeys.topProducts(),
     queryFn: fetchTopProducts,
     enabled: !profileLoading && shouldFetchStoreData,
     staleTime: 300000,
@@ -353,27 +322,27 @@ export function useDashboardData(): DashboardData {
 
   // Property data
   const propertiesQuery = useQuery({
-    queryKey: ["dashboard-properties"],
+    queryKey: dashboardKeys.properties(),
     queryFn: fetchProperties,
     enabled: !profileLoading && shouldFetchPropertyData,
     staleTime: 60000,
   });
 
   const propertyInquiriesQuery = useQuery({
-    queryKey: ["dashboard-property-inquiries"],
+    queryKey: dashboardKeys.propertyInquiries(),
     queryFn: fetchPropertyInquiries,
     enabled: !profileLoading && shouldFetchPropertyData,
     staleTime: 30000,
   });
 
   const pipelineQuery = useQuery({
-    queryKey: ["dashboard-pipeline"],
+    queryKey: dashboardKeys.pipeline(),
     queryFn: fetchPipeline,
     enabled: !profileLoading && shouldFetchPropertyData,
     staleTime: 60000,
   });
 
-  // Determine overall loading state
+  // Determine overall loading state (core data per group)
   const isLoading =
     profileLoading ||
     metricsQuery.isLoading ||
@@ -382,21 +351,32 @@ export function useDashboardData(): DashboardData {
     (shouldFetchStoreData &&
       (storesQuery.isLoading || ordersQuery.isLoading)) ||
     (shouldFetchPropertyData &&
-      (propertiesQuery.isLoading || propertyInquiriesQuery.isLoading));
+      (propertiesQuery.isLoading ||
+        propertyInquiriesQuery.isLoading ||
+        pipelineQuery.isLoading));
 
-  // Collect any error
+  // Collect any error from enabled queries
   const error =
     metricsQuery.error ||
+    agendaQuery.error ||
     leadsQuery.error ||
     projectsQuery.error ||
+    portfolioQuery.error ||
     storesQuery.error ||
     ordersQuery.error ||
+    inventoryQuery.error ||
+    topProductsQuery.error ||
     propertiesQuery.error ||
-    propertyInquiriesQuery.error;
+    propertyInquiriesQuery.error ||
+    pipelineQuery.error;
 
   // Get primary store (first store)
   const stores = storesQuery.data || [];
   const primaryStore: StoreData | null = stores[0] ?? null;
+
+  const refetch = async () => {
+    await queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
+  };
 
   return {
     config,
@@ -425,6 +405,7 @@ export function useDashboardData(): DashboardData {
 
     isLoading,
     error: error as Error | undefined,
+    refetch,
   };
 }
 
