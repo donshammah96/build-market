@@ -1,15 +1,14 @@
-import NextAuth from 'next-auth';
-import Credentials from 'next-auth/providers/credentials';
-import { authConfig } from './auth.config';
-import { z } from 'zod';
-import type { User } from './definitions';
-import Google from 'next-auth/providers/google';
-import GitHub from 'next-auth/providers/github';
-import Facebook from 'next-auth/providers/facebook';
-import Azure from 'next-auth/providers/azure-ad';
-import { verifyScryptPassword } from './actions';
-import { getSqlClient } from './db';
-
+import NextAuth from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import { authConfig } from "./auth.config";
+import { z } from "zod";
+import type { User } from "@/app/lib/types/definitions";
+import Google from "next-auth/providers/google";
+import GitHub from "next-auth/providers/github";
+import Facebook from "next-auth/providers/facebook";
+import Azure from "next-auth/providers/azure-ad";
+import { verifyScryptPassword } from "@/app/actions/passwordReset";
+import { getSqlClient } from "@/app/lib/infrastructure/db";
 
 async function getUser(email: string): Promise<User | undefined> {
   try {
@@ -17,15 +16,14 @@ async function getUser(email: string): Promise<User | undefined> {
     const user = await sql<User[]>`SELECT * FROM users WHERE email=${email}`;
     return user[0];
   } catch (error) {
-    console.error('Failed to fetch user:', error);
-    throw new Error('Failed to fetch user.');
+    console.error("Failed to fetch user:", error);
+    throw new Error("Failed to fetch user.");
   }
 }
 
-
 export function checkUserRole(
   session: { user?: { role?: string | null } | null } | null | undefined,
-  allowedRoles: ReadonlyArray<string>
+  allowedRoles: ReadonlyArray<string>,
 ): boolean {
   if (!session?.user) return false;
   const role = session.user.role ?? null;
@@ -38,10 +36,10 @@ const nextAuth = NextAuth({
   providers: [
     // Credentials Provider
     Credentials({
-      name: 'credentials',
+      name: "credentials",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
         const parsed = z
@@ -54,7 +52,7 @@ const nextAuth = NextAuth({
         if (!user) return null;
 
         // Verify with the same algorithm you used on signup (scrypt shown here)
-        const ok = await verifyScryptPassword(password, user.password); 
+        const ok = await verifyScryptPassword(password, user.password);
         if (!ok) return null;
 
         // Return a User that matches your type (id, email, role at least)
@@ -75,50 +73,50 @@ const nextAuth = NextAuth({
         } as User;
       },
     }),
-    
+
     // Google OAuth Provider
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          prompt: 'consent',
-          access_type: 'offline',
-          response_type: 'code',
+          prompt: "consent",
+          access_type: "offline",
+          response_type: "code",
         },
       },
     }),
-    
+
     // GitHub OAuth Provider
     GitHub({
       clientId: process.env.GITHUB_CLIENT_ID!,
       clientSecret: process.env.GITHUB_CLIENT_SECRET!,
       authorization: {
         params: {
-          scope: 'read:user user:email',
+          scope: "read:user user:email",
         },
       },
     }),
-    
+
     // Facebook OAuth Provider
     Facebook({
       clientId: process.env.FACEBOOK_CLIENT_ID!,
       clientSecret: process.env.FACEBOOK_CLIENT_SECRET!,
       authorization: {
         params: {
-          scope: 'email public_profile',
+          scope: "email public_profile",
         },
       },
     }),
-    
+
     // Microsoft Azure AD OAuth Provider
     Azure({
       clientId: process.env.AZURE_AD_CLIENT_ID!,
       clientSecret: process.env.AZURE_AD_CLIENT_SECRET!,
-      issuer: `https://login.microsoftonline.com/${process.env.AZURE_AD_TENANT_ID || 'common'}/v2.0`,
+      issuer: `https://login.microsoftonline.com/${process.env.AZURE_AD_TENANT_ID || "common"}/v2.0`,
       authorization: {
         params: {
-          scope: 'openid profile email User.Read',
+          scope: "openid profile email User.Read",
         },
       },
     }),
@@ -126,11 +124,9 @@ const nextAuth = NextAuth({
 });
 
 export const handlers = nextAuth.handlers;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line /typescript-eslint/no-explicit-any
 export const auth = nextAuth.auth as unknown as (...args: any[]) => any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line /typescript-eslint/no-explicit-any
 export const signIn = nextAuth.signIn as unknown as (...args: any[]) => any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line /typescript-eslint/no-explicit-any
 export const signOut = nextAuth.signOut as unknown as (...args: any[]) => any;
-
-

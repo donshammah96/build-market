@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
-import { env } from './env';
+import { env } from '../infrastructure/env';
 
 /**
  * Allowed origins for CORS
  */
 const getAllowedOrigins = (): string[] => {
-  const origins = [env.NEXT_PUBLIC_APP_URL];
+  const origins = [env.appUrl];
 
   // Add localhost origins in development
-  if (env.NODE_ENV === 'development') {
+  if (env.isDev) {
     origins.push(
       'http://localhost:3000',
       'http://localhost:3030',

@@ -5,19 +5,19 @@
  * For the actual response functions (apiSuccess, apiError), import from resilient-api.ts
  * which includes enhanced features like correlation ID tracking and observability.
  *
- * @module api-response
+ * /module api-response
  */
 
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
 /**
  * Build API success response with correlation ID
- * @deprecated Import from resilient-api.ts instead for better observability
+ * /deprecated Import from resilient-api.ts instead for better observability
  */
 export function apiSuccess<T>(
   data: T,
   status: number = 200,
-  correlationId?: string
+  correlationId?: string,
 ): NextResponse {
   return NextResponse.json(
     {
@@ -26,19 +26,22 @@ export function apiSuccess<T>(
       timestamp: new Date().toISOString(),
       ...(correlationId && { correlationId }),
     },
-    { status, headers: correlationId ? { 'X-Correlation-ID': correlationId } : {} }
+    {
+      status,
+      headers: correlationId ? { "X-Correlation-ID": correlationId } : {},
+    },
   );
 }
 
 /**
  * Build API error response with correlation ID
- * @deprecated Import from resilient-api.ts instead for better observability
+ * /deprecated Import from resilient-api.ts instead for better observability
  */
 export function apiError(
   message: string,
   status: number = 500,
   details?: unknown,
-  correlationId?: string
+  correlationId?: string,
 ): NextResponse {
   const response: {
     success: false;
@@ -59,10 +62,10 @@ export function apiError(
     response.correlationId = correlationId;
   }
 
-  return NextResponse.json(
-    response,
-    { status, headers: correlationId ? { 'X-Correlation-ID': correlationId } : {} }
-  );
+  return NextResponse.json(response, {
+    status,
+    headers: correlationId ? { "X-Correlation-ID": correlationId } : {},
+  });
 }
 
 /**
@@ -130,6 +133,7 @@ export const HttpStatus = {
   GONE: 410,
   UNPROCESSABLE_ENTITY: 422,
   TOO_MANY_REQUESTS: 429,
+  PRECONDITION_REQUIRED: 428,
   INTERNAL_SERVER_ERROR: 500,
   SERVICE_UNAVAILABLE: 503,
 } as const;
@@ -164,6 +168,7 @@ export const ErrorCodes = {
   INSUFFICIENT_PERMISSIONS: "INSUFFICIENT_PERMISSIONS",
   INVALID_STATE_TRANSITION: "INVALID_STATE_TRANSITION",
   VERIFICATION_REQUIRED: "VERIFICATION_REQUIRED",
+  PRECONDITION_REQUIRED: "PRECONDITION_REQUIRED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
@@ -173,7 +178,7 @@ export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
  */
 export function buildSuccessResponse<T>(
   data: T,
-  correlationId?: string
+  correlationId?: string,
 ): ApiSuccessResponse<T> {
   return {
     success: true,
@@ -189,7 +194,7 @@ export function buildSuccessResponse<T>(
 export function buildListResponse<T>(
   data: T[],
   pagination: PaginationInfo,
-  correlationId?: string
+  correlationId?: string,
 ): ApiListResponse<T> {
   return {
     success: true,
@@ -207,7 +212,7 @@ export function buildErrorResponse(
   error: string,
   code?: ErrorCode,
   details?: unknown,
-  correlationId?: string
+  correlationId?: string,
 ): ApiErrorResponse {
   return {
     success: false,

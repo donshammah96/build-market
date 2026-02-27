@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 
 /**
  * Simple in-memory rate limiter (for development)
- * For production, use Redis-based rate limiting with @upstash/ratelimit
+ * For production, use Redis-based rate limiting with /upstash/ratelimit
  */
 
 interface RateLimitStore {
@@ -36,9 +36,9 @@ export interface RateLimitResult {
 
 /**
  * Check rate limit for an identifier
- * @param identifier - Unique identifier (IP, user ID, etc.)
- * @param limit - Maximum requests allowed
- * @param window - Time window in milliseconds
+ * /param identifier - Unique identifier (IP, user ID, etc.)
+ * /param limit - Maximum requests allowed
+ * /param window - Time window in milliseconds
  */
 export async function checkRateLimit(
   identifier: string,

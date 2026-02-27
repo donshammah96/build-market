@@ -48,7 +48,7 @@ export interface AuthContext {
 /**
  * Handler function with authentication context
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line/typescript-eslint/no-explicit-any
 type AuthenticatedHandler<T = any> = (
   req: NextRequest,
   context: AuthContext,
@@ -62,16 +62,40 @@ type AuthenticatedHandler<T = any> = (
  * Rejects non-active users (SUSPENDED, BANNED, DEACTIVATED, ARCHIVED)
  * and soft-deleted users.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line/typescript-eslint/no-explicit-any
 export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
   // Using rest parameters to handle both static and dynamic routes
   const routeHandler = async (
     req: NextRequest,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line/typescript-eslint/no-explicit-any
     ...args: any[]
   ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
     const logger = getClientLogger();
+
+    // --- DEV AUTH BYPASS ---
+    // Short-circuit auth for local offline development
+    if (
+      process.env.BYPASS_AUTH === "true" &&
+      process.env.NODE_ENV === "development"
+    ) {
+      const devContext: AuthContext = {
+        clerkId: process.env.DEV_CLERK_ID || "user_35Z6M7pKOJKZB9yNEZvS5udrrGo",
+        dbUserId:
+          process.env.DEV_DB_USER_ID || "929c4dd1-b8c2-416e-872d-068abdb80c40",
+        userEmail: process.env.DEV_USER_EMAIL || "donshammah1@gmail.com",
+        userRole:
+          (process.env.DEV_USER_ROLE as UserRole) || UserRole.PROFESSIONAL,
+      };
+
+      const routeContext = args[0] as { params?: Promise<T> } | undefined;
+      const params = routeContext?.params
+        ? await routeContext.params
+        : undefined;
+
+      return handler(req, devContext, params);
+    }
+    // --- END DEV AUTH BYPASS ---
 
     try {
       // Get Clerk user ID

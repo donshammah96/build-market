@@ -5,15 +5,15 @@
  * Pattern matches existing request-utils.ts and can be used by any API route.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
-import { STORE_CONFIG } from "@/app/lib/config/store.config";
+import { apiError, HttpStatus } from "./api-response";
+import { STORE_CONFIG } from "../config/store.config";
 
 /**
  * Guard: reject requests where Content-Length exceeds the given limit.
  *
- * @param req - Incoming request
- * @param maxSize - Maximum body size in bytes (defaults to STORE_CONFIG.MAX_BODY_SIZE)
- * @returns null if size is acceptable, or an error NextResponse
+ * /param req - Incoming request
+ * /param maxSize - Maximum body size in bytes (defaults to STORE_CONFIG.MAX_BODY_SIZE)
+ * /returns null if size is acceptable, or an error NextResponse
  */
 export function checkBodySize(
   req: NextRequest,
@@ -32,9 +32,9 @@ export function checkBodySize(
 /**
  * Guard: reject requests with too many images in the payload.
  *
- * @param images - Array of image objects (or undefined)
- * @param maxCount - Maximum allowed images (defaults to STORE_CONFIG.MAX_IMAGES_PER_REQUEST)
- * @returns null if count is acceptable, or an error NextResponse
+ * /param images - Array of image objects (or undefined)
+ * /param maxCount - Maximum allowed images (defaults to STORE_CONFIG.MAX_IMAGES_PER_REQUEST)
+ * /returns null if count is acceptable, or an error NextResponse
  */
 export function checkImageCount(
   images: unknown[] | undefined,
