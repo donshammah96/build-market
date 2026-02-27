@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Star,
@@ -28,119 +27,17 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
+import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 
-interface ServiceCategory {
-  id: string;
-  name: string;
-  slug: string;
-  icon?: string | null;
-}
-
-interface ProfileImage {
-  id: string;
-  url: string;
-  caption?: string | null;
-  isMain: boolean;
-}
-
-interface PortfolioImage {
-  id: string;
-  url: string;
-  caption?: string | null;
-  isMain: boolean;
-  isBefore: boolean;
-  isAfter: boolean;
-}
-
-interface Portfolio {
-  id: string;
-  title: string;
-  description?: string | null;
-  projectType: string;
-  completedAt?: Date | string | null;
-  images?: PortfolioImage[];
-}
-
-interface Review {
-  id: string;
-  rating: number;
-  comment?: string | null;
-  createdAt: Date | string;
-  reviewer: {
-    firstName: string;
-    lastName: string;
-    avatar?: string | null;
-  };
-}
-
-interface Certificate {
-  id: string;
-  name: string;
-  issuer: string;
-  issueDate?: Date | string | null;
-  expiryDate?: Date | string | null;
-}
-
-interface ProfessionalProfile {
-  id: string;
-  userId: string;
-  companyName: string;
-  licenseNumber: string;
-  bio?: string | null;
-  city?: string | null;
-  county?: string | null;
-  website?: string | null;
-  portfolioUrl?: string | null;
-  yearsExperience?: number | null;
-  verified: boolean;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-  avgRating?: number | null;
-  user: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    avatar?: string | null;
-  };
-  services?: ServiceCategory[];
-  images?: ProfileImage[];
-  portfolios?: Portfolio[];
-  reviews?: Review[];
-  certificates?: Certificate[];
-  _count?: {
-    reviews: number;
-    projects: number;
-    portfolios: number;
-  };
-}
+import { usePublicProfile } from "@/hooks/useProfile";
 
 export default function ProfessionalProfileDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
 
-  const {
-    data: professional,
-    isLoading,
-    error,
-  } = useQuery<ProfessionalProfile>({
-    queryKey: ["professional-profile", id],
-    queryFn: async () => {
-      const res = await fetch(`/api/professional-portal/profile/${id}`);
-      if (!res.ok) {
-        if (res.status === 404) {
-          throw new Error("Professional not found");
-        }
-        throw new Error("Failed to fetch professional profile");
-      }
-      return res.json();
-    },
-    enabled: !!id,
-    retry: 2,
-    staleTime: 30000,
-  });
+  const { data: professional, isLoading, error } = usePublicProfile(id);
 
   const images = useMemo(() => {
     if (!professional?.images) return [];
@@ -193,9 +90,7 @@ export default function ProfessionalProfileDetailPage() {
                 ? error.message
                 : "The professional profile you're looking for doesn't exist."}
             </p>
-            <Button asChild>
-              <Link href="/professional-portal/profile">Back to Profile</Link>
-            </Button>
+            <Button onClick={() => router.back()}>Go Back</Button>
           </div>
         </Card>
       </div>
@@ -335,7 +230,6 @@ export default function ProfessionalProfileDetailPage() {
 
             {/* Overview Tab */}
             <TabsContent value="overview" className="space-y-6 mt-6">
-              {/* Bio */}
               {professional.bio && (
                 <Card className="border border-zinc-200 shadow-sm bg-white">
                   <CardHeader>
@@ -352,7 +246,6 @@ export default function ProfessionalProfileDetailPage() {
                 </Card>
               )}
 
-              {/* Services */}
               {professional.services && professional.services.length > 0 && (
                 <Card className="border border-zinc-200 shadow-sm bg-white">
                   <CardHeader>
@@ -508,7 +401,7 @@ export default function ProfessionalProfileDetailPage() {
                               <Calendar className="h-4 w-4" />
                               Completed{" "}
                               {new Date(
-                                portfolio.completedAt
+                                portfolio.completedAt,
                               ).toLocaleDateString()}
                             </div>
                           </CardContent>
@@ -556,7 +449,7 @@ export default function ProfessionalProfileDetailPage() {
                                 </p>
                                 <p className="text-sm text-zinc-500">
                                   {new Date(
-                                    review.createdAt
+                                    review.createdAt,
                                   ).toLocaleDateString()}
                                 </p>
                               </div>
@@ -721,7 +614,7 @@ export default function ProfessionalProfileDetailPage() {
                       year: "numeric",
                       month: "long",
                       day: "numeric",
-                    }
+                    },
                   )}
                 </p>
               </div>

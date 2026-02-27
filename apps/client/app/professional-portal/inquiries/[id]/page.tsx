@@ -1,11 +1,14 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useParams } from "next/navigation";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
+import {
+  useInquiry,
+  useUpdateInquiry,
+  useDeleteInquiry,
+} from "@/hooks/useInquiries";
+import type { UpdateInquiryInput } from "@/lib/inquiries-client";
 import {
   ArrowLeft,
   Phone,
@@ -59,54 +62,7 @@ import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 
-// Property Inquiry interface matching API response
-interface PropertyInquiry {
-  id: string;
-  propertyId: string;
-  userId?: string | null;
-  clientName: string;
-  clientEmail?: string | null;
-  clientPhone?: string | null;
-  message?: string | null;
-  status: "NEW" | "CONTACTED" | "VIEWING_SCHEDULED" | "OFFER_MADE" | "CLOSED";
-  notes?: string | null;
-  preferredViewingDate?: string | Date | null;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-  property: {
-    id: string;
-    title: string;
-    price: number | string;
-    currency: string;
-    type: string;
-    category: string;
-    location: string;
-    status: string;
-    agentId: string;
-  };
-  user?: {
-    id: string;
-    firstName?: string | null;
-    lastName?: string | null;
-    email?: string | null;
-    phone?: string | null;
-  } | null;
-}
-
-// Schema for updating an inquiry
-const updateInquirySchema = z.object({
-  status: z.enum([
-    "NEW",
-    "CONTACTED",
-    "VIEWING_SCHEDULED",
-    "OFFER_MADE",
-    "CLOSED",
-  ]),
-  notes: z.string().optional(),
-  preferredViewingDate: z.string().optional().or(z.literal("")),
-});
-
-type UpdateInquiryFormValues = z.infer<typeof updateInquirySchema>;
+// We use the validation schemas directly now
 
 const statusConfig: Record<
   string,
@@ -141,97 +97,44 @@ const statusConfig: Record<
 
 export default function InquiryDetailPage() {
   const params = useParams();
-  const router = useRouter();
-  const queryClient = useQueryClient();
   const id = params.id as string;
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   // Fetch Inquiry
-  const {
-    data: inquiry,
-    isLoading,
-    error,
-  } = useQuery<PropertyInquiry>({
-    queryKey: ["property-inquiry", id],
-    queryFn: async () => {
-      const res = await fetch(`/api/professional-portal/inquiries/${id}`);
-      if (!res.ok) {
-        if (res.status === 404) {
-          throw new Error("Inquiry not found");
-        }
-        if (res.status === 403) {
-          throw new Error("Unauthorized access");
-        }
-        throw new Error("Failed to fetch inquiry");
-      }
-      return res.json();
-    },
-    enabled: !!id,
-    retry: 2,
-    staleTime: 30000,
-  });
+  const { data: inquiry, isLoading, error } = useInquiry(id);
 
   // Update Inquiry Mutation
-  const updateInquiryMutation = useMutation({
-    mutationFn: async (data: UpdateInquiryFormValues) => {
-      const res = await fetch(`/api/professional-portal/inquiries/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...data,
-          preferredViewingDate: data.preferredViewingDate
-            ? new Date(data.preferredViewingDate).toISOString()
-            : null,
-        }),
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to update inquiry");
-      }
-      return res.json();
-    },
+  const updateInquiryMutation = useUpdateInquiry({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["property-inquiry", id] });
-      queryClient.invalidateQueries({ queryKey: ["professional-inquiries"] });
       setIsEditOpen(false);
       toast.success("Inquiry updated successfully");
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : "Failed to update inquiry"
+        error instanceof Error ? error.message : "Failed to update inquiry",
       );
     },
   });
 
   // Delete Inquiry Mutation
-  const deleteInquiryMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/professional-portal/inquiries/${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to delete inquiry");
-      }
-      return res.json();
-    },
+  const deleteInquiryMutation = useDeleteInquiry({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["professional-inquiries"] });
       toast.success("Inquiry deleted successfully");
-      router.push("/professional-portal/inquiries");
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete inquiry"
+        error instanceof Error ? error.message : "Failed to delete inquiry",
       );
     },
   });
 
-  const form = useForm<UpdateInquiryFormValues>({
-    resolver: zodResolver(updateInquirySchema),
+  const form = useForm<UpdateInquiryInput>({
     defaultValues: {
-      status: inquiry?.status || "NEW",
+      status: (inquiry?.status || "NEW") as Extract<
+        UpdateInquiryInput["status"],
+        "NEW"
+      >,
       notes: inquiry?.notes || "",
       preferredViewingDate: inquiry?.preferredViewingDate
         ? new Date(inquiry.preferredViewingDate).toISOString().slice(0, 16)
@@ -254,12 +157,20 @@ export default function InquiryDetailPage() {
     });
   }
 
-  function onSubmit(data: UpdateInquiryFormValues) {
-    updateInquiryMutation.mutate(data);
+  function onSubmit(data: UpdateInquiryInput) {
+    updateInquiryMutation.mutate({
+      inquiryId: id,
+      data: {
+        ...data,
+        preferredViewingDate: data.preferredViewingDate
+          ? new Date(data.preferredViewingDate).toISOString()
+          : null,
+      } as UpdateInquiryInput,
+    });
   }
 
   const handleDelete = () => {
-    deleteInquiryMutation.mutate();
+    deleteInquiryMutation.mutate({ inquiryId: id });
   };
 
   // Format price
@@ -490,7 +401,7 @@ export default function InquiryDetailPage() {
                     </label>
                     <p className="text-zinc-900">
                       {new Date(
-                        inquiry.preferredViewingDate
+                        inquiry.preferredViewingDate,
                       ).toLocaleDateString("en-US", {
                         year: "numeric",
                         month: "long",

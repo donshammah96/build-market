@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Download, Wallet, Loader2 } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useForm, Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -12,6 +12,13 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -30,71 +37,64 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useWithdraw, financeKeys } from "@/hooks/useWithdraw";
 
 const withdrawSchema = z.object({
   amount: z.coerce.number().min(1, "Amount must be at least 1"),
+  method: z.enum(["MPESA", "BANK_TRANSFER", "CARD", "WALLET", "CASH"], {
+    message: "Please select a withdrawal method",
+  }),
 });
 
 type WithdrawFormValues = z.infer<typeof withdrawSchema>;
 
 export default function FinancePage() {
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
-  const queryClient = useQueryClient();
 
   // Fetch Stats
   const { data: stats, isLoading: isLoadingStats } = useQuery({
-    queryKey: ["finance-stats"],
+    queryKey: financeKeys.stats(),
     queryFn: async () => {
       const res = await fetch("/api/professional-portal/finance/stats");
       if (!res.ok) throw new Error("Failed to fetch stats");
-      return res.json();
+      const json = await res.json();
+      return json.data ?? json;
     },
   });
 
   // Fetch Transactions
   const { data: transactionsData, isLoading: isLoadingTransactions } = useQuery(
     {
-      queryKey: ["transactions"],
+      queryKey: financeKeys.transactions(),
       queryFn: async () => {
         const res = await fetch(
-          "/api/professional-portal/finance/transactions"
+          "/api/professional-portal/finance/transactions",
         );
         if (!res.ok) throw new Error("Failed to fetch transactions");
         return res.json();
       },
-    }
+    },
   );
 
-  const transactions = Array.isArray(transactionsData?.data)
-    ? transactionsData.data
-    : [];
+  const payload = transactionsData?.data;
+  const transactions = Array.isArray(payload)
+    ? payload
+    : payload && typeof payload === "object" && "data" in payload
+      ? ((payload as { data: unknown[] }).data ?? [])
+      : [];
 
   // Withdraw Form
   const form = useForm<WithdrawFormValues>({
     resolver: zodResolver(withdrawSchema) as Resolver<WithdrawFormValues>,
     defaultValues: {
       amount: 0,
+      method: "MPESA",
     },
   });
 
   // Withdraw Mutation
-  const withdrawMutation = useMutation({
-    mutationFn: async (data: WithdrawFormValues) => {
-      const res = await fetch("/api/professional-portal/finance/withdraw", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to withdraw funds");
-      }
-      return res.json();
-    },
+  const withdrawMutation = useWithdraw({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["finance-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
       setIsWithdrawOpen(false);
       toast.success("Withdrawal request submitted");
       form.reset();
@@ -105,7 +105,10 @@ export default function FinancePage() {
   });
 
   function onSubmit(data: WithdrawFormValues) {
-    withdrawMutation.mutate(data);
+    withdrawMutation.mutate({
+      amount: data.amount,
+      method: data.method,
+    });
   }
 
   return (
@@ -143,6 +146,32 @@ export default function FinancePage() {
                   onSubmit={form.handleSubmit(onSubmit)}
                   className="space-y-4"
                 >
+                  <FormField
+                    control={form.control}
+                    name="method"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Withdrawal Method</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a method" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="MPESA">M-Pesa</SelectItem>
+                            <SelectItem value="BANK_TRANSFER">
+                              Bank Transfer
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <FormField
                     control={form.control}
                     name="amount"
@@ -272,7 +301,7 @@ export default function FinancePage() {
                       status={txn.status}
                       type={txn.type}
                     />
-                  )
+                  ),
                 )
               )}
             </tbody>

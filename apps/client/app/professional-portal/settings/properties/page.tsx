@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
@@ -31,55 +30,42 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
+import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
-import PropertyForm from "@/components/forms/PropertyForm";
+import PropertyForm, {
+  PropertyFormSubmitData,
+} from "@/components/forms/PropertyForm";
 import { DocumentUploader } from "@/components/admin/verification/DocumentUploader";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
-
-interface Property {
-  id: string;
-  title: string;
-  price: number;
-  location: string;
-  type: string;
-  status: "active" | "pending" | "sold" | "rented";
-  views: number;
-  inquiries: number;
-  images: string[];
-  verificationStatus?:
-    | "UNVERIFIED"
-    | "PENDING"
-    | "VERIFIED"
-    | "REJECTED"
-    | "NEEDS_CORRECTION";
-  rejectionReason?: string | null;
-}
-
-interface PropertyAttachment {
-  id: string;
-  fileUrl: string;
-  fileKey?: string | null;
-  type: string;
-  isVerified: boolean;
-  verifiedAt?: Date | string | null;
-  notes?: string | null;
-  createdAt: Date | string;
-}
+import { VerificationBadge } from "@/components/ui/VerificationBadge";
+import { StatCard } from "@/components/ui/StatCard";
+import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
+import {
+  useMyProperties,
+  useDeleteProperty,
+  usePropertyDocuments,
+  useAddPropertyDocument,
+  useReplacePropertyDocument,
+  useRemovePropertyDocument,
+  useCreateProperty,
+} from "@/hooks/useProperties";
+import type {
+  Property,
+  PropertyAttachment,
+  CreatePropertyClientInput,
+} from "@/lib/properties-client";
 
 export default function PropertiesSettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const queryClient = useQueryClient();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(
-    null
+    null,
   );
   const [selectedPropertyForDocs, setSelectedPropertyForDocs] = useState<
     string | null
@@ -88,7 +74,7 @@ export default function PropertiesSettingsPage() {
     "all" | "active" | "pending" | "sold"
   >("all");
   const [activeTab, setActiveTab] = useState<"properties" | "verification">(
-    "properties"
+    "properties",
   );
 
   // Check URL params for status and redirect to verification tab if needed
@@ -104,166 +90,76 @@ export default function PropertiesSettingsPage() {
     }
   }, [searchParams]);
 
-  // Fetch properties
-  const { data, isLoading, error } = useQuery<{ data: Property[] }>({
-    queryKey: ["my-properties", statusFilter],
-    queryFn: async () => {
-      const res = await fetch(
-        `/api/properties/my-listings?status=${statusFilter}&limit=50`
-      );
-      if (!res.ok) throw new Error("Failed to fetch properties");
-      return res.json();
-    },
-  });
+  // Fetch all properties via hook
+  const {
+    data: myPropertiesData,
+    isLoading,
+    error,
+    refetch: refetchProperties,
+  } = useMyProperties({ status: "all", limit: 50 });
 
-  // Delete property mutation
-  const deletePropertyMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/properties/${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to delete property");
-      }
-      return res.json();
-    },
+  // Delete property via server action hook
+  const deletePropertyMutation = useDeleteProperty({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["my-properties"] });
       toast.success("Property deleted successfully");
       setIsDeleteOpen(false);
       setSelectedProperty(null);
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete property"
+        error instanceof Error ? error.message : "Failed to delete property",
       );
     },
   });
 
-  const properties = data?.data || [];
+  const allProperties = (myPropertiesData as unknown as Property[]) || [];
+  const properties =
+    statusFilter === "all"
+      ? allProperties
+      : allProperties.filter((p) => p.status === statusFilter);
+  const propertyDetails = allProperties;
 
-  // Fetch property details with verification status (for verification tab)
-  const { data: propertyDetailsData } = useQuery<{ data: Property[] }>({
-    queryKey: ["property-details"],
-    queryFn: async () => {
-      const res = await fetch(
-        "/api/properties/my-listings?status=all&limit=50"
-      );
-      if (!res.ok) return { data: [] };
-      return res.json();
-    },
-  });
+  // Fetch attachments for selected property via hook
+  const { data: attachmentsRaw } = usePropertyDocuments(
+    selectedPropertyForDocs,
+    !!selectedPropertyForDocs,
+  );
+  const attachments = (attachmentsRaw as unknown as PropertyAttachment[]) || [];
 
-  const propertyDetails = propertyDetailsData?.data || [];
+  // Document mutations via server action hooks
+  const addDocMutation = useAddPropertyDocument(selectedPropertyForDocs ?? "");
+  const replaceDocMutation = useReplacePropertyDocument(
+    selectedPropertyForDocs ?? "",
+  );
+  const removeDocMutation = useRemovePropertyDocument(
+    selectedPropertyForDocs ?? "",
+  );
 
-  // Fetch attachments for selected property
-  const { data: attachmentsData } = useQuery<{ data: PropertyAttachment[] }>({
-    queryKey: ["property-attachments", selectedPropertyForDocs],
-    queryFn: async () => {
-      if (!selectedPropertyForDocs) return { data: [] };
-      const res = await fetch(
-        `/api/properties/${selectedPropertyForDocs}/documents`
-      );
-      if (!res.ok) return { data: [] };
-      return res.json();
-    },
-    enabled: !!selectedPropertyForDocs,
-  });
-
-  const attachments = attachmentsData?.data || [];
-
-  // Upload document mutation
-  const uploadDocumentMutation = useMutation({
-    mutationFn: async ({
-      propertyId,
-      fileUrl,
-      fileKey,
-      type,
-    }: {
-      propertyId: string;
-      fileUrl: string;
-      fileKey?: string;
-      type: string;
-    }) => {
-      const res = await fetch(`/api/properties/${propertyId}/documents`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileUrl, fileKey, type }),
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to upload document");
-      }
-      return res.json();
-    },
+  const createPropertyMutation = useCreateProperty({
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["property-attachments", selectedPropertyForDocs],
-      });
-      queryClient.invalidateQueries({ queryKey: ["property-details"] });
+      setIsCreateOpen(false);
+      toast.success("Property created successfully");
     },
-  });
-
-  // Replace document mutation
-  const replaceDocumentMutation = useMutation({
-    mutationFn: async ({
-      propertyId,
-      attachmentId,
-      fileUrl,
-      fileKey,
-    }: {
-      propertyId: string;
-      attachmentId: string;
-      fileUrl: string;
-      fileKey?: string;
-    }) => {
-      const res = await fetch(`/api/properties/${propertyId}/documents`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ attachmentId, fileUrl, fileKey }),
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to replace document");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["property-attachments", selectedPropertyForDocs],
-      });
-      queryClient.invalidateQueries({ queryKey: ["property-details"] });
-    },
-  });
-
-  // Delete document mutation
-  const deleteDocumentMutation = useMutation({
-    mutationFn: async ({
-      propertyId,
-      attachmentId,
-    }: {
-      propertyId: string;
-      attachmentId: string;
-    }) => {
-      const res = await fetch(
-        `/api/properties/${propertyId}/documents?attachmentId=${attachmentId}`,
-        {
-          method: "DELETE",
-        }
+    onError: (err) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create property",
       );
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to delete document");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["property-attachments", selectedPropertyForDocs],
-      });
     },
   });
+
+  const handleCreateProperty = async (data: PropertyFormSubmitData) => {
+    const payload = {
+      ...data,
+      images:
+        data.images?.map((url, i) => ({
+          assetId: url,
+          category: "EXTERIOR",
+          isMain: i === 0,
+        })) ?? [],
+    } as unknown as CreatePropertyClientInput;
+
+    await createPropertyMutation.mutateAsync(payload);
+  };
 
   const handleDelete = (property: Property) => {
     setSelectedProperty(property);
@@ -272,7 +168,10 @@ export default function PropertiesSettingsPage() {
 
   const confirmDelete = () => {
     if (selectedProperty) {
-      deletePropertyMutation.mutate(selectedProperty.id);
+      deletePropertyMutation.mutate({
+        id: selectedProperty.id,
+        version: selectedProperty.version,
+      });
     }
   };
 
@@ -282,7 +181,7 @@ export default function PropertiesSettingsPage() {
       (p) =>
         p.verificationStatus === "REJECTED" ||
         p.verificationStatus === "NEEDS_CORRECTION" ||
-        p.verificationStatus === "PENDING"
+        p.verificationStatus === "PENDING",
     ) || false;
 
   const getStatusBadge = (status: string) => {
@@ -338,13 +237,7 @@ export default function PropertiesSettingsPage() {
                 ? error.message
                 : "Unable to load your properties. Please try again."}
             </p>
-            <Button
-              onClick={() =>
-                queryClient.invalidateQueries({ queryKey: ["my-properties"] })
-              }
-            >
-              Retry
-            </Button>
+            <Button onClick={() => refetchProperties()}>Retry</Button>
           </div>
         </Card>
       </div>
@@ -406,62 +299,30 @@ export default function PropertiesSettingsPage() {
         <TabsContent value="properties" className="space-y-6 mt-6">
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="border border-zinc-200 shadow-sm">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-zinc-500 mb-1">
-                      Total Properties
-                    </p>
-                    <p className="text-2xl font-bold text-zinc-900">
-                      {properties.length}
-                    </p>
-                  </div>
-                  <Home className="h-8 w-8 text-zinc-400" />
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border border-zinc-200 shadow-sm">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-zinc-500 mb-1">Active</p>
-                    <p className="text-2xl font-bold text-emerald-600">
-                      {properties.filter((p) => p.status === "active").length}
-                    </p>
-                  </div>
-                  <CheckCircle className="h-8 w-8 text-emerald-400" />
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border border-zinc-200 shadow-sm">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-zinc-500 mb-1">Pending</p>
-                    <p className="text-2xl font-bold text-amber-600">
-                      {properties.filter((p) => p.status === "pending").length}
-                    </p>
-                  </div>
-                  <Clock className="h-8 w-8 text-amber-400" />
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border border-zinc-200 shadow-sm">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-zinc-500 mb-1">
-                      Total Inquiries
-                    </p>
-                    <p className="text-2xl font-bold text-zinc-900">
-                      {properties.reduce((sum, p) => sum + p.inquiries, 0)}
-                    </p>
-                  </div>
-                  <Eye className="h-8 w-8 text-zinc-400" />
-                </div>
-              </CardContent>
-            </Card>
+            <StatCard
+              label="Total Properties"
+              value={allProperties.length}
+              icon={Home}
+            />
+            <StatCard
+              label="Active"
+              value={allProperties.filter((p) => p.status === "active").length}
+              icon={CheckCircle}
+              valueClassName="text-emerald-600"
+              iconClassName="text-emerald-400"
+            />
+            <StatCard
+              label="Pending"
+              value={allProperties.filter((p) => p.status === "pending").length}
+              icon={Clock}
+              valueClassName="text-amber-600"
+              iconClassName="text-amber-400"
+            />
+            <StatCard
+              label="Total Inquiries"
+              value={allProperties.reduce((sum, p) => sum + p.inquiries, 0)}
+              icon={Eye}
+            />
           </div>
 
           {/* Properties List */}
@@ -610,11 +471,6 @@ export default function PropertiesSettingsPage() {
                   {propertyDetails.map((property) => {
                     const verificationStatus =
                       property.verificationStatus || "UNVERIFIED";
-                    const isRejected =
-                      verificationStatus === "REJECTED" ||
-                      verificationStatus === "NEEDS_CORRECTION";
-                    const isPending = verificationStatus === "PENDING";
-                    const isVerified = verificationStatus === "VERIFIED";
 
                     return (
                       <div
@@ -627,29 +483,7 @@ export default function PropertiesSettingsPage() {
                               <h3 className="text-lg font-semibold text-zinc-900">
                                 {property.title}
                               </h3>
-                              {isVerified && (
-                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
-                                  <CheckCircle className="mr-1 h-3 w-3" />
-                                  Verified
-                                </Badge>
-                              )}
-                              {isPending && (
-                                <Badge className="bg-amber-100 text-amber-700 border-amber-200">
-                                  <Clock className="mr-1 h-3 w-3" />
-                                  Pending Review
-                                </Badge>
-                              )}
-                              {isRejected && (
-                                <Badge className="bg-red-100 text-red-700 border-red-200">
-                                  <XCircle className="mr-1 h-3 w-3" />
-                                  {verificationStatus === "REJECTED"
-                                    ? "Rejected"
-                                    : "Needs Correction"}
-                                </Badge>
-                              )}
-                              {verificationStatus === "UNVERIFIED" && (
-                                <Badge variant="outline">Unverified</Badge>
-                              )}
+                              <VerificationBadge status={verificationStatus} />
                             </div>
                             <p className="text-sm text-zinc-600">
                               {property.location}
@@ -673,7 +507,7 @@ export default function PropertiesSettingsPage() {
                               setSelectedPropertyForDocs(
                                 selectedPropertyForDocs === property.id
                                   ? null
-                                  : property.id
+                                  : property.id,
                               );
                             }}
                           >
@@ -694,7 +528,7 @@ export default function PropertiesSettingsPage() {
                                 "MANDATE_LETTER",
                               ].map((docType) => {
                                 const typeAttachments = attachments.filter(
-                                  (a) => a.type === docType
+                                  (a) => a.type === docType,
                                 );
                                 return (
                                   <div key={docType} className="space-y-2">
@@ -706,39 +540,28 @@ export default function PropertiesSettingsPage() {
                                       documentType={docType}
                                       documentTypeLabel={docType.replace(
                                         /_/g,
-                                        " "
+                                        " ",
                                       )}
-                                      onUpload={async (fileUrl, fileKey) => {
-                                        await uploadDocumentMutation.mutateAsync(
-                                          {
-                                            propertyId: property.id,
-                                            fileUrl,
-                                            fileKey,
-                                            type: docType,
-                                          }
-                                        );
+                                      onUpload={async (fileUrl) => {
+                                        await addDocMutation.mutateAsync({
+                                          type: docType,
+                                          assetId: fileUrl,
+                                        });
                                       }}
                                       onReplace={async (
-                                        attachmentId,
+                                        documentId,
                                         fileUrl,
-                                        fileKey
                                       ) => {
-                                        await replaceDocumentMutation.mutateAsync(
-                                          {
-                                            propertyId: property.id,
-                                            attachmentId,
-                                            fileUrl,
-                                            fileKey,
-                                          }
-                                        );
+                                        await replaceDocMutation.mutateAsync({
+                                          documentId,
+                                          assetId: fileUrl,
+                                          type: docType,
+                                        });
                                       }}
-                                      onDelete={async (attachmentId) => {
-                                        await deleteDocumentMutation.mutateAsync(
-                                          {
-                                            propertyId: property.id,
-                                            attachmentId,
-                                          }
-                                        );
+                                      onDelete={async (documentId) => {
+                                        await removeDocMutation.mutateAsync({
+                                          documentId,
+                                        });
                                       }}
                                       allowedTypes={[
                                         "application/pdf",
@@ -779,68 +602,25 @@ export default function PropertiesSettingsPage() {
             </DialogDescription>
           </DialogHeader>
           <PropertyForm
-            onSubmit={async (data) => {
-              try {
-                const res = await fetch("/api/properties", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(data),
-                });
-                if (!res.ok) {
-                  const error = await res.json();
-                  throw new Error(error.error || "Failed to create property");
-                }
-                setIsCreateOpen(false);
-                queryClient.invalidateQueries({ queryKey: ["my-properties"] });
-                toast.success("Property created successfully");
-              } catch (error) {
-                toast.error(
-                  error instanceof Error
-                    ? error.message
-                    : "Failed to create property"
-                );
-                throw error;
-              }
-            }}
+            onSubmit={handleCreateProperty}
             hideSubmitButton={false}
           />
         </DialogContent>
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Delete Property</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete "{selectedProperty?.title}"? This
-              action cannot be undone. All associated data will be permanently
-              removed.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsDeleteOpen(false);
-                setSelectedProperty(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmDelete}
-              disabled={deletePropertyMutation.isPending}
-            >
-              {deletePropertyMutation.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Delete Property
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDeleteDialog
+        open={isDeleteOpen}
+        onOpenChange={(open) => {
+          setIsDeleteOpen(open);
+          if (!open) setSelectedProperty(null);
+        }}
+        title="Delete Property"
+        entityName={selectedProperty?.title ?? ""}
+        description={`Are you sure you want to delete \u201c${selectedProperty?.title}\u201d? This action cannot be undone. All associated data will be permanently removed.`}
+        onConfirm={confirmDelete}
+        isPending={deletePropertyMutation.isPending}
+      />
     </div>
   );
 }

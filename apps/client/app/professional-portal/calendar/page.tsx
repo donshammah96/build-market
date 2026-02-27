@@ -11,7 +11,7 @@ import {
   ChevronRight,
   AlertCircle,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useCalendarEvents } from "@/hooks/useCalendar";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -63,32 +63,17 @@ export default function CalendarPage() {
     data: apiEvents,
     isLoading,
     error: fetchError,
-  } = useQuery<CalendarEvent[]>({
-    queryKey: ["professional-calendar"],
-    queryFn: async () => {
-      const response = await fetch("/api/professional-portal/calendar");
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || "Failed to fetch events");
-      }
-      const result = await response.json();
-      // Handle both direct array and paginated response
-      const events = Array.isArray(result) ? result : result.data || [];
-      // Convert string dates to Date objects
-      return events.map((event: CalendarEvent) => ({
-        ...event,
-        startDate: new Date(event.startDate),
-        endDate: new Date(event.endDate),
-      }));
-    },
-    retry: 2,
-    staleTime: 30000, // 30 seconds
-  });
+  } = useCalendarEvents();
 
-  // Ensure events is always an array
+  // Ensure events is always an array with Date objects
   const events = useMemo(() => {
     if (!apiEvents) return [];
-    return Array.isArray(apiEvents) ? apiEvents : [];
+    const raw = Array.isArray(apiEvents) ? apiEvents : [];
+    return (raw as CalendarEvent[]).map((evt) => ({
+      ...evt,
+      startDate: new Date(evt.startDate),
+      endDate: new Date(evt.endDate),
+    }));
   }, [apiEvents]);
 
   // Filter events based on selected date

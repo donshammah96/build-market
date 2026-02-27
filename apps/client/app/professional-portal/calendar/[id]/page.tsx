@@ -2,7 +2,11 @@
 
 import { useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useCalendarEvent,
+  useUpdateCalendarEvent,
+  useDeleteCalendarEvent,
+} from "@/hooks/useCalendar";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -138,84 +142,37 @@ const typeConfig: Record<string, { color: string; label: string }> = {
 export default function CalendarEventDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const queryClient = useQueryClient();
   const id = params.id as string;
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   // Fetch Calendar Event
-  const {
-    data: event,
-    isLoading,
-    error,
-  } = useQuery<CalendarEvent>({
-    queryKey: ["calendar-event", id],
-    queryFn: async () => {
-      const res = await fetch(`/api/professional-portal/calendar/${id}`);
-      if (!res.ok) {
-        if (res.status === 404) {
-          throw new Error("Event not found");
-        }
-        throw new Error("Failed to fetch event");
-      }
-      return res.json();
-    },
-    enabled: !!id,
-    retry: 2,
-    staleTime: 30000,
-  });
+  const { data: eventData, isLoading, error } = useCalendarEvent(id, !!id);
+
+  const event = eventData as CalendarEvent | undefined;
 
   // Update Event Mutation
-  const updateEventMutation = useMutation({
-    mutationFn: async (data: UpdateEventFormValues) => {
-      const res = await fetch(`/api/professional-portal/calendar/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...data,
-          startDate: new Date(data.startDate).toISOString(),
-          endDate: new Date(data.endDate).toISOString(),
-        }),
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to update event");
-      }
-      return res.json();
-    },
+  const updateEventMutation = useUpdateCalendarEvent({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["calendar-event", id] });
-      queryClient.invalidateQueries({ queryKey: ["professional-calendar"] });
       setIsEditOpen(false);
       toast.success("Event updated successfully");
     },
-    onError: (error) => {
+    onError: (err) => {
       toast.error(
-        error instanceof Error ? error.message : "Failed to update event"
+        err instanceof Error ? err.message : "Failed to update event",
       );
     },
   });
 
   // Delete Event Mutation
-  const deleteEventMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/professional-portal/calendar/${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to delete event");
-      }
-      return res.json();
-    },
+  const deleteEventMutation = useDeleteCalendarEvent({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["professional-calendar"] });
       toast.success("Event deleted successfully");
       router.push("/professional-portal/calendar");
     },
-    onError: (error) => {
+    onError: (err) => {
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete event"
+        err instanceof Error ? err.message : "Failed to delete event",
       );
     },
   });
@@ -255,11 +212,35 @@ export default function CalendarEventDetailPage() {
   }
 
   function onSubmit(data: UpdateEventFormValues) {
-    updateEventMutation.mutate(data);
+    updateEventMutation.mutate({
+      eventId: id,
+      payload: {
+        title: data.title,
+        description: data.description,
+        startDate: new Date(data.startDate).toISOString(),
+        endDate: new Date(data.endDate).toISOString(),
+        location: data.location,
+        type: data.type.toUpperCase() as
+          | "MEETING"
+          | "SITE_VISIT"
+          | "DEADLINE"
+          | "PAYMENT_DUE"
+          | "MATERIAL_DELIVERY"
+          | "INSPECTION_NCA"
+          | "INSPECTION_INTERNAL",
+        status: data.status.toUpperCase() as
+          | "SCHEDULED"
+          | "CONFIRMED"
+          | "COMPLETED"
+          | "CANCELLED"
+          | "RESCHEDULED"
+          | "NO_SHOW",
+      },
+    });
   }
 
   const handleDelete = () => {
-    deleteEventMutation.mutate();
+    deleteEventMutation.mutate({ eventId: id });
   };
 
   // Calculate duration

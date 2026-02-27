@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
@@ -14,9 +13,7 @@ import {
   DollarSign,
   Package,
   ShoppingCart,
-  CheckCircle,
   Clock,
-  XCircle,
   AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
@@ -30,42 +27,54 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  VerificationBadge,
+  type VerificationStatus,
+} from "@/components/ui/VerificationBadge";
+import { StatCard } from "@/components/ui/StatCard";
+import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import StoreForm from "@/components/forms/StoreForm";
-
-interface StoreData {
-  id: string;
-  name: string;
-  slug: string;
-  description?: string;
-  verificationStatus?:
-    | "UNVERIFIED"
-    | "PENDING"
-    | "VERIFIED"
-    | "REJECTED"
-    | "NEEDS_CORRECTION";
-  rejectionReason?: string | null;
-  totalProducts: number;
-  totalOrders: number;
-  pendingOrders: number;
-  totalRevenue: number;
-  views: number;
-}
+import { useMyStores, useCreateStore, useDeleteStore } from "@/hooks/useStores";
+import type { StoreData, CreateStoreClientInput } from "@/lib/stores-client";
 
 export default function StoresSettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const queryClient = useQueryClient();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedStore, setSelectedStore] = useState<StoreData | null>(null);
   const [activeTab, setActiveTab] = useState<"stores" | "verification">(
-    "stores"
+    "stores",
   );
+
+  const { data: stores = [], isLoading, error, refetch } = useMyStores();
+  const createStoreMutation = useCreateStore({
+    onSuccess: () => {
+      setIsCreateOpen(false);
+      toast.success("Store created successfully");
+    },
+    onError: (err) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create store",
+      );
+    },
+  });
+  const deleteStoreMutation = useDeleteStore({
+    onSuccess: () => {
+      toast.success("Store deleted successfully");
+      setIsDeleteOpen(false);
+      setSelectedStore(null);
+    },
+    onError: (err) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to delete store",
+      );
+    },
+  });
 
   // Check URL params for status and redirect to verification tab if needed
   useEffect(() => {
@@ -80,49 +89,12 @@ export default function StoresSettingsPage() {
     }
   }, [searchParams]);
 
-  // Fetch stores
-  const { data, isLoading, error } = useQuery<{ data: StoreData[] }>({
-    queryKey: ["my-stores"],
-    queryFn: async () => {
-      const res = await fetch("/api/stores/my-stores");
-      if (!res.ok) throw new Error("Failed to fetch stores");
-      return res.json();
-    },
-  });
-
-  // Delete store mutation
-  const deleteStoreMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/stores/${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to delete store");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["my-stores"] });
-      toast.success("Store deleted successfully");
-      setIsDeleteOpen(false);
-      setSelectedStore(null);
-    },
-    onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to delete store"
-      );
-    },
-  });
-
-  const stores = data?.data || [];
-
   // Check for stores with pending/rejected verification
   const hasPendingIssues = stores.some(
     (s) =>
       s.verificationStatus === "REJECTED" ||
       s.verificationStatus === "NEEDS_CORRECTION" ||
-      s.verificationStatus === "PENDING"
+      s.verificationStatus === "PENDING",
   );
 
   const handleDelete = (store: StoreData) => {
@@ -130,38 +102,12 @@ export default function StoresSettingsPage() {
     setIsDeleteOpen(true);
   };
 
-  const getVerificationBadge = (status?: string) => {
-    switch (status) {
-      case "VERIFIED":
-        return (
-          <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
-            <CheckCircle className="mr-1 h-3 w-3" />
-            Verified
-          </Badge>
-        );
-      case "PENDING":
-        return (
-          <Badge className="bg-amber-100 text-amber-700 border-amber-200">
-            <Clock className="mr-1 h-3 w-3" />
-            Pending Review
-          </Badge>
-        );
-      case "REJECTED":
-      case "NEEDS_CORRECTION":
-        return (
-          <Badge className="bg-red-100 text-red-700 border-red-200">
-            <XCircle className="mr-1 h-3 w-3" />
-            {status === "REJECTED" ? "Rejected" : "Needs Correction"}
-          </Badge>
-        );
-      default:
-        return <Badge variant="outline">Unverified</Badge>;
-    }
-  };
-
   const confirmDelete = () => {
     if (selectedStore) {
-      deleteStoreMutation.mutate(selectedStore.id);
+      deleteStoreMutation.mutate({
+        id: selectedStore.id,
+        version: selectedStore.version ?? 0,
+      });
     }
   };
 
@@ -189,13 +135,7 @@ export default function StoresSettingsPage() {
                 ? error.message
                 : "Unable to load your stores. Please try again."}
             </p>
-            <Button
-              onClick={() =>
-                queryClient.invalidateQueries({ queryKey: ["my-stores"] })
-              }
-            >
-              Retry
-            </Button>
+            <Button onClick={() => refetch()}>Retry</Button>
           </div>
         </Card>
       </div>
@@ -257,64 +197,30 @@ export default function StoresSettingsPage() {
         <TabsContent value="stores" className="space-y-6 mt-6">
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="border border-zinc-200 shadow-sm">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-zinc-500 mb-1">Total Stores</p>
-                    <p className="text-2xl font-bold text-zinc-900">
-                      {stores.length}
-                    </p>
-                  </div>
-                  <Store className="h-8 w-8 text-zinc-400" />
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border border-zinc-200 shadow-sm">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-zinc-500 mb-1">Total Products</p>
-                    <p className="text-2xl font-bold text-emerald-600">
-                      {stores.reduce((sum, s) => sum + s.totalProducts, 0)}
-                    </p>
-                  </div>
-                  <Package className="h-8 w-8 text-emerald-400" />
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border border-zinc-200 shadow-sm">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-zinc-500 mb-1">Total Orders</p>
-                    <p className="text-2xl font-bold text-blue-600">
-                      {stores.reduce((sum, s) => sum + s.totalOrders, 0)}
-                    </p>
-                  </div>
-                  <ShoppingCart className="h-8 w-8 text-blue-400" />
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border border-zinc-200 shadow-sm">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-zinc-500 mb-1">Total Revenue</p>
-                    <p className="text-2xl font-bold text-zinc-900">
-                      {new Intl.NumberFormat("en-KE", {
-                        style: "currency",
-                        currency: "KES",
-                        minimumFractionDigits: 0,
-                      }).format(
-                        stores.reduce((sum, s) => sum + s.totalRevenue, 0)
-                      )}
-                    </p>
-                  </div>
-                  <DollarSign className="h-8 w-8 text-zinc-400" />
-                </div>
-              </CardContent>
-            </Card>
+            <StatCard label="Total Stores" value={stores.length} icon={Store} />
+            <StatCard
+              label="Total Products"
+              value={stores.reduce((sum, s) => sum + s.totalProducts, 0)}
+              icon={Package}
+              valueClassName="text-emerald-600"
+              iconClassName="text-emerald-400"
+            />
+            <StatCard
+              label="Total Orders"
+              value={stores.reduce((sum, s) => sum + s.totalOrders, 0)}
+              icon={ShoppingCart}
+              valueClassName="text-blue-600"
+              iconClassName="text-blue-400"
+            />
+            <StatCard
+              label="Total Revenue"
+              value={new Intl.NumberFormat("en-KE", {
+                style: "currency",
+                currency: "KES",
+                minimumFractionDigits: 0,
+              }).format(stores.reduce((sum, s) => sum + s.totalRevenue, 0))}
+              icon={DollarSign}
+            />
           </div>
 
           {/* Stores List */}
@@ -352,7 +258,11 @@ export default function StoresSettingsPage() {
                               <h3 className="text-lg font-semibold text-zinc-900">
                                 {store.name}
                               </h3>
-                              {getVerificationBadge(store.verificationStatus)}
+                              <VerificationBadge
+                                status={
+                                  store.verificationStatus as VerificationStatus
+                                }
+                              />
                             </div>
                             {store.description && (
                               <p className="text-sm text-zinc-600 mt-1">
@@ -470,7 +380,11 @@ export default function StoresSettingsPage() {
                               <h3 className="text-lg font-semibold text-zinc-900">
                                 {store.name}
                               </h3>
-                              {getVerificationBadge(store.verificationStatus)}
+                              <VerificationBadge
+                                status={
+                                  store.verificationStatus as VerificationStatus
+                                }
+                              />
                             </div>
                             <p className="text-sm text-zinc-600">
                               {store.description || "No description"}
@@ -540,27 +454,23 @@ export default function StoresSettingsPage() {
           </DialogHeader>
           <StoreForm
             onSubmit={async (data) => {
-              try {
-                const res = await fetch("/api/stores", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(data),
-                });
-                if (!res.ok) {
-                  const error = await res.json();
-                  throw new Error(error.error || "Failed to create store");
-                }
-                setIsCreateOpen(false);
-                queryClient.invalidateQueries({ queryKey: ["my-stores"] });
-                toast.success("Store created successfully");
-              } catch (error) {
-                toast.error(
-                  error instanceof Error
-                    ? error.message
-                    : "Failed to create store"
-                );
-                throw error;
-              }
+              const payload = {
+                ...data,
+                categories: data.categories.map((c) =>
+                  c.toUpperCase(),
+                ) as CreateStoreClientInput["categories"],
+                storeType:
+                  data.storeType.toUpperCase() as CreateStoreClientInput["storeType"],
+                acceptsCard: false,
+                acceptsCash: true,
+                images:
+                  data.images?.map((assetId, i) => ({
+                    assetId,
+                    category: "INTERIOR" as const,
+                    isMain: i === 0,
+                  })) ?? [],
+              } satisfies CreateStoreClientInput;
+              await createStoreMutation.mutateAsync(payload);
             }}
             hideSubmitButton={false}
             variant="light"
@@ -569,39 +479,18 @@ export default function StoresSettingsPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Delete Store</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete &quot;{selectedStore?.name}&quot;?
-              This action cannot be undone. All products and orders associated
-              with this store will also be removed.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsDeleteOpen(false);
-                setSelectedStore(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmDelete}
-              disabled={deleteStoreMutation.isPending}
-            >
-              {deleteStoreMutation.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Delete Store
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDeleteDialog
+        open={isDeleteOpen}
+        onOpenChange={(open) => {
+          setIsDeleteOpen(open);
+          if (!open) setSelectedStore(null);
+        }}
+        title="Delete Store"
+        entityName={selectedStore?.name ?? ""}
+        description={`Are you sure you want to delete \u201c${selectedStore?.name}\u201d? This action cannot be undone. All products and orders associated with this store will also be removed.`}
+        onConfirm={confirmDelete}
+        isPending={deleteStoreMutation.isPending}
+      />
     </div>
   );
 }

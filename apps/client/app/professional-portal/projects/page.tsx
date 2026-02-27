@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  MoreHorizontal, 
-  MapPin
+import {
+  Plus,
+  Search,
+  Filter,
+  MoreHorizontal,
+  MapPin,
+  Loader2,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { getProfessionalProjectUrl } from "@/lib/links";
@@ -19,98 +19,218 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// Project interface for type safety
+import { usePortalProjects } from "@/hooks/useProjects";
+
+// ─── Project shape as returned by /api/professional-portal/projects ──────────
+
 interface Project {
   id: string;
   title: string;
-  client: string;
-  clientAvatar?: string;
-  location: string;
-  budget: string;
-  spent?: string;
+  client?:
+    | string
+    | {
+        firstName?: string | null;
+        lastName?: string | null;
+        avatar?: string | null;
+      }
+    | null;
+  clientAvatar?: string | null;
+  location?: string | null;
+  budget?: string | number | null;
+  spent?: string | null;
   status: string;
-  progress: number;
-  dueDate: string;
-  image?: string;
+  progress?: number;
+  dueDate?: string | null;
+  endDate?: string | null;
+  image?: string | null;
   tags?: string[];
 }
 
-// --- Mock Data ---
-const PROJECTS = [
-  {
-    id: "1",
-    title: "Karen Villa Renovation",
-    client: "Michael Kamau",
-    clientAvatar: "https://i.pravatar.cc/150?u=1",
-    location: "Karen, Nairobi",
-    budget: "KSh 4.2M",
-    spent: "KSh 3.1M",
-    status: "In Progress",
-    progress: 75,
-    dueDate: "Oct 24, 2024",
-    image: "/images/projects/karen-villa.jpg", // Placeholder
-    tags: ["Renovation", "Interior"]
-  },
-  {
-    id: "2",
-    title: "Westlands Office Fitout",
-    client: "Tech Solutions Ltd",
-    clientAvatar: "https://i.pravatar.cc/150?u=2",
-    location: "Westlands, Nairobi",
-    budget: "KSh 1.8M",
-    spent: "KSh 600k",
-    status: "Planning",
-    progress: 30,
-    dueDate: "Nov 15, 2024",
-    image: "/images/projects/office.jpg", // Placeholder
-    tags: ["Commercial", "Fitout"]
-  },
-  {
-    id: "3",
-    title: "Lavington Apartment Design",
-    client: "Sarah Jenkins",
-    clientAvatar: "https://i.pravatar.cc/150?u=3",
-    location: "Lavington, Nairobi",
-    budget: "KSh 850k",
-    spent: "KSh 850k",
-    status: "Completed",
-    progress: 100,
-    dueDate: "Sep 30, 2024",
-    image: "/images/projects/apartment.jpg", // Placeholder
-    tags: ["Design", "Residential"]
-  }
-];
+// ─── Status badge ─────────────────────────────────────────────────────────────
+
+function statusColor(status: string) {
+  const s = status.toLowerCase();
+  if (s === "completed") return "bg-emerald-500 hover:bg-emerald-600";
+  if (s === "in_progress" || s === "in progress")
+    return "bg-blue-500 hover:bg-blue-600";
+  return "bg-zinc-500 hover:bg-zinc-600";
+}
+
+function statusLabel(status: string) {
+  return status.replace(/_/g, " ");
+}
+
+// ─── ProjectCard ──────────────────────────────────────────────────────────────
+
+function ProjectCard({ project }: { project: Project }) {
+  const clientLabel =
+    typeof project.client === "string"
+      ? project.client
+      : project.client
+        ? `${project.client.firstName ?? ""} ${project.client.lastName ?? ""}`.trim()
+        : "";
+  const clientAvatar =
+    project.clientAvatar ??
+    (typeof project.client === "object" && project.client
+      ? (project.client.avatar ?? undefined)
+      : undefined);
+
+  const dueDate = project.dueDate ?? project.endDate;
+
+  return (
+    <Card className="border border-zinc-200 shadow-sm hover:shadow-md transition-all duration-300 bg-white group flex flex-col h-full">
+      <CardHeader className="p-0">
+        <div className="h-40 w-full bg-zinc-100 relative overflow-hidden rounded-t-xl">
+          <div className="absolute inset-0 bg-zinc-200 flex items-center justify-center text-zinc-400">
+            <MapPin className="h-8 w-8 opacity-20" />
+          </div>
+          <div className="absolute top-4 right-4">
+            <Badge
+              className={`${statusColor(project.status)} text-white border-0 shadow-sm`}
+            >
+              {statusLabel(project.status)}
+            </Badge>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="p-6 flex-1 flex flex-col">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h3 className="font-bold text-zinc-900 text-lg line-clamp-1">
+              {project.title}
+            </h3>
+            {project.location && (
+              <div className="flex items-center gap-1.5 text-xs text-zinc-500 mt-1">
+                <MapPin className="h-3.5 w-3.5" />
+                {project.location}
+              </div>
+            )}
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-zinc-400 hover:text-zinc-900"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem>View Details</DropdownMenuItem>
+              <DropdownMenuItem>Edit Project</DropdownMenuItem>
+              <DropdownMenuItem className="text-red-600">
+                Archive
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <div className="space-y-4 mb-6 flex-1">
+          {clientLabel && (
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2">
+                <Avatar className="h-6 w-6 border border-zinc-100">
+                  <AvatarImage src={clientAvatar} />
+                  <AvatarFallback>CL</AvatarFallback>
+                </Avatar>
+                <span className="text-zinc-600">{clientLabel}</span>
+              </div>
+            </div>
+          )}
+
+          {typeof project.progress === "number" && (
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-500">Progress</span>
+                <span className="font-medium text-zinc-900">
+                  {project.progress}%
+                </span>
+              </div>
+              <Progress
+                value={project.progress}
+                className="h-2 bg-zinc-100"
+                indicatorClassName="bg-zinc-900"
+              />
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4 py-4 border-t border-b border-zinc-50">
+            {project.budget && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-zinc-400 font-medium">
+                  Budget
+                </p>
+                <p className="text-sm font-semibold text-zinc-900 mt-0.5">
+                  {project.budget}
+                </p>
+              </div>
+            )}
+            {dueDate && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-zinc-400 font-medium">
+                  Due Date
+                </p>
+                <p className="text-sm font-semibold text-zinc-900 mt-0.5">
+                  {dueDate}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <Link href={getProfessionalProjectUrl(project.id)} className="w-full">
+          <Button
+            variant="outline"
+            className="w-full border-zinc-200 text-zinc-900 hover:bg-zinc-50"
+          >
+            Manage Project
+          </Button>
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState("all");
 
-  const { data: apiProjects, isLoading } = useQuery({
-    queryKey: ["professional-projects"],
-    queryFn: async () => {
-      const response = await fetch("/api/professional-portal/projects");
-      if (!response.ok) throw new Error("Failed to fetch projects");
-      const result = await response.json();
-      return result.data;
-    },
-  });
+  const { data: rawProjects, isLoading, error } = usePortalProjects();
 
-  // Use API data if available and not empty, otherwise fallback to mock data
-  const projects = (apiProjects && apiProjects.length > 0) ? apiProjects : PROJECTS;
+  const projects = useMemo(() => {
+    const list = (rawProjects as Project[] | undefined) ?? [];
+    return list.filter((p) => {
+      const matchesSearch =
+        !searchQuery ||
+        p.title.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesTab =
+        activeTab === "all" ||
+        (activeTab === "active" &&
+          !["completed", "archived"].includes(p.status.toLowerCase())) ||
+        (activeTab === "completed" && p.status.toLowerCase() === "completed");
+      return matchesSearch && matchesTab;
+    });
+  }, [rawProjects, searchQuery, activeTab]);
 
   return (
     <div className="space-y-8 max-w-[1600px] mx-auto pb-10">
-      
-      {/* --- Header --- */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-100 pb-6">
         <div>
-          <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">Projects</h1>
+          <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">
+            Projects
+          </h1>
           <p className="text-zinc-500 mt-1 text-sm">
             Manage your ongoing work, track progress, and view project history.
           </p>
@@ -120,12 +240,12 @@ export default function ProjectsPage() {
         </Button>
       </div>
 
-      {/* --- Filters & Controls --- */}
+      {/* Filters */}
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
         <div className="relative w-full md:w-96">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-          <Input 
-            placeholder="Search projects..." 
+          <Input
+            placeholder="Search projects..."
             className="pl-10 border-zinc-200 focus:ring-zinc-900"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -135,116 +255,58 @@ export default function ProjectsPage() {
           <Button variant="outline" className="border-zinc-200 text-zinc-600">
             <Filter className="mr-2 h-4 w-4" /> Filter
           </Button>
-          <Tabs defaultValue="all" className="w-auto">
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="w-auto"
+          >
             <TabsList className="bg-zinc-100">
-              <TabsTrigger value="all" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">All</TabsTrigger>
-              <TabsTrigger value="active" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">Active</TabsTrigger>
-              <TabsTrigger value="completed" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">Completed</TabsTrigger>
+              <TabsTrigger
+                value="all"
+                className="data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              >
+                All
+              </TabsTrigger>
+              <TabsTrigger
+                value="active"
+                className="data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              >
+                Active
+              </TabsTrigger>
+              <TabsTrigger
+                value="completed"
+                className="data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              >
+                Completed
+              </TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
       </div>
 
-      {/* --- Projects Grid --- */}
+      {/* Grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-[400px] bg-zinc-100 rounded-xl animate-pulse" />
-          ))}
+        <div className="flex items-center justify-center min-h-[300px]">
+          <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
+        </div>
+      ) : error ? (
+        <div className="text-center py-12 text-zinc-500">
+          <p>Failed to load projects. Please refresh and try again.</p>
+        </div>
+      ) : projects.length === 0 ? (
+        <div className="text-center py-16 space-y-3">
+          <p className="text-zinc-400 text-lg">No projects found.</p>
+          <Button className="bg-zinc-900 hover:bg-zinc-800 text-white">
+            <Plus className="mr-2 h-4 w-4" /> Create Your First Project
+          </Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {projects.map((project: Project) => (
+          {projects.map((project) => (
             <ProjectCard key={project.id} project={project} />
           ))}
         </div>
       )}
-
     </div>
-  );
-}
-
-function ProjectCard({ project }: { project: Project }) {
-  return (
-    <Card className="border border-zinc-200 shadow-sm hover:shadow-md transition-all duration-300 bg-white group flex flex-col h-full">
-      <CardHeader className="p-0">
-        <div className="h-40 w-full bg-zinc-100 relative overflow-hidden rounded-t-xl">
-          {/* Placeholder for project image */}
-          <div className="absolute inset-0 bg-zinc-200 flex items-center justify-center text-zinc-400">
-            <MapPin className="h-8 w-8 opacity-20" />
-          </div>
-          <div className="absolute top-4 right-4">
-            <Badge className={`
-              ${project.status === 'Completed' ? 'bg-emerald-500 hover:bg-emerald-600' : 
-                project.status === 'In Progress' ? 'bg-blue-500 hover:bg-blue-600' : 
-                'bg-zinc-500 hover:bg-zinc-600'} text-white border-0 shadow-sm
-            `}>
-              {project.status}
-            </Badge>
-          </div>
-        </div>
-      </CardHeader>
-      
-      <CardContent className="p-6 flex-1 flex flex-col">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h3 className="font-bold text-zinc-900 text-lg line-clamp-1">{project.title}</h3>
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500 mt-1">
-              <MapPin className="h-3.5 w-3.5" />
-              {project.location}
-            </div>
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>View Details</DropdownMenuItem>
-              <DropdownMenuItem>Edit Project</DropdownMenuItem>
-              <DropdownMenuItem className="text-red-600">Archive</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        <div className="space-y-4 mb-6 flex-1">
-          <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center gap-2">
-              <Avatar className="h-6 w-6 border border-zinc-100">
-                <AvatarImage src={project.clientAvatar} />
-                <AvatarFallback>CL</AvatarFallback>
-              </Avatar>
-              <span className="text-zinc-600">{project.client}</span>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-xs">
-              <span className="text-zinc-500">Progress</span>
-              <span className="font-medium text-zinc-900">{project.progress}%</span>
-            </div>
-            <Progress value={project.progress} className="h-2 bg-zinc-100" indicatorClassName="bg-zinc-900" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 py-4 border-t border-b border-zinc-50">
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-zinc-400 font-medium">Budget</p>
-              <p className="text-sm font-semibold text-zinc-900 mt-0.5">{project.budget}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-zinc-400 font-medium">Due Date</p>
-              <p className="text-sm font-semibold text-zinc-900 mt-0.5">{project.dueDate}</p>
-            </div>
-          </div>
-        </div>
-
-        <Link href={getProfessionalProjectUrl(project.id)} className="w-full">
-          <Button variant="outline" className="w-full border-zinc-200 text-zinc-900 hover:bg-zinc-50">
-            Manage Project
-          </Button>
-        </Link>
-      </CardContent>
-    </Card>
   );
 }

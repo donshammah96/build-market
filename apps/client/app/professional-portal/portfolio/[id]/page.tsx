@@ -54,7 +54,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
+import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 
 // Portfolio interface matching API response

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, memo, useCallback } from "react";
+import { useState, memo, useCallback } from "react";
 import {
   Star,
   Award,
@@ -19,7 +19,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
 
-import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
+import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -35,7 +35,8 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Navbar } from "@/components/layout/NavBar";
 import { Footer } from "@/components/layout/Footer";
-import { ProfessionalProfile } from "@/types/professional";
+import type { ProfessionalDetailResult } from "@/lib/services/professionals";
+import type { Portfolio, ProfessionalReview } from "@/types/professional";
 import {
   Dialog,
   DialogContent,
@@ -65,6 +66,8 @@ import {
   useShouldAnimate,
   useIntersectionObserver,
 } from "@/lib/hooks/usePerformance";
+import { useProfessional } from "@/hooks/useProfessionals";
+import { useSubmitLead } from "@/hooks/usePublicLeads";
 
 const contactSchema = z.object({
   clientName: z.string().min(1, "Name is required"),
@@ -118,8 +121,13 @@ const ErrorState = memo(function ErrorState({ message }: { message: string }) {
 // Profile Header Section (Memoized)
 // =============================================================================
 
+type ProfessionalDetailForDisplay = ProfessionalDetailResult & {
+  licenseNumber?: string | null;
+  _count?: { reviews: number; projects: number; stores: number; properties: number };
+};
+
 interface ProfileHeaderProps {
-  professional: ProfessionalProfile;
+  professional: ProfessionalDetailForDisplay;
   fullName: string;
   averageRating: string | null;
   onContactOpen: () => void;
@@ -147,7 +155,11 @@ const ProfileHeader = memo(function ProfileHeader({
             <div className="flex-shrink-0">
               <Avatar className="h-32 w-32 rounded-lg">
                 <AvatarImage
-                  src={professional.portfolios?.[0]?.images?.[0]?.url ?? ""}
+                  src={
+                    professional.profileImage ??
+                    (professional.portfolios as Portfolio[])?.[0]?.images?.[0]?.url ??
+                    ""
+                  }
                   alt={fullName}
                 />
                 <AvatarFallback className="rounded-lg text-3xl">
@@ -268,7 +280,7 @@ const ProfileHeader = memo(function ProfileHeader({
 // =============================================================================
 
 interface PortfolioCardProps {
-  portfolio: NonNullable<ProfessionalProfile["portfolios"]>[number];
+  portfolio: Portfolio;
   index: number;
   shouldAnimate: boolean;
   isInView: boolean;
@@ -323,7 +335,7 @@ const PortfolioCard = memo(function PortfolioCard({
 // =============================================================================
 
 interface ReviewCardProps {
-  review: NonNullable<ProfessionalProfile["reviews"]>[number];
+  review: ProfessionalReview;
   index: number;
   isLast: boolean;
   shouldAnimate: boolean;
@@ -387,9 +399,29 @@ const ReviewCard = memo(function ReviewCard({
 // =============================================================================
 
 interface ContactDialogProps {
-  professional: ProfessionalProfile;
+  professional: ProfessionalDetailForDisplay;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+const PROJECT_TYPE_MAP: Record<string, string> = {
+  "Residential Construction": "RESIDENTIAL",
+  "Commercial Construction": "COMMERCIAL",
+  Renovation: "RENOVATION",
+  "Interior Design": "INTERIOR_DESIGN",
+  Landscaping: "LANDSCAPING",
+  Other: "OTHER",
+};
+
+function parseBudget(value: string): number | undefined {
+  if (!value?.trim()) return undefined;
+  const cleaned = value.replace(/[,\s]/g, "").toLowerCase();
+  const match = cleaned.match(/^([\d.]+)(k|m)?$/);
+  if (!match?.[1]) return undefined;
+  let num = parseFloat(match[1]);
+  if (match[2] === "k") num *= 1000;
+  if (match[2] === "m") num *= 1_000_000;
+  return Number.isFinite(num) && num > 0 ? num : undefined;
 }
 
 const ContactDialog = memo(function ContactDialog({
@@ -397,7 +429,7 @@ const ContactDialog = memo(function ContactDialog({
   open,
   onOpenChange,
 }: ContactDialogProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLead = useSubmitLead();
 
   const form = useForm<ContactFormValues>({
     resolver: zodResolver(contactSchema),
@@ -412,35 +444,36 @@ const ContactDialog = memo(function ContactDialog({
     },
   });
 
-  const onSubmit = async (data: ContactFormValues) => {
+  const onSubmit = (data: ContactFormValues) => {
     if (!professional) return;
 
-    setIsSubmitting(true);
-    try {
-      const response = await fetch("/api/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...data,
-          professionalId: professional.userId,
-        }),
-      });
+    const projectType = PROJECT_TYPE_MAP[data.projectType] ?? "RESIDENTIAL";
+    const budget = parseBudget(data.budget ?? "");
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to send message");
-      }
-
-      toast.success("Message sent successfully!");
-      onOpenChange(false);
-      form.reset();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to send message"
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
+    submitLead.mutate(
+      {
+        professionalId: professional.userId,
+        clientName: data.clientName,
+        clientEmail: data.clientEmail,
+        clientPhone: data.clientPhone || undefined,
+        title: data.message.substring(0, 200) || "Project inquiry",
+        projectType: projectType as "RESIDENTIAL" | "COMMERCIAL" | "RENOVATION" | "INTERIOR_DESIGN" | "LANDSCAPING" | "OTHER",
+        message: data.message,
+        location: data.location || undefined,
+        budget,
+        source: "PROFILE_VIEW",
+      },
+      {
+        onSuccess: () => {
+          toast.success("Message sent successfully!");
+          onOpenChange(false);
+          form.reset();
+        },
+        onError: (error) => {
+          toast.error(error instanceof Error ? error.message : "Failed to send message");
+        },
+      },
+    );
   };
 
   return (
@@ -577,10 +610,10 @@ const ContactDialog = memo(function ContactDialog({
             <DialogFooter>
               <Button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={submitLead.isPending}
                 className="w-full bg-emerald-600 hover:bg-emerald-700"
               >
-                {isSubmitting && (
+                {submitLead.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
                 Send Message
@@ -598,7 +631,7 @@ const ContactDialog = memo(function ContactDialog({
 // =============================================================================
 
 interface ProfileTabsProps {
-  professional: ProfessionalProfile;
+  professional: ProfessionalDetailForDisplay;
 }
 
 const ProfileTabs = memo(function ProfileTabs({
@@ -690,7 +723,7 @@ const ProfileTabs = memo(function ProfileTabs({
             className="grid md:grid-cols-2 gap-6"
           >
             {professional.portfolios && professional.portfolios.length > 0 ? (
-              professional.portfolios.map((portfolio, index) => (
+              (professional.portfolios as Portfolio[]).map((portfolio, index) => (
                 <PortfolioCard
                   key={portfolio.id}
                   portfolio={portfolio}
@@ -722,7 +755,7 @@ const ProfileTabs = memo(function ProfileTabs({
               className="space-y-6"
             >
               {professional.reviews && professional.reviews.length > 0 ? (
-                professional.reviews.map((review, index) => (
+                (professional.reviews as ProfessionalReview[]).map((review, index) => (
                   <ReviewCard
                     key={review.id}
                     review={review}
@@ -751,41 +784,12 @@ const ProfileTabs = memo(function ProfileTabs({
 
 export default function ProfessionalProfilePage() {
   const params = useParams();
-  const [professional, setProfessional] = useState<ProfessionalProfile | null>(
-    null
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [isContactOpen, setIsContactOpen] = useState(false);
 
-  const fetchProfessional = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await fetch(`/api/professionals/${params.id}`);
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error("Professional not found");
-        }
-        throw new Error("Failed to fetch professional");
-      }
-
-      const data = await response.json();
-      setProfessional(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setLoading(false);
-    }
-  }, [params.id]);
-
-  useEffect(() => {
-    if (params.id) {
-      fetchProfessional();
-    }
-  }, [params.id, fetchProfessional]);
+  const { data: professional, isLoading: loading, error: queryError } = useProfessional(
+    params.id as string
+  );
+  const error = queryError?.message ?? null;
 
   const handleContactOpen = useCallback(() => {
     setIsContactOpen(true);
@@ -812,8 +816,10 @@ export default function ProfessionalProfilePage() {
   const averageRating =
     professional.reviews && professional.reviews.length > 0
       ? (
-          professional.reviews.reduce((sum, review) => sum + review.rating, 0) /
-          professional.reviews.length
+          (professional.reviews as { rating?: number }[]).reduce(
+            (sum, review) => sum + Number(review.rating ?? 0),
+            0
+          ) / professional.reviews.length
         ).toFixed(1)
       : null;
 
@@ -825,7 +831,7 @@ export default function ProfessionalProfilePage() {
         {/* Header Section */}
         <ProfileHeader
           professional={professional}
-          fullName={fullName}
+          fullName={fullName ?? ""}
           averageRating={averageRating}
           onContactOpen={handleContactOpen}
         />

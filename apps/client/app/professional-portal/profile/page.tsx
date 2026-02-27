@@ -1,6 +1,5 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   Loader2,
@@ -24,69 +23,15 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
+import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 
-interface ServiceCategory {
-  id: string;
-  name: string;
-  slug: string;
-  icon?: string | null;
-}
-
-interface ProfileImage {
-  id: string;
-  url: string;
-  caption?: string | null;
-  isMain: boolean;
-}
-
-interface ProfessionalProfile {
-  id: string;
-  userId: string;
-  companyName: string;
-  licenseNumber: string;
-  bio?: string | null;
-  city?: string | null;
-  county?: string | null;
-  website?: string | null;
-  portfolioUrl?: string | null;
-  yearsExperience?: number | null;
-  verified: boolean;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-  user: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    avatar?: string | null;
-  };
-  services?: ServiceCategory[];
-  images?: ProfileImage[];
-}
+import { useOwnProfile } from "@/hooks/useProfile";
 
 export default function ProfilePage() {
   const router = useRouter();
 
-  const {
-    data: profile,
-    isLoading,
-    error,
-  } = useQuery<ProfessionalProfile>({
-    queryKey: ["professional-profile"],
-    queryFn: async () => {
-      const res = await fetch("/api/professional-portal/profile");
-      if (!res.ok) {
-        if (res.status === 404) {
-          throw new Error("Profile not found");
-        }
-        throw new Error("Failed to fetch profile");
-      }
-      return res.json();
-    },
-    retry: 2,
-    staleTime: 30000,
-  });
+  const { data: profile, isLoading, error } = useOwnProfile();
 
   if (isLoading) {
     return (
@@ -250,7 +195,6 @@ export default function ProfilePage() {
 
             {/* Overview Tab */}
             <TabsContent value="overview" className="space-y-6 mt-6">
-              {/* Bio */}
               {profile.bio && (
                 <Card className="border border-zinc-200 shadow-sm bg-white">
                   <CardHeader>
@@ -267,7 +211,6 @@ export default function ProfilePage() {
                 </Card>
               )}
 
-              {/* Portfolio URL */}
               {profile.portfolioUrl && (
                 <Card className="border border-zinc-200 shadow-sm bg-white">
                   <CardHeader>
