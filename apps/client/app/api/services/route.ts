@@ -1,24 +1,29 @@
 import { NextRequest } from "next/server";
 import { prisma, Prisma, Profession } from "@build/db";
 import { z } from "zod";
-import { withRole } from "@/app/lib/api-middleware";
-import { generateUniqueSlug } from "@/lib/utils";
-import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api-response";
+import { withRole } from "@/app/lib/api/api-middleware";
+import { generateUniqueSlug } from "@/app/lib/utils/server-utils";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
   getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
-import { checkBodySize } from "@/app/lib/api-guards";
+import { checkBodySize } from "@/app/lib/api/api-guards";
 
 // Allowed sort fields to prevent arbitrary column injection
-const ALLOWED_SORT_FIELDS = ["createdAt", "name", "sortOrder", "updatedAt"] as const;
+const ALLOWED_SORT_FIELDS = [
+  "createdAt",
+  "name",
+  "sortOrder",
+  "updatedAt",
+] as const;
 type SortField = (typeof ALLOWED_SORT_FIELDS)[number];
 
 // Validation schemas — use z.nativeEnum() with Prisma enums per conventions
@@ -77,13 +82,13 @@ export async function GET(request: NextRequest) {
   const { success } = await checkRateLimit(
     `services-read:${identifier}`,
     RateLimits.READ.limit,
-    RateLimits.READ.window
+    RateLimits.READ.window,
   );
 
   if (!success) {
     return apiError(
       "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS
+      HttpStatus.TOO_MANY_REQUESTS,
     );
   }
 
@@ -105,7 +110,7 @@ export async function GET(request: NextRequest) {
     return apiError(
       "Invalid query parameters",
       HttpStatus.BAD_REQUEST,
-      queryValidation.error.issues
+      queryValidation.error.issues,
     );
   }
 
@@ -117,7 +122,7 @@ export async function GET(request: NextRequest) {
   // Parse and validate sort parameter
   const [rawSortField = "createdAt", sortDirection] = sort.split(":");
   const sortField: SortField = ALLOWED_SORT_FIELDS.includes(
-    rawSortField as SortField
+    rawSortField as SortField,
   )
     ? (rawSortField as SortField)
     : "createdAt";
@@ -172,11 +177,14 @@ export async function GET(request: NextRequest) {
         },
       };
     },
-    { operationName: "get_services" }
+    { operationName: "get_services" },
   );
 
   if (!result.success) {
-    return apiError("Failed to fetch services", HttpStatus.INTERNAL_SERVER_ERROR);
+    return apiError(
+      "Failed to fetch services",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
   }
 
   return apiSuccess(result.data);
@@ -187,141 +195,142 @@ export async function GET(request: NextRequest) {
  * Create a new service category
  * Admin only endpoint — protected by withRole middleware
  */
-export const POST = withRole(["ADMIN"])(
-  async (request: NextRequest, { dbUserId }) => {
-    const correlationId = initializeCorrelationId(request);
-    const logger = getClientLogger();
+export const POST = withRole(["ADMIN"])(async (
+  request: NextRequest,
+  { dbUserId },
+) => {
+  const correlationId = initializeCorrelationId(request);
+  const logger = getClientLogger();
 
-    const { success } = await checkRateLimit(
-      getRateLimitIdentifier(request),
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window
-    );
+  const { success } = await checkRateLimit(
+    getRateLimitIdentifier(request),
+    RateLimits.WRITE.limit,
+    RateLimits.WRITE.window,
+  );
 
-    if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-    }
-
-    // Body size guard
-    const sizeError = checkBodySize(request);
-    if (sizeError) return sizeError;
-
-    const body = await request.json();
-    const validation = createServiceSchema.safeParse(body);
-
-    if (!validation.success) {
-      logger.warn("Service creation validation failed", {
-        correlationId,
-        userId: dbUserId,
-        errors: validation.error.issues,
-      });
-      return apiError(
-        "Invalid input",
-        HttpStatus.BAD_REQUEST,
-        validation.error.issues
-      );
-    }
-
-    const {
-      name,
-      description,
-      icon,
-      imageUrl,
-      professionType,
-      sortOrder,
-      isFeatured,
-      metaTitle,
-      metaDescription,
-      keywords,
-    } = validation.data;
-
-    // Idempotency check
-    const idempotencyKey =
-      request.headers.get("Idempotency-Key") ||
-      IdempotencyService.generateKey(dbUserId, "POST:service", { name });
-    const idempotencyCheck = await IdempotencyService.checkOrCreate(
-      idempotencyKey,
-      "service",
-      dbUserId,
-      "POST"
-    );
-
-    if (idempotencyCheck?.status === "completed") {
-      return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
-    }
-    if (idempotencyCheck?.status === "pending") {
-      return apiError("Request already in progress", HttpStatus.CONFLICT);
-    }
-
-    logger.info("Creating service category", {
-      correlationId,
-      userId: dbUserId,
-      name,
-    });
-
-    const resilientExecutor = getResilientExecutor();
-    const result = await resilientExecutor.execute(
-      async () => {
-        // Check for duplicate name (name is not @unique, use findFirst)
-        const existing = await prisma.serviceCategory.findFirst({
-          where: { name, deletedAt: null },
-          select: { id: true },
-        });
-
-        if (existing) {
-          return null; // Signal duplicate
-        }
-
-        // Generate unique slug
-        const slug = await generateUniqueSlug("serviceCategory", name);
-
-        const service = await prisma.serviceCategory.create({
-          data: {
-            name,
-            slug,
-            description,
-            icon,
-            imageUrl,
-            professionType,
-            sortOrder,
-            isFeatured,
-            metaTitle,
-            metaDescription,
-            keywords,
-          },
-          select: serviceListSelect,
-        });
-
-        return service;
-      },
-      { operationName: "create_service" }
-    );
-
-    if (!result.success) {
-      await IdempotencyService.fail(idempotencyKey);
-      return apiError(
-        "Failed to create service category",
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
-    }
-
-    if (result.data === null) {
-      await IdempotencyService.fail(idempotencyKey);
-      return apiError(
-        "A service with this name already exists",
-        HttpStatus.CONFLICT
-      );
-    }
-
-    const service = result.data!;
-
-    logger.info("Service category created successfully", {
-      correlationId,
-      userId: dbUserId,
-      serviceId: service.id,
-    });
-
-    await IdempotencyService.complete(idempotencyKey, service);
-    return apiSuccess(service, HttpStatus.CREATED);
+  if (!success) {
+    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
   }
-);
+
+  // Body size guard
+  const sizeError = checkBodySize(request);
+  if (sizeError) return sizeError;
+
+  const body = await request.json();
+  const validation = createServiceSchema.safeParse(body);
+
+  if (!validation.success) {
+    logger.warn("Service creation validation failed", {
+      correlationId,
+      userId: dbUserId,
+      errors: validation.error.issues,
+    });
+    return apiError(
+      "Invalid input",
+      HttpStatus.BAD_REQUEST,
+      validation.error.issues,
+    );
+  }
+
+  const {
+    name,
+    description,
+    icon,
+    imageUrl,
+    professionType,
+    sortOrder,
+    isFeatured,
+    metaTitle,
+    metaDescription,
+    keywords,
+  } = validation.data;
+
+  // Idempotency check
+  const idempotencyKey =
+    request.headers.get("Idempotency-Key") ||
+    IdempotencyService.generateKey(dbUserId, "POST:service", { name });
+  const idempotencyCheck = await IdempotencyService.checkOrCreate(
+    idempotencyKey,
+    "service",
+    dbUserId,
+    "POST",
+  );
+
+  if (idempotencyCheck?.status === "completed") {
+    return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+  }
+  if (idempotencyCheck?.status === "pending") {
+    return apiError("Request already in progress", HttpStatus.CONFLICT);
+  }
+
+  logger.info("Creating service category", {
+    correlationId,
+    userId: dbUserId,
+    name,
+  });
+
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    async () => {
+      // Check for duplicate name (name is not @unique, use findFirst)
+      const existing = await prisma.serviceCategory.findFirst({
+        where: { name, deletedAt: null },
+        select: { id: true },
+      });
+
+      if (existing) {
+        return null; // Signal duplicate
+      }
+
+      // Generate unique slug
+      const slug = await generateUniqueSlug("serviceCategory", name);
+
+      const service = await prisma.serviceCategory.create({
+        data: {
+          name,
+          slug,
+          description,
+          icon,
+          imageUrl,
+          professionType,
+          sortOrder,
+          isFeatured,
+          metaTitle,
+          metaDescription,
+          keywords,
+        },
+        select: serviceListSelect,
+      });
+
+      return service;
+    },
+    { operationName: "create_service" },
+  );
+
+  if (!result.success) {
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      "Failed to create service category",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  if (result.data === null) {
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      "A service with this name already exists",
+      HttpStatus.CONFLICT,
+    );
+  }
+
+  const service = result.data!;
+
+  logger.info("Service category created successfully", {
+    correlationId,
+    userId: dbUserId,
+    serviceId: service.id,
+  });
+
+  await IdempotencyService.complete(idempotencyKey, service);
+  return apiSuccess(service, HttpStatus.CREATED);
+});

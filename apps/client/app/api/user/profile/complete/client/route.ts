@@ -2,27 +2,27 @@ import { NextRequest } from "next/server";
 import { prisma } from "@build/db";
 import { County, ClientType, Prisma } from "@prisma/client";
 import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { HttpStatus } from "@/app/lib/api-response";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { HttpStatus } from "@/app/lib/api/api-response";
 import {
   apiError,
   apiSuccess,
   initializeCorrelationId,
   getClientLogger,
   getResilientExecutor,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   calculateProfileCompletion,
   getMissingFieldLabels,
-} from "@/app/lib/profile-completion";
+} from "@/app/lib/utils/profile-completion";
 import {
   RateLimits,
   getRateLimitIdentifier,
   checkRateLimit,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
 import {
   safeParseJsonBody,
-} from "@/app/lib/request-utils";
+} from "@/app/lib/api/request-utils";
 
 const logger = getClientLogger();
 const executor = getResilientExecutor();

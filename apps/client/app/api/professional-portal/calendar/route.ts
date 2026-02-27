@@ -1,156 +1,159 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@build/db";
-import { z } from "zod";
-import { withAuth } from '@/app/lib/api-middleware';
-import { apiError, HttpStatus } from '@/app/lib/api-response';
-import { initializeCorrelationId, executeResilient, getClientLogger } from '@/app/lib/resilient-api';
-import { checkRateLimit, getRateLimitIdentifier, RateLimits } from '@/app/lib/rate-limit';
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
+import {
+  initializeCorrelationId,
+  getResilientExecutor,
+  getClientLogger,
+} from "@/app/lib/api/resilient-api";
+import {
+  checkRateLimit,
+  getRateLimitIdentifier,
+  RateLimits,
+} from "@/app/lib/api/rate-limit";
+import { checkBodySize } from "@/app/lib/api/api-guards";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import {
+  CalendarQuerySchema,
+  CreateCalendarEventSchema,
+} from "@/app/lib/validation/calendar-validation";
+import { createProfessionalPortalGet } from "@/app/lib/api/professional-portal-handler";
+import { getCalendarEvents, createCalendarEvent } from "@/lib/services/calendar";
 
 const logger = getClientLogger();
+const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 
-interface CalendarWhereClause {
-  professionalId: string;
-  startDate?: {
-    gte: Date;
-    lte: Date;
+function parseCalendarQuery(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  return {
+    start: searchParams.get("start") || undefined,
+    end: searchParams.get("end") || undefined,
+    type: searchParams.get("type") || undefined,
+    status: searchParams.get("status") || undefined,
   };
 }
 
-const createEventSchema = z.object({
-  title: z.string().min(3),
-  description: z.string().optional(),
-  startDate: z.string().datetime(),
-  endDate: z.string().datetime(),
-  location: z.string().optional(),
-  type: z.string().default("meeting"),
-  status: z.string().default("scheduled"),
-  clientId: z.string().uuid().optional(),
-  projectId: z.string().uuid().optional(),
-});
-
 /**
  * GET /api/professional-portal/calendar
- * Get calendar events for the authenticated professional
- * Supports optional date range filtering via ?start=&end= query params
+ * List calendar events for the authenticated professional.
  */
-export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
-
-  const identifier = getRateLimitIdentifier(req);
-  const rateLimitResult = await checkRateLimit(
-    `calendar:${identifier}`,
-    RateLimits.READ.limit,
-    RateLimits.READ.window
-  );
-
-  if (!rateLimitResult.success) {
-    return apiError('Too many requests. Please try again later.', HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  const { searchParams } = new URL(req.url);
-  const start = searchParams.get("start");
-  const end = searchParams.get("end");
-
-  logger.info('Fetching calendar events', { correlationId, userId: dbUserId, dateRange: { start, end } });
-
-  return executeResilient(
-    async () => {
-      const where: CalendarWhereClause = {
-        professionalId: dbUserId,
-      };
-
-      if (start && end) {
-        where.startDate = {
-          gte: new Date(start),
-          lte: new Date(end),
-        };
-      }
-
-      const events = await prisma.calendarEvent.findMany({
-        where,
-        include: {
-          client: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
-          project: {
-            select: {
-              id: true,
-              title: true,
-            },
-          },
-        },
-        orderBy: {
-          startDate: "asc",
-        },
-      });
-
-      logger.info('Calendar events fetched successfully', { correlationId, userId: dbUserId, count: events.length });
-      return events;
-    },
-    {
-      operationName: 'get_calendar_events',
-      successStatus: HttpStatus.OK,
-    }
-  );
-});
+export const GET = createProfessionalPortalGet({
+    rateLimitKey: "calendar-read",
+    querySchema: CalendarQuerySchema,
+    parseQuery: parseCalendarQuery,
+    handler: async ({ dbUserId, query }) => getCalendarEvents(dbUserId, query),
+    operationName: "get_calendar_events",
+    errorMessage: "Failed to fetch calendar events",
+  });
 
 /**
  * POST /api/professional-portal/calendar
- * Create a new calendar event
+ * Create a new calendar event.
  */
 export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
   const correlationId = initializeCorrelationId(req);
 
+  const sizeError = checkBodySize(req, MAX_BODY_SIZE);
+  if (sizeError) return sizeError;
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+  }
+
+  const validation = CreateCalendarEventSchema.safeParse(body);
+  if (!validation.success) {
+    return apiError(
+      "Invalid input",
+      HttpStatus.BAD_REQUEST,
+      validation.error.issues,
+    );
+  }
+
+  const eventData = validation.data;
+
+  if (new Date(eventData.endDate) <= new Date(eventData.startDate)) {
+    return apiError(
+      "End date must be after start date",
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+
+  const idempotencyKey =
+    req.headers.get("Idempotency-Key") ||
+    IdempotencyService.generateKey(dbUserId, "POST", {
+      domain: "calendar_event",
+      title: eventData.title,
+      startDate: eventData.startDate,
+    });
+
+  const idempotencyCheck = await IdempotencyService.checkOrCreate(
+    idempotencyKey,
+    "calendar_event",
+    dbUserId,
+    "POST",
+  );
+  if (!idempotencyCheck) {
+    return apiError(
+      "Failed to process idempotency key",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+  if (idempotencyCheck.status === "completed") {
+    return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+  }
+  if (idempotencyCheck.status === "pending") {
+    return apiError(
+      "Request is being processed. Please wait.",
+      HttpStatus.CONFLICT,
+    );
+  }
+
   const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
-    `calendar:${identifier}`,
+    `calendar-write:${identifier}`,
     RateLimits.WRITE.limit,
-    RateLimits.WRITE.window
+    RateLimits.WRITE.window,
   );
-
   if (!rateLimitResult.success) {
-    return apiError('Too many requests. Please try again later.', HttpStatus.TOO_MANY_REQUESTS);
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
   }
 
-  const body = await req.json();
-  const validation = createEventSchema.safeParse(body);
+  logger.info("Creating calendar event", {
+    correlationId,
+    userId: dbUserId,
+    title: eventData.title,
+    startDate: eventData.startDate,
+  });
 
-  if (!validation.success) {
-    logger.warn('Calendar event validation failed', { correlationId, userId: dbUserId, errors: validation.error.issues });
-    return apiError("Invalid input", HttpStatus.BAD_REQUEST, validation.error.issues);
-  }
-
-  const { title, description, startDate, endDate, location, type, status, clientId, projectId } = validation.data;
-
-  logger.info('Creating calendar event', { correlationId, userId: dbUserId, title, startDate });
-
-  return executeResilient(
-    async () => {
-      const event = await prisma.calendarEvent.create({
-        data: {
-          professionalId: dbUserId,
-          title,
-          description,
-          startDate: new Date(startDate),
-          endDate: new Date(endDate),
-          location,
-          type,
-          status,
-          clientId,
-          projectId,
-        },
-      });
-
-      logger.info('Calendar event created successfully', { correlationId, userId: dbUserId, eventId: event.id });
-      return event;
-    },
-    {
-      operationName: 'create_calendar_event',
-      successStatus: HttpStatus.CREATED,
-    }
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    () => createCalendarEvent(dbUserId, eventData),
+    { operationName: "create_calendar_event" },
   );
+
+  if (!result.success || !result.data) {
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      "Failed to create calendar event",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  const data = result.data;
+  if ("error" in data) {
+    await IdempotencyService.fail(idempotencyKey);
+    if (data.error === "client_not_found")
+      return apiError("Client not found", HttpStatus.NOT_FOUND);
+    return apiError("Project not found", HttpStatus.NOT_FOUND);
+  }
+
+  await IdempotencyService.complete(idempotencyKey, data.data);
+  return apiSuccess(data.data, HttpStatus.CREATED);
 });

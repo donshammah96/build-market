@@ -1,361 +1,271 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@build/db";
-import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { AuditAction } from "@prisma/client";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { UpdatePortfolioSchema } from "@/app/lib/validation/portfolio-validation";
+import { PORTFOLIO_CONFIG } from "@/app/lib/config/portfolio.config";
+import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
+import {
+  getProfessionalPortfolioById,
+  updateProfessionalPortfolio,
+  deleteProfessionalPortfolio,
+} from "@/lib/services/portfolio";
 
 const logger = getClientLogger();
 
-// Schema for image data matching PortfolioImage model
-const portfolioImageSchema = z.object({
-  id: z.string().uuid().optional(), // Existing image ID (for updates)
-  url: z.string().url(),
-  key: z.string().optional(),
-  caption: z.string().optional(),
-  isMain: z.boolean().optional().default(false),
-  isBefore: z.boolean().optional().default(false),
-  isAfter: z.boolean().optional().default(false),
-  sortOrder: z.number().int().optional().default(0),
-});
+type PortfolioParams = { id: string };
 
-const updatePortfolioSchema = z.object({
-  title: z.string().min(3).optional(),
-  description: z.string().optional(),
-  projectType: z.string().optional(),
-  clientTestimonial: z.string().optional(),
-  completedAt: z.string().datetime().nullable().optional(),
-  // Images as array of PortfolioImage data (replaces all images)
-  images: z
-    .array(portfolioImageSchema)
-    .min(1, "At least one image is required")
-    .optional(),
-});
-
-export const GET = withAuth<{ id: string }>(
+/**
+ * GET /api/professional-portal/portfolio/[id]
+ * Get a specific portfolio item with all images and details (owner only).
+ */
+export const GET = withAuth<PortfolioParams>(
   async (req: NextRequest, { dbUserId }, params) => {
-    const correlationId = initializeCorrelationId(req);
-    const { id } = params!;
+    initializeCorrelationId(req);
+
+    if (!params?.id || !isValidId(params.id)) {
+      return apiError("Invalid portfolio ID", HttpStatus.BAD_REQUEST);
+    }
+    const portfolioId = params.id;
 
     const identifier = getRateLimitIdentifier(req);
     const rateLimitResult = await checkRateLimit(
-      `portfolio:${identifier}`,
+      `portfolio-read:${identifier}`,
       RateLimits.READ.limit,
-      RateLimits.READ.window
+      RateLimits.READ.window,
+    );
+    if (!rateLimitResult.success) {
+      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      () => getProfessionalPortfolioById(dbUserId, portfolioId),
+      { operationName: "get_portfolio_detail" },
     );
 
-    if (!rateLimitResult.success) {
+    if (!result.success) {
       return apiError(
-        "Too many requests. Please try again later.",
-        HttpStatus.TOO_MANY_REQUESTS
+        "Failed to fetch portfolio",
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
 
-    logger.info("Fetching portfolio", {
-      correlationId,
-      portfolioId: id,
-      userId: dbUserId,
-    });
-
-    return executeResilient(
-      async () => {
-        const portfolio = await prisma.portfolio.findUnique({
-          where: {
-            id,
-            professionalId: dbUserId,
-          },
-          include: {
-            // Include portfolio images
-            images: {
-              orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }],
-              select: {
-                id: true,
-                url: true,
-                key: true,
-                caption: true,
-                isMain: true,
-                isBefore: true,
-                isAfter: true,
-                sortOrder: true,
-                createdAt: true,
-              },
-            },
-            professional: {
-              select: {
-                companyName: true,
-                licenseNumber: true,
-                portfolioUrl: true,
-                yearsExperience: true,
-                website: true,
-                bio: true,
-                city: true,
-                county: true,
-                country: true,
-                // Include services relation properly
-                services: {
-                  select: {
-                    id: true,
-                    name: true,
-                    slug: true,
-                  },
-                },
-              },
-            },
-          },
-        });
-
-        if (!portfolio) {
-          logger.warn("Portfolio not found", {
-            correlationId,
-            portfolioId: id,
-            userId: dbUserId,
-          });
-          return apiError("Portfolio not found", HttpStatus.NOT_FOUND);
-        }
-
-        logger.info("Portfolio fetched successfully", {
-          correlationId,
-          portfolioId: id,
-        });
-        return portfolio;
-      },
-      {
-        operationName: "get_professional_portfolio",
-        successStatus: HttpStatus.OK,
-      }
-    );
-  }
+    const data = result.data;
+    if (!data) {
+      return apiError(
+        "Failed to fetch portfolio",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    if (data.success === false) {
+      if (data.error === "not_found")
+        return apiError("Portfolio not found", HttpStatus.NOT_FOUND);
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    }
+    return apiSuccess(data.data, HttpStatus.OK);
+  },
 );
 
-export const PATCH = withAuth<{ id: string }>(
+/**
+ * PATCH /api/professional-portal/portfolio/[id]
+ * Update a portfolio item (owner only).
+ */
+export const PATCH = withAuth<PortfolioParams>(
   async (req: NextRequest, { dbUserId }, params) => {
     const correlationId = initializeCorrelationId(req);
-    const { id } = params!;
 
-    const identifier = getRateLimitIdentifier(req);
-    const rateLimitResult = await checkRateLimit(
-      `portfolio_update:${identifier}`,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window
-    );
+    if (!params?.id || !isValidId(params.id)) {
+      return apiError("Invalid portfolio ID", HttpStatus.BAD_REQUEST);
+    }
+    const portfolioId = params.id;
 
-    if (!rateLimitResult.success) {
-      return apiError(
-        "Too many requests. Please try again later.",
-        HttpStatus.TOO_MANY_REQUESTS
-      );
+    const sizeError = checkBodySize(req, PORTFOLIO_CONFIG.MAX_BODY_SIZE);
+    if (sizeError) return sizeError;
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
     }
 
-    const body = await req.json();
-    const validation = updatePortfolioSchema.safeParse(body);
-
+    const validation = UpdatePortfolioSchema.safeParse(body);
     if (!validation.success) {
-      logger.warn("Portfolio update validation failed", {
-        correlationId,
-        portfolioId: id,
-        errors: validation.error.issues,
-      });
       return apiError(
         "Invalid input",
         HttpStatus.BAD_REQUEST,
-        validation.error.issues
+        validation.error.issues,
       );
     }
 
-    const {
-      title,
-      description,
-      projectType,
-      images,
-      clientTestimonial,
-      completedAt,
-    } = validation.data;
+    const updateData = validation.data;
 
-    logger.info("Updating portfolio", {
-      correlationId,
-      portfolioId: id,
-      userId: dbUserId,
-    });
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      IdempotencyService.generateKey(dbUserId, "PATCH", {
+        portfolioId,
+        ...updateData,
+      });
 
-    return executeResilient(
-      async () => {
-        const existingPortfolio = await prisma.portfolio.findUnique({
-          where: {
-            id,
-            professionalId: dbUserId,
-          },
-        });
-
-        if (!existingPortfolio) {
-          logger.warn("Portfolio not found for update", {
-            correlationId,
-            portfolioId: id,
-            userId: dbUserId,
-          });
-          return apiError("Portfolio not found", HttpStatus.NOT_FOUND);
-        }
-
-        // Build update data
-        const updateData: Record<string, unknown> = {};
-        if (title !== undefined) updateData.title = title;
-        if (description !== undefined) updateData.description = description;
-        if (projectType !== undefined) updateData.projectType = projectType;
-        if (clientTestimonial !== undefined)
-          updateData.clientTestimonial = clientTestimonial;
-        if (completedAt !== undefined)
-          updateData.completedAt = completedAt ? new Date(completedAt) : null;
-
-        // Handle images update - replace all images if provided
-        if (images !== undefined) {
-          // Ensure exactly one image is marked as main
-          const hasMainImage = images.some((img) => img.isMain);
-          const processedImages = images.map((img, index) => ({
-            url: img.url,
-            key: img.key,
-            caption: img.caption,
-            isMain: hasMainImage ? img.isMain : index === 0,
-            isBefore: img.isBefore ?? false,
-            isAfter: img.isAfter ?? false,
-            sortOrder: img.sortOrder ?? index,
-          }));
-
-          // Use transaction to delete old images and create new ones
-          const updatedPortfolio = await prisma.$transaction(async (tx) => {
-            // Delete existing images
-            await tx.portfolioImage.deleteMany({
-              where: { portfolioId: id },
-            });
-
-            // Update portfolio with new images
-            return tx.portfolio.update({
-              where: { id },
-              data: {
-                ...updateData,
-                images: {
-                  create: processedImages,
-                },
-              },
-              include: {
-                images: {
-                  orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }],
-                },
-              },
-            });
-          });
-
-          logger.info("Portfolio updated successfully with new images", {
-            correlationId,
-            portfolioId: id,
-          });
-          return updatedPortfolio;
-        }
-
-        // Update without changing images
-        const updatedPortfolio = await prisma.portfolio.update({
-          where: { id },
-          data: updateData,
-          include: {
-            images: {
-              orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }],
-            },
-          },
-        });
-
-        logger.info("Portfolio updated successfully", {
-          correlationId,
-          portfolioId: id,
-        });
-        return updatedPortfolio;
-      },
-      {
-        operationName: "update_professional_portfolio",
-        successStatus: HttpStatus.OK,
-      }
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
+      idempotencyKey,
+      "portfolio",
+      dbUserId,
+      "PATCH",
     );
-  }
-);
-
-export const DELETE = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
-    const correlationId = initializeCorrelationId(req);
-    const { id } = params!;
+    if (!idempotencyCheck) {
+      return apiError(
+        "Failed to process idempotency key",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    if (idempotencyCheck.status === "completed") {
+      return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+    }
+    if (idempotencyCheck.status === "pending") {
+      return apiError("Request is being processed", HttpStatus.CONFLICT);
+    }
 
     const identifier = getRateLimitIdentifier(req);
     const rateLimitResult = await checkRateLimit(
-      `portfolio_delete:${identifier}`,
+      `portfolio-write:${identifier}`,
       RateLimits.WRITE.limit,
-      RateLimits.WRITE.window
+      RateLimits.WRITE.window,
     );
-
     if (!rateLimitResult.success) {
-      return apiError(
-        "Too many requests. Please try again later.",
-        HttpStatus.TOO_MANY_REQUESTS
-      );
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Deleting portfolio", {
+    logger.info("Updating portfolio item", {
       correlationId,
-      portfolioId: id,
+      portfolioId,
+      fields: Object.keys(updateData),
       userId: dbUserId,
     });
 
-    return executeResilient(
-      async () => {
-        const existingPortfolio = await prisma.portfolio.findUnique({
-          where: {
-            id,
-            professionalId: dbUserId,
-          },
-          include: {
-            images: { select: { key: true } },
-          },
-        });
-
-        if (!existingPortfolio) {
-          logger.warn("Portfolio not found for deletion", {
-            correlationId,
-            portfolioId: id,
-            userId: dbUserId,
-          });
-          return apiError("Portfolio not found", HttpStatus.NOT_FOUND);
-        }
-
-        // Note: PortfolioImage records will be cascade deleted due to onDelete: Cascade
-        // If you need to clean up storage (S3/Uploadthing), collect keys here:
-        const imageKeys = existingPortfolio.images
-          .map((img) => img.key)
-          .filter(Boolean);
-
-        await prisma.portfolio.delete({
-          where: { id },
-        });
-
-        logger.info("Portfolio deleted successfully", {
-          correlationId,
-          portfolioId: id,
-          deletedImageKeys: imageKeys.length,
-        });
-
-        return {
-          message: "Portfolio deleted successfully",
-          // Return keys for potential storage cleanup on client side
-          deletedImageKeys: imageKeys,
-        };
-      },
-      {
-        operationName: "delete_professional_portfolio",
-        successStatus: HttpStatus.OK,
-      }
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      () => updateProfessionalPortfolio(dbUserId, portfolioId, updateData),
+      { operationName: "update_portfolio_item" },
     );
-  }
+
+    if (!result.success || !result.data) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        "Failed to update portfolio",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const data = result.data;
+    if ("error" in data) {
+      await IdempotencyService.fail(idempotencyKey);
+      if (data.error === "not_found")
+        return apiError("Portfolio not found", HttpStatus.NOT_FOUND);
+      if (data.error === "forbidden")
+        return apiError("Forbidden", HttpStatus.FORBIDDEN);
+      return apiError("Linked project not found", HttpStatus.NOT_FOUND);
+    }
+
+    await IdempotencyService.complete(idempotencyKey, data.data);
+    return apiSuccess(data.data, HttpStatus.OK);
+  },
+);
+
+/**
+ * DELETE /api/professional-portal/portfolio/[id]
+ * Soft-delete a portfolio item (owner only).
+ */
+export const DELETE = withAuth<PortfolioParams>(
+  async (req: NextRequest, { dbUserId }, params) => {
+    const correlationId = initializeCorrelationId(req);
+
+    if (!params?.id || !isValidId(params.id)) {
+      return apiError("Invalid portfolio ID", HttpStatus.BAD_REQUEST);
+    }
+    const portfolioId = params.id;
+
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      IdempotencyService.generateKey(dbUserId, "DELETE", { portfolioId });
+
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
+      idempotencyKey,
+      "portfolio",
+      dbUserId,
+      "DELETE",
+    );
+    if (idempotencyCheck?.status === "completed") {
+      return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+    }
+    if (idempotencyCheck?.status === "pending") {
+      return apiError("Request already in progress", HttpStatus.CONFLICT);
+    }
+
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `portfolio-write:${identifier}`,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
+    );
+    if (!rateLimitResult.success) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    logger.info("Deleting portfolio item", {
+      correlationId,
+      portfolioId,
+      userId: dbUserId,
+    });
+
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      () => deleteProfessionalPortfolio(dbUserId, portfolioId),
+      { operationName: "delete_portfolio_item" },
+    );
+
+    if (!result.success || !result.data) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        "Failed to delete portfolio",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const data = result.data;
+    if ("error" in data) {
+      await IdempotencyService.fail(idempotencyKey);
+      if (data.error === "not_found")
+        return apiError("Portfolio not found", HttpStatus.NOT_FOUND);
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    }
+
+    ComplianceService.logAdminAction(
+      dbUserId,
+      AuditAction.DATA_RECTIFIED,
+      "Portfolio",
+      portfolioId,
+      { title: data.data.title, action: "DELETE" },
+    ).catch((err) => logger.error("Failed to log deletion", err));
+
+    const { message, portfolioId: deletedId } = data.data;
+    const response = { message, portfolioId: deletedId };
+    await IdempotencyService.complete(idempotencyKey, response);
+    return apiSuccess(response, HttpStatus.OK);
+  },
 );

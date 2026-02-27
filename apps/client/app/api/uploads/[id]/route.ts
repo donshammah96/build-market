@@ -1,21 +1,21 @@
 import { NextRequest } from "next/server";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api-response";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
   getClientLogger,
   getResilientExecutor,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
 import { 
   getRequestMetadata,
   TimeoutConfig
-} from "@/app/lib/request-utils";
-import { getStorageProvider } from "@/app/lib/storage";
+} from "@/app/lib/api/request-utils";
+import { getStorageProvider } from "@/app/lib/infrastructure/storage";
 import { prisma } from "@build/db";
 
 const logger = getClientLogger();
@@ -27,9 +27,9 @@ const storage = getStorageProvider();
  * Get metadata for a specific uploaded file
  * Now queries Asset model with ownership tracking
  *
- * @param id - Asset ID (UUID) or legacy filename
- * @security Requires authentication, returns only user's own assets
- * @rateLimit READ tier (60 requests/minute)
+ * /param id - Asset ID (UUID) or legacy filename
+ * /security Requires authentication, returns only user's own assets
+ * /rateLimit READ tier (60 requests/minute)
  */
 export const GET = withAuth<{ id: string }>(
   async (req: NextRequest, { dbUserId }, params) => {
@@ -188,10 +188,10 @@ export const GET = withAuth<{ id: string }>(
  * DELETE /api/uploads/[id]
  * Delete a specific uploaded file with ownership verification
  *
- * @param id - Asset ID (UUID)
- * @security Requires authentication, only owner can delete
- * @rateLimit WRITE tier (10 requests/minute)
- * @gdpr Implements right to erasure (GDPR Article 17)
+ * /param id - Asset ID (UUID)
+ * /security Requires authentication, only owner can delete
+ * /rateLimit WRITE tier (10 requests/minute)
+ * /gdpr Implements right to erasure (GDPR Article 17)
  */
 export const DELETE = withAuth<{ id: string }>(
   async (req: NextRequest, { dbUserId }, params) => {

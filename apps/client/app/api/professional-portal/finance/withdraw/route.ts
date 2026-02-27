@@ -1,103 +1,149 @@
 import { NextRequest } from "next/server";
-import { z } from "zod";
-import { prisma } from "@build/db";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
-import { initializeCorrelationId, executeResilient, getClientLogger } from "@/app/lib/resilient-api";
-import { checkRateLimit, RateLimits, getRateLimitIdentifier } from "@/app/lib/rate-limit";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
+import {
+  initializeCorrelationId,
+  getResilientExecutor,
+  getClientLogger,
+} from "@/app/lib/api/resilient-api";
+import {
+  checkRateLimit,
+  getRateLimitIdentifier,
+  RateLimits,
+} from "@/app/lib/api/rate-limit";
+import { checkBodySize } from "@/app/lib/api/api-guards";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { WithdrawSchema } from "@/app/lib/validation/finance-validation";
+import { createWithdrawal } from "@/lib/services/finance";
 
 const logger = getClientLogger();
-
-const withdrawSchema = z.object({
-  amount: z.number().min(1, "Amount must be at least 1"),
-});
+const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 
 /**
  * POST /api/professional-portal/finance/withdraw
- * Request a withdrawal of funds
+ * Request a withdrawal of funds.
  */
 export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
   const correlationId = initializeCorrelationId(req);
 
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(identifier, RateLimits.WRITE.limit, RateLimits.WRITE.window);
+  const sizeError = checkBodySize(req, MAX_BODY_SIZE);
+  if (sizeError) return sizeError;
 
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
   }
 
-  const body = await req.json();
-  const validation = withdrawSchema.safeParse(body);
-
+  const validation = WithdrawSchema.safeParse(body);
   if (!validation.success) {
-    logger.warn('Withdrawal validation failed', { correlationId, userId: dbUserId, errors: validation.error.issues });
-    return apiError("Invalid input data", HttpStatus.BAD_REQUEST, validation.error.issues);
+    return apiError(
+      "Invalid input",
+      HttpStatus.BAD_REQUEST,
+      validation.error.issues,
+    );
   }
 
-  const { amount } = validation.data;
+  const { amount, method, description } = validation.data;
 
-  logger.info('Processing withdrawal request', { correlationId, userId: dbUserId, amount });
+  const idempotencyKey =
+    req.headers.get("Idempotency-Key") ||
+    IdempotencyService.generateKey(dbUserId, "POST", {
+      domain: "withdrawal",
+      amount,
+      method,
+    });
 
-  return executeResilient(
-    async () => {
-      // Calculate available balance (INCOME - WITHDRAWAL)
-      const income = await prisma.professionalTransaction.aggregate({
-        where: {
-          professional: { userId: dbUserId },
-          type: "INCOME",
-          status: "COMPLETED",
-        },
-        _sum: { amount: true },
-      });
-
-      const withdrawals = await prisma.professionalTransaction.aggregate({
-        where: {
-          professional: { userId: dbUserId },
-          type: "WITHDRAWAL",
-          status: { in: ["COMPLETED", "PENDING"] },
-        },
-        _sum: { amount: true },
-      });
-
-      const totalIncome = Number(income._sum.amount || 0);
-      const totalWithdrawals = Number(withdrawals._sum.amount || 0);
-      const availableBalance = totalIncome - totalWithdrawals;
-
-      if (amount > availableBalance) {
-        logger.warn('Insufficient funds for withdrawal', {
-          correlationId,
-          userId: dbUserId,
-          requestedAmount: amount,
-          availableBalance,
-        });
-        return apiError("Insufficient funds", HttpStatus.BAD_REQUEST);
-      }
-
-      const transaction = await prisma.professionalTransaction.create({
-        data: {
-          professional: {
-            connect: { userId: dbUserId },
-          },
-          description: "Withdrawal Request",
-          amount: amount,
-          type: "WITHDRAWAL",
-          status: "PENDING",
-          date: new Date(),
-        },
-      });
-
-      logger.info('Withdrawal request created successfully', {
-        correlationId,
-        userId: dbUserId,
-        transactionId: transaction.id,
-        amount,
-      });
-
-      return transaction;
-    },
-    {
-      operationName: "withdraw_funds",
-      successStatus: HttpStatus.CREATED,
-    }
+  const idempotencyCheck = await IdempotencyService.checkOrCreate(
+    idempotencyKey,
+    "withdrawal",
+    dbUserId,
+    "POST",
   );
+  if (!idempotencyCheck) {
+    return apiError(
+      "Failed to process idempotency key",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+  if (idempotencyCheck.status === "completed") {
+    return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+  }
+  if (idempotencyCheck.status === "pending") {
+    return apiError(
+      "Request is being processed. Please wait.",
+      HttpStatus.CONFLICT,
+    );
+  }
+
+  const identifier = getRateLimitIdentifier(req);
+  const rateLimitResult = await checkRateLimit(
+    `finance-withdraw:${identifier}`,
+    RateLimits.WRITE.limit,
+    RateLimits.WRITE.window,
+  );
+  if (!rateLimitResult.success) {
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
+  logger.info("Processing withdrawal request", {
+    correlationId,
+    userId: dbUserId,
+    amount,
+    method,
+  });
+
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    () =>
+      createWithdrawal(dbUserId, {
+        amount,
+        method,
+        description,
+      }),
+    { operationName: "create_withdrawal" },
+  );
+
+  if (!result.success || !result.data) {
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      "Failed to create withdrawal",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  const data = result.data;
+  if ("error" in data) {
+    await IdempotencyService.fail(idempotencyKey);
+    if (data.error === "insufficient_funds") {
+      return apiError(
+        `Insufficient funds. Available balance: ${data.availableBalance}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (data.error === "below_minimum") {
+      return apiError(
+        `Withdrawal amount is below the minimum of ${data.min} KES`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (data.error === "above_maximum") {
+      return apiError(
+        `Withdrawal amount exceeds the maximum of ${data.max} KES`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return apiError(
+      "Failed to create withdrawal",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  await IdempotencyService.complete(idempotencyKey, data.data);
+  return apiSuccess(data.data, HttpStatus.CREATED);
 });

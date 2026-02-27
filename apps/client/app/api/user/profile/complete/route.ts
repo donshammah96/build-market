@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@build/db";
-import { withAuth } from "@/app/lib/api-middleware";
-import { HttpStatus } from "@/app/lib/api-response";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { HttpStatus } from "@/app/lib/api/api-response";
 import {
   apiError,
   initializeCorrelationId,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 
 const logger = getClientLogger();
 
@@ -20,7 +20,7 @@ const logger = getClientLogger();
  * This approach provides better type safety and clearer validation logic
  * by separating concerns based on user role.
  *
- * @deprecated Consider using role-specific endpoints directly:
+ * /deprecated Consider using role-specific endpoints directly:
  * - PATCH /api/user/profile/complete/client
  * - PATCH /api/user/profile/complete/professional
  */

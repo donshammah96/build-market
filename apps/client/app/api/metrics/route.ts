@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   getResilientExecutor,
   initializeCorrelationId,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
+import {
+  checkRateLimit,
+  getRateLimitIdentifier,
+  RateLimits,
+} from "@/app/lib/api/rate-limit";
 
 const logger = getClientLogger();
 
-// Operations to track - covers all major API operations
+/**
+ * Tracked operations — covers all major API operations across the platform.
+ * Names must match the `operationName` values passed to `getResilientExecutor().execute()`.
+ */
 const TRACKED_OPERATIONS = [
   // Professional Portal
   "get_professional_profile",
@@ -16,42 +25,63 @@ const TRACKED_OPERATIONS = [
   "create_portfolio_item",
   "get_calendar_events",
   "get_leads",
+  "create_lead",
   "get_transactions",
-  // Client Dashboard
-  "get_client_dashboard",
-  "fetch-idea-books",
+  "get_projects",
+  "create_project",
   // Messaging
-  "fetch-professionals",
-  "get-conversations",
-  "send-message",
-  "fetch-conversation-messages",
+  "list_threads",
+  "create_thread",
+  "get_thread",
+  "send_message",
+  "list_thread_messages",
+  "mark_thread_read",
   // Notifications
-  "get_notifications",
-  "update_notification",
-  // Auth/Onboarding
-  "fetch-user-data",
+  "list_notifications",
+  "mark_notification_read",
+  "delete_notifications",
+  // Auth / Onboarding
   "complete_onboarding",
+  "skip_onboarding",
   // Public
   "create_public_lead",
   "get_public_lead_status",
-];
+  // Stores & Properties
+  "get_stores",
+  "create_store",
+  "get_properties",
+  "create_property",
+] as const;
 
 /**
  * GET /api/metrics
- * Observability endpoint for monitoring system health and performance
+ * Observability endpoint for monitoring system health and performance.
  *
- * Returns:
- * - Operation statistics (latency percentiles, counts)
- * - Circuit breaker states
- * - Cache statistics
- * - All collected metrics
+ * Returns operation latency percentiles, circuit breaker states,
+ * cache statistics, and aggregated metrics.
  *
- * Note: In production, this should be protected or on an internal network
+ * Protected by INTERNAL_API_SECRET header. In production, this
+ * should be on an internal network or behind admin authentication.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const correlationId = initializeCorrelationId(request);
 
-  logger.debug("Metrics endpoint accessed", { correlationId });
+  // Access control via internal secret
+  const internalSecret = request.headers.get("x-internal-secret");
+  const expectedSecret = process.env.INTERNAL_API_SECRET;
+  if (expectedSecret && internalSecret !== expectedSecret) {
+    return apiError("Forbidden", HttpStatus.FORBIDDEN);
+  }
+
+  const identifier = getRateLimitIdentifier(request);
+  const rateLimitResult = await checkRateLimit(
+    `metrics:${identifier}`,
+    RateLimits.API.limit,
+    RateLimits.API.window,
+  );
+  if (!rateLimitResult.success) {
+    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+  }
 
   try {
     const executor = getResilientExecutor();
@@ -77,18 +107,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       };
     });
 
-    // Filter to only show operations with data
-    const activeOperations = operationStats.filter((op) => op.summary !== null);
-
-    // Get circuit breaker states
-    const circuitBreakerStates = Object.fromEntries(
-      executor.getCircuitBreakerStates()
+    const activeOperations = operationStats.filter(
+      (op) => op.summary !== null,
     );
 
-    // Get cache statistics
+    const circuitBreakerStates = Object.fromEntries(
+      executor.getCircuitBreakerStates(),
+    );
+
     const cacheStats = Object.fromEntries(executor.getCacheStats());
 
-    // Get all metrics
     const allMetrics = executor.getMetrics();
 
     logger.info("Metrics collected", {
@@ -97,40 +125,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalTracked: TRACKED_OPERATIONS.length,
     });
 
-    return NextResponse.json(
+    return apiSuccess(
       {
-        success: true,
-        timestamp: new Date().toISOString(),
-        correlationId,
-        data: {
-          operations: activeOperations,
-          allOperations: operationStats,
-          circuitBreakers: circuitBreakerStates,
-          caches: cacheStats,
-          metrics: allMetrics,
-        },
+        operations: activeOperations,
+        allOperations: operationStats,
+        circuitBreakers: circuitBreakerStates,
+        caches: cacheStats,
+        metrics: allMetrics,
       },
-      {
-        headers: {
-          "Cache-Control": "no-store, must-revalidate",
-          "X-Correlation-ID": correlationId || "",
-        },
-      }
+      HttpStatus.OK,
     );
   } catch (err) {
     logger.error(
       "Error collecting metrics",
       err instanceof Error ? err : new Error(String(err)),
-      { correlationId }
+      { correlationId },
     );
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to collect metrics",
-        correlationId,
-      },
-      { status: 500 }
+    return apiError(
+      "Failed to collect metrics",
+      HttpStatus.INTERNAL_SERVER_ERROR,
     );
   }
 }

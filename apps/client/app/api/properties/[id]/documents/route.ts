@@ -1,387 +1,244 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@build/db";
 import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { PropertyDocumentType, AuditAction } from "@prisma/client";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+  getResilientExecutor,
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
+import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
+import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
+import {
+  getPropertyDocuments,
+  addPropertyDocument,
+  removePropertyDocument,
+} from "@/lib/services/properties";
 
 const logger = getClientLogger();
 
-const AttachmentTypeEnum = z.enum([
-  "TITLE_DEED",
-  "OFFICIAL_SEARCH",
-  "MANDATE_LETTER",
-]);
+const PropertyDocumentTypeEnum = z.nativeEnum(PropertyDocumentType);
 
-const createAttachmentSchema = z.object({
-  fileUrl: z.string().url("Invalid file URL"),
-  fileKey: z.string().optional(),
-  type: AttachmentTypeEnum,
+const createDocumentSchema = z.object({
+  type: PropertyDocumentTypeEnum,
+  assetId: z.string().uuid("Invalid asset ID"),
+  notes: z.string().optional(),
 });
 
-const updateAttachmentSchema = z.object({
-  attachmentId: z.string().uuid(),
-  fileUrl: z.string().url("Invalid file URL"),
-  fileKey: z.string().optional(),
-});
-
-/**
- * GET /api/properties/[id]/documents
- * Get all attachments for a property
+/*
+ ** GET /api/properties/[id]/documents
+ *
+ * /param {string} id - The ID of the property
+ * /returns {Promise<PropertyDocument[]>} - The list of property documents
  */
 export const GET = withAuth<{ id: string }>(
   async (req: NextRequest, { dbUserId }, params) => {
     const correlationId = initializeCorrelationId(req);
     const { id } = params!;
 
+    if (!isValidId(id)) {
+      return apiError("Invalid property ID", HttpStatus.BAD_REQUEST);
+    }
+
     const identifier = getRateLimitIdentifier(req);
     const { success } = await checkRateLimit(
       identifier,
       RateLimits.READ.limit,
-      RateLimits.READ.window
+      RateLimits.READ.window,
     );
 
     if (!success) {
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Fetching property attachments", {
+    const resilientExecutor = getResilientExecutor();
+
+    const result = await resilientExecutor.execute(
+      async () => {
+        const propertyDocuments = await getPropertyDocuments(id, dbUserId);
+        return { data: propertyDocuments };
+      },
+      { operationName: "get_property_documents" },
+    );
+
+    if (result.success && result.data) {
+      return apiSuccess(result.data, HttpStatus.OK, correlationId);
+    }
+
+    const errMsg =
+      result.error instanceof Error ? result.error.message : "Unknown error";
+    logger.error("Failed to fetch property documents", result.error, {
       correlationId,
       propertyId: id,
     });
-
-    return executeResilient(
-      async () => {
-        // Verify property exists and user owns it
-        const property = await prisma.property.findUnique({
-          where: { id },
-          select: { agentId: true },
-        });
-
-        if (!property) {
-          return apiError("Property not found", HttpStatus.NOT_FOUND);
-        }
-
-        if (property.agentId !== dbUserId) {
-          return apiError("Unauthorized", HttpStatus.FORBIDDEN);
-        }
-
-        const attachments = await prisma.propertyAttachment.findMany({
-          where: { propertyId: id },
-          orderBy: { createdAt: "desc" },
-        });
-
-        logger.info("Property attachments fetched successfully", {
-          correlationId,
-          propertyId: id,
-          count: attachments.length,
-        });
-
-        return { data: attachments };
-      },
-      {
-        operationName: "get_property_attachments",
-        successStatus: HttpStatus.OK,
-      }
+    if (errMsg === "Property not found")
+      return apiError(errMsg, HttpStatus.NOT_FOUND);
+    if (errMsg === "Unauthorized") return apiError(errMsg, HttpStatus.FORBIDDEN);
+    return apiError(
+      "Failed to fetch property documents",
+      HttpStatus.INTERNAL_SERVER_ERROR,
     );
-  }
+  },
 );
 
-/**
- * POST /api/properties/[id]/documents
- * Create a new attachment for a property
+/*
+ ** POST /api/properties/[id]/documents
+ *
+ * Creates a new property document linked to an Asset.
+ *
+ * /param {string} id - The ID of the property
+ * /body {Object} - { type, assetId, notes? }
  */
 export const POST = withAuth<{ id: string }>(
   async (req: NextRequest, { dbUserId }, params) => {
     const correlationId = initializeCorrelationId(req);
     const { id } = params!;
+
+    if (!isValidId(id)) {
+      return apiError("Invalid property ID", HttpStatus.BAD_REQUEST);
+    }
+
+    // Rate Limit (Write)
     const identifier = getRateLimitIdentifier(req);
     const { success } = await checkRateLimit(
       identifier,
       RateLimits.WRITE.limit,
-      RateLimits.WRITE.window
+      RateLimits.WRITE.window,
     );
-
     if (!success) {
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    const body = await req.json();
-    const validation = createAttachmentSchema.safeParse(body);
+    const bodyError = checkBodySize(req, PROPERTY_CONFIG.MAX_BODY_SIZE);
+    if (bodyError) return bodyError;
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+    }
+
+    const validation = createDocumentSchema.safeParse(body);
 
     if (!validation.success) {
-      logger.warn("Attachment creation validation failed", {
-        correlationId,
-        propertyId: id,
-        errors: validation.error.issues,
-      });
       return apiError(
-        "Invalid input",
+        validation.error.message,
         HttpStatus.BAD_REQUEST,
-        validation.error.issues
+        validation.error.issues,
+        correlationId,
       );
     }
 
-    // Verify property exists and user owns it
-    const property = await prisma.property.findUnique({
-      where: { id },
-      select: { agentId: true },
-    });
+    const { type, assetId, notes } = validation.data;
 
-    if (!property) {
-      return apiError("Property not found", HttpStatus.NOT_FOUND);
+    const resilientExecutor = getResilientExecutor();
+
+    const result = await resilientExecutor.execute(
+      async () => {
+        const newDoc = await addPropertyDocument(id, dbUserId, {
+          type,
+          assetId,
+          notes,
+        });
+        if (dbUserId) {
+          ComplianceService.logAdminAction(
+            dbUserId,
+            AuditAction.PROFILE_UPDATED,
+            "PropertyDocument",
+            newDoc.id,
+            { propertyId: id, type, assetId },
+          ).catch((err) => logger.error("Failed to create audit log", err));
+        }
+        return { data: newDoc };
+      },
+      { operationName: "create_property_document" },
+    );
+
+    if (result.success && result.data) {
+      return apiSuccess(result.data, HttpStatus.CREATED, correlationId);
     }
 
-    if (property.agentId !== dbUserId) {
-      return apiError("Unauthorized", HttpStatus.FORBIDDEN);
-    }
-
-    const { fileUrl, fileKey, type } = validation.data;
-
-    logger.info("Creating property attachment", {
+    const errMsg =
+      result.error instanceof Error ? result.error.message : "Unknown error";
+    logger.error("Failed to create property document", result.error, {
       correlationId,
       propertyId: id,
-      type,
     });
-
-    return executeResilient(
-      async () => {
-        // Update property status to PENDING when attachments are submitted
-        await prisma.property.update({
-          where: { id },
-          data: {
-            verificationStatus: "PENDING",
-            submittedAt: new Date(),
-          },
-        });
-
-        const attachment = await prisma.propertyAttachment.create({
-          data: {
-            propertyId: id,
-            fileUrl,
-            fileKey: fileKey || null,
-            type,
-            uploadedBy: dbUserId,
-            isVerified: false,
-          },
-        });
-
-        logger.info("Property attachment created successfully", {
-          correlationId,
-          propertyId: id,
-          attachmentId: attachment.id,
-        });
-
-        return attachment;
-      },
-      {
-        operationName: "create_property_attachment",
-        successStatus: HttpStatus.CREATED,
-      }
+    if (errMsg === "Property not found")
+      return apiError(errMsg, HttpStatus.NOT_FOUND);
+    if (errMsg === "Unauthorized" || errMsg === "Unauthorized access to asset")
+      return apiError(errMsg, HttpStatus.FORBIDDEN);
+    if (errMsg === "Asset not found")
+      return apiError(errMsg, HttpStatus.NOT_FOUND);
+    return apiError(
+      "Failed to create property document",
+      HttpStatus.INTERNAL_SERVER_ERROR,
     );
-  }
+  },
 );
 
-/**
- * PATCH /api/properties/[id]/documents
- * Update/replace an existing attachment
- */
-export const PATCH = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
-    const correlationId = initializeCorrelationId(req);
-    const { id } = params!;
-    const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window
-    );
-
-    if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-    }
-
-    const body = await req.json();
-    const validation = updateAttachmentSchema.safeParse(body);
-
-    if (!validation.success) {
-      logger.warn("Attachment update validation failed", {
-        correlationId,
-        propertyId: id,
-        errors: validation.error.issues,
-      });
-      return apiError(
-        "Invalid input",
-        HttpStatus.BAD_REQUEST,
-        validation.error.issues
-      );
-    }
-
-    const { attachmentId, fileUrl, fileKey } = validation.data;
-
-    logger.info("Updating property attachment", {
-      correlationId,
-      propertyId: id,
-      attachmentId,
-    });
-
-    return executeResilient(
-      async () => {
-        // Verify property exists and user owns it
-        const property = await prisma.property.findUnique({
-          where: { id },
-          select: { agentId: true },
-        });
-
-        if (!property) {
-          return apiError("Property not found", HttpStatus.NOT_FOUND);
-        }
-
-        if (property.agentId !== dbUserId) {
-          return apiError("Unauthorized", HttpStatus.FORBIDDEN);
-        }
-
-        // Verify attachment belongs to property
-        const existing = await prisma.propertyAttachment.findUnique({
-          where: { id: attachmentId },
-        });
-
-        if (!existing) {
-          return apiError("Attachment not found", HttpStatus.NOT_FOUND);
-        }
-
-        if (existing.propertyId !== id) {
-          return apiError(
-            "Attachment does not belong to this property",
-            HttpStatus.BAD_REQUEST
-          );
-        }
-
-        // Update attachment and reset verification status
-        const attachment = await prisma.propertyAttachment.update({
-          where: { id: attachmentId },
-          data: {
-            fileUrl,
-            fileKey: fileKey || null,
-            isVerified: false,
-            verifiedAt: null,
-            notes: null,
-          },
-        });
-
-        // Update property status to PENDING when attachments are replaced
-        await prisma.property.update({
-          where: { id },
-          data: {
-            verificationStatus: "PENDING",
-            submittedAt: new Date(),
-          },
-        });
-
-        logger.info("Property attachment updated successfully", {
-          correlationId,
-          propertyId: id,
-          attachmentId: attachment.id,
-        });
-
-        return attachment;
-      },
-      {
-        operationName: "update_property_attachment",
-        successStatus: HttpStatus.OK,
-      }
-    );
-  }
-);
-
-/**
- * DELETE /api/properties/[id]/documents
- * Delete an attachment
+/*
+ ** DELETE /api/properties/[id]/documents
+ *
+ * Deletes a property document.
+ *
+ * /param {string} id - The ID of the property
+ * /query {string} documentId - The ID of the document to delete
  */
 export const DELETE = withAuth<{ id: string }>(
   async (req: NextRequest, { dbUserId }, params) => {
     const correlationId = initializeCorrelationId(req);
     const { id } = params!;
     const { searchParams } = new URL(req.url);
-    const attachmentId = searchParams.get("attachmentId");
+    const documentId = searchParams.get("documentId");
 
-    if (!attachmentId) {
-      return apiError("Attachment ID is required", HttpStatus.BAD_REQUEST);
-    }
-    const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window
-    );
-
-    if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+    if (!isValidId(id) || !documentId || !isValidId(documentId)) {
+      return apiError("Invalid IDs provided", HttpStatus.BAD_REQUEST);
     }
 
-    logger.info("Deleting property attachment", {
-      correlationId,
-      propertyId: id,
-      attachmentId,
-    });
+    const resilientExecutor = getResilientExecutor();
 
-    return executeResilient(
+    const result = await resilientExecutor.execute(
       async () => {
-        // Verify property exists and user owns it
-        const property = await prisma.property.findUnique({
-          where: { id },
-          select: { agentId: true },
-        });
-
-        if (!property) {
-          return apiError("Property not found", HttpStatus.NOT_FOUND);
+        await removePropertyDocument(id, documentId, dbUserId);
+        if (dbUserId) {
+          ComplianceService.logAdminAction(
+            dbUserId,
+            AuditAction.DATA_RECTIFIED,
+            "PropertyDocument",
+            documentId,
+            { propertyId: id, action: "DELETE" },
+          ).catch((err) => logger.error("Failed to log deletion", err));
         }
-
-        if (property.agentId !== dbUserId) {
-          return apiError("Unauthorized", HttpStatus.FORBIDDEN);
-        }
-
-        // Verify attachment belongs to property
-        const existing = await prisma.propertyAttachment.findUnique({
-          where: { id: attachmentId },
-        });
-
-        if (!existing) {
-          return apiError("Attachment not found", HttpStatus.NOT_FOUND);
-        }
-
-        if (existing.propertyId !== id) {
-          return apiError(
-            "Attachment does not belong to this property",
-            HttpStatus.BAD_REQUEST
-          );
-        }
-
-        await prisma.propertyAttachment.delete({
-          where: { id: attachmentId },
-        });
-
-        logger.info("Property attachment deleted successfully", {
-          correlationId,
-          propertyId: id,
-          attachmentId,
-        });
-
-        return { success: true };
+        return { data: { success: true } };
       },
-      {
-        operationName: "delete_property_attachment",
-        successStatus: HttpStatus.OK,
-      }
+      { operationName: "delete_property_document" },
     );
-  }
+
+    if (result.success) {
+      return apiSuccess(
+        { message: "Document deleted successfully" },
+        HttpStatus.OK,
+        correlationId,
+      );
+    }
+
+    const errMsg =
+      result.error instanceof Error ? result.error.message : "Unknown error";
+    if (errMsg === "Property not found" || errMsg === "Document not found")
+      return apiError(errMsg, HttpStatus.NOT_FOUND);
+    if (errMsg === "Unauthorized") return apiError(errMsg, HttpStatus.FORBIDDEN);
+    return apiError(
+      "Failed to delete document",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  },
 );

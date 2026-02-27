@@ -1,87 +1,72 @@
 import { Webhook } from "svix";
-import { NextRequest, NextResponse } from "next/server";
-import { prisma, UserRole, VerificationStatus } from "@build/db";
-import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api-response";
-import { UserRepository } from "@/app/lib/repositories/user.repository";
+import { NextRequest } from "next/server";
+import { prisma, VerificationStatus } from "@build/db";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
+import { checkBodySize } from "@/app/lib/api/api-guards";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
-import { env } from "@/app/lib/env";
+} from "@/app/lib/api/rate-limit";
+import { env } from "@/app/lib/infrastructure/env";
 import {
   initializeCorrelationId,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
+import {
+  ClerkUserPayloadSchema,
+  ClerkSessionPayloadSchema,
+  resolveUserRole,
+  computeDisplayName,
+  userWebhookSelect,
+  professionalProfileSelect,
+  WEBHOOK_CONFIG,
+  UserRole,
+  UserStatus,
+  type ClerkWebhookEvent,
+  type ClerkUserData,
+  type ClerkSessionData,
+  type HandledEventType,
+} from "@/app/lib/validation/clerk-webhook-validation";
 
 const logger = getClientLogger();
 
-// Clerk webhook event types
-interface ClerkEmailAddress {
-  email_address: string;
-  verification?: {
-    status: "verified" | "unverified" | "expired";
-  };
-}
-
-interface ClerkPhoneNumber {
-  phone_number: string;
-  verification?: {
-    status: "verified" | "unverified" | "expired";
-  };
-}
-
-interface ClerkUserData {
-  id: string;
-  email_addresses?: ClerkEmailAddress[];
-  first_name?: string | null;
-  last_name?: string | null;
-  phone_numbers?: ClerkPhoneNumber[];
-  image_url?: string;
-  username?: string | null;
-  public_metadata?: {
-    role?: "client" | "professional";
-    isOnboarded?: boolean;
-    isVerified?: boolean;
-  };
-}
-
-interface ClerkWebhookEvent {
-  type: string;
-  data: ClerkUserData;
-}
-
-interface PrismaError extends Error {
-  code?: string;
-}
+// ─── Route Handler ───────────────────────────────────────────────────────────
 
 /**
  * POST /api/clerk-webhook
- * Handle Clerk webhook events for user creation and updates
+ *
+ * Handles Clerk webhook events for user lifecycle management.
+ *
+ * Supported events:
+ * - user.created  → Upserts user record with profile, verification timestamps, displayName
+ * - user.updated  → Patches user fields, syncs professional verification status
+ * - user.deleted  → Soft-deletes with GDPR audit trail (deletionRequestedAt, deletionReason)
+ * - session.created → Tracks login activity (lastLoginAt, loginCount)
+ *
+ * Security:
+ * - Svix signature verification (HMAC-SHA256) — rejects tampered payloads
+ * - Body size guard (256 KB max)
+ * - Rate limiting (post-verification, scoped to source IP)
+ *
+ * Schema alignment:
+ * - Sets emailVerifiedAt / phoneVerifiedAt timestamps alongside boolean flags
+ * - Computes displayName from firstName + lastName
+ * - Uses UserStatus enum for soft-delete (not string literal)
+ * - Populates GDPR deletion audit fields on user.deleted
  */
-export async function POST(req: NextRequest): Promise<NextResponse> {
+export async function POST(req: NextRequest) {
   const correlationId = initializeCorrelationId(req);
 
-  logger.info("Webhook request received", { correlationId });
+  logger.info("Clerk webhook request received", { correlationId });
 
   try {
-    // Rate limiting for webhooks
-    const identifier = getRateLimitIdentifier(req);
-    const rateLimitResult = await checkRateLimit(
-      `webhook:${identifier}`,
-      RateLimits.WEBHOOK.limit,
-      RateLimits.WEBHOOK.window,
-    );
+    // ── 1. Body size guard ─────────────────────────────────────────────
+    const sizeError = checkBodySize(req, WEBHOOK_CONFIG.MAX_PAYLOAD_SIZE);
+    if (sizeError) return sizeError;
 
-    if (!rateLimitResult.success) {
-      return apiError(
-        "Too many webhook requests",
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    // Check webhook secret
-    if (!env.CLERK_WEBHOOK_SECRET) {
+    // ── 2. Verify webhook secret is configured ─────────────────────────
+    if (!env.clerk.webhookSecret) {
       logger.error("CLERK_WEBHOOK_SECRET not configured", undefined, {
         correlationId,
       });
@@ -91,17 +76,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Parse request
+    // ── 3. Read raw payload for Svix verification ──────────────────────
     const payload = await req.text();
     const headers = Object.fromEntries(req.headers);
 
-    logger.debug("Webhook payload received", {
-      correlationId,
-      payloadLength: payload.length,
-    });
+    // Verify required Svix headers are present before verification
+    const missingSvixHeaders = WEBHOOK_CONFIG.REQUIRED_HEADERS.filter(
+      (h) => !headers[h],
+    );
+    if (missingSvixHeaders.length > 0) {
+      logger.warn("Missing Svix headers", {
+        correlationId,
+        missing: missingSvixHeaders,
+      });
+      return apiError("Missing webhook signature headers", HttpStatus.BAD_REQUEST);
+    }
 
-    // Verify webhook signature
-    const wh = new Webhook(env.CLERK_WEBHOOK_SECRET);
+    // ── 4. Svix signature verification ─────────────────────────────────
+    const wh = new Webhook(env.clerk.webhookSecret);
     let evt: ClerkWebhookEvent;
 
     try {
@@ -117,51 +109,62 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return apiError("Invalid webhook signature", HttpStatus.UNAUTHORIZED);
     }
 
-    logger.info("Webhook verified", { correlationId, eventType: evt.type });
-
-    // Check database connection
-    try {
-      await prisma.$connect();
-      logger.debug("Database connection verified", { correlationId });
-    } catch (dbError) {
-      logger.error(
-        "Database connection failed",
-        dbError instanceof Error ? dbError : new Error(String(dbError)),
-        { correlationId },
-      );
-      return apiError(
-        "Database connection failed",
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
-
-    // Initialize repository
-    const userRepo = new UserRepository(prisma);
-
-    // Handle user.created event
-    if (evt.type === "user.created") {
-      return await handleUserCreated(evt, userRepo, correlationId);
-    }
-
-    // Handle user.updated event
-    if (evt.type === "user.updated") {
-      return await handleUserUpdated(evt, userRepo, correlationId);
-    }
-
-    // Handle user.deleted event (optional)
-    if (evt.type === "user.deleted") {
-      return await handleUserDeleted(evt, userRepo, correlationId);
-    }
-
-    // Other events - just acknowledge
-    logger.info("Event type not handled", {
+    logger.info("Webhook signature verified", {
       correlationId,
       eventType: evt.type,
     });
-    return apiSuccess(
-      { message: `Event ${evt.type} acknowledged` },
-      HttpStatus.OK,
+
+    // ── 5. Rate limit (post-verification to avoid penalizing legit retries)
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `clerk-webhook:${identifier}`,
+      RateLimits.WEBHOOK.limit,
+      RateLimits.WEBHOOK.window,
     );
+    if (!rateLimitResult.success) {
+      logger.warn("Webhook rate limited", { correlationId, identifier });
+      return apiError(
+        "Too many webhook requests",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    // ── 6. Route to event handler ──────────────────────────────────────
+    switch (evt.type as HandledEventType) {
+      case "user.created":
+        return await handleUserCreated(
+          evt.data as ClerkUserData,
+          correlationId,
+        );
+
+      case "user.updated":
+        return await handleUserUpdated(
+          evt.data as ClerkUserData,
+          correlationId,
+        );
+
+      case "user.deleted":
+        return await handleUserDeleted(
+          evt.data as ClerkUserData,
+          correlationId,
+        );
+
+      case "session.created":
+        return await handleSessionCreated(
+          evt.data as ClerkSessionData,
+          correlationId,
+        );
+
+      default:
+        logger.info("Unhandled event type acknowledged", {
+          correlationId,
+          eventType: evt.type,
+        });
+        return apiSuccess(
+          { message: `Event ${evt.type} acknowledged` },
+          HttpStatus.OK,
+        );
+    }
   } catch (err: unknown) {
     logger.error(
       "Webhook processing failed",
@@ -175,180 +178,232 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 }
 
+// ─── Event Handlers ──────────────────────────────────────────────────────────
+
 /**
- * Handle user.created webhook event
+ * user.created → Upsert user record.
+ *
+ * Uses upsert to handle Clerk replay / duplicate webhook delivery gracefully.
+ * Sets emailVerifiedAt/phoneVerifiedAt timestamps, computes displayName,
+ * and resolves role from public_metadata.
  */
-async function handleUserCreated(
-  evt: ClerkWebhookEvent,
-  userRepo: UserRepository,
-  correlationId: string,
-) {
+async function handleUserCreated(data: ClerkUserData, correlationId: string) {
+  // Validate payload structure
+  const parsed = ClerkUserPayloadSchema.safeParse(data);
+  if (!parsed.success) {
+    logger.error("Invalid user.created payload", undefined, {
+      correlationId,
+      errors: parsed.error.flatten().fieldErrors,
+    });
+    return apiError("Invalid user data", HttpStatus.BAD_REQUEST, {
+      fields: parsed.error.flatten().fieldErrors,
+    });
+  }
+
   const {
-    id,
+    id: clerkId,
     email_addresses,
     first_name,
     last_name,
     phone_numbers,
     image_url,
     public_metadata,
-  } = evt.data;
+  } = parsed.data;
 
-  if (!id || !email_addresses?.[0]?.email_address) {
-    logger.error("Missing required data (id or email)", undefined, {
+  // Primary email is required for user creation
+  const primaryEmail = email_addresses?.[0];
+  if (!primaryEmail?.email_address) {
+    logger.error("Missing primary email in user.created", undefined, {
       correlationId,
+      clerkId,
     });
-    return apiError("Missing required user data", HttpStatus.BAD_REQUEST);
+    return apiError(
+      "Missing required email address",
+      HttpStatus.BAD_REQUEST,
+    );
   }
 
-  const emailData = email_addresses[0];
-  const email = emailData.email_address;
-  const isEmailVerified = emailData.verification?.status === "verified";
+  const email = primaryEmail.email_address;
+  const isEmailVerified = primaryEmail.verification?.status === "verified";
 
-  const phoneData = phone_numbers?.[0];
-  const phone = phoneData?.phone_number;
-  const isPhoneVerified = phoneData?.verification?.status === "verified";
+  const primaryPhone = phone_numbers?.[0];
+  const phone = primaryPhone?.phone_number || null;
+  const isPhoneVerified =
+    primaryPhone?.verification?.status === "verified" || false;
 
-  // Determine role from metadata or default to CLIENT
-  let role: UserRole = UserRole.CLIENT;
-  if (public_metadata?.role) {
-    const roleStr = public_metadata.role.toUpperCase();
-    if (roleStr === "PROFESSIONAL") role = UserRole.PROFESSIONAL;
-    else if (roleStr === "ADMIN") role = UserRole.ADMIN;
-  }
+  // Resolve role from metadata (defaults to CLIENT)
+  const role = resolveUserRole(public_metadata?.role) ?? UserRole.CLIENT;
+  const displayName = computeDisplayName(first_name, last_name);
 
-  logger.info("Processing user creation", {
+  logger.info("Processing user.created", {
     correlationId,
-    clerkId: id,
+    clerkId,
     email,
     role,
   });
 
   try {
-    const user = await userRepo.upsert(
-      id,
-      {
-        clerkId: id,
+    const user = await prisma.user.upsert({
+      where: { clerkId },
+      create: {
+        clerkId,
         email,
         firstName: first_name || null,
         lastName: last_name || null,
-        phone: phone || null,
+        displayName,
+        phone,
         avatar: image_url || null,
         role,
         isEmailVerified,
         isPhoneVerified,
+        ...(isEmailVerified && { emailVerifiedAt: new Date() }),
+        ...(isPhoneVerified && { phoneVerifiedAt: new Date() }),
       },
-      {
+      update: {
+        // On replay / race condition: update non-destructive fields
         email,
         firstName: first_name || null,
         lastName: last_name || null,
-        phone: phone || null,
+        displayName,
+        phone,
         avatar: image_url || null,
         isEmailVerified,
         isPhoneVerified,
+        ...(isEmailVerified && { emailVerifiedAt: new Date() }),
+        ...(isPhoneVerified && { phoneVerifiedAt: new Date() }),
       },
-    );
+      select: userWebhookSelect,
+    });
 
-    logger.info("User created successfully", {
+    logger.info("User created/upserted successfully", {
       correlationId,
       userId: user.id,
       email: user.email,
+      role: user.role,
     });
 
     return apiSuccess(
-      {
-        userId: user.id,
-        message: "User created successfully",
-      },
+      { userId: user.id, message: "User created successfully" },
       HttpStatus.OK,
+      correlationId,
     );
   } catch (err: unknown) {
-    const prismaErr = err as PrismaError;
-    logger.error(
-      "User creation failed",
-      err instanceof Error ? err : new Error(String(err)),
-      {
-        correlationId,
-        clerkId: id,
-        errorCode: prismaErr.code,
-      },
-    );
-
-    if (prismaErr.code === "P2002") {
-      return apiError("User already exists", HttpStatus.CONFLICT);
-    }
-
-    return apiError("Failed to create user", HttpStatus.INTERNAL_SERVER_ERROR);
+    return handlePrismaError(err, "user.created", clerkId, correlationId);
   }
 }
 
 /**
- * Handle user.updated webhook event
+ * user.updated → Patch user fields.
+ *
+ * Only updates fields present in the webhook payload (partial update).
+ * Syncs professional verification status if public_metadata.isVerified changes.
+ * Updates emailVerifiedAt/phoneVerifiedAt timestamps when status transitions to verified.
  */
-async function handleUserUpdated(
-  evt: ClerkWebhookEvent,
-  userRepo: UserRepository,
-  correlationId: string,
-) {
+async function handleUserUpdated(data: ClerkUserData, correlationId: string) {
+  const parsed = ClerkUserPayloadSchema.safeParse(data);
+  if (!parsed.success) {
+    logger.error("Invalid user.updated payload", undefined, {
+      correlationId,
+      errors: parsed.error.flatten().fieldErrors,
+    });
+    return apiError("Invalid user data", HttpStatus.BAD_REQUEST, {
+      fields: parsed.error.flatten().fieldErrors,
+    });
+  }
+
   const {
-    id,
+    id: clerkId,
     email_addresses,
     first_name,
     last_name,
     phone_numbers,
     image_url,
     public_metadata,
-  } = evt.data;
+  } = parsed.data;
 
-  if (!id) {
-    logger.error("Missing user ID in update event", undefined, {
-      correlationId,
-    });
-    return apiError("Missing user ID", HttpStatus.BAD_REQUEST);
-  }
-
-  const emailData = email_addresses?.[0];
-  const email = emailData?.email_address;
-  const isEmailVerified = emailData?.verification?.status === "verified";
-
-  const phoneData = phone_numbers?.[0];
-  const phone = phoneData?.phone_number;
-  const isPhoneVerified = phoneData?.verification?.status === "verified";
-
-  logger.info("Processing user update", {
+  logger.info("Processing user.updated", {
     correlationId,
-    clerkId: id,
+    clerkId,
     hasMetadata: !!public_metadata,
   });
 
   try {
-    const updateData: any = {
-      ...(email && { email }),
+    // Fetch current user to compute diff-aware updates
+    const existingUser = await prisma.user.findUnique({
+      where: { clerkId },
+      select: {
+        id: true,
+        isEmailVerified: true,
+        isPhoneVerified: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+
+    if (!existingUser) {
+      logger.warn("User not found for update — will attempt upsert via user.created path", {
+        correlationId,
+        clerkId,
+      });
+      return apiError("User not found", HttpStatus.NOT_FOUND);
+    }
+
+    // Build update payload — only include fields present in the event
+    const primaryEmail = email_addresses?.[0];
+    const email = primaryEmail?.email_address;
+    const isEmailVerified =
+      primaryEmail?.verification?.status === "verified";
+
+    const primaryPhone = phone_numbers?.[0];
+    const phone = primaryPhone?.phone_number;
+    const isPhoneVerified =
+      primaryPhone?.verification?.status === "verified";
+
+    // Compute displayName from updated or existing names
+    const effectiveFirstName =
+      first_name !== undefined ? first_name : existingUser.firstName;
+    const effectiveLastName =
+      last_name !== undefined ? last_name : existingUser.lastName;
+    const displayName = computeDisplayName(effectiveFirstName, effectiveLastName);
+
+    // Detect verification state transitions for timestamp updates
+    const emailJustVerified =
+      isEmailVerified && !existingUser.isEmailVerified;
+    const phoneJustVerified =
+      isPhoneVerified && !existingUser.isPhoneVerified;
+
+    const updateData: Record<string, unknown> = {
+      ...(email !== undefined && { email }),
       ...(first_name !== undefined && { firstName: first_name || null }),
       ...(last_name !== undefined && { lastName: last_name || null }),
+      displayName,
       ...(phone !== undefined && { phone: phone || null }),
       ...(image_url !== undefined && { avatar: image_url || null }),
       ...(isEmailVerified !== undefined && { isEmailVerified }),
       ...(isPhoneVerified !== undefined && { isPhoneVerified }),
+      // Set verification timestamps only on transition to verified
+      ...(emailJustVerified && { emailVerifiedAt: new Date() }),
+      ...(phoneJustVerified && { phoneVerifiedAt: new Date() }),
     };
 
-    // Update role if changed in metadata
+    // Resolve role if metadata contains it
     if (public_metadata?.role) {
-      const roleStr = public_metadata.role.toUpperCase();
-      if (
-        roleStr === "PROFESSIONAL" ||
-        roleStr === "CLIENT" ||
-        roleStr === "ADMIN"
-      ) {
-        updateData.role = roleStr as UserRole;
+      const resolvedRole = resolveUserRole(public_metadata.role);
+      if (resolvedRole) {
+        updateData.role = resolvedRole;
       }
     }
 
-    const user = await userRepo.update(id, updateData);
+    const user = await prisma.user.update({
+      where: { clerkId },
+      data: updateData,
+      select: userWebhookSelect,
+    });
 
-    // Sync professional verification status if metadata contains isVerified
+    // Sync professional verification status if metadata changed
     if (public_metadata?.isVerified !== undefined) {
       await syncProfessionalVerification(
-        id,
+        clerkId,
         public_metadata.isVerified,
         correlationId,
       );
@@ -357,99 +412,173 @@ async function handleUserUpdated(
     logger.info("User updated successfully", {
       correlationId,
       userId: user.id,
+      role: user.role,
+      emailJustVerified,
+      phoneJustVerified,
     });
 
     return apiSuccess(
-      {
-        userId: user.id,
-        message: "User updated successfully",
-      },
+      { userId: user.id, message: "User updated successfully" },
       HttpStatus.OK,
+      correlationId,
     );
   } catch (err: unknown) {
-    const prismaErr = err as PrismaError;
-    logger.error(
-      "User update failed",
-      err instanceof Error ? err : new Error(String(err)),
-      {
-        correlationId,
-        clerkId: id,
-        errorCode: prismaErr.code,
-      },
-    );
-
-    if (prismaErr.code === "P2025") {
-      return apiError("User not found", HttpStatus.NOT_FOUND);
-    }
-
-    return apiError("Failed to update user", HttpStatus.INTERNAL_SERVER_ERROR);
+    return handlePrismaError(err, "user.updated", clerkId, correlationId);
   }
 }
 
 /**
- * Handle user.deleted webhook event
+ * user.deleted → Soft-delete with GDPR audit trail.
+ *
+ * Sets:
+ * - deletedAt timestamp
+ * - status to DEACTIVATED (GDPR deletion requested, anonymization pending)
+ * - deletionRequestedAt and deletionReason for audit trail
+ * - scheduledDeletionAt for the data retention pipeline
+ *
+ * Does NOT hard-delete — the data retention/anonymization pipeline handles that.
  */
-async function handleUserDeleted(
-  evt: ClerkWebhookEvent,
-  userRepo: UserRepository,
-  correlationId: string,
-) {
-  const { id } = evt.data;
+async function handleUserDeleted(data: ClerkUserData, correlationId: string) {
+  const clerkId = data.id;
 
-  if (!id) {
-    logger.error("Missing user ID in delete event", undefined, {
+  if (!clerkId) {
+    logger.error("Missing user ID in user.deleted event", undefined, {
       correlationId,
     });
     return apiError("Missing user ID", HttpStatus.BAD_REQUEST);
   }
 
-  logger.info("Processing user deletion", { correlationId, clerkId: id });
+  logger.info("Processing user.deleted", { correlationId, clerkId });
 
   try {
-    // Soft delete the user
-    await prisma.user.update({
-      where: { clerkId: id },
+    const now = new Date();
+
+    const user = await prisma.user.update({
+      where: { clerkId },
       data: {
-        deletedAt: new Date(),
-        status: "ARCHIVED",
+        status: UserStatus.DEACTIVATED,
+        deletedAt: now,
+        deletionRequestedAt: now,
+        deletionReason: "CLERK_ACCOUNT_DELETED",
+        // Schedule for anonymization after retention period (30 days default)
+        scheduledDeletionAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
       },
+      select: userWebhookSelect,
     });
 
-    logger.info("User soft deleted successfully", {
+    logger.info("User soft-deleted successfully", {
       correlationId,
-      clerkId: id,
+      userId: user.id,
+      clerkId,
+      status: user.status,
     });
 
     return apiSuccess(
-      {
-        message: "User deletion acknowledged",
-      },
+      { userId: user.id, message: "User deletion processed" },
       HttpStatus.OK,
+      correlationId,
     );
   } catch (err: unknown) {
-    logger.error(
-      "User deletion failed",
-      err instanceof Error ? err : new Error(String(err)),
-      {
-        correlationId,
-        clerkId: id,
-      },
-    );
-    return apiError("Failed to delete user", HttpStatus.INTERNAL_SERVER_ERROR);
+    return handlePrismaError(err, "user.deleted", clerkId, correlationId);
   }
 }
 
 /**
- * Sync professional verification status from Clerk metadata to database
- * Called when user.updated event contains verification metadata changes
+ * session.created → Track login activity.
+ *
+ * Updates:
+ * - lastLoginAt timestamp
+ * - loginCount (atomic increment)
+ * - lastActiveAt timestamp
+ *
+ * This enables the User model's activity tracking fields to stay current
+ * without relying on polling Clerk's API.
+ */
+async function handleSessionCreated(
+  data: ClerkSessionData,
+  correlationId: string,
+) {
+  const parsed = ClerkSessionPayloadSchema.safeParse(data);
+  if (!parsed.success) {
+    logger.warn("Invalid session.created payload", {
+      correlationId,
+      errors: parsed.error.flatten().fieldErrors,
+    });
+    // Don't fail on session events — they're non-critical
+    return apiSuccess(
+      { message: "Session event acknowledged" },
+      HttpStatus.OK,
+      correlationId,
+    );
+  }
+
+  const { user_id: clerkUserId } = parsed.data;
+
+  try {
+    await prisma.user.update({
+      where: { clerkId: clerkUserId },
+      data: {
+        lastLoginAt: new Date(),
+        lastActiveAt: new Date(),
+        loginCount: { increment: 1 },
+        // Reset failed login count on successful session
+        failedLoginCount: 0,
+      },
+      select: { id: true },
+    });
+
+    logger.debug("Login activity tracked", {
+      correlationId,
+      clerkId: clerkUserId,
+    });
+
+    return apiSuccess(
+      { message: "Session tracked" },
+      HttpStatus.OK,
+      correlationId,
+    );
+  } catch (err: unknown) {
+    // Non-critical — user may not exist yet if session.created fires before user.created
+    const prismaErr = err as { code?: string };
+    if (prismaErr.code === "P2025") {
+      logger.debug("User not found for session tracking (race condition)", {
+        correlationId,
+        clerkId: clerkUserId,
+      });
+    } else {
+      logger.warn(
+        "Failed to track login activity",
+        {
+          correlationId,
+          clerkId: clerkUserId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      );
+    }
+
+    // Always acknowledge — session tracking failures should not cause retries
+    return apiSuccess(
+      { message: "Session event acknowledged" },
+      HttpStatus.OK,
+      correlationId,
+    );
+  }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Sync professional verification status from Clerk metadata to ProfessionalProfile.
+ *
+ * Called when user.updated contains a `public_metadata.isVerified` change.
+ * Only updates if the status actually changed to avoid unnecessary writes.
  */
 async function syncProfessionalVerification(
   clerkId: string,
   isVerified: boolean,
   correlationId: string,
-) {
+): Promise<void> {
   try {
-    // Find user by clerkId
     const user = await prisma.user.findUnique({
       where: { clerkId },
       select: { id: true },
@@ -463,25 +592,24 @@ async function syncProfessionalVerification(
       return;
     }
 
-    // Update professional profile verification status
     const profile = await prisma.professionalProfile.findUnique({
       where: { userId: user.id },
-      select: { verified: true },
+      select: professionalProfileSelect,
     });
 
     if (!profile) {
-      logger.debug("No professional profile found for verification sync", {
+      logger.debug("No professional profile for verification sync", {
         correlationId,
         clerkId,
       });
       return;
     }
 
-    // Only update if status changed
+    // Only write if status actually changed
     if (profile.verified !== isVerified) {
       const newStatus = isVerified
         ? VerificationStatus.VERIFIED
-        : VerificationStatus.UNVERIFIED;
+        : VerificationStatus.PENDING;
 
       await prisma.professionalProfile.update({
         where: { userId: user.id },
@@ -497,17 +625,64 @@ async function syncProfessionalVerification(
         clerkId,
         userId: user.id,
         verified: isVerified,
-        status: newStatus,
+        verificationStatus: newStatus,
       });
     }
   } catch (err) {
+    // Non-fatal — log and continue
     logger.error(
       "Failed to sync professional verification",
       err instanceof Error ? err : new Error(String(err)),
-      {
-        correlationId,
-        clerkId,
-      },
+      { correlationId, clerkId },
     );
+  }
+}
+
+/**
+ * Centralized Prisma error handler for webhook operations.
+ * Maps known Prisma error codes to appropriate HTTP responses.
+ */
+function handlePrismaError(
+  err: unknown,
+  eventType: string,
+  clerkId: string,
+  correlationId: string,
+) {
+  const prismaErr = err as { code?: string };
+
+  logger.error(
+    `${eventType} processing failed`,
+    err instanceof Error ? err : new Error(String(err)),
+    {
+      correlationId,
+      clerkId,
+      prismaCode: prismaErr.code,
+    },
+  );
+
+  switch (prismaErr.code) {
+    case "P2002":
+      // Unique constraint violation (e.g., duplicate email)
+      return apiError(
+        "User already exists with this identifier",
+        HttpStatus.CONFLICT,
+        { clerkId },
+        correlationId,
+      );
+    case "P2025":
+      // Record not found
+      return apiError(
+        "User not found",
+        HttpStatus.NOT_FOUND,
+        { clerkId },
+        correlationId,
+      );
+    default:
+      return apiError(
+        `Failed to process ${eventType}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        undefined,
+        correlationId,
+      );
   }
 }

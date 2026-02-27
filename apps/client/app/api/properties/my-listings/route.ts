@@ -1,18 +1,18 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@build/db";
 import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   RateLimits,
   getRateLimitIdentifier,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { getMyProperties } from "@/lib/services/properties";
 
 const logger = getClientLogger();
 
@@ -26,24 +26,24 @@ const querySchema = z.object({
 
 /**
  * GET /api/properties/my-listings
- * Get property listings owned by the authenticated user
- * Returns property data formatted for dashboard widget
+ * Get property listings owned by the authenticated user.
+ * Returns property data formatted for dashboard widget.
+ * Excludes soft-deleted properties.
  */
 export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
   const correlationId = initializeCorrelationId(req);
 
   const identifier = getRateLimitIdentifier(req);
   const { success } = await checkRateLimit(
-    identifier,
+    `my-listings:${identifier}`,
     RateLimits.READ.limit,
-    RateLimits.READ.window
+    RateLimits.READ.window,
   );
 
   if (!success) {
     return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
   }
 
-  // Parse query params
   const { searchParams } = new URL(req.url);
   const queryParams = {
     limit: searchParams.get("limit") || "10",
@@ -55,7 +55,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     return apiError(
       "Invalid query parameters",
       HttpStatus.BAD_REQUEST,
-      queryValidation.error.issues
+      queryValidation.error.issues,
     );
   }
 
@@ -69,86 +69,25 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     status,
   });
 
-  return executeResilient(
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
     async () => {
-      // Build status filter
-      const whereClause: {
-        agentId: string;
-        status?:
-          | "AVAILABLE"
-          | "SOLD"
-          | "RENTED"
-          | "UNDER_OFFER"
-          | { in: ("AVAILABLE" | "UNDER_OFFER")[] };
-      } = {
-        agentId: dbUserId,
-      };
-
-      if (status !== "all") {
-        if (status === "active") {
-          whereClause.status = { in: ["AVAILABLE", "UNDER_OFFER"] };
-        } else if (status === "pending") {
-          whereClause.status = "UNDER_OFFER";
-        } else {
-          whereClause.status = "SOLD";
-        }
-      }
-
-      // Get properties with images and verification status
-      const properties = await prisma.property.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          title: true,
-          price: true,
-          location: true,
-          type: true,
-          status: true,
-          verificationStatus: true,
-          rejectionReason: true,
-          images: {
-            select: { url: true },
-            take: 1,
-            orderBy: { sortOrder: "asc" },
-          },
-          _count: {
-            select: { inquiries: true },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        take: limitNum,
+      const properties = await getMyProperties(dbUserId, {
+        limit: limitNum,
+        status,
       });
-
-      // Format for dashboard widget
-      const formattedProperties = properties.map((p) => ({
-        id: p.id,
-        title: p.title,
-        price: p.price,
-        location: p.location || "Unknown",
-        type: p.type,
-        status: p.status.toLowerCase() as
-          | "active"
-          | "pending"
-          | "sold"
-          | "rented",
-        verificationStatus: p.verificationStatus,
-        rejectionReason: p.rejectionReason,
-        views: 0, // Would need analytics
-        inquiries: p._count.inquiries,
-        images: p.images.map((img: { url: string }) => img.url),
-      }));
-
-      logger.info("User property listings fetched successfully", {
-        correlationId,
-        userId: dbUserId,
-        count: formattedProperties.length,
-      });
-
-      return { data: formattedProperties };
+      return { properties };
     },
-    {
-      operationName: "get_my_listings",
-      successStatus: HttpStatus.OK,
-    }
+    { operationName: "get_my_listings" },
   );
+
+  if (result.success && result.data) {
+    return apiSuccess(result.data, HttpStatus.OK, correlationId);
+  }
+
+  logger.error("Failed to fetch listings", result.error, {
+    correlationId,
+    userId: dbUserId,
+  });
+  return apiError("Failed to fetch listings", HttpStatus.INTERNAL_SERVER_ERROR);
 });

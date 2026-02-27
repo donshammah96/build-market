@@ -1,23 +1,26 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@build/db";
 import { County, Profession } from "@prisma/client";
 import { OnboardingSchema } from "@build/types";
-import { z } from "zod";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { checkBodySize } from "@/app/lib/api/api-guards";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { clerkClient } from "@clerk/nextjs/server";
 
 const logger = getClientLogger();
+
+const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 
 /**
  * POST /api/onboarding
@@ -25,302 +28,361 @@ const logger = getClientLogger();
  *
  * This endpoint uses Clerk auth directly (not withAuth middleware) because
  * the user may not exist in the database yet. It will create the user if needed.
+ *
+ * Handles two primary roles:
+ * - "client" → creates User + ClientProfile
+ * - "professional" → creates User + ProfessionalProfile + ProfessionalDocuments
  */
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   const correlationId = initializeCorrelationId(req);
 
-  try {
-    // Get Clerk user ID
-    const { userId: clerkId } = await auth();
+  // Get Clerk user ID
+  const { userId: clerkId } = await auth();
 
-    if (!clerkId) {
-      return apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED);
-    }
+  if (!clerkId) {
+    return apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED);
+  }
 
-    // Rate limiting
-    const identifier = getRateLimitIdentifier(req);
-    const rateLimitResult = await checkRateLimit(
-      `onboarding:${identifier}`,
-      RateLimits.AUTH.limit,
-      RateLimits.AUTH.window
+  // Rate limiting
+  const identifier = getRateLimitIdentifier(req);
+  const rateLimitResult = await checkRateLimit(
+    `onboarding:${identifier}`,
+    RateLimits.AUTH.limit,
+    RateLimits.AUTH.window,
+  );
+
+  if (!rateLimitResult.success) {
+    return apiError(
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS,
     );
+  }
 
-    if (!rateLimitResult.success) {
-      return apiError(
-        "Too many requests. Please try again later.",
-        HttpStatus.TOO_MANY_REQUESTS
-      );
-    }
+  // Body size guard
+  const sizeError = checkBodySize(req, MAX_BODY_SIZE);
+  if (sizeError) return sizeError;
 
-    // Parse and validate request body
-    let validatedData;
-    try {
-      const body = await req.json();
-      validatedData = OnboardingSchema.parse(body);
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        logger.warn("Onboarding validation failed", {
-          correlationId,
-          clerkId,
-          errors: err.issues,
-        });
-        return apiError(
-          "Validation failed",
-          HttpStatus.BAD_REQUEST,
-          err.issues
-        );
-      }
-      throw err;
-    }
+  // Parse and validate request body
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+  }
 
-    const { role } = validatedData;
+  const validation = OnboardingSchema.safeParse(body);
+  if (!validation.success) {
+    logger.warn("Onboarding validation failed", {
+      correlationId,
+      clerkId,
+      errors: validation.error.issues,
+    });
+    return apiError(
+      "Validation failed",
+      HttpStatus.BAD_REQUEST,
+      validation.error.issues,
+    );
+  }
 
-    logger.info("Processing onboarding", { correlationId, clerkId, role });
+  const validatedData = validation.data;
+  const { role } = validatedData;
 
-    // Get Clerk user data to create/update database user
-    const clerkUserData = await currentUser();
-    if (!clerkUserData) {
-      return apiError(
-        "Could not retrieve user data from Clerk",
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
-    }
+  // Map role to UserRole enum (schema uses lowercase, enum is uppercase)
+  const userRole = role.toUpperCase() as "CLIENT" | "PROFESSIONAL";
 
-    return executeResilient(
-      async () => {
-        // Use transaction with extended timeout for database operations
-        interface ClientData {
-          county?: string;
-          city?: string;
-          address?: string;
-          zipCode?: string;
-          projectType: string;
-          projectLocation: string;
-          estimatedBudget: number;
-          description: string;
-        }
+  // Idempotency — prevent duplicate onboarding
+  const idempotencyKey =
+    req.headers.get("Idempotency-Key") ||
+    IdempotencyService.generateKey(clerkId, "POST", {
+      domain: "onboarding",
+      role: userRole,
+    });
 
-        interface ProfessionalData {
-          profession: string;
-          companyName?: string;
-          licenseNumber?: string;
-          yearsExperience?: number;
-          portfolio?: string;
-          website?: string;
-          bio?: string;
-          certificatesUrls?: string[];
-          idDocumentsUrls?: string[];
-        }
+  const idempotencyCheck = await IdempotencyService.checkOrCreate(
+    idempotencyKey,
+    "onboarding",
+    clerkId,
+    "POST",
+  );
+  if (!idempotencyCheck) {
+    return apiError(
+      "Failed to process idempotency key",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+  if (idempotencyCheck.status === "completed") {
+    return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+  }
+  if (idempotencyCheck.status === "pending") {
+    return apiError(
+      "Onboarding is being processed. Please wait.",
+      HttpStatus.CONFLICT,
+    );
+  }
 
-        interface UserResult {
-          id: string;
-          clerkId: string;
-          email: string;
-          firstName: string | null;
-          lastName: string | null;
-          phone: string | null;
-          role: string;
-          isProfileComplete: boolean;
-        }
+  logger.info("Processing onboarding", { correlationId, clerkId, role });
 
-        const result: UserResult = await prisma.$transaction<UserResult>(
-          async (tx): Promise<UserResult> => {
-            // Create or update user - handles the case where webhook didn't fire
-            const user = await tx.user.upsert({
-              where: { clerkId },
-              create: {
-          clerkId,
-          email: clerkUserData.emailAddresses[0]?.emailAddress || "",
-          firstName: clerkUserData.firstName || null,
-          lastName: clerkUserData.lastName || null,
-          phone: clerkUserData.phoneNumbers?.[0]?.phoneNumber || null,
-          role,
-          isProfileComplete: true,
-              },
+  // Get Clerk user data to create/update database user
+  const clerkUserData = await currentUser();
+  if (!clerkUserData) {
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      "Could not retrieve user data from Clerk",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    async () => {
+      const user = await prisma.$transaction(
+        async (tx) => {
+          // Create or update user — handles the case where webhook didn't fire
+          const dbUser = await tx.user.upsert({
+            where: { clerkId },
+            create: {
+              clerkId,
+              email: clerkUserData.emailAddresses[0]?.emailAddress || "",
+              firstName: clerkUserData.firstName || null,
+              lastName: clerkUserData.lastName || null,
+              phone: clerkUserData.phoneNumbers?.[0]?.phoneNumber || null,
+              role: userRole,
+              isProfileComplete: true,
+            },
+            update: {
+              role: userRole,
+              isProfileComplete: true,
+            },
+            select: {
+              id: true,
+              role: true,
+              isProfileComplete: true,
+            },
+          });
+
+          // Create profile based on role
+          if (role === "client") {
+            const clientData = validatedData as Extract<
+              typeof validatedData,
+              { role: "client" }
+            >;
+
+            await tx.clientProfile.upsert({
+              where: { userId: dbUser.id },
               update: {
-          role,
-          isProfileComplete: true,
+                county: clientData.county as County,
+                city: clientData.city || null,
+                address: clientData.address || null,
+                zipCode: clientData.zipCode || null,
+                budgetRangeMin: clientData.budgetRangeMin ?? null,
+                budgetRangeMax: clientData.budgetRangeMax ?? null,
+                interests: clientData.interests || [],
+                type:
+                  (clientData.type as
+                    | "HOMEOWNER"
+                    | "CORPORATE_DEVELOPER"
+                    | "INTERIOR_DESIGN_FIRM"
+                    | "GOVERNMENT_ENTITY") || "HOMEOWNER",
+              },
+              create: {
+                userId: dbUser.id,
+                county: clientData.county as County,
+                city: clientData.city || null,
+                address: clientData.address || null,
+                zipCode: clientData.zipCode || null,
+                budgetRangeMin: clientData.budgetRangeMin ?? null,
+                budgetRangeMax: clientData.budgetRangeMax ?? null,
+                interests: clientData.interests || [],
+                type:
+                  (clientData.type as
+                    | "HOMEOWNER"
+                    | "CORPORATE_DEVELOPER"
+                    | "INTERIOR_DESIGN_FIRM"
+                    | "GOVERNMENT_ENTITY") || "HOMEOWNER",
+              },
+            });
+          } else if (role === "professional") {
+            const proData = validatedData as Extract<
+              typeof validatedData,
+              { role: "professional" }
+            >;
+
+            // Type guard: ProfessionalOnboardingSchema has "profession" field
+            const profession =
+              "profession" in proData
+                ? (proData.profession as Profession)
+                : ("OTHER" as Profession);
+            const companyName =
+              "companyName" in proData ? (proData.companyName as string) : "";
+
+            const professionalProfile = await tx.professionalProfile.upsert({
+              where: { userId: dbUser.id },
+              update: {
+                profession,
+                companyName,
+                yearsExperience:
+                  "yearsExperience" in proData
+                    ? ((proData.yearsExperience as number | undefined) ?? null)
+                    : null,
+                website:
+                  "website" in proData
+                    ? (proData.website as string) || null
+                    : null,
+                bio: "bio" in proData ? (proData.bio as string) || null : null,
+                portfolioUrl:
+                  "portfolioUrl" in proData
+                    ? (proData.portfolioUrl as string) || null
+                    : null,
+                county:
+                  "county" in proData ? (proData.county as County) : undefined,
+                city:
+                  "city" in proData ? (proData.city as string) || null : null,
+                serviceRadiusKm:
+                  "serviceRadiusKm" in proData
+                    ? ((proData.serviceRadiusKm as number | undefined) ?? null)
+                    : null,
+                verified: false,
+              },
+              create: {
+                userId: dbUser.id,
+                profession,
+                companyName: companyName || "",
+                yearsExperience:
+                  "yearsExperience" in proData
+                    ? ((proData.yearsExperience as number | undefined) ?? null)
+                    : null,
+                website:
+                  "website" in proData
+                    ? (proData.website as string) || null
+                    : null,
+                bio: "bio" in proData ? (proData.bio as string) || null : null,
+                portfolioUrl:
+                  "portfolioUrl" in proData
+                    ? (proData.portfolioUrl as string) || null
+                    : null,
+                county:
+                  "county" in proData ? (proData.county as County) : undefined,
+                city:
+                  "city" in proData ? (proData.city as string) || null : null,
+                serviceRadiusKm:
+                  "serviceRadiusKm" in proData
+                    ? ((proData.serviceRadiusKm as number | undefined) ?? null)
+                    : null,
+                verified: false,
               },
             });
 
-            // Create or update profile based on role
-            if (role === "client") {
-              // Access properties with type assertion since schema was updated
-              // but TypeScript may be using cached types
-              const clientData = validatedData as typeof validatedData & ClientData;
-
-              const {
-          projectType,
-          projectLocation,
-          estimatedBudget,
-          description,
-              } = {
-          ...validatedData,
-          estimatedBudget: Number(validatedData.estimatedBudget),
-              } as ClientData;
-
-              // Extract location fields with proper typing
-              const county: string | undefined = clientData.county;
-              const city: string | undefined = clientData.city;
-              const address: string | undefined = clientData.address;
-              const zipCode: string | undefined = clientData.zipCode;
-
-              const preferences: {
-          projectType: string;
-          projectLocation: string;
-          estimatedBudget: number;
-          description: string;
-              } = {
-          projectType,
-          projectLocation,
-          estimatedBudget,
-          description,
+            // Handle license from the OnboardingSchema license object
+            if ("license" in proData && proData.license) {
+              const license = proData.license as {
+                authority?: string;
+                licenseNumber?: string;
               };
-
-              await tx.clientProfile.upsert({
-          where: { userId: user.id },
-          update: {
-            preferences,
-            county: county as County | undefined,
-            city: city || null,
-            address: address || null,
-            zipCode: zipCode || null,
-          },
-          create: {
-            userId: user.id,
-            county: county as County,
-            city: city || null,
-            address: address || null,
-            zipCode: zipCode || null,
-            preferences,
-          },
-              });
-            } else if (role === "professional") {
-              const {
-          profession,
-          companyName,
-          licenseNumber,
-          yearsExperience,
-          portfolio,
-          website,
-          bio,
-          certificatesUrls,
-          idDocumentsUrls,
-              } = validatedData as ProfessionalData;
-
-              // Type assertion for profession enum
-              const professionEnum: Profession = profession as Profession;
-
-              const professionalProfile = await tx.professionalProfile.upsert({
-          where: { userId: user.id },
-          update: {
-            profession: professionEnum,
-            companyName,
-            licenseNumber,
-            yearsExperience,
-            website,
-            bio,
-            portfolioUrl: portfolio,
-            verified: false,
-          },
-          create: {
-            userId: user.id,
-            profession: professionEnum,
-            companyName: companyName || "",
-            licenseNumber,
-            yearsExperience,
-            website,
-            bio,
-            portfolioUrl: portfolio,
-            verified: false,
-          },
-              });
-
-              // Handle certificates and documents
-              const certPromises: Promise<unknown>[] = (certificatesUrls || []).map((url: string) =>
-          tx.certificate.create({
-            data: {
-              name: "Professional Certificate",
-              issuer: "Self-reported",
-              fileUrl: url,
-              fileKey: "",
-              professionalId: professionalProfile.userId,
-            },
-          })
-              );
-
-              const idPromises: Promise<unknown>[] = (idDocumentsUrls || []).map((url: string) =>
-          tx.certificate.create({
-            data: {
-              name: "ID Document",
-              issuer: "Government/Official",
-              fileUrl: url,
-              fileKey: "",
-              professionalId: professionalProfile.userId,
-            },
-          })
-              );
-
-              await Promise.all([...certPromises, ...idPromises]);
+              if (license.authority && license.licenseNumber) {
+                await tx.professionalLicense.upsert({
+                  where: {
+                    professionalId_authority_licenseNumber: {
+                      professionalId: dbUser.id,
+                      authority:
+                        license.authority as import("@prisma/client").LicenseAuthority,
+                      licenseNumber: license.licenseNumber,
+                    },
+                  },
+                  update: { validFrom: new Date(), status: "PENDING" },
+                  create: {
+                    professionalId: dbUser.id,
+                    authority:
+                      license.authority as import("@prisma/client").LicenseAuthority,
+                    licenseNumber: license.licenseNumber,
+                    validFrom: new Date(),
+                    status: "PENDING",
+                  },
+                });
+              }
             }
 
-            return user as UserResult;
-          },
-          {
-            // Extended timeout for slow database connections
-            maxWait: 10000, // 10 seconds max wait to acquire connection
-            timeout: 30000, // 30 seconds transaction timeout
+            // Handle certificates → ProfessionalDocument (EDUCATION_CERT)
+            if ("certificatesUrls" in proData) {
+              const certUrls = (proData.certificatesUrls as string[]) || [];
+              for (let i = 0; i < certUrls.length; i++) {
+                await tx.professionalDocument.create({
+                  data: {
+                    professionalId: professionalProfile.userId,
+                    category: "EDUCATION_CERT",
+                    title: `Professional Certificate ${i + 1}`,
+                    issuer: "Self-reported",
+                    fileUrl: certUrls[i],
+                    status: "PENDING",
+                  },
+                });
+              }
+            }
+
+            // Handle ID documents → ProfessionalDocument (ID_OR_PASSPORT)
+            if ("idDocumentsUrls" in proData) {
+              const idUrls = (proData.idDocumentsUrls as string[]) || [];
+              for (let i = 0; i < idUrls.length; i++) {
+                await tx.professionalDocument.create({
+                  data: {
+                    professionalId: professionalProfile.userId,
+                    category: "ID_OR_PASSPORT",
+                    title: `ID Document ${i + 1}`,
+                    issuer: "Government/Official",
+                    fileUrl: idUrls[i],
+                    status: "PENDING",
+                  },
+                });
+              }
+            }
           }
-        );
 
-        logger.info("Onboarding completed successfully", {
-          correlationId,
-          userId: result.id,
-          role,
-        });
+          return dbUser;
+        },
+        { maxWait: 10000, timeout: 30000 },
+      );
 
-        // Update Clerk publicMetadata so middleware can access role without DB calls
-        try {
-          const client = await clerkClient();
-          await client.users.updateUserMetadata(clerkId, {
-            publicMetadata: {
-              role: result.role,
-              isOnboarded: true,
-            },
-          });
-          logger.info("Clerk metadata updated", {
-            correlationId,
-            clerkId,
-            role: result.role,
-          });
-        } catch (clerkError) {
-          // Log but don't fail the request - DB is the source of truth
-          logger.error(
-            "Failed to update Clerk metadata",
-            clerkError instanceof Error
-              ? clerkError
-              : new Error(String(clerkError)),
-            { correlationId, clerkId }
-          );
-        }
+      return {
+        userId: user.id,
+        role: user.role,
+        isProfileComplete: user.isProfileComplete,
+      };
+    },
+    { operationName: "complete_onboarding" },
+  );
 
-        return {
-          userId: result.id,
-          role: result.role,
-          isProfileComplete: result.isProfileComplete,
-        };
-      },
-      {
-        operationName: "complete_onboarding",
-        successStatus: HttpStatus.OK,
-      }
-    );
-  } catch (error) {
-    logger.error(
-      "Onboarding error",
-      error instanceof Error ? error : new Error(String(error)),
-      { correlationId }
-    );
+  if (!result.success || !result.data) {
+    await IdempotencyService.fail(idempotencyKey);
+    logger.error("Onboarding failed", result.error, {
+      correlationId,
+      clerkId,
+    });
     return apiError("Onboarding failed", HttpStatus.INTERNAL_SERVER_ERROR);
   }
+
+  // Update Clerk publicMetadata so middleware can access role without DB calls
+  try {
+    const client = await clerkClient();
+    await client.users.updateUserMetadata(clerkId, {
+      publicMetadata: {
+        role: result.data.role,
+        isOnboarded: true,
+      },
+    });
+  } catch (clerkError) {
+    // Log but don't fail — DB is the source of truth
+    logger.error(
+      "Failed to update Clerk metadata",
+      clerkError instanceof Error ? clerkError : new Error(String(clerkError)),
+      { correlationId, clerkId },
+    );
+  }
+
+  logger.info("Onboarding completed successfully", {
+    correlationId,
+    userId: result.data.userId,
+    role: result.data.role,
+  });
+
+  await IdempotencyService.complete(idempotencyKey, result.data);
+  return apiSuccess(result.data, HttpStatus.OK);
 }

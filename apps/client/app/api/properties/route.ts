@@ -1,224 +1,282 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@build/db";
+import { NextRequest } from "next/server";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
-  PropertyRepository,
-  PropertyFilters,
-} from "@/app/lib/repositories/property.repository";
+  initializeCorrelationId,
+  getResilientExecutor,
+  getClientLogger,
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
-import { env } from "@/app/lib/env";
+} from "@/app/lib/api/rate-limit";
+import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import {
-  executeResilient,
-  initializeCorrelationId,
-  apiError,
-  getClientLogger,
-} from "@/app/lib/resilient-api";
-import { PropertyType, PropertyCategory } from "@prisma/client";
+  CreatePropertySchema,
+  BatchCreatePropertiesSchema,
+  PropertyQuerySchema,
+} from "@/app/lib/validation/properties-validation";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { checkBodySize } from "@/app/lib/api/api-guards";
+import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
+import {
+  getProperties,
+  createProperty,
+  createPropertiesBatch,
+} from "@/lib/services/properties";
 
 const logger = getClientLogger();
 
 /**
  * GET /api/properties
- * Get list of properties with filtering, sorting, and pagination
+ * Get all properties with optional filtering, sorting, and pagination.
+ * Public endpoint — no authentication required.
  */
-export async function GET(request: NextRequest): Promise<NextResponse> {
-  const correlationId = initializeCorrelationId(request);
+export async function GET(req: NextRequest) {
+  const correlationId = initializeCorrelationId(req);
 
-  // Rate limiting
-  const identifier = getRateLimitIdentifier(request);
+  const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
-    `properties:${identifier}`,
+    `properties-read:${identifier}`,
     RateLimits.READ.limit,
     RateLimits.READ.window,
   );
 
   if (!rateLimitResult.success) {
-    logger.warn("Rate limit exceeded", { correlationId, identifier });
-    return apiError("Too many requests. Please try again later.", 429);
-  }
-
-  const searchParams = request.nextUrl.searchParams;
-
-  // Parse and validate query parameters
-  const type = searchParams.get("type") as PropertyType | null;
-  const category = searchParams.get("category") as PropertyCategory | null;
-  const county = searchParams.get("county")?.trim().toUpperCase() || undefined;
-  const constituency =
-    searchParams.get("constituency")?.trim().slice(0, 100) || undefined;
-  const neighbourhood =
-    searchParams.get("neighbourhood")?.trim().slice(0, 100) || undefined;
-  const location =
-    searchParams.get("location")?.trim().slice(0, 100) || undefined;
-  const minPrice = searchParams.get("minPrice")
-    ? Number(searchParams.get("minPrice"))
-    : undefined;
-  const maxPrice = searchParams.get("maxPrice")
-    ? Number(searchParams.get("maxPrice"))
-    : undefined;
-  const minBedrooms = searchParams.get("beds")
-    ? Number(searchParams.get("beds"))
-    : undefined;
-  const minBathrooms = searchParams.get("baths")
-    ? Number(searchParams.get("baths"))
-    : undefined;
-  const verified =
-    searchParams.get("verified") === "true"
-      ? true
-      : searchParams.get("verified") === "false"
-        ? false
-        : undefined;
-  const featured = searchParams.get("featured") === "true" ? true : undefined;
-  const sortBy = (searchParams.get("sortBy") || "newest") as
-    | "price_asc"
-    | "price_desc"
-    | "newest"
-    | "oldest";
-  const limit = Math.min(Number(searchParams.get("limit")) || 20, 50);
-  const offset = Number(searchParams.get("offset")) || 0;
-
-  // Validate sortBy
-  const validSortOptions = ["price_asc", "price_desc", "newest", "oldest"];
-  if (!validSortOptions.includes(sortBy)) {
     return apiError(
-      "Invalid sort option. Must be one of: price_asc, price_desc, newest, oldest",
-      400,
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS,
     );
   }
 
-  // Validate type if provided
-  if (type && !["SALE", "RENT", "LEASE"].includes(type)) {
+  // Parse query parameters
+  const { searchParams } = new URL(req.url);
+  const rawParams = Object.fromEntries(searchParams.entries());
+
+  const queryParams = {
+    ...rawParams,
+    type: rawParams.type || undefined,
+    category: rawParams.category || undefined,
+    county: rawParams.county || undefined,
+    status: rawParams.status || undefined,
+    verified: rawParams.verified || undefined,
+    featured: rawParams.featured || undefined,
+    furnishing: rawParams.furnishing || undefined,
+    minPrice: rawParams.minPrice || undefined,
+    maxPrice: rawParams.maxPrice || undefined,
+    minBedrooms: rawParams.minBedrooms || rawParams.beds || undefined,
+    maxBedrooms: rawParams.maxBedrooms || undefined,
+    minBathrooms: rawParams.minBathrooms || rawParams.baths || undefined,
+    search: rawParams.search || undefined,
+    sortBy: rawParams.sortBy || "createdAt",
+    sortOrder: rawParams.sortOrder || "desc",
+    page: rawParams.page || "1",
+    limit: rawParams.limit || "20",
+  };
+
+  const queryValidation = PropertyQuerySchema.safeParse(queryParams);
+  if (!queryValidation.success) {
+    logger.warn("Property query validation failed", {
+      correlationId,
+      errors: queryValidation.error.issues,
+    });
     return apiError(
-      "Invalid property type. Must be one of: SALE, RENT, LEASE",
-      400,
+      "Invalid query parameters",
+      HttpStatus.BAD_REQUEST,
+      queryValidation.error.issues,
     );
   }
 
-  // Validate category if provided
-  if (
-    category &&
-    !["RESIDENTIAL", "COMMERCIAL", "LAND", "INDUSTRIAL"].includes(category)
-  ) {
-    return apiError(
-      "Invalid property category. Must be one of: RESIDENTIAL, COMMERCIAL, LAND, INDUSTRIAL",
-      400,
-    );
+  logger.info("Fetching properties", {
+    correlationId,
+    filters: queryValidation.data,
+  });
+
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    async () => getProperties(queryValidation.data),
+    { operationName: "list_properties" },
+  );
+
+  if (result.success && result.data) {
+    return apiSuccess(result.data, HttpStatus.OK, correlationId);
   }
 
-  // Execute with resilience patterns
-  return executeResilient(
-    async () => {
-      const repo = new PropertyRepository(prisma);
-      const result = await repo.findMany({
-        type: type || undefined,
-        category: category || undefined,
-        county: county as PropertyFilters["county"],
-        constituency,
-        neighbourhood,
-        location,
-        minPrice,
-        maxPrice,
-        minBedrooms,
-        minBathrooms,
-        verified,
-        featured,
-        sortBy,
-        limit,
-        offset,
-      });
-
-      const baseUrl = env.NEXT_PUBLIC_APP_URL || "http://localhost:3500";
-
-      // Transform to PropertyCardData format
-      const properties = result.properties.map((property) => {
-        const agentName = property.agent?.user
-          ? `${property.agent.user.firstName || ""} ${property.agent.user.lastName || ""}`.trim() ||
-            property.agent.companyName
-          : property.agent?.companyName || "Unknown";
-
-        // Get main image URL from images relation
-        const mainImage =
-          property.images?.find((img) => img.isMain) || property.images?.[0];
-        const imageUrl = mainImage?.url || "/placeholder-property.jpg";
-
-        return {
-          id: property.id,
-          title: property.title,
-          price: Number(property.price),
-          currency: property.currency,
-          location: property.location,
-          county: property.county,
-          type: property.type,
-          category: property.category,
-          status: property.status,
-          beds: property.bedrooms || undefined,
-          baths: property.bathrooms || undefined,
-          area: property.areaSqFt || undefined,
-          image: imageUrl,
-          images: property.images?.map((img) => ({
-            id: img.id,
-            url: img.url,
-            caption: img.caption,
-            isMain: img.isMain,
-            sortOrder: img.sortOrder,
-          })),
-          featured: property.featured,
-          agent: property.agent
-            ? {
-                name: agentName,
-                image: property.agent.user?.avatar || undefined,
-              }
-            : undefined,
-          propertyUrl: `${baseUrl}/properties/${property.id}`,
-        };
-      });
-
-      logger.info("Properties fetched successfully", {
-        correlationId,
-        count: properties.length,
-        total: result.total,
-        filters: {
-          type,
-          category,
-          county,
-          location,
-          minPrice,
-          maxPrice,
-          minBedrooms,
-          minBathrooms,
-          verified,
-          featured,
-          sortBy,
-        },
-      });
-
-      return {
-        properties,
-        total: result.total,
-        page: Math.floor(offset / limit) + 1,
-        limit,
-        hasMore: result.hasMore,
-      };
-    },
-    {
-      criticality: "normal",
-      operationName: "fetch-properties",
-      cache: {
-        ttl: 30000, // 30s cache
-        staleWhileRevalidate: 15000,
-      },
-      fallback: async () => {
-        logger.warn("Using fallback for properties list", { correlationId });
-        return {
-          properties: [],
-          total: 0,
-          page: 1,
-          limit,
-          hasMore: false,
-        };
-      },
-    },
+  logger.error("Failed to fetch properties", result.error, { correlationId });
+  return apiError(
+    "Failed to fetch properties",
+    HttpStatus.INTERNAL_SERVER_ERROR,
   );
 }
+
+/**
+ * POST /api/properties
+ * Create one or more properties.
+ * Authenticated endpoint — requires professional (agent) role.
+ * Supports idempotency via Idempotency-Key header.
+ */
+export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
+  const correlationId = initializeCorrelationId(req);
+  const { ipAddress, userAgent } = getRequestMetadata(req);
+
+  // Rate limiting
+  const identifier = getRateLimitIdentifier(req);
+  const rateLimitResult = await checkRateLimit(
+    `properties-write:${identifier}`,
+    RateLimits.WRITE.limit,
+    RateLimits.WRITE.window,
+  );
+
+  if (!rateLimitResult.success) {
+    return apiError(
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
+  // Body size guard
+  const sizeError = checkBodySize(req, PROPERTY_CONFIG.MAX_BODY_SIZE);
+  if (sizeError) return sizeError;
+
+  // Parse body
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+  }
+
+  // Determine structural intent to provide accurate validation errors
+  const isBatchPayload =
+    typeof body === "object" && body != null && "properties" in body;
+
+  let validatedData;
+  if (isBatchPayload) {
+    const validation = BatchCreatePropertiesSchema.safeParse(body);
+    if (!validation.success) {
+      logger.warn("Batch property creation validation failed", {
+        correlationId,
+        errors: validation.error.issues,
+      });
+      return apiError(
+        "Invalid batch property data",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+      );
+    }
+    validatedData = {
+      type: "batch" as const,
+      data: validation.data.properties,
+    };
+  } else {
+    const validation = CreatePropertySchema.safeParse(body);
+    if (!validation.success) {
+      logger.warn("Single property creation validation failed", {
+        correlationId,
+        errors: validation.error.issues,
+      });
+      return apiError(
+        "Invalid property data",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+      );
+    }
+    validatedData = { type: "single" as const, data: validation.data };
+  }
+
+  // Idempotency
+  const idempotencyKey =
+    req.headers.get("Idempotency-Key") ||
+    IdempotencyService.generateKey(dbUserId, "POST", body);
+
+  const idempotencyCheck = await IdempotencyService.checkOrCreate(
+    idempotencyKey,
+    "property",
+    dbUserId,
+    "POST",
+    undefined,
+    PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+  );
+
+  if (idempotencyCheck?.status === "completed") {
+    logger.info("Returning cached idempotent response", {
+      correlationId,
+      idempotencyKey,
+    });
+    return apiSuccess(idempotencyCheck.response, HttpStatus.OK, correlationId);
+  }
+
+  if (idempotencyCheck?.status === "pending") {
+    return apiError(
+      "A request with this idempotency key is already being processed",
+      HttpStatus.CONFLICT,
+    );
+  }
+
+  try {
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      async () => {
+        const options = { ipAddress, userAgent };
+        if (validatedData.type === "batch") {
+          return createPropertiesBatch(dbUserId, validatedData.data, options);
+        } else {
+          return createProperty(dbUserId, validatedData.data, options);
+        }
+      },
+      { operationName: "create_property" },
+    );
+    if (result.success && result.data) {
+      const responseData = result.data;
+      await IdempotencyService.complete(idempotencyKey, responseData);
+
+      logger.info("Property created successfully", {
+        correlationId,
+        userId: dbUserId,
+        isBatch: validatedData.type === "batch",
+        count: validatedData.type === "batch" ? validatedData.data.length : 1,
+      });
+
+      return apiSuccess(responseData, HttpStatus.CREATED, correlationId);
+    }
+
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      "Failed to create property",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  } catch (error) {
+    await IdempotencyService.fail(idempotencyKey);
+
+    const err = error instanceof Error ? error : new Error(String(error));
+    if (
+      err.message.includes("suspended") ||
+      err.message.includes("professionals")
+    ) {
+      return apiError(err.message, HttpStatus.FORBIDDEN);
+    }
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code: string }).code === "P2002"
+    ) {
+      logger.warn("Property creation uniqueness conflict", {
+        correlationId,
+        error: err.message,
+      });
+      return apiError(
+        "A property with this slug or title deed number already exists",
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    logger.error("Property creation failed", err, { correlationId });
+
+    return apiError(
+      "Failed to create property",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+});

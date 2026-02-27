@@ -30,26 +30,26 @@
 
 import { NextRequest } from "next/server";
 import { AnonymizationService } from "@/app/lib/gdpr/services/anonymization.service";
-import { withAuth } from "@/app/lib/api-middleware";
-import { HttpStatus } from "@/app/lib/api-response";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { HttpStatus } from "@/app/lib/api/api-response";
 import {
   apiError,
   apiSuccess,
   initializeCorrelationId,
   getClientLogger,
   getResilientExecutor,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   RateLimits,
   getRateLimitIdentifier,
   checkRateLimit,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
 import { z } from "zod";
 import {
   getRequestMetadata,
   safeParseJsonBody,
   TimeoutConfig,
-} from "@/app/lib/request-utils";
+} from "@/app/lib/api/request-utils";
 import { prisma } from "@build/db";
 
 const logger = getClientLogger();
@@ -254,7 +254,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
           "After 30 days, your personal data will be permanently anonymized",
           "Transaction history will be retained for 7 years (legal requirement)",
         ],
-        supportEmail: "privacy@buildmarket.co.ke",
+        supportEmail: "privacy/buildmarket.co.ke",
       },
       HttpStatus.OK,
     );

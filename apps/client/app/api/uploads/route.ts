@@ -1,25 +1,25 @@
 import { NextRequest } from "next/server";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api-response";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
 import {
   initializeCorrelationId,
   getClientLogger,
   getResilientExecutor,
-} from "@/app/lib/resilient-api";
-import { getRequestMetadata } from "@/app/lib/request-utils";
-import { getStorageProvider } from "@/app/lib/storage";
+} from "@/app/lib/api/resilient-api";
+import { getRequestMetadata } from "@/app/lib/api/request-utils";
+import { getStorageProvider } from "@/app/lib/infrastructure/storage";
 import {
   validateFile,
   sanitizeFilename,
   isImageFile,
   getValidationConfig,
-} from "@/app/lib/file-validation";
-import { processImage } from "@/app/lib/image-processing";
+} from "@/app/lib/validation/file-validation";
+import { processImage } from "@/app/lib/media/image-processing";
 import { prisma } from "@build/db";
 import { z } from "zod";
 
@@ -84,8 +84,8 @@ const UploadContextSchema = z.object({
  *   }
  * }
  *
- * @security Requires authentication
- * @rateLimit WRITE tier (10 requests/minute)
+ * /security Requires authentication
+ * /rateLimit WRITE tier (10 requests/minute)
  */
 export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
   const correlationId = initializeCorrelationId(req);

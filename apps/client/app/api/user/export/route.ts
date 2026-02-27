@@ -34,25 +34,25 @@
 
 import { NextRequest } from "next/server";
 import { ExportService } from "@/app/lib/gdpr/services/export.service";
-import { withAuth } from "@/app/lib/api-middleware";
-import { HttpStatus } from "@/app/lib/api-response";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { HttpStatus } from "@/app/lib/api/api-response";
 import {
   apiError,
   apiSuccess,
   initializeCorrelationId,
   getClientLogger,
   getResilientExecutor,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   RateLimits,
   getRateLimitIdentifier,
   checkRateLimit,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
 import {
   getRequestMetadata,
   UUIDSchema,
   TimeoutConfig,
-} from "@/app/lib/request-utils";
+} from "@/app/lib/api/request-utils";
 
 const logger = getClientLogger();
 const executor = getResilientExecutor();

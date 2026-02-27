@@ -1,39 +1,34 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@build/db";
-import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { getRequestMetadata } from "@/app/lib/api/request-utils";
+import { checkBodySize } from "@/app/lib/api/api-guards";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import {
+  ProjectQuerySchema,
+  CreateProjectSchema,
+} from "@/app/lib/validation/projects-validation";
+import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
+import {
+  getProfessionalProjects,
+  createProfessionalProject,
+} from "@/lib/services/projects";
 
 const logger = getClientLogger();
 
-type ProjectStatus = "planning" | "in_progress" | "completed" | "archived";
-
-// Validation schema for creating a project
-const createProjectSchema = z.object({
-  title: z.string().min(3),
-  description: z.string().optional(),
-  clientId: z.string().uuid(),
-  budget: z.number().positive().optional(),
-  startDate: z.string().datetime().optional(),
-  endDate: z.string().datetime().optional(),
-  status: z
-    .enum(["planning", "in_progress", "completed", "archived"])
-    .optional(),
-});
-
 /**
  * GET /api/professional-portal/projects
- * Get all projects for the authenticated professional
+ * Get all projects for the authenticated professional.
  * Supports pagination via ?page=&limit= and filtering via ?status=
  */
 export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
@@ -41,129 +36,89 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
 
   const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
-    `projects:${identifier}`,
+    `projects-read:${identifier}`,
     RateLimits.READ.limit,
-    RateLimits.READ.window
+    RateLimits.READ.window,
   );
 
   if (!rateLimitResult.success) {
     return apiError(
       "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS
+      HttpStatus.TOO_MANY_REQUESTS,
     );
   }
 
-  // Parse query params
   const { searchParams } = new URL(req.url);
-  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-  const limit = Math.min(
-    50,
-    Math.max(1, parseInt(searchParams.get("limit") || "20", 10))
-  );
-  const skip = (page - 1) * limit;
-  const statusParam = searchParams.get("status");
+  const queryParams = {
+    page: searchParams.get("page") || "1",
+    limit: searchParams.get("limit") || String(PROJECT_CONFIG.DEFAULT_LIMIT),
+    status: searchParams.get("status") || undefined,
+  };
 
-  // Map "active" to planning and in_progress statuses
-  let statusFilter: ProjectStatus | { in: ProjectStatus[] } | undefined;
-  if (statusParam === "active") {
-    statusFilter = { in: ["planning", "in_progress"] };
-  } else if (
-    statusParam &&
-    ["planning", "in_progress", "completed", "archived"].includes(statusParam)
-  ) {
-    statusFilter = statusParam as ProjectStatus;
+  const queryValidation = ProjectQuerySchema.safeParse(queryParams);
+  if (!queryValidation.success) {
+    logger.warn("Project query validation failed", {
+      correlationId,
+      userId: dbUserId,
+      errors: queryValidation.error.issues,
+    });
+    return apiError(
+      "Invalid query parameters",
+      HttpStatus.BAD_REQUEST,
+      queryValidation.error.issues,
+    );
   }
 
   logger.info("Fetching projects", {
     correlationId,
     userId: dbUserId,
-    page,
-    limit,
-    statusFilter,
+    page: queryValidation.data.page,
+    limit: queryValidation.data.limit,
+    status: queryValidation.data.status,
   });
 
-  return executeResilient(
-    async () => {
-      const whereClause = {
-        professionalId: dbUserId,
-        ...(statusFilter && { status: statusFilter }),
-      };
-
-      const [projects, total] = await Promise.all([
-        prisma.project.findMany({
-          where: whereClause,
-          include: {
-            client: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-              },
-            },
-            _count: {
-              select: {
-                milestones: true,
-                quotes: true,
-              },
-            },
-          },
-          orderBy: {
-            updatedAt: "desc",
-          },
-          skip,
-          take: limit,
-        }),
-        prisma.project.count({ where: whereClause }),
-      ]);
-
-      logger.info("Projects fetched successfully", {
-        correlationId,
-        userId: dbUserId,
-        count: projects.length,
-      });
-
-      return {
-        data: projects,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        },
-      };
-    },
-    {
-      operationName: "get_professional_projects",
-      successStatus: HttpStatus.OK,
-    }
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    async () => getProfessionalProjects(dbUserId, queryValidation.data),
+    { operationName: "get_professional_projects" },
   );
+
+  if (result.success && result.data) {
+    logger.info("Projects fetched successfully", {
+      correlationId,
+      userId: dbUserId,
+      count: result.data.projects.length,
+      total: result.data.pagination.total,
+    });
+    return apiSuccess(result.data, HttpStatus.OK);
+  }
+
+  logger.error("Failed to fetch projects", result.error, {
+    correlationId,
+    userId: dbUserId,
+  });
+  return apiError("Failed to fetch projects", HttpStatus.INTERNAL_SERVER_ERROR);
 });
 
 /**
  * POST /api/professional-portal/projects
- * Create a new project
+ * Create a new project for the authenticated professional.
  */
 export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
   const correlationId = initializeCorrelationId(req);
+  const { ipAddress, userAgent } = getRequestMetadata(req);
 
-  const identifier = getRateLimitIdentifier(req);
-  const rateLimitResult = await checkRateLimit(
-    `project:${identifier}`,
-    RateLimits.WRITE.limit,
-    RateLimits.WRITE.window
-  );
+  const sizeError = checkBodySize(req, PROJECT_CONFIG.MAX_BODY_SIZE);
+  if (sizeError) return sizeError;
 
-  if (!rateLimitResult.success) {
-    return apiError(
-      "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS
-    );
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
   }
 
-  const body = await req.json();
-  const validation = createProjectSchema.safeParse(body);
-
+  const validation = CreateProjectSchema.safeParse(body);
   if (!validation.success) {
     logger.warn("Project creation validation failed", {
       correlationId,
@@ -171,47 +126,90 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       errors: validation.error.issues,
     });
     return apiError(
-      "Validation failed",
+      "Invalid input",
       HttpStatus.BAD_REQUEST,
-      validation.error.issues
+      validation.error.issues,
     );
   }
 
-  const { title, description, clientId, budget, startDate, endDate, status } =
-    validation.data;
+  const projectData = validation.data;
+
+  // Idempotency
+  const idempotencyKey =
+    req.headers.get("Idempotency-Key") ||
+    IdempotencyService.generateKey(dbUserId, "POST", projectData);
+
+  const idempotencyCheck = await IdempotencyService.checkOrCreate(
+    idempotencyKey,
+    "project",
+    dbUserId,
+    "POST",
+  );
+
+  if (!idempotencyCheck) {
+    return apiError(
+      "Failed to process idempotency key",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  if (idempotencyCheck.status === "completed") {
+    return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+  }
+
+  if (idempotencyCheck.status === "pending") {
+    return apiError(
+      "Request is being processed. Please wait.",
+      HttpStatus.CONFLICT,
+    );
+  }
+
+  const identifier = getRateLimitIdentifier(req);
+  const rateLimitResult = await checkRateLimit(
+    `projects-write:${identifier}`,
+    RateLimits.WRITE.limit,
+    RateLimits.WRITE.window,
+  );
+
+  if (!rateLimitResult.success) {
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
 
   logger.info("Creating project", {
     correlationId,
     userId: dbUserId,
-    title,
-    clientId,
+    title: projectData.title,
+    clientId: projectData.clientId,
+    ipAddress,
   });
 
-  return executeResilient(
-    async () => {
-      const project = await prisma.project.create({
-        data: {
-          professionalId: dbUserId,
-          clientId,
-          title,
-          description,
-          budget,
-          startDate: startDate ? new Date(startDate) : undefined,
-          endDate: endDate ? new Date(endDate) : undefined,
-          status: status as ProjectStatus | undefined,
-        },
-      });
-
-      logger.info("Project created successfully", {
-        correlationId,
-        userId: dbUserId,
-        projectId: project.id,
-      });
-      return project;
-    },
-    {
-      operationName: "create_professional_project",
-      successStatus: HttpStatus.CREATED,
-    }
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    async () =>
+      createProfessionalProject(dbUserId, projectData, {
+        ipAddress,
+        userAgent,
+      }),
+    { operationName: "create_professional_project" },
   );
+
+  if (!result.success || !result.data) {
+    logger.error(
+      "Project creation failed",
+      result.error || new Error("Unknown error"),
+      { correlationId, userId: dbUserId },
+    );
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      "Failed to create project",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  await IdempotencyService.complete(idempotencyKey, result.data);
+  return apiSuccess(result.data, HttpStatus.CREATED);
 });
