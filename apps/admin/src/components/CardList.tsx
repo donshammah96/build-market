@@ -41,7 +41,7 @@ const CardList = async ({ title }: { title: string }) => {
       <h1 className="text-lg font-medium mb-6">{title}</h1>
       <div className="flex flex-col gap-2">
         {title === "Popular Products"
-          ? products.map((item) => (
+          ? products.map((item: ProductsType[number]) => (
               <Card
                 key={item.id}
                 className="flex-row items-center justify-between gap-4 p-4"
