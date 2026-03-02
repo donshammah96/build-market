@@ -2,8 +2,9 @@
  * Structured logging with correlation IDs and contextual information
  */
 
-import { LogContext, LogLevel } from './types';
-import type { Logger } from './types';
+import { LogContext, LogLevel } from "./types";
+import type { Logger } from "./types";
+import { getConfig } from "./config";
 
 export interface LogEntry {
   level: LogLevel;
@@ -18,7 +19,7 @@ export interface LogEntry {
 }
 
 // Re-export Logger type for convenience
-export type { Logger } from './types';
+export type { Logger } from "./types";
 
 /**
  * Structured logger implementation
@@ -53,19 +54,44 @@ export class StructuredLogger implements Logger {
   }
 
   /**
+   * Check if log level should be output based on config
+   */
+  private shouldLog(level: LogLevel): boolean {
+    const config = getConfig();
+    if (!config.logging.enabled) return false;
+
+    const levelOrder: Record<LogLevel, number> = {
+      [LogLevel.DEBUG]: 0,
+      [LogLevel.INFO]: 1,
+      [LogLevel.WARN]: 2,
+      [LogLevel.ERROR]: 3,
+      [LogLevel.FATAL]: 4,
+    };
+
+    return levelOrder[level] >= levelOrder[config.logging.level];
+  }
+
+  /**
    * Internal log method
    */
   private log(
     level: LogLevel,
     message: string,
     error?: Error,
-    context?: LogContext
+    context?: LogContext,
   ): void {
+    if (!this.shouldLog(level)) return;
+
+    const config = getConfig();
     const entry: LogEntry = {
       level,
       message,
-      timestamp: new Date().toISOString(),
-      context: { ...this.defaultContext, ...context },
+      timestamp: config.logging.includeTimestamp
+        ? new Date().toISOString()
+        : "",
+      context: config.logging.includeContext
+        ? { ...this.defaultContext, ...context }
+        : undefined,
     };
 
     if (error) {
@@ -76,8 +102,8 @@ export class StructuredLogger implements Logger {
       };
     }
 
-    // Format and output based on environment
-    if (this.shouldLogJson()) {
+    // Format and output based on configuration
+    if (config.logging.format === "json") {
       console.log(JSON.stringify(entry));
     } else {
       this.logFormatted(entry);
@@ -86,9 +112,10 @@ export class StructuredLogger implements Logger {
 
   /**
    * Check if we should use JSON logging
+   * @deprecated Use config.logging.format instead
    */
   private shouldLogJson(): boolean {
-    return process.env.NODE_ENV === 'production' || process.env.LOG_FORMAT === 'json';
+    return getConfig().logging.format === "json";
   }
 
   /**
@@ -96,10 +123,10 @@ export class StructuredLogger implements Logger {
    */
   private logFormatted(entry: LogEntry): void {
     const { level, message, timestamp, context, error } = entry;
-    
+
     const levelColor = this.getLevelColor(level);
-    const reset = '\x1b[0m';
-    
+    const reset = "\x1b[0m";
+
     let output = `${levelColor}[${level.toUpperCase()}]${reset} ${timestamp} - ${message}`;
 
     if (context && Object.keys(context).length > 0) {
@@ -137,17 +164,17 @@ export class StructuredLogger implements Logger {
   private getLevelColor(level: LogLevel): string {
     switch (level) {
       case LogLevel.DEBUG:
-        return '\x1b[36m'; // Cyan
+        return "\x1b[36m"; // Cyan
       case LogLevel.INFO:
-        return '\x1b[32m'; // Green
+        return "\x1b[32m"; // Green
       case LogLevel.WARN:
-        return '\x1b[33m'; // Yellow
+        return "\x1b[33m"; // Yellow
       case LogLevel.ERROR:
-        return '\x1b[31m'; // Red
+        return "\x1b[31m"; // Red
       case LogLevel.FATAL:
-        return '\x1b[35m'; // Magenta
+        return "\x1b[35m"; // Magenta
       default:
-        return '\x1b[0m';  // Reset
+        return "\x1b[0m"; // Reset
     }
   }
 
@@ -206,7 +233,7 @@ export class CorrelationIdManager {
    * In production, use AsyncLocalStorage or similar
    */
   private static getContextId(): string {
-    return 'global'; // Simplified for demo
+    return "global"; // Simplified for demo
   }
 }
 
@@ -226,7 +253,7 @@ let globalLogger: Logger | undefined;
 
 export function getGlobalLogger(): Logger {
   if (!globalLogger) {
-    globalLogger = createLogger('build-market');
+    globalLogger = createLogger("build-market");
   }
   return globalLogger;
 }

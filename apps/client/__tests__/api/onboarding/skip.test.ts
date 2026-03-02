@@ -1,10 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { POST } from '@/app/api/onboarding/skip/route';
-import { NextRequest } from 'next/server';
-import { prisma } from '@repo/db';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { POST } from "@/app/api/onboarding/skip/route";
+import { NextRequest } from "next/server";
+import { prisma } from "@build/db";
 
 // Mock dependencies
-vi.mock('@repo/db', () => ({
+vi.mock("@build/db", () => ({
   prisma: {
     $transaction: vi.fn(),
     user: {
@@ -18,37 +18,43 @@ vi.mock('@repo/db', () => ({
 }));
 
 // Mock Clerk - the new implementation uses auth() and currentUser() directly
-vi.mock('@clerk/nextjs/server', () => ({
-  auth: vi.fn().mockResolvedValue({ userId: 'clerk_123' }),
+vi.mock("@clerk/nextjs/server", () => ({
+  auth: vi.fn().mockResolvedValue({ userId: "clerk_123" }),
   currentUser: vi.fn().mockResolvedValue({
-    id: 'clerk_123',
-    emailAddresses: [{ emailAddress: 'test@example.com' }],
-    firstName: 'John',
-    lastName: 'Doe',
-    phoneNumbers: [{ phoneNumber: '+1234567890' }],
+    id: "clerk_123",
+    emailAddresses: [{ emailAddress: "test@example.com" }],
+    firstName: "John",
+    lastName: "Doe",
+    phoneNumbers: [{ phoneNumber: "+1234567890" }],
   }),
 }));
 
-vi.mock('@/app/lib/rate-limit', () => ({
+vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
-  getRateLimitIdentifier: vi.fn().mockReturnValue('test-ip'),
+  getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
   RateLimits: {
     AUTH: { limit: 5, window: 60000 },
   },
 }));
 
-vi.mock('@/app/lib/resilient-api', () => ({
-  initializeCorrelationId: vi.fn().mockReturnValue('test-correlation-id'),
+vi.mock("@/app/lib/api/resilient-api", () => ({
+  initializeCorrelationId: vi.fn().mockReturnValue("test-correlation-id"),
   executeResilient: vi.fn().mockImplementation(async (fn, options) => {
-    const { NextResponse } = await import('next/server');
+    const { NextResponse } = await import("next/server");
     try {
       const result = await fn();
-      return NextResponse.json({ success: true, data: result }, { status: options.successStatus || 200 });
+      return NextResponse.json(
+        { success: true, data: result },
+        { status: options.successStatus || 200 },
+      );
     } catch (error) {
       // Handle errors thrown inside the callback - this matches the actual executeResilient behavior
       return NextResponse.json(
-        { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
-        { status: 500 }
+        {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        },
+        { status: 500 },
       );
     }
   }),
@@ -60,13 +66,18 @@ vi.mock('@/app/lib/resilient-api', () => ({
   }),
 }));
 
-vi.mock('@/app/lib/api-response', () => ({
-  apiError: vi.fn().mockImplementation((message: string, status: number, details?: any) => {
-    const { NextResponse } = require('next/server');
-    return NextResponse.json({ success: false, error: message, details }, { status });
-  }),
+vi.mock("@/app/lib/api/api-response", () => ({
+  apiError: vi
+    .fn()
+    .mockImplementation((message: string, status: number, details?: any) => {
+      const { NextResponse } = require("next/server");
+      return NextResponse.json(
+        { success: false, error: message, details },
+        { status },
+      );
+    }),
   apiSuccess: vi.fn().mockImplementation((data: any, status: number = 200) => {
-    const { NextResponse } = require('next/server');
+    const { NextResponse } = require("next/server");
     return NextResponse.json({ success: true, data }, { status });
   }),
   HttpStatus: {
@@ -80,15 +91,15 @@ vi.mock('@/app/lib/api-response', () => ({
   },
 }));
 
-describe('POST /api/onboarding/skip', () => {
+describe("POST /api/onboarding/skip", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should allow homeowner to skip onboarding (creates user if not exists)', async () => {
+  it("should allow homeowner to skip onboarding (creates user if not exists)", async () => {
     const mockUpdatedUser = {
-      id: 'db_user_123',
-      role: 'client',
+      id: "db_user_123",
+      role: "client",
       isProfileComplete: false,
     };
 
@@ -104,37 +115,43 @@ describe('POST /api/onboarding/skip', () => {
       });
     });
 
-    const request = new NextRequest('http://localhost:3500/api/onboarding/skip', {
-      method: 'POST',
-    });
+    const request = new NextRequest(
+      "http://localhost:3500/api/onboarding/skip",
+      {
+        method: "POST",
+      },
+    );
 
     const response = await POST(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
-    expect(data.data.role).toBe('client');
+    expect(data.data.role).toBe("client");
     expect(data.data.isProfileComplete).toBe(false);
     expect(data.data.skipped).toBe(true);
-    expect(data.data.redirectTo).toBe('/dashboard');
+    expect(data.data.redirectTo).toBe("/dashboard");
   });
 
-  it('should reject skip for users with professional profile', async () => {
+  it("should reject skip for users with professional profile", async () => {
     vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
       return callback({
         user: {
           findUnique: vi.fn().mockResolvedValue({
-            id: 'db_user_123',
+            id: "db_user_123",
             isProfileComplete: false,
-            professionalProfile: { userId: 'db_user_123' }, // Has professional profile
+            professionalProfile: { userId: "db_user_123" }, // Has professional profile
           }),
         },
       });
     });
 
-    const request = new NextRequest('http://localhost:3500/api/onboarding/skip', {
-      method: 'POST',
-    });
+    const request = new NextRequest(
+      "http://localhost:3500/api/onboarding/skip",
+      {
+        method: "POST",
+      },
+    );
 
     const response = await POST(request);
     const data = await response.json();
@@ -143,12 +160,12 @@ describe('POST /api/onboarding/skip', () => {
     expect(data.success).toBe(false);
   });
 
-  it('should reject if user already completed onboarding', async () => {
+  it("should reject if user already completed onboarding", async () => {
     vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
       return callback({
         user: {
           findUnique: vi.fn().mockResolvedValue({
-            id: 'db_user_123',
+            id: "db_user_123",
             isProfileComplete: true, // Already complete
             professionalProfile: null,
           }),
@@ -156,9 +173,12 @@ describe('POST /api/onboarding/skip', () => {
       });
     });
 
-    const request = new NextRequest('http://localhost:3500/api/onboarding/skip', {
-      method: 'POST',
-    });
+    const request = new NextRequest(
+      "http://localhost:3500/api/onboarding/skip",
+      {
+        method: "POST",
+      },
+    );
 
     const response = await POST(request);
     const data = await response.json();
@@ -167,23 +187,26 @@ describe('POST /api/onboarding/skip', () => {
     expect(data.success).toBe(false);
   });
 
-  it('should reject unauthenticated requests', async () => {
-    const { auth } = await import('@clerk/nextjs/server');
+  it("should reject unauthenticated requests", async () => {
+    const { auth } = await import("@clerk/nextjs/server");
     vi.mocked(auth).mockResolvedValueOnce({ userId: null } as any);
 
-    const request = new NextRequest('http://localhost:3500/api/onboarding/skip', {
-      method: 'POST',
-    });
+    const request = new NextRequest(
+      "http://localhost:3500/api/onboarding/skip",
+      {
+        method: "POST",
+      },
+    );
 
     const response = await POST(request);
     const data = await response.json();
 
     expect(response.status).toBe(401);
-    expect(data.error).toContain('Unauthorized');
+    expect(data.error).toContain("Unauthorized");
   });
 
-  it('should respect rate limiting', async () => {
-    const { checkRateLimit } = await import('@/app/lib/rate-limit');
+  it("should respect rate limiting", async () => {
+    const { checkRateLimit } = await import("@/app/lib/api/rate-limit");
     vi.mocked(checkRateLimit).mockResolvedValueOnce({
       success: false,
       limit: 5,
@@ -191,29 +214,35 @@ describe('POST /api/onboarding/skip', () => {
       reset: Date.now() + 60000,
     });
 
-    const request = new NextRequest('http://localhost:3500/api/onboarding/skip', {
-      method: 'POST',
-    });
+    const request = new NextRequest(
+      "http://localhost:3500/api/onboarding/skip",
+      {
+        method: "POST",
+      },
+    );
 
     const response = await POST(request);
     const data = await response.json();
 
     expect(response.status).toBe(429);
-    expect(data.error).toContain('Too many requests');
+    expect(data.error).toContain("Too many requests");
   });
 
-  it('should handle Clerk currentUser failure gracefully', async () => {
-    const { currentUser } = await import('@clerk/nextjs/server');
+  it("should handle Clerk currentUser failure gracefully", async () => {
+    const { currentUser } = await import("@clerk/nextjs/server");
     vi.mocked(currentUser).mockResolvedValueOnce(null);
 
-    const request = new NextRequest('http://localhost:3500/api/onboarding/skip', {
-      method: 'POST',
-    });
+    const request = new NextRequest(
+      "http://localhost:3500/api/onboarding/skip",
+      {
+        method: "POST",
+      },
+    );
 
     const response = await POST(request);
     const data = await response.json();
 
     expect(response.status).toBe(500);
-    expect(data.error).toContain('Could not retrieve user data');
+    expect(data.error).toContain("Could not retrieve user data");
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, memo } from "react";
+import React, { useState, useCallback, useMemo, memo } from "react";
 import { motion } from "framer-motion";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { getProfessionRegulatoryBody } from "@/lib/constants/professionOptions";
+import { getRegulatoryAuthorityCode } from "@/lib/constants/professionOptions";
 import { StepComponentProps, WIZARD_STYLES } from "./types";
 
 // ============================================================================
@@ -59,9 +59,13 @@ const validateFile = (file: File): string | null => {
     return `"${file.name}" is ${sizeMB}MB — max ${FILE_CONFIG.maxSizeMB}MB allowed.`;
   }
 
-  const isValidType = (FILE_CONFIG.allowedTypes as readonly string[]).includes(file.type);
+  const isValidType = (FILE_CONFIG.allowedTypes as readonly string[]).includes(
+    file.type,
+  );
   const extension = "." + file.name.split(".").pop()?.toLowerCase();
-  const isValidExtension = (FILE_CONFIG.allowedExtensions as readonly string[]).includes(extension);
+  const isValidExtension = (
+    FILE_CONFIG.allowedExtensions as readonly string[]
+  ).includes(extension);
 
   if (!isValidType && !isValidExtension) {
     return `"${file.name}" is not a valid file type. Only PDF, JPG, and PNG are allowed.`;
@@ -79,7 +83,10 @@ interface FileListItemProps {
   onRemove: () => void;
 }
 
-const FileListItem = memo<FileListItemProps>(function FileListItem({ file, onRemove }) {
+const FileListItem = memo<FileListItemProps>(function FileListItem({
+  file,
+  onRemove,
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, x: -10 }}
@@ -92,7 +99,9 @@ const FileListItem = memo<FileListItemProps>(function FileListItem({ file, onRem
           <FileText className="h-4 w-4 text-emerald-400" />
         </div>
         <div>
-          <p className="text-sm text-white truncate max-w-[200px]">{file.name}</p>
+          <p className="text-sm text-white truncate max-w-[200px]">
+            {file.name}
+          </p>
           <p className="text-xs text-zinc-500">
             {(file.size / 1024).toFixed(0)} KB
           </p>
@@ -205,7 +214,7 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           isDragging
             ? "border-emerald-500 bg-emerald-500/10"
             : "border-zinc-700 hover:border-zinc-600 bg-white/5",
-          files.length >= maxFiles && "opacity-50 cursor-not-allowed"
+          files.length >= maxFiles && "opacity-50 cursor-not-allowed",
         )}
         onDragOver={files.length < maxFiles ? handleDragOver : undefined}
         onDragLeave={handleDragLeave}
@@ -220,10 +229,12 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
             disabled={files.length >= maxFiles}
             className="hidden"
           />
-          <Upload className={cn(
-            "h-8 w-8 mb-3 transition-colors",
-            isDragging ? "text-emerald-400" : "text-zinc-500"
-          )} />
+          <Upload
+            className={cn(
+              "h-8 w-8 mb-3 transition-colors",
+              isDragging ? "text-emerald-400" : "text-zinc-500",
+            )}
+          />
           <p className="text-sm text-zinc-400 text-center">
             {isDragging
               ? "Drop files here..."
@@ -278,11 +289,47 @@ export default function DocumentsStep({
   onNext,
   onBack,
 }: StepComponentProps) {
-  const regulatoryBody = data.profession
-    ? getProfessionRegulatoryBody(data.profession)
-    : "NCA";
+  // STAFF REFINEMENT: Accurately determine the required document names
+  const documentContext = useMemo(() => {
+    const authCode = getRegulatoryAuthorityCode(data.profession || "");
 
-  const { control, handleSubmit, formState: { errors } } = useForm<FormData>({
+    // Edge cases for Real Estate
+    if (data.profession === "REAL_ESTATE_VALUER")
+      return {
+        title: "VRB Certificate",
+        desc: "Upload your valid VRB practicing certificate.",
+      };
+    if (data.profession === "LAND_SURVEYOR")
+      return {
+        title: "ISK Certificate",
+        desc: "Upload your ISK membership certificate.",
+      };
+    if (data.profession === "REAL_ESTATE_AGENT")
+      return {
+        title: "EARB Certificate",
+        desc: "Upload your EARB registration certificate.",
+      };
+
+    // Regulated Boards
+    if (authCode) {
+      return {
+        title: `${authCode} Certificate`,
+        desc: `Upload your active ${authCode} registration or practicing license.`,
+      };
+    }
+
+    // Fallback for unregulated (e.g., Suppliers, unlisted trades)
+    return {
+      title: "Business / Trade Licenses",
+      desc: "Upload your Single Business Permit or relevant trade licenses.",
+    };
+  }, [data.profession]);
+
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<FormData>({
     resolver: zodResolver(documentsSchema),
     defaultValues: {
       certificates: data.certificates || [],
@@ -295,20 +342,25 @@ export default function DocumentsStep({
     append: appendCertificate,
     remove: removeCertificate,
   } = useFieldArray({ control, name: "certificates" });
-
   const {
     fields: idFields,
     append: appendId,
     remove: removeId,
   } = useFieldArray({ control, name: "idDocuments" });
 
-  const handleAddCertificates = useCallback((files: File[]) => {
-    files.forEach((file) => appendCertificate({ file }));
-  }, [appendCertificate]);
+  const handleAddCertificates = useCallback(
+    (files: File[]) => {
+      files.forEach((file) => appendCertificate({ file }));
+    },
+    [appendCertificate],
+  );
 
-  const handleAddIdDocuments = useCallback((files: File[]) => {
-    files.forEach((file) => appendId({ file }));
-  }, [appendId]);
+  const handleAddIdDocuments = useCallback(
+    (files: File[]) => {
+      files.forEach((file) => appendId({ file }));
+    },
+    [appendId],
+  );
 
   const onSubmit = (formData: FormData) => {
     onUpdate({
@@ -319,10 +371,7 @@ export default function DocumentsStep({
   };
 
   const handleSkip = () => {
-    onUpdate({
-      certificates: [],
-      idDocuments: [],
-    });
+    onUpdate({ certificates: [], idDocuments: [] });
     onNext();
   };
 
@@ -359,8 +408,8 @@ export default function DocumentsStep({
               Documents help verify your credentials
             </p>
             <p className="text-xs text-zinc-400 mt-1">
-              Your documents are securely stored and only reviewed by our verification team.
-              You can upload them now or later from your dashboard.
+              Your documents are securely stored and only reviewed by our
+              verification team.
             </p>
           </div>
         </div>
@@ -374,8 +423,8 @@ export default function DocumentsStep({
         className="space-y-8"
       >
         <FileUploadSection
-          title={`${regulatoryBody?.split(" ")[0] || "Professional"} Certificates`}
-          description="Upload your professional registration or license certificates"
+          title={documentContext.title}
+          description={documentContext.desc}
           icon={<CheckCircle2 className="h-5 w-5" />}
           files={certificateFields as Array<{ file: File }>}
           onFilesAdd={handleAddCertificates}
@@ -386,8 +435,8 @@ export default function DocumentsStep({
         <div className="border-t border-white/10" />
 
         <FileUploadSection
-          title="ID / Registration Documents"
-          description="Upload your national ID, KRA PIN, or other registration documents"
+          title="ID / KRA PIN Documents"
+          description="Upload your National ID or Passport, and KRA PIN Certificate."
           icon={<IdCard className="h-5 w-5" />}
           files={idFields as Array<{ file: File }>}
           onFilesAdd={handleAddIdDocuments}
@@ -408,11 +457,10 @@ export default function DocumentsStep({
           onClick={onBack}
           className={cn(
             WIZARD_STYLES.secondaryButton,
-            "flex items-center gap-2"
+            "flex items-center gap-2",
           )}
         >
-          <ArrowLeft className="h-4 w-4" />
-          Back
+          <ArrowLeft className="h-4 w-4" /> Back
         </button>
 
         <div className="flex items-center gap-3">
@@ -421,22 +469,19 @@ export default function DocumentsStep({
             onClick={handleSkip}
             className={cn(
               WIZARD_STYLES.secondaryButton,
-              "flex items-center gap-2"
+              "flex items-center gap-2",
             )}
           >
-            <SkipForward className="h-4 w-4" />
-            Skip for now
+            <SkipForward className="h-4 w-4" /> Skip for now
           </button>
-
           <button
             type="submit"
             className={cn(
               WIZARD_STYLES.primaryButton,
-              "flex items-center justify-center gap-2"
+              "flex items-center justify-center gap-2",
             )}
           >
-            Continue to Review
-            <ArrowRight className="h-4 w-4" />
+            Continue to Review <ArrowRight className="h-4 w-4" />
           </button>
         </div>
       </motion.div>

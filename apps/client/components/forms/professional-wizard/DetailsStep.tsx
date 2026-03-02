@@ -7,7 +7,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
   Building2,
-  ShieldCheck,
   Clock,
   Globe,
   FileText,
@@ -17,14 +16,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { getProfessionRegulatoryBody } from "@/lib/constants/professionOptions";
-import { StepComponentProps, detailsStepSchema, WIZARD_STYLES } from "./types";
-
-// ============================================================================
-// TYPES
-// ============================================================================
-
-type FormData = z.infer<typeof detailsStepSchema>;
+import { StepComponentProps, WIZARD_STYLES } from "./types";
 
 // ============================================================================
 // FORM FIELD COMPONENT
@@ -68,6 +60,25 @@ const FormField: React.FC<FormFieldProps> = ({
 );
 
 // ============================================================================
+// SCHEMA
+// ============================================================================
+
+// We no longer need the dynamic authority schema here since licenses
+// are handled in CredentialsStep.tsx
+const detailsSchema = z.object({
+  companyName: z.string().min(1, "Company name is required"),
+  yearsExperience: z.number().min(0).max(100).optional(),
+  website: z
+    .string()
+    .url("Please enter a valid URL")
+    .optional()
+    .or(z.literal("")),
+  bio: z.string().max(1000, "Bio must be less than 1000 characters").optional(),
+});
+
+type FormData = z.infer<typeof detailsSchema>;
+
+// ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 
@@ -78,19 +89,14 @@ export default function DetailsStep({
   onBack,
   isFirstStep,
 }: StepComponentProps) {
-  const regulatoryBody = data.profession
-    ? getProfessionRegulatoryBody(data.profession)
-    : "NCA";
-
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<FormData>({
-    resolver: zodResolver(detailsStepSchema),
+    resolver: zodResolver(detailsSchema),
     defaultValues: {
       companyName: data.companyName || "",
-      licenseNumber: data.licenseNumber || "",
       yearsExperience: data.yearsExperience,
       website: data.website || "",
       bio: data.bio || "",
@@ -100,7 +106,6 @@ export default function DetailsStep({
   const onSubmit = (formData: FormData) => {
     onUpdate({
       companyName: formData.companyName,
-      licenseNumber: formData.licenseNumber,
       yearsExperience: formData.yearsExperience,
       website: formData.website || undefined,
       bio: formData.bio || undefined,
@@ -149,40 +154,10 @@ export default function DetailsStep({
               className={cn(
                 WIZARD_STYLES.input,
                 "pl-11",
-                errors.companyName && "border-red-500/50"
+                errors.companyName && "border-red-500/50",
               )}
             />
           </div>
-        </FormField>
-
-        {/* License Number */}
-        <FormField
-          label={`${regulatoryBody?.split(" ")[0] || "NCA"} License Number`}
-          hint={
-            <span className="flex items-center gap-1 text-amber-400">
-              <ShieldCheck className="h-3 w-3" />
-              For verification
-            </span>
-          }
-          error={errors.licenseNumber?.message}
-        >
-          <div className="relative">
-            <ShieldCheck className="absolute left-3 top-3.5 h-5 w-5 text-amber-500/70" />
-            <input
-              type="text"
-              placeholder="e.g. NCA/1234/5678"
-              {...register("licenseNumber")}
-              className={cn(
-                WIZARD_STYLES.input,
-                "pl-11",
-                "focus:border-amber-400 focus:ring-amber-400",
-                errors.licenseNumber && "border-red-500/50"
-              )}
-            />
-          </div>
-          <p className="text-xs text-zinc-500 mt-1">
-            Regulated by: {regulatoryBody}
-          </p>
         </FormField>
 
         {/* Two Column Grid */}
@@ -221,7 +196,7 @@ export default function DetailsStep({
                 className={cn(
                   WIZARD_STYLES.input,
                   "pl-11",
-                  errors.website && "border-red-500/50"
+                  errors.website && "border-red-500/50",
                 )}
               />
             </div>
@@ -243,7 +218,7 @@ export default function DetailsStep({
               className={cn(
                 WIZARD_STYLES.input,
                 "pl-11 resize-none",
-                errors.bio && "border-red-500/50"
+                errors.bio && "border-red-500/50",
               )}
             />
           </div>
@@ -263,7 +238,7 @@ export default function DetailsStep({
           disabled={isFirstStep}
           className={cn(
             WIZARD_STYLES.secondaryButton,
-            "flex items-center gap-2"
+            "flex items-center gap-2",
           )}
         >
           <ArrowLeft className="h-4 w-4" />
@@ -274,7 +249,7 @@ export default function DetailsStep({
           type="submit"
           className={cn(
             WIZARD_STYLES.primaryButton,
-            "max-w-xs flex items-center justify-center gap-2"
+            "max-w-xs flex items-center justify-center gap-2",
           )}
         >
           Continue

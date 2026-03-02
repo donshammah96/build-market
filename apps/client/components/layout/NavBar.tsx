@@ -19,10 +19,11 @@ import {
   useShouldAnimate,
 } from "@/lib/hooks/usePerformance";
 import { AccessibilitySettingsPanel } from "@/components/accessibility";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 
 const navItems = [
   { label: "Home", href: ROUTES.home },
-  { label: "Idea Books", href: ROUTES.ideaBooks },
+  { label: "Idea Books", href: ROUTES.ideaBooks, featureFlag: "enableIdeaBooks" as const },
   { label: "Professionals", href: ROUTES.findProfessional },
   { label: "Properties", href: ROUTES.properties },
 ] as const;
@@ -105,7 +106,15 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
   const shouldAnimate = useShouldAnimate();
 
   const userRole = user?.publicMetadata?.role as string | undefined;
+  const enableIdeaBooks = useFeatureFlag("enableIdeaBooks");
   const useScrolledStyles = variant === "light" || isScrolled;
+
+  const visibleNavItems = navItems.filter(
+    (item) =>
+      !("featureFlag" in item) ||
+      enableIdeaBooks === true ||
+      enableIdeaBooks === undefined
+  );
   const textColorClass = useScrolledStyles ? "text-zinc-900" : "text-white";
   const hoverClass = useScrolledStyles
     ? "hover:bg-zinc-100"
@@ -147,7 +156,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-1">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <NavItem
                 key={item.href}
                 href={item.href}
@@ -254,7 +263,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
         )}
         aria-hidden={!isMobileMenuOpen}
       >
-        {navItems.map((item, index) => (
+        {visibleNavItems.map((item, index) => (
           <MobileNavItem
             key={item.href}
             href={item.href}

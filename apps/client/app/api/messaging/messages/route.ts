@@ -1,114 +1,214 @@
-import { NextRequest } from "next/server";
-import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@build/db";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
-  resilientFetch,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { checkBodySize } from "@/app/lib/api/api-guards";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import {
+  SendMessageSchema,
+  messageListSelect,
+  MESSAGING_CONFIG,
+} from "@/app/lib/validation/messaging-validation";
 
-const MESSAGING_SERVICE_URL =
-  process.env.MESSAGING_SERVICE_URL || "http://localhost:3010";
 const logger = getClientLogger();
-
-// MessageType enum aligned with schema: text, image, file, pdf, system
-const SendMessageSchema = z.object({
-  conversationId: z.string().uuid(),
-  content: z.string().min(1, "Message content is required"),
-  type: z.enum(["text", "image", "file", "pdf", "system"]).default("text"),
-  // Attachment data aligned with MessageAttachment model
-  attachment: z
-    .object({
-      url: z.string().url(),
-      key: z.string().optional(),
-      filename: z.string().min(1),
-      size: z.number().int().positive(),
-      mimeType: z.string().min(1),
-    })
-    .optional(),
-});
 
 /**
  * POST /api/messaging/messages
- * Send a new message with resilience patterns
  */
-export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
+export const POST = withAuth(
+  async (req: NextRequest, { dbUserId }): Promise<NextResponse> => {
+    const correlationId = initializeCorrelationId(req);
 
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
-    identifier,
-    RateLimits.WRITE.limit,
-    RateLimits.WRITE.window
-  );
+    const sizeError = checkBodySize(req, MESSAGING_CONFIG.MAX_BODY_SIZE);
+    if (sizeError) return sizeError;
 
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  let validatedData;
-  try {
-    const body = await req.json();
-    validatedData = SendMessageSchema.parse(body);
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      logger.warn("Message validation failed", {
-        correlationId,
-        userId: dbUserId,
-        errors: err.issues,
-      });
-      return apiError("Validation failed", HttpStatus.BAD_REQUEST, err.issues);
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
     }
-    throw err;
-  }
 
-  const messageData = {
-    ...validatedData,
-    senderId: dbUserId,
-  };
-
-  logger.info("Sending message", {
-    correlationId,
-    userId: dbUserId,
-    conversationId: validatedData.conversationId,
-    type: validatedData.type,
-  });
-
-  return executeResilient(
-    async () => {
-      const data = await resilientFetch(
-        `${MESSAGING_SERVICE_URL}/api/messages`,
-        {
-          method: "POST",
-          headers: {
-            "X-User-Id": dbUserId,
-            "X-Correlation-ID": correlationId,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(messageData),
-          timeout: 8000,
-          retry: true,
-          operationName: "send-message",
-        }
+    const validation = SendMessageSchema.safeParse(body);
+    if (!validation.success) {
+      return apiError(
+        "Validation failed",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
       );
+    }
+    const data = validation.data;
 
-      logger.info("Message sent successfully", {
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      IdempotencyService.generateKey(dbUserId, "POST", {
+        domain: "messaging-message",
+        threadId: data.threadId,
+        content: data.content.substring(0, 100),
+      });
+
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
+      idempotencyKey,
+      "messaging",
+      dbUserId,
+      "POST",
+    );
+    if (!idempotencyCheck)
+      return apiError(
+        "Failed to process idempotency key",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    if (idempotencyCheck.status === "completed")
+      return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+    if (idempotencyCheck.status === "pending")
+      return apiError("Message is being processed", HttpStatus.CONFLICT);
+
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `messaging-send:${identifier}`,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
+    );
+    if (!rateLimitResult.success) {
+      await IdempotencyService.fail(idempotencyKey).catch(() => {});
+      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    const executor = getResilientExecutor();
+    const result = await executor.execute(
+      async () => {
+        const participant = await prisma.threadParticipant.findUnique({
+          where: {
+            threadId_userId: { threadId: data.threadId, userId: dbUserId },
+          },
+          select: { id: true },
+        });
+        if (!participant)
+          return {
+            _error: true as const,
+            message: "Not a participant in this conversation",
+            status: HttpStatus.FORBIDDEN,
+          };
+
+        const thread = await prisma.messageThread.findFirst({
+          where: { id: data.threadId, deletedAt: null },
+          select: { id: true },
+        });
+        if (!thread)
+          return {
+            _error: true as const,
+            message: "Conversation not found",
+            status: HttpStatus.NOT_FOUND,
+          };
+
+        if (data.replyToId) {
+          const replyMessage = await prisma.message.findFirst({
+            where: {
+              id: data.replyToId,
+              threadId: data.threadId,
+              deletedAt: null,
+            },
+            select: { id: true },
+          });
+          if (!replyMessage)
+            return {
+              _error: true as const,
+              message: "Reply target message not found in this conversation",
+              status: HttpStatus.BAD_REQUEST,
+            };
+        }
+
+        if (data.attachmentIds && data.attachmentIds.length > 0) {
+          const assets = await prisma.asset.findMany({
+            where: { id: { in: data.attachmentIds }, uploaderId: dbUserId },
+            select: { id: true },
+          });
+          if (assets.length !== data.attachmentIds.length)
+            return {
+              _error: true as const,
+              message:
+                "One or more attachment assets not found or not owned by you",
+              status: HttpStatus.BAD_REQUEST,
+            };
+        }
+
+        return prisma.$transaction(async (tx) => {
+          const message = await tx.message.create({
+            data: {
+              threadId: data.threadId,
+              senderId: dbUserId,
+              content: data.content,
+              type: data.type,
+              replyToId: data.replyToId,
+              ...(data.attachmentIds?.length
+                ? {
+                    attachments: {
+                      create: data.attachmentIds.map((assetId) => ({
+                        assetId,
+                      })),
+                    },
+                  }
+                : {}),
+            },
+            select: messageListSelect,
+          });
+
+          await tx.messageThread.update({
+            where: { id: data.threadId },
+            data: {
+              lastMessage: data.content.substring(0, 500),
+              lastMessageAt: new Date(),
+            },
+          });
+
+          await tx.threadParticipant.updateMany({
+            where: { threadId: data.threadId, userId: { not: dbUserId } },
+            data: { unreadCount: { increment: 1 } },
+          });
+
+          await tx.readReceipt.upsert({
+            where: {
+              messageId_userId: { messageId: message.id, userId: dbUserId },
+            },
+            update: { readAt: new Date() },
+            create: { messageId: message.id, userId: dbUserId },
+          });
+
+          return message;
+        });
+      },
+      { operationName: "send_message" },
+    );
+
+    if (!result.success) {
+      await IdempotencyService.fail(idempotencyKey).catch(() => {});
+      logger.error("Failed to send message", result.error, {
         correlationId,
         userId: dbUserId,
-        conversationId: validatedData.conversationId,
+        threadId: data.threadId,
       });
-      return data;
-    },
-    {
-      operationName: "post-message",
-      successStatus: HttpStatus.CREATED,
+      return apiError(
+        "Failed to send message",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    } else {
+      const data = result.data;
+      if (data && "_error" in (data as any) && (data as any)._error) {
+        await IdempotencyService.fail(idempotencyKey).catch(() => {});
+        return apiError((data as any).message, (data as any).status);
+      }
+      await IdempotencyService.complete(idempotencyKey, data).catch(() => {});
+      return apiSuccess(data, HttpStatus.CREATED);
     }
-  );
-});
+  },
+);

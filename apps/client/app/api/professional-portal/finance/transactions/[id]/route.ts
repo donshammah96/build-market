@@ -1,169 +1,282 @@
-import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
-import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
-import { initializeCorrelationId, executeResilient, getClientLogger } from "@/app/lib/resilient-api";
-import { checkRateLimit, RateLimits, getRateLimitIdentifier } from "@/app/lib/rate-limit";
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@build/db";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
+import {
+  initializeCorrelationId,
+  getResilientExecutor,
+  getClientLogger,
+} from "@/app/lib/api/resilient-api";
+import {
+  checkRateLimit,
+  RateLimits,
+  getRateLimitIdentifier,
+} from "@/app/lib/api/rate-limit";
+import { checkBodySize, isValidId } from "@/app/lib/api/api-guards";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import {
+  UpdateTransactionSchema,
+  transactionDetailSelect,
+  serializeTransactionDecimals,
+} from "@/app/lib/validation/finance-validation";
 
 const logger = getClientLogger();
 
-const updateTransactionSchema = z.object({
-  description: z.string().optional(),
-  status: z.enum(["PENDING", "COMPLETED", "FAILED", "CANCELLED"]).optional(),
-});
+const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 
 /**
  * GET /api/professional-portal/finance/transactions/[id]
- * Get a specific transaction by ID
+ * Get a specific transaction by ID.
  */
-export const GET = withAuth<{ id: string }>(async (req: NextRequest, { dbUserId }, params) => {
-  const correlationId = initializeCorrelationId(req);
-  const { id } = params!;
+export const GET = withAuth<{ id: string }>(
+  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+    initializeCorrelationId(req);
+    const { id } = params!;
 
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(identifier, RateLimits.READ.limit, RateLimits.READ.window);
-
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  logger.info('Fetching transaction', { correlationId, transactionId: id, userId: dbUserId });
-
-  return executeResilient(
-    async () => {
-      const transaction = await prisma.professionalTransaction.findUnique({
-        where: { id },
-        include: {
-          professional: {
-            select: {
-              userId: true,
-              companyName: true,
-            },
-          },
-          project: {
-            select: {
-              id: true,
-              title: true,
-            },
-          },
-        },
-      });
-
-      if (!transaction || transaction.professional.userId !== dbUserId) {
-        logger.warn('Transaction not found or unauthorized', { correlationId, transactionId: id, userId: dbUserId });
-        return apiError("Transaction not found", HttpStatus.NOT_FOUND);
-      }
-
-      logger.info('Transaction fetched successfully', { correlationId, transactionId: id });
-      return transaction;
-    },
-    {
-      operationName: "get_transaction",
-      successStatus: HttpStatus.OK,
+    if (!isValidId(id)) {
+      return apiError("Invalid transaction ID format", HttpStatus.BAD_REQUEST);
     }
-  );
-});
+
+    const identifier = getRateLimitIdentifier(req);
+    const { success } = await checkRateLimit(
+      `finance-txn-detail:${identifier}`,
+      RateLimits.READ.limit,
+      RateLimits.READ.window,
+    );
+
+    if (!success) {
+      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      async () => {
+        const transaction = await prisma.professionalTransaction.findUnique({
+          where: { id, professionalId: dbUserId },
+          select: transactionDetailSelect,
+        });
+
+        return transaction;
+      },
+      { operationName: "get_transaction" },
+    );
+
+    if (!result.success) {
+      logger.error("Failed to fetch transaction", result.error, {
+        transactionId: id,
+      });
+      return apiError(
+        "Failed to fetch transaction",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    if (!result.data) {
+      return apiError("Transaction not found", HttpStatus.NOT_FOUND);
+    }
+
+    return apiSuccess(serializeTransactionDecimals(result.data), HttpStatus.OK);
+  },
+);
 
 /**
  * PATCH /api/professional-portal/finance/transactions/[id]
- * Update a specific transaction (limited fields)
+ * Update a transaction's description (professional-editable field).
  */
-export const PATCH = withAuth<{ id: string }>(async (req: NextRequest, { dbUserId }, params) => {
-  const correlationId = initializeCorrelationId(req);
-  const { id } = params!;
+export const PATCH = withAuth<{ id: string }>(
+  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+    const correlationId = initializeCorrelationId(req);
+    const { id } = params!;
 
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(identifier, RateLimits.WRITE.limit, RateLimits.WRITE.window);
-
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  const body = await req.json();
-  const validation = updateTransactionSchema.safeParse(body);
-
-  if (!validation.success) {
-    logger.warn('Transaction update validation failed', { correlationId, transactionId: id, errors: validation.error.issues });
-    return apiError("Invalid input", HttpStatus.BAD_REQUEST, validation.error.issues);
-  }
-
-  logger.info('Updating transaction', { correlationId, transactionId: id, userId: dbUserId });
-
-  return executeResilient(
-    async () => {
-      // Verify ownership
-      const existingTransaction = await prisma.professionalTransaction.findUnique({
-        where: { id },
-        include: { professional: true },
-      });
-
-      if (!existingTransaction || existingTransaction.professional.userId !== dbUserId) {
-        logger.warn('Transaction not found or unauthorized for update', { correlationId, transactionId: id, userId: dbUserId });
-        return apiError("Transaction not found", HttpStatus.NOT_FOUND);
-      }
-
-      const updatedTransaction = await prisma.professionalTransaction.update({
-        where: { id },
-        data: validation.data,
-      });
-
-      logger.info('Transaction updated successfully', { correlationId, transactionId: id });
-      return updatedTransaction;
-    },
-    {
-      operationName: "update_transaction",
-      successStatus: HttpStatus.OK,
+    if (!isValidId(id)) {
+      return apiError("Invalid transaction ID format", HttpStatus.BAD_REQUEST);
     }
-  );
-});
+
+    const sizeError = checkBodySize(req, MAX_BODY_SIZE);
+    if (sizeError) return sizeError;
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+    }
+
+    const validation = UpdateTransactionSchema.safeParse(body);
+    if (!validation.success) {
+      return apiError(
+        "Invalid input",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+      );
+    }
+
+    const updateData = validation.data;
+
+    if (Object.keys(updateData).length === 0) {
+      return apiError("No fields to update", HttpStatus.BAD_REQUEST);
+    }
+
+    // Idempotency
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      IdempotencyService.generateKey(dbUserId, "PATCH", {
+        domain: "transaction",
+        transactionId: id,
+        ...updateData,
+      });
+
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
+      idempotencyKey,
+      "transaction",
+      dbUserId,
+      "PATCH",
+    );
+    if (!idempotencyCheck) {
+      return apiError(
+        "Failed to process idempotency key",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    if (idempotencyCheck.status === "completed") {
+      return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+    }
+    if (idempotencyCheck.status === "pending") {
+      return apiError(
+        "Request is being processed. Please wait.",
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `finance-txn-write:${identifier}`,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
+    );
+    if (!rateLimitResult.success) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    logger.info("Updating transaction", {
+      correlationId,
+      transactionId: id,
+      userId: dbUserId,
+    });
+
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      async () => {
+        // Verify ownership
+        const existing = await prisma.professionalTransaction.findUnique({
+          where: { id, professionalId: dbUserId },
+          select: { id: true },
+        });
+
+        if (!existing) return { error: "not_found" as const };
+
+        const updated = await prisma.professionalTransaction.update({
+          where: { id },
+          data: updateData,
+          select: transactionDetailSelect,
+        });
+
+        return { data: updated };
+      },
+      { operationName: "update_transaction" },
+    );
+
+    if (!result.success || !result.data) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        "Failed to update transaction",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    if (result.data.error === "not_found") {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError("Transaction not found", HttpStatus.NOT_FOUND);
+    }
+
+    const serialized = serializeTransactionDecimals(result.data.data!);
+    await IdempotencyService.complete(idempotencyKey, serialized);
+    return apiSuccess(serialized, HttpStatus.OK);
+  },
+);
 
 /**
  * DELETE /api/professional-portal/finance/transactions/[id]
- * Delete a specific transaction (only if PENDING or CANCELLED)
+ * Delete a transaction (only PENDING or CANCELLED allowed).
  */
-export const DELETE = withAuth<{ id: string }>(async (req: NextRequest, { dbUserId }, params) => {
-  const correlationId = initializeCorrelationId(req);
-  const { id } = params!;
+export const DELETE = withAuth<{ id: string }>(
+  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+    const correlationId = initializeCorrelationId(req);
+    const { id } = params!;
 
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(identifier, RateLimits.WRITE.limit, RateLimits.WRITE.window);
-
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  logger.info('Deleting transaction', { correlationId, transactionId: id, userId: dbUserId });
-
-  return executeResilient(
-    async () => {
-      // Verify ownership
-      const existingTransaction = await prisma.professionalTransaction.findUnique({
-        where: { id },
-        include: { professional: true },
-      });
-
-      if (!existingTransaction || existingTransaction.professional.userId !== dbUserId) {
-        logger.warn('Transaction not found or unauthorized for deletion', { correlationId, transactionId: id, userId: dbUserId });
-        return apiError("Transaction not found", HttpStatus.NOT_FOUND);
-      }
-
-      // Only allow deletion of PENDING or CANCELLED transactions
-      if (!["PENDING", "CANCELLED"].includes(existingTransaction.status)) {
-        logger.warn('Cannot delete completed transaction', { correlationId, transactionId: id, status: existingTransaction.status });
-        return apiError("Cannot delete completed transactions", HttpStatus.BAD_REQUEST);
-      }
-
-      await prisma.professionalTransaction.delete({
-        where: { id },
-      });
-
-      logger.info('Transaction deleted successfully', { correlationId, transactionId: id });
-      return { message: "Transaction deleted successfully" };
-    },
-    {
-      operationName: "delete_transaction",
-      successStatus: HttpStatus.OK,
+    if (!isValidId(id)) {
+      return apiError("Invalid transaction ID format", HttpStatus.BAD_REQUEST);
     }
-  );
-});
+
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `finance-txn-delete:${identifier}`,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
+    );
+    if (!rateLimitResult.success) {
+      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    logger.info("Deleting transaction", {
+      correlationId,
+      transactionId: id,
+      userId: dbUserId,
+    });
+
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      async () => {
+        const existing = await prisma.professionalTransaction.findUnique({
+          where: { id, professionalId: dbUserId },
+          select: { id: true, status: true },
+        });
+
+        if (!existing) return { error: "not_found" as const };
+
+        // Only allow deletion of PENDING or CANCELLED transactions
+        if (!["PENDING", "CANCELLED"].includes(existing.status)) {
+          return { error: "not_deletable" as const };
+        }
+
+        await prisma.professionalTransaction.delete({ where: { id } });
+
+        return { deleted: true };
+      },
+      { operationName: "delete_transaction" },
+    );
+
+    if (!result.success || !result.data) {
+      return apiError(
+        "Failed to delete transaction",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    if (result.data.error === "not_found") {
+      return apiError("Transaction not found", HttpStatus.NOT_FOUND);
+    }
+    if (result.data.error === "not_deletable") {
+      return apiError(
+        "Only PENDING or CANCELLED transactions can be deleted",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return apiSuccess(
+      { message: "Transaction deleted successfully" },
+      HttpStatus.OK,
+    );
+  },
+);

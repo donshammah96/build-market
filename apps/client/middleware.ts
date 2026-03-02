@@ -29,6 +29,7 @@ const isProfessionalRoute = createRouteMatcher(["/professional-portal(.*)"]);
  */
 const isPublicRoute = createRouteMatcher([
   "/",
+  "/maintenance",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/verify(.*)", // Clerk email verification
@@ -47,6 +48,91 @@ const isPublicRoute = createRouteMatcher([
  * Separated from public routes so middleware can redirect already-onboarded users
  */
 const isOnboardingRoute = createRouteMatcher(["/onboarding(.*)"]);
+
+/**
+ * Sign-up routes - may be blocked by system settings
+ */
+const isSignUpRoute = createRouteMatcher([
+  "/sign-up(.*)",
+  "/professional/sign-up(.*)",
+]);
+
+/**
+ * Routes that skip maintenance/settings checks (internal APIs, health)
+ */
+const isSettingsExemptRoute = createRouteMatcher([
+  "/api/health(.*)",
+  "/api/internal(.*)",
+  "/maintenance",
+]);
+
+// =============================================================================
+// System Settings Cache (for maintenance mode and signup blocking)
+// =============================================================================
+
+interface SystemSettingsCacheEntry {
+  maintenanceMode: boolean;
+  maintenanceMessage: string | null;
+  publicSignup: boolean;
+  allowProfessionalSignup: boolean;
+  allowedIPs: string[];
+  timestamp: number;
+}
+
+let systemSettingsCache: SystemSettingsCacheEntry | null = null;
+const SETTINGS_CACHE_TTL = 60_000; // 60 seconds
+
+async function getSystemSettingsForMiddleware(
+  baseUrl: string,
+): Promise<SystemSettingsCacheEntry> {
+  if (
+    systemSettingsCache &&
+    Date.now() - systemSettingsCache.timestamp < SETTINGS_CACHE_TTL
+  ) {
+    return systemSettingsCache;
+  }
+
+  try {
+    const internalSecret = process.env.INTERNAL_API_SECRET || "";
+    const url = new URL("/api/internal/system-settings", baseUrl);
+    const response = await fetch(url.toString(), {
+      headers: { "x-internal-secret": internalSecret },
+      signal: AbortSignal.timeout(2000),
+    });
+
+    if (!response.ok) {
+      return {
+        maintenanceMode: false,
+        maintenanceMessage: null,
+        publicSignup: true,
+        allowProfessionalSignup: true,
+        allowedIPs: [],
+        timestamp: Date.now(),
+      };
+    }
+
+    const data = await response.json();
+    const entry: SystemSettingsCacheEntry = {
+      maintenanceMode: data.maintenanceMode ?? false,
+      maintenanceMessage: data.maintenanceMessage ?? null,
+      publicSignup: data.publicSignup ?? true,
+      allowProfessionalSignup: data.allowProfessionalSignup ?? true,
+      allowedIPs: Array.isArray(data.allowedIPs) ? data.allowedIPs : [],
+      timestamp: Date.now(),
+    };
+    systemSettingsCache = entry;
+    return entry;
+  } catch {
+    return {
+      maintenanceMode: false,
+      maintenanceMessage: null,
+      publicSignup: true,
+      allowProfessionalSignup: true,
+      allowedIPs: [],
+      timestamp: Date.now(),
+    };
+  }
+}
 
 // =============================================================================
 // In-Memory Cache for DB Fallback (Edge-compatible)
@@ -111,7 +197,7 @@ function cacheStatus(clerkId: string, status: Omit<CacheEntry, "timestamp">) {
  */
 async function checkOnboardingFromDB(
   clerkId: string,
-  baseUrl: string
+  baseUrl: string,
 ): Promise<{ isOnboarded: boolean; role: string | null }> {
   // Check cache first
   const cached = getCachedStatus(clerkId);
@@ -150,7 +236,7 @@ async function checkOnboardingFromDB(
         {
           clerkId,
           role: result.role,
-        }
+        },
       );
     }
 
@@ -174,6 +260,52 @@ async function checkOnboardingFromDB(
 export default clerkMiddleware(async (auth, req: NextRequest) => {
   const { pathname } = req.nextUrl;
   const baseUrl = req.nextUrl.origin;
+
+  // --- DEV AUTH BYPASS ---
+  // Allow all routes during local offline development without triggering Clerk checks
+  if (
+    process.env.BYPASS_AUTH === "true" &&
+    process.env.NODE_ENV === "development"
+  ) {
+    return NextResponse.next();
+  }
+  // --- END DEV AUTH BYPASS ---
+
+  // 0. Maintenance mode and signup blocking (skip for exempt routes)
+  if (!isSettingsExemptRoute(req)) {
+    const settings = await getSystemSettingsForMiddleware(baseUrl);
+
+    // Maintenance mode: block non-admins and non-whitelisted IPs
+    if (settings.maintenanceMode) {
+      const authObject = await auth();
+      const metadata = authObject.sessionClaims?.metadata as
+        | { role?: string }
+        | undefined;
+      const isAdmin = metadata?.role === "admin";
+
+      const forwarded = req.headers.get("x-forwarded-for");
+      const clientIp =
+        forwarded?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip") ?? "";
+      const isAllowedIp = settings.allowedIPs.includes(clientIp);
+
+      if (!isAdmin && !isAllowedIp) {
+        return NextResponse.redirect(new URL("/maintenance", req.url));
+      }
+    }
+
+    // Signup blocking: redirect if registration is disabled
+    if (isSignUpRoute(req)) {
+      if (!settings.publicSignup) {
+        return NextResponse.redirect(new URL("/?registration=closed", req.url));
+      }
+      if (
+        pathname.startsWith("/professional/sign-up") &&
+        !settings.allowProfessionalSignup
+      ) {
+        return NextResponse.redirect(new URL("/sign-up?pro=closed", req.url));
+      }
+    }
+  }
 
   // 1. Public routes - allow access without any checks
   if (isPublicRoute(req)) {
@@ -211,7 +343,7 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
         "[Middleware] Onboarding route: Clerk metadata undefined, checking DB",
         {
           userId,
-        }
+        },
       );
       const dbResult = await checkOnboardingFromDB(userId, baseUrl);
       isOnboarded = dbResult.isOnboarded;
@@ -223,7 +355,7 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
           "[Middleware] Onboarding route: Professional found via DB fallback",
           {
             userId,
-          }
+          },
         );
       }
     }
@@ -240,7 +372,7 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
           userId,
           role: userRole,
           dashboardPath,
-        }
+        },
       );
       return NextResponse.redirect(new URL(dashboardPath, req.url));
     }
@@ -281,7 +413,7 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
           userId,
           pathname,
           hasRole: !!userRole,
-        }
+        },
       );
       const dbResult = await checkOnboardingFromDB(userId, baseUrl);
       isOnboarded = dbResult.isOnboarded;
@@ -294,7 +426,7 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
           {
             userId,
             pathname,
-          }
+          },
         );
       }
     }
@@ -309,7 +441,7 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
             userId,
             pathname,
             metadataOnboarded: metadata?.isOnboarded,
-          }
+          },
         );
       }
       const onboardingUrl = new URL("/onboarding", req.url);

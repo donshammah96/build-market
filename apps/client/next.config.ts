@@ -1,8 +1,29 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Disable linting during build since turbo will handle it separately
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+
+  // Disable type checking during build since turbo will handle it separately
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+
   // Enable React strict mode for better development experience
   reactStrictMode: true,
+
+  // Automatically transpile and bundle workspace packages with SWC
+  transpilePackages: [
+    "@build/ui",
+    "@build/db",
+    "@build/types",
+    "@build/enums",
+    "@build/nats",
+    "@build/redis",
+    "@build/resilience",
+  ],
 
   // Turbopack configuration (used in dev mode with --turbopack flag)
   turbopack: {

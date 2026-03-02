@@ -9,6 +9,7 @@ export default defineConfig({
     setupFiles: ['./__tests__/setup.ts'],
     environment: 'node', // Default to node for API tests
     include: ['**/__tests__/**/*.{test,spec}.{js,ts,tsx}'],
+    testTimeout: 10000, // 10 seconds for tests with eventual consistency scenarios
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
@@ -19,6 +20,12 @@ export default defineConfig({
         '**/types/',
         '**/*.d.ts',
       ],
+      thresholds: {
+        lines: 80,
+        functions: 80,
+        branches: 80,
+        statements: 80,
+      },
     },
   },
   resolve: {

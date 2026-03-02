@@ -1,19 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useUser } from "@clerk/nextjs";
+import { formatDistanceToNow } from "date-fns";
 
-import { 
-  Plus, 
-  MessageSquare, 
-  Clock, 
-  Calendar, 
+import {
+  Plus,
+  MessageSquare,
+  Clock,
+  Calendar,
   MoreHorizontal,
   Search,
   LayoutTemplate,
-  ShoppingBag
+  ShoppingBag,
 } from "lucide-react";
 
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
@@ -26,96 +26,72 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProfileCompletionBanner } from "@/components/shared/ProfileCompletionBanner";
 import { useProfileStatus } from "@/hooks/useProfileStatus";
+import { useClientDashboard } from "@/hooks/useClientDashboard";
+import { useNotifications } from "@/hooks/useNotifications";
 import { cn } from "@/lib/utils";
 import { ROUTES, getProjectUrl, getIdeaBookUrl } from "@/lib/links";
+import type { DashboardProject, DashboardIdeaBook } from "@/lib/client-dashboard-client";
 
-// --- Types based on your Prisma Schema ---
-// (In a real app, import these from your types definition)
-
-interface ProjectMock {
-  id: string;
-  title: string;
-  status: 'planning' | 'in_progress' | 'completed';
-  nextMilestone: string;
-  dueDate: string;
-  progress: number;
-  image: string;
-  professional?: {
-    name: string;
-    role: string;
-    avatar: string;
-  };
-}
-
-interface IdeaBookMock {
-  id: string;
-  title: string;
-  itemCount: number;
-  previewImage: string;
-}
-
+// Activity placeholder — not yet provided by dashboard API
 interface ActivityMock {
   id: string;
-  type: 'message' | 'order' | 'milestone';
+  type: "message" | "order" | "milestone";
   content: string;
   meta: string;
   time: string;
   image?: string;
 }
 
+const PLACEHOLDER_IMAGE =
+  "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=800&q=80";
+
+function getTimeOfDayGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 export default function UserDashboardPage() {
   const { user, isLoaded } = useUser();
-  const [loading, setLoading] = useState(true);
-  
-  // Profile completion status
   const { completion, isLoading: profileLoading } = useProfileStatus();
-  
-  // Mock Data State
-  const [activeProject, setActiveProject] = useState<ProjectMock | null>(null);
-  const [ideaBooks, setIdeaBooks] = useState<IdeaBookMock[]>([]);
-  const [activities, setActivities] = useState<ActivityMock[]>([]);
+  const { data: dashboardData, isLoading: dashboardLoading, isError: dashboardError, error: dashboardErrorDetail, refetch: refetchDashboard } = useClientDashboard();
+  const { data: notificationsData } = useNotifications({ limit: 1 });
 
-  useEffect(() => {
-    // Simulate API fetch
-    const timer = setTimeout(() => {
-      // MOCK: Active Project Data
-      setActiveProject({
-        id: "proj_1",
-        title: "Kileleshwa Kitchen Renovation",
-        status: "in_progress",
-        nextMilestone: "Cabinet Installation",
-        dueDate: "Oct 24",
-        progress: 65,
-        image: "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=800&q=80",
-        professional: {
-          name: "Evans Ndegwa",
-          role: "Lead Contractor",
-          avatar: "https://i.pravatar.cc/150?u=evans"
-        }
-      });
+  const loading = !isLoaded || profileLoading || dashboardLoading;
+  const unreadNotifications = notificationsData?.unreadCount ?? 0;
+  const projects = dashboardData?.projects ?? [];
+  const ideaBooks = dashboardData?.ideaBooks ?? [];
+  const stats = dashboardData?.stats;
+  const activeProject = projects.find(
+    (p) => p.status === "IN_PROGRESS" || p.status === "PLANNING"
+  ) ?? projects[0] ?? null;
 
-      // MOCK: Idea Books
-      setIdeaBooks([
-        { id: "ib_1", title: "Modern Living Rooms", itemCount: 12, previewImage: "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=400&q=80" },
-        { id: "ib_2", title: "Garden Landscapes", itemCount: 8, previewImage: "https://images.unsplash.com/photo-1558904541-efa843a96f01?auto=format&fit=crop&w=400&q=80" },
-        { id: "ib_3", title: "Master Bath", itemCount: 24, previewImage: "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?auto=format&fit=crop&w=400&q=80" },
-      ]);
-
-      // MOCK: Recent Activity
-      setActivities([
-        { id: "act_1", type: "message", content: "New message from Evans Ndegwa", meta: "Regarding: Tile selection", time: "10m ago", image: "https://i.pravatar.cc/150?u=evans" },
-        { id: "act_2", type: "order", content: "Order #2939 Shipped", meta: "Ceramic Floor Tiles - 50 Boxes", time: "2h ago" },
-        { id: "act_3", type: "milestone", content: "Milestone Completed", meta: "Demolition Phase", time: "1d ago" },
-      ]);
-
-      setLoading(false);
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, []);
+  const activities: ActivityMock[] = [];
 
   const firstName = user?.firstName || "there";
 
   if (!isLoaded || loading) return <DashboardSkeleton />;
+
+  if (dashboardError) {
+    return (
+      <div className="min-h-screen bg-zinc-50/50">
+        <ClientNavbar />
+        <main className="container mx-auto px-4 md:px-8 py-8 pt-24 max-w-7xl">
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <h2 className="text-xl font-semibold text-zinc-900 mb-2">Unable to load dashboard</h2>
+            <p className="text-zinc-500 max-w-md mb-6">
+              {dashboardErrorDetail instanceof Error ? dashboardErrorDetail.message : "Something went wrong. Please try again."}
+            </p>
+            <Button onClick={() => refetchDashboard()} className="bg-emerald-600 hover:bg-emerald-700">
+              Try again
+            </Button>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50/50">
@@ -136,18 +112,22 @@ export default function UserDashboardPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
           <div>
             <h1 className="text-3xl md:text-4xl font-bold text-zinc-900 tracking-tight">
-              Good afternoon, {firstName}.
+              {getTimeOfDayGreeting()}, {firstName}.
             </h1>
             <p className="text-zinc-500 mt-2 text-lg">
-              You have <span className="text-emerald-600 font-medium">2 upcoming tasks</span> for your renovation.
+              {stats && stats.activeProjects > 0 ? (
+                <>You have <span className="text-emerald-600 font-medium">{stats.activeProjects} active project{stats.activeProjects !== 1 ? "s" : ""}</span> in progress.</>
+              ) : (
+                <>Start a new project or browse <span className="text-emerald-600 font-medium">verified professionals</span>.</>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" className="h-12 px-6 border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50">
-              <Search className="mr-2 h-4 w-4" /> Find Pros
+            <Button variant="outline" className="h-12 px-6 border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50" asChild>
+              <Link href={ROUTES.findProfessional}><Search className="mr-2 h-4 w-4" /> Find Pros</Link>
             </Button>
-            <Button className="h-12 px-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm">
-              <Plus className="mr-2 h-4 w-4" /> New Project
+            <Button className="h-12 px-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm" asChild>
+              <Link href={ROUTES.userProjects}><Plus className="mr-2 h-4 w-4" /> New Project</Link>
             </Button>
           </div>
         </div>
@@ -172,7 +152,7 @@ export default function UserDashboardPage() {
                     {/* Image Side */}
                     <div className="md:col-span-2 relative h-64 md:h-full bg-zinc-100">
                       <Image 
-                        src={activeProject.image} 
+                        src={PLACEHOLDER_IMAGE} 
                         alt={activeProject.title}
                         fill
                         className="object-cover transition-transform duration-700 group-hover:scale-105"
@@ -206,23 +186,29 @@ export default function UserDashboardPage() {
                             <Progress value={activeProject.progress} className="h-2 bg-zinc-100" indicatorClassName="bg-emerald-600" />
                           </div>
 
-                          {/* Milestone */}
-                          <div className="flex items-start gap-4 p-4 bg-zinc-50 rounded-xl border border-zinc-100">
-                            <div className="bg-white p-2.5 rounded-lg shadow-sm text-emerald-600">
-                              <Calendar className="h-5 w-5" />
+                          {/* Timeline */}
+                          {(activeProject.estimatedEndDate || activeProject.milestoneCount > 0) && (
+                            <div className="flex items-start gap-4 p-4 bg-zinc-50 rounded-xl border border-zinc-100">
+                              <div className="bg-white p-2.5 rounded-lg shadow-sm text-emerald-600">
+                                <Calendar className="h-5 w-5" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-0.5">
+                                  {activeProject.milestoneCount > 0 ? "Milestones" : "Timeline"}
+                                </p>
+                                <p className="font-semibold text-zinc-900">
+                                  {activeProject.milestoneCount > 0
+                                    ? `${activeProject.milestoneCount} milestone${activeProject.milestoneCount !== 1 ? "s" : ""}`
+                                    : "In progress"}
+                                </p>
+                                {activeProject.estimatedEndDate && (
+                                  <p className="text-sm text-zinc-500">
+                                    Est. completion: {formatDistanceToNow(new Date(activeProject.estimatedEndDate), { addSuffix: true })}
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-0.5">
-                                Up Next
-                              </p>
-                              <p className="font-semibold text-zinc-900">
-                                {activeProject.nextMilestone}
-                              </p>
-                              <p className="text-sm text-zinc-500">
-                                Due: {activeProject.dueDate}
-                              </p>
-                            </div>
-                          </div>
+                          )}
                         </div>
                       </div>
 
@@ -231,12 +217,13 @@ export default function UserDashboardPage() {
                         {activeProject.professional && (
                           <div className="flex items-center gap-3">
                             <Avatar className="h-10 w-10 border-2 border-white shadow-sm">
-                              <AvatarImage src={activeProject.professional.avatar} />
-                              <AvatarFallback>EN</AvatarFallback>
+                              <AvatarFallback className="bg-emerald-100 text-emerald-700">
+                                {activeProject.professional.name.split(/\s+/).map((n) => n[0]).join("").slice(0, 2).toUpperCase() || "?"}
+                              </AvatarFallback>
                             </Avatar>
                             <div className="text-sm">
                               <p className="font-medium text-zinc-900">{activeProject.professional.name}</p>
-                              <p className="text-zinc-500 text-xs">{activeProject.professional.role}</p>
+                              <p className="text-zinc-500 text-xs">{activeProject.professional.title}</p>
                             </div>
                           </div>
                         )}
@@ -269,7 +256,7 @@ export default function UserDashboardPage() {
                     <div className="group cursor-pointer">
                       <div className="relative aspect-[4/3] rounded-xl overflow-hidden mb-3 bg-zinc-100">
                         <Image 
-                          src={book.previewImage} 
+                          src={book.coverImage || PLACEHOLDER_IMAGE} 
                           alt={book.title}
                           fill
                           className="object-cover transition-transform duration-500 group-hover:scale-110"
@@ -282,18 +269,18 @@ export default function UserDashboardPage() {
                       <h3 className="font-semibold text-zinc-900 group-hover:text-emerald-600 transition-colors">
                         {book.title}
                       </h3>
-                      <p className="text-sm text-zinc-500">Last updated 2 days ago</p>
+                      <p className="text-sm text-zinc-500">Last updated {formatDistanceToNow(new Date(book.updatedAt), { addSuffix: true })}</p>
                     </div>
                   </Link>
                 ))}
                 
                 {/* Add New Idea Book Card */}
-                <button className="flex flex-col items-center justify-center aspect-[4/3] rounded-xl border-2 border-dashed border-zinc-200 hover:border-emerald-500 hover:bg-emerald-50/50 transition-all group">
+                <Link href={ROUTES.ideaBooks} className="flex flex-col items-center justify-center aspect-[4/3] rounded-xl border-2 border-dashed border-zinc-200 hover:border-emerald-500 hover:bg-emerald-50/50 transition-all group">
                   <div className="h-10 w-10 rounded-full bg-zinc-100 text-zinc-400 flex items-center justify-center mb-3 group-hover:bg-white group-hover:text-emerald-600 group-hover:shadow-sm">
                     <Plus className="h-5 w-5" />
                   </div>
                   <span className="font-medium text-zinc-600 group-hover:text-emerald-700">Create New Board</span>
-                </button>
+                </Link>
               </div>
             </section>
 
@@ -325,7 +312,7 @@ export default function UserDashboardPage() {
                   icon={<MessageSquare className="h-4 w-4" />} 
                   label="Messages" 
                   href={ROUTES.userMessages} 
-                  count="5"
+                  count={unreadNotifications > 0 ? String(unreadNotifications) : undefined}
                   badgeColor="bg-emerald-100 text-emerald-700"
                 />
               </CardContent>
@@ -338,7 +325,9 @@ export default function UserDashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="relative pl-4 border-l border-zinc-200 space-y-8">
-                  {activities.map((activity) => (
+                  {activities.length === 0 ? (
+                    <p className="text-sm text-zinc-500 py-4">No recent activity. Messages, orders, and milestones will appear here.</p>
+                  ) : activities.map((activity) => (
                     <div key={activity.id} className="relative">
                       {/* Timeline Dot */}
                       <div className={cn(
@@ -419,7 +408,9 @@ function EmptyState() {
       <p className="text-zinc-500 max-w-sm mt-1 mb-6">
         Ready to start building? Find a verified professional to kickstart your dream home.
       </p>
-      <Button>Find a Pro</Button>
+      <Button asChild>
+        <Link href={ROUTES.findProfessional}>Find a Pro</Link>
+      </Button>
     </div>
   );
 }

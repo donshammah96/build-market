@@ -1,6 +1,6 @@
 import { getAuth } from "@clerk/express";
 import { Request, Response, NextFunction } from "express";
-import type { CustomJwtSessionClaims } from "@repo/types";
+import type { CustomJwtSessionClaims } from "@build/types";
 
 declare global {
   namespace Express {
@@ -13,7 +13,7 @@ declare global {
 export const shouldBeUser = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const auth = getAuth(req);
   const userId = auth.userId;
@@ -30,7 +30,7 @@ export const shouldBeUser = (
 export const shouldBeAdmin = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const auth = getAuth(req);
   const userId = auth.userId;
@@ -49,4 +49,3 @@ export const shouldBeAdmin = (
 
   return next();
 };
-

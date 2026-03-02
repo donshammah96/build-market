@@ -5,19 +5,11 @@ import { AlertTriangle, Package, ChevronRight, ArrowUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { InventoryAlert } from "@/lib/services/inventory";
 
 // ============================================================================
 // TYPES
 // ============================================================================
-
-interface InventoryAlert {
-  id: string;
-  productName: string;
-  sku?: string;
-  currentStock: number;
-  threshold: number;
-  status: "low" | "out_of_stock";
-}
 
 export interface InventoryAlertsWidgetProps {
   /** Inventory alerts */
@@ -128,7 +120,7 @@ export function InventoryAlertsWidget({
   const outOfStockCount = safeAlerts.filter(
     (a) => a.status === "out_of_stock"
   ).length;
-  const lowStockCount = safeAlerts.filter((a) => a.status === "low").length;
+  const lowStockCount = safeAlerts.filter((a) => a.status === "low_stock").length;
 
   return (
     <Card

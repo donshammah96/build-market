@@ -355,7 +355,7 @@ toast({
     "@tanstack/react-query": "^5.x",
     "next-auth": "^5.x",
     "lucide-react": "^0.x",
-    "@repo/types": "workspace:*"
+    "@build/types": "workspace:*"
   }
 }
 ```

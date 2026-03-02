@@ -18,7 +18,8 @@ import { cn } from "@/lib/utils";
 import StoreForm, { StoreFormSubmitData, StoreFormVariant } from "./StoreForm";
 
 // Re-export types for usage
-export type { StoreFormSubmitData } from "./StoreForm";
+export type { StoreFormSubmitData } from "./StoreForm"; // Keep this
+// export type { StoreData } from "./MultiStoreForm"; // REMOVE THIS LINE
 
 // ============================================================================
 // TYPES
@@ -248,7 +249,7 @@ export function MultiStoreForm({
       prev.map((s) => ({
         ...s,
         isExpanded: s.id === storeId ? !s.isExpanded : false,
-      }))
+      })),
     );
   }, []);
 
@@ -262,25 +263,25 @@ export function MultiStoreForm({
                 data: { ...s.data, ...data },
                 isValid: validateStore({ ...s.data, ...data }),
               }
-            : s
-        )
+            : s,
+        ),
       );
     },
-    []
+    [],
   );
 
   const handleSubmit = async () => {
     const invalidStores = stores.filter((s) => !s.isValid);
     if (invalidStores.length > 0) {
       setError(
-        `Please complete all required fields for ${invalidStores.length} store(s).`
+        `Please complete all required fields for ${invalidStores.length} store(s).`,
       );
       // Expand the first invalid store
       setStores((prev) =>
         prev.map((s) => ({
           ...s,
           isExpanded: s.id === invalidStores[0]?.id,
-        }))
+        })),
       );
       return;
     }
@@ -304,7 +305,7 @@ export function MultiStoreForm({
       <div
         className={cn(
           "flex flex-col md:flex-row md:items-end justify-between gap-4",
-          theme.headerBorder
+          theme.headerBorder,
         )}
       >
         <div>
@@ -355,7 +356,7 @@ export function MultiStoreForm({
                 theme.storeCard,
                 store.isExpanded
                   ? theme.storeCardExpanded
-                  : theme.storeCardCollapsed
+                  : theme.storeCardCollapsed,
               )}
             >
               {/* Card Header (Clickable) */}
@@ -370,7 +371,7 @@ export function MultiStoreForm({
                       "w-12 h-12 rounded-full flex items-center justify-center border transition-colors",
                       store.isValid
                         ? theme.statusIndicatorValid
-                        : theme.statusIndicatorInvalid
+                        : theme.statusIndicatorInvalid,
                     )}
                   >
                     {store.isValid ? (
@@ -386,7 +387,7 @@ export function MultiStoreForm({
                         "font-semibold text-lg transition-colors",
                         !store.data.name
                           ? theme.storeNameEmpty
-                          : theme.storeName
+                          : theme.storeName,
                       )}
                     >
                       {store.data.name || `New Store Location ${index + 1}`}
@@ -394,14 +395,14 @@ export function MultiStoreForm({
                     <div
                       className={cn(
                         "flex items-center gap-2 text-sm mt-0.5",
-                        theme.statusMeta
+                        theme.statusMeta,
                       )}
                     >
                       {store.isValid ? (
                         <span
                           className={cn(
                             "flex items-center gap-1",
-                            theme.statusValid
+                            theme.statusValid,
                           )}
                         >
                           <Check className="h-3 w-3" />
@@ -411,7 +412,7 @@ export function MultiStoreForm({
                         <span
                           className={cn(
                             "flex items-center gap-1",
-                            theme.statusInvalid
+                            theme.statusInvalid,
                           )}
                         >
                           Incomplete
@@ -422,7 +423,7 @@ export function MultiStoreForm({
                           <span
                             className={cn(
                               "w-1 h-1 rounded-full",
-                              theme.statusDot
+                              theme.statusDot,
                             )}
                           />
                           <span className="flex items-center gap-1">
@@ -451,7 +452,7 @@ export function MultiStoreForm({
                     className={cn(
                       "transition-transform duration-300",
                       theme.chevron,
-                      store.isExpanded && "rotate-180"
+                      store.isExpanded && "rotate-180",
                     )}
                   >
                     <ChevronDown className="h-5 w-5" />
@@ -526,7 +527,7 @@ export function MultiStoreForm({
             disabled={isSubmitting || !allValid}
             className={cn(
               "min-w-[140px] transition-all",
-              allValid ? theme.submitButtonValid : theme.submitButtonInvalid
+              allValid ? theme.submitButtonValid : theme.submitButtonInvalid,
             )}
           >
             {isSubmitting ? (

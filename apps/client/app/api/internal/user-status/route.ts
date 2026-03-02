@@ -1,59 +1,81 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@repo/db";
+import { prisma, UserRole } from "@build/db";
+import {
+  initializeCorrelationId,
+  getClientLogger,
+} from "@/app/lib/api/resilient-api";
+import {
+  checkRateLimit,
+  getRateLimitIdentifier,
+} from "@/app/lib/api/rate-limit";
+
+const logger = getClientLogger();
 
 /**
  * GET /api/internal/user-status
  *
- * Internal endpoint (NOT for public use) to check user's onboarding status.
- * Used by middleware as a fallback when Clerk metadata is not yet propagated.
+ * Internal endpoint to check a user's onboarding status.
+ * Called by middleware as a fallback when Clerk metadata is not yet propagated.
  *
- * This endpoint is optimized for speed:
- * - Minimal database query (only selects required fields)
- * - Short timeout recommended by callers
- * - No rate limiting (internal use only)
+ * Optimized for speed:
+ * - Minimal Prisma select (only required fields)
+ * - `findUnique` on indexed `clerkId` column
+ * - Excludes soft-deleted users
  *
- * Security: Protected by INTERNAL_API_SECRET header validation
+ * Security: Protected by `INTERNAL_API_SECRET` header validation.
  *
- * Returns: { isOnboarded: boolean, role: string | null }
+ * Returns: `{ isOnboarded: boolean, role: string | null }`
  */
-export async function GET(req: NextRequest) {
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  const correlationId = initializeCorrelationId(req);
+
+  // ── Access control ──────────────────────────────────────────────────
+  const internalSecret = req.headers.get("x-internal-secret");
+  const expectedSecret = process.env.INTERNAL_API_SECRET;
+
+  if (expectedSecret && internalSecret !== expectedSecret) {
+    logger.warn("Internal user-status forbidden: invalid secret", {
+      correlationId,
+    });
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // ── Rate limit (guard against runaway middleware loops) ─────────────
+  const identifier = getRateLimitIdentifier(req);
+  const rateLimitResult = await checkRateLimit(
+    `internal-user-status:${identifier}`,
+    200, // generous limit — this is hit on every middleware miss
+    60_000,
+  );
+  if (!rateLimitResult.success) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429 },
+    );
+  }
+
+  // ── Input ──────────────────────────────────────────────────────────
+  const clerkId = req.nextUrl.searchParams.get("clerkId");
+  if (!clerkId) {
+    return NextResponse.json(
+      { error: "Missing clerkId" },
+      { status: 400 },
+    );
+  }
+
   try {
-    // Only allow internal calls - check for secret header
-    const internalSecret = req.headers.get("x-internal-secret");
-    const expectedSecret = process.env.INTERNAL_API_SECRET;
-
-    // If secret is configured, validate it
-    if (expectedSecret && internalSecret !== expectedSecret) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    // Get clerk ID from query param (middleware passes it)
-    const clerkId = req.nextUrl.searchParams.get("clerkId");
-
-    if (!clerkId) {
-      return NextResponse.json({ error: "Missing clerkId" }, { status: 400 });
-    }
-
-    // Query database for user - minimal select for performance
-    // Using a simple findFirst instead of findUnique for better query optimization
-    // For professionals, also check if professional profile exists to confirm they've skipped onboarding
-    const user = await prisma.user.findFirst({
-      where: { clerkId },
+    // Use findUnique on the unique clerkId index, exclude soft-deleted users
+    const user = await prisma.user.findUnique({
+      where: { clerkId, deletedAt: null },
       select: {
         id: true,
         role: true,
-        // For professionals, check if profile exists (even if incomplete) to confirm skip onboarding
         professionalProfile: {
-          select: {
-            userId: true,
-          },
+          select: { userId: true },
         },
-        // We consider a user "onboarded" if they exist in the database
-        // The user record is created during onboarding or skip flow
       },
     });
 
-    // If no user found, they haven't completed onboarding
     if (!user) {
       return NextResponse.json({
         isOnboarded: false,
@@ -61,45 +83,41 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // User exists = they've completed onboarding or skipped it
-    // (User records are only created during onboarding or skip flow)
-    // For professionals, verify they have a professional profile (created during skip)
-    if (user.role === "professional" && !user.professionalProfile) {
-      // Professional user exists but no profile - this shouldn't happen normally
-      // but log it for debugging and still consider them onboarded (they have a role)
-      console.warn(
-        `[user-status] Professional user ${clerkId} exists but has no professional profile`
+    // Check for professional users without a profile (edge case)
+    if (user.role === UserRole.PROFESSIONAL && !user.professionalProfile) {
+      logger.warn(
+        "Professional user exists but has no professional profile",
+        {
+          correlationId,
+          clerkId,
+          userId: user.id,
+        },
       );
     }
 
-    // User exists with a role = they've gone through onboarding or skip flow
     return NextResponse.json({
       isOnboarded: true,
       role: user.role,
     });
   } catch (error) {
-    console.error("Internal user-status check failed:", error);
-    // Log additional context for debugging
-    console.error("[user-status] Error details:", {
-      clerkId: req.nextUrl.searchParams.get("clerkId"),
-      error: error instanceof Error ? error.message : String(error),
-    });
-    // Return "not onboarded" to let middleware handle gracefully
-    // This is safer than throwing an error which would block the request
+    logger.error(
+      "Internal user-status check failed",
+      error instanceof Error ? error : new Error(String(error)),
+      { correlationId, clerkId },
+    );
+
+    // Return "not onboarded" so middleware handles gracefully
+    // rather than blocking the request entirely
     return NextResponse.json(
       {
         isOnboarded: false,
         role: null,
         error: "Database check failed",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
 // Force dynamic to prevent caching of database queries
 export const dynamic = "force-dynamic";
-
-// Optimize for edge runtime if available (faster cold starts)
-// Uncomment if your prisma setup supports edge runtime:
-// export const runtime = 'edge';

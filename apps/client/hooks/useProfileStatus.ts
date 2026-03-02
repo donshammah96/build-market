@@ -24,6 +24,7 @@ export interface UserProfile {
   lastName: string | null;
   phone: string | null;
   avatar: string | null;
+  bio?: string | null;
   role: "client" | "professional" | "admin";
   isProfileComplete: boolean;
   createdAt: string;
@@ -44,7 +45,10 @@ export interface ClientProfileData {
 export interface ProfessionalProfileData {
   userId: string;
   companyName: string;
+  profession: string | null;
   licenseNumber: string | null;
+  earbNumber?: string | null;
+  storeData?: any | null;
   yearsExperience: number | null;
   servicesOffered: string[];
   portfolioUrl: string | null;
@@ -107,7 +111,7 @@ async function fetchProfileStatus(): Promise<ProfileStatusResponse | null> {
  * Update profile via API
  */
 async function updateProfile(
-  data: ProfileUpdateData
+  data: ProfileUpdateData,
 ): Promise<ProfileStatusResponse> {
   const response = await fetch("/api/user/profile/complete", {
     method: "PATCH",
@@ -246,7 +250,7 @@ export function useDetailedCompletion() {
 
     return categories.map((cat) => {
       const completedFields = cat.fields.filter((f) =>
-        filledFields.includes(f)
+        filledFields.includes(f),
       );
       return {
         ...cat,
@@ -278,7 +282,7 @@ export function useDetailedCompletion() {
 
     return categories.map((cat) => {
       const completedFields = cat.fields.filter((f) =>
-        filledFields.includes(f)
+        filledFields.includes(f),
       );
       return {
         ...cat,

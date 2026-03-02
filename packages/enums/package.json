@@ -1,0 +1,23 @@
+{
+  "name": "@build/enums",
+  "version": "0.0.1",
+  "description": "Shared enum constants for the build-market monorepo. Zero runtime dependencies — safe for both browser and server.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@build/typescript-config": "workspace:*",
+    "@types/node": "^24.8.1"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}

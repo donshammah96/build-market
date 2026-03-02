@@ -160,8 +160,15 @@ export const UpdateProfileSchema = z.object({
 export const SystemSettingsSchema = z.object({
   maintenanceMode: z.boolean(),
   publicSignup: z.boolean(),
-  autoVerifyNCA: z.boolean(),
-  commissionRate: z.number().min(0).max(100),
+  enableAutoVerifyNCA: z.boolean(),
+  enableAutoVerifyEPRA: z.boolean(),
+  enableAutoVerifyBORAQS: z.boolean(),
+  enforceProfessionalLicenses: z.boolean(),
+  enforcePropertyDocuments: z.boolean(),
+  enableLandRegistryCheck: z.boolean(),
+  enforceStorePermits: z.boolean(),
+  requireTaxCompliance: z.boolean(),
+  platformCommission: z.number().min(0).max(100),
   supportEmail: z.string().email(),
   adminEmailAlerts: z.boolean(),
   securityMFA: z.boolean(),
@@ -172,7 +179,9 @@ export const SystemSettingsSchema = z.object({
 // ============================================================================
 
 export const VerificationFilterSchema = z.object({
-  entityType: z.enum(["all", "professional", "store", "property"]).default("all"),
+  entityType: z
+    .enum(["all", "professional", "store", "property"])
+    .default("all"),
   status: z
     .enum(["UNVERIFIED", "PENDING", "VERIFIED", "REJECTED", "NEEDS_CORRECTION"])
     .default("PENDING"),
@@ -191,7 +200,11 @@ export const VerifyEntitySchema = z.object({
 });
 
 export const VerifyDocumentSchema = z.object({
-  documentType: z.enum(["professional_document", "property_attachment", "certificate"]),
+  documentType: z.enum([
+    "professional_document",
+    "property_attachment",
+    "certificate",
+  ]),
   documentId: z.string().uuid(),
   action: z.enum(["APPROVE", "REJECT"]),
   notes: z.string().optional(),
@@ -200,11 +213,15 @@ export const VerifyDocumentSchema = z.object({
 export const BatchVerifyDocumentsSchema = z.object({
   documents: z.array(
     z.object({
-      documentType: z.enum(["professional_document", "property_attachment", "certificate"]),
+      documentType: z.enum([
+        "professional_document",
+        "property_attachment",
+        "certificate",
+      ]),
       documentId: z.string().uuid(),
       action: z.enum(["APPROVE", "REJECT"]),
       notes: z.string().optional(),
-    })
+    }),
   ),
 });
 
@@ -217,13 +234,17 @@ export type UpdateProfileInput = z.infer<typeof UpdateProfileSchema>;
 export type VerificationFilterInput = z.infer<typeof VerificationFilterSchema>;
 export type VerifyEntityInput = z.infer<typeof VerifyEntitySchema>;
 export type VerifyDocumentInput = z.infer<typeof VerifyDocumentSchema>;
-export type BatchVerifyDocumentsInput = z.infer<typeof BatchVerifyDocumentsSchema>;
+export type BatchVerifyDocumentsInput = z.infer<
+  typeof BatchVerifyDocumentsSchema
+>;
 
 // ============================================================================
 // Validation Functions (for use in server actions)
 // ============================================================================
 
-export function parseVerificationFilter(input: unknown): VerificationFilterInput {
+export function parseVerificationFilter(
+  input: unknown,
+): VerificationFilterInput {
   return VerificationFilterSchema.parse(input);
 }
 
@@ -235,6 +256,8 @@ export function parseVerifyDocument(input: unknown): VerifyDocumentInput {
   return VerifyDocumentSchema.parse(input);
 }
 
-export function parseBatchVerifyDocuments(input: unknown): BatchVerifyDocumentsInput {
+export function parseBatchVerifyDocuments(
+  input: unknown,
+): BatchVerifyDocumentsInput {
   return BatchVerifyDocumentsSchema.parse(input);
 }

@@ -1,5 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { CustomJwtSessionClaims } from "@repo/types";
+import { CustomJwtSessionClaims } from "@build/types";
 
 const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/unauthorized(.*)"]);
 // Dashboard routes that require admin access

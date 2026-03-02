@@ -1,132 +1,163 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
-import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { AuditAction } from "@prisma/client";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { UpdateCertificateSchema } from "@/app/lib/validation/certificate-validation";
+import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
+import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
+import {
+  getCertificateById,
+  updateCertificate,
+  deleteCertificate,
+} from "@/lib/services/certificates";
 
 const logger = getClientLogger();
 
-const updateCertificateSchema = z.object({
-  name: z.string().min(1, "Certificate name is required").optional(),
-  issuer: z.string().min(1, "Issuer is required").optional(),
-  issueDate: z.string().datetime().optional().nullable(),
-  expiryDate: z.string().datetime().optional().nullable(),
-  fileUrl: z.string().url("Invalid file URL").optional(),
-  fileKey: z.string().optional(),
-});
-
 /**
  * GET /api/professional-portal/certificates/[id]
- * Get a specific certificate by ID
+ * Get a specific certificate by ID.
  */
 export const GET = withAuth<{ id: string }>(
   async (req: NextRequest, { dbUserId }, params) => {
-    const correlationId = initializeCorrelationId(req);
+    initializeCorrelationId(req);
     const { id } = params!;
 
-    const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
-      RateLimits.READ.limit,
-      RateLimits.READ.window
-    );
-
-    if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+    if (!isValidId(id)) {
+      return apiError("Invalid certificate ID format", HttpStatus.BAD_REQUEST);
     }
 
-    logger.info("Fetching certificate", {
-      correlationId,
-      certificateId: id,
-      userId: dbUserId,
-    });
-
-    return executeResilient(
-      async () => {
-        const certificate = await prisma.certificate.findUnique({
-          where: { id },
-        });
-
-        if (!certificate) {
-          logger.warn("Certificate not found", {
-            correlationId,
-            certificateId: id,
-            userId: dbUserId,
-          });
-          return apiError("Certificate not found", HttpStatus.NOT_FOUND);
-        }
-
-        if (certificate.professionalId !== dbUserId) {
-          logger.warn("Unauthorized access to certificate", {
-            correlationId,
-            certificateId: id,
-            userId: dbUserId,
-          });
-          return apiError("Unauthorized", HttpStatus.FORBIDDEN);
-        }
-
-        logger.info("Certificate fetched successfully", {
-          correlationId,
-          certificateId: id,
-        });
-        return { data: certificate };
-      },
-      {
-        operationName: "get_certificate",
-        successStatus: HttpStatus.OK,
-      }
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `certificate-read:${identifier}`,
+      RateLimits.READ.limit,
+      RateLimits.READ.window,
     );
-  }
+    if (!rateLimitResult.success) {
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      () => getCertificateById(dbUserId, id),
+      { operationName: "get_certificate" },
+    );
+
+    if (!result.success) {
+      logger.error("Failed to fetch certificate", result.error, {
+        certificateId: id,
+      });
+      return apiError(
+        "Failed to fetch certificate",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const data = result.data;
+    if (!data) {
+      return apiError("Certificate not found", HttpStatus.NOT_FOUND);
+    }
+    if (data.success === false) {
+      if (data.error === "not_found")
+        return apiError("Certificate not found", HttpStatus.NOT_FOUND);
+      return apiError("Unauthorized", HttpStatus.FORBIDDEN);
+    }
+
+    return apiSuccess(data.data, HttpStatus.OK);
+  },
 );
 
 /**
  * PATCH /api/professional-portal/certificates/[id]
- * Update a specific certificate
+ * Update a specific certificate.
  */
 export const PATCH = withAuth<{ id: string }>(
   async (req: NextRequest, { dbUserId }, params) => {
     const correlationId = initializeCorrelationId(req);
     const { id } = params!;
 
-    const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window
-    );
-
-    if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+    if (!isValidId(id)) {
+      return apiError("Invalid certificate ID format", HttpStatus.BAD_REQUEST);
     }
 
-    const body = await req.json();
-    const validation = updateCertificateSchema.safeParse(body);
+    const sizeError = checkBodySize(req, DOCUMENT_CONFIG.MAX_BODY_SIZE);
+    if (sizeError) return sizeError;
 
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+    }
+
+    const validation = UpdateCertificateSchema.safeParse(body);
     if (!validation.success) {
-      logger.warn("Certificate update validation failed", {
-        correlationId,
-        certificateId: id,
-        errors: validation.error.issues,
-      });
       return apiError(
         "Invalid input",
         HttpStatus.BAD_REQUEST,
-        validation.error.issues
+        validation.error.issues,
       );
     }
 
-    const { name, issuer, issueDate, expiryDate, fileUrl, fileKey } =
-      validation.data;
+    const updateData = validation.data;
+
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      IdempotencyService.generateKey(dbUserId, "PATCH", {
+        domain: "certificate",
+        certificateId: id,
+        ...updateData,
+      });
+
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
+      idempotencyKey,
+      "certificate",
+      dbUserId,
+      "PATCH",
+    );
+    if (!idempotencyCheck) {
+      return apiError(
+        "Failed to process idempotency key",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    if (idempotencyCheck.status === "completed") {
+      return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+    }
+    if (idempotencyCheck.status === "pending") {
+      return apiError(
+        "Request is being processed. Please wait.",
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `certificate-write:${identifier}`,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
+    );
+    if (!rateLimitResult.success) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
 
     logger.info("Updating certificate", {
       correlationId,
@@ -134,77 +165,61 @@ export const PATCH = withAuth<{ id: string }>(
       userId: dbUserId,
     });
 
-    return executeResilient(
-      async () => {
-        // Verify certificate belongs to professional
-        const existing = await prisma.certificate.findUnique({
-          where: { id },
-        });
-
-        if (!existing) {
-          return apiError("Certificate not found", HttpStatus.NOT_FOUND);
-        }
-
-        if (existing.professionalId !== dbUserId) {
-          return apiError("Unauthorized", HttpStatus.FORBIDDEN);
-        }
-
-        // Build update data
-        const updateData: Record<string, unknown> = {};
-        if (name !== undefined) updateData.name = name;
-        if (issuer !== undefined) updateData.issuer = issuer;
-        if (issueDate !== undefined)
-          updateData.issueDate = issueDate ? new Date(issueDate) : null;
-        if (expiryDate !== undefined)
-          updateData.expiryDate = expiryDate ? new Date(expiryDate) : null;
-        if (fileUrl !== undefined) updateData.fileUrl = fileUrl;
-        if (fileKey !== undefined) updateData.fileKey = fileKey || null;
-
-        // Reset verification status if file is replaced
-        if (fileUrl !== undefined) {
-          updateData.verificationStatus = "pending";
-          updateData.verifiedAt = null;
-          updateData.notes = null;
-        }
-
-        const certificate = await prisma.certificate.update({
-          where: { id },
-          data: updateData,
-        });
-
-        logger.info("Certificate updated successfully", {
-          correlationId,
-          certificateId: id,
-        });
-
-        return { data: certificate };
-      },
-      {
-        operationName: "update_certificate",
-        successStatus: HttpStatus.OK,
-      }
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      () => updateCertificate(dbUserId, id, updateData),
+      { operationName: "update_certificate" },
     );
-  }
+
+    if (!result.success || !result.data) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        "Failed to update certificate",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const data = result.data;
+    if ("error" in data) {
+      await IdempotencyService.fail(idempotencyKey);
+      if (data.error === "not_found")
+        return apiError("Certificate not found", HttpStatus.NOT_FOUND);
+      if (data.error === "forbidden")
+        return apiError("Unauthorized", HttpStatus.FORBIDDEN);
+      if (data.error === "asset_not_found")
+        return apiError("Asset not found", HttpStatus.NOT_FOUND);
+      return apiError("Unauthorized access to asset", HttpStatus.FORBIDDEN);
+    }
+
+    await IdempotencyService.complete(idempotencyKey, data.data);
+    return apiSuccess(data.data, HttpStatus.OK);
+  },
 );
 
 /**
  * DELETE /api/professional-portal/certificates/[id]
- * Delete a specific certificate
+ * Soft-delete a specific certificate.
  */
 export const DELETE = withAuth<{ id: string }>(
   async (req: NextRequest, { dbUserId }, params) => {
     const correlationId = initializeCorrelationId(req);
     const { id } = params!;
 
-    const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window
-    );
+    if (!isValidId(id)) {
+      return apiError("Invalid certificate ID format", HttpStatus.BAD_REQUEST);
+    }
 
-    if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `certificate-delete:${identifier}`,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
+    );
+    if (!rateLimitResult.success) {
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     logger.info("Deleting certificate", {
@@ -213,36 +228,37 @@ export const DELETE = withAuth<{ id: string }>(
       userId: dbUserId,
     });
 
-    return executeResilient(
-      async () => {
-        // Verify certificate belongs to professional
-        const existing = await prisma.certificate.findUnique({
-          where: { id },
-        });
-
-        if (!existing) {
-          return apiError("Certificate not found", HttpStatus.NOT_FOUND);
-        }
-
-        if (existing.professionalId !== dbUserId) {
-          return apiError("Unauthorized", HttpStatus.FORBIDDEN);
-        }
-
-        await prisma.certificate.delete({
-          where: { id },
-        });
-
-        logger.info("Certificate deleted successfully", {
-          correlationId,
-          certificateId: id,
-        });
-
-        return { data: { success: true, message: "Certificate deleted successfully" } };
-      },
-      {
-        operationName: "delete_certificate",
-        successStatus: HttpStatus.OK,
-      }
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      () => deleteCertificate(dbUserId, id),
+      { operationName: "delete_certificate" },
     );
-  }
+
+    if (!result.success || !result.data) {
+      return apiError(
+        "Failed to delete certificate",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const data = result.data;
+    if ("error" in data) {
+      if (data.error === "not_found")
+        return apiError("Certificate not found", HttpStatus.NOT_FOUND);
+      return apiError("Unauthorized", HttpStatus.FORBIDDEN);
+    }
+
+    ComplianceService.logAdminAction(
+      dbUserId,
+      AuditAction.PROFILE_UPDATED,
+      "ProfessionalDocument",
+      id,
+      { category: data.data.category, action: "DELETE_CERTIFICATE" },
+    ).catch((err) => logger.error("Failed to create audit log", err));
+
+    return apiSuccess(
+      { message: "Certificate deleted successfully" },
+      HttpStatus.OK,
+    );
+  },
 );

@@ -1,0 +1,10 @@
+export const INQUIRY_CONFIG = {
+  MAX_BODY_SIZE: 1024 * 1024,
+  DEFAULT_LIMIT: 10,
+  MAX_LIMIT: 50,
+  IDEMPOTENCY_KEY_TTL_HOURS: 24,
+} as const;
+
+export const INQUIRIES_CLIENT_CONFIG = {
+  BULKHEAD_CONCURRENCY: 5,
+} as const;

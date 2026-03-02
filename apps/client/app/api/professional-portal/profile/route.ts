@@ -1,51 +1,46 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
-import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { getRequestMetadata } from "@/app/lib/api/request-utils";
+import { checkBodySize } from "@/app/lib/api/api-guards";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { UpdateProfileSchema } from "@/app/lib/validation/profile-validation";
+import {
+  getProfessionalProfile,
+  updateProfessionalProfile,
+} from "@/lib/services/profile";
 
 const logger = getClientLogger();
 
-const updateProfileSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  companyName: z.string().min(1, "Company name is required"),
-  bio: z.string().optional(),
-  city: z.string().optional(),
-  county: z.string().optional(),
-  website: z.string().url("Invalid URL").optional().or(z.literal("")),
-  portfolioUrl: z.string().url("Invalid URL").optional().or(z.literal("")),
-  yearsExperience: z.number().int().min(0).optional(),
-  // ServiceCategory IDs for many-to-many relation
-  serviceIds: z.array(z.string().uuid()).optional(),
-});
-
 /**
  * GET /api/professional-portal/profile
- * Get the authenticated professional's profile
+ * Get the authenticated professional's profile.
  */
 export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
   const correlationId = initializeCorrelationId(req);
 
   const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
-    identifier,
+  const rateLimitResult = await checkRateLimit(
+    `profile-read:${identifier}`,
     RateLimits.READ.limit,
-    RateLimits.READ.window
+    RateLimits.READ.window,
   );
 
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+  if (!rateLimitResult.success) {
+    return apiError(
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
   }
 
   logger.info("Fetching professional profile", {
@@ -53,76 +48,56 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     userId: dbUserId,
   });
 
-  return executeResilient(
-    async () => {
-      const professional = await prisma.professionalProfile.findUnique({
-        where: { userId: dbUserId },
-        include: {
-          user: {
-            select: {
-              firstName: true,
-              lastName: true,
-              email: true,
-              avatar: true,
-            },
-          },
-          services: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              icon: true,
-            },
-          },
-          images: {
-            where: { isMain: true },
-            take: 1,
-          },
-        },
-      });
-
-      if (!professional) {
-        logger.warn("Professional profile not found", {
-          correlationId,
-          userId: dbUserId,
-        });
-        return apiError("Professional profile not found", HttpStatus.NOT_FOUND);
-      }
-
-      logger.info("Professional profile fetched successfully", {
-        correlationId,
-        userId: dbUserId,
-      });
-      return professional;
-    },
-    {
-      operationName: "get_professional_profile",
-      successStatus: HttpStatus.OK,
-    }
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    () => getProfessionalProfile(dbUserId),
+    { operationName: "get_professional_profile" },
   );
+
+  if (!result.success) {
+    logger.error("Profile fetch failed", result.error, {
+      correlationId,
+      userId: dbUserId,
+    });
+    return apiError(
+      "Failed to fetch profile",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  const data = result.data;
+  if (!data) {
+    return apiError(
+      "Failed to fetch profile",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+  if (data.success === false) {
+    return apiError("Professional profile not found", HttpStatus.NOT_FOUND);
+  }
+
+  return apiSuccess(data.data, HttpStatus.OK);
 });
 
 /**
  * PATCH /api/professional-portal/profile
- * Update the authenticated professional's profile
+ * Update the authenticated professional's profile.
  */
 export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
   const correlationId = initializeCorrelationId(req);
+  const { ipAddress } = getRequestMetadata(req);
 
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
-    identifier,
-    RateLimits.WRITE.limit,
-    RateLimits.WRITE.window
-  );
+  const sizeError = checkBodySize(req);
+  if (sizeError) return sizeError;
 
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
   }
 
-  const body = await req.json();
-  const validation = updateProfileSchema.safeParse(body);
-
+  const validation = UpdateProfileSchema.safeParse(body);
   if (!validation.success) {
     logger.warn("Profile update validation failed", {
       correlationId,
@@ -132,93 +107,90 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
     return apiError(
       "Invalid input",
       HttpStatus.BAD_REQUEST,
-      validation.error.issues
+      validation.error.issues,
     );
   }
 
-  const {
-    firstName,
-    lastName,
-    companyName,
-    bio,
-    city,
-    county,
-    website,
-    portfolioUrl,
-    yearsExperience,
-    serviceIds,
-  } = validation.data;
+  // Idempotency
+  const idempotencyKey =
+    req.headers.get("Idempotency-Key") ||
+    IdempotencyService.generateKey(dbUserId, "PATCH", {
+      scope: "profile",
+      ...validation.data,
+    });
+
+  const idempotencyCheck = await IdempotencyService.checkOrCreate(
+    idempotencyKey,
+    "profile",
+    dbUserId,
+    "PATCH",
+  );
+
+  if (!idempotencyCheck) {
+    return apiError(
+      "Failed to process idempotency key",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  if (idempotencyCheck.status === "completed") {
+    return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+  }
+
+  if (idempotencyCheck.status === "pending") {
+    return apiError(
+      "Request is being processed. Please wait.",
+      HttpStatus.CONFLICT,
+    );
+  }
+
+  const identifier = getRateLimitIdentifier(req);
+  const rateLimitResult = await checkRateLimit(
+    `profile-write:${identifier}`,
+    RateLimits.WRITE.limit,
+    RateLimits.WRITE.window,
+  );
+
+  if (!rateLimitResult.success) {
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
 
   logger.info("Updating professional profile", {
     correlationId,
     userId: dbUserId,
+    fields: Object.keys(validation.data),
+    ipAddress,
   });
 
-  return executeResilient(
-    async () => {
-      // Use a transaction to update both User and ProfessionalProfile atomically
-      const professional = await prisma.$transaction(async (tx) => {
-        // Update User fields
-        await tx.user.update({
-          where: { id: dbUserId },
-          data: {
-            firstName,
-            lastName,
-          },
-        });
-
-        // Build the update data for ProfessionalProfile
-        const profileUpdateData: Record<string, unknown> = {
-          companyName,
-          bio,
-          city,
-          county,
-          website: website || null,
-          portfolioUrl: portfolioUrl || null,
-          yearsExperience,
-        };
-
-        // Handle many-to-many relation update for services
-        if (serviceIds !== undefined) {
-          profileUpdateData.services = {
-            set: serviceIds.map((id) => ({ id })),
-          };
-        }
-
-        // Update ProfessionalProfile fields
-        return tx.professionalProfile.update({
-          where: { userId: dbUserId },
-          data: profileUpdateData,
-          include: {
-            user: {
-              select: {
-                firstName: true,
-                lastName: true,
-                email: true,
-                avatar: true,
-              },
-            },
-            services: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                icon: true,
-              },
-            },
-          },
-        });
-      });
-
-      logger.info("Professional profile updated successfully", {
-        correlationId,
-        userId: dbUserId,
-      });
-      return professional;
-    },
-    {
-      operationName: "update_professional_profile",
-      successStatus: HttpStatus.OK,
-    }
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    () => updateProfessionalProfile(dbUserId, validation.data),
+    { operationName: "update_professional_profile" },
   );
+
+  if (!result.success || !result.data) {
+    logger.error(
+      "Profile update failed",
+      result.error || new Error("Unknown error"),
+      { correlationId, userId: dbUserId },
+    );
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      "Failed to update profile",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  await IdempotencyService.complete(idempotencyKey, result.data);
+
+  logger.info("Professional profile updated successfully", {
+    correlationId,
+    userId: dbUserId,
+  });
+
+  return apiSuccess(result.data, HttpStatus.OK);
 });

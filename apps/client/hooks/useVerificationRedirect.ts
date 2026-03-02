@@ -3,59 +3,48 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { useMyStores } from "./useStores";
+import { useMyProperties } from "./useProperties";
 
-interface VerificationStatus {
-  verificationStatus?:
-    | "UNVERIFIED"
-    | "PENDING"
-    | "VERIFIED"
-    | "REJECTED"
-    | "NEEDS_CORRECTION";
-  rejectionReason?: string | null;
-}
+// ─── Query Keys ─────────────────────────────────────────────────────────
+
+export const verificationKeys = {
+  professionalProfile: () => ["verification", "professional-profile"] as const,
+};
 
 /**
- * Hook to redirect users to appropriate pages if they have pending/rejected verification items
+ * Hook to redirect users to appropriate pages if they have pending/rejected verification items.
+ * Only runs redirects once data is loaded; skips when queries are still loading or have failed.
  */
 export function useVerificationRedirect() {
   const router = useRouter();
+  const { data: stores = [], isLoading: storesLoading } = useMyStores();
+  const { data: properties = [], isLoading: propertiesLoading } =
+    useMyProperties({ status: "all", limit: 50 });
 
   // Check professional verification status
-  const { data: professionalProfile } = useQuery({
-    queryKey: ["professional-profile"],
+  const {
+    data: professionalProfile,
+    isLoading: profileLoading,
+    isError: profileError,
+  } = useQuery({
+    queryKey: verificationKeys.professionalProfile(),
     queryFn: async () => {
       const res = await fetch("/api/professional-portal/profile");
       if (!res.ok) return null;
-      return res.json();
+      const json = await res.json();
+      return json.data ?? json;
     },
   });
 
-  // Check properties verification status
-  const { data: propertiesData } = useQuery<{ data: VerificationStatus[] }>({
-    queryKey: ["property-verification-status"],
-    queryFn: async () => {
-      const res = await fetch(
-        "/api/properties/my-listings?status=all&limit=50"
-      );
-      if (!res.ok) return { data: [] };
-      return res.json();
-    },
-  });
-
-  // Check stores verification status
-  const { data: storesData } = useQuery<{ data: VerificationStatus[] }>({
-    queryKey: ["store-verification-status"],
-    queryFn: async () => {
-      const res = await fetch("/api/stores/my-stores");
-      if (!res.ok) return { data: [] };
-      return res.json();
-    },
-  });
+  const isLoading = storesLoading || propertiesLoading || profileLoading;
 
   useEffect(() => {
+    if (isLoading || profileError) return;
     // Check professional verification
     if (professionalProfile) {
-      const status = professionalProfile.status;
+      const status =
+        professionalProfile.verificationStatus ?? professionalProfile.status;
       if (status === "REJECTED" || status === "NEEDS_CORRECTION") {
         router.push(
           "/professional-portal/settings/complete-profile?tab=verification&status=rejected"
@@ -71,7 +60,6 @@ export function useVerificationRedirect() {
     }
 
     // Check properties verification
-    const properties = propertiesData?.data || [];
     const rejectedProperty = properties.find(
       (p) =>
         p.verificationStatus === "REJECTED" ||
@@ -95,7 +83,6 @@ export function useVerificationRedirect() {
     }
 
     // Check stores verification
-    const stores = storesData?.data || [];
     const rejectedStore = stores.find(
       (s) =>
         s.verificationStatus === "REJECTED" ||
@@ -115,5 +102,5 @@ export function useVerificationRedirect() {
       );
       return;
     }
-  }, [professionalProfile, propertiesData, storesData, router]);
+  }, [professionalProfile, properties, stores, router, isLoading, profileError]);
 }

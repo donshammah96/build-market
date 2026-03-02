@@ -1,5 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 
 export async function syncUserRole() {
   const { userId, sessionClaims } = await auth();

@@ -1,10 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useUser, useClerk } from "@clerk/nextjs";
-import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 import Link from "next/link";
-import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
 import HomeownerForm from "@/components/forms/HomeownerForm";
 import ProfessionalForm from "@/components/forms/ProfessionalForm";
@@ -13,12 +10,10 @@ import {
   Briefcase,
   ArrowLeft,
   Loader2,
-  CheckCircle2,
   X,
   ChevronRight,
   FastForward,
 } from "lucide-react";
-import { OnboardingData } from "@repo/types";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,72 +35,18 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialogue";
-import { API_ROUTES, ROUTES } from "@/lib/links";
+import { useReducedMotion } from "@/hooks/use-reduced-motion";
+import { RoleCard } from "./_components/RoleCard";
+import { StepIndicator } from "./_components/StepIndicator";
+import { useOnboarding } from "./_hooks/useOnboarding";
 
 // ============================================================================
-// TYPES
-// ============================================================================
-
-/** Clerk public metadata structure for onboarded users */
-interface ClerkPublicMetadata {
-  isOnboarded?: boolean;
-  role?: "client" | "professional";
-  profileId?: string;
-}
-
-/** User roles available during onboarding */
-type UserRole = "client" | "professional";
-
-/** Props for StepIndicator component */
-interface StepIndicatorProps {
-  current: number;
-  stepNumber: number;
-  label: string;
-}
-
-/** Props for RoleCard component */
-interface RoleCardProps {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  onClick: () => void;
-  delay: number;
-  highlight?: boolean;
-  prefersReducedMotion?: boolean;
-}
-
-// ============================================================================
-// HOOKS
-// ============================================================================
-
-/**
- * Hook to detect reduced motion preference
- * Returns true if user prefers reduced motion (accessibility)
- */
-function useReducedMotion(): boolean {
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setPrefersReducedMotion(mediaQuery.matches);
-
-    const handleChange = (event: MediaQueryListEvent) => {
-      setPrefersReducedMotion(event.matches);
-    };
-
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
-
-  return prefersReducedMotion;
-}
-
-// ============================================================================
-// ANIMATION VARIANTS (with reduced motion support)
+// ANIMATION VARIANTS (Move directly here? Or keep in a constants file?
+// For now keeping here as it is view-specific)
 // ============================================================================
 
 const createVariants = (
-  prefersReducedMotion: boolean
+  prefersReducedMotion: boolean,
 ): Record<string, Variants> => ({
   fadeIn: {
     initial: { opacity: 0, y: prefersReducedMotion ? 0 : -10 },
@@ -128,235 +69,36 @@ const createVariants = (
 });
 
 // ============================================================================
-// CONSTANTS
-// ============================================================================
-
-const MAX_METADATA_RETRIES = 5;
-const METADATA_RETRY_DELAY = 300; // 300ms between retries
-
-// ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 
 export default function Onboarding() {
-  const { user, isLoaded: userLoaded } = useUser();
-  const { signOut } = useClerk();
-  const router = useRouter();
+  const {
+    step,
+    setStep,
+    role,
+    submitting,
+    showCancelDialog,
+    setShowCancelDialog,
+    handleRoleSelect,
+    handleCancelOnboarding,
+    handleSkip,
+    handleSubmit,
+  } = useOnboarding();
+
   const prefersReducedMotion = useReducedMotion();
 
-  const [step, setStep] = useState(1);
-  const [role, setRole] = useState<UserRole | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [showCancelDialog, setShowCancelDialog] = useState(false);
-
-  // Memoize animation variants based on reduced motion preference
+  // Memoize animation variants
   const variants = useMemo(
     () => createVariants(prefersReducedMotion),
-    [prefersReducedMotion]
+    [prefersReducedMotion],
   );
-
-  // Redirect if user is already onboarded (check Clerk metadata)
-  useEffect(() => {
-    if (!userLoaded || !user) return;
-
-    const metadata = user.publicMetadata as ClerkPublicMetadata;
-
-    if (metadata?.isOnboarded) {
-      const dashboardPath =
-        metadata.role === "professional"
-          ? ROUTES.professionalDashboard
-          : ROUTES.userDashboard;
-      router.replace(dashboardPath);
-    }
-  }, [userLoaded, user, router]);
-
-  /**
-   * Wait for Clerk metadata to propagate after onboarding
-   * Uses exponential backoff with user.reload() to refresh session
-   */
-  const waitForMetadataPropagation = useCallback(async (): Promise<boolean> => {
-    if (!user) return false;
-
-    for (let attempt = 0; attempt < MAX_METADATA_RETRIES; attempt++) {
-      try {
-        // Reload user to get fresh metadata from Clerk
-        await user.reload();
-
-        const metadata = user.publicMetadata as ClerkPublicMetadata;
-
-        if (metadata?.isOnboarded) {
-          return true;
-        }
-
-        // Wait with exponential backoff before next attempt
-        if (attempt < MAX_METADATA_RETRIES - 1) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, METADATA_RETRY_DELAY * Math.pow(1.5, attempt))
-          );
-        }
-      } catch (error) {
-        console.error("Error reloading user:", error);
-      }
-    }
-
-    return false;
-  }, [user]);
-
-  /**
-   * Navigate to dashboard after successful onboarding
-   * Uses router.push for SPA navigation, with fallback to hard nav if needed
-   */
-  const navigateToDashboard = useCallback(
-    async (targetRole: UserRole) => {
-      const dashboardPath =
-        targetRole === "professional"
-          ? ROUTES.professionalDashboard
-          : ROUTES.userDashboard;
-
-      // Wait for metadata to propagate
-      const metadataReady = await waitForMetadataPropagation();
-
-      if (metadataReady) {
-        // Metadata is ready, use SPA navigation
-        router.push(dashboardPath);
-      } else {
-        // Fallback: metadata didn't propagate in time
-        // Use router.refresh() to get new session, then navigate
-        router.refresh();
-        router.push(dashboardPath);
-      }
-    },
-    [router, waitForMetadataPropagation]
-  );
-
-  // Handle cancel onboarding - sign out and redirect to homepage
-  const handleCancelOnboarding = async () => {
-    toast.info("Onboarding cancelled. Signing out and returning to homepage.");
-    await signOut({ redirectUrl: "/" });
-  };
-
-  // Handle skip onboarding for homeowners - creates minimal profile and goes to dashboard
-  const handleSkipOnboarding = async () => {
-    setSubmitting(true);
-    try {
-      const response = await fetch(API_ROUTES.onboardingSkip, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to skip onboarding");
-      }
-
-      toast.info("Welcome! Redirecting to your dashboard...");
-      await navigateToDashboard("client");
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Something went wrong. Please try again."
-      );
-      setSubmitting(false);
-    }
-  };
-
-  // Handle skip for professionals - creates minimal professional profile
-  const handleSkipProfessionalOnboarding = async () => {
-    setSubmitting(true);
-    try {
-      const response = await fetch(API_ROUTES.onboardingSkipProfessional, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to skip onboarding");
-      }
-
-      toast.info("Welcome! Redirecting to your professional dashboard...");
-      await navigateToDashboard("professional");
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Could not create minimal profile. Please complete the full form."
-      );
-      setSubmitting(false);
-    }
-  };
 
   // Get the current step label for breadcrumbs
   const getCurrentStepLabel = (): string => {
     if (step === 1) return "Select Role";
     if (role === "client") return "Project Owner Details";
     return "Professional Details";
-  };
-
-  const handleRoleSelect = (selectedRole: UserRole): void => {
-    setRole(selectedRole);
-    setStep(2);
-  };
-
-  const handleHomeownerSubmit = async (data: OnboardingData) => {
-    setSubmitting(true);
-    try {
-      const response = await fetch(API_ROUTES.onboarding, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clerkId: user?.id, ...data }),
-      });
-
-      if (!response.ok) throw new Error("Failed to complete onboarding");
-
-      toast.success("Welcome home! Redirecting to your dashboard...");
-      await navigateToDashboard("client");
-    } catch {
-      toast.error("Something went wrong. Please try again.");
-      setSubmitting(false);
-    }
-  };
-
-  const handleProfessionalSubmit = async (data: OnboardingData) => {
-    setSubmitting(true);
-    try {
-      const response = await fetch(API_ROUTES.onboarding, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clerkId: user?.id, ...data }),
-      });
-
-      if (!response.ok)
-        throw new Error("Failed to create professional profile");
-
-      // If store data was collected, create the store
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const storeData = (data as any).storeData;
-      if (storeData) {
-        try {
-          const storeResponse = await fetch(API_ROUTES.stores, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(storeData),
-          });
-
-          if (!storeResponse.ok) {
-            console.error(
-              "Failed to create store, but professional profile was created"
-            );
-          }
-        } catch (storeError) {
-          console.error("Store creation error:", storeError);
-        }
-      }
-
-      toast.success("Professional account verified! Redirecting...");
-      await navigateToDashboard("professional");
-    } catch {
-      toast.error("Could not verify profile. Please try again.");
-      setSubmitting(false);
-    }
   };
 
   return (
@@ -460,7 +202,7 @@ export default function Onboarding() {
             <div
               className={cn(
                 "w-12 h-0.5 transition-colors duration-500",
-                step >= 2 ? "bg-emerald-500" : "bg-zinc-800"
+                step >= 2 ? "bg-emerald-500" : "bg-zinc-800",
               )}
             />
             <StepIndicator current={step} stepNumber={2} label="Details" />
@@ -533,7 +275,7 @@ export default function Onboarding() {
               className="w-full max-w-4xl mx-auto"
             >
               {role === "client" ? (
-                /* Homeowner Form - Keep existing wrapper */
+                /* Homeowner Form */
                 <div className="relative bg-zinc-900/50 backdrop-blur-xl border border-white/10 p-1 rounded-2xl shadow-2xl max-w-2xl mx-auto">
                   <div className="absolute top-4 left-4 z-20">
                     <Button
@@ -561,27 +303,27 @@ export default function Onboarding() {
 
                     <HomeownerForm
                       onBack={() => setStep(1)}
-                      onSubmit={handleHomeownerSubmit}
+                      onSubmit={handleSubmit}
                       onAuthSuccess={() => {}}
-                      onSkip={handleSkipOnboarding}
+                      onSkip={() => handleSkip("client")}
                     />
                   </div>
                 </div>
               ) : (
-                /* Professional Form - Multi-step wizard handles its own UI */
+                /* Professional Form */
                 <div className="relative">
                   <ProfessionalForm
                     onBack={() => setStep(1)}
-                    onSubmit={handleProfessionalSubmit}
+                    onSubmit={handleSubmit}
                     onAuthSuccess={() => {}}
                   />
 
-                  {/* Skip option for professionals - shown below the wizard */}
+                  {/* Skip option for professionals */}
                   <div className="mt-6 pt-4 border-t border-white/10 max-w-2xl mx-auto">
                     <Button
                       type="button"
                       variant="ghost"
-                      onClick={handleSkipProfessionalOnboarding}
+                      onClick={() => handleSkip("professional")}
                       disabled={submitting}
                       className="w-full text-zinc-400 hover:text-white hover:bg-white/5"
                     >
@@ -602,78 +344,3 @@ export default function Onboarding() {
     </div>
   );
 }
-
-// --- Helper Components ---
-
-const StepIndicator: React.FC<StepIndicatorProps> = ({
-  current,
-  stepNumber,
-  label,
-}) => {
-  const isActive = current >= stepNumber;
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <div
-        className={cn(
-          "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 border-2",
-          isActive
-            ? "bg-emerald-500 border-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)]"
-            : "bg-transparent border-zinc-700 text-zinc-500"
-        )}
-      >
-        {isActive ? <CheckCircle2 size={14} /> : stepNumber}
-      </div>
-      <span
-        className={cn(
-          "text-xs font-medium uppercase tracking-wider",
-          isActive ? "text-emerald-400" : "text-zinc-600"
-        )}
-      >
-        {label}
-      </span>
-    </div>
-  );
-};
-
-const RoleCard: React.FC<RoleCardProps> = ({
-  icon,
-  title,
-  description,
-  onClick,
-  delay,
-  highlight,
-  prefersReducedMotion = false,
-}) => (
-  <motion.button
-    initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ delay, duration: prefersReducedMotion ? 0.1 : 0.5 }}
-    whileHover={prefersReducedMotion ? undefined : { y: -5, scale: 1.02 }}
-    whileTap={prefersReducedMotion ? undefined : { scale: 0.98 }}
-    onClick={onClick}
-    className={cn(
-      "group relative flex flex-col items-start text-left p-8 rounded-2xl transition-all duration-300 border",
-      "bg-zinc-900/40 backdrop-blur-md hover:bg-zinc-800/60",
-      highlight
-        ? "border-emerald-500/30 hover:border-emerald-500/60 hover:shadow-[0_0_30px_-5px_rgba(16,185,129,0.15)]"
-        : "border-white/10 hover:border-white/20 hover:shadow-xl"
-    )}
-  >
-    <div
-      className={cn(
-        "mb-6 p-4 rounded-xl transition-colors duration-300",
-        highlight
-          ? "bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white"
-          : "bg-white/5 text-zinc-400 group-hover:bg-white group-hover:text-zinc-900"
-      )}
-    >
-      {icon}
-    </div>
-    <h3 className="text-2xl font-bold text-white mb-3 group-hover:text-emerald-400 transition-colors">
-      {title}
-    </h3>
-    <p className="text-zinc-400 text-sm leading-relaxed group-hover:text-zinc-300">
-      {description}
-    </p>
-  </motion.button>
-);

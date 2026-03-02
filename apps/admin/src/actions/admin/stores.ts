@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, prisma, County, StoreType, StoreCategory } from "@repo/db";
+import { Prisma, prisma, County, StoreType, StoreCategory } from "@build/db";
 import { safeAction, safeVerificationAction } from "./shared";
 import { z } from "zod";
 import { notStrictEqual } from "assert";

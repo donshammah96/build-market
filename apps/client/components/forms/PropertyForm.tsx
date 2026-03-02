@@ -38,16 +38,24 @@ import { cn } from "@/lib/utils";
 import { isLocalUpload } from "@/lib/services/upload";
 import { useImageUploader } from "@/hooks/useImageUploader";
 import Image from "next/image";
+// @build/enums — single source of truth for all Prisma-aligned enums
 import {
+  COUNTIES,
+  COUNTY_LABELS,
+  PROPERTY_TYPES as PROPERTY_TYPE_VALUES,
+  PROPERTY_TYPE_LABELS,
+  PROPERTY_CATEGORIES as PROPERTY_CATEGORY_VALUES,
+  PROPERTY_CATEGORY_LABELS,
+  PROPERTY_TENURES,
+} from "@build/enums";
+// Local sub-type (only the 3 document types exposed in this form)
+import type {
   PropertyType,
   PropertyCategory,
   PropertyAttachmentType,
-  PROPERTY_TYPE_LABELS,
-  PROPERTY_CATEGORY_LABELS,
-  PROPERTY_ATTACHMENT_TYPE_LABELS,
-  County,
 } from "@/types/property";
-import { COUNTY_LABELS } from "@/types/store";
+import { PROPERTY_ATTACHMENT_TYPE_LABELS as ATTACH_LABELS } from "@/types/property";
+import type { County } from "@build/enums";
 
 // ============================================================================
 // CONSTANTS & TYPES
@@ -120,7 +128,7 @@ export const isAllowedUrlDomain = (url: string): boolean => {
     const urlObj = new URL(url);
     return ALLOWED_URL_DOMAINS.some(
       (domain: string) =>
-        urlObj.hostname === domain || urlObj.hostname.endsWith(`.${domain}`)
+        urlObj.hostname === domain || urlObj.hostname.endsWith(`.${domain}`),
     );
   } catch {
     return false;
@@ -149,46 +157,35 @@ const getAttachmentIcon = (url: string, type: string): React.ReactNode => {
   return <File className="h-4 w-4 text-zinc-500" />;
 };
 
-// Property Type options
-const PROPERTY_TYPES: Array<{ value: PropertyType; label: string }> = [
-  { value: "SALE", label: PROPERTY_TYPE_LABELS.SALE },
-  { value: "RENT", label: PROPERTY_TYPE_LABELS.RENT },
-  { value: "LEASE", label: PROPERTY_TYPE_LABELS.LEASE },
-];
+// Property Type options — derived from @build/enums (single source of truth)
+const PROPERTY_TYPE_OPTIONS: Array<{ value: PropertyType; label: string }> =
+  PROPERTY_TYPE_VALUES.map((v) => ({
+    value: v as PropertyType,
+    label: PROPERTY_TYPE_LABELS[v],
+  }));
 
-// Property Category options
-const PROPERTY_CATEGORIES: Array<{
+// Property Category options — derived from @build/enums
+const PROPERTY_CATEGORY_OPTIONS: Array<{
   value: PropertyCategory;
   label: string;
-}> = [
-  { value: "RESIDENTIAL", label: PROPERTY_CATEGORY_LABELS.RESIDENTIAL },
-  { value: "COMMERCIAL", label: PROPERTY_CATEGORY_LABELS.COMMERCIAL },
-  { value: "LAND", label: PROPERTY_CATEGORY_LABELS.LAND },
-  { value: "INDUSTRIAL", label: PROPERTY_CATEGORY_LABELS.INDUSTRIAL },
-];
+}> = PROPERTY_CATEGORY_VALUES.map((v) => ({
+  value: v as PropertyCategory,
+  label: PROPERTY_CATEGORY_LABELS[v],
+}));
 
-// Property Attachment Type options
+// Property Attachment Type options (form subset — 3 document types only)
 const ATTACHMENT_TYPES: Array<{
   value: PropertyAttachmentType;
   label: string;
 }> = [
-  {
-    value: "TITLE_DEED",
-    label: PROPERTY_ATTACHMENT_TYPE_LABELS.TITLE_DEED,
-  },
-  {
-    value: "OFFICIAL_SEARCH",
-    label: PROPERTY_ATTACHMENT_TYPE_LABELS.OFFICIAL_SEARCH,
-  },
-  {
-    value: "MANDATE_LETTER",
-    label: PROPERTY_ATTACHMENT_TYPE_LABELS.MANDATE_LETTER,
-  },
+  { value: "TITLE_DEED", label: ATTACH_LABELS.TITLE_DEED },
+  { value: "OFFICIAL_SEARCH", label: ATTACH_LABELS.OFFICIAL_SEARCH },
+  { value: "MANDATE_LETTER", label: ATTACH_LABELS.MANDATE_LETTER },
 ];
 
-// County options
+// County options — derived from @build/enums COUNTY_LABELS record
 const COUNTY_OPTIONS: Array<{ value: County; label: string }> = Object.entries(
-  COUNTY_LABELS
+  COUNTY_LABELS,
 ).map(([value, label]) => ({
   value: value as County,
   label,
@@ -202,74 +199,16 @@ const CURRENCY_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "GBP", label: "GBP - British Pound" },
 ];
 
-// Create County enum from the County type
-const CountyEnum = z.enum([
-  "MOMBASA",
-  "KWALE",
-  "KILIFI",
-  "TANA_RIVER",
-  "LAMU",
-  "TAITA_TAVETA",
-  "GARISSA",
-  "WAJIR",
-  "MANDERA",
-  "MARSABIT",
-  "ISIOLO",
-  "MERU",
-  "THARAKA_NITHI",
-  "EMBU",
-  "KITUI",
-  "MACHAKOS",
-  "MAKUENI",
-  "NYANDARUA",
-  "NYERI",
-  "KIRINYAGA",
-  "MURANGA",
-  "KIAMBU",
-  "TURKANA",
-  "WEST_POKOT",
-  "SAMBURU",
-  "TRANS_NZOIA",
-  "UASIN_GISHU",
-  "ELGEYO_MARAKWET",
-  "NANDI",
-  "BARINGO",
-  "LAIKIPIA",
-  "NAKURU",
-  "NAROK",
-  "KAJIADO",
-  "KERICHO",
-  "BOMET",
-  "KAKAMEGA",
-  "VIHIGA",
-  "BUNGOMA",
-  "BUSIA",
-  "SIAYA",
-  "KISUMU",
-  "HOMA_BAY",
-  "MIGORI",
-  "KISII",
-  "NYAMIRA",
-  "NAIROBI",
-] as const);
-
-// Property Type enum
-const PropertyTypeEnum = z.enum(["SALE", "RENT", "LEASE"]);
-
-// Property Category enum
-const PropertyCategoryEnum = z.enum([
-  "RESIDENTIAL",
-  "COMMERCIAL",
-  "LAND",
-  "INDUSTRIAL",
-]);
-
-// Property Attachment Type enum
+// Zod enums — derived from @build/enums as-const arrays (single source of truth)
+const CountyEnum = z.enum(COUNTIES);
+const PropertyTypeEnum = z.enum(PROPERTY_TYPE_VALUES);
+const PropertyCategoryEnum = z.enum(PROPERTY_CATEGORY_VALUES);
+// Attachment type is a narrower 3-element subset used only in this form
 const PropertyAttachmentTypeEnum = z.enum([
   "TITLE_DEED",
   "OFFICIAL_SEARCH",
   "MANDATE_LETTER",
-]);
+] as const);
 
 // Property attachment schema
 const PropertyAttachmentSchema = z.object({
@@ -303,6 +242,7 @@ const propertySchema = z
       .min(1, "Currency is required")
       .max(3, "Currency code must be 3 characters or less"),
     type: PropertyTypeEnum,
+    tenure: z.enum(PROPERTY_TENURES),
     category: PropertyCategoryEnum,
     county: CountyEnum,
     location: z.string().min(1, "Location is required").max(100),
@@ -341,6 +281,7 @@ const propertySchema = z
       .max(50, "Bathrooms cannot exceed 50")
       .optional(),
     areaSqFt: z.number().positive("Area must be a positive number").optional(),
+    areaUnit: z.enum(["SQ_FEET", "ACRES", "SQ_METERS"]).optional(),
     lotSize: z
       .number()
       .positive("Lot size must be a positive number")
@@ -368,10 +309,16 @@ const propertySchema = z
         z
           .string()
           .min(1, "Feature cannot be empty")
-          .max(100, "Feature must be less than 100 characters")
+          .max(100, "Feature must be less than 100 characters"),
       )
       .max(20, "Maximum 20 features allowed")
       .optional(),
+    priceNegotiable: z.boolean().optional(),
+    isGatedCommunity: z.boolean().optional(),
+    hasBorehole: z.boolean().optional(),
+    hasBackupGenerator: z.boolean().optional(),
+    hasElevator: z.boolean().optional(),
+    hasCCTV: z.boolean().optional(),
     images: z
       .array(
         z.object({
@@ -383,9 +330,9 @@ const propertySchema = z
               (url) => url.startsWith("https://") || url.startsWith("/"),
               {
                 message: "Image URL must be a valid HTTPS or local URL",
-              }
+              },
             ),
-        })
+        }),
       )
       .min(1, "At least one image is required")
       .max(20, "Maximum 20 images allowed")
@@ -401,7 +348,7 @@ const propertySchema = z
     {
       message: "Provide both latitude and longitude or neither",
       path: ["latitude"],
-    }
+    },
   );
 
 export type PropertyFormData = z.infer<typeof propertySchema>;
@@ -438,7 +385,7 @@ const FormSection: React.FC<{
   <div
     className={cn(
       "bg-white dark:bg-zinc-900/50 rounded-xl border border-zinc-100 dark:border-zinc-800 p-6 shadow-sm",
-      className
+      className,
     )}
   >
     <div className="flex items-start gap-3 mb-6 border-b border-zinc-100 dark:border-zinc-800 pb-4">
@@ -524,7 +471,7 @@ const FeaturesInput = memo<{
     (feature: string) => {
       onChange(value.filter((f) => f !== feature));
     },
-    [value, onChange]
+    [value, onChange],
   );
 
   return (
@@ -627,7 +574,7 @@ const ImageGallery = memo<ImageGalleryProps>(function ImageGallery({
         className={cn(
           THEME.dropZone,
           "p-6 mb-4",
-          isDragging ? THEME.dropZoneActive : THEME.dropZoneDefault
+          isDragging ? THEME.dropZoneActive : THEME.dropZoneDefault,
         )}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -991,21 +938,28 @@ export default function PropertyForm({
   // Debounce form values to prevent expensive onChange calls on every keystroke
   const [debouncedFormValues] = useDebounce(formValues, 300);
 
+  // Keep a stable ref to the latest onChange callback to prevent infinite useEffect loops
+  // when parent components pass inline functions as onChange handlers
+  const onChangeRef = React.useRef(onChange);
   React.useEffect(() => {
-    if (onChange) {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  React.useEffect(() => {
+    if (onChangeRef.current) {
       // Transform images from object array to string array for onChange callback
       const transformedValues: Partial<PropertyFormSubmitData> = {
         ...debouncedFormValues,
         images: debouncedFormValues.images?.map((img) => img.value),
       };
-      onChange(transformedValues);
+      onChangeRef.current(transformedValues);
     }
-  }, [debouncedFormValues, onChange]);
+  }, [debouncedFormValues]);
 
   // Memoized image fields for stable reference
   const stableImageFields = useMemo(
     () => imageFields.map((f) => ({ id: f.id, value: f.value })),
-    [imageFields]
+    [imageFields],
   );
 
   // Wrapper handlers that connect the hook to useFieldArray
@@ -1015,7 +969,7 @@ export default function PropertyForm({
       stableImageFields,
       appendImage,
       updateImage,
-      removeImage
+      removeImage,
     );
   };
 
@@ -1188,7 +1142,7 @@ export default function PropertyForm({
               errorList.push({
                 field: `Image ${index + 1}`,
                 message: safeMessage(
-                  (valueError as { message: unknown }).message
+                  (valueError as { message: unknown }).message,
                 ),
                 section: "Media",
               });
@@ -1247,7 +1201,7 @@ export default function PropertyForm({
    */
   const onFormSubmit = async (data: PropertyFormData): Promise<void> => {
     const loadingToast = toast.loading(
-      isEditing ? "Saving changes..." : "Creating property..."
+      isEditing ? "Saving changes..." : "Creating property...",
     );
     try {
       // Transform images from object array to string array for submission
@@ -1299,7 +1253,7 @@ export default function PropertyForm({
 
   // Sort sections by defined order
   const sortedSections = Object.keys(errorsBySection).sort(
-    (a, b) => sectionOrder.indexOf(a) - sectionOrder.indexOf(b)
+    (a, b) => sectionOrder.indexOf(a) - sectionOrder.indexOf(b),
   );
 
   return (
@@ -1368,7 +1322,7 @@ export default function PropertyForm({
               control={control}
               render={({ field }) => (
                 <Combobox
-                  options={PROPERTY_TYPES}
+                  options={PROPERTY_TYPE_OPTIONS}
                   value={field.value}
                   onChange={field.onChange}
                   placeholder="Select type"
@@ -1384,7 +1338,7 @@ export default function PropertyForm({
               control={control}
               render={({ field }) => (
                 <Combobox
-                  options={PROPERTY_CATEGORIES}
+                  options={PROPERTY_CATEGORY_OPTIONS}
                   value={field.value}
                   onChange={field.onChange}
                   placeholder="Select category"

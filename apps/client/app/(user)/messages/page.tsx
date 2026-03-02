@@ -11,19 +11,26 @@ import { ConversationsList } from "@/components/chat/ConversationsList";
 import ChatWindow from "@/components/chat/ChatWindow";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { ROUTES } from "@/lib/links";
+import { cn } from "@/lib/utils";
 
 export default function MessagesPage() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showChatOnMobile, setShowChatOnMobile] = useState(false);
 
   const handleSelectConversation = (conversationId: string, otherUserId: string) => {
     setSelectedConversationId(conversationId);
     setSelectedUserId(otherUserId);
+    setShowChatOnMobile(true);
   };
+
+  const handleBackToList = () => setShowChatOnMobile(false);
 
   return (
     <div className="min-h-screen bg-zinc-50/50 flex flex-col">
@@ -44,34 +51,39 @@ export default function MessagesPage() {
           </Link>
         </div>
 
-        <div className="flex-1 grid md:grid-cols-12 gap-6 h-[calc(100vh-220px)] min-h-[600px]">
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 h-[calc(100vh-220px)] min-h-[600px]">
           
           {/* --- LEFT COLUMN: Conversations List --- */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.4 }}
-            className="md:col-span-4 lg:col-span-3 h-full"
+            className={cn(
+              "md:col-span-4 lg:col-span-3 h-full",
+              showChatOnMobile && selectedConversationId && "hidden md:block"
+            )}
           >
             <Card className="h-full border-zinc-200 shadow-sm bg-white overflow-hidden flex flex-col">
-              {/* Sidebar Header */}
               <div className="p-4 border-b border-zinc-100 bg-white">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-                  <input 
-                    type="text" 
-                    placeholder="Search messages..." 
-                    className="w-full pl-9 pr-4 py-2 bg-zinc-50 border-zinc-200 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                  <Input
+                    type="text"
+                    placeholder="Search conversations..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 bg-zinc-50 border-zinc-200 focus:ring-emerald-500/20 focus:border-emerald-500"
                   />
                 </div>
               </div>
-              
-              {/* List Container */}
-              <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="flex-1 overflow-hidden min-h-0">
                 <Suspense fallback={<ConversationsListSkeleton />}>
                   <ConversationsList
                     onSelectConversation={handleSelectConversation}
                     selectedId={selectedConversationId || undefined}
+                    embedded
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
                   />
                 </Suspense>
               </div>
@@ -83,17 +95,31 @@ export default function MessagesPage() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
-            className="md:col-span-8 lg:col-span-9 h-full"
+            className={cn(
+              "md:col-span-8 lg:col-span-9 h-full flex flex-col",
+              selectedConversationId ? "flex" : "hidden md:flex"
+            )}
           >
             <Card className="h-full border-zinc-200 shadow-sm bg-white overflow-hidden flex flex-col relative">
               {selectedConversationId ? (
                 <div className="flex flex-col h-full">
                   {/* Chat Header Overlay (Improves context) */}
-                  <div className="h-16 border-b border-zinc-100 flex items-center justify-between px-6 bg-white z-10">
+                  <div className="h-16 border-b border-zinc-100 flex items-center justify-between px-4 md:px-6 bg-white z-10">
                     <div className="flex items-center gap-3">
+                      {showChatOnMobile && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="md:hidden -ml-2"
+                          onClick={handleBackToList}
+                          aria-label="Back to conversations"
+                        >
+                          <ArrowLeft className="h-5 w-5" />
+                        </Button>
+                      )}
                        <Avatar className="h-9 w-9 border border-zinc-100">
-                          <AvatarFallback className="bg-emerald-100 text-emerald-700 font-medium">
-                            {selectedUserId ? 'U' : '#'}
+                          <AvatarFallback className="bg-emerald-100 text-emerald-700 font-medium text-xs">
+                            {selectedUserId ? selectedUserId.slice(0, 2).toUpperCase() : "?"}
                           </AvatarFallback>
                        </Avatar>
                        <div>
@@ -159,8 +185,8 @@ function EmptyChatState() {
       <p className="text-zinc-500 max-w-sm mb-8 leading-relaxed">
         Select a conversation from the sidebar to view your message history or start a new chat with a professional.
       </p>
-      <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
-        Start New Conversation
+      <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" asChild>
+        <Link href={ROUTES.findProfessional}>Find a Professional</Link>
       </Button>
     </div>
   );

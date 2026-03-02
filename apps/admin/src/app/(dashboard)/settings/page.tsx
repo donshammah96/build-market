@@ -11,8 +11,8 @@ export default async function SettingsPage() {
   const initialSettings = settings ?? {
     maintenanceMode: false,
     publicSignup: true,
-    autoVerifyNCA: false,
-    commissionRate: 10,
+    enableAutoVerifyNCA: false,
+    platformCommission: 10,
     supportEmail: "support@buildmarket.co.ke",
     adminEmailAlerts: true,
     securityMFA: true

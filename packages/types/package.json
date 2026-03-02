@@ -1,25 +1,26 @@
 {
-  "name": "@repo/types",
+  "name": "@build/types",
   "version": "0.0.1",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "scripts": {
     "check-types": "tsc --noEmit",
     "build": "tsc",
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@build/enums": "workspace:*",
     "zod": "^4.1.9"
   },
   "devDependencies": {
-    "@repo/typescript-config": "workspace:*",
+    "@build/typescript-config": "workspace:*",
     "@types/node": "^24.8.1"
   },
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts",
-      "require": "./dist/index.js"
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
     }
   }
 }

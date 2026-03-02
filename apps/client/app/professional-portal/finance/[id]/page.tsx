@@ -24,7 +24,6 @@ import Link from "next/link";
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -144,7 +143,7 @@ export default function TransactionDetailPage() {
     queryKey: ["transaction", id],
     queryFn: async () => {
       const res = await fetch(
-        `/api/professional-portal/finance/transactions/${id}`
+        `/api/professional-portal/finance/transactions/${id}`,
       );
       if (!res.ok) {
         if (res.status === 404) {
@@ -166,7 +165,7 @@ export default function TransactionDetailPage() {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
-        }
+        },
       );
       if (!res.ok) {
         const error = await res.json();
@@ -193,7 +192,7 @@ export default function TransactionDetailPage() {
         `/api/professional-portal/finance/transactions/${id}`,
         {
           method: "DELETE",
-        }
+        },
       );
       if (!res.ok) {
         const error = await res.json();
@@ -440,7 +439,7 @@ export default function TransactionDetailPage() {
                         day: "numeric",
                         hour: "2-digit",
                         minute: "2-digit",
-                      }
+                      },
                     )}
                   </p>
                 </div>
@@ -458,7 +457,7 @@ export default function TransactionDetailPage() {
                         day: "numeric",
                         hour: "2-digit",
                         minute: "2-digit",
-                      }
+                      },
                     )}
                   </p>
                 </div>

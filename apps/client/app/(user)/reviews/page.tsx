@@ -2,17 +2,19 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Star, 
-  Search, 
-  Filter, 
-  ThumbsUp, 
-  MessageSquare, 
-  Store as StoreIcon, 
+import { formatDistanceToNow } from "date-fns";
+import {
+  Star,
+  Search,
+  Filter,
+  ThumbsUp,
+  MessageSquare,
+  Store as StoreIcon,
   HardHat,
   BadgeCheck,
-  Quote
+  Quote,
 } from "lucide-react";
 
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
@@ -24,66 +26,30 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useReviews } from "@/hooks/useReviews";
+import { getProfessionalUrl, getStoreUrl } from "@/lib/links";
+import type { ReviewListItem } from "@/lib/reviews-client";
 
-// --- Types based on Prisma Schema (Mocking the joined data) ---
-type ReviewType = 'professional' | 'store';
-
-interface ReviewWithRelations {
-  id: string;
-  rating: number;
-  comment: string;
-  createdAt: string;
-  type: ReviewType;
-  reviewer: {
-    firstName: string;
-    lastName: string;
-    imageUrl?: string;
-    clientProfile?: {
-      city: string;
-    };
-  };
-  // Relations (Only one is populated based on type)
-  professional?: {
-    id: string; // userId
-    companyName: string;
-    imageUrl?: string;
-    verified: boolean;
-  };
-  store?: {
-    id: string;
-    name: string;
-    imageUrl?: string;
-    verified: boolean;
-  };
-}
+type TabValue = "all" | "PROFESSIONAL" | "STORE";
 
 export default function ReviewsPage() {
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<ReviewType | 'all'>('all');
-  const [reviews, setReviews] = useState<ReviewWithRelations[]>([]);
+  const [activeTab, setActiveTab] = useState<TabValue>("all");
+  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    // Simulate Prisma Fetch: 
-    // await prisma.review.findMany({ include: { reviewer: true, professional: true, store: true } })
-    const timer = setTimeout(() => {
-      setReviews(MOCK_REVIEWS);
-      setLoading(false);
-    }, 1000);
+    const timer = setTimeout(() => setSearchQuery(searchInput), 300);
     return () => clearTimeout(timer);
-  }, []);
+  }, [searchInput]);
 
-  // Filter Logic
-  const filteredReviews = reviews.filter((review) => {
-    const matchesTab = activeTab === 'all' || review.type === activeTab;
-    const searchLower = searchQuery.toLowerCase();
-    const matchesSearch = 
-      review.comment?.toLowerCase().includes(searchLower) ||
-      review.professional?.companyName.toLowerCase().includes(searchLower) ||
-      review.store?.name.toLowerCase().includes(searchLower);
-      
-    return matchesTab && matchesSearch;
+  const typeFilter = activeTab === "all" ? undefined : activeTab;
+  const { data, isLoading } = useReviews({
+    type: typeFilter,
+    search: searchQuery.trim() || undefined,
+    limit: 24,
   });
+
+  const reviews = data?.reviews ?? [];
 
   return (
     <div className="min-h-screen bg-zinc-50/50 flex flex-col">
@@ -128,17 +94,17 @@ export default function ReviewsPage() {
                   <Input 
                     placeholder="Search reviews or companies..." 
                     className="pl-9 bg-white border-zinc-200"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
                   />
                 </div>
 
                 {/* Tabs */}
-                <Tabs defaultValue="all" className="w-full md:w-auto" onValueChange={(v) => setActiveTab(v as ReviewType | 'all')}>
+                <Tabs defaultValue="all" className="w-full md:w-auto" onValueChange={(v) => setActiveTab(v as TabValue)}>
                   <TabsList className="grid w-full grid-cols-3 md:w-[400px]">
                     <TabsTrigger value="all">All Reviews</TabsTrigger>
-                    <TabsTrigger value="professional">Pros</TabsTrigger>
-                    <TabsTrigger value="store">Stores</TabsTrigger>
+                    <TabsTrigger value="PROFESSIONAL">Pros</TabsTrigger>
+                    <TabsTrigger value="STORE">Stores</TabsTrigger>
                   </TabsList>
                 </Tabs>
 
@@ -153,12 +119,12 @@ export default function ReviewsPage() {
 
         {/* --- Reviews Grid --- */}
         <section className="container mx-auto px-4 md:px-6 pb-20">
-          {loading ? (
+          {isLoading ? (
              <ReviewsSkeleton />
-          ) : filteredReviews.length > 0 ? (
+          ) : reviews.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <AnimatePresence mode="popLayout">
-                {filteredReviews.map((review, index) => (
+                {reviews.map((review, index) => (
                   <ReviewListCard key={review.id} review={review} index={index} />
                 ))}
               </AnimatePresence>
@@ -182,12 +148,17 @@ export default function ReviewsPage() {
 
 // --- Sub-Components ---
 
-function ReviewListCard({ review, index }: { review: ReviewWithRelations; index: number }) {
-  // Determine target (Professional or Store) based on type
-  const targetName = review.type === 'professional' ? review.professional?.companyName : review.store?.name;
-  const targetImage = review.type === 'professional' ? review.professional?.imageUrl : review.store?.imageUrl;
-  const isVerified = review.type === 'professional' ? review.professional?.verified : review.store?.verified;
-  
+function ReviewListCard({ review, index }: { review: ReviewListItem; index: number }) {
+  const targetName = review.type === "PROFESSIONAL" ? review.professional?.companyName : review.store?.name;
+  const targetImage = review.type === "PROFESSIONAL" ? review.professional?.imageUrl : review.store?.imageUrl;
+  const isVerified = review.type === "PROFESSIONAL" ? review.professional?.verified : review.store?.verified;
+  const targetUrl =
+    review.type === "PROFESSIONAL" && review.professional
+      ? getProfessionalUrl(review.professional.id)
+      : review.store
+        ? getStoreUrl(review.store.id)
+        : null;
+
   return (
     <motion.div
       layout
@@ -202,7 +173,7 @@ function ReviewListCard({ review, index }: { review: ReviewWithRelations; index:
           {/* Header: Reviewer Info */}
           <div className="flex items-center gap-3 mb-4">
             <Avatar className="h-10 w-10 border border-zinc-100">
-              <AvatarImage src={review.reviewer.imageUrl} />
+              <AvatarImage src={review.reviewer.avatar ?? undefined} />
               <AvatarFallback className="bg-emerald-50 text-emerald-700 font-bold">
                 {review.reviewer.firstName[0]}
               </AvatarFallback>
@@ -212,7 +183,7 @@ function ReviewListCard({ review, index }: { review: ReviewWithRelations; index:
                 {review.reviewer.firstName} {review.reviewer.lastName}
               </p>
               <p className="text-xs text-zinc-500">
-                {review.reviewer.clientProfile?.city || "Kenya"} • {review.createdAt}
+                {review.reviewer.city ?? "Kenya"} • {formatDistanceToNow(new Date(review.createdAt), { addSuffix: true })}
               </p>
             </div>
             <div className="ml-auto flex">
@@ -232,25 +203,26 @@ function ReviewListCard({ review, index }: { review: ReviewWithRelations; index:
           <div className="relative mb-6 flex-1">
             <Quote className="absolute -top-1 -left-1 h-6 w-6 text-zinc-100 fill-zinc-100 transform -scale-x-100" />
             <p className="relative z-10 text-zinc-600 leading-relaxed pt-2">
-              &quot;{review.comment}&quot;
+              &quot;{review.comment ?? ""}&quot;
             </p>
           </div>
 
           {/* Footer: Reviewed Entity (The Hook) */}
           <div className="mt-auto pt-4 border-t border-zinc-100">
              <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-                {review.type === 'professional' ? <HardHat className="h-3 w-3" /> : <StoreIcon className="h-3 w-3" />}
+                {review.type === "PROFESSIONAL" ? <HardHat className="h-3 w-3" /> : <StoreIcon className="h-3 w-3" />}
                 Reviewed
              </div>
              
-             <div className="flex items-center gap-3 bg-zinc-50 p-3 rounded-lg group-hover:bg-emerald-50/50 transition-colors cursor-pointer">
+             {targetUrl ? (
+             <Link href={targetUrl} className="flex items-center gap-3 bg-zinc-50 p-3 rounded-lg group-hover:bg-emerald-50/50 transition-colors cursor-pointer">
                 <div className="h-10 w-10 relative rounded overflow-hidden bg-white border border-zinc-200 shrink-0">
                    {/* Fallback visual if no image */}
                    {targetImage ? (
                       <Image src={targetImage} alt={targetName || ''} fill className="object-cover" />
                    ) : (
                       <div className="h-full w-full flex items-center justify-center bg-zinc-100 text-zinc-400">
-                         {review.type === 'professional' ? <HardHat className="h-5 w-5" /> : <StoreIcon className="h-5 w-5" />}
+                         {review.type === "PROFESSIONAL" ? <HardHat className="h-5 w-5" /> : <StoreIcon className="h-5 w-5" />}
                       </div>
                    )}
                 </div>
@@ -261,14 +233,36 @@ function ReviewListCard({ review, index }: { review: ReviewWithRelations; index:
                       {isVerified && <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />}
                    </h4>
                    <p className="text-xs text-zinc-500 truncate">
-                      {review.type === 'professional' ? 'Verified Professional' : 'Verified Merchant'}
+                      {review.type === "PROFESSIONAL" ? "Verified Professional" : "Verified Merchant"}
                    </p>
                 </div>
                 
                 <Button size="icon" variant="ghost" className="h-8 w-8 text-zinc-400 group-hover:text-emerald-600">
                    <ThumbsUp className="h-4 w-4" />
                 </Button>
+             </Link>
+             ) : (
+             <div className="flex items-center gap-3 bg-zinc-50 p-3 rounded-lg">
+                <div className="h-10 w-10 relative rounded overflow-hidden bg-white border border-zinc-200 shrink-0">
+                   {targetImage ? (
+                      <Image src={targetImage} alt={targetName ?? ""} fill className="object-cover" />
+                   ) : (
+                      <div className="h-full w-full flex items-center justify-center bg-zinc-100 text-zinc-400">
+                         {review.type === "PROFESSIONAL" ? <HardHat className="h-5 w-5" /> : <StoreIcon className="h-5 w-5" />}
+                      </div>
+                   )}
+                </div>
+                <div className="flex-1 min-w-0">
+                   <h4 className="text-sm font-bold text-zinc-900 truncate flex items-center gap-1">
+                      {targetName}
+                      {isVerified && <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />}
+                   </h4>
+                   <p className="text-xs text-zinc-500 truncate">
+                      {review.type === "PROFESSIONAL" ? "Verified Professional" : "Verified Merchant"}
+                   </p>
+                </div>
              </div>
+             )}
           </div>
 
         </CardContent>
@@ -296,52 +290,3 @@ function ReviewsSkeleton() {
     </div>
   )
 }
-
-// --- Mock Data ---
-const MOCK_REVIEWS: ReviewWithRelations[] = [
-  {
-    id: "1",
-    rating: 5,
-    comment: "Evans and his team completely transformed our kitchen. They finished two weeks ahead of schedule and the finishing is top-notch. Highly recommend for anyone in Nairobi.",
-    type: "professional",
-    createdAt: "2 days ago",
-    reviewer: { firstName: "Sarah", lastName: "Kamau", imageUrl: "https://i.pravatar.cc/150?u=sarah", clientProfile: { city: "Nairobi" } },
-    professional: { id: "p1", companyName: "Evannas Structural Engineering", verified: true, imageUrl: "https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=800" }
-  },
-  {
-    id: "2",
-    rating: 5,
-    comment: "The tiles we ordered arrived safely in Kisumu without a single crack. The packaging was excellent and delivery was prompt.",
-    type: "store",
-    createdAt: "1 week ago",
-    reviewer: { firstName: "David", lastName: "Ochieng", imageUrl: "https://i.pravatar.cc/150?u=david", clientProfile: { city: "Kisumu" } },
-    store: { id: "s1", name: "Ceramics Plaza", verified: true, imageUrl: "/tiles.png" }
-  },
-  {
-    id: "3",
-    rating: 4,
-    comment: "Great architectural insights. Don helped us maximize the small plot we had in Ruaka. Just wish the 3D renders came a bit faster.",
-    type: "professional",
-    createdAt: "2 weeks ago",
-    reviewer: { firstName: "Amina", lastName: "Zain", imageUrl: "https://i.pravatar.cc/150?u=amina", clientProfile: { city: "Ruaka" } },
-    professional: { id: "p2", companyName: "Shammah Architecture", verified: true, imageUrl: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=800" }
-  },
-  {
-    id: "4",
-    rating: 5,
-    comment: "Best hardware store in Thika. They have authentic Crown Paints and shipping is free for bulk orders.",
-    type: "store",
-    createdAt: "3 weeks ago",
-    reviewer: { firstName: "John", lastName: "Mwangi", clientProfile: { city: "Thika" } },
-    store: { id: "s2", name: "Thika Hardware Solutions", verified: false, imageUrl: "/hardware.png" }
-  },
-  {
-    id: "5",
-    rating: 5,
-    comment: "We hired Build Market pros for our entire office renovation. Seamless coordination between the electricians and the dry-wall team.",
-    type: "professional",
-    createdAt: "1 month ago",
-    reviewer: { firstName: "Tech", lastName: "Solutions Ltd", imageUrl: "https://i.pravatar.cc/150?u=tech", clientProfile: { city: "Westlands" } },
-    professional: { id: "p3", companyName: "Prime Contractors", verified: true, imageUrl: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=800" }
-  }
-];

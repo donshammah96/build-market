@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
 import {
   Eye,
   FileText,
@@ -19,29 +18,22 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
-// Property Inquiry interface matching API response
-interface PropertyInquiry {
-  id: string;
-  propertyTitle: string;
-  clientName: string;
-  clientPhone: string;
-  message: string;
-  status: "new" | "contacted" | "viewing_scheduled" | "offer_made" | "closed";
-  createdAt: string;
-}
+import { usePipelineSummary } from "@/hooks/usePipeline";
+import { useInquiries } from "@/hooks/useInquiries";
+import type { PropertyInquiryList } from "@/lib/inquiries-client";
 
-interface PipelineStage {
+// ─── Static stage config ───────────────────────────────────────────────────
+
+interface PipelineStageConfig {
   id: string;
   label: string;
-  count: number;
-  value: number;
   icon: React.ComponentType<{ className?: string }>;
   color: string;
   bgColor: string;
   status: "viewing_scheduled" | "offer_made" | "closed";
 }
 
-const STAGES: Omit<PipelineStage, "count" | "value">[] = [
+const STAGES: PipelineStageConfig[] = [
   {
     id: "viewing",
     label: "Viewings Scheduled",
@@ -68,112 +60,75 @@ const STAGES: Omit<PipelineStage, "count" | "value">[] = [
   },
 ];
 
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat("en-KE", {
+    style: "currency",
+    currency: "KES",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+
 /**
  * PipelinePage Component
  *
  * Enterprise-level sales pipeline interface with:
- * - Kanban-style pipeline view
+ * - Kanban-style pipeline view via custom hooks (usePipelineSummary + useInquiries)
  * - Inquiries grouped by stage
  * - Links to inquiry detail pages
  * - Pipeline value tracking
  */
 export default function PipelinePage() {
-  // Fetch Pipeline Summary
-  const { data: pipelineData, isLoading: isLoadingPipeline } = useQuery<{
-    data: { stages: PipelineStage[]; totalValue: number };
-  }>({
-    queryKey: ["professional-pipeline"],
-    queryFn: async () => {
-      const res = await fetch("/api/professional-portal/pipeline");
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error.error || "Failed to fetch pipeline");
-      }
-      return res.json();
-    },
-    retry: 2,
-    staleTime: 30000,
-  });
+  // ─── Data Fetching via custom hooks ────────────────────────────────────
 
-  // Fetch Inquiries for each stage
-  const { data: inquiriesData, isLoading: isLoadingInquiries } = useQuery<{
-    data: PropertyInquiry[];
-  }>({
-    queryKey: ["professional-inquiries"],
-    queryFn: async () => {
-      const res = await fetch("/api/professional-portal/inquiries?limit=100");
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error.error || "Failed to fetch inquiries");
-      }
-      return res.json();
-    },
-    retry: 2,
-    staleTime: 30000,
-  });
+  const { data: pipelineSummary, isLoading: isLoadingPipeline } =
+    usePipelineSummary();
 
-  // Ensure inquiries is always an array
-  const inquiries = useMemo(() => {
-    if (!inquiriesData) return [];
-    if (Array.isArray(inquiriesData)) return inquiriesData;
-    if (inquiriesData.data && Array.isArray(inquiriesData.data)) {
-      return inquiriesData.data;
-    }
-    return [];
-  }, [inquiriesData]);
+  // Request up to 100 inquiries to populate pipeline stages.
+  // InquiriesQuerySchema.limit is a string-coercing field (z.string → transform → number).
+  const { data: inquiries = [], isLoading: isLoadingInquiries } = useInquiries({
+    limit: "100",
+  } as unknown as Parameters<typeof useInquiries>[0]);
 
-  // Get pipeline stages with data
+  const isLoading = isLoadingPipeline || isLoadingInquiries;
+  const totalValue = pipelineSummary?.totalValue ?? 0;
+
+  // ─── Computed state ────────────────────────────────────────────────────
+
+  /** Merge static stage config with live counts/values from the API. */
   const stages = useMemo(() => {
-    if (!pipelineData?.data?.stages) {
-      return STAGES.map((stage) => ({ ...stage, count: 0, value: 0 }));
-    }
     return STAGES.map((stage) => {
-      const apiStage = pipelineData.data.stages.find((s) => s.id === stage.id);
+      const apiStage = pipelineSummary?.stages?.find(
+        (s: { id: string; count: number; value: number }) => s.id === stage.id,
+      );
       return {
         ...stage,
-        count: apiStage?.count || 0,
-        value: apiStage?.value || 0,
+        count: apiStage?.count ?? 0,
+        value: apiStage?.value ?? 0,
       };
     });
-  }, [pipelineData]);
+  }, [pipelineSummary]);
 
-  // Group inquiries by stage
+  /** Group inquiries by pipeline status key. */
   const inquiriesByStage = useMemo(() => {
-    const grouped: Record<string, PropertyInquiry[]> = {
+    const grouped: Record<string, PropertyInquiryList[]> = {
       viewing_scheduled: [],
       offer_made: [],
       closed: [],
     };
 
     inquiries.forEach((inquiry) => {
-      const status = inquiry.status;
+      const status = inquiry.status as string;
       if (
         status === "viewing_scheduled" ||
         status === "offer_made" ||
         status === "closed"
       ) {
-        const stageArray = grouped[status];
-        if (stageArray) {
-          stageArray.push(inquiry);
-        }
+        grouped[status]?.push(inquiry);
       }
     });
 
     return grouped;
   }, [inquiries]);
-
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-KE", {
-      style: "currency",
-      currency: "KES",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  const totalValue = pipelineData?.data?.totalValue || 0;
-  const isLoading = isLoadingPipeline || isLoadingInquiries;
 
   return (
     <div className="space-y-8 max-w-[1600px] mx-auto pb-10">
@@ -231,7 +186,7 @@ export default function PipelinePage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {stages.map((stage) => {
             const Icon = stage.icon;
-            const stageInquiries = inquiriesByStage[stage.status] || [];
+            const stageInquiries = inquiriesByStage[stage.status] ?? [];
 
             return (
               <Card
@@ -289,11 +244,13 @@ export default function PipelinePage() {
   );
 }
 
+// ─── InquiryCard Component ─────────────────────────────────────────────────
+
 function InquiryCard({
   inquiry,
   stageColor,
 }: {
-  inquiry: PropertyInquiry;
+  inquiry: PropertyInquiryList;
   stageColor: string;
 }) {
   return (
@@ -303,7 +260,7 @@ function InquiryCard({
           <div className="flex items-start justify-between gap-2 mb-2">
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-zinc-900 text-sm line-clamp-1 group-hover:text-emerald-600 transition-colors">
-                {inquiry.propertyTitle}
+                {inquiry.propertyTitle ?? "Untitled Inquiry"}
               </h3>
               <div className="flex items-center gap-1 mt-1">
                 <Building2 className="h-3 w-3 text-zinc-400" />
@@ -313,7 +270,7 @@ function InquiryCard({
             <ChevronRight
               className={cn(
                 "h-4 w-4 text-zinc-400 group-hover:text-zinc-600 transition-colors flex-shrink-0",
-                stageColor
+                stageColor,
               )}
             />
           </div>
@@ -327,7 +284,7 @@ function InquiryCard({
           <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-100">
             <Avatar className="h-6 w-6 border border-zinc-200">
               <AvatarFallback className="text-xs">
-                {inquiry.clientName.charAt(0).toUpperCase()}
+                {inquiry.clientName?.charAt(0).toUpperCase() ?? "?"}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">

@@ -4,57 +4,8 @@ import {
   PropertyCategory,
   PropertyStatus,
   Prisma,
+  County
 } from "@prisma/client";
-
-// County enum - matches Prisma County
-type County =
-  | "MOMBASA"
-  | "KWALE"
-  | "KILIFI"
-  | "TANA_RIVER"
-  | "LAMU"
-  | "TAITA_TAVETA"
-  | "GARISSA"
-  | "WAJIR"
-  | "MANDERA"
-  | "MARSABIT"
-  | "ISIOLO"
-  | "MERU"
-  | "THARAKA_NITHI"
-  | "EMBU"
-  | "KITUI"
-  | "MACHAKOS"
-  | "MAKUENI"
-  | "NYANDARUA"
-  | "NYERI"
-  | "KIRINYAGA"
-  | "MURANGA"
-  | "KIAMBU"
-  | "TURKANA"
-  | "WEST_POKOT"
-  | "SAMBURU"
-  | "TRANS_NZOIA"
-  | "UASIN_GISHU"
-  | "ELGEYO_MARAKWET"
-  | "NANDI"
-  | "BARINGO"
-  | "LAIKIPIA"
-  | "NAKURU"
-  | "NAROK"
-  | "KAJIADO"
-  | "KERICHO"
-  | "BOMET"
-  | "KAKAMEGA"
-  | "VIHIGA"
-  | "BUNGOMA"
-  | "BUSIA"
-  | "SIAYA"
-  | "KISUMU"
-  | "HOMA_BAY"
-  | "MIGORI"
-  | "KISII"
-  | "NYAMIRA"
-  | "NAIROBI";
 
 export interface PropertyFilters {
   type?: PropertyType;
@@ -76,13 +27,101 @@ export interface PropertyFilters {
   offset?: number;
 }
 
+// DTOs
+export interface PropertyListItem {
+  id: string;
+  title: string;
+  slug: string;
+  price: Prisma.Decimal;
+  currency: string;
+  location: string;
+  type: PropertyType;
+  category: PropertyCategory;
+  status: PropertyStatus;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  area: number | null;
+  areaUnit: string;
+  featured: boolean;
+  verified: boolean;
+  image: string; // Cover image
+  agent: {
+    id: string; // userId
+    name: string;
+    company: string | null;
+    avatar: string | null;
+    verified: boolean;
+  };
+  createdAt: string;
+}
+
+export interface PropertyRepositoryResult {
+  properties: PropertyListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+export interface PropertyDetail {
+  id: string;
+  title: string;
+  description: string | null;
+  price: Prisma.Decimal;
+  currency: string;
+  location: string;
+  address: string | null;
+  type: PropertyType;
+  category: PropertyCategory;
+  status: PropertyStatus;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  parkingSpaces: number | null;
+  area: number | null; // Unified from buildingSize/plotSize
+  areaUnit: string;
+  yearBuilt: number | null;
+  furnishing: any; // FurnishingStatus
+  features: string[];
+  featured: boolean;
+  verified: boolean;
+  createdAt: string; // ISO Date
+  
+  images: {
+    id: string;
+    url: string;
+    caption: string | null;
+    isMain: boolean;
+  }[];
+
+  attachments: {
+    id: string;
+    title: string;
+    type: any; // AttachmentType
+    url: string | null;
+  }[];
+
+  agent: {
+    id: string;
+    name: string;
+    company: string | null;
+    location: string;
+    bio: string | null;
+    avatar: string | null;
+    verified: boolean;
+    contact: {
+      email: string | null;
+      phone: string | null;
+    };
+  };
+}
+
 export class PropertyRepository {
   constructor(private prisma: PrismaClient) {}
 
   /**
    * Find properties with filters, sorting, and pagination
    */
-  async findMany(filters: PropertyFilters = {}) {
+  async findMany(filters: PropertyFilters = {}): Promise<PropertyRepositoryResult> {
     const {
       type,
       category,
@@ -149,7 +188,11 @@ export class PropertyRepository {
 
     // Verification status filter
     if (verified !== undefined) {
-      where.verificationStatus = verified ? "VERIFIED" : "UNVERIFIED";
+      if (verified) {
+        where.verificationStatus = "VERIFIED";
+      } else {
+        where.verificationStatus = { not: "VERIFIED" };
+      }
     }
 
     // Build orderBy clause
@@ -172,21 +215,38 @@ export class PropertyRepository {
     // Get total count for pagination
     const total = await this.prisma.property.count({ where });
 
-    // Fetch properties with agent info and images
-    const properties = await this.prisma.property.findMany({
+    // Fetch properties with optimized select
+    const propertiesData = await this.prisma.property.findMany({
       where,
       orderBy,
       skip: offset,
       take: limit,
-      include: {
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        price: true,
+        currency: true,
+        location: true,
+        type: true,
+        category: true,
+        status: true,
+        bedrooms: true,
+        bathrooms: true,
+        buildingSize: true, // using buildingSize as 'area' default
+        plotSize: true,     // fallback for Land
+        areaUnit: true,
+        featured: true,
+        verified: true,
+        createdAt: true,
         images: {
           orderBy: { sortOrder: "asc" },
+          take: 1, // Only need cover image
           select: {
-            id: true,
-            url: true,
-            caption: true,
-            isMain: true,
-            sortOrder: true,
+            url: true, // Legacy
+            asset: {   // New Asset system
+              select: { cdnUrl: true } 
+            }
           },
         },
         agent: {
@@ -196,7 +256,6 @@ export class PropertyRepository {
             verified: true,
             user: {
               select: {
-                id: true,
                 firstName: true,
                 lastName: true,
                 avatar: true,
@@ -205,6 +264,47 @@ export class PropertyRepository {
           },
         },
       },
+    });
+
+    // Transform to DTO
+    const properties: PropertyListItem[] = propertiesData.map((p) => {
+      // Image resolution: Asset > Legacy > Placeholder
+      let image = "/placeholder-property.jpg";
+      const firstImg = p.images[0];
+      if (firstImg) {
+        if (firstImg.asset?.cdnUrl) image = firstImg.asset.cdnUrl;
+        else if (firstImg.url) image = firstImg.url;
+      }
+
+      // Agent name resolution
+      const agentName = `${p.agent.user.firstName ?? ""} ${p.agent.user.lastName ?? ""}`.trim() || p.agent.companyName || "Agent";
+
+      return {
+        id: p.id,
+        title: p.title,
+        slug: p.slug,
+        price: p.price,
+        currency: p.currency,
+        location: p.location,
+        type: p.type,
+        category: p.category,
+        status: p.status,
+        bedrooms: p.bedrooms,
+        bathrooms: p.bathrooms,
+        area: p.buildingSize ?? p.plotSize,
+        areaUnit: p.areaUnit,
+        featured: p.featured,
+        verified: p.verified,
+        image,
+        agent: {
+          id: p.agent.userId,
+          name: agentName,
+          company: p.agent.companyName,
+          avatar: p.agent.user.avatar,
+          verified: p.agent.verified,
+        },
+        createdAt: p.createdAt.toISOString(),
+      };
     });
 
     return {
@@ -219,33 +319,55 @@ export class PropertyRepository {
   /**
    * Find a single property by ID with full details
    */
+  /**
+   * Find a single property by ID with full details
+   */
   async findById(id: string) {
-    return this.prisma.property.findFirst({
+    const property = await this.prisma.property.findFirst({
       where: {
         id,
-        deletedAt: null, // Exclude soft-deleted
+        deletedAt: null,
       },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        price: true,
+        currency: true,
+        location: true,
+        address: true,
+        type: true,
+        category: true,
+        status: true,
+        bedrooms: true,
+        bathrooms: true,
+        parkingSpaces: true,
+        buildingSize: true,
+        plotSize: true,
+        areaUnit: true,
+        yearBuilt: true,
+        furnishing: true,
+        features: true,
+        featured: true,
+        verified: true,
+        createdAt: true,
         images: {
           orderBy: { sortOrder: "asc" },
           select: {
             id: true,
-            url: true,
-            key: true,
+            url: true, // Legacy
             caption: true,
             isMain: true,
-            sortOrder: true,
+            asset: { select: { cdnUrl: true } }
           },
         },
         attachments: {
           select: {
             id: true,
+            title: true,
             type: true,
-            fileUrl: true,
-            fileKey: true,
-            isVerified: true,
-            notes: true,
-            createdAt: true,
+            fileUrl: true, // Legacy
+            asset: { select: { cdnUrl: true } }
           },
         },
         agent: {
@@ -254,12 +376,10 @@ export class PropertyRepository {
             companyName: true,
             verified: true,
             bio: true,
-            city: true,
+            city: true, // ProfessionalProfile city
             county: true,
-            earbNumber: true,
             user: {
               select: {
-                id: true,
                 firstName: true,
                 lastName: true,
                 email: true,
@@ -271,8 +391,71 @@ export class PropertyRepository {
         },
       },
     });
+
+    if (!property) return null;
+
+    // Transform images
+    const images = property.images.map(img => ({
+      id: img.id,
+      url: img.asset?.cdnUrl ?? img.url ?? "/placeholder-property.jpg",
+      caption: img.caption,
+      isMain: img.isMain,
+    }));
+
+    // Transform attachments
+    const attachments = property.attachments.map(att => ({
+      id: att.id,
+      title: att.title,
+      type: att.type,
+      url: att.asset?.cdnUrl ?? att.fileUrl,
+    }));
+
+    // Transform Agent
+    const agent = {
+      id: property.agent.userId,
+      name: `${property.agent.user.firstName ?? ""} ${property.agent.user.lastName ?? ""}`.trim() || property.agent.companyName || "Agent",
+      company: property.agent.companyName,
+      location: `${property.agent.city ?? ""}, ${property.agent.county ?? ""}`.trim().replace(/^, |, $/g, ""),
+      bio: property.agent.bio,
+      avatar: property.agent.user.avatar,
+      verified: property.agent.verified,
+      contact: {
+        email: property.agent.user.email,
+        phone: property.agent.user.phone,
+      }
+    };
+
+    return {
+      id: property.id,
+      title: property.title,
+      description: property.description,
+      price: property.price,
+      currency: property.currency,
+      location: property.location,
+      address: property.address,
+      type: property.type,
+      category: property.category,
+      status: property.status,
+      bedrooms: property.bedrooms,
+      bathrooms: property.bathrooms,
+      parkingSpaces: property.parkingSpaces,
+      area: property.buildingSize ?? property.plotSize,
+      areaUnit: property.areaUnit,
+      yearBuilt: property.yearBuilt,
+      furnishing: property.furnishing,
+      features: property.features,
+      featured: property.featured,
+      verified: property.verified,
+      createdAt: property.createdAt.toISOString(),
+      images,
+      attachments,
+      agent,
+    };
   }
 
+  /**
+   * Find similar properties (same location or type)
+   */
   /**
    * Find similar properties (same location or type)
    */
@@ -290,7 +473,7 @@ export class PropertyRepository {
 
     if (!property) return [];
 
-    return this.prisma.property.findMany({
+    const propertiesData = await this.prisma.property.findMany({
       where: {
         id: { not: propertyId },
         status: "AVAILABLE",
@@ -308,20 +491,38 @@ export class PropertyRepository {
       },
       take: limit,
       orderBy: { createdAt: "desc" },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        price: true,
+        currency: true,
+        location: true,
+        type: true,
+        category: true,
+        status: true,
+        bedrooms: true,
+        bathrooms: true,
+        buildingSize: true, // using buildingSize as 'area' default
+        plotSize: true,     // fallback for Land
+        areaUnit: true,
+        featured: true,
+        verified: true,
+        createdAt: true,
         images: {
-          where: { isMain: true },
-          take: 1,
+          orderBy: { sortOrder: "asc" },
+          take: 1, // Only need cover image
           select: {
-            id: true,
-            url: true,
-            caption: true,
+            url: true, // Legacy
+            asset: {   // New Asset system
+              select: { cdnUrl: true } 
+            }
           },
         },
         agent: {
           select: {
             userId: true,
             companyName: true,
+            verified: true,
             user: {
               select: {
                 firstName: true,
@@ -333,13 +534,51 @@ export class PropertyRepository {
         },
       },
     });
+
+    // Reuse transformation logic (could be extracted to private helper)
+    return propertiesData.map((p) => {
+      let image = "/placeholder-property.jpg";
+      const firstImg = p.images[0];
+      if (firstImg) {
+        if (firstImg.asset?.cdnUrl) image = firstImg.asset.cdnUrl;
+        else if (firstImg.url) image = firstImg.url;
+      }
+      
+      const agentName = `${p.agent.user.firstName ?? ""} ${p.agent.user.lastName ?? ""}`.trim() || p.agent.companyName || "Agent";
+
+      return {
+        id: p.id,
+        title: p.title,
+        price: p.price,
+        currency: p.currency,
+        location: p.location,
+        type: p.type,
+        category: p.category,
+        status: p.status,
+        bedrooms: p.bedrooms,
+        bathrooms: p.bathrooms,
+        area: p.buildingSize ?? p.plotSize,
+        areaUnit: p.areaUnit,
+        featured: p.featured,
+        verified: p.verified,
+        image,
+        agent: {
+          id: p.agent.userId,
+          name: agentName,
+          company: p.agent.companyName,
+          avatar: p.agent.user.avatar,
+          verified: p.agent.verified,
+        },
+        createdAt: p.createdAt.toISOString(),
+      };
+    });
   }
 
   /**
    * Get featured properties
    */
   async findFeatured(limit: number = 6) {
-    return this.prisma.property.findMany({
+    const propertiesData = await this.prisma.property.findMany({
       where: {
         featured: true,
         status: "AVAILABLE",
@@ -347,21 +586,38 @@ export class PropertyRepository {
       },
       take: limit,
       orderBy: { createdAt: "desc" },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        price: true,
+        currency: true,
+        location: true,
+        type: true,
+        category: true,
+        status: true,
+        bedrooms: true,
+        bathrooms: true,
+        buildingSize: true, // using buildingSize as 'area' default
+        plotSize: true,     // fallback for Land
+        areaUnit: true,
+        featured: true,
+        verified: true,
+        createdAt: true,
         images: {
           orderBy: { sortOrder: "asc" },
-          take: 1,
+          take: 1, // Only need cover image
           select: {
-            id: true,
-            url: true,
-            caption: true,
-            isMain: true,
+            url: true, // Legacy
+            asset: {   // New Asset system
+              select: { cdnUrl: true } 
+            }
           },
         },
         agent: {
           select: {
             userId: true,
             companyName: true,
+            verified: true,
             user: {
               select: {
                 firstName: true,
@@ -372,6 +628,43 @@ export class PropertyRepository {
           },
         },
       },
+    });
+
+    return propertiesData.map((p) => {
+      let image = "/placeholder-property.jpg";
+      const firstImg = p.images[0];
+      if (firstImg) {
+        if (firstImg.asset?.cdnUrl) image = firstImg.asset.cdnUrl;
+        else if (firstImg.url) image = firstImg.url;
+      }
+      
+      const agentName = `${p.agent.user.firstName ?? ""} ${p.agent.user.lastName ?? ""}`.trim() || p.agent.companyName || "Agent";
+
+      return {
+        id: p.id,
+        title: p.title,
+        price: p.price,
+        currency: p.currency,
+        location: p.location,
+        type: p.type,
+        category: p.category,
+        status: p.status,
+        bedrooms: p.bedrooms,
+        bathrooms: p.bathrooms,
+        area: p.buildingSize ?? p.plotSize,
+        areaUnit: p.areaUnit,
+        featured: p.featured,
+        verified: p.verified,
+        image,
+        agent: {
+          id: p.agent.userId,
+          name: agentName,
+          company: p.agent.companyName,
+          avatar: p.agent.user.avatar,
+          verified: p.agent.verified,
+        },
+        createdAt: p.createdAt.toISOString(),
+      };
     });
   }
 }

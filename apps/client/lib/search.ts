@@ -1,21 +1,22 @@
-// import { SearchFilters } from "@repo/types";
-import { searchProfessionalsAction } from "@/app/actions/search";
+import { apiFetch } from "@/lib/api-client-utils";
 
 export async function searchProfessionals(query: string) {
-    // Note: filters are not yet implemented in the MVP action
-    const results = await searchProfessionalsAction(query);
+    const res = await apiFetch<any>(`/api/professionals?search=${encodeURIComponent(query)}`);
+    if (!res.success) return res;
+
     return {
         success: true,
-        data: results
+        data: res.data.professionals || []
     };
 }
 
 export async function autoComplete(query: string) {
-    // Reuse search action for autocomplete in MVP
-    const results = await searchProfessionalsAction(query);
+    const res = await apiFetch<any>(`/api/professionals?search=${encodeURIComponent(query)}`);
+    if (!res.success) return res;
+
     return {
         success: true,
-        data: results.map(p => ({
+        data: (res.data.professionals || []).map((p: any) => ({
             id: p.userId,
             text: p.companyName,
             type: 'professional'

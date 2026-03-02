@@ -2,11 +2,11 @@
 
 import {
   useState,
-  useEffect,
   useCallback,
   useRef,
   Suspense,
   memo,
+  useMemo,
 } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
@@ -42,6 +42,8 @@ import {
   useIntersectionObserver,
 } from "@/lib/hooks/usePerformance";
 import { cn } from "@/lib/utils";
+import { useProfessionals } from "@/hooks/useProfessionals";
+import { mapToListCardData } from "@/lib/professionals-mappers";
 
 const SORT_OPTIONS = [
   { value: "rating", label: "Top Rated", icon: Star },
@@ -287,13 +289,21 @@ function ProfessionalsPageContent() {
     (searchParams.get("sortBy") as "rating" | "experience" | "reviews") ||
     "rating";
 
-  // Local state
+  // Local state (search input debounced from URL)
   const [searchInput, setSearchInput] = useState(urlSearch);
-  const [professionals, setProfessionals] = useState<ProfessionalCardData[]>(
-    []
+
+  // Fetch professionals via React Query
+  const { data, isLoading: loading, error: queryError, refetch } = useProfessionals({
+    search: urlSearch,
+    category: urlCategory,
+    sortBy: urlSort,
+  });
+
+  const professionals = useMemo(
+    () => mapToListCardData(data),
+    [data]
   );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const error = queryError?.message ?? null;
 
   // Debounce search
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -322,38 +332,6 @@ function ProfessionalsPageContent() {
     },
     [pathname, router, searchParams]
   );
-
-  // Fetch professionals
-  const fetchProfessionals = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const params = new URLSearchParams();
-      if (urlSearch) params.set("search", urlSearch);
-      if (urlCategory && urlCategory !== "all")
-        params.set("category", urlCategory);
-      if (urlSort) params.set("sortBy", urlSort);
-
-      const response = await fetch(`/api/professionals?${params.toString()}`);
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch professionals");
-      }
-
-      const result = await response.json();
-      setProfessionals(Array.isArray(result) ? result : result.data || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setLoading(false);
-    }
-  }, [urlSearch, urlCategory, urlSort]);
-
-  // Fetch on mount and when filters change
-  useEffect(() => {
-    fetchProfessionals();
-  }, [fetchProfessionals]);
 
   // Handle search input with debounce
   const handleSearchChange = useCallback(
@@ -545,7 +523,7 @@ function ProfessionalsPageContent() {
               Something went wrong
             </h3>
             <p className="text-zinc-500 mb-4">{error}</p>
-            <Button onClick={fetchProfessionals} variant="outline">
+            <Button onClick={() => refetch()} variant="outline">
               Try Again
             </Button>
           </div>

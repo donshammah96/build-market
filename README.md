@@ -122,9 +122,11 @@ build-market/
 ### Frontend Applications
 
 #### Client App (`apps/client`)
+
 **Main marketplace application - Port 3030**
 
 Features:
+
 - 🏠 **Marketplace**: Browse professionals, stores, and products
 - 🛒 **E-commerce**: Shopping cart, checkout, and order tracking
 - 👤 **User Portal**: Client dashboard, project management, and messaging
@@ -135,6 +137,7 @@ Features:
 - 🔐 **Authentication**: Clerk integration with role-based access control
 
 Technology:
+
 - Next.js 15 with App Router
 - React 19
 - TypeScript 5.7
@@ -146,9 +149,11 @@ Technology:
 - Vitest (testing)
 
 #### Admin App (`apps/admin`)
+
 **Administrative dashboard - Separate deployment**
 
 Features:
+
 - 📊 Platform analytics and reporting
 - 👥 User and professional management
 - ✅ Verification and approval workflows
@@ -159,6 +164,7 @@ Features:
 ### Backend Microservices
 
 #### Messaging Service (`apps/messaging-service`)
+
 **Real-time messaging - Port 3010**
 
 - WebSocket communication with Socket.io
@@ -170,6 +176,7 @@ Features:
 - See [Messaging Service README](apps/messaging-service/README.md)
 
 #### Search Service (`apps/search-service`)
+
 **Full-text search - Port 3005**
 
 - Elasticsearch for search indexing
@@ -181,6 +188,7 @@ Features:
 - See [Search Service README](apps/search-service/README.md)
 
 #### Notification Service (`apps/notification-service`)
+
 **Push notifications - Port 3011**
 
 - Email notifications
@@ -190,6 +198,7 @@ Features:
 - Event-driven architecture
 
 #### Review Service (`apps/review-service`)
+
 **Reviews and ratings - Port 3012**
 
 - Professional and store reviews
@@ -199,6 +208,7 @@ Features:
 - Review verification
 
 #### Payment Service (`apps/payment-service`)
+
 **Payment processing**
 
 - Stripe integration
@@ -208,6 +218,7 @@ Features:
 - Invoice generation
 
 #### Order Service (`apps/order-service`)
+
 **Order management**
 
 - Order lifecycle tracking
@@ -217,6 +228,7 @@ Features:
 - MongoDB storage
 
 #### Project Service (`apps/project-service`)
+
 **Project management**
 
 - Project lifecycle (planning → completion)
@@ -226,6 +238,7 @@ Features:
 - Client-professional collaboration
 
 #### Email Service (`apps/email-service`)
+
 **Email delivery**
 
 - Transactional emails
@@ -236,26 +249,30 @@ Features:
 
 ### Shared Packages
 
-#### `@repo/db`
+#### `@build/db`
+
 - Prisma ORM for PostgreSQL
 - Schema definitions and migrations
 - Database seeding
 - Performance indexes
 - Connection pooling
 
-#### `@repo/types`
+#### `@build/types`
+
 - Shared TypeScript interfaces
 - Type definitions for all services
 - Ensures type safety across monorepo
 - Auto-generated from Prisma schema
 
-#### `@repo/ui`
+#### `@build/ui`
+
 - Shared React components
 - shadcn/ui component library
 - Design system tokens
 - Reusable UI primitives
 
-#### `@repo/kafka`
+#### `@build/kafka`
+
 - Kafka client configuration
 - Producer and consumer utilities
 - Event schemas
@@ -266,6 +283,7 @@ Everything is 100% [TypeScript](https://www.typescriptlang.org/).
 ## 🛠️ Technology Stack
 
 ### Frontend
+
 - **Framework**: Next.js 15 (App Router, React 19, Server Components)
 - **Styling**: Tailwind CSS 4, Framer Motion
 - **UI Components**: shadcn/ui (Radix UI primitives)
@@ -277,6 +295,7 @@ Everything is 100% [TypeScript](https://www.typescriptlang.org/).
 - **Type Safety**: TypeScript 5.7 (strict mode)
 
 ### Backend Services
+
 - **Runtime**: Node.js 18+
 - **API Framework**: Next.js API Routes, Express, Hono
 - **ORM**: Prisma (PostgreSQL), Mongoose (MongoDB)
@@ -290,12 +309,14 @@ Everything is 100% [TypeScript](https://www.typescriptlang.org/).
 - **Webhooks**: Svix
 
 ### Databases
+
 - **Primary Database**: PostgreSQL (User data, projects, products)
 - **NoSQL**: MongoDB (Messages, notifications, reviews)
 - **Search Engine**: Elasticsearch (Full-text search)
 - **Cache**: Redis (Session, rate limiting, search cache)
 
 ### Development Tools
+
 - **Monorepo**: Turborepo 2.x
 - **Package Manager**: pnpm 10.x
 - **Linting**: ESLint 9
@@ -306,6 +327,7 @@ Everything is 100% [TypeScript](https://www.typescriptlang.org/).
 - **Database Tools**: Prisma Studio, MongoDB Compass
 
 ### Infrastructure
+
 - **Hosting**: Vercel (frontend), AWS/GCP (services)
 - **CDN**: Vercel Edge Network, CloudFront
 - **Monitoring**: Ready for Sentry, DataDog
@@ -414,6 +436,7 @@ Everything is 100% [TypeScript](https://www.typescriptlang.org/).
 ### Data Flow Examples
 
 #### User Authentication Flow
+
 ```
 User Login → Clerk Auth → JWT Token → Cookie Storage
     ↓
@@ -429,6 +452,7 @@ Return response with appropriate data
 ```
 
 #### Shopping Flow
+
 ```
 User adds to cart → CartStore (Zustand)
     ↓
@@ -446,6 +470,7 @@ Confirmation Page with Order Details
 ```
 
 #### Messaging Flow
+
 ```
 User sends message → [Client] WebSocket
     ↓
@@ -459,6 +484,7 @@ Messaging Service (Port 3010)
 ```
 
 #### Search Flow
+
 ```
 User types query → [Client] Search Input
     ↓
@@ -478,21 +504,25 @@ Display with pagination & relevance score
 ### Design Patterns
 
 #### Repository Pattern
+
 - Encapsulates data access logic
 - Testable and maintainable
 - Used in: `apps/client/app/lib/repositories/`
 
 #### Middleware Pattern
+
 - Composable request handlers
 - `withAuth`, `withRole`, `withValidation`
 - Used in: API routes for security
 
 #### Event-Driven Architecture
+
 - Kafka for async communication
 - Decoupled services
 - Used in: Email, notifications, analytics
 
 #### Circuit Breaker (Implemented)
+
 - Fault tolerance for external services
 - Graceful degradation
 - See [Resilience Package](#resilience-framework)
@@ -504,41 +534,53 @@ Build Market implements comprehensive resilience patterns from first principles 
 ### Key Features
 
 #### 1. **Timeouts** ⏱️
+
 Criticality-based timeout strategies prevent hanging requests:
+
 - **Critical** (3s): Payments, authentication, security
 - **Normal** (10s): User data, listings, searches
 - **Background** (30s): Analytics, logs, notifications
 
 #### 2. **Retry Logic** 🔄
+
 Intelligent exponential backoff with jitter:
+
 - Configurable max attempts (default: 3)
 - Exponential backoff (2x multiplier)
 - Jitter (±10%) prevents thundering herd
 - Retryable error filtering
 
 #### 3. **Circuit Breakers** 🔌
+
 Protect struggling services from cascading failures:
+
 - Three states: Closed, Open, Half-Open
 - Automatic failure detection and recovery
 - Per-service isolation
 - Default: 5 failures → 60s timeout → recovery
 
 #### 4. **Caching** 💾
+
 Aggressive multi-layer caching:
+
 - In-memory LRU cache (1000 entries)
 - Stale-while-revalidate pattern
 - Background revalidation
 - Configurable TTL per operation
 
 #### 5. **Fallbacks** 🎯
+
 Graceful degradation mechanisms:
+
 - Static fallback values
 - Fallback functions
 - Cascading fallback chains
 - Non-critical feature degradation
 
 #### 6. **Observability** 📊
+
 Comprehensive metrics and logging:
+
 - Operation duration tracking (p50, p95, p99)
 - Success/failure counters
 - Circuit breaker state monitoring
@@ -548,20 +590,20 @@ Comprehensive metrics and logging:
 ### Usage Example
 
 ```typescript
-import { executeResilient, initializeCorrelationId } from '@/app/lib/resilient-api';
+import {
+  executeResilient,
+  initializeCorrelationId,
+} from "@/app/lib/resilient-api";
 
 export async function GET(request: NextRequest) {
   initializeCorrelationId(request);
-  
-  return executeResilient(
-    async () => fetchData(),
-    {
-      criticality: 'normal',
-      operationName: 'fetch-data',
-      cache: { ttl: 60000, staleWhileRevalidate: 30000 },
-      fallback: async () => [],
-    }
-  );
+
+  return executeResilient(async () => fetchData(), {
+    criticality: "normal",
+    operationName: "fetch-data",
+    cache: { ttl: 60000, staleWhileRevalidate: 30000 },
+    fallback: async () => [],
+  });
 }
 ```
 
@@ -582,6 +624,7 @@ export async function GET(request: NextRequest) {
 ### Database Schema Highlights
 
 **Key Models** (PostgreSQL via Prisma):
+
 - `User`: Multi-role support (client, professional, admin)
 - `ProfessionalProfile`: Business info, certifications, services
 - `ClientProfile`: Preferences, location
@@ -593,6 +636,7 @@ export async function GET(request: NextRequest) {
 - `Portfolio`: Professional work showcase
 
 **Indexes** (Performance optimized):
+
 - Composite indexes for common query patterns
 - GIN indexes for array searches (services, tags)
 - Geo-spatial indexes (coming soon)
@@ -730,16 +774,20 @@ pnpm exec turbo link
 ## 📚 Documentation
 
 ### Getting Started
+
 - **[Quick Start Guide](./QUICK_START_GUIDE.md)** - Setup, testing, and common commands
 - **[Implementation Summary](./IMPLEMENTATION_SUMMARY.md)** - Complete technical documentation
 - **[Performance Guide](./README-SPEEDUP.md)** - Development speed improvements
 
 ### Database
+
 - **[Migration Guide](./packages/db/prisma/migrations/add_performance_indexes.md)** - Database optimization
 - **Prisma Schema**: `packages/db/prisma/schema.prisma`
 
 ### API Routes
+
 All routes in `apps/client/app/api/` are:
+
 - ✅ Secured with authentication middleware
 - ✅ Rate limited
 - ✅ Input validated
@@ -793,6 +841,7 @@ pnpm run type-check
 ## 🌐 Services Documentation
 
 ### Messaging Service
+
 **Real-time WebSocket messaging**
 
 ```bash
@@ -803,6 +852,7 @@ pnpm run dev  # Runs on port 3010
 ```
 
 **Features**:
+
 - Real-time chat with Socket.io
 - Conversation management
 - Read receipts and typing indicators
@@ -811,6 +861,7 @@ pnpm run dev  # Runs on port 3010
 - MongoDB persistence
 
 **API Endpoints**:
+
 - `GET /api/conversations/user/:userId` - Get user conversations
 - `POST /api/conversations` - Create/get conversation
 - `POST /api/messages` - Send message
@@ -819,6 +870,7 @@ pnpm run dev  # Runs on port 3010
 See [Messaging Service README](apps/messaging-service/README.md) for full documentation.
 
 ### Search Service
+
 **Elasticsearch-powered search**
 
 ```bash
@@ -829,6 +881,7 @@ pnpm run dev  # Runs on port 3005
 ```
 
 **Features**:
+
 - Full-text search with fuzzy matching
 - Redis caching for sub-second responses
 - Geo-spatial search
@@ -836,6 +889,7 @@ pnpm run dev  # Runs on port 3005
 - Advanced filtering
 
 **API Endpoints**:
+
 - `GET /api/search/professionals?q=...&location=...` - Search professionals
 - `GET /api/search/stores?q=...&category=...` - Search stores
 - `GET /api/search/products?q=...&price=...` - Search products
@@ -844,6 +898,7 @@ pnpm run dev  # Runs on port 3005
 See [Search Service README](apps/search-service/README.md) for full documentation.
 
 ### Notification Service
+
 **Multi-channel notifications**
 
 ```bash
@@ -853,12 +908,14 @@ pnpm run dev  # Runs on port 3011
 ```
 
 **Channels**:
+
 - Email notifications
 - Push notifications
 - In-app alerts
 - SMS (planned)
 
 ### Review Service
+
 **Ratings and reviews**
 
 ```bash
@@ -868,12 +925,14 @@ pnpm run dev  # Runs on port 3012
 ```
 
 **Features**:
+
 - Professional and store reviews
 - Star ratings (1-5)
 - Review moderation
 - Aggregate rating calculations
 
 ### Payment Service
+
 **Stripe integration**
 
 ```bash
@@ -883,6 +942,7 @@ pnpm run dev
 ```
 
 **Features**:
+
 - Payment processing
 - Refund management
 - Transaction history
@@ -976,22 +1036,26 @@ DATABASE_URL=postgresql://user:password@localhost:5432/buildmarket
 ### Getting API Keys
 
 #### Clerk (Authentication)
+
 1. Sign up at [clerk.com](https://clerk.com)
 2. Create a new application
 3. Get keys from "API Keys" section
 4. Set up webhook endpoint for user sync
 
 #### Stripe (Payments)
+
 1. Sign up at [stripe.com](https://stripe.com)
 2. Get test keys from Dashboard → Developers → API keys
 3. Set up webhook for payment events
 
 #### Upstash Redis (Rate Limiting - Optional)
+
 1. Sign up at [upstash.com](https://upstash.com)
 2. Create a Redis database
 3. Copy REST URL and token
 
 #### MongoDB Atlas (Messaging - Free Tier)
+
 1. Sign up at [mongodb.com/cloud/atlas](https://mongodb.com/cloud/atlas)
 2. Create a free M0 cluster
 3. Create database user and whitelist IP
@@ -1027,6 +1091,7 @@ vercel --prod
 ```
 
 **Vercel Configuration**:
+
 - Build Command: `cd ../.. && pnpm run build --filter=client`
 - Output Directory: `apps/client/.next`
 - Install Command: `pnpm install`
@@ -1075,6 +1140,7 @@ Follow service-specific setup guides.
 ### Production Environment Variables
 
 **Security Checklist**:
+
 - ✅ Use production API keys (not test keys)
 - ✅ Set `NODE_ENV=production`
 - ✅ Use strong, unique passwords
@@ -1094,6 +1160,7 @@ Follow service-specific setup guides.
 **Problem**: `Error: listen EADDRINUSE: address already in use :::3030`
 
 **Solution**:
+
 ```bash
 # Windows
 netstat -ano | findstr :3030
@@ -1108,6 +1175,7 @@ lsof -ti:3030 | xargs kill -9
 **Problem**: `Error: Can't reach database server`
 
 **Solution**:
+
 1. Check if PostgreSQL is running
 2. Verify `DATABASE_URL` in `.env`
 3. Ensure database exists:
@@ -1124,6 +1192,7 @@ lsof -ti:3030 | xargs kill -9
 **Problem**: `Cannot find module '@prisma/client'`
 
 **Solution**:
+
 ```bash
 cd packages/db
 npx prisma generate
@@ -1134,6 +1203,7 @@ npx prisma generate
 **Problem**: `Invalid API key` or `Unauthorized`
 
 **Solutions**:
+
 1. Verify `.env` has correct Clerk keys
 2. Check key prefixes: `pk_test_` for publishable, `sk_test_` for secret
 3. Restart development server after changing env vars
@@ -1148,13 +1218,16 @@ npx prisma generate
 **Problem**: `MongoServerError: Authentication failed`
 
 **Solutions**:
+
 1. Check MongoDB is running:
+
    ```bash
    # macOS
    brew services list | grep mongodb
-   
+
    # Windows - check Services
    ```
+
 2. For MongoDB Atlas:
    - Whitelist your IP address
    - Verify database user credentials
@@ -1165,6 +1238,7 @@ npx prisma generate
 **Problem**: `ConnectionError: ECONNREFUSED`
 
 **Solutions**:
+
 1. Start Elasticsearch:
    ```bash
    cd apps/search-service
@@ -1184,6 +1258,7 @@ npx prisma generate
 **Problem**: Type errors or build failures
 
 **Solutions**:
+
 1. Clean install:
    ```bash
    rm -rf node_modules pnpm-lock.yaml
@@ -1203,6 +1278,7 @@ npx prisma generate
 **Problem**: Tests failing after changes
 
 **Solutions**:
+
 1. Update test snapshots:
    ```bash
    cd apps/client
@@ -1222,6 +1298,7 @@ npx prisma generate
 #### Slow Development Server
 
 **Solutions**:
+
 1. Use selective dev commands:
    ```bash
    pnpm run dev:client  # Only client app
@@ -1231,6 +1308,7 @@ npx prisma generate
 #### Slow Database Queries
 
 **Solutions**:
+
 1. Apply performance indexes:
    ```bash
    cd packages/db
@@ -1282,12 +1360,14 @@ We welcome contributions to Build Market! Please follow these guidelines:
 ### Getting Started
 
 1. **Fork the repository**
+
    ```bash
    git clone https://github.com/yourusername/build-market.git
    cd build-market
    ```
 
 2. **Install dependencies**
+
    ```bash
    pnpm install
    ```
@@ -1320,10 +1400,10 @@ describe('Feature Name', () => {
   it('should handle happy path', async () => {
     // Arrange
     const input = { ... };
-    
+
     // Act
     const result = await yourFunction(input);
-    
+
     // Assert
     expect(result).toEqual(expectedOutput);
   });
@@ -1335,11 +1415,13 @@ describe('Feature Name', () => {
 ```
 
 **Test Coverage Requirements**:
+
 - New API routes: 90%+ coverage
 - Repositories: 85%+ coverage
 - Utilities: 100% coverage
 
 Run tests before committing:
+
 ```bash
 cd apps/client
 npm test
@@ -1383,22 +1465,27 @@ git commit -m "chore(deps): update dependencies"
    ```
 4. **Update CHANGELOG** (if applicable)
 5. **Submit PR** with clear description:
+
    ```markdown
    ## Description
+
    Brief description of changes
 
    ## Type of Change
+
    - [ ] Bug fix
    - [ ] New feature
    - [ ] Breaking change
    - [ ] Documentation update
 
    ## Testing
+
    - Tested locally
    - Added unit tests
    - Updated integration tests
 
    ## Checklist
+
    - [ ] Code follows style guidelines
    - [ ] Self-review completed
    - [ ] Documentation updated
@@ -1440,6 +1527,7 @@ git commit -m "chore(deps): update dependencies"
 ### Code Review Checklist
 
 Reviewers will check:
+
 - [ ] Code quality and readability
 - [ ] Test coverage and quality
 - [ ] Performance implications
@@ -1452,6 +1540,7 @@ Reviewers will check:
 ### Areas Needing Contribution
 
 #### High Priority
+
 - [ ] Mobile responsiveness improvements
 - [ ] Accessibility (WCAG 2.1 AA compliance)
 - [ ] Performance optimizations
@@ -1459,6 +1548,7 @@ Reviewers will check:
 - [ ] End-to-end tests with Playwright
 
 #### Medium Priority
+
 - [ ] GraphQL API layer
 - [ ] Advanced search filters
 - [ ] Real-time notifications UI
@@ -1466,6 +1556,7 @@ Reviewers will check:
 - [ ] Admin panel enhancements
 
 #### Low Priority
+
 - [ ] Internationalization (i18n)
 - [ ] Dark mode improvements
 - [ ] Progressive Web App features
@@ -1497,6 +1588,7 @@ This project is private and proprietary.
 ## 🙏 Acknowledgments
 
 Built with amazing open-source technologies:
+
 - [Next.js](https://nextjs.org/) - React framework
 - [Turborepo](https://turborepo.com/) - Monorepo tool
 - [Prisma](https://www.prisma.io/) - Database ORM
@@ -1513,6 +1605,7 @@ Special thanks to all contributors and the open-source community! ❤️
 ## Useful Links
 
 ### Turborepo Documentation
+
 - [Tasks](https://turborepo.com/docs/crafting-your-repository/running-tasks)
 - [Caching](https://turborepo.com/docs/crafting-your-repository/caching)
 - [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching)
@@ -1521,6 +1614,7 @@ Special thanks to all contributors and the open-source community! ❤️
 - [CLI Usage](https://turborepo.com/docs/reference/command-line-reference)
 
 ### Technology Stack
+
 - [Next.js Documentation](https://nextjs.org/docs)
 - [Prisma Documentation](https://www.prisma.io/docs)
 - [Clerk Documentation](https://clerk.com/docs)

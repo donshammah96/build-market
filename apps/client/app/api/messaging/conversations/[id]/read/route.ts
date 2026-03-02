@@ -1,76 +1,76 @@
-import { NextRequest } from "next/server";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@build/db";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
-  resilientFetch,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { isValidId } from "@/app/lib/api/api-guards";
 
-const MESSAGING_SERVICE_URL =
-  process.env.MESSAGING_SERVICE_URL || "http://localhost:3010";
 const logger = getClientLogger();
+type ThreadParams = { id: string };
 
 /**
  * POST /api/messaging/conversations/[id]/read
- * Mark conversation as read for the authenticated user
  */
-export const POST = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
+export const POST = withAuth<ThreadParams>(
+  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
-    const { id: conversationId } = params!;
+    if (!params?.id || !isValidId(params.id))
+      return apiError("Invalid conversation ID", HttpStatus.BAD_REQUEST);
+    const threadId = params.id;
 
     const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
+    const rateLimitResult = await checkRateLimit(
+      `messaging-read-write:${identifier}`,
       RateLimits.WRITE.limit,
-      RateLimits.WRITE.window
+      RateLimits.WRITE.window,
     );
-
-    if (!success) {
+    if (!rateLimitResult.success)
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-    }
 
-    logger.info("Marking conversation as read", {
-      correlationId,
-      conversationId,
-      userId: dbUserId,
-    });
-
-    return executeResilient(
+    const executor = getResilientExecutor();
+    const result = await executor.execute(
       async () => {
-        const data = await resilientFetch(
-          `${MESSAGING_SERVICE_URL}/api/conversations/${conversationId}/read`,
-          {
-            method: "POST",
-            headers: {
-              "X-User-Id": dbUserId,
-              "X-Correlation-ID": correlationId,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ userId: dbUserId }),
-            timeout: 5000,
-            retry: false,
-            operationName: "mark-conversation-read",
-          }
-        );
-
-        logger.info("Conversation marked as read", {
-          correlationId,
-          conversationId,
+        const participant = await prisma.threadParticipant.findUnique({
+          where: { threadId_userId: { threadId, userId: dbUserId } },
         });
-        return data;
+        if (!participant)
+          return {
+            _error: true as const,
+            message: "Not a participant",
+            status: HttpStatus.FORBIDDEN,
+          };
+        await prisma.threadParticipant.update({
+          where: { id: participant.id },
+          data: { unreadCount: 0, lastReadAt: new Date() },
+        });
+        return { success: true };
       },
-      {
-        operationName: "post-conversation-read",
-        successStatus: HttpStatus.OK,
-      }
+      { operationName: "mark_thread_read" },
     );
-  }
+
+    if (!result.success) {
+      logger.error("Failed to mark thread read", result.error, {
+        correlationId,
+        threadId,
+      });
+      return apiError(
+        "Failed to mark thread read",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    } else {
+      const data = result.data;
+      if (data && "_error" in (data as any) && (data as any)._error)
+        return apiError((data as any).message, (data as any).status);
+      return apiSuccess(data, HttpStatus.OK);
+    }
+  },
 );

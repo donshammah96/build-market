@@ -16,7 +16,7 @@
     "dotenv": "^17.2.3",
     "cors": "^2.8.5",
     "zod": "^4.1.9",
-    "@repo/types": "workspace:*"
+    "@build/types": "workspace:*"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
@@ -26,4 +26,3 @@
     "typescript": "^5.9.3"
   }
 }
-

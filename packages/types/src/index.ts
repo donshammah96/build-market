@@ -1,5 +1,6 @@
 export * from "./auth";
 export * from "./analytics";
+export * from "./license";
 export * from "./cart";
 export * from "./messaging";
 export * from "./order";
@@ -8,6 +9,7 @@ export * from "./product";
 export * from "./project";
 export * from "./review";
 export * from "./search";
+export * from "./documents";
 // Export Store but not Product from store.ts since Product is already exported from product.ts
 export type { Store } from "./store";
 export { StoreSchema, ProductSchema } from "./store";

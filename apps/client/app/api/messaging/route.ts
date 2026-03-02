@@ -1,27 +1,35 @@
-import { NextRequest } from "next/server";
-import { healthCheck, initializeCorrelationId } from "@/app/lib/resilient-api";
+import { NextResponse } from "next/server";
+import { prisma } from "@build/db";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 
 /**
  * GET /api/messaging
- * Health check for messaging API proxy with circuit breaker monitoring
+ * Health check endpoint for the messaging subsystem.
+ * Returns service status and basic statistics.
  */
-export async function GET(request: NextRequest) {
-  initializeCorrelationId(request);
-  
-  const MESSAGING_SERVICE_URL = process.env.MESSAGING_SERVICE_URL || "http://localhost:3010";
+export async function GET() {
+  try {
+    const [threadCount, messageCount] = await Promise.all([
+      prisma.messageThread.count({ where: { deletedAt: null } }),
+      prisma.message.count({ where: { deletedAt: null } }),
+    ]);
 
-  return healthCheck("messaging-service", [
-    {
-      name: "messaging-service",
-      check: async () => {
-        const response = await fetch(`${MESSAGING_SERVICE_URL}/health`, {
-          method: "GET",
-          signal: AbortSignal.timeout(5000),
-        });
-        return response.ok;
+    return apiSuccess(
+      {
+        status: "healthy",
+        service: "messaging",
+        timestamp: new Date().toISOString(),
+        stats: {
+          activeThreads: threadCount,
+          totalMessages: messageCount,
+        },
       },
-      critical: false, // Messaging is not critical for app functionality
-    },
-  ]);
+      HttpStatus.OK,
+    );
+  } catch (error) {
+    return apiError(
+      "Messaging service is unavailable",
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+  }
 }
-

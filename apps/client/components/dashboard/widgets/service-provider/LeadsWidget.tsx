@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { LeadData } from "@/lib/dashboard";
+import { WidgetEmptyState } from "../shared";
 
 // ============================================================================
 // TYPES
@@ -162,13 +163,11 @@ export function LeadsWidget({
       </CardHeader>
 
       {leads.length === 0 ? (
-        <div className="p-12 text-center">
-          <Users className="h-12 w-12 text-zinc-200 mx-auto mb-3" />
-          <p className="text-sm text-zinc-500">No leads yet</p>
-          <p className="text-xs text-zinc-400 mt-1">
-            New inquiries will appear here
-          </p>
-        </div>
+        <WidgetEmptyState
+          icon={Users}
+          title="No leads yet"
+          description="New inquiries will appear here"
+        />
       ) : (
         <div className="divide-y divide-zinc-100">
           {leads.slice(0, 5).map((lead) => (

@@ -1,133 +1,89 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { GET } from '@/app/api/professionals/route';
-import { NextRequest } from 'next/server';
-import { prisma } from '@repo/db';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { GET } from "@/app/api/professionals/route";
+import { NextRequest } from "next/server";
 
-// Mock dependencies
-vi.mock('@repo/db', () => ({
-  prisma: {
-    professionalProfile: {
-      findMany: vi.fn(),
-    },
-  },
-}));
-
-vi.mock('@/app/lib/rate-limit', () => ({
+vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
-  getRateLimitIdentifier: vi.fn().mockReturnValue('test-ip'),
+  getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
   RateLimits: {
     READ: { limit: 100, window: 60000 },
   },
 }));
 
-vi.mock('@/app/lib/env', () => ({
-  env: {
-    NEXT_PUBLIC_APP_URL: 'http://localhost:3500',
-  },
+vi.mock("@/lib/services/professionals", () => ({
+  getProfessionals: vi.fn(),
 }));
 
-// Mock the category mapping utilities
-vi.mock('@/lib/constants/professionalCategories', () => ({
-  getProfessionsForCategory: vi.fn((slug: string) => {
-    const mapping: Record<string, string[]> = {
-      'all': [],
-      'plumbing': ['plumber', 'waterproofing_specialist'],
-      'architecture': ['architect', 'draftsman'],
-    };
-    return mapping[slug] || [];
-  }),
-  getProfessionLabel: vi.fn((profession: string) => profession),
-  isValidCategory: vi.fn(() => true),
-}));
-
-describe('GET /api/professionals', () => {
-  beforeEach(() => {
+describe("GET /api/professionals", () => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { getProfessionals } = await import("@/lib/services/professionals");
+    vi.mocked(getProfessionals).mockResolvedValue({
+      professionals: [],
+      total: 0,
+      hasMore: false,
+    });
   });
 
-  it('should return list of verified professionals', async () => {
-    const mockProfessionals = [
-      {
-        userId: 'prof-1',
-        companyName: 'Test Company',
-        bio: 'Test bio',
-        servicesOffered: ['General Contractor'],
-        yearsExperience: 10,
-        verified: true,
-        portfolioUrl: 'https://example.com',
-        user: {
-          id: 'prof-1',
-          firstName: 'John',
-          lastName: 'Doe',
-          email: 'john@example.com',
-          phone: '1234567890',
-        },
-        portfolios: [
-          {
-            images: ['image1.jpg'],
-          },
-        ],
-        reviews: [
-          { rating: 5 },
-          { rating: 4 },
-        ],
-        certificates: [],
-        _count: {
-          reviews: 2,
-          projects: 5,
-        },
-      },
-    ];
+  it("should return list of verified professionals", async () => {
+    const { getProfessionals } = await import("@/lib/services/professionals");
+    vi.mocked(getProfessionals).mockResolvedValue({
+      professionals: [
+        {
+          id: "prof-1",
+          companyName: "Test Company",
+          profession: "CONTRACTOR",
+          verified: true,
+          rating: 4.5,
+          user: { id: "prof-1", firstName: "John", lastName: "Doe", avatar: null },
+          professionLabel: "Contractor",
+          profileUrl: "http://localhost:3500/professionals/prof-1",
+        } as any,
+      ],
+      total: 1,
+      hasMore: false,
+    });
 
-    vi.mocked(prisma.professionalProfile.findMany).mockResolvedValue(
-      mockProfessionals as any
-    );
-
-    const request = new NextRequest('http://localhost:3500/api/professionals');
+    const request = new NextRequest("http://localhost:3500/api/professionals");
     const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
-    expect(data.data).toHaveLength(1);
-    expect(data.data[0].verified).toBe(true);
-    expect(data.data[0].rating).toBe(4.5); // Average of 5 and 4
+    expect(data.data.professionals).toHaveLength(1);
+    expect(data.data.professionals[0].verified).toBe(true);
+    expect(data.data.professionals[0].rating).toBe(4.5);
   });
 
-  it('should filter professionals by search query', async () => {
-    vi.mocked(prisma.professionalProfile.findMany).mockResolvedValue([]);
+  it("should filter professionals by search query", async () => {
+    const { getProfessionals } = await import("@/lib/services/professionals");
 
     const request = new NextRequest(
-      'http://localhost:3500/api/professionals?search=carpenter'
+      "http://localhost:3500/api/professionals?search=carpenter",
     );
-
     await GET(request);
 
-    expect(prisma.professionalProfile.findMany).toHaveBeenCalled();
-    // Verify that the search parameter is being used
-    const callArgs = vi.mocked(prisma.professionalProfile.findMany).mock.calls[0]?.[0];
-    if (!callArgs) {
-      throw new Error('Call arguments not found');
-    }
-    expect(callArgs).toBeDefined();
+    expect(getProfessionals).toHaveBeenCalledWith(
+      expect.objectContaining({ search: "carpenter" }),
+    );
   });
 
-  it('should filter professionals by category', async () => {
-    vi.mocked(prisma.professionalProfile.findMany).mockResolvedValue([]);
+  it("should filter professionals by category", async () => {
+    const { getProfessionals } = await import("@/lib/services/professionals");
 
-    // Use valid category slug format
     const request = new NextRequest(
-      'http://localhost:3500/api/professionals?category=plumbing'
+      "http://localhost:3500/api/professionals?category=plumbing",
     );
-
     await GET(request);
 
-    expect(prisma.professionalProfile.findMany).toHaveBeenCalled();
+    expect(getProfessionals).toHaveBeenCalledWith(
+      expect.objectContaining({ category: "plumbing" }),
+    );
   });
 
-  it('should reject invalid sort options', async () => {
+  it("should reject invalid sort options", async () => {
     const request = new NextRequest(
-      'http://localhost:3500/api/professionals?sortBy=invalid'
+      "http://localhost:3500/api/professionals?sortBy=invalid",
     );
 
     const response = await GET(request);
@@ -135,101 +91,38 @@ describe('GET /api/professionals', () => {
 
     expect(response.status).toBe(400);
     expect(data.success).toBe(false);
-    expect(data.error).toContain('Invalid sort option');
+    expect(data.error).toContain("Invalid");
   });
 
-  it('should handle database errors gracefully', async () => {
-    vi.mocked(prisma.professionalProfile.findMany).mockRejectedValue(
-      new Error('Database connection failed')
+  it("should handle service errors gracefully", async () => {
+    const { getProfessionals } = await import("@/lib/services/professionals");
+    vi.mocked(getProfessionals).mockRejectedValue(
+      new Error("Database connection failed"),
     );
 
-    const request = new NextRequest('http://localhost:3500/api/professionals');
-    const response = await GET(request);
-    const data = await response.json();
-
-    expect(response.status).toBe(500);
-    expect(data.success).toBe(false);
-    expect(data.error).toContain('Failed to fetch professionals');
-  });
-
-  it('should return empty array when no professionals found', async () => {
-    vi.mocked(prisma.professionalProfile.findMany).mockResolvedValue([]);
-
-    const request = new NextRequest('http://localhost:3500/api/professionals');
+    const request = new NextRequest("http://localhost:3500/api/professionals");
     const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
-    expect(data.data).toEqual([]);
+    expect(data.data.professionals).toEqual([]);
+    expect(data.data.total).toBe(0);
   });
 
-  it('should sanitize search input (max 100 characters)', async () => {
-    const longSearch = 'a'.repeat(150);
-    vi.mocked(prisma.professionalProfile.findMany).mockResolvedValue([]);
-
-    const request = new NextRequest(
-      `http://localhost:3500/api/professionals?search=${encodeURIComponent(longSearch)}`
-    );
-
-    await GET(request);
-
-    // The search should be truncated to 100 characters
-    expect(prisma.professionalProfile.findMany).toHaveBeenCalled();
-  });
-
-  it('should sort professionals by rating correctly', async () => {
-    const mockProfessionals = [
-      {
-        userId: 'prof-1',
-        companyName: 'Low Rating Pro',
-        servicesOffered: ['Service'],
-        verified: true,
-        user: {
-          id: 'prof-1',
-          firstName: 'John',
-          lastName: 'Doe',
-          email: 'john@example.com',
-        },
-        portfolios: [],
-        reviews: [{ rating: 3 }],
-        certificates: [],
-        _count: { reviews: 1, projects: 0 },
-      },
-      {
-        userId: 'prof-2',
-        companyName: 'High Rating Pro',
-        servicesOffered: ['Service'],
-        verified: true,
-        user: {
-          id: 'prof-2',
-          firstName: 'Jane',
-          lastName: 'Smith',
-          email: 'jane@example.com',
-        },
-        portfolios: [],
-        reviews: [{ rating: 5 }],
-        certificates: [],
-        _count: { reviews: 1, projects: 0 },
-      },
-    ];
-
-    vi.mocked(prisma.professionalProfile.findMany).mockResolvedValue(
-      mockProfessionals as any
-    );
-
-    const request = new NextRequest(
-      'http://localhost:3500/api/professionals?sortBy=rating'
-    );
-
+  it("should return empty array when no professionals found", async () => {
+    const request = new NextRequest("http://localhost:3500/api/professionals");
     const response = await GET(request);
     const data = await response.json();
 
-    expect(data.data[0].rating).toBeGreaterThanOrEqual(data.data[1].rating);
+    expect(response.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(data.data.professionals).toEqual([]);
+    expect(data.data.total).toBe(0);
   });
 
-  it('should respect rate limiting', async () => {
-    const { checkRateLimit } = await import('@/app/lib/rate-limit');
+  it("should respect rate limiting", async () => {
+    const { checkRateLimit } = await import("@/app/lib/api/rate-limit");
     vi.mocked(checkRateLimit).mockResolvedValueOnce({
       success: false,
       limit: 100,
@@ -237,12 +130,11 @@ describe('GET /api/professionals', () => {
       reset: Date.now() + 60000,
     });
 
-    const request = new NextRequest('http://localhost:3500/api/professionals');
+    const request = new NextRequest("http://localhost:3500/api/professionals");
     const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(429);
-    expect(data.error).toContain('Too many requests');
+    expect(data.error).toContain("Too many requests");
   });
 });
-

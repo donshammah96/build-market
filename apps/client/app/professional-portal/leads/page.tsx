@@ -1,11 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import {
   Search,
   MoreHorizontal,
@@ -44,7 +42,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { DialogClose } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/text-area";
 import {
   Select,
   SelectContent,
@@ -53,69 +50,31 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { z } from "zod";
 
-// Lead interface for type safety
-interface Lead {
-  id: string;
-  clientName: string;
-  clientEmail?: string;
-  clientPhone?: string;
-  projectType: string;
-  location?: string;
-  budget?: string;
-  status: string;
-  notes?: string;
-  followUpDate?: string | null;
-  createdAt: string;
-}
-
-// Schema for creating a lead
-const leadSchema = z.object({
-  clientName: z.string().min(1, "Client name is required"),
-  clientEmail: z.string().email().optional().or(z.literal("")),
-  clientPhone: z.string().optional(),
-  projectType: z.string().min(1, "Project type is required"),
-  location: z.string().optional(),
-  budget: z.string().optional(),
-  status: z.enum(["NEW", "CONTACTED", "PROPOSAL", "WON", "LOST"]),
-  notes: z.string().optional(),
-  followUpDate: z.string().optional().or(z.literal("")),
-});
-
-type LeadFormValues = z.infer<typeof leadSchema>;
+import { useLeads, useCreateLead, useUpdateLead } from "@/hooks/useLeads";
+import {
+  CreateLeadSchema,
+  type LeadList,
+  type CreateLeadInput,
+} from "@/app/lib/validation/leads-validation";
+// Schema for creating a lead is available via forms.
+type LeadFormValues = z.input<typeof CreateLeadSchema>;
 
 export default function LeadsPage() {
   const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
   const [isUpdateStatusOpen, setIsUpdateStatusOpen] = useState(false);
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const queryClient = useQueryClient();
+  const [selectedLead, setSelectedLead] = useState<LeadList | null>(null);
 
-  // Fetch Leads
-  const { data: leads, isLoading } = useQuery({
-    queryKey: ["leads"],
-    queryFn: async () => {
-      const res = await fetch("/api/professional-portal/leads");
-      if (!res.ok) throw new Error("Failed to fetch leads");
-      const json = await res.json();
-      // Ensure we always return an array
-      const leadsData = json.data ?? json;
-      return Array.isArray(leadsData) ? leadsData : [];
-    },
-  });
+  const { data: leadsData, isLoading } = useLeads();
+  const leads: LeadList[] = useMemo(() => {
+    if (!leadsData) return [];
+    if (Array.isArray(leadsData)) return leadsData;
+    return [];
+  }, [leadsData]);
 
-  // Create Lead Mutation
-  const createLeadMutation = useMutation({
-    mutationFn: async (data: LeadFormValues) => {
-      const res = await fetch("/api/professional-portal/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error("Failed to create lead");
-      return res.json();
-    },
+  const createLeadMutation = useCreateLead({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
       setIsAddLeadOpen(false);
       toast.success("Lead created successfully");
     },
@@ -124,33 +83,8 @@ export default function LeadsPage() {
     },
   });
 
-  // Update Status Mutation
-  const updateStatusMutation = useMutation({
-    mutationFn: async ({
-      id,
-      status,
-      notes,
-      followUpDate,
-    }: {
-      id: string;
-      status: string;
-      notes?: string;
-      followUpDate?: string;
-    }) => {
-      const res = await fetch(`/api/professional-portal/leads/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status,
-          notes,
-          followUpDate: followUpDate || undefined,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to update status");
-      return res.json();
-    },
+  const updateStatusMutation = useUpdateLead({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
       toast.success("Status updated");
     },
     onError: () => {
@@ -159,22 +93,23 @@ export default function LeadsPage() {
   });
 
   const form = useForm<LeadFormValues>({
-    resolver: zodResolver(leadSchema),
+    resolver: zodResolver(CreateLeadSchema),
     defaultValues: {
       clientName: "",
       clientEmail: "",
       clientPhone: "",
-      projectType: "",
+      title: "",
+      projectType: "RESIDENTIAL",
       location: "",
-      budget: "",
+      budget: undefined,
       status: "NEW",
       notes: "",
-      followUpDate: "",
+      followUpDate: undefined,
     },
   });
 
   function onSubmit(data: LeadFormValues) {
-    createLeadMutation.mutate(data);
+    createLeadMutation.mutate(data as CreateLeadInput);
   }
 
   return (
@@ -222,7 +157,7 @@ export default function LeadsPage() {
                       <FormItem>
                         <FormLabel>Client Name</FormLabel>
                         <FormControl>
-                          <Input placeholder="John Doe" {...field} />
+                          <Input placeholder="Don Shammah" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -236,7 +171,7 @@ export default function LeadsPage() {
                         <FormItem>
                           <FormLabel>Email</FormLabel>
                           <FormControl>
-                            <Input placeholder="john@example.com" {...field} />
+                            <Input placeholder="don@gmail.com" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -362,7 +297,7 @@ export default function LeadsPage() {
                   </td>
                 </tr>
               ) : (
-                leads.map((lead: Lead) => (
+                leads.map((lead: LeadList) => (
                   <tr
                     key={lead.id}
                     className="group hover:bg-zinc-50/50 transition-colors"
@@ -397,12 +332,6 @@ export default function LeadsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <StatusBadge status={lead.status} />
-                      {lead.followUpDate && (
-                        <p className="text-xs text-zinc-500 mt-1">
-                          Follow-up:{" "}
-                          {new Date(lead.followUpDate).toLocaleDateString()}
-                        </p>
-                      )}
                     </td>
                     <td className="px-6 py-4 text-zinc-500 flex items-center gap-2">
                       <Clock className="h-3 w-3" />{" "}
@@ -417,7 +346,7 @@ export default function LeadsPage() {
                           onClick={() => {
                             if (!lead.clientPhone) {
                               toast.error(
-                                "No phone number available for this client"
+                                "No phone number available for this client",
                               );
                               return;
                             }
@@ -433,15 +362,15 @@ export default function LeadsPage() {
                           onClick={() => {
                             if (!lead.clientEmail) {
                               toast.error(
-                                "No email address available for this client"
+                                "No email address available for this client",
                               );
                               return;
                             }
                             const subject = encodeURIComponent(
-                              "Regarding your project inquiry"
+                              "Regarding your project inquiry",
                             );
                             const body = encodeURIComponent(
-                              "Hello,\n\nThank you for your interest. I'll be in touch soon.\n\nBest regards,"
+                              "Hello,\n\nThank you for your interest. I'll be in touch soon.\n\nBest regards,",
                             );
                             window.location.href = `mailto:${lead.clientEmail}?subject=${subject}&body=${body}`;
                           }}
@@ -470,8 +399,8 @@ export default function LeadsPage() {
                             <DropdownMenuItem
                               onClick={() =>
                                 updateStatusMutation.mutate({
-                                  id: lead.id,
-                                  status: "WON",
+                                  leadId: lead.id,
+                                  data: { status: "WON" },
                                 })
                               }
                             >
@@ -480,8 +409,8 @@ export default function LeadsPage() {
                             <DropdownMenuItem
                               onClick={() =>
                                 updateStatusMutation.mutate({
-                                  id: lead.id,
-                                  status: "LOST",
+                                  leadId: lead.id,
+                                  data: { status: "LOST" },
                                 })
                               }
                             >
@@ -525,7 +454,7 @@ export default function LeadsPage() {
                   onValueChange={(value) =>
                     setSelectedLead({
                       ...selectedLead,
-                      status: value,
+                      status: value as LeadList["status"],
                     })
                   }
                 >
@@ -542,38 +471,9 @@ export default function LeadsPage() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <FormLabel>Follow-up Date</FormLabel>
-                <Input
-                  type="date"
-                  value={
-                    selectedLead.followUpDate
-                      ? new Date(selectedLead.followUpDate)
-                          .toISOString()
-                          .split("T")[0]
-                      : ""
-                  }
-                  onChange={(e) =>
-                    setSelectedLead({
-                      ...selectedLead,
-                      followUpDate: e.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              <div className="space-y-2">
-                <FormLabel>Notes</FormLabel>
-                <Textarea
-                  value={selectedLead.notes || ""}
-                  onChange={(e) =>
-                    setSelectedLead({
-                      ...selectedLead,
-                      notes: e.target.value,
-                    })
-                  }
-                  rows={4}
-                />
+              <FormLabel>Notes</FormLabel>
+              <div className="text-sm text-zinc-500 py-3">
+                Notes and follow-up adjustments are done in the details view.
               </div>
             </div>
             <DialogFooter>
@@ -584,10 +484,15 @@ export default function LeadsPage() {
                 onClick={() => {
                   if (!selectedLead) return;
                   updateStatusMutation.mutate({
-                    id: selectedLead.id,
-                    status: selectedLead.status,
-                    notes: selectedLead.notes,
-                    followUpDate: selectedLead.followUpDate || undefined,
+                    leadId: selectedLead.id,
+                    data: {
+                      status: selectedLead.status as
+                        | "NEW"
+                        | "CONTACTED"
+                        | "PROPOSAL"
+                        | "WON"
+                        | "LOST",
+                    },
                   });
                   setIsUpdateStatusOpen(false);
                   setSelectedLead(null);

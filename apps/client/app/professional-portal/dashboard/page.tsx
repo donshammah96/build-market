@@ -21,148 +21,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ProfileCompletionBanner } from "@/components/shared/ProfileCompletionBanner";
 import { useProfileStatus } from "@/hooks/useProfileStatus";
 import { useDashboardData } from "@/hooks/useDashboardData";
-import { WidgetId } from "@/lib/dashboard";
 
 // Dashboard components
-import { DashboardHeader, MetricsRow } from "@/components/dashboard";
-import {
-  // Shared widgets
-  ProfileStrengthWidget,
-  AgendaWidget,
-  // Service Provider widgets
-  LeadsWidget,
-  ProjectsWidget,
-  PortfolioWidget,
-  // Store widgets
-  StoreOverviewWidget,
-  OrdersWidget,
-  ProductsWidget,
-  InventoryAlertsWidget,
-  // Property widgets
-  ListingsWidget,
-  InquiriesWidget,
-  PipelineWidget,
-} from "@/components/dashboard/widgets";
-
-// ============================================================================
-// WIDGET RENDERER - Maps widget IDs to actual components
-// ============================================================================
-
-interface WidgetRendererProps {
-  widgetId: WidgetId;
-  data: ReturnType<typeof useDashboardData>;
-}
-
-function WidgetRenderer({ widgetId, data }: WidgetRendererProps) {
-  const {
-    leads,
-    projects,
-    portfolio,
-    primaryStore,
-    orders,
-    topProducts,
-    inventoryAlerts,
-    properties,
-    propertyInquiries,
-    pipeline,
-    agenda,
-  } = data;
-
-  switch (widgetId) {
-    // Shared widgets
-    case "profile_strength":
-      return <ProfileStrengthWidget />;
-    case "agenda":
-      return <AgendaWidget events={Array.isArray(agenda) ? agenda : []} />;
-
-    // Service Provider widgets
-    case "leads":
-      return (
-        <LeadsWidget
-          leads={Array.isArray(leads) ? leads : []}
-          newLeadsCount={
-            Array.isArray(leads)
-              ? leads.filter((l) => l.status === "new").length
-              : 0
-          }
-        />
-      );
-    case "projects":
-      return (
-        <ProjectsWidget projects={Array.isArray(projects) ? projects : []} />
-      );
-    case "portfolio":
-      return (
-        <PortfolioWidget items={Array.isArray(portfolio) ? portfolio : []} />
-      );
-
-    // Store widgets
-    case "store_overview":
-      return <StoreOverviewWidget store={primaryStore || undefined} />;
-    case "orders":
-      return (
-        <OrdersWidget
-          orders={Array.isArray(orders) ? orders : []}
-          pendingCount={
-            Array.isArray(orders)
-              ? orders.filter((o) => o.status === "pending").length
-              : 0
-          }
-        />
-      );
-    case "products":
-      return (
-        <ProductsWidget
-          products={Array.isArray(topProducts) ? topProducts : []}
-        />
-      );
-    case "inventory_alerts":
-      return (
-        <InventoryAlertsWidget
-          alerts={Array.isArray(inventoryAlerts) ? inventoryAlerts : []}
-        />
-      );
-
-    // Property widgets
-    case "property_listings":
-      return (
-        <ListingsWidget
-          properties={Array.isArray(properties) ? properties : []}
-        />
-      );
-    case "property_inquiries":
-      return (
-        <InquiriesWidget
-          inquiries={Array.isArray(propertyInquiries) ? propertyInquiries : []}
-          newCount={
-            Array.isArray(propertyInquiries)
-              ? propertyInquiries.filter((i) => i.status === "new").length
-              : 0
-          }
-        />
-      );
-    case "sales_pipeline":
-      return (
-        <PipelineWidget
-          stages={pipeline.stages}
-          totalValue={pipeline.totalValue}
-        />
-      );
-
-    // Hybrid widgets - development_projects shows projects for property developers
-    case "development_projects":
-      return (
-        <ProjectsWidget projects={Array.isArray(projects) ? projects : []} />
-      );
-
-    default:
-      // Unknown widget - log warning in development
-      if (process.env.NODE_ENV === "development") {
-        console.warn(`Unknown widget ID: ${widgetId}`);
-      }
-      return null;
-  }
-}
+import { DashboardHeader, MetricsRow, WidgetRenderer } from "@/components/dashboard";
 
 // ============================================================================
 // ERROR ALERT COMPONENT
@@ -206,7 +67,7 @@ export default function ProfessionalDashboardPage() {
 
   // Dashboard data with conditional fetching based on profession
   const dashboardData = useDashboardData();
-  const { config, metrics, isLoading: dataLoading, error } = dashboardData;
+  const { config, metrics, isLoading: dataLoading, error, refetch } = dashboardData;
 
   // Check if user skipped onboarding
   const skippedOnboarding =
@@ -242,7 +103,7 @@ export default function ProfessionalDashboardPage() {
   return (
     <div className="space-y-10 max-w-[1600px] mx-auto pb-10">
       {/* Error Alert */}
-      {error && <ErrorAlert error={error} />}
+      {error && <ErrorAlert error={error} onRetry={refetch} />}
 
       {/* Verification Prompt for Skipped Onboarding */}
       {skippedOnboarding && <VerificationPromptCard />}

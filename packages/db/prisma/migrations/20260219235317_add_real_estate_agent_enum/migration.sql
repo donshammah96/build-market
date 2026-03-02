@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "Profession" ADD VALUE 'REAL_ESTATE_AGENT';

@@ -1,129 +1,6 @@
 import { z } from "zod";
-
-// =============================================================================
-// Enums - Must match Prisma schema enums
-// =============================================================================
-
-// County enum - matches Prisma County (required for ClientProfile)
-export const CountyEnum = z.enum([
-  "MOMBASA",
-  "KWALE",
-  "KILIFI",
-  "TANA_RIVER",
-  "LAMU",
-  "TAITA_TAVETA",
-  "GARISSA",
-  "WAJIR",
-  "MANDERA",
-  "MARSABIT",
-  "ISIOLO",
-  "MERU",
-  "THARAKA_NITHI",
-  "EMBU",
-  "KITUI",
-  "MACHAKOS",
-  "MAKUENI",
-  "NYANDARUA",
-  "NYERI",
-  "KIRINYAGA",
-  "MURANGA",
-  "KIAMBU",
-  "TURKANA",
-  "WEST_POKOT",
-  "SAMBURU",
-  "TRANS_NZOIA",
-  "UASIN_GISHU",
-  "ELGEYO_MARAKWET",
-  "NANDI",
-  "BARINGO",
-  "LAIKIPIA",
-  "NAKURU",
-  "NAROK",
-  "KAJIADO",
-  "KERICHO",
-  "BOMET",
-  "KAKAMEGA",
-  "VIHIGA",
-  "BUNGOMA",
-  "BUSIA",
-  "SIAYA",
-  "KISUMU",
-  "HOMA_BAY",
-  "MIGORI",
-  "KISII",
-  "NYAMIRA",
-  "NAIROBI",
-]);
-
-// Profession enum - matches Prisma Profession
-export const ProfessionEnum = z.enum([
-  // Architecture & Design
-  "architect",
-  "interior_designer",
-  "landscape_architect",
-  "urban_planner",
-  "draftsman",
-  // Engineering
-  "structural_engineer",
-  "civil_engineer",
-  "mechanical_engineer",
-  "electrical_engineer",
-  "geotechnical_engineer",
-  "environmental_engineer",
-  "water_engineer",
-  // Construction Management
-  "construction_manager",
-  "project_manager",
-  "site_supervisor",
-  "quantity_surveyor",
-  "estimator",
-  "clerk_of_works",
-  // Contractors
-  "contractor",
-  "building_contractor",
-  "roofing_contractor",
-  "flooring_contractor",
-  "painting_contractor",
-  "demolition_contractor",
-  // Specialized Trades
-  "plumber",
-  "electrician",
-  "hvac_technician",
-  "mason",
-  "carpenter",
-  "welder",
-  "glazier",
-  "tiler",
-  "plasterer",
-  "waterproofing_specialist",
-  "painter",
-  "roofer",
-  // Real Estate
-  "real_estate_agent",
-  "realtor",
-  "realty_company",
-  "property_developer",
-  "land_surveyor",
-  "property_valuator",
-  "surveyor",
-  // Specialists
-  "solar_installer",
-  "pool_builder",
-  "landscaper",
-  "security_systems",
-  "smart_home_specialist",
-  "fire_safety_specialist",
-  "acoustic_consultant",
-  // Suppliers
-  "building_materials_supplier",
-  "hardware_supplier",
-  "sanitary_supplier",
-  // Other
-  "other",
-]);
-
-export type County = z.infer<typeof CountyEnum>;
-export type Profession = z.infer<typeof ProfessionEnum>;
+import { COUNTIES, PROFESSIONS } from "@build/enums";
+export type { County, Profession } from "@build/enums";
 
 // =============================================================================
 // Homeowner/Client Onboarding Schema
@@ -133,7 +10,7 @@ export type Profession = z.infer<typeof ProfessionEnum>;
 export const homeownerOnboardingSchema = z
   .object({
     // Location - required for ClientProfile
-    county: CountyEnum,
+    county: z.enum(COUNTIES),
 
     city: z
       .string()
@@ -175,7 +52,7 @@ export const homeownerOnboardingSchema = z
     {
       message: "Please describe your project type",
       path: ["customProjectType"],
-    }
+    },
   );
 
 export type HomeownerOnboardingData = z.infer<typeof homeownerOnboardingSchema>;
@@ -188,7 +65,7 @@ export type HomeownerOnboardingData = z.infer<typeof homeownerOnboardingSchema>;
 export const professionalOnboardingSchema = z
   .object({
     // Required fields
-    profession: ProfessionEnum,
+    profession: z.enum(PROFESSIONS),
 
     companyName: z
       .string()
@@ -258,7 +135,7 @@ export const professionalOnboardingSchema = z
     {
       message: "EARB number is required for real estate agents",
       path: ["earbNumber"],
-    }
+    },
   );
 
 export type ProfessionalOnboardingData = z.infer<
@@ -272,7 +149,7 @@ export type ProfessionalOnboardingData = z.infer<
 export const clientOnboardingPayload = z.object({
   role: z.literal("client"),
   // ClientProfile fields
-  county: CountyEnum,
+  county: z.enum(COUNTIES),
   city: z.string().optional(),
   address: z.string().optional(),
   zipCode: z.string().optional(),
@@ -286,7 +163,7 @@ export const clientOnboardingPayload = z.object({
 export const professionalOnboardingPayload = z.object({
   role: z.literal("professional"),
   // ProfessionalProfile fields
-  profession: ProfessionEnum,
+  profession: z.enum(PROFESSIONS),
   companyName: z.string().min(2),
   licenseNumber: z.string().optional(),
   yearsExperience: z.number().int().optional(),
