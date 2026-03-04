@@ -1684,6 +1684,34 @@ model Asset {
   @@index([createdAt])
 }
 
+enum OnboardingUploadStatus {
+  STAGED
+  CONSUMED
+  EXPIRED
+}
+
+model OnboardingUpload {
+  id               String                 @id @default(uuid())
+  clerkId          String
+  tempUrl          String
+  originalName     String
+  mimeType         String
+  size             Int
+  checksum         String
+  storageBucket    String
+  storageKey       String                 @unique
+  status           OnboardingUploadStatus @default(STAGED)
+  expiresAt        DateTime
+  consumedAt       DateTime?
+  consumedByUserId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([clerkId])
+  @@index([expiresAt])
+  @@unique([id, clerkId])
+}
+
 // ========================================================
 // 6. PORTFOLIOS (CASE STUDIES)
 // ========================================================

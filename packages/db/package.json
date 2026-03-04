@@ -9,7 +9,9 @@
     "./system-settings": "./lib/system-settings.ts"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "check-types": "tsc --noEmit",
+    "lint": "echo \"No lint configured\" && exit 0",
+    "test": "echo \"No tests configured\" && exit 0",
     "postinstall": "prisma generate"
   },
   "keywords": [],

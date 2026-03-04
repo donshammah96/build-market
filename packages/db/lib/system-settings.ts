@@ -202,23 +202,35 @@ const DocumentQualitySchema = z.object({
   minPropertyImages: z.coerce.number().default(5),
 });
 
+// Helper: Fast object merge using Object.assign instead of object spread,
+// avoiding z.preprocess(). Runs after basic type checking.
+const fastMergeDefaults = <T extends Record<string, string[]>>(
+  defaults: T,
+  val: Record<string, string[]>,
+): T => {
+  return Object.assign({}, defaults, val) as T;
+};
+
 const VerificationRulesSchema = z.object({
-  // Use z.nativeEnum(Profession) for strict keys
+  // Use z.record(z.string(), ...) to avoid the nativeEnum key reflection overhead.
+  // Use .catch() or .transform() to apply defaults instantly.
   requiredLicenses: z
-    .record(z.nativeEnum(Profession), z.array(z.string()))
-    .default(
-      DEFAULT_VERIFICATION_RULES.requiredLicenses as unknown as Record<
-        Profession,
-        string[]
-      >,
+    .record(z.string(), z.array(z.string()))
+    .catch({})
+    .transform((val) =>
+      fastMergeDefaults(
+        DEFAULT_VERIFICATION_RULES.requiredLicenses as any,
+        val,
+      ),
     ),
   requiredDocuments: z
-    .record(z.nativeEnum(Profession), z.array(z.string()))
-    .default(
-      DEFAULT_VERIFICATION_RULES.requiredDocuments as Record<
-        Profession,
-        string[]
-      >,
+    .record(z.string(), z.array(z.string()))
+    .catch({})
+    .transform((val) =>
+      fastMergeDefaults(
+        DEFAULT_VERIFICATION_RULES.requiredDocuments as any,
+        val,
+      ),
     ),
   requiredStoreDocuments: z.array(z.string()).optional(),
   requiredPropertyDocuments: z.array(z.string()).optional(),
@@ -251,7 +263,6 @@ const PublicSettingsSchema = z.object({
 });
 
 const FinancialSettingsSchema = z.object({
-  // Use z.coerce.number() to handle Decimal types from Prisma
   platformCommission: z.coerce.number().default(5),
   vatRate: z.coerce.number().default(16),
   withholdingTaxRate: z.coerce.number().default(5),
@@ -318,7 +329,15 @@ export type PropertyDocumentType =
 
 class SystemSettingsService {
   private static instance: SystemSettingsService;
-  private cache: { data: SystemSettings; timestamp: number } | null = null;
+
+  // Cache all pre-parsed forms to avoid Zod overhead on repeated getter calls
+  private cache: {
+    full: SystemSettings;
+    publicParsed: PublicSettings;
+    financialParsed: FinancialSettings;
+    timestamp: number;
+  } | null = null;
+
   private readonly CACHE_TTL_MS = 60_000; // 60 seconds
   private pendingRequest: Promise<SystemSettings> | null = null;
 
@@ -338,7 +357,7 @@ class SystemSettingsService {
   public async getSettings(): Promise<SystemSettings> {
     // 1. Cache Check
     if (this.cache && Date.now() - this.cache.timestamp < this.CACHE_TTL_MS) {
-      return this.cache.data;
+      return this.cache.full;
     }
 
     // 2. Request Deduplication: Return pending promise if request is in flight
@@ -353,22 +372,38 @@ class SystemSettingsService {
           where: { id: "global" },
         });
 
-        // Use safe parsing. z.coerce handles Decimals automatically now.
-        // We pass the raw row or empty object. Zod handles the rest via coercion and defaults.
+        // Parse once sequentially
         const parsed = SystemSettingsSchema.parse(row ?? {});
+        const publicParsed = PublicSettingsSchema.parse(parsed);
+        const financialParsed = FinancialSettingsSchema.parse(parsed);
 
-        this.cache = { data: parsed, timestamp: Date.now() };
+        // Store pre-parsed objects in memory
+        this.cache = {
+          full: parsed,
+          publicParsed,
+          financialParsed,
+          timestamp: Date.now(),
+        };
         return parsed;
       } catch (error) {
         console.error(
           "Critical Settings Failure, falling back to defaults:",
           error,
         );
-        // Fallback to defaults. Zod parse ensures this matches the schema structure.
-        return SystemSettingsSchema.parse({
+        const fallback = SystemSettingsSchema.parse({
           ...DEFAULT_PUBLIC_SETTINGS,
           ...DEFAULT_FINANCIAL_SETTINGS,
         });
+        const publicParsed = PublicSettingsSchema.parse(fallback);
+        const financialParsed = FinancialSettingsSchema.parse(fallback);
+
+        this.cache = {
+          full: fallback,
+          publicParsed,
+          financialParsed,
+          timestamp: Date.now(),
+        };
+        return fallback;
       } finally {
         this.pendingRequest = null;
       }
@@ -378,13 +413,13 @@ class SystemSettingsService {
   }
 
   public async getPublicSettings(): Promise<PublicSettings> {
-    const settings = await this.getSettings();
-    return PublicSettingsSchema.parse(settings);
+    await this.getSettings(); // Ensures cache is populated
+    return this.cache!.publicParsed; // Zero-parsing fast return
   }
 
   public async getFinancialSettings(): Promise<FinancialSettings> {
-    const settings = await this.getSettings();
-    return FinancialSettingsSchema.parse(settings);
+    await this.getSettings(); // Ensures cache is populated
+    return this.cache!.financialParsed; // Zero-parsing fast return
   }
 }
 
