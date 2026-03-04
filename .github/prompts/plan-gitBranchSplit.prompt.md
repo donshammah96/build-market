@@ -6,16 +6,16 @@ Split the current `feature/store-integration` branch with mixed changes into 8 s
 
 ## Branches (Merge Order)
 
-| # | Branch | Description |
-|---|--------|-------------|
-| 1 | `chore/db-schema-and-infra` | Database schema, migrations, packages, root config |
-| 2 | `feature/notification-nats-integration` | Notification service + NATS + Redis |
-| 3 | `feature/admin-dashboard-improvements` | Admin panel: analytics, audit, services |
-| 4 | `feature/admin-verification-system` | Verification workflow for entities |
-| 5 | `feature/property-management` | Property listings and documents |
-| 6 | `feature/professional-portal-enhancements` | Professional dashboard, leads, portfolio |
-| 7 | `feature/store-integration` | Store/vendor integration |
-| 8 | `chore/client-app-improvements` | Client app: auth, onboarding, UI, config |
+| #   | Branch                                     | Description                                        |
+| --- | ------------------------------------------ | -------------------------------------------------- |
+| 1   | `chore/db-schema-and-infra`                | Database schema, migrations, packages, root config |
+| 2   | `feature/notification-nats-integration`    | Notification service + NATS + Redis                |
+| 3   | `feature/admin-dashboard-improvements`     | Admin panel: analytics, audit, services            |
+| 4   | `feature/admin-verification-system`        | Verification workflow for entities                 |
+| 5   | `feature/property-management`              | Property listings and documents                    |
+| 6   | `feature/professional-portal-enhancements` | Professional dashboard, leads, portfolio           |
+| 7   | `feature/store-integration`                | Store/vendor integration                           |
+| 8   | `chore/client-app-improvements`            | Client app: auth, onboarding, UI, config           |
 
 ---
 
@@ -69,7 +69,7 @@ $dbFiles = @(
     "pnpm-lock.yaml",
     "turbo.json",
     ".github/",
-    
+
     # Database package
     "packages/db/prisma/schema.prisma",
     "packages/db/prisma/seed.ts",
@@ -80,12 +80,12 @@ $dbFiles = @(
     "packages/db/prisma/migrations/20260107100124_add_propery_parking_spaces/",
     "packages/db/prisma/migrations/20260107101341_add_property_year_built_field/",
     "packages/db/prisma/migrations/20260114112618_add_failed_notif_table_and_queue_status_enums/",
-    
+
     # Resilience package
     "packages/resilience/package.json",
     "packages/resilience/src/cache.ts",
     "packages/resilience/src/types.ts",
-    
+
     # Types package
     "packages/types/src/auth.ts"
 )
@@ -199,11 +199,11 @@ $adminDashboardFiles = @(
     "apps/admin/src/app/(dashboard)/analytics/",
     "apps/admin/src/app/(dashboard)/audit/",
     "apps/admin/src/app/(dashboard)/services/",
-    
+
     # Auth pages
     "apps/admin/src/app/(auth)/sign-in/",
     "apps/admin/src/app/(auth)/unauthorized/",
-    
+
     # Actions
     "apps/admin/src/actions/admin/index.ts",
     "apps/admin/src/actions/admin/professionals.ts",
@@ -212,12 +212,12 @@ $adminDashboardFiles = @(
     "apps/admin/src/actions/admin/analytics.ts",
     "apps/admin/src/actions/admin/audit.ts",
     "apps/admin/src/actions/admin/services.ts",
-    
+
     # Components
     "apps/admin/src/components/admin/breadcrumbs.tsx",
     "apps/admin/src/components/ui/alert.tsx",
     "apps/admin/src/components/ui/dialog.tsx",
-    
+
     # Config
     "apps/admin/src/middleware.ts",
     "apps/admin/src/app/globals.css"
@@ -259,21 +259,21 @@ $verificationFiles = @(
     "apps/admin/src/actions/admin/verification.ts",
     "apps/admin/src/app/(dashboard)/verifications/",
     "apps/admin/src/components/admin/verification/",
-    
+
     # Client API routes
     "apps/client/app/api/admin/verify/",
     "apps/client/app/api/admin/verify-document/",
     "apps/client/app/api/admin/pending-verifications/",
     "apps/client/app/api/admin/verification-details/",
     "apps/client/app/api/admin/verification-stats/",
-    
+
     # Client services and hooks
     "apps/client/lib/services/verification/",
     "apps/client/hooks/useVerificationRedirect.ts",
-    
+
     # Tests
     "apps/client/__tests__/admin-verification/",
-    
+
     # Documentation
     "VERIFICATION_API_DOCS.md",
     "VERIFICATION_DASHBOARD_INTEGRATION.md",
@@ -321,26 +321,26 @@ git checkout -b feature/property-management 2>$null || git checkout feature/prop
 $propertyFiles = @(
     # Types
     "apps/client/types/property.ts",
-    
+
     # API routes
     "apps/client/app/api/properties/[id]/route.ts",
     "apps/client/app/api/properties/route.ts",
     "apps/client/app/api/properties/[id]/documents/",
     "apps/client/app/api/properties/my-listings/",
-    
+
     # Pages
     "apps/client/app/properties/[id]/page.tsx",
     "apps/client/app/properties/page.tsx",
     "apps/client/app/professional-portal/settings/properties/",
-    
+
     # Repository
     "apps/client/app/lib/repositories/property.repository.ts",
-    
+
     # Components
     "apps/client/components/real-estate/Property.tsx",
     "apps/client/components/real-estate/PropertyCard.tsx",
     "apps/client/components/forms/PropertyForm.tsx",
-    
+
     # Admin
     "apps/admin/src/actions/admin/properties.ts",
     "apps/admin/src/app/(dashboard)/properties/",
@@ -383,7 +383,7 @@ $professionalFiles = @(
     # Types
     "apps/client/types/professional.ts",
     "apps/client/types/project.ts",
-    
+
     # Professional portal pages
     "apps/client/app/professional-portal/dashboard/page.tsx",
     "apps/client/app/professional-portal/leads/page.tsx",
@@ -402,7 +402,7 @@ $professionalFiles = @(
     "apps/client/app/professional-portal/settings/page.tsx",
     "apps/client/app/professional-portal/settings/complete-profile/page.tsx",
     "apps/client/app/professional-portal/layout.tsx",
-    
+
     # Professional portal API routes
     "apps/client/app/api/professional-portal/finance/transactions/route.ts",
     "apps/client/app/api/professional-portal/leads/[id]/route.ts",
@@ -421,7 +421,7 @@ $professionalFiles = @(
     "apps/client/app/api/professional-portal/orders/",
     "apps/client/app/api/professional-portal/pipeline/",
     "apps/client/app/api/professional-portal/products/",
-    
+
     # Public professional pages
     "apps/client/app/professionals/[id]/page.tsx",
     "apps/client/app/professionals/page.tsx",
@@ -429,14 +429,14 @@ $professionalFiles = @(
     "apps/client/app/professional/page.tsx",
     "apps/client/app/api/professionals/[id]/route.ts",
     "apps/client/app/api/professionals/route.ts",
-    
+
     # Leads API
     "apps/client/app/api/leads/[id]/route.ts",
     "apps/client/app/api/leads/route.ts",
-    
+
     # Repository
     "apps/client/app/lib/repositories/professional.repository.ts",
-    
+
     # Components
     "apps/client/components/layout/ProfessionalNavbar.tsx",
     "apps/client/components/layout/ProfessionalSidebar.tsx",
@@ -445,11 +445,11 @@ $professionalFiles = @(
     "apps/client/components/professional/OnboardingWizard.tsx",
     "apps/client/components/projects/ProjectCard.tsx",
     "apps/client/components/forms/professional-wizard/",
-    
+
     # Hooks and utilities
     "apps/client/hooks/useDashboardData.ts",
     "apps/client/lib/dashboard/",
-    
+
     # Admin leads
     "apps/admin/src/actions/admin/leads.ts",
     "apps/admin/src/app/(dashboard)/leads/",
@@ -502,19 +502,19 @@ $storeFiles = @(
     # Types
     "apps/client/types/store.ts",
     "apps/client/types/vendor.ts",
-    
+
     # Components
     "apps/client/components/vendors/VendorCard.tsx",
     "apps/client/components/vendors/VendorSection.tsx",
     "apps/client/components/forms/StoreForm.tsx",
     "apps/client/components/forms/MultiStoreForm.tsx",
-    
+
     # API routes
     "apps/client/app/api/stores/",
-    
+
     # Professional portal store settings
     "apps/client/app/professional-portal/settings/stores/",
-    
+
     # Admin
     "apps/admin/src/actions/admin/stores.ts",
     "apps/admin/src/app/(dashboard)/stores/"
@@ -559,69 +559,69 @@ $clientFiles = @(
     "apps/client/styles/globals.css",
     "apps/client/next.config.ts",
     "apps/client/package.json",
-    
+
     # Auth pages
     "apps/client/app/sign-in/",
     "apps/client/app/sign-up/",
     "apps/client/app/auth-callback/page.tsx",
     "apps/client/app/verify/page.tsx",
-    
+
     # Onboarding
     "apps/client/app/onboarding/page.tsx",
     "apps/client/app/api/onboarding/route.ts",
     "apps/client/app/api/onboarding/skip/route.ts",
     "apps/client/app/api/onboarding/uploads/route.ts",
     "apps/client/app/api/onboarding/skip-professional/",
-    
+
     # User/Profile API
     "apps/client/app/api/user/profile/complete/route.ts",
     "apps/client/app/api/user/profile/route.ts",
     "apps/client/app/api/profile/",
     "apps/client/app/api/clerk-webhook/route.ts",
     "apps/client/app/api/internal/user-status/route.ts",
-    
+
     # Other API routes
     "apps/client/app/api/client/dashboard/route.ts",
     "apps/client/app/api/health/route.ts",
     "apps/client/app/api/metrics/route.ts",
     "apps/client/app/api/notifications/route.ts",
     "apps/client/app/api/services/",
-    
+
     # Idea books
     "apps/client/app/api/idea-books/[id]/attachments/[attachmentId]/route.ts",
     "apps/client/app/api/idea-books/[id]/attachments/route.ts",
     "apps/client/app/api/idea-books/[id]/route.ts",
     "apps/client/app/api/idea-books/route.ts",
-    
+
     # Messaging
     "apps/client/app/api/messaging/conversations/[id]/read/route.ts",
     "apps/client/app/api/messaging/conversations/route.ts",
     "apps/client/app/api/messaging/messages/[id]/read/route.ts",
     "apps/client/app/api/messaging/messages/route.ts",
-    
+
     # Reviews
     "apps/client/app/(user)/reviews/page.tsx",
     "apps/client/components/reviews/ReviewCard.tsx",
     "apps/client/components/reviews/ReviewsSection.tsx",
-    
+
     # Home components
     "apps/client/components/home/CTA.tsx",
     "apps/client/components/home/FeatureCard.tsx",
     "apps/client/components/home/FeatureSection.tsx",
     "apps/client/components/home/Hero.tsx",
     "apps/client/components/home/Onboarding.tsx",
-    
+
     # Layout components
     "apps/client/components/layout/NavBar.tsx",
     "apps/client/components/layout/Footer.tsx",
-    
+
     # Forms
     "apps/client/components/forms/HomeownerForm.tsx",
     "apps/client/components/forms/ProfessionalForm.tsx",
-    
+
     # Notifications
     "apps/client/components/notifications/NotificationsPopover.tsx",
-    
+
     # Shared components
     "apps/client/components/shared/ProfileCompletionWidget.tsx",
     "apps/client/components/shared/ProfileCompletionWidgetWrapper.tsx",
@@ -629,13 +629,13 @@ $clientFiles = @(
     "apps/client/components/dashboard/",
     "apps/client/components/admin/",
     "apps/client/components/ui/step-progress.tsx",
-    
+
     # Hooks
     "apps/client/hooks/useProfileStatus.ts",
     "apps/client/hooks/useABTest.ts",
     "apps/client/hooks/useClerkMetadataSync.ts",
     "apps/client/hooks/useImageUploader.ts",
-    
+
     # Lib utilities
     "apps/client/app/lib/api-response.ts",
     "apps/client/app/lib/api-utils.ts",
@@ -649,7 +649,7 @@ $clientFiles = @(
     "apps/client/lib/generate-keys.ts",
     "apps/client/lib/hooks/",
     "apps/client/lib/stores/",
-    
+
     # Public assets
     "apps/client/public/favicon.ico",
     "apps/client/public/apple-touch-icon.png",
@@ -659,7 +659,7 @@ $clientFiles = @(
     "apps/client/public/icon-512.png",
     "apps/client/public/manifest.json",
     "apps/client/public/site.webmanifest",
-    
+
     # Testing
     "apps/client/cypress.config.ts",
     "apps/client/cypress/",
@@ -765,6 +765,7 @@ Write-Host "Done!" -ForegroundColor Green
 ## Post-Script Commands
 
 ### Push All Branches
+
 ```powershell
 git push -u origin chore/db-schema-and-infra
 git push -u origin feature/notification-nats-integration
@@ -777,6 +778,7 @@ git push -u origin chore/client-app-improvements
 ```
 
 ### Cleanup After All PRs Merged
+
 ```powershell
 git branch -D backup/all-changes-2026-01-15
 git fetch --prune

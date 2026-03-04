@@ -17,7 +17,9 @@ async function main() {
     },
   ]);
 
-  console.log("[example] Consumer subscribed to 'test.example'. Running 30s...");
+  console.log(
+    "[example] Consumer subscribed to 'test.example'. Running 30s...",
+  );
 
   // Run for 30s then shutdown
   setTimeout(async () => {
