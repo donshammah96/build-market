@@ -49,7 +49,7 @@ function ProductItemRow({ product, rank }: ProductItemRowProps) {
       <span
         className={cn(
           "text-xs font-bold w-5 text-center",
-          rank === 1 ? "text-amber-500" : "text-zinc-400"
+          rank === 1 ? "text-amber-500" : "text-zinc-400",
         )}
       >
         #{rank}

@@ -33,6 +33,8 @@ export const baseDocumentSchema = z.object({
     .optional(),
   notes: z.string().max(500, "Notes cannot exceed 500 characters").optional(),
   assetId: z.string().min(1, "Document file must be uploaded").optional(), // Keep optional for initial form state, enforce later if needed
+  uploadId: z.string().optional(),
+  previewUrl: z.string().optional(),
 });
 
 // ============================================================================

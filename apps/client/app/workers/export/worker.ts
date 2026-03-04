@@ -1,6 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { redisConnection } from "@/app/lib/queues/redis-connection";
-import { ExportJobData } from "@/app/lib/queues/export.queue";
+import { redisConnection, ExportJobData } from "@build/queue-server";
 import { ExportProcessor } from "./processor";
 import { prisma } from "@build/db";
 import { sendExportReadyEmail } from "@/app/lib/notifications/email.service";

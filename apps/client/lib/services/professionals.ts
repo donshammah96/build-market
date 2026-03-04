@@ -45,7 +45,7 @@ const baseUrl = env.appUrl;
  * List professionals with filters. Public, verified-only by default.
  */
 export async function getProfessionals(
-  filters: ProfessionalQueryInput
+  filters: ProfessionalQueryInput,
 ): Promise<ProfessionalListResult> {
   const serviceFilters: ProfessionalFilters = {
     search: filters.search || undefined,
@@ -84,17 +84,14 @@ export async function getProfessionals(
  * Get professional detail by user ID. Public.
  */
 export async function getProfessionalById(
-  userId: string
+  userId: string,
 ): Promise<ProfessionalDetailResult | null> {
   const professional = await repo.findByUserId(userId);
   if (!professional) return null;
 
   const locationParts: string[] = [];
   if (professional.city) locationParts.push(professional.city);
-  if (
-    professional.county &&
-    professional.county !== professional.city
-  ) {
+  if (professional.county && professional.county !== professional.city) {
     locationParts.push(professional.county);
   }
   if (professional.country) locationParts.push(professional.country);
@@ -104,8 +101,7 @@ export async function getProfessionalById(
     professionLabel: professional.profession
       ? getProfessionLabel(professional.profession.toLowerCase())
       : "Professional",
-    location:
-      locationParts.length > 0 ? locationParts.join(", ") : undefined,
+    location: locationParts.length > 0 ? locationParts.join(", ") : undefined,
     profileImage: professional.user.avatar || undefined,
     profileUrl: `${baseUrl}/professionals/${professional.userId}`,
   };

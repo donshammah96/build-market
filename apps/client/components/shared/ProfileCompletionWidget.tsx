@@ -163,7 +163,7 @@ export function ProfileCompletionWidget({
           state: newState,
           dismissedAt:
             newState === "dismissed" ? new Date().toISOString() : undefined,
-        })
+        }),
       );
     }
   }, []);
@@ -207,7 +207,7 @@ export function ProfileCompletionWidget({
               className={cn(
                 "block p-3 bg-white rounded-full shadow-lg border border-zinc-200",
                 "hover:shadow-xl hover:border-zinc-300 transition-all duration-200",
-                "group relative"
+                "group relative",
               )}
             >
               <CircularProgress
@@ -322,7 +322,7 @@ export function ProfileCompletionWidget({
                 className={cn(
                   "flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg",
                   "bg-zinc-900 text-white font-medium text-sm",
-                  "hover:bg-zinc-800 transition-colors group"
+                  "hover:bg-zinc-800 transition-colors group",
                 )}
               >
                 Complete Profile

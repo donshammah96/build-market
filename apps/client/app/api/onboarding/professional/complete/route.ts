@@ -1,6 +1,11 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@build/db";
-import { Profession, LicenseAuthority, County } from "@prisma/client";
+import {
+  Profession,
+  LicenseAuthority,
+  County,
+  DocumentCategory,
+} from "@prisma/client";
 import { z } from "zod";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { HttpStatus } from "@/app/lib/api/api-response";
@@ -81,9 +86,16 @@ const OnboardingCompleteSchema = z.object({
     // Let me check imports.
     .optional(),
 
-  // Documents (creates ProfessionalDocument records)
-  certificatesUrls: z.array(z.string().url()).max(10).optional(),
-  idDocumentsUrls: z.array(z.string().url()).max(5).optional(),
+  documents: z
+    .array(
+      z.object({
+        uploadId: z.string(),
+        previewUrl: z.string().optional(),
+        category: z.string(),
+        title: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 
 /**
@@ -414,49 +426,85 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
             }
           }
 
-          // Handle certificates → ProfessionalDocument (EDUCATION_CERT)
-          if (data.certificatesUrls && data.certificatesUrls.length > 0) {
-            const certPromises = data.certificatesUrls.map((url, index) =>
-              tx.professionalDocument.create({
-                data: {
-                  professionalId: dbUserId,
-                  category: "EDUCATION_CERT",
-                  title: `Professional Certificate ${index + 1}`,
-                  issuer: "Self-reported",
-                  fileUrl: url,
-                  status: "PENDING",
-                },
-              }),
-            );
-            await Promise.all(certPromises);
+          // Handle unified documents logic
 
-            logger.info("Certificate documents created during onboarding", {
-              userId: dbUserId,
-              correlationId,
-              count: data.certificatesUrls.length,
+          if (data.documents && data.documents.length > 0) {
+            const uploadIds = data.documents
+              .map((d) => d.uploadId)
+              .filter(Boolean);
+
+            const stagedUploads = await tx.onboardingUpload.findMany({
+              where: {
+                id: { in: uploadIds },
+                clerkId: currentUserRecord.clerkId,
+                status: "STAGED",
+              },
             });
-          }
 
-          // Handle ID documents → ProfessionalDocument (ID_OR_PASSPORT)
-          if (data.idDocumentsUrls && data.idDocumentsUrls.length > 0) {
-            const idPromises = data.idDocumentsUrls.map((url, index) =>
-              tx.professionalDocument.create({
+            if (
+              uploadIds.length > 0 &&
+              stagedUploads.length !== uploadIds.length
+            ) {
+              throw new Error("Invalid or expired document uploads");
+            }
+
+            for (let i = 0; i < data.documents.length; i++) {
+              const doc = data.documents[i];
+              if (!doc) continue;
+
+              const staged = stagedUploads.find((s) => s.id === doc.uploadId);
+              let assetId: string | undefined = undefined;
+
+              if (staged) {
+                let asset = await tx.asset.findUnique({
+                  where: { checksum: staged.checksum },
+                });
+                if (!asset) {
+                  asset = await tx.asset.create({
+                    data: {
+                      uploaderId: dbUserId,
+                      originalName: staged.originalName,
+                      mimeType: staged.mimeType,
+                      size: staged.size,
+                      checksum: staged.checksum,
+                      bucket: staged.storageBucket,
+                      key: staged.storageKey,
+                      cdnUrl: staged.tempUrl,
+                    },
+                  });
+                }
+                assetId = asset.id;
+
+                await tx.onboardingUpload.update({
+                  where: { id: staged.id },
+                  data: {
+                    status: "CONSUMED",
+                    consumedAt: new Date(),
+                    consumedByUserId: dbUserId,
+                  },
+                });
+              }
+
+              await tx.professionalDocument.create({
                 data: {
                   professionalId: dbUserId,
-                  category: "ID_OR_PASSPORT",
-                  title: `ID Document ${index + 1}`,
-                  issuer: "Government/Official",
-                  fileUrl: url,
+                  category: doc.category as DocumentCategory,
+                  title: doc.title || `Document ${i + 1}`,
+                  issuer:
+                    doc.category === "ID_OR_PASSPORT"
+                      ? "Government/Official"
+                      : "Self-reported",
+                  assetId,
+                  fileUrl: doc.previewUrl || staged?.tempUrl || null,
                   status: "PENDING",
                 },
-              }),
-            );
-            await Promise.all(idPromises);
+              });
+            }
 
-            logger.info("ID documents created during onboarding", {
+            logger.info("Documents created during onboarding", {
               userId: dbUserId,
               correlationId,
-              count: data.idDocumentsUrls.length,
+              count: data.documents.length,
             });
           }
 

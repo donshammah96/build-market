@@ -19,7 +19,7 @@ const logger = getClientLogger();
  * GET /api/stores/my-stores
  * Get all stores owned by the authenticated professional
  * Returns store data formatted for dashboard widget
- * 
+ *
  * Features:
  * - Optimized single-query approach (no N+1 problem)
  * - Aggregated stats for each store
@@ -34,7 +34,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
   const { success } = await checkRateLimit(
     `stores-my:${identifier}`,
     RateLimits.READ.limit,
-    RateLimits.READ.window
+    RateLimits.READ.window,
   );
 
   if (!success) {

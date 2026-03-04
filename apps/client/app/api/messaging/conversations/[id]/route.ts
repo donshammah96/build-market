@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@build/db";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -16,9 +15,9 @@ import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import {
   UpdateThreadSchema,
-  threadDetailSelect,
   MESSAGING_CONFIG,
-} from "@/app/lib/validation/messaging-validation";
+  messagingService,
+} from "@build/messaging-server";
 import { extractExpectedVersion } from "@/app/lib/api/request-utils";
 
 const logger = getClientLogger();
@@ -47,31 +46,7 @@ export const GET = withAuth<ThreadParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      async () => {
-        const participant = await prisma.threadParticipant.findUnique({
-          where: { threadId_userId: { threadId, userId: dbUserId } },
-          select: { id: true },
-        });
-        if (!participant)
-          return {
-            _error: true as const,
-            message: "Not a participant in this conversation",
-            status: HttpStatus.FORBIDDEN,
-          };
-
-        const thread = await prisma.messageThread.findFirst({
-          where: { id: threadId, deletedAt: null },
-          select: threadDetailSelect,
-        });
-        if (!thread)
-          return {
-            _error: true as const,
-            message: "Conversation not found",
-            status: HttpStatus.NOT_FOUND,
-          };
-
-        return thread;
-      },
+      () => messagingService.getConversation(dbUserId, threadId),
       { operationName: "get_thread" },
     );
 
@@ -85,11 +60,14 @@ export const GET = withAuth<ThreadParams>(
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     } else {
-      const data = result.data;
-      if (data && "_error" in (data as any) && (data as any)._error) {
-        return apiError((data as any).message, (data as any).status);
+      const serviceResult = result.data;
+      if (!serviceResult || !serviceResult.ok) {
+        return apiError(
+          serviceResult?.message ?? "Invalid request",
+          serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+        );
       }
-      return apiSuccess(data, HttpStatus.OK);
+      return apiSuccess(serviceResult.data, HttpStatus.OK);
     }
   },
 );
@@ -166,46 +144,7 @@ export const PATCH = withAuth<ThreadParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      async () => {
-        const participant = await prisma.threadParticipant.findUnique({
-          where: { threadId_userId: { threadId, userId: dbUserId } },
-          select: { id: true, role: true },
-        });
-        if (!participant)
-          return {
-            _error: true as const,
-            message: "Not a participant in this conversation",
-            status: HttpStatus.FORBIDDEN,
-          };
-        if (data.subject !== undefined && participant.role === "MEMBER")
-          return {
-            _error: true as const,
-            message: "Only admins can update thread subject",
-            status: HttpStatus.FORBIDDEN,
-          };
-
-        const thread = await prisma.messageThread.findFirst({
-          where: { id: threadId, deletedAt: null },
-          select: { id: true },
-        });
-        if (!thread)
-          return {
-            _error: true as const,
-            message: "Conversation not found",
-            status: HttpStatus.NOT_FOUND,
-          };
-
-        return prisma.messageThread.update({
-          where: { id: threadId },
-          data: {
-            ...(data.subject !== undefined ? { subject: data.subject } : {}),
-            ...(data.isArchived !== undefined
-              ? { isArchived: data.isArchived }
-              : {}),
-          },
-          select: threadDetailSelect,
-        });
-      },
+      () => messagingService.updateConversation(dbUserId, threadId, data),
       { operationName: "update_thread" },
     );
 
@@ -220,13 +159,18 @@ export const PATCH = withAuth<ThreadParams>(
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     } else {
-      const data = result.data;
-      if (data && "_error" in (data as any) && (data as any)._error) {
+      const serviceResult = result.data;
+      if (!serviceResult || !serviceResult.ok) {
         await IdempotencyService.fail(idempotencyKey).catch(() => {});
-        return apiError((data as any).message, (data as any).status);
+        return apiError(
+          serviceResult?.message ?? "Invalid request",
+          serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+        );
       }
-      await IdempotencyService.complete(idempotencyKey, data).catch(() => {});
-      return apiSuccess(data, HttpStatus.OK);
+      await IdempotencyService.complete(idempotencyKey, serviceResult.data).catch(
+        () => {},
+      );
+      return apiSuccess(serviceResult.data, HttpStatus.OK);
     }
   },
 );
@@ -269,41 +213,7 @@ export const DELETE = withAuth<ThreadParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      async () => {
-        const participant = await prisma.threadParticipant.findUnique({
-          where: { threadId_userId: { threadId, userId: dbUserId } },
-          select: { role: true },
-        });
-        if (!participant)
-          return {
-            _error: true as const,
-            message: "Not a participant",
-            status: HttpStatus.FORBIDDEN,
-          };
-        if (participant.role !== "OWNER" && participant.role !== "ADMIN")
-          return {
-            _error: true as const,
-            message: "Only thread owners or admins can delete conversations",
-            status: HttpStatus.FORBIDDEN,
-          };
-
-        const thread = await prisma.messageThread.findFirst({
-          where: { id: threadId, deletedAt: null },
-          select: { id: true },
-        });
-        if (!thread)
-          return {
-            _error: true as const,
-            message: "Conversation not found",
-            status: HttpStatus.NOT_FOUND,
-          };
-
-        await prisma.messageThread.update({
-          where: { id: threadId },
-          data: { deletedAt: new Date() },
-        });
-        return { id: threadId, deleted: true, expectedVersion };
-      },
+      () => messagingService.deleteConversation(dbUserId, threadId),
       { operationName: "delete_thread" },
     );
 
@@ -317,11 +227,15 @@ export const DELETE = withAuth<ThreadParams>(
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     } else {
-      const data = result.data;
-      if (data && "_error" in (data as any) && (data as any)._error) {
-        return apiError((data as any).message, (data as any).status);
+      const serviceResult = result.data;
+      if (!serviceResult || !serviceResult.ok) {
+        return apiError(
+          serviceResult?.message ?? "Invalid request",
+          serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+        );
       }
-      return apiSuccess(data, HttpStatus.OK);
+      const payload = serviceResult.data as Record<string, unknown>;
+      return apiSuccess({ ...payload, expectedVersion }, HttpStatus.OK);
     }
   },
 );

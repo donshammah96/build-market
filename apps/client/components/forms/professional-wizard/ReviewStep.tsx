@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   CheckCircle2,
@@ -116,6 +116,39 @@ const ReviewItem: React.FC<ReviewItemProps> = ({
   </div>
 );
 
+// ============================================================================
+// LEGAL CHECKBOX COMPONENT
+// ============================================================================
+
+interface LegalCheckboxProps {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  children: React.ReactNode;
+}
+
+const LegalCheckbox: React.FC<LegalCheckboxProps> = ({
+  checked,
+  onChange,
+  children,
+}) => (
+  <label className="flex items-start gap-3 cursor-pointer group">
+    <div className="relative flex items-center justify-center mt-1">
+      <input
+        type="checkbox"
+        className="peer sr-only"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <div className="w-5 h-5 border-2 border-zinc-600 rounded bg-transparent peer-checked:bg-emerald-500 peer-checked:border-emerald-500 transition-all flex items-center justify-center">
+        {checked && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+      </div>
+    </div>
+    <span className="text-sm text-zinc-400 group-hover:text-zinc-300 transition-colors">
+      {children}
+    </span>
+  </label>
+);
+
 export default function ReviewStep({
   data,
   onUpdate: _onUpdate,
@@ -147,7 +180,15 @@ export default function ReviewStep({
   const idDocumentCount = data.idDocuments?.length || 0;
   const totalDocuments = certificateCount + idDocumentCount;
 
-  const handleSubmit = () => onNext();
+  // Layer 2: Role-specific legal agreements (must be checked before submission)
+  const [agreedToTruth, setAgreedToTruth] = useState(false);
+  const [agreedToTos, setAgreedToTos] = useState(false);
+  const canSubmit = agreedToTruth && agreedToTos;
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    onNext();
+  };
 
   return (
     <div className="space-y-8">
@@ -352,6 +393,41 @@ export default function ReviewStep({
         </div>
       </motion.div>
 
+      {/* Layer 2: Role-Specific Legal Agreements */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.35 }}
+        className="space-y-4 pt-4 border-t border-white/10"
+      >
+        <LegalCheckbox checked={agreedToTruth} onChange={setAgreedToTruth}>
+          I declare that the information provided, including my{" "}
+          {authCode || "professional"} credentials, is true and accurate. I
+          understand that misrepresentation may result in account termination
+          and legal action.
+        </LegalCheckbox>
+
+        <LegalCheckbox checked={agreedToTos} onChange={setAgreedToTos}>
+          I agree to the Build Market{" "}
+          <a
+            href="/legal/professional-terms"
+            target="_blank"
+            className="text-emerald-400 hover:underline"
+          >
+            Professional Services Agreement
+          </a>{" "}
+          and{" "}
+          <a
+            href="/legal/privacy"
+            target="_blank"
+            className="text-emerald-400 hover:underline"
+          >
+            Privacy Policy
+          </a>
+          .
+        </LegalCheckbox>
+      </motion.div>
+
       {/* Navigation */}
       <motion.div
         initial={{ opacity: 0 }}
@@ -374,7 +450,7 @@ export default function ReviewStep({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !canSubmit}
           className={cn(
             "font-bold py-3.5 px-8 rounded-lg text-white bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600",
             "hover:from-amber-400 hover:via-yellow-400 hover:to-amber-500",

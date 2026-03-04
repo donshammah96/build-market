@@ -1,19 +1,19 @@
-'use client';
+"use client";
 
-import Image from 'next/image';
+import Image from "next/image";
 import { FC, memo, useCallback } from "react";
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@clerk/nextjs';
-import { Card, CardContent } from '../ui/card';
+import { useRouter } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
+import { Card, CardContent } from "../ui/card";
 import {
   Carousel,
   CarouselContent,
   CarouselItem,
   CarouselNext,
   CarouselPrevious,
-} from '../ui/carousel';
-import { ArrowRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
+} from "../ui/carousel";
+import { ArrowRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Feature {
   title: string;
@@ -21,20 +21,20 @@ interface Feature {
   image: string;
   imageAlt: string;
   href: string;
-  images?: string[]; 
+  images?: string[];
 }
 
-const FeatureCard: FC<Feature> = memo(function FeatureCard({ 
-  title, 
-  description, 
-  image, 
-  imageAlt, 
-  href, 
-  images 
+const FeatureCard: FC<Feature> = memo(function FeatureCard({
+  title,
+  description,
+  image,
+  imageAlt,
+  href,
+  images,
 }) {
   const router = useRouter();
   const { isSignedIn } = useAuth();
-  
+
   const allImages = images && images.length > 0 ? [image, ...images] : [image];
   const hasMultipleImages = allImages.length > 1;
 
@@ -48,16 +48,16 @@ const FeatureCard: FC<Feature> = memo(function FeatureCard({
 
   return (
     <div className="h-full group hover-lift">
-      <Card 
+      <Card
         className={cn(
           "h-full flex flex-col border-0 shadow-sm bg-white overflow-hidden rounded-2xl cursor-pointer",
-          "transition-shadow duration-300 hover:shadow-xl"
+          "transition-shadow duration-300 hover:shadow-xl",
         )}
         onClick={handleCardClick}
         role="article"
         tabIndex={0}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
+          if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             handleCardClick();
           }
@@ -83,12 +83,12 @@ const FeatureCard: FC<Feature> = memo(function FeatureCard({
                   </CarouselItem>
                 ))}
               </CarouselContent>
-              <CarouselPrevious 
-                className="left-2 bg-white/80 hover:bg-white border-0 opacity-0 group-hover:opacity-100 transition-opacity" 
+              <CarouselPrevious
+                className="left-2 bg-white/80 hover:bg-white border-0 opacity-0 group-hover:opacity-100 transition-opacity"
                 aria-label="Previous image"
               />
-              <CarouselNext 
-                className="right-2 bg-white/80 hover:bg-white border-0 opacity-0 group-hover:opacity-100 transition-opacity" 
+              <CarouselNext
+                className="right-2 bg-white/80 hover:bg-white border-0 opacity-0 group-hover:opacity-100 transition-opacity"
                 aria-label="Next image"
               />
             </Carousel>
@@ -104,10 +104,10 @@ const FeatureCard: FC<Feature> = memo(function FeatureCard({
               />
             </div>
           )}
-          
+
           {/* Overlay Gradient on hover */}
-          <div 
-            className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300 pointer-events-none" 
+          <div
+            className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300 pointer-events-none"
             aria-hidden="true"
           />
         </div>
@@ -120,7 +120,7 @@ const FeatureCard: FC<Feature> = memo(function FeatureCard({
           <p className="text-zinc-500 text-sm leading-relaxed line-clamp-2 mb-4">
             {description}
           </p>
-          
+
           <div className="mt-auto flex items-center text-sm font-semibold text-emerald-600 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
             Explore <ArrowRight className="ml-1 h-4 w-4" aria-hidden="true" />
           </div>

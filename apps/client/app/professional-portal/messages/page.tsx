@@ -42,7 +42,7 @@ export default function MessagesPage() {
       const newUrl = `/professional-portal/messages?conversationId=${conversationId}`;
       router.replace(newUrl, { scroll: false });
     },
-    [router]
+    [router],
   );
 
   // Sync with URL param changes (e.g., browser back/forward)
@@ -67,7 +67,7 @@ export default function MessagesPage() {
       `${
         selectedConversationId ? "hidden md:block" : "block"
       } w-full md:w-1/3 lg:w-1/4 h-full`,
-    [selectedConversationId]
+    [selectedConversationId],
   );
 
   const chatPaneClasses = useMemo(
@@ -75,7 +75,7 @@ export default function MessagesPage() {
       `${
         !selectedConversationId ? "hidden md:block" : "block"
       } w-full md:w-2/3 lg:w-3/4 h-full`,
-    [selectedConversationId]
+    [selectedConversationId],
   );
 
   // Render error state

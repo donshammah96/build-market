@@ -42,6 +42,21 @@ describe("CreatePropertySchema", () => {
           isMain: true,
         },
       ],
+      attachments: [
+        {
+          title: "Marketing Brochure",
+          type: "BROCHURE",
+          assetId: "550e8400-e29b-41d4-a716-446655440001",
+        },
+      ],
+      documents: [
+        {
+          type: "TITLE_DEED",
+          assetId: "550e8400-e29b-41d4-a716-446655440002",
+          notes: "Verified copy",
+          isPrivate: true,
+        },
+      ],
     });
     expect(result.success).toBe(true);
   });
@@ -85,6 +100,51 @@ describe("CreatePropertySchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("rejects attachment without asset or legacy file reference", () => {
+    const result = CreatePropertySchema.safeParse({
+      ...validInput,
+      attachments: [
+        {
+          title: "Brochure",
+          type: "BROCHURE",
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects document with invalid date range", () => {
+    const result = CreatePropertySchema.safeParse({
+      ...validInput,
+      documents: [
+        {
+          type: "TITLE_DEED",
+          assetId: "550e8400-e29b-41d4-a716-446655440003",
+          issueDate: "2026-12-31T00:00:00.000Z",
+          expiryDate: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects multiple main images", () => {
+    const result = CreatePropertySchema.safeParse({
+      ...validInput,
+      images: [
+        {
+          assetId: "550e8400-e29b-41d4-a716-446655440010",
+          isMain: true,
+        },
+        {
+          assetId: "550e8400-e29b-41d4-a716-446655440011",
+          isMain: true,
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("UpdatePropertySchema", () => {
@@ -120,6 +180,30 @@ describe("UpdatePropertySchema", () => {
       status: "INVALID",
     });
     expect(result.success).toBe(false);
+  });
+
+  it("rejects mismatched coordinates and latitude/longitude", () => {
+    const result = UpdatePropertySchema.safeParse({
+      latitude: -1.2921,
+      longitude: 36.8219,
+      coordinates: { lat: -1.3, lng: 36.8219 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts legacy file-url attachment fallback", () => {
+    const result = UpdatePropertySchema.safeParse({
+      attachments: [
+        {
+          title: "Legacy brochure",
+          type: "BROCHURE",
+          fileUrl: "https://cdn.example.com/brochure.pdf",
+          mimeType: "application/pdf",
+          size: 1024,
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
   });
 });
 

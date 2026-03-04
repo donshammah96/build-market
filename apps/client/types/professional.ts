@@ -442,7 +442,7 @@ function formatLocation(profile: ProfessionalProfile): string | undefined {
 
 // Helper function to convert ProfessionalProfile to ProfessionalCardData
 export function toProfessionalCardData(
-  profile: ProfessionalProfile
+  profile: ProfessionalProfile,
 ): ProfessionalCardData {
   const fullName = profile.user
     ? `${profile.user.firstName || ""} ${profile.user.lastName || ""}`.trim()

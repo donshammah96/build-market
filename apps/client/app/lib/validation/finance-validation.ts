@@ -126,7 +126,14 @@ export function serializeTransactionDecimals<
     taxAmount?: unknown;
     netAmount?: unknown;
   },
->(txn: T): T & { amount: number; platformFee: number; taxAmount: number; netAmount: number } {
+>(
+  txn: T,
+): T & {
+  amount: number;
+  platformFee: number;
+  taxAmount: number;
+  netAmount: number;
+} {
   return {
     ...txn,
     amount: Number(txn.amount ?? 0),

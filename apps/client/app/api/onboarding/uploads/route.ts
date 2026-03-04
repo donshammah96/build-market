@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import fs from "fs";
 import path from "path";
-import { randomUUID } from "crypto";
+import { randomUUID, createHash } from "crypto";
+import { prisma } from "@build/db";
 import { apiError, HttpStatus } from "@/app/lib/api/api-response";
 import {
   apiSuccess,
@@ -224,7 +225,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
       // Check max files limit
       if (files.length === 0) {
-        return { _error: true as const, message: "No files provided", status: HttpStatus.BAD_REQUEST };
+        return {
+          _error: true as const,
+          message: "No files provided",
+          status: HttpStatus.BAD_REQUEST,
+        };
       }
       if (files.length > MAX_FILES_PER_REQUEST) {
         return {
@@ -259,7 +264,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // All files valid — proceed with upload
       const uploaded: Record<
         string,
-        Array<{ originalName: string; url: string }>
+        Array<{ originalName: string; uploadId: string; previewUrl: string }>
       > = {};
 
       for (const { key, file } of files) {
@@ -272,8 +277,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         await fs.promises.writeFile(filepath, buffer);
 
         const url = `/uploads/${filename}`;
+        const checksum = createHash("sha256").update(buffer).digest("hex");
+
+        const stagedUpload = await prisma.onboardingUpload.create({
+          data: {
+            clerkId,
+            tempUrl: url,
+            originalName: file.name,
+            mimeType: file.type,
+            size: file.size,
+            checksum,
+            storageBucket: "local",
+            storageKey: filename,
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+          },
+        });
+
         if (!uploaded[key]) uploaded[key] = [];
-        uploaded[key].push({ originalName: file.name, url });
+        uploaded[key].push({
+          originalName: file.name,
+          uploadId: stagedUpload.id,
+          previewUrl: url,
+        });
       }
 
       logger.info("Onboarding files uploaded successfully", {

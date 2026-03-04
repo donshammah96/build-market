@@ -48,7 +48,9 @@ export class StreamManager {
     try {
       // Try to get existing stream
       const existing = await jsm.streams.info(options.name);
-      console.log(`[NATS Streams] Stream ${options.name} already exists, updating...`);
+      console.log(
+        `[NATS Streams] Stream ${options.name} already exists, updating...`,
+      );
 
       // Update stream config
       await jsm.streams.update(options.name, streamConfig);
@@ -184,14 +186,18 @@ export class StreamManager {
 /**
  * Create a stream manager instance
  */
-export function createStreamManager(config?: Partial<NatsConfig>): StreamManager {
+export function createStreamManager(
+  config?: Partial<NatsConfig>,
+): StreamManager {
   return new StreamManager(config);
 }
 
 /**
  * Initialize all predefined streams for Build Market
  */
-export async function initializeStreams(config?: Partial<NatsConfig>): Promise<void> {
+export async function initializeStreams(
+  config?: Partial<NatsConfig>,
+): Promise<void> {
   const manager = createStreamManager(config);
 
   const streams: StreamOptions[] = [
@@ -239,7 +245,10 @@ export async function initializeStreams(config?: Partial<NatsConfig>): Promise<v
       await manager.ensureStream(stream);
       console.log(`[NATS Streams] Stream ${stream.name} ready`);
     } catch (error) {
-      console.error(`[NATS Streams] Failed to create stream ${stream.name}:`, error);
+      console.error(
+        `[NATS Streams] Failed to create stream ${stream.name}:`,
+        error,
+      );
     }
   }
 

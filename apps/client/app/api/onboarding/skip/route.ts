@@ -185,10 +185,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       correlationId,
       clerkId,
     });
-    return apiError(
-      "Skip onboarding failed",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
+    return apiError("Skip onboarding failed", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
   // Handle business-rule errors returned from the executor

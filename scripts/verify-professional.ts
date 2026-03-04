@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
  * Verify Professional Script
- * 
+ *
  * Admin utility script to verify professional profiles.
- * 
+ *
  * Usage:
  *   npx tsx scripts/verify-professional.ts <userId>        # Verify single professional
  *   npx tsx scripts/verify-professional.ts --all           # Verify all unverified professionals
  *   npx tsx scripts/verify-professional.ts --list          # List all unverified professionals
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -30,24 +30,29 @@ async function listUnverified() {
   });
 
   if (professionals.length === 0) {
-    console.log('✓ No unverified professionals found.');
+    console.log("✓ No unverified professionals found.");
     return;
   }
 
-  console.log(`\n📋 Found ${professionals.length} unverified professional(s):\n`);
-  console.log('─'.repeat(80));
-  
+  console.log(
+    `\n📋 Found ${professionals.length} unverified professional(s):\n`,
+  );
+  console.log("─".repeat(80));
+
   for (const prof of professionals) {
     console.log(`  User ID:     ${prof.userId}`);
-    console.log(`  Name:        ${prof.user.firstName || ''} ${prof.user.lastName || ''}`.trim() || 'N/A');
+    console.log(
+      `  Name:        ${prof.user.firstName || ""} ${prof.user.lastName || ""}`.trim() ||
+        "N/A",
+    );
     console.log(`  Email:       ${prof.user.email}`);
     console.log(`  Company:     ${prof.companyName}`);
-    console.log(`  License:     ${prof.licenseNumber || 'N/A'}`);
-    console.log(`  Services:    ${prof.servicesOffered.join(', ')}`);
+    console.log(`  License:     ${prof.licenseNumber || "N/A"}`);
+    console.log(`  Services:    ${prof.servicesOffered.join(", ")}`);
     console.log(`  Created:     ${prof.createdAt.toISOString()}`);
-    console.log('─'.repeat(80));
+    console.log("─".repeat(80));
   }
-  
+
   console.log(`\nTo verify a professional, run:`);
   console.log(`  npx tsx scripts/verify-professional.ts <userId>\n`);
 }
@@ -68,7 +73,9 @@ async function verifyProfessional(userId: string) {
   }
 
   if (professional.verified) {
-    console.log(`ℹ️  Professional "${professional.companyName}" is already verified.`);
+    console.log(
+      `ℹ️  Professional "${professional.companyName}" is already verified.`,
+    );
     return;
   }
 
@@ -78,7 +85,9 @@ async function verifyProfessional(userId: string) {
   });
 
   console.log(`✅ Successfully verified professional:`);
-  console.log(`   Name:    ${professional.user.firstName || ''} ${professional.user.lastName || ''}`.trim());
+  console.log(
+    `   Name:    ${professional.user.firstName || ""} ${professional.user.lastName || ""}`.trim(),
+  );
   console.log(`   Email:   ${professional.user.email}`);
   console.log(`   Company: ${professional.companyName}`);
 }
@@ -109,9 +118,9 @@ Usage:
 
   const command = args[0];
 
-  if (command === '--list' || command === '-l') {
+  if (command === "--list" || command === "-l") {
     await listUnverified();
-  } else if (command === '--all' || command === '-a') {
+  } else if (command === "--all" || command === "-a") {
     await verifyAll();
   } else {
     await verifyProfessional(command);
@@ -120,7 +129,7 @@ Usage:
 
 main()
   .catch((error) => {
-    console.error('Error:', error);
+    console.error("Error:", error);
     process.exit(1);
   })
   .finally(async () => {

@@ -350,7 +350,7 @@ const MOCK_PROPERTIES: Record<string, PropertyDetail> = {
 
 // Helper to convert county string to County enum
 const getCountyEnum = (
-  countyStr: string | null | undefined
+  countyStr: string | null | undefined,
 ): keyof typeof COUNTY_LABELS => {
   if (!countyStr) return "NAIROBI";
   const upperCounty = countyStr.toUpperCase();
@@ -426,7 +426,7 @@ export default function PropertyDetailPage() {
         setError(null);
 
         const response = await fetch(
-          `http://localhost:3500/api/properties/${id}`
+          `http://localhost:3500/api/properties/${id}`,
         );
         const data: ApiResponse = await response.json();
 
@@ -434,7 +434,7 @@ export default function PropertyDetailPage() {
           throw new Error(
             data.success === false
               ? "Property not found"
-              : "Failed to fetch property"
+              : "Failed to fetch property",
           );
         }
 
@@ -481,7 +481,7 @@ export default function PropertyDetailPage() {
   const prevImage = () => {
     if (property) {
       setCurrentImageIndex(
-        (prev) => (prev - 1 + property.images.length) % property.images.length
+        (prev) => (prev - 1 + property.images.length) % property.images.length,
       );
     }
   };

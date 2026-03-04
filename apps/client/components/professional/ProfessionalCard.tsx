@@ -34,7 +34,7 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
         <Card
           className={cn(
             "h-full flex flex-col border border-zinc-200 bg-white overflow-hidden rounded-xl shadow-sm",
-            "transition-all duration-300 hover:shadow-lg group"
+            "transition-all duration-300 hover:shadow-lg group",
           )}
         >
           {/* Hero Image (Portfolio Preview) */}
@@ -171,7 +171,7 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
         </Card>
       </div>
     );
-  }
+  },
 );
 
 export default ProfessionalCard;

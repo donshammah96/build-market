@@ -49,7 +49,7 @@ export interface ReviewsQueryInput {
 }
 
 export async function getReviews(
-  input: ReviewsQueryInput = {}
+  input: ReviewsQueryInput = {},
 ): Promise<ReviewsResult> {
   const limit = Math.min(input.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
   const offset = input.offset ?? 0;

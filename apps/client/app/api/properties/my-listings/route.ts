@@ -12,7 +12,7 @@ import {
   RateLimits,
   getRateLimitIdentifier,
 } from "@/app/lib/api/rate-limit";
-import { getMyProperties } from "@/lib/services/properties";
+import { propertiesService } from "@/app/lib/domains/properties";
 
 const logger = getClientLogger();
 
@@ -71,18 +71,20 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
 
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
-    async () => {
-      const properties = await getMyProperties(dbUserId, {
+    async () =>
+      propertiesService.getMyListings(dbUserId, {
         limit: limitNum,
         status,
-      });
-      return { properties };
-    },
+      }),
     { operationName: "get_my_listings" },
   );
 
-  if (result.success && result.data) {
-    return apiSuccess(result.data, HttpStatus.OK, correlationId);
+  if (result.success && result.data?.ok) {
+    return apiSuccess(result.data.data, HttpStatus.OK, correlationId);
+  }
+
+  if (result.success && result.data && !result.data.ok) {
+    return apiError(result.data.message, result.data.status);
   }
 
   logger.error("Failed to fetch listings", result.error, {

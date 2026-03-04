@@ -23,7 +23,11 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 
 const navItems = [
   { label: "Home", href: ROUTES.home },
-  { label: "Idea Books", href: ROUTES.ideaBooks, featureFlag: "enableIdeaBooks" as const },
+  {
+    label: "Idea Books",
+    href: ROUTES.ideaBooks,
+    featureFlag: "enableIdeaBooks" as const,
+  },
   { label: "Professionals", href: ROUTES.findProfessional },
   { label: "Properties", href: ROUTES.properties },
 ] as const;
@@ -53,7 +57,7 @@ const NavItem = memo(function NavItem({
         className={cn(
           "text-sm font-medium transition-colors duration-200",
           textColorClass,
-          hoverClass
+          hoverClass,
         )}
       >
         {label}
@@ -80,7 +84,7 @@ const MobileNavItem = memo(function MobileNavItem({
     <div
       className={cn(
         "transform transition-all duration-300",
-        shouldAnimate && "animate-fade-in-up"
+        shouldAnimate && "animate-fade-in-up",
       )}
       style={{ animationDelay: shouldAnimate ? `${index * 50}ms` : "0ms" }}
     >
@@ -113,7 +117,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
     (item) =>
       !("featureFlag" in item) ||
       enableIdeaBooks === true ||
-      enableIdeaBooks === undefined
+      enableIdeaBooks === undefined,
   );
   const textColorClass = useScrolledStyles ? "text-zinc-900" : "text-white";
   const hoverClass = useScrolledStyles
@@ -138,7 +142,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
           shouldAnimate && "animate-slide-down",
           useScrolledStyles
             ? "bg-white/90 backdrop-blur-md border-zinc-200/50 shadow-sm py-3"
-            : "bg-transparent border-transparent py-5"
+            : "bg-transparent border-transparent py-5",
         )}
       >
         <div className="max-w-[1440px] mx-auto px-4 md:px-8 flex items-center justify-between">
@@ -147,7 +151,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
             <span
               className={cn(
                 "text-2xl font-bold tracking-tight transition-colors",
-                textColorClass
+                textColorClass,
               )}
             >
               Build<span className="text-emerald-500">Market</span>
@@ -177,7 +181,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
                   className={cn(
                     "rounded-full transition-colors",
                     textColorClass,
-                    hoverClass
+                    hoverClass,
                   )}
                   aria-label="Accessibility settings"
                 >
@@ -259,7 +263,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
           "transition-all duration-300 ease-out",
           isMobileMenuOpen
             ? "opacity-100 translate-x-0 pointer-events-auto"
-            : "opacity-0 translate-x-full pointer-events-none"
+            : "opacity-0 translate-x-full pointer-events-none",
         )}
         aria-hidden={!isMobileMenuOpen}
       >

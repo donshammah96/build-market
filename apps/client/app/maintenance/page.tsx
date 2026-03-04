@@ -12,7 +12,8 @@ export default function MaintenancePage() {
           We&apos;ll be back soon
         </h1>
         <p className="text-zinc-600">
-          We&apos;re performing scheduled maintenance. Please check back shortly.
+          We&apos;re performing scheduled maintenance. Please check back
+          shortly.
         </p>
         <Link
           href="/"

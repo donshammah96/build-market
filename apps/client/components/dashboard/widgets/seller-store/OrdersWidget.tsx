@@ -102,13 +102,13 @@ function OrderItem({ order }: OrderItemProps) {
           "p-2 rounded-lg border",
           order.status === "pending"
             ? "bg-amber-50 border-amber-200"
-            : "bg-zinc-50 border-zinc-200"
+            : "bg-zinc-50 border-zinc-200",
         )}
       >
         <StatusIcon
           className={cn(
             "h-4 w-4",
-            order.status === "pending" ? "text-amber-600" : "text-zinc-500"
+            order.status === "pending" ? "text-amber-600" : "text-zinc-500",
           )}
         />
       </div>
@@ -139,7 +139,7 @@ function OrderItem({ order }: OrderItemProps) {
         variant="outline"
         className={cn(
           "text-[10px] font-medium border shrink-0",
-          statusConfig.color
+          statusConfig.color,
         )}
       >
         {statusConfig.label}
@@ -198,7 +198,7 @@ export function OrdersWidget({
     <Card
       className={cn(
         "border border-zinc-200 shadow-sm overflow-hidden bg-white",
-        className
+        className,
       )}
     >
       <CardHeader className="border-b border-zinc-100 py-5 px-6 flex flex-row items-center justify-between">

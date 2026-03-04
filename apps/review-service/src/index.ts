@@ -24,7 +24,8 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/ratings", ratingRoutes);
 
 // Database connection
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/reviews";
+const MONGODB_URI =
+  process.env.MONGODB_URI || "mongodb://localhost:27017/reviews";
 
 mongoose
   .connect(MONGODB_URI)
@@ -40,4 +41,3 @@ const PORT = process.env.PORT || 3012;
 app.listen(PORT, () => {
   console.log(`🚀 Review service running on http://localhost:${PORT}`);
 });
-

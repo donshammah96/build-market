@@ -51,19 +51,19 @@ Notification {
 
 ### Collection Routes (`/api/notifications`)
 
-| Method | Description                         | Body                                         |
-| ------ | ----------------------------------- | -------------------------------------------- |
+| Method | Description                         | Body                                                     |
+| ------ | ----------------------------------- | -------------------------------------------------------- |
 | GET    | List notifications (paginated)      | Query: `page`, `limit`, `unreadOnly`, `type`, `priority` |
-| PATCH  | Mark notification(s) as read/unread | `{ id: "uuid" \| "all", isRead?: boolean }`  |
-| DELETE | Batch delete notifications          | `{ id: "uuid" \| "all" \| "read" }`          |
+| PATCH  | Mark notification(s) as read/unread | `{ id: "uuid" \| "all", isRead?: boolean }`              |
+| DELETE | Batch delete notifications          | `{ id: "uuid" \| "all" \| "read" }`                      |
 
 ### Single Resource Routes (`/api/notifications/[id]`)
 
-| Method | Description          | Body                     |
-| ------ | -------------------- | ------------------------ |
-| GET    | Get notification     | —                        |
-| PATCH  | Update (read status) | `{ isRead?: boolean }`   |
-| DELETE | Delete notification  | —                        |
+| Method | Description          | Body                   |
+| ------ | -------------------- | ---------------------- |
+| GET    | Get notification     | —                      |
+| PATCH  | Update (read status) | `{ isRead?: boolean }` |
+| DELETE | Delete notification  | —                      |
 
 ## Request/Response Examples
 
@@ -161,14 +161,14 @@ DELETE /api/notifications/notification-uuid
 }
 ```
 
-| Status | Meaning                     |
-| ------ | --------------------------- |
-| 400    | Validation failed           |
-| 401    | Not authenticated           |
-| 403    | Not notification owner      |
-| 404    | Notification not found      |
-| 429    | Rate limited                |
-| 500    | Internal server error       |
+| Status | Meaning                |
+| ------ | ---------------------- |
+| 400    | Validation failed      |
+| 401    | Not authenticated      |
+| 403    | Not notification owner |
+| 404    | Notification not found |
+| 429    | Rate limited           |
+| 500    | Internal server error  |
 
 ## Validation Module
 

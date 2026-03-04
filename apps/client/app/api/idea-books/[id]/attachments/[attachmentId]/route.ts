@@ -130,7 +130,10 @@ export const PATCH = withAuth<AttachmentParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => updateAttachment(dbUserId, attachmentId, { caption: validation.data.caption }),
+      () =>
+        updateAttachment(dbUserId, attachmentId, {
+          caption: validation.data.caption,
+        }),
       { operationName: "update_idea_book_attachment" },
     );
 

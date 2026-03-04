@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@build/db";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -13,6 +12,7 @@ import {
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { isValidId } from "@/app/lib/api/api-guards";
+import { messagingService } from "@build/messaging-server";
 
 const logger = getClientLogger();
 
@@ -44,60 +44,29 @@ export const POST = withAuth<MessageParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      async () => {
-        // Find the message and verify it exists
-        const message = await prisma.message.findFirst({
-          where: { id: messageId, deletedAt: null },
-          select: { id: true, threadId: true },
-        });
-        if (!message) {
-          return { _error: true as const, message: "Message not found", status: HttpStatus.NOT_FOUND };
-        }
-
-        // Verify caller is a participant
-        const participant = await prisma.threadParticipant.findUnique({
-          where: {
-            threadId_userId: { threadId: message.threadId, userId: dbUserId },
-          },
-          select: { id: true },
-        });
-        if (!participant) {
-          return { _error: true as const, message: "Not a participant in this conversation", status: HttpStatus.FORBIDDEN };
-        }
-
-        // Upsert read receipt
-        const receipt = await prisma.readReceipt.upsert({
-          where: { messageId_userId: { messageId, userId: dbUserId } },
-          update: { readAt: new Date() },
-          create: { messageId, userId: dbUserId },
-          select: {
-            id: true,
-            messageId: true,
-            userId: true,
-            readAt: true,
-          },
-        });
-
-        return receipt;
-      },
+      () => messagingService.markMessageAsRead(dbUserId, messageId),
       { operationName: "mark_message_read" },
     );
 
-    if (!result.success || !result.data) {
+    if (!result.success) {
       logger.error("Failed to mark message as read", result.error, {
         correlationId,
         messageId,
       });
-      return apiError("Failed to mark as read", HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-
-    if ("_error" in result.data && result.data._error) {
       return apiError(
-        (result.data as { message: string }).message,
-        (result.data as { status: number }).status,
+        "Failed to mark as read",
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
 
-    return apiSuccess(result.data, HttpStatus.OK);
+    const serviceResult = result.data;
+    if (!serviceResult || !serviceResult.ok) {
+      return apiError(
+        serviceResult?.message ?? "Invalid request",
+        serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return apiSuccess(serviceResult.data, HttpStatus.OK);
   },
 );

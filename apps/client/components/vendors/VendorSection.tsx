@@ -133,7 +133,7 @@ export const VendorsSection = memo(function VendorsSection({
   const filteredStores = useMemo(() => {
     if (!searchTerm) return vendorCards;
     return vendorCards.filter((vendor) =>
-      vendor.name.toLowerCase().includes(searchTerm.toLowerCase())
+      vendor.name.toLowerCase().includes(searchTerm.toLowerCase()),
     );
   }, [vendorCards, searchTerm]);
 
@@ -197,7 +197,7 @@ export const VendorsSection = memo(function VendorsSection({
                 <div
                   className={cn(
                     "h-full",
-                    isInView && shouldAnimate && "animate-fade-in-up"
+                    isInView && shouldAnimate && "animate-fade-in-up",
                   )}
                   style={{
                     animationDelay:

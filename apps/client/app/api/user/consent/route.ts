@@ -391,7 +391,11 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
     });
 
     // Process all consents
-    const results: Array<{ type: ConsentType; granted: boolean; success: boolean }> = [];
+    const results: Array<{
+      type: ConsentType;
+      granted: boolean;
+      success: boolean;
+    }> = [];
 
     for (const consentItem of consents) {
       const executionResult = await executor.execute(

@@ -58,7 +58,7 @@ export function useHighContrast(): boolean {
  */
 export function throttle<T extends (...args: unknown[]) => void>(
   func: T,
-  limit: number
+  limit: number,
 ): (...args: Parameters<T>) => void {
   let inThrottle = false;
 
@@ -100,7 +100,7 @@ export function useThrottledScroll(threshold: number = 20): boolean {
  * More performant than scroll-based detection
  */
 export function useIntersectionObserver(
-  options: IntersectionObserverInit = {}
+  options: IntersectionObserverInit = {},
 ): [React.RefObject<HTMLElement | null>, boolean] {
   const ref = useRef<HTMLElement | null>(null);
   const [isIntersecting, setIsIntersecting] = useState(false);
@@ -121,7 +121,7 @@ export function useIntersectionObserver(
         threshold: 0.1,
         rootMargin: "-50px",
         ...options,
-      }
+      },
     );
 
     observer.observe(element);

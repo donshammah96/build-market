@@ -6,16 +6,8 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { Award, Loader2 } from "lucide-react";
 
-import {
-  ProfessionalOnboardingData,
-  Profession,
-  County,
-  type AreaUnit,
-  type PropertyType,
-  type PropertyCategory,
-  type PropertyDocumentType,
-} from "@build/types";
-import { PropertyTenure } from "@build/enums";
+import { ProfessionalOnboardingData, Profession, County } from "@build/types";
+import { DocumentCategory } from "@build/enums";
 import {
   StepProgress,
   CompactStepProgress,
@@ -378,10 +370,10 @@ const ProfessionalForm: React.FC<Props> = ({
       fieldName: string,
       signal?: AbortSignal,
       onProgress?: (uploaded: number, total: number, fileName: string) => void,
-    ): Promise<string[]> => {
+    ): Promise<Array<{ uploadId: string; previewUrl: string }>> => {
       if (files.length === 0) return [];
 
-      const urls: string[] = [];
+      const results: Array<{ uploadId: string; previewUrl: string }> = [];
       const totalFiles = files.length;
       let uploadedIndex = 0;
 
@@ -410,12 +402,15 @@ const ProfessionalForm: React.FC<Props> = ({
           }
 
           const json = await res.json();
-          const uploadedUrl = json.uploaded?.[fieldName]?.[0]?.url;
+          const uploadedResult = json.uploaded?.[fieldName]?.[0];
 
-          if (uploadedUrl) {
-            urls.push(uploadedUrl);
+          if (uploadedResult?.uploadId) {
+            results.push({
+              uploadId: uploadedResult.uploadId,
+              previewUrl: uploadedResult.previewUrl || "",
+            });
           } else {
-            throw new Error("No URL returned from server");
+            throw new Error("No uploadId returned from server");
           }
         } catch (err) {
           if (err instanceof Error && err.name === "AbortError") {
@@ -429,7 +424,7 @@ const ProfessionalForm: React.FC<Props> = ({
       }
 
       onProgress?.(totalFiles, totalFiles, "");
-      return urls;
+      return results;
     },
     [],
   );
@@ -446,12 +441,16 @@ const ProfessionalForm: React.FC<Props> = ({
       const certificateFiles = formData.certificates?.map((c) => c.file) ?? [];
       const idDocumentFiles = formData.idDocuments?.map((d) => d.file) ?? [];
 
-      let certificatesUrls: string[] = [];
-      let idDocumentsUrls: string[] = [];
+      const uploadedDocuments: Array<{
+        uploadId: string;
+        previewUrl?: string;
+        category: DocumentCategory;
+        title?: string;
+      }> = [];
 
       // 1. Upload Certificates
       if (certificateFiles.length > 0) {
-        certificatesUrls = await uploadFiles(
+        const certRecords = await uploadFiles(
           certificateFiles,
           "certificates",
           undefined,
@@ -462,11 +461,19 @@ const ProfessionalForm: React.FC<Props> = ({
               });
           },
         );
+        certRecords.forEach((record, i) =>
+          uploadedDocuments.push({
+            uploadId: record.uploadId,
+            previewUrl: record.previewUrl,
+            category: "EDUCATION_CERT",
+            title: `Professional Certificate ${i + 1}`,
+          }),
+        );
       }
 
       // 2. Upload IDs
       if (idDocumentFiles.length > 0) {
-        idDocumentsUrls = await uploadFiles(
+        const idRecords = await uploadFiles(
           idDocumentFiles,
           "idDocuments",
           undefined,
@@ -476,6 +483,14 @@ const ProfessionalForm: React.FC<Props> = ({
                 id: toastId,
               });
           },
+        );
+        idRecords.forEach((record, i) =>
+          uploadedDocuments.push({
+            uploadId: record.uploadId,
+            previewUrl: record.previewUrl,
+            category: "ID_OR_PASSPORT",
+            title: `ID Document ${i + 1}`,
+          }),
         );
       }
 
@@ -504,12 +519,11 @@ const ProfessionalForm: React.FC<Props> = ({
         license: {
           authority,
           licenseNumber: finalLicenseNumber,
-          certificateUrl: certificatesUrls[0] || "",
+          certificateUrl:
+            uploadedDocuments.find((d) => d.category === "EDUCATION_CERT")
+              ?.previewUrl || "",
         },
-        documents: idDocumentsUrls.map((url) => ({
-          category: "ID_OR_PASSPORT",
-          assetId: url,
-        })),
+        documents: uploadedDocuments,
         ...(formData.stores?.length && {
           stores: formData.stores.map((s: any) => ({
             ...s,

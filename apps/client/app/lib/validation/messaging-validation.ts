@@ -5,11 +5,7 @@
  * MessageReaction, ReadReceipt, MessageAttachment.
  */
 import { z } from "zod";
-import {
-  MessageType,
-  ThreadType,
-  ParticipantRole,
-} from "@prisma/client";
+import { MessageType, ThreadType, ParticipantRole } from "@prisma/client";
 
 // =============================================================================
 // Enum Schemas

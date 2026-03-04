@@ -59,11 +59,7 @@ export default function CalendarPage() {
   const [date, setDate] = useState<Date | undefined>(new Date());
 
   // Fetch calendar events
-  const {
-    data: apiEvents,
-    isLoading,
-    error: fetchError,
-  } = useCalendarEvents();
+  const { data: apiEvents, isLoading, error: fetchError } = useCalendarEvents();
 
   // Ensure events is always an array with Date objects
   const events = useMemo(() => {

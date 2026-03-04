@@ -4,7 +4,7 @@ import {
   DeliveryOption,
   VerificationStatus,
   Prisma,
-  County
+  County,
 } from "@prisma/client";
 
 export interface StoreFilters {
@@ -134,7 +134,7 @@ export class StoreRepository {
 
     if (type) where.storeType = type;
     if (county) where.county = county;
-    
+
     if (city) {
       where.city = { contains: city, mode: "insensitive" };
     }
@@ -148,9 +148,9 @@ export class StoreRepository {
 
     // Category filter
     if (category) {
-       // Assuming categories is Enum array
-       // Prisine doesn't support 'contains' on Enums comfortably without full text search or exact match
-       // where.categories = { has: category as any };
+      // Assuming categories is Enum array
+      // Prisine doesn't support 'contains' on Enums comfortably without full text search or exact match
+      // where.categories = { has: category as any };
     }
 
     // Sorting
@@ -193,24 +193,24 @@ export class StoreRepository {
         categories: true,
         professional: {
           select: {
-            companyName: true, 
+            companyName: true,
             user: {
-              select: { firstName: true, lastName: true }
-            }
-          }
-        }
-      }
+              select: { firstName: true, lastName: true },
+            },
+          },
+        },
+      },
     });
 
-    const stores: StoreListItem[] = storesData.map(store => ({
+    const stores: StoreListItem[] = storesData.map((store) => ({
       id: store.id,
       name: store.name,
       slug: store.slug,
       type: store.storeType,
       description: store.description,
-      logo: store.logoUrl ?? "/placeholder-store.jpg", 
+      logo: store.logoUrl ?? "/placeholder-store.jpg",
       banner: store.bannerUrl,
-      location: `${store.city}${store.county ? `, ${store.county}` : ''}`,
+      location: `${store.city}${store.county ? `, ${store.county}` : ""}`,
       rating: Number(store.rating),
       reviewCount: store.reviewCount,
       verified: store.verified,
@@ -234,9 +234,14 @@ export class StoreRepository {
   /**
    * Find products for a store
    */
-  async findProducts(storeId: string, page = 1, limit = 20, category?: string): Promise<{ products: ProductListItem[]; total: number }> {
+  async findProducts(
+    storeId: string,
+    page = 1,
+    limit = 20,
+    category?: string,
+  ): Promise<{ products: ProductListItem[]; total: number }> {
     const offset = (page - 1) * limit;
-    
+
     const where: Prisma.ProductWhereInput = {
       storeId,
       deletedAt: null,
@@ -244,7 +249,7 @@ export class StoreRepository {
     };
 
     if (category) {
-       // where.category = category as any;
+      // where.category = category as any;
     }
 
     const total = await this.prisma.product.count({ where });
@@ -253,7 +258,7 @@ export class StoreRepository {
       where,
       take: limit,
       skip: offset,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       select: {
         id: true,
         name: true,
@@ -264,37 +269,39 @@ export class StoreRepository {
         lowStockAlert: true,
         category: true,
         store: {
-            select: { id: true, name: true }
+          select: { id: true, name: true },
         },
         images: {
-            take: 1,
-            select: {
-                cdnUrl: true, 
-                thumbnailUrl: true
-            }
-        }
-      }
+          take: 1,
+          select: {
+            cdnUrl: true,
+            thumbnailUrl: true,
+          },
+        },
+      },
     });
 
-    const products: ProductListItem[] = productsData.map(p => {
-        const cover = p.images[0]?.thumbnailUrl || p.images[0]?.cdnUrl || "/placeholder-product.jpg";
-        return {
-            id: p.id,
-            name: p.name,
-            slug: p.slug,
-            price: p.price,
-            compareAt: p.compareAt,
-            stock: p.stockQuantity,
-            lowStock: p.stockQuantity <= p.lowStockAlert,
-            image: cover,
-            // eslint-disable-next-line /typescript-eslint/no-explicit-any
-            category: String(p.category),
-            storeId: p.store.id,
-            storeName: p.store.name
-        };
+    const products: ProductListItem[] = productsData.map((p) => {
+      const cover =
+        p.images[0]?.thumbnailUrl ||
+        p.images[0]?.cdnUrl ||
+        "/placeholder-product.jpg";
+      return {
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        price: p.price,
+        compareAt: p.compareAt,
+        stock: p.stockQuantity,
+        lowStock: p.stockQuantity <= p.lowStockAlert,
+        image: cover,
+        // eslint-disable-next-line /typescript-eslint/no-explicit-any
+        category: String(p.category),
+        storeId: p.store.id,
+        storeName: p.store.name,
+      };
     });
 
     return { products, total };
   }
 }
-

@@ -65,8 +65,18 @@ Complete user onboarding by setting role and creating a profile. This is the pri
     "authority": "BORAQS",
     "licenseNumber": "A-12345"
   },
-  "certificatesUrls": ["https://..."],
-  "idDocumentsUrls": ["https://..."]
+  "documents": [
+    {
+      "url": "https://...",
+      "type": "EDUCATION_CERT",
+      "title": "Degree Certificate"
+    },
+    {
+      "url": "https://...",
+      "type": "ID_OR_PASSPORT",
+      "title": "National ID"
+    }
+  ]
 }
 ```
 
@@ -195,8 +205,18 @@ Complete a professional profile for users who previously skipped onboarding. Thi
     "city": "Nairobi",
     "county": "NAIROBI"
   },
-  "certificatesUrls": ["https://..."],
-  "idDocumentsUrls": ["https://..."]
+  "documents": [
+    {
+      "url": "https://...",
+      "type": "EDUCATION_CERT",
+      "title": "Degree Certificate"
+    },
+    {
+      "url": "https://...",
+      "type": "ID_OR_PASSPORT",
+      "title": "National ID"
+    }
+  ]
 }
 ```
 

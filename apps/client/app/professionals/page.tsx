@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  useState,
-  useCallback,
-  useRef,
-  Suspense,
-  memo,
-  useMemo,
-} from "react";
+import { useState, useCallback, useRef, Suspense, memo, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   Search,
@@ -100,7 +93,7 @@ const EmptyState = memo(function EmptyState({
     <div
       className={cn(
         "text-center py-20 px-4",
-        shouldAnimate && "animate-scale-in"
+        shouldAnimate && "animate-scale-in",
       )}
     >
       <div className="w-20 h-20 bg-zinc-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -152,7 +145,7 @@ const CategoryTabs = memo(function CategoryTabs({
                 "transition-all duration-200 snap-start shrink-0",
                 isSelected
                   ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
-                  : "bg-white text-zinc-600 border border-zinc-200 hover:border-emerald-300 hover:text-emerald-600"
+                  : "bg-white text-zinc-600 border border-zinc-200 hover:border-emerald-300 hover:text-emerald-600",
               )}
             >
               <Icon className="h-4 w-4" />
@@ -293,16 +286,18 @@ function ProfessionalsPageContent() {
   const [searchInput, setSearchInput] = useState(urlSearch);
 
   // Fetch professionals via React Query
-  const { data, isLoading: loading, error: queryError, refetch } = useProfessionals({
+  const {
+    data,
+    isLoading: loading,
+    error: queryError,
+    refetch,
+  } = useProfessionals({
     search: urlSearch,
     category: urlCategory,
     sortBy: urlSort,
   });
 
-  const professionals = useMemo(
-    () => mapToListCardData(data),
-    [data]
-  );
+  const professionals = useMemo(() => mapToListCardData(data), [data]);
   const error = queryError?.message ?? null;
 
   // Debounce search
@@ -330,7 +325,7 @@ function ProfessionalsPageContent() {
         scroll: false,
       });
     },
-    [pathname, router, searchParams]
+    [pathname, router, searchParams],
   );
 
   // Handle search input with debounce
@@ -346,7 +341,7 @@ function ProfessionalsPageContent() {
         updateParams({ search: value || null });
       }, 300);
     },
-    [updateParams]
+    [updateParams],
   );
 
   // Handle category change
@@ -354,7 +349,7 @@ function ProfessionalsPageContent() {
     (slug: string) => {
       updateParams({ category: slug === "all" ? null : slug });
     },
-    [updateParams]
+    [updateParams],
   );
 
   // Handle sort change
@@ -362,7 +357,7 @@ function ProfessionalsPageContent() {
     (value: string) => {
       updateParams({ sortBy: value });
     },
-    [updateParams]
+    [updateParams],
   );
 
   // Clear all filters
@@ -381,7 +376,7 @@ function ProfessionalsPageContent() {
       acc[primaryService].push(prof);
       return acc;
     },
-    {} as Record<string, ProfessionalCardData[]>
+    {} as Record<string, ProfessionalCardData[]>,
   );
 
   return (
@@ -407,7 +402,7 @@ function ProfessionalsPageContent() {
           <div
             className={cn(
               "text-center max-w-3xl mx-auto",
-              heroInView && shouldAnimate && "animate-fade-in-up"
+              heroInView && shouldAnimate && "animate-fade-in-up",
             )}
           >
             <Badge className="mb-4 bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
@@ -513,7 +508,7 @@ function ProfessionalsPageContent() {
           <div
             className={cn(
               "text-center py-20",
-              shouldAnimate && "animate-fade-in"
+              shouldAnimate && "animate-fade-in",
             )}
           >
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">

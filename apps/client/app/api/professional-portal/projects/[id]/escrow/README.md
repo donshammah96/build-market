@@ -66,7 +66,10 @@ DISPUTED -> REFUNDED, RELEASED (resolved)
 When creating escrow transactions, use `computePlatformFee` from `@build/db/system-settings` to calculate the platform fee from the current `platformCommission` setting:
 
 ```ts
-import { computePlatformFee, getFinancialSettings } from "@build/db/system-settings";
+import {
+  computePlatformFee,
+  getFinancialSettings,
+} from "@build/db/system-settings";
 
 // For a given milestone amount:
 const platformFee = await computePlatformFee(amount);

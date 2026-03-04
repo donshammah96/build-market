@@ -27,7 +27,10 @@ import {
   getRateLimitIdentifier,
   checkRateLimit,
 } from "@/app/lib/api/rate-limit";
-import { safeParseJsonBody, getRequestMetadata } from "@/app/lib/api/request-utils";
+import {
+  safeParseJsonBody,
+  getRequestMetadata,
+} from "@/app/lib/api/request-utils";
 
 const logger = getClientLogger();
 const executor = getResilientExecutor();

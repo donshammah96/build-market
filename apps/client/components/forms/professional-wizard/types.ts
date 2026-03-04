@@ -49,8 +49,12 @@ export interface ProfessionalWizardData {
   certificates: Array<{ file: File }>;
   idDocuments: Array<{ file: File }>;
 
-  certificatesUrls?: string[];
-  idDocumentsUrls?: string[];
+  documents?: Array<{
+    uploadId: string;
+    previewUrl?: string;
+    category: string;
+    title?: string;
+  }>;
 }
 
 /**

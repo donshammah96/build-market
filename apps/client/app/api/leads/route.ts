@@ -62,14 +62,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const data = validation.data;
 
   const executor = getResilientExecutor();
-  const result = await executor.execute(
-    () => createPublicLead(data),
-    { operationName: "create_public_lead" },
-  );
+  const result = await executor.execute(() => createPublicLead(data), {
+    operationName: "create_public_lead",
+  });
 
   if (!result.success || !result.data) {
     logger.error("Failed to create lead", result.error, { correlationId });
-    return apiError("Failed to submit inquiry", HttpStatus.INTERNAL_SERVER_ERROR);
+    return apiError(
+      "Failed to submit inquiry",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
   }
 
   const serviceResult = result.data as

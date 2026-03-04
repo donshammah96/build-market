@@ -39,7 +39,7 @@ export function WidgetEmptyState({
     <div
       className={cn(
         "flex flex-col items-center justify-center text-center p-8 py-12",
-        className
+        className,
       )}
     >
       <div className="p-4 rounded-full bg-zinc-100 mb-4">
@@ -47,7 +47,9 @@ export function WidgetEmptyState({
       </div>
       <p className="text-sm font-medium text-zinc-500 mb-1">{title}</p>
       {description && (
-        <p className="text-xs text-zinc-400 mt-1 max-w-[200px]">{description}</p>
+        <p className="text-xs text-zinc-400 mt-1 max-w-[200px]">
+          {description}
+        </p>
       )}
       {action && <div className="mt-4">{action}</div>}
     </div>

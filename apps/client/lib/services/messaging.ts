@@ -13,6 +13,12 @@ import {
   threadDetailSelect,
   messageListSelect,
 } from "@/app/lib/validation/messaging-validation";
+import {
+  canDeleteMessage,
+  canDeleteThread,
+  canReadThread,
+  canSendMessage,
+} from "@/app/lib/security/policies";
 
 // =============================================================================
 // Participant Verification
@@ -29,6 +35,40 @@ export async function verifyParticipant(threadId: string, userId: string) {
     },
     select: { id: true, role: true, userId: true, threadId: true },
   });
+}
+
+export async function assertCanReadThread(threadId: string, userId: string) {
+  const participant = await verifyParticipant(threadId, userId);
+  if (!canReadThread(!!participant)) {
+    throw new Error("Not authorized to read this thread");
+  }
+  return participant;
+}
+
+export async function assertCanSendMessage(threadId: string, userId: string) {
+  const participant = await verifyParticipant(threadId, userId);
+  if (!canSendMessage(!!participant)) {
+    throw new Error("Not authorized to send messages in this thread");
+  }
+  return participant;
+}
+
+export function assertCanDeleteThread(
+  participantRole: "OWNER" | "ADMIN" | "MEMBER" | null | undefined,
+) {
+  if (!canDeleteThread(participantRole)) {
+    throw new Error("Only thread owners or admins can delete threads");
+  }
+}
+
+export function assertCanDeleteMessage(params: {
+  senderId: string;
+  actorId: string;
+  participantRole?: "OWNER" | "ADMIN" | "MEMBER" | null;
+}) {
+  if (!canDeleteMessage(params)) {
+    throw new Error("Only the sender or thread admins can delete messages");
+  }
 }
 
 // =============================================================================

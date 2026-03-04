@@ -110,7 +110,8 @@ export const dashboardKeys = {
   inventoryAlerts: () => [...dashboardKeys.all, "inventory-alerts"] as const,
   topProducts: () => [...dashboardKeys.all, "top-products"] as const,
   properties: () => [...dashboardKeys.all, "properties"] as const,
-  propertyInquiries: () => [...dashboardKeys.all, "property-inquiries"] as const,
+  propertyInquiries: () =>
+    [...dashboardKeys.all, "property-inquiries"] as const,
   pipeline: () => [...dashboardKeys.all, "pipeline"] as const,
 };
 
@@ -127,7 +128,7 @@ async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
 
 async function fetchLeads(): Promise<LeadData[]> {
   const res = await fetch(
-    "/api/professional-portal/leads?limit=5&status=new,contacted"
+    "/api/professional-portal/leads?limit=5&status=new,contacted",
   );
   if (!res.ok) throw new Error("Failed to fetch leads");
   const json = await res.json();
@@ -167,7 +168,7 @@ async function fetchProperties(): Promise<PropertyListingData[]> {
 
 async function fetchPropertyInquiries(): Promise<PropertyInquiryData[]> {
   const res = await fetch(
-    "/api/professional-portal/inquiries?limit=4&type=property"
+    "/api/professional-portal/inquiries?limit=4&type=property",
   );
   if (!res.ok) throw new Error("Failed to fetch inquiries");
   const json = await res.json();
@@ -182,7 +183,7 @@ async function fetchAgenda(): Promise<AgendaEvent[]> {
   end.setHours(23, 59, 59, 999);
 
   const res = await fetch(
-    `${API_ROUTES.professionalPortalCalendar}?start=${start.toISOString()}&end=${end.toISOString()}`
+    `${API_ROUTES.professionalPortalCalendar}?start=${start.toISOString()}&end=${end.toISOString()}`,
   );
   if (!res.ok) throw new Error("Failed to fetch agenda");
   const json = await res.json();
@@ -234,7 +235,9 @@ async function fetchPipeline(): Promise<{
 // MAIN HOOK
 // ============================================================================
 
-export function useDashboardData(): DashboardData & { refetch: () => Promise<void> } {
+export function useDashboardData(): DashboardData & {
+  refetch: () => Promise<void>;
+} {
   const queryClient = useQueryClient();
   const { profile, isLoading: profileLoading } = useProfileStatus();
 

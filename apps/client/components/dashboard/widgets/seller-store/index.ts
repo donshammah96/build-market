@@ -1,6 +1,6 @@
 /**
  * Seller (Store) Dashboard Widgets
- * 
+ *
  * Widgets for suppliers and store owners.
  */
 

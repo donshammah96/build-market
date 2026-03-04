@@ -33,7 +33,7 @@ export class JetStreamConsumer {
   constructor(
     serviceName: string,
     groupName: string,
-    config?: Partial<NatsConfig>
+    config?: Partial<NatsConfig>,
   ) {
     this.serviceName = serviceName;
     this.groupName = groupName;
@@ -72,7 +72,7 @@ export class JetStreamConsumer {
         const streamName = await this.getStreamForSubject(topic.subject);
         if (!streamName) {
           console.error(
-            `[NATS Consumer] No stream found for subject: ${topic.subject}`
+            `[NATS Consumer] No stream found for subject: ${topic.subject}`,
           );
           continue;
         }
@@ -81,19 +81,22 @@ export class JetStreamConsumer {
         await jsm.consumers.add(streamName, consumerConfig);
 
         // Get consumer reference for pulling messages
-        const consumer = await js.consumers.get(streamName, consumerConfig.durable_name!);
+        const consumer = await js.consumers.get(
+          streamName,
+          consumerConfig.durable_name!,
+        );
         this.consumers.push(consumer);
 
         // Start consuming messages
         this.consumeMessages(consumer, topic.handler, topic.subject);
 
         console.log(
-          `[NATS Consumer] Subscribed to ${topic.subject} on stream ${streamName}`
+          `[NATS Consumer] Subscribed to ${topic.subject} on stream ${streamName}`,
         );
       } catch (error) {
         console.error(
           `[NATS Consumer] Failed to subscribe to ${topic.subject}:`,
-          error
+          error,
         );
       }
     }
@@ -105,7 +108,8 @@ export class JetStreamConsumer {
   private buildConsumerConfig(topic: TopicConfig): Partial<ConsumerConfig> {
     const opts = topic.consumerOptions || {};
     const durableName =
-      opts.durableName || `${this.groupName}-${topic.subject.replace(/[.>*]/g, "-")}`;
+      opts.durableName ||
+      `${this.groupName}-${topic.subject.replace(/[.>*]/g, "-")}`;
 
     const config: Partial<ConsumerConfig> = {
       durable_name: durableName,
@@ -206,7 +210,7 @@ export class JetStreamConsumer {
     // Pattern contains * (single token wildcard)
     if (pattern.includes("*")) {
       const regex = new RegExp(
-        "^" + pattern.replace(/\./g, "\\.").replace(/\*/g, "[^.]+") + "$"
+        "^" + pattern.replace(/\./g, "\\.").replace(/\*/g, "[^.]+") + "$",
       );
       return regex.test(subject);
     }
@@ -220,14 +224,17 @@ export class JetStreamConsumer {
   private async consumeMessages(
     consumer: Consumer,
     handler: (message: MessagePayload) => Promise<void>,
-    subject: string
+    subject: string,
   ): Promise<void> {
     const batchSize = 10;
 
     while (this.running) {
       try {
         // Fetch batch of messages using consume iterator
-        const messages = await consumer.fetch({ max_messages: batchSize, expires: 5000 });
+        const messages = await consumer.fetch({
+          max_messages: batchSize,
+          expires: 5000,
+        });
 
         for await (const msg of messages) {
           await this.processMessage(msg, handler, subject);
@@ -247,7 +254,7 @@ export class JetStreamConsumer {
   private async processMessage(
     msg: JsMsg,
     handler: (message: MessagePayload) => Promise<void>,
-    subject: string
+    subject: string,
   ): Promise<void> {
     try {
       const data = JSON.parse(sc.decode(msg.data));
@@ -272,12 +279,12 @@ export class JetStreamConsumer {
       msg.ack();
 
       console.log(
-        `[NATS Consumer] Processed message from ${subject}, seq: ${msg.seq}`
+        `[NATS Consumer] Processed message from ${subject}, seq: ${msg.seq}`,
       );
     } catch (error) {
       console.error(
         `[NATS Consumer] Error processing message from ${subject}:`,
-        error
+        error,
       );
       // Negative ack to retry
       msg.nak();
@@ -324,7 +331,7 @@ export class JetStreamConsumer {
 export function createConsumer(
   serviceName: string,
   groupName: string,
-  config?: Partial<NatsConfig>
+  config?: Partial<NatsConfig>,
 ): JetStreamConsumer {
   return new JetStreamConsumer(serviceName, groupName, config);
 }

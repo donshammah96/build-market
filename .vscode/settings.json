@@ -18,5 +18,11 @@
     "**/.next/**": true,
     "**/.turbo/**": true,
     "**/dist/**": true
+  },
+  "chat.tools.terminal.autoApprove": {
+    "pnpm": true,
+    "Push-Location": true,
+    "Pop-Location": true,
+    "Y": true
   }
 }

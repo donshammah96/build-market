@@ -13,9 +13,7 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
-import {
-  UpdateLeadSchema,
-} from "@/app/lib/validation/leads-validation";
+import { UpdateLeadSchema } from "@/app/lib/validation/leads-validation";
 import { LEAD_CONFIG } from "@/app/lib/config/lead.config";
 import {
   getProfessionalLeadById,
@@ -62,10 +60,7 @@ export const GET = withAuth<LeadParams>(
     );
 
     if (!result.success) {
-      return apiError(
-        "Failed to fetch lead",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      return apiError("Failed to fetch lead", HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     const data = result.data;
@@ -73,7 +68,8 @@ export const GET = withAuth<LeadParams>(
       return apiError("Failed to fetch lead", HttpStatus.INTERNAL_SERVER_ERROR);
     }
     if (data.success === false) {
-      if (data.error === "not_found") return apiError("Lead not found", HttpStatus.NOT_FOUND);
+      if (data.error === "not_found")
+        return apiError("Lead not found", HttpStatus.NOT_FOUND);
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
     return apiSuccess(data.data, HttpStatus.OK);
@@ -179,11 +175,15 @@ export const PATCH = withAuth<LeadParams>(
     const data = result.data;
     if (!data) {
       await IdempotencyService.fail(idempotencyKey);
-      return apiError("Failed to update lead", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to update lead",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
     if (data.success === false) {
       await IdempotencyService.fail(idempotencyKey);
-      if (data.error === "not_found") return apiError("Lead not found", HttpStatus.NOT_FOUND);
+      if (data.error === "not_found")
+        return apiError("Lead not found", HttpStatus.NOT_FOUND);
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
     await IdempotencyService.complete(idempotencyKey, data.data);
@@ -214,7 +214,10 @@ export const DELETE = withAuth<LeadParams>(
 
     const idempotencyKey =
       req.headers.get("Idempotency-Key") ||
-      IdempotencyService.generateKey(dbUserId, "DELETE", { leadId, ...(body && typeof body === 'object' ? body : {}) });
+      IdempotencyService.generateKey(dbUserId, "DELETE", {
+        leadId,
+        ...(body && typeof body === "object" ? body : {}),
+      });
 
     const idempotencyCheck = await IdempotencyService.checkOrCreate(
       idempotencyKey,
@@ -266,11 +269,15 @@ export const DELETE = withAuth<LeadParams>(
     const data = result.data;
     if (!data) {
       await IdempotencyService.fail(idempotencyKey);
-      return apiError("Failed to delete lead", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to delete lead",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
     if (data.success === false) {
       await IdempotencyService.fail(idempotencyKey);
-      if (data.error === "not_found") return apiError("Lead not found", HttpStatus.NOT_FOUND);
+      if (data.error === "not_found")
+        return apiError("Lead not found", HttpStatus.NOT_FOUND);
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
     await IdempotencyService.complete(idempotencyKey, data.data);

@@ -6,7 +6,10 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm dlx tsx --env-file=.env --watch src/index.ts",
-    "check-types": "tsc --noEmit"
+    "build": "echo \"No build configured\" && exit 0",
+    "lint": "echo \"No lint configured\" && exit 0",
+    "check-types": "tsc --noEmit",
+    "test": "echo \"No tests configured\" && exit 0"
   },
   "keywords": [],
   "author": "",

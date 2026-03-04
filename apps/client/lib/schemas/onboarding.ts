@@ -121,10 +121,16 @@ export const professionalOnboardingSchema = z
       .optional(),
 
     // File arrays - validated separately since they're File objects
-    // These represent the uploaded file URLs after upload
-    certificatesUrls: z.array(z.string().url()).optional(),
-
-    idDocumentsUrls: z.array(z.string().url()).optional(),
+    documents: z
+      .array(
+        z.object({
+          uploadId: z.string(),
+          previewUrl: z.string().optional(),
+          category: z.string(),
+          title: z.string().optional(),
+        }),
+      )
+      .optional(),
   })
   .refine(
     () => {
@@ -177,8 +183,15 @@ export const professionalOnboardingPayload = z.object({
   // Real estate agent specific
   earbNumber: z.string().optional(),
   // Document URLs
-  certificatesUrls: z.array(z.string()).optional(),
-  idDocumentsUrls: z.array(z.string()).optional(),
+  documents: z
+    .array(
+      z.object({
+        url: z.string().url(),
+        type: z.string(),
+        title: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 
 export type ClientOnboardingPayload = z.infer<typeof clientOnboardingPayload>;

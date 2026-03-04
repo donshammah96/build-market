@@ -69,7 +69,7 @@ const Categories = () => {
       params.set("category", value);
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [pathname, router, searchParams]
+    [pathname, router, searchParams],
   );
 
   return (

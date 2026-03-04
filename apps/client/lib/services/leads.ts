@@ -95,9 +95,7 @@ export async function createProfessionalLead(
       priority: data.priority,
       source: data.source,
       notes: data.notes,
-      followUpDate: data.followUpDate
-        ? new Date(data.followUpDate)
-        : undefined,
+      followUpDate: data.followUpDate ? new Date(data.followUpDate) : undefined,
     },
     select: leadListSelect,
   });
@@ -120,7 +118,8 @@ export async function getProfessionalLeadById(
   });
 
   if (!lead) return { success: false, error: "not_found" };
-  if (lead.professionalId !== dbUserId) return { success: false, error: "forbidden" };
+  if (lead.professionalId !== dbUserId)
+    return { success: false, error: "forbidden" };
 
   const { professionalId: _pid, ...data } = lead;
   return { success: true, data };
@@ -141,7 +140,8 @@ export async function updateProfessionalLead(
   });
 
   if (!existing) return { success: false, error: "not_found" };
-  if (existing.professionalId !== dbUserId) return { success: false, error: "forbidden" };
+  if (existing.professionalId !== dbUserId)
+    return { success: false, error: "forbidden" };
 
   const isWinning = data.status === "WON" && existing.status !== "WON";
 
@@ -149,10 +149,8 @@ export async function updateProfessionalLead(
     where: { id: leadId },
     data: {
       ...data,
-      clientEmail:
-        data.clientEmail === "" ? null : data.clientEmail,
-      clientId:
-        data.clientId === null ? null : data.clientId || undefined,
+      clientEmail: data.clientEmail === "" ? null : data.clientEmail,
+      clientId: data.clientId === null ? null : data.clientId || undefined,
       followUpDate:
         data.followUpDate === null
           ? null
@@ -184,7 +182,8 @@ export async function deleteProfessionalLead(
   });
 
   if (!existing) return { success: false, error: "not_found" };
-  if (existing.professionalId !== dbUserId) return { success: false, error: "forbidden" };
+  if (existing.professionalId !== dbUserId)
+    return { success: false, error: "forbidden" };
 
   await prisma.lead.delete({ where: { id: leadId } });
 

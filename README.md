@@ -795,6 +795,33 @@ All routes in `apps/client/app/api/` are:
 
 ## 🛠️ Development Workflow
 
+### Root Scripts Reference
+
+All scripts below are run from the monorepo root via `pnpm run <script>`.
+
+| Script          | Owner / audience       | What it does                                                                      |
+| --------------- | ---------------------- | --------------------------------------------------------------------------------- |
+| `dev`           | All developers         | Start every app and service concurrently (use selective variants below for speed) |
+| `dev:client`    | Frontend devs          | Start only the client Next.js app                                                 |
+| `dev:admin`     | Admin devs             | Start only the admin Next.js app                                                  |
+| `dev:frontend`  | Frontend devs          | Start client + admin together                                                     |
+| `dev:services`  | Backend devs           | Start all backend microservices                                                   |
+| `dev:messaging` | Messaging feature devs | Start the messaging service only                                                  |
+| `dev:search`    | Search feature devs    | Start the search service only                                                     |
+| `build`         | CI / deployments       | Compile every workspace package                                                   |
+| `lint`          | Developers / CI        | Run ESLint across the entire monorepo via Turborepo                               |
+| `format`        | Developers             | Rewrite formatting in-place (destructive — do not run in CI)                      |
+| `format:check`  | CI / pre-merge         | Verify formatting without writing changes                                         |
+| `check-types`   | Developers / CI        | Run `tsc --noEmit` across all packages                                            |
+| `test`          | Developers / CI        | Run all Vitest/Jest suites via Turborepo                                          |
+| `validate`      | CI / pre-merge         | Full quality gate: `format:check → lint → check-types → test`                     |
+| `clean`         | Developers             | Remove all `node_modules` and Turbo-generated build artifacts                     |
+| `clean:cache`   | Developers             | Clear the Turborepo daemon and `.turbo` cache only                                |
+| `deps:outdated` | Platform / maintenance | List outdated packages across every workspace (`pnpm outdated -r`)                |
+| `deps:audit`    | Platform / security    | Run a production-dependency security audit (`pnpm audit --prod`)                  |
+
+> **Tip**: Use the `dev:*` variants instead of bare `dev` to avoid starting services you don't need — startup time drops from ~60 s to ~5 s.
+
 ### Database Migrations
 
 ```bash
@@ -813,16 +840,21 @@ npx prisma studio
 ### Testing Workflow
 
 ```bash
-cd apps/client
+# Run all tests across the monorepo (from root)
+pnpm run test
 
-# Run tests before committing
-npm test
+# Run tests for a single workspace
+pnpm run test --filter=client
+
+# Watch mode (inside a specific app)
+cd apps/client
+pnpm run test:watch
 
 # Generate coverage report
-npm run test:coverage
+pnpm run test:coverage
 
 # Interactive UI for debugging
-npm run test:ui
+pnpm run test:ui
 ```
 
 ### Code Quality
@@ -1065,7 +1097,7 @@ DATABASE_URL=postgresql://user:password@localhost:5432/buildmarket
 
 ### Pre-deployment Checklist
 
-- [ ] All tests passing (`npm test`)
+- [ ] All tests passing (`pnpm run validate`)
 - [ ] Database migrations applied
 - [ ] Environment variables configured
 - [ ] Database indexes applied
@@ -1457,11 +1489,9 @@ git commit -m "chore(deps): update dependencies"
 
 1. **Update documentation** for user-facing changes
 2. **Add tests** for new functionality
-3. **Run linter and tests**:
+3. **Run the full quality gate**:
    ```bash
-   pnpm run lint
-   pnpm run check-types
-   cd apps/client && npm test
+   pnpm run validate
    ```
 4. **Update CHANGELOG** (if applicable)
 5. **Submit PR** with clear description:

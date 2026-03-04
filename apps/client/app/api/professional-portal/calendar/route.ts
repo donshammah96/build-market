@@ -18,7 +18,10 @@ import {
   CreateCalendarEventSchema,
 } from "@/app/lib/validation/calendar-validation";
 import { createProfessionalPortalGet } from "@/app/lib/api/professional-portal-handler";
-import { getCalendarEvents, createCalendarEvent } from "@/lib/services/calendar";
+import {
+  getCalendarEvents,
+  createCalendarEvent,
+} from "@/lib/services/calendar";
 
 const logger = getClientLogger();
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
@@ -38,13 +41,13 @@ function parseCalendarQuery(req: NextRequest) {
  * List calendar events for the authenticated professional.
  */
 export const GET = createProfessionalPortalGet({
-    rateLimitKey: "calendar-read",
-    querySchema: CalendarQuerySchema,
-    parseQuery: parseCalendarQuery,
-    handler: async ({ dbUserId, query }) => getCalendarEvents(dbUserId, query),
-    operationName: "get_calendar_events",
-    errorMessage: "Failed to fetch calendar events",
-  });
+  rateLimitKey: "calendar-read",
+  querySchema: CalendarQuerySchema,
+  parseQuery: parseCalendarQuery,
+  handler: async ({ dbUserId, query }) => getCalendarEvents(dbUserId, query),
+  operationName: "get_calendar_events",
+  errorMessage: "Failed to fetch calendar events",
+});
 
 /**
  * POST /api/professional-portal/calendar

@@ -47,13 +47,13 @@ export function useVerificationRedirect() {
         professionalProfile.verificationStatus ?? professionalProfile.status;
       if (status === "REJECTED" || status === "NEEDS_CORRECTION") {
         router.push(
-          "/professional-portal/settings/complete-profile?tab=verification&status=rejected"
+          "/professional-portal/settings/complete-profile?tab=verification&status=rejected",
         );
         return;
       }
       if (status === "PENDING") {
         router.push(
-          "/professional-portal/settings/complete-profile?tab=verification&status=pending"
+          "/professional-portal/settings/complete-profile?tab=verification&status=pending",
         );
         return;
       }
@@ -63,21 +63,21 @@ export function useVerificationRedirect() {
     const rejectedProperty = properties.find(
       (p) =>
         p.verificationStatus === "REJECTED" ||
-        p.verificationStatus === "NEEDS_CORRECTION"
+        p.verificationStatus === "NEEDS_CORRECTION",
     );
     if (rejectedProperty) {
       router.push(
-        "/professional-portal/settings/properties?tab=verification&status=rejected"
+        "/professional-portal/settings/properties?tab=verification&status=rejected",
       );
       return;
     }
 
     const pendingProperty = properties.find(
-      (p) => p.verificationStatus === "PENDING"
+      (p) => p.verificationStatus === "PENDING",
     );
     if (pendingProperty) {
       router.push(
-        "/professional-portal/settings/properties?tab=verification&status=pending"
+        "/professional-portal/settings/properties?tab=verification&status=pending",
       );
       return;
     }
@@ -86,11 +86,11 @@ export function useVerificationRedirect() {
     const rejectedStore = stores.find(
       (s) =>
         s.verificationStatus === "REJECTED" ||
-        s.verificationStatus === "NEEDS_CORRECTION"
+        s.verificationStatus === "NEEDS_CORRECTION",
     );
     if (rejectedStore) {
       router.push(
-        "/professional-portal/settings/stores?tab=verification&status=rejected"
+        "/professional-portal/settings/stores?tab=verification&status=rejected",
       );
       return;
     }
@@ -98,9 +98,16 @@ export function useVerificationRedirect() {
     const pendingStore = stores.find((s) => s.verificationStatus === "PENDING");
     if (pendingStore) {
       router.push(
-        "/professional-portal/settings/stores?tab=verification&status=pending"
+        "/professional-portal/settings/stores?tab=verification&status=pending",
       );
       return;
     }
-  }, [professionalProfile, properties, stores, router, isLoading, profileError]);
+  }, [
+    professionalProfile,
+    properties,
+    stores,
+    router,
+    isLoading,
+    profileError,
+  ]);
 }

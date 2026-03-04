@@ -76,23 +76,23 @@ IdeaBookAttachment {
 
 ### Idea Books
 
-| Method | Path                    | Description                             |
-| ------ | ----------------------- | --------------------------------------- |
-| GET    | `/api/idea-books`       | List books (paginated, searchable)      |
-| POST   | `/api/idea-books`       | Create book (with idempotency)          |
-| GET    | `/api/idea-books/:id`   | Get book detail + attachments + collabs |
-| PATCH  | `/api/idea-books/:id`   | Update title/desc/category/privacy      |
-| DELETE | `/api/idea-books/:id`   | Delete (cascades all children)          |
-| POST   | `/api/idea-books/:id`   | Add attachment to book                  |
+| Method | Path                  | Description                             |
+| ------ | --------------------- | --------------------------------------- |
+| GET    | `/api/idea-books`     | List books (paginated, searchable)      |
+| POST   | `/api/idea-books`     | Create book (with idempotency)          |
+| GET    | `/api/idea-books/:id` | Get book detail + attachments + collabs |
+| PATCH  | `/api/idea-books/:id` | Update title/desc/category/privacy      |
+| DELETE | `/api/idea-books/:id` | Delete (cascades all children)          |
+| POST   | `/api/idea-books/:id` | Add attachment to book                  |
 
 ### Attachments
 
-| Method | Path                                              | Description               |
-| ------ | ------------------------------------------------- | ------------------------- |
-| GET    | `/api/idea-books/:id/attachments`                 | List attachments (paged)  |
-| GET    | `/api/idea-books/:id/attachments/:attachmentId`   | Get attachment detail     |
-| PATCH  | `/api/idea-books/:id/attachments/:attachmentId`   | Update caption            |
-| DELETE | `/api/idea-books/:id/attachments/:attachmentId`   | Delete attachment         |
+| Method | Path                                            | Description              |
+| ------ | ----------------------------------------------- | ------------------------ |
+| GET    | `/api/idea-books/:id/attachments`               | List attachments (paged) |
+| GET    | `/api/idea-books/:id/attachments/:attachmentId` | Get attachment detail    |
+| PATCH  | `/api/idea-books/:id/attachments/:attachmentId` | Update caption           |
+| DELETE | `/api/idea-books/:id/attachments/:attachmentId` | Delete attachment        |
 
 ## Request/Response Examples
 
@@ -143,10 +143,10 @@ GET /api/idea-books?page=1&limit=20&search=kitchen&category=KITCHEN
 
 ## Enums
 
-| Enum             | Values                                                                              |
-| ---------------- | ----------------------------------------------------------------------------------- |
+| Enum             | Values                                                                                                    |
+| ---------------- | --------------------------------------------------------------------------------------------------------- |
 | IdeaBookCategory | LIVING_ROOM, KITCHEN, BATHROOM, BEDROOM, OUTDOOR_LANDSCAPING, COMMERCIAL_OFFICE, RETAIL_SHOP, WHOLE_HOUSE |
-| IdeaBookPrivacy  | PUBLIC, SHARED_LINK, PRIVATE                                                        |
+| IdeaBookPrivacy  | PUBLIC, SHARED_LINK, PRIVATE                                                                              |
 
 ## Critical Bugs Fixed in This Refactor
 

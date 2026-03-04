@@ -1,6 +1,6 @@
 /**
  * Professional Categories Mapping
- * 
+ *
  * This file defines the relationship between:
  * - UI category slugs (used in URLs and page tabs)
  * - Profession values (stored in ProfessionalProfile.servicesOffered)
@@ -31,14 +31,10 @@ import {
  * The profession values match the `value` field in ProfessionalForm's PROFESSION_OPTIONS.
  */
 export const CATEGORY_TO_PROFESSIONS: Record<string, string[]> = {
-  "all": [], // Empty array means no filtering
-  
-  "architecture": [
-    "architect",
-    "draftsman",
-    "urban_planner",
-  ],
-  
+  all: [], // Empty array means no filtering
+
+  architecture: ["architect", "draftsman", "urban_planner"],
+
   "general-contracting": [
     "general_contractor",
     "building_contractor",
@@ -46,11 +42,9 @@ export const CATEGORY_TO_PROFESSIONS: Record<string, string[]> = {
     "project_manager",
     "site_supervisor",
   ],
-  
-  "interior-design": [
-    "interior_designer",
-  ],
-  
+
+  "interior-design": ["interior_designer"],
+
   "structural-engineering": [
     "structural_engineer",
     "civil_engineer",
@@ -59,27 +53,20 @@ export const CATEGORY_TO_PROFESSIONS: Record<string, string[]> = {
     "water_engineer",
     "mechanical_engineer",
   ],
-  
-  "electrical": [
+
+  electrical: [
     "electrician",
     "electrical_engineer",
     "solar_installer",
     "smart_home_specialist",
     "security_systems",
   ],
-  
-  "plumbing": [
-    "plumber",
-    "waterproofing_specialist",
-  ],
-  
-  "landscaping": [
-    "landscaper",
-    "landscape_architect",
-    "pool_builder",
-  ],
-  
-  "construction": [
+
+  plumbing: ["plumber", "waterproofing_specialist"],
+
+  landscaping: ["landscaper", "landscape_architect", "pool_builder"],
+
+  construction: [
     "mason",
     "carpenter",
     "welder",
@@ -94,15 +81,15 @@ export const CATEGORY_TO_PROFESSIONS: Record<string, string[]> = {
     "fire_safety_specialist",
     "acoustic_consultant",
   ],
-  
-  "surveying": [
+
+  surveying: [
     "quantity_surveyor",
     "land_surveyor",
     "estimator",
     "clerk_of_works",
     "property_valuator",
   ],
-  
+
   "real-estate": [
     "real_estate_agent",
     "realtor",
@@ -121,73 +108,73 @@ export const CATEGORY_TO_PROFESSIONS: Record<string, string[]> = {
  */
 export const PROFESSION_LABELS: Record<string, string> = {
   // Architecture & Design
-  "architect": "Architect",
-  "interior_designer": "Interior Designer",
-  "landscape_architect": "Landscape Architect",
-  "urban_planner": "Urban Planner",
-  "draftsman": "Draftsman / CAD Technician",
-  
+  architect: "Architect",
+  interior_designer: "Interior Designer",
+  landscape_architect: "Landscape Architect",
+  urban_planner: "Urban Planner",
+  draftsman: "Draftsman / CAD Technician",
+
   // Engineering
-  "structural_engineer": "Structural Engineer",
-  "civil_engineer": "Civil Engineer",
-  "mechanical_engineer": "Mechanical Engineer (HVAC)",
-  "electrical_engineer": "Electrical Engineer",
-  "geotechnical_engineer": "Geotechnical Engineer",
-  "environmental_engineer": "Environmental Engineer",
-  "water_engineer": "Water & Sanitation Engineer",
-  
+  structural_engineer: "Structural Engineer",
+  civil_engineer: "Civil Engineer",
+  mechanical_engineer: "Mechanical Engineer (HVAC)",
+  electrical_engineer: "Electrical Engineer",
+  geotechnical_engineer: "Geotechnical Engineer",
+  environmental_engineer: "Environmental Engineer",
+  water_engineer: "Water & Sanitation Engineer",
+
   // Construction Management
-  "construction_manager": "Construction Manager",
-  "project_manager": "Project Manager",
-  "site_supervisor": "Site Supervisor / Foreman",
-  "quantity_surveyor": "Quantity Surveyor",
-  "estimator": "Construction Estimator",
-  "clerk_of_works": "Clerk of Works",
-  
+  construction_manager: "Construction Manager",
+  project_manager: "Project Manager",
+  site_supervisor: "Site Supervisor / Foreman",
+  quantity_surveyor: "Quantity Surveyor",
+  estimator: "Construction Estimator",
+  clerk_of_works: "Clerk of Works",
+
   // Contractors
-  "general_contractor": "General Contractor",
-  "building_contractor": "Building Contractor",
-  "roofing_contractor": "Roofing Contractor",
-  "flooring_contractor": "Flooring Contractor",
-  "painting_contractor": "Painting Contractor",
-  "demolition_contractor": "Demolition Contractor",
-  
+  general_contractor: "General Contractor",
+  building_contractor: "Building Contractor",
+  roofing_contractor: "Roofing Contractor",
+  flooring_contractor: "Flooring Contractor",
+  painting_contractor: "Painting Contractor",
+  demolition_contractor: "Demolition Contractor",
+
   // Specialized Trades
-  "plumber": "Plumber",
-  "electrician": "Electrician",
-  "hvac_technician": "HVAC Technician",
-  "mason": "Mason / Bricklayer",
-  "carpenter": "Carpenter",
-  "welder": "Welder / Fabricator",
-  "glazier": "Glazier (Glass Work)",
-  "tiler": "Tiler",
-  "plasterer": "Plasterer",
-  "waterproofing_specialist": "Waterproofing Specialist",
-  
+  plumber: "Plumber",
+  electrician: "Electrician",
+  hvac_technician: "HVAC Technician",
+  mason: "Mason / Bricklayer",
+  carpenter: "Carpenter",
+  welder: "Welder / Fabricator",
+  glazier: "Glazier (Glass Work)",
+  tiler: "Tiler",
+  plasterer: "Plasterer",
+  waterproofing_specialist: "Waterproofing Specialist",
+
   // Real Estate
-  "real_estate_agent": "Real Estate Agent",
-  "realtor": "Realtor",
-  "realty_company": "Realty Company",
-  "property_developer": "Property Developer",
-  "land_surveyor": "Land Surveyor",
-  "property_valuator": "Property Valuator",
-  
+  real_estate_agent: "Real Estate Agent",
+  realtor: "Realtor",
+  realty_company: "Realty Company",
+  property_developer: "Property Developer",
+  land_surveyor: "Land Surveyor",
+  property_valuator: "Property Valuator",
+
   // Specialists
-  "solar_installer": "Solar Panel Installer",
-  "pool_builder": "Pool Builder",
-  "landscaper": "Landscaper",
-  "security_systems": "Security Systems Installer",
-  "smart_home_specialist": "Smart Home Specialist",
-  "fire_safety_specialist": "Fire Safety Specialist",
-  "acoustic_consultant": "Acoustic Consultant",
-  
+  solar_installer: "Solar Panel Installer",
+  pool_builder: "Pool Builder",
+  landscaper: "Landscaper",
+  security_systems: "Security Systems Installer",
+  smart_home_specialist: "Smart Home Specialist",
+  fire_safety_specialist: "Fire Safety Specialist",
+  acoustic_consultant: "Acoustic Consultant",
+
   // Suppliers
-  "building_materials_supplier": "Building Materials Supplier",
-  "hardware_supplier": "Hardware Supplier",
-  "sanitary_supplier": "Sanitary Ware Supplier",
-  
+  building_materials_supplier: "Building Materials Supplier",
+  hardware_supplier: "Hardware Supplier",
+  sanitary_supplier: "Sanitary Ware Supplier",
+
   // Fallback
-  "other": "Other Professional",
+  other: "Other Professional",
 };
 
 // =============================================================================
@@ -291,7 +278,9 @@ export function getProfessionsForCategory(categorySlug: string): string[] {
  * Returns "other" if no matching category is found.
  */
 export function getCategoryForProfession(profession: string): string {
-  for (const [category, professions] of Object.entries(CATEGORY_TO_PROFESSIONS)) {
+  for (const [category, professions] of Object.entries(
+    CATEGORY_TO_PROFESSIONS,
+  )) {
     if (category !== "all" && professions.includes(profession)) {
       return category;
     }
@@ -310,7 +299,7 @@ export function getProfessionLabel(profession: string): string {
   // Fallback: convert snake_case to Title Case
   return profession
     .split("_")
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 }
 
@@ -318,7 +307,7 @@ export function getProfessionLabel(profession: string): string {
  * Get the category name for a given slug.
  */
 export function getCategoryName(categorySlug: string): string {
-  const category = CATEGORIES.find(c => c.slug === categorySlug);
+  const category = CATEGORIES.find((c) => c.slug === categorySlug);
   return category?.name || "All Professionals";
 }
 
@@ -326,5 +315,5 @@ export function getCategoryName(categorySlug: string): string {
  * Check if a category slug is valid.
  */
 export function isValidCategory(slug: string): boolean {
-  return CATEGORIES.some(c => c.slug === slug);
+  return CATEGORIES.some((c) => c.slug === slug);
 }

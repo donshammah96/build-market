@@ -34,6 +34,7 @@ import { isValidId } from "@/app/lib/utils/validators";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@build/db";
 import { revalidatePath } from "next/cache";
+import { canManageProject } from "@/app/lib/security/policies";
 
 /**
  * Resolve Clerk userId to database user ID.
@@ -111,7 +112,10 @@ export async function getProjectAction(id: string) {
   if (!project) throw new Error("Project not found");
 
   const isClient = project.clientId === dbUserId;
-  const isProfessional = project.professionalId === dbUserId;
+  const isProfessional = canManageProject({
+    actorId: dbUserId,
+    projectProfessionalId: project.professionalId,
+  });
   if (!isClient && !isProfessional) {
     throw new Error("Not authorized to view this project");
   }

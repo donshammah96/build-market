@@ -7,7 +7,7 @@ import Google from "next-auth/providers/google";
 import GitHub from "next-auth/providers/github";
 import Facebook from "next-auth/providers/facebook";
 import Azure from "next-auth/providers/azure-ad";
-import { verifyScryptPassword } from "@/app/actions/passwordReset";
+import { verifyScryptPassword } from "@build/auth-server";
 import { getSqlClient } from "@/app/lib/infrastructure/db";
 
 async function getUser(email: string): Promise<User | undefined> {

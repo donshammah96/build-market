@@ -1,6 +1,6 @@
 /**
  * Shared Dashboard Widgets
- * 
+ *
  * Widgets that are used across all dashboard types.
  */
 

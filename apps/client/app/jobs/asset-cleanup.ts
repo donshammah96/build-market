@@ -8,7 +8,7 @@
  */
 
 import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
-import { redisConnection } from "@/app/lib/queues/redis-connection";
+import { redisConnection } from "@build/queue-server";
 import { prisma } from "@build/db";
 import { AssetCleanupService } from "@/app/lib/gdpr/services/asset-cleanup.service";
 import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";

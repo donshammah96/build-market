@@ -123,7 +123,12 @@ const ErrorState = memo(function ErrorState({ message }: { message: string }) {
 
 type ProfessionalDetailForDisplay = ProfessionalDetailResult & {
   licenseNumber?: string | null;
-  _count?: { reviews: number; projects: number; stores: number; properties: number };
+  _count?: {
+    reviews: number;
+    projects: number;
+    stores: number;
+    properties: number;
+  };
 };
 
 interface ProfileHeaderProps {
@@ -157,7 +162,8 @@ const ProfileHeader = memo(function ProfileHeader({
                 <AvatarImage
                   src={
                     professional.profileImage ??
-                    (professional.portfolios as Portfolio[])?.[0]?.images?.[0]?.url ??
+                    (professional.portfolios as Portfolio[])?.[0]?.images?.[0]
+                      ?.url ??
                     ""
                   }
                   alt={fullName}
@@ -259,7 +265,7 @@ const ProfileHeader = memo(function ProfileHeader({
                       rel="noopener noreferrer"
                       className={cn(
                         buttonVariants({ variant: "outline", size: "lg" }),
-                        "gap-2"
+                        "gap-2",
                       )}
                     >
                       <ExternalLink className="h-4 w-4" />
@@ -457,7 +463,13 @@ const ContactDialog = memo(function ContactDialog({
         clientEmail: data.clientEmail,
         clientPhone: data.clientPhone || undefined,
         title: data.message.substring(0, 200) || "Project inquiry",
-        projectType: projectType as "RESIDENTIAL" | "COMMERCIAL" | "RENOVATION" | "INTERIOR_DESIGN" | "LANDSCAPING" | "OTHER",
+        projectType: projectType as
+          | "RESIDENTIAL"
+          | "COMMERCIAL"
+          | "RENOVATION"
+          | "INTERIOR_DESIGN"
+          | "LANDSCAPING"
+          | "OTHER",
         message: data.message,
         location: data.location || undefined,
         budget,
@@ -470,7 +482,9 @@ const ContactDialog = memo(function ContactDialog({
           form.reset();
         },
         onError: (error) => {
-          toast.error(error instanceof Error ? error.message : "Failed to send message");
+          toast.error(
+            error instanceof Error ? error.message : "Failed to send message",
+          );
         },
       },
     );
@@ -723,15 +737,17 @@ const ProfileTabs = memo(function ProfileTabs({
             className="grid md:grid-cols-2 gap-6"
           >
             {professional.portfolios && professional.portfolios.length > 0 ? (
-              (professional.portfolios as Portfolio[]).map((portfolio, index) => (
-                <PortfolioCard
-                  key={portfolio.id}
-                  portfolio={portfolio}
-                  index={index}
-                  shouldAnimate={shouldAnimate}
-                  isInView={portfolioInView}
-                />
-              ))
+              (professional.portfolios as Portfolio[]).map(
+                (portfolio, index) => (
+                  <PortfolioCard
+                    key={portfolio.id}
+                    portfolio={portfolio}
+                    index={index}
+                    shouldAnimate={shouldAnimate}
+                    isInView={portfolioInView}
+                  />
+                ),
+              )
             ) : (
               <p className="col-span-full text-center text-slate-600 py-8">
                 No portfolio items available yet.
@@ -755,16 +771,18 @@ const ProfileTabs = memo(function ProfileTabs({
               className="space-y-6"
             >
               {professional.reviews && professional.reviews.length > 0 ? (
-                (professional.reviews as ProfessionalReview[]).map((review, index) => (
-                  <ReviewCard
-                    key={review.id}
-                    review={review}
-                    index={index}
-                    isLast={index === professional.reviews!.length - 1}
-                    shouldAnimate={shouldAnimate}
-                    isInView={reviewsInView}
-                  />
-                ))
+                (professional.reviews as ProfessionalReview[]).map(
+                  (review, index) => (
+                    <ReviewCard
+                      key={review.id}
+                      review={review}
+                      index={index}
+                      isLast={index === professional.reviews!.length - 1}
+                      shouldAnimate={shouldAnimate}
+                      isInView={reviewsInView}
+                    />
+                  ),
+                )
               ) : (
                 <p className="text-center text-slate-600 py-8">
                   No reviews available yet.
@@ -786,9 +804,11 @@ export default function ProfessionalProfilePage() {
   const params = useParams();
   const [isContactOpen, setIsContactOpen] = useState(false);
 
-  const { data: professional, isLoading: loading, error: queryError } = useProfessional(
-    params.id as string
-  );
+  const {
+    data: professional,
+    isLoading: loading,
+    error: queryError,
+  } = useProfessional(params.id as string);
   const error = queryError?.message ?? null;
 
   const handleContactOpen = useCallback(() => {
@@ -818,7 +838,7 @@ export default function ProfessionalProfilePage() {
       ? (
           (professional.reviews as { rating?: number }[]).reduce(
             (sum, review) => sum + Number(review.rating ?? 0),
-            0
+            0,
           ) / professional.reviews.length
         ).toFixed(1)
       : null;

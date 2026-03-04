@@ -48,7 +48,7 @@ function ProjectCard({ project }: ProjectCardProps) {
               "font-medium border-0 px-2 py-0.5 capitalize",
               isAlert
                 ? "bg-amber-50 text-amber-700"
-                : "bg-zinc-100 text-zinc-600"
+                : "bg-zinc-100 text-zinc-600",
             )}
           >
             {project.status.replace("_", " ")}

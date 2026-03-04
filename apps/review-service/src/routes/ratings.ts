@@ -64,4 +64,3 @@ router.get("/:entityType/:entityId", async (req: Request, res: Response) => {
 });
 
 export { router as ratingRoutes };
-

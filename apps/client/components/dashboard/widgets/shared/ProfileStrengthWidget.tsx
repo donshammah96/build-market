@@ -64,7 +64,7 @@ export function ProfileStrengthWidget({
     <Card
       className={cn(
         "border border-zinc-200 shadow-sm bg-white overflow-hidden",
-        className
+        className,
       )}
     >
       <CardHeader className="pb-3 pt-5 px-5">
@@ -92,7 +92,7 @@ export function ProfileStrengthWidget({
               ? "bg-emerald-500"
               : percentage >= 50
                 ? "bg-amber-500"
-                : "bg-red-500"
+                : "bg-red-500",
           )}
         />
 

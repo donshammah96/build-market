@@ -11,6 +11,7 @@ Production-ready chat components with real-time messaging, animations, and moder
 Main chat interface with messages display and input.
 
 **Features:**
+
 - ✅ Real-time messaging via WebSocket
 - ✅ Message encryption/decryption (handled by API)
 - ✅ Typing indicators (animated)
@@ -24,6 +25,7 @@ Main chat interface with messages display and input.
 - ✅ Responsive design
 
 **Props:**
+
 ```typescript
 interface ChatWindowProps {
   conversationId: string;
@@ -34,6 +36,7 @@ interface ChatWindowProps {
 ```
 
 **Usage:**
+
 ```typescript
 <ChatWindow
   conversationId="conv-123"
@@ -48,6 +51,7 @@ interface ChatWindowProps {
 Sidebar showing all conversations with search and selection.
 
 **Features:**
+
 - ✅ List all conversations
 - ✅ Search conversations
 - ✅ Unread count badges
@@ -60,6 +64,7 @@ Sidebar showing all conversations with search and selection.
 - ✅ Smooth animations
 
 **Props:**
+
 ```typescript
 interface ConversationsListProps {
   onSelectConversation: (conversationId: string, otherUserId: string) => void;
@@ -68,6 +73,7 @@ interface ConversationsListProps {
 ```
 
 **Usage:**
+
 ```typescript
 <ConversationsList
   onSelectConversation={handleSelect}
@@ -80,6 +86,7 @@ interface ConversationsListProps {
 Full-page layout combining conversations list and chat window.
 
 **Features:**
+
 - ✅ Split layout (1/3 - 2/3)
 - ✅ Responsive design
 - ✅ State management
@@ -87,6 +94,7 @@ Full-page layout combining conversations list and chat window.
 - ✅ Page animations
 
 **Usage:**
+
 ```typescript
 // app/(dashboard)/messages/page.tsx
 export default function MessagesPage() {
@@ -97,20 +105,24 @@ export default function MessagesPage() {
 ## Animations
 
 ### Message Animations
+
 - **Entry**: Slide up + fade in (0.2s)
 - **Exit**: Scale down + fade out
 - **Hover**: Slight scale up (1.02)
 
 ### Typing Indicator
+
 - **3 dots**: Sequential bounce animation
 - **Container**: Slide up + fade in/out
 
 ### Conversation Items
+
 - **Entry**: Slide from left with stagger
 - **Hover**: Background color transition
 - **Tap**: Scale down (0.98)
 
 ### Unread Badge
+
 - **Entry**: Scale from 0 to 1
 
 ## WebSocket Events
@@ -178,6 +190,7 @@ await messagingClient.markConversationAsRead(id);
 ## State Management
 
 Uses React Query for:
+
 - Caching
 - Optimistic updates
 - Auto-refetching
@@ -186,9 +199,7 @@ Uses React Query for:
 
 ```typescript
 // Query keys
-["conversations"] // List of conversations
-["conversation", id] // Single conversation
-["messages", conversationId] // Messages for conversation
+["conversations"][("conversation", id)][("messages", conversationId)]; // List of conversations // Single conversation // Messages for conversation
 ```
 
 ## Environment Variables
@@ -204,6 +215,7 @@ NEXT_PUBLIC_MESSAGING_SERVICE_URL=http://localhost:3010
 ### Theme Variables
 
 Components use CSS variables from your theme:
+
 - `--primary` - Primary color (sent messages)
 - `--muted` - Received messages background
 - `--accent` - Selected conversation
@@ -213,10 +225,14 @@ Components use CSS variables from your theme:
 
 ```css
 /* Adjust message bubble roundness */
-.rounded-2xl { border-radius: 1rem; }
+.rounded-2xl {
+  border-radius: 1rem;
+}
 
 /* Adjust heights */
-.h-[600px] { height: 600px; }
+.h-[600px] {
+  height: 600px;
+}
 ```
 
 ## Accessibility
@@ -239,15 +255,18 @@ Components use CSS variables from your theme:
 ## Responsive Design
 
 ### Mobile (< 768px)
+
 - Stacked layout
 - Full-width components
 - Adjusted padding
 
 ### Tablet (768px - 1024px)
+
 - 1/3 - 2/3 split
 - Comfortable spacing
 
 ### Desktop (> 1024px)
+
 - Full layout
 - Optimal spacing
 - Hover states
@@ -255,21 +274,24 @@ Components use CSS variables from your theme:
 ## Error Handling
 
 ### Network Errors
+
 ```typescript
 // Toast notification
 toast({
   variant: "destructive",
   title: "Failed to send message",
-  description: "Please try again"
+  description: "Please try again",
 });
 ```
 
 ### Socket Disconnection
+
 - Auto-reconnect (5 attempts)
 - Exponential backoff
 - User notification
 
 ### API Errors
+
 - Retry button
 - Error message display
 - Rollback optimistic updates
@@ -285,6 +307,7 @@ toast({
 ## Future Enhancements
 
 ### Planned Features
+
 - [ ] File attachments (UI ready)
 - [ ] Image uploads (UI ready)
 - [ ] Voice messages
@@ -306,12 +329,14 @@ toast({
 - [ ] Message export
 
 ### Performance
+
 - [ ] Virtual scrolling for large conversations
 - [ ] Message pagination (load older)
 - [ ] Image lazy loading
 - [ ] Service worker for offline
 
 ### UX Improvements
+
 - [ ] Drag & drop files
 - [ ] Copy message text
 - [ ] Message selection
@@ -324,23 +349,27 @@ toast({
 ## Troubleshooting
 
 ### Messages not loading
+
 1. Check API connection
 2. Verify authentication
 3. Check console for errors
 4. Verify `conversationId` is valid
 
 ### WebSocket not connecting
+
 1. Check `NEXT_PUBLIC_MESSAGING_SERVICE_URL`
 2. Verify messaging service is running
 3. Check `session.accessToken` exists
 4. Check browser console for errors
 
 ### Animations laggy
+
 1. Reduce `AnimatePresence` items
 2. Use `useReducedMotion` hook
 3. Disable animations on low-end devices
 
 ### Typing indicator stuck
+
 1. Check WebSocket connection
 2. Verify event handlers
 3. Check timeout (2s default)
@@ -363,6 +392,7 @@ toast({
 ## Testing
 
 ### Unit Tests (TODO)
+
 ```typescript
 // Test message sending
 it("should send message", async () => {
@@ -376,6 +406,7 @@ it("should show typing when user types", () => {
 ```
 
 ### E2E Tests (TODO)
+
 ```typescript
 // Test conversation flow
 test("user can send and receive messages", async () => {
@@ -386,8 +417,8 @@ test("user can send and receive messages", async () => {
 ## Support
 
 For issues or questions:
+
 1. Check [MESSAGING_API_SETUP.md](../MESSAGING_API_SETUP.md)
 2. Review messaging service logs
 3. Check browser console
 4. Verify environment variables
-

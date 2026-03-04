@@ -128,7 +128,10 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
     // Safe JSON parsing
     const parseResult = await safeParseJsonBody(req);
     if (!parseResult.success) {
-      return apiError(parseResult.error || "Invalid JSON body", HttpStatus.BAD_REQUEST);
+      return apiError(
+        parseResult.error || "Invalid JSON body",
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     const body = parseResult.data;

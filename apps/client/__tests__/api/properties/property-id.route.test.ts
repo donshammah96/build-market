@@ -114,7 +114,14 @@ describe("GET /api/properties/[id]", () => {
       agent: {
         userId: "agent_1",
         companyName: "Test Realty",
-        user: { firstName: "John", lastName: "Doe", avatar: null, email: "j/test.com", phone: null, status: "ACTIVE" },
+        user: {
+          firstName: "John",
+          lastName: "Doe",
+          avatar: null,
+          email: "j/test.com",
+          phone: null,
+          status: "ACTIVE",
+        },
       },
       _count: { inquiries: 3 },
       createdAt: new Date(),
@@ -122,11 +129,15 @@ describe("GET /api/properties/[id]", () => {
       deletedAt: null,
     };
 
-    vi.mocked(prisma.property.findUnique).mockResolvedValue(mockProperty as any);
+    vi.mocked(prisma.property.findUnique).mockResolvedValue(
+      mockProperty as any,
+    );
     // Mock update (view count)
     vi.mocked(prisma.property.update).mockResolvedValue({} as any);
 
-    const request = new NextRequest("http://localhost:3500/api/properties/prop_1");
+    const request = new NextRequest(
+      "http://localhost:3500/api/properties/prop_1",
+    );
     const response = await GET(request, {
       params: Promise.resolve({ id: "prop_1" }),
     });
@@ -141,7 +152,9 @@ describe("GET /api/properties/[id]", () => {
   it("returns 404 for non-existent property", async () => {
     vi.mocked(prisma.property.findUnique).mockResolvedValue(null);
 
-    const request = new NextRequest("http://localhost:3500/api/properties/nonexistent");
+    const request = new NextRequest(
+      "http://localhost:3500/api/properties/nonexistent",
+    );
     const response = await GET(request, {
       params: Promise.resolve({ id: "nonexistent" }),
     });
@@ -151,9 +164,12 @@ describe("GET /api/properties/[id]", () => {
 
   it("returns 400 for invalid ID", async () => {
     const { isValidId } = await import("@/app/lib/api/api-guards");
-    const mockErrorResponse = new Response(JSON.stringify({ error: "Invalid ID" }), {
-      status: 400,
-    });
+    const mockErrorResponse = new Response(
+      JSON.stringify({ error: "Invalid ID" }),
+      {
+        status: 400,
+      },
+    );
     vi.mocked(isValidId).mockReturnValueOnce(mockErrorResponse as any);
 
     const request = new NextRequest("http://localhost:3500/api/properties/");
@@ -181,7 +197,14 @@ describe("GET /api/properties/[id]", () => {
       agent: {
         userId: "agent_1",
         companyName: "Test",
-        user: { firstName: "J", lastName: "D", avatar: null, email: "j/t.com", phone: null, status: "ACTIVE" },
+        user: {
+          firstName: "J",
+          lastName: "D",
+          avatar: null,
+          email: "j/t.com",
+          phone: null,
+          status: "ACTIVE",
+        },
       },
       _count: { inquiries: 0 },
       createdAt: new Date(),
@@ -189,10 +212,14 @@ describe("GET /api/properties/[id]", () => {
       deletedAt: null,
     };
 
-    vi.mocked(prisma.property.findUnique).mockResolvedValue(mockProperty as any);
+    vi.mocked(prisma.property.findUnique).mockResolvedValue(
+      mockProperty as any,
+    );
     vi.mocked(prisma.property.update).mockResolvedValue({} as any);
 
-    const request = new NextRequest("http://localhost:3500/api/properties/prop_1");
+    const request = new NextRequest(
+      "http://localhost:3500/api/properties/prop_1",
+    );
     const response = await GET(request, {
       params: Promise.resolve({ id: "prop_1" }),
     });

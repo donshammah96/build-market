@@ -295,9 +295,8 @@ describe("FieldEncryption", () => {
     it("should throw DecryptionError in production mode on failure", async () => {
       process.env.ENCRYPTION_MIGRATION_MODE = "false";
 
-      const { FieldEncryption, DecryptionError } = await import(
-        "../field-encryption"
-      );
+      const { FieldEncryption, DecryptionError } =
+        await import("../field-encryption");
 
       // Create corrupted encrypted data
       const corrupted =

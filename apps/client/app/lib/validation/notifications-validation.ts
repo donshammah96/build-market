@@ -60,11 +60,7 @@ export const MarkReadSchema = z.object({
 
 /** DELETE /api/notifications — batch delete */
 export const BatchDeleteSchema = z.object({
-  id: z.union([
-    z.string().uuid(),
-    z.literal("all"),
-    z.literal("read"),
-  ]),
+  id: z.union([z.string().uuid(), z.literal("all"), z.literal("read")]),
 });
 
 /** PATCH /api/notifications/[id] — update single notification */

@@ -155,7 +155,12 @@ export class AnonymizationService {
   /**
    * Phase 1: Deactivate User (Soft Delete / Grace Period)
    */
-  static async deactivateUser(userId: string, reason: string = "USER_REQUEST", ipAddress?: string, userAgent?: string) {
+  static async deactivateUser(
+    userId: string,
+    reason: string = "USER_REQUEST",
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     const deletionDate = new Date();
     deletionDate.setDate(deletionDate.getDate() + 30); // 30 day grace
 
@@ -170,7 +175,7 @@ export class AnonymizationService {
           metadata: {
             ipAddress,
             userAgent,
-          }
+          },
           // We do NOT delete data here yet
         },
       });
@@ -220,7 +225,8 @@ export class AnonymizationService {
       throw new Error("User not found");
     }
 
-    const isDeletionScheduled = user.status === "DEACTIVATED" && !!user.scheduledDeletionAt;
+    const isDeletionScheduled =
+      user.status === "DEACTIVATED" && !!user.scheduledDeletionAt;
     let daysRemaining = 0;
     let canCancel = false;
 
@@ -228,7 +234,10 @@ export class AnonymizationService {
       const now = new Date();
       daysRemaining = Math.max(
         0,
-        Math.ceil((user.scheduledDeletionAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+        Math.ceil(
+          (user.scheduledDeletionAt.getTime() - now.getTime()) /
+            (1000 * 60 * 60 * 24),
+        ),
       );
       canCancel = now < user.scheduledDeletionAt;
     }

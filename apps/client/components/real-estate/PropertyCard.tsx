@@ -35,7 +35,7 @@ const PropertyCard: React.FC<PropertyCardProps> = memo(function PropertyCard({
       <Card
         className={cn(
           "h-full flex flex-col border border-zinc-200 bg-white overflow-hidden rounded-xl shadow-sm",
-          "transition-all duration-300 hover:shadow-lg"
+          "transition-all duration-300 hover:shadow-lg",
         )}
       >
         {/* Image Section */}

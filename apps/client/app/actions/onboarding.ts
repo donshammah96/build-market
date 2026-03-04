@@ -216,14 +216,17 @@ export async function submitOnboarding(data: unknown): Promise<ActionResponse> {
             verified: false,
           },
         });
-
         // License
         if ("license" in proData && proData.license) {
           const license = proData.license as {
             authority?: string;
             licenseNumber?: string;
           };
-          if (license.authority && license.licenseNumber) {
+          if (
+            license.authority &&
+            license.authority !== "OTHER" &&
+            license.licenseNumber
+          ) {
             await tx.professionalLicense.upsert({
               where: {
                 professionalId_authority_licenseNumber: {
@@ -245,32 +248,74 @@ export async function submitOnboarding(data: unknown): Promise<ActionResponse> {
         }
 
         // Documents
-        if ("certificatesUrls" in proData) {
-          const certUrls = (proData.certificatesUrls as string[]) || [];
-          for (let i = 0; i < certUrls.length; i++) {
-            await tx.professionalDocument.create({
-              data: {
-                professionalId: professionalProfile.userId,
-                category: "EDUCATION_CERT",
-                title: `Professional Certificate ${i + 1}`,
-                issuer: "Self-reported",
-                fileUrl: certUrls[i],
-                status: "PENDING",
-              },
-            });
-          }
-        }
+        if (
+          "documents" in proData &&
+          Array.isArray((proData as any).documents)
+        ) {
+          const docs = (proData as any).documents;
+          const uploadIds = docs.map((d: any) => d.uploadId).filter(Boolean);
+          const stagedUploads = await tx.onboardingUpload.findMany({
+            where: {
+              id: { in: uploadIds },
+              clerkId,
+              status: "STAGED",
+            },
+          });
 
-        if ("idDocumentsUrls" in proData) {
-          const idUrls = (proData.idDocumentsUrls as string[]) || [];
-          for (let i = 0; i < idUrls.length; i++) {
+          if (
+            uploadIds.length > 0 &&
+            stagedUploads.length !== uploadIds.length
+          ) {
+            throw new Error("Invalid or expired document uploads");
+          }
+
+          for (let i = 0; i < docs.length; i++) {
+            const docData = docs[i];
+            const staged = stagedUploads.find((s) => s.id === docData.uploadId);
+            let assetId: string | undefined = undefined;
+
+            if (staged) {
+              let asset = await tx.asset.findUnique({
+                where: { checksum: staged.checksum },
+              });
+              if (!asset) {
+                asset = await tx.asset.create({
+                  data: {
+                    uploaderId: user.id,
+                    originalName: staged.originalName,
+                    mimeType: staged.mimeType,
+                    size: staged.size,
+                    checksum: staged.checksum,
+                    bucket: staged.storageBucket,
+                    key: staged.storageKey,
+                    cdnUrl: staged.tempUrl,
+                  },
+                });
+              }
+              assetId = asset.id;
+
+              await tx.onboardingUpload.update({
+                where: { id: staged.id },
+                data: {
+                  status: "CONSUMED",
+                  consumedAt: new Date(),
+                  consumedByUserId: user.id,
+                },
+              });
+            }
+
             await tx.professionalDocument.create({
               data: {
                 professionalId: professionalProfile.userId,
-                category: "ID_OR_PASSPORT",
-                title: `ID Document ${i + 1}`,
-                issuer: "Government/Official",
-                fileUrl: idUrls[i],
+                category:
+                  docData.category as import("@prisma/client").DocumentCategory,
+                title: docData.title || `Document ${i + 1}`,
+                issuer:
+                  docData.category === "ID_OR_PASSPORT"
+                    ? "Government/Official"
+                    : "Self-reported",
+                assetId,
+                fileUrl: docData.previewUrl || staged?.tempUrl || null,
                 status: "PENDING",
               },
             });

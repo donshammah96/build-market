@@ -29,8 +29,8 @@ async function resolveDbUserId(): Promise<string> {
 
 Creates a project for the authenticated user (as client).
 
-| Input | Type | Description |
-|-------|------|-------------|
+| Input  | Type                       | Description                                                                                  |
+| ------ | -------------------------- | -------------------------------------------------------------------------------------------- |
 | `data` | `CreateProjectActionInput` | Project fields; `clientId` is injected from auth; optional `idempotencyKey` for safe retries |
 
 **Idempotency**: Uses `IdempotencyService` with scope `"project"`. Accepts optional `idempotencyKey`; otherwise generates SHA-256 key from user + payload. Duplicate requests return cached response; in-flight requests throw "Request is being processed. Please wait."
@@ -42,6 +42,7 @@ Creates a project for the authenticated user (as client).
 **Service**: `createProject` from `@/lib/services/projects`
 
 **Schema alignment**: Fields map to Prisma Project model:
+
 - `title`, `description`, `type`, `contractType`
 - `budgetMin`, `budgetMax`, `agreedPrice` (not `budget`)
 - `startDate`, `endDate`, `location`, `siteAddress`, `county`
@@ -53,9 +54,9 @@ Creates a project for the authenticated user (as client).
 
 Returns a project if the authenticated user is the client or professional.
 
-| Input | Type | Description |
-|-------|------|-------------|
-| `id` | `string` | Project UUID |
+| Input | Type     | Description  |
+| ----- | -------- | ------------ |
+| `id`  | `string` | Project UUID |
 
 **Validation**: `isValidId(id)` — rejects empty/invalid IDs.
 
@@ -69,8 +70,8 @@ Returns a project if the authenticated user is the client or professional.
 
 Returns projects for the authenticated user.
 
-| Input | Type | Description |
-|-------|------|-------------|
+| Input  | Type                         | Description        |
+| ------ | ---------------------------- | ------------------ |
 | `role` | `'client' \| 'professional'` | Default `'client'` |
 
 **Auth**: Resolves Clerk → DB user; filters by `clientId` (client) or `professionalId` (professional).
@@ -85,30 +86,30 @@ Returns projects for the authenticated user.
 
 From `@/app/lib/validation/projects-validation`:
 
-| Field | Type | Required | Default |
-|-------|------|----------|---------|
-| `clientId` | `string` (UUID) | Yes | — |
-| `title` | `string` (3–200 chars) | Yes | — |
-| `description` | `string` | No | — |
-| `type` | `ProjectType` | No | `RESIDENTIAL` |
-| `contractType` | `ContractType` | No | `FULL_CONTRACT` |
-| `budgetMin` | `number` | No | — |
-| `budgetMax` | `number` | No | — |
-| `agreedPrice` | `number` | No | — |
-| `startDate` | `string` (ISO datetime) | No | — |
-| `endDate` | `string` (ISO datetime) | No | — |
-| `status` | `ProjectStatus` | No | `PLANNING` |
-| `location` | `string` | No | — |
-| `siteAddress` | `string` | No | — |
-| `county` | `County` | No | — |
+| Field          | Type                    | Required | Default         |
+| -------------- | ----------------------- | -------- | --------------- |
+| `clientId`     | `string` (UUID)         | Yes      | —               |
+| `title`        | `string` (3–200 chars)  | Yes      | —               |
+| `description`  | `string`                | No       | —               |
+| `type`         | `ProjectType`           | No       | `RESIDENTIAL`   |
+| `contractType` | `ContractType`          | No       | `FULL_CONTRACT` |
+| `budgetMin`    | `number`                | No       | —               |
+| `budgetMax`    | `number`                | No       | —               |
+| `agreedPrice`  | `number`                | No       | —               |
+| `startDate`    | `string` (ISO datetime) | No       | —               |
+| `endDate`      | `string` (ISO datetime) | No       | —               |
+| `status`       | `ProjectStatus`         | No       | `PLANNING`      |
+| `location`     | `string`                | No       | —               |
+| `siteAddress`  | `string`                | No       | —               |
+| `county`       | `County`                | No       | —               |
 
 ### Ownership Rules
 
-| Action | Who can call | Rule |
-|--------|--------------|------|
-| `createProjectAction` | Authenticated user | Creates as client; `clientId` = resolved user |
-| `getProjectAction` | Client or professional | Must be `clientId` or `professionalId` |
-| `getUserProjectsAction` | Authenticated user | Returns own projects by role |
+| Action                  | Who can call           | Rule                                          |
+| ----------------------- | ---------------------- | --------------------------------------------- |
+| `createProjectAction`   | Authenticated user     | Creates as client; `clientId` = resolved user |
+| `getProjectAction`      | Client or professional | Must be `clientId` or `professionalId`        |
+| `getUserProjectsAction` | Authenticated user     | Returns own projects by role                  |
 
 ---
 

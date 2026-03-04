@@ -62,7 +62,14 @@ router.post("/", async (req: Request, res: Response) => {
       images,
     } = req.body;
 
-    if (!userId || !userName || !entityType || !entityId || !rating || !content) {
+    if (
+      !userId ||
+      !userName ||
+      !entityType ||
+      !entityId ||
+      !rating ||
+      !content
+    ) {
       return res.status(400).json({
         success: false,
         error: "Missing required fields",
@@ -154,7 +161,7 @@ router.post("/:id/flag", async (req: Request, res: Response) => {
     const review = await Review.findByIdAndUpdate(
       req.params.id,
       { flagged: true },
-      { new: true }
+      { new: true },
     );
 
     if (!review) {
@@ -191,7 +198,7 @@ router.patch("/:id/moderate", async (req: Request, res: Response) => {
     const review = await Review.findByIdAndUpdate(
       req.params.id,
       { moderationStatus },
-      { new: true }
+      { new: true },
     );
 
     if (!review) {
@@ -214,4 +221,3 @@ router.patch("/:id/moderate", async (req: Request, res: Response) => {
 });
 
 export { router as reviewRoutes };
-

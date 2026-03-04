@@ -10,12 +10,12 @@ List calendar events for the authenticated professional.
 
 **Query Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `start` | ISO 8601 datetime | Filter events starting from this date |
-| `end` | ISO 8601 datetime | Filter events ending at this date |
-| `type` | `CalendarEventType` enum | Filter by event type |
-| `status` | `CalendarEventStatus` enum | Filter by event status |
+| Parameter | Type                       | Description                           |
+| --------- | -------------------------- | ------------------------------------- |
+| `start`   | ISO 8601 datetime          | Filter events starting from this date |
+| `end`     | ISO 8601 datetime          | Filter events ending at this date     |
+| `type`    | `CalendarEventType` enum   | Filter by event type                  |
+| `status`  | `CalendarEventStatus` enum | Filter by event status                |
 
 **Response:** `200 OK` — Array of calendar events with linked client/project summaries.
 
@@ -25,24 +25,24 @@ Create a new calendar event.
 
 **Body:**
 
-| Field | Type | Required | Default |
-|-------|------|----------|---------|
-| `title` | `string` (3–200 chars) | Yes | — |
-| `description` | `string` (max 5000) | No | — |
-| `type` | `CalendarEventType` | No | `MEETING` |
-| `status` | `CalendarEventStatus` | No | `SCHEDULED` |
-| `startDate` | ISO 8601 datetime | Yes | — |
-| `endDate` | ISO 8601 datetime | Yes | — |
-| `isAllDay` | `boolean` | No | `false` |
-| `timeZone` | `string` | No | `Africa/Nairobi` |
-| `recurrenceRule` | `string` | No | — |
-| `location` | `string` (max 500) | No | — |
-| `meetingUrl` | `string` (URL) | No | — |
-| `reminders` | `number[]` (minutes) | No | `[30]` |
-| `color` | `string` | No | — |
-| `clientId` | `UUID` | No | — |
-| `projectId` | `UUID` | No | — |
-| `guestEmails` | `string[]` (emails) | No | `[]` |
+| Field            | Type                   | Required | Default          |
+| ---------------- | ---------------------- | -------- | ---------------- |
+| `title`          | `string` (3–200 chars) | Yes      | —                |
+| `description`    | `string` (max 5000)    | No       | —                |
+| `type`           | `CalendarEventType`    | No       | `MEETING`        |
+| `status`         | `CalendarEventStatus`  | No       | `SCHEDULED`      |
+| `startDate`      | ISO 8601 datetime      | Yes      | —                |
+| `endDate`        | ISO 8601 datetime      | Yes      | —                |
+| `isAllDay`       | `boolean`              | No       | `false`          |
+| `timeZone`       | `string`               | No       | `Africa/Nairobi` |
+| `recurrenceRule` | `string`               | No       | —                |
+| `location`       | `string` (max 500)     | No       | —                |
+| `meetingUrl`     | `string` (URL)         | No       | —                |
+| `reminders`      | `number[]` (minutes)   | No       | `[30]`           |
+| `color`          | `string`               | No       | —                |
+| `clientId`       | `UUID`                 | No       | —                |
+| `projectId`      | `UUID`                 | No       | —                |
+| `guestEmails`    | `string[]` (emails)    | No       | `[]`             |
 
 **Response:** `201 Created` — The created calendar event.
 

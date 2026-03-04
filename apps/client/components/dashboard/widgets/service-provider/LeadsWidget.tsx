@@ -139,7 +139,7 @@ export function LeadsWidget({
     <Card
       className={cn(
         "border border-zinc-200 shadow-sm overflow-hidden bg-white",
-        className
+        className,
       )}
     >
       <CardHeader className="border-b border-zinc-100 py-5 px-6 flex flex-row items-center justify-between">

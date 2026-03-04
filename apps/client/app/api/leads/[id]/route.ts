@@ -43,17 +43,19 @@ export async function GET(
   }
 
   const executor = getResilientExecutor();
-  const result = await executor.execute(
-    () => getPublicLeadStatus(id),
-    { operationName: "get_public_lead_status" },
-  );
+  const result = await executor.execute(() => getPublicLeadStatus(id), {
+    operationName: "get_public_lead_status",
+  });
 
   if (!result.success || !result.data) {
     logger.error("Failed to fetch lead status", result.error, {
       correlationId,
       leadId: id,
     });
-    return apiError("Failed to fetch lead status", HttpStatus.INTERNAL_SERVER_ERROR);
+    return apiError(
+      "Failed to fetch lead status",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
   }
 
   const serviceResult = result.data as

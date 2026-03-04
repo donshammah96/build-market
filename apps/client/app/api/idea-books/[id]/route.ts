@@ -111,12 +111,7 @@ export const PATCH = withAuth<IdeaBookParams>(
     }
 
     const data = validation.data;
-    if (
-      !data.title &&
-      !data.description &&
-      !data.category &&
-      !data.privacy
-    ) {
+    if (!data.title && !data.description && !data.category && !data.privacy) {
       return apiError("No fields to update", HttpStatus.BAD_REQUEST);
     }
 

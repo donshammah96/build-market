@@ -12,7 +12,9 @@ interface DashboardData {
 }
 
 export default function ClientDashboard() {
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,14 +22,14 @@ export default function ClientDashboard() {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        const response = await fetch('/api/client/dashboard');
-        
-        if (!response.ok) throw new Error('Failed to fetch dashboard data');
+        const response = await fetch("/api/client/dashboard");
+
+        if (!response.ok) throw new Error("Failed to fetch dashboard data");
 
         const data = await response.json();
         setDashboardData(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
+        setError(err instanceof Error ? err.message : "An error occurred");
       } finally {
         setLoading(false);
       }

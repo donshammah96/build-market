@@ -6,7 +6,7 @@ import type { ProfessionalListResult } from "@/lib/services/professionals";
 
 /** Map service list result to ProfessionalCardData[] for cards/grids */
 export function mapToListCardData(
-  result: ProfessionalListResult | undefined
+  result: ProfessionalListResult | undefined,
 ): ProfessionalCardData[] {
   if (!result?.professionals) return [];
 
@@ -14,7 +14,7 @@ export function mapToListCardData(
     const name =
       p.user?.firstName || p.user?.lastName
         ? `${p.user.firstName ?? ""} ${p.user.lastName ?? ""}`.trim()
-        : p.companyName ?? "Professional";
+        : (p.companyName ?? "Professional");
 
     const services = (p.skills ?? []).map((name, i) => ({
       id: `s-${p.id}-${i}`,
@@ -42,8 +42,12 @@ export function mapToListCardData(
       profession: (p.profession
         ? String(p.profession).toLowerCase().replace(/-/g, "_")
         : "other") as ProfessionalCardData["profession"],
-      professionLabel: (p as { professionLabel?: string }).professionLabel ?? "Professional",
-      title: p.skills?.[0] ?? (p as { professionLabel?: string }).professionLabel ?? "Professional",
+      professionLabel:
+        (p as { professionLabel?: string }).professionLabel ?? "Professional",
+      title:
+        p.skills?.[0] ??
+        (p as { professionLabel?: string }).professionLabel ??
+        "Professional",
       bio: p.bio ?? undefined,
       services,
       serviceNames: p.skills,
@@ -52,7 +56,8 @@ export function mapToListCardData(
       verified: p.verified ?? false,
       rating: p.rating ?? undefined,
       reviewCount: p.reviewCount ?? 0,
-      projectCount: (p as { _count?: { projects?: number } })._count?.projects ?? 0,
+      projectCount:
+        (p as { _count?: { projects?: number } })._count?.projects ?? 0,
       portfolioImage: (p as { portfolioImage?: string }).portfolioImage,
       profileImage: p.user?.avatar ?? undefined,
       city: p.city ?? undefined,

@@ -138,7 +138,7 @@ export function StoreOverviewWidget({
     <Card
       className={cn(
         "border border-zinc-200 shadow-sm bg-white overflow-hidden",
-        className
+        className,
       )}
     >
       {/* Header */}
@@ -173,7 +173,11 @@ export function StoreOverviewWidget({
             icon={ShoppingCart}
             label="Total Orders"
             value={store.totalOrders}
-            subtext={store.pendingOrders > 0 ? `${store.pendingOrders} pending` : undefined}
+            subtext={
+              store.pendingOrders > 0
+                ? `${store.pendingOrders} pending`
+                : undefined
+            }
           />
           <StatItem
             icon={Package}
@@ -210,9 +214,7 @@ export function StoreOverviewWidget({
             className="flex-1 text-xs bg-zinc-900 hover:bg-zinc-800"
             asChild
           >
-            <Link href="/professional-portal/products/new">
-              Add Product
-            </Link>
+            <Link href="/professional-portal/products/new">Add Product</Link>
           </Button>
         </div>
       </CardContent>

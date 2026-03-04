@@ -51,7 +51,7 @@ export const ReviewsSection = memo(function ReviewsSection({
     return allReviews.filter(
       (review: Review) =>
         review.quote.toLowerCase().includes(term) ||
-        review.name.toLowerCase().includes(term)
+        review.name.toLowerCase().includes(term),
     );
   }, [searchTerm]);
 
@@ -86,7 +86,7 @@ export const ReviewsSection = memo(function ReviewsSection({
           <div
             className={cn(
               "hidden sm:block",
-              isInView && shouldAnimate && "animate-slide-in-right"
+              isInView && shouldAnimate && "animate-slide-in-right",
             )}
             style={{ animationDelay: "200ms" }}
           >
@@ -106,7 +106,7 @@ export const ReviewsSection = memo(function ReviewsSection({
               key={review.id}
               className={cn(
                 "h-full",
-                isInView && shouldAnimate && "animate-fade-in-up"
+                isInView && shouldAnimate && "animate-fade-in-up",
               )}
               style={{
                 animationDelay:

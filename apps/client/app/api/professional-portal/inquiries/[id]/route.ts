@@ -65,10 +65,14 @@ export const GET = withAuth<InquiryParams>(
 
     const data = result.data;
     if (!data) {
-      return apiError("Failed to fetch inquiry", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to fetch inquiry",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
     if (data.success === false) {
-      if (data.error === "not_found") return apiError("Inquiry not found", HttpStatus.NOT_FOUND);
+      if (data.error === "not_found")
+        return apiError("Inquiry not found", HttpStatus.NOT_FOUND);
       return apiError("Unauthorized", HttpStatus.FORBIDDEN);
     }
     return apiSuccess(data.data, HttpStatus.OK);
@@ -175,7 +179,8 @@ export const PATCH = withAuth<InquiryParams>(
     const data = result.data;
     if (data.success === false) {
       await IdempotencyService.fail(idempotencyKey);
-      if (data.error === "not_found") return apiError("Inquiry not found", HttpStatus.NOT_FOUND);
+      if (data.error === "not_found")
+        return apiError("Inquiry not found", HttpStatus.NOT_FOUND);
       return apiError("Unauthorized", HttpStatus.FORBIDDEN);
     }
     await IdempotencyService.complete(idempotencyKey, data.data);
@@ -204,7 +209,10 @@ export const DELETE = withAuth<InquiryParams>(
 
     const idempotencyKey =
       req.headers.get("Idempotency-Key") ||
-      IdempotencyService.generateKey(dbUserId, "DELETE", { inquiryId, ...(body && typeof body === 'object' ? body : {}) });
+      IdempotencyService.generateKey(dbUserId, "DELETE", {
+        inquiryId,
+        ...(body && typeof body === "object" ? body : {}),
+      });
 
     const idempotencyCheck = await IdempotencyService.checkOrCreate(
       idempotencyKey,
@@ -253,11 +261,14 @@ export const DELETE = withAuth<InquiryParams>(
     const data = result.data;
     if (data.success === false) {
       await IdempotencyService.fail(idempotencyKey);
-      if (data.error === "not_found") return apiError("Inquiry not found", HttpStatus.NOT_FOUND);
+      if (data.error === "not_found")
+        return apiError("Inquiry not found", HttpStatus.NOT_FOUND);
       return apiError("Unauthorized", HttpStatus.FORBIDDEN);
     }
-    
-    await IdempotencyService.complete(idempotencyKey, { message: "Inquiry deleted successfully" });
+
+    await IdempotencyService.complete(idempotencyKey, {
+      message: "Inquiry deleted successfully",
+    });
     return apiSuccess(
       { message: "Inquiry deleted successfully" },
       HttpStatus.OK,

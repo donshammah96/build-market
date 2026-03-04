@@ -23,8 +23,12 @@ export default function CompleteProfilePage() {
         yearsExperience: data.yearsExperience ?? undefined,
         website: data.website,
         bio: data.bio,
-        certificatesUrls: data.certificatesUrls,
-        idDocumentsUrls: data.idDocumentsUrls,
+        documents: data.documents
+          ?.filter((doc) => doc.uploadId != null)
+          .map((doc) => ({
+            ...doc,
+            uploadId: doc.uploadId as string,
+          })),
         storeData: data.stores,
         propertyData: data.properties,
         boardRegistrationNumber: data.boardRegistrationNumber,

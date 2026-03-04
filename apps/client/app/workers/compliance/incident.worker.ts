@@ -1,12 +1,13 @@
 import { Worker, Job } from "bullmq";
-import { redisConnection } from "@/app/lib/queues/redis-connection";
 import {
+  redisConnection,
   incidentQueue,
   IncidentJobData,
   ComplianceJobs,
-} from "@/app/lib/queues/compliance.queue";
+  queueUserNotifications,
+} from "@build/queue-server";
 import { prisma } from "@build/db";
-import { sendEmail } from "@/app/lib/infrastructure/mailer";
+import { sendEmail } from "@build/mail-server";
 import { sendSMS } from "@/app/lib/infrastructure/sms";
 import { IncidentSeverity } from "@prisma/client";
 
@@ -95,10 +96,6 @@ async function handleEmergencyProtocol(incidentId: string, job: Job) {
   const affectedUsers = await identifyAffectedUsers(incident);
 
   if (affectedUsers.length > 0 && !incident.usersNotified) {
-    const { queueUserNotifications } = await import(
-      "@/app/lib/queues/compliance.queue"
-    );
-
     await queueUserNotifications(incidentId, affectedUsers, {
       template: "BREACH_NOTIFICATION",
       channel: "EMAIL",

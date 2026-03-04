@@ -4,7 +4,7 @@ import {
   PropertyCategory,
   PropertyStatus,
   Prisma,
-  County
+  County,
 } from "@prisma/client";
 
 export interface PropertyFilters {
@@ -85,7 +85,7 @@ export interface PropertyDetail {
   featured: boolean;
   verified: boolean;
   createdAt: string; // ISO Date
-  
+
   images: {
     id: string;
     url: string;
@@ -121,7 +121,9 @@ export class PropertyRepository {
   /**
    * Find properties with filters, sorting, and pagination
    */
-  async findMany(filters: PropertyFilters = {}): Promise<PropertyRepositoryResult> {
+  async findMany(
+    filters: PropertyFilters = {},
+  ): Promise<PropertyRepositoryResult> {
     const {
       type,
       category,
@@ -234,7 +236,7 @@ export class PropertyRepository {
         bedrooms: true,
         bathrooms: true,
         buildingSize: true, // using buildingSize as 'area' default
-        plotSize: true,     // fallback for Land
+        plotSize: true, // fallback for Land
         areaUnit: true,
         featured: true,
         verified: true,
@@ -244,9 +246,10 @@ export class PropertyRepository {
           take: 1, // Only need cover image
           select: {
             url: true, // Legacy
-            asset: {   // New Asset system
-              select: { cdnUrl: true } 
-            }
+            asset: {
+              // New Asset system
+              select: { cdnUrl: true },
+            },
           },
         },
         agent: {
@@ -277,7 +280,10 @@ export class PropertyRepository {
       }
 
       // Agent name resolution
-      const agentName = `${p.agent.user.firstName ?? ""} ${p.agent.user.lastName ?? ""}`.trim() || p.agent.companyName || "Agent";
+      const agentName =
+        `${p.agent.user.firstName ?? ""} ${p.agent.user.lastName ?? ""}`.trim() ||
+        p.agent.companyName ||
+        "Agent";
 
       return {
         id: p.id,
@@ -358,7 +364,7 @@ export class PropertyRepository {
             url: true, // Legacy
             caption: true,
             isMain: true,
-            asset: { select: { cdnUrl: true } }
+            asset: { select: { cdnUrl: true } },
           },
         },
         attachments: {
@@ -367,7 +373,7 @@ export class PropertyRepository {
             title: true,
             type: true,
             fileUrl: true, // Legacy
-            asset: { select: { cdnUrl: true } }
+            asset: { select: { cdnUrl: true } },
           },
         },
         agent: {
@@ -395,7 +401,7 @@ export class PropertyRepository {
     if (!property) return null;
 
     // Transform images
-    const images = property.images.map(img => ({
+    const images = property.images.map((img) => ({
       id: img.id,
       url: img.asset?.cdnUrl ?? img.url ?? "/placeholder-property.jpg",
       caption: img.caption,
@@ -403,7 +409,7 @@ export class PropertyRepository {
     }));
 
     // Transform attachments
-    const attachments = property.attachments.map(att => ({
+    const attachments = property.attachments.map((att) => ({
       id: att.id,
       title: att.title,
       type: att.type,
@@ -413,16 +419,21 @@ export class PropertyRepository {
     // Transform Agent
     const agent = {
       id: property.agent.userId,
-      name: `${property.agent.user.firstName ?? ""} ${property.agent.user.lastName ?? ""}`.trim() || property.agent.companyName || "Agent",
+      name:
+        `${property.agent.user.firstName ?? ""} ${property.agent.user.lastName ?? ""}`.trim() ||
+        property.agent.companyName ||
+        "Agent",
       company: property.agent.companyName,
-      location: `${property.agent.city ?? ""}, ${property.agent.county ?? ""}`.trim().replace(/^, |, $/g, ""),
+      location: `${property.agent.city ?? ""}, ${property.agent.county ?? ""}`
+        .trim()
+        .replace(/^, |, $/g, ""),
       bio: property.agent.bio,
       avatar: property.agent.user.avatar,
       verified: property.agent.verified,
       contact: {
         email: property.agent.user.email,
         phone: property.agent.user.phone,
-      }
+      },
     };
 
     return {
@@ -503,7 +514,7 @@ export class PropertyRepository {
         bedrooms: true,
         bathrooms: true,
         buildingSize: true, // using buildingSize as 'area' default
-        plotSize: true,     // fallback for Land
+        plotSize: true, // fallback for Land
         areaUnit: true,
         featured: true,
         verified: true,
@@ -513,9 +524,10 @@ export class PropertyRepository {
           take: 1, // Only need cover image
           select: {
             url: true, // Legacy
-            asset: {   // New Asset system
-              select: { cdnUrl: true } 
-            }
+            asset: {
+              // New Asset system
+              select: { cdnUrl: true },
+            },
           },
         },
         agent: {
@@ -543,8 +555,11 @@ export class PropertyRepository {
         if (firstImg.asset?.cdnUrl) image = firstImg.asset.cdnUrl;
         else if (firstImg.url) image = firstImg.url;
       }
-      
-      const agentName = `${p.agent.user.firstName ?? ""} ${p.agent.user.lastName ?? ""}`.trim() || p.agent.companyName || "Agent";
+
+      const agentName =
+        `${p.agent.user.firstName ?? ""} ${p.agent.user.lastName ?? ""}`.trim() ||
+        p.agent.companyName ||
+        "Agent";
 
       return {
         id: p.id,
@@ -598,7 +613,7 @@ export class PropertyRepository {
         bedrooms: true,
         bathrooms: true,
         buildingSize: true, // using buildingSize as 'area' default
-        plotSize: true,     // fallback for Land
+        plotSize: true, // fallback for Land
         areaUnit: true,
         featured: true,
         verified: true,
@@ -608,9 +623,10 @@ export class PropertyRepository {
           take: 1, // Only need cover image
           select: {
             url: true, // Legacy
-            asset: {   // New Asset system
-              select: { cdnUrl: true } 
-            }
+            asset: {
+              // New Asset system
+              select: { cdnUrl: true },
+            },
           },
         },
         agent: {
@@ -637,8 +653,11 @@ export class PropertyRepository {
         if (firstImg.asset?.cdnUrl) image = firstImg.asset.cdnUrl;
         else if (firstImg.url) image = firstImg.url;
       }
-      
-      const agentName = `${p.agent.user.firstName ?? ""} ${p.agent.user.lastName ?? ""}`.trim() || p.agent.companyName || "Agent";
+
+      const agentName =
+        `${p.agent.user.firstName ?? ""} ${p.agent.user.lastName ?? ""}`.trim() ||
+        p.agent.companyName ||
+        "Agent";
 
       return {
         id: p.id,

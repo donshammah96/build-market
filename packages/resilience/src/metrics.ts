@@ -2,10 +2,10 @@
  * Comprehensive metrics and observability utilities
  */
 
-import { MetricData } from './types';
-import { Logger } from './logger';
+import { MetricData } from "./types";
+import { Logger } from "./logger";
 
-export type MetricType = 'counter' | 'gauge' | 'histogram' | 'summary';
+export type MetricType = "counter" | "gauge" | "histogram" | "summary";
 
 export interface Metric {
   name: string;
@@ -42,7 +42,9 @@ export class MetricsCollector {
   private readonly logger?: Logger;
 
   // Default histogram buckets (in milliseconds for duration metrics)
-  private readonly defaultBuckets = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
+  private readonly defaultBuckets = [
+    10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000,
+  ];
 
   constructor(logger?: Logger) {
     this.logger = logger;
@@ -51,7 +53,11 @@ export class MetricsCollector {
   /**
    * Increment a counter
    */
-  incrementCounter(name: string, value: number = 1, tags?: Record<string, string>): void {
+  incrementCounter(
+    name: string,
+    value: number = 1,
+    tags?: Record<string, string>,
+  ): void {
     const key = this.getKey(name, tags);
     const current = this.counters.get(key) || 0;
     this.counters.set(key, current + value);
@@ -68,7 +74,11 @@ export class MetricsCollector {
   /**
    * Record a histogram value
    */
-  recordHistogram(name: string, value: number, tags?: Record<string, string>): void {
+  recordHistogram(
+    name: string,
+    value: number,
+    tags?: Record<string, string>,
+  ): void {
     const key = this.getKey(name, tags);
     const values = this.histograms.get(key) || [];
     values.push(value);
@@ -81,7 +91,7 @@ export class MetricsCollector {
   async recordDuration<T>(
     operation: () => Promise<T>,
     name: string,
-    tags?: Record<string, string>
+    tags?: Record<string, string>,
   ): Promise<T> {
     const startTime = Date.now();
     try {
@@ -101,17 +111,20 @@ export class MetricsCollector {
   /**
    * Get histogram statistics
    */
-  getHistogramStats(name: string, tags?: Record<string, string>): HistogramData | undefined {
+  getHistogramStats(
+    name: string,
+    tags?: Record<string, string>,
+  ): HistogramData | undefined {
     const key = this.getKey(name, tags);
     const values = this.histograms.get(key);
-    
+
     if (!values || values.length === 0) {
       return undefined;
     }
 
     const sorted = [...values].sort((a, b) => a - b);
     const sum = sorted.reduce((acc, val) => acc + val, 0);
-    
+
     const buckets: HistogramBucket[] = this.defaultBuckets.map((le) => ({
       le,
       count: sorted.filter((v) => v <= le).length,
@@ -127,27 +140,30 @@ export class MetricsCollector {
   /**
    * Get summary statistics with quantiles
    */
-  getSummaryStats(name: string, tags?: Record<string, string>): SummaryData | undefined {
+  getSummaryStats(
+    name: string,
+    tags?: Record<string, string>,
+  ): SummaryData | undefined {
     const key = this.getKey(name, tags);
     const values = this.histograms.get(key);
-    
+
     if (!values || values.length === 0) {
       return undefined;
     }
 
     const sorted = [...values].sort((a, b) => a - b);
     const sum = sorted.reduce((acc, val) => acc + val, 0);
-    
+
     const quantiles = new Map<number, number>();
     const calculateQuantile = (p: number): number => {
       const index = Math.ceil((p / 100) * sorted.length) - 1;
       return sorted[Math.max(0, index)] ?? 0;
     };
 
-    quantiles.set(0.5, calculateQuantile(50));   // p50
-    quantiles.set(0.75, calculateQuantile(75));  // p75
-    quantiles.set(0.95, calculateQuantile(95));  // p95
-    quantiles.set(0.99, calculateQuantile(99));  // p99
+    quantiles.set(0.5, calculateQuantile(50)); // p50
+    quantiles.set(0.75, calculateQuantile(75)); // p75
+    quantiles.set(0.95, calculateQuantile(95)); // p95
+    quantiles.set(0.99, calculateQuantile(99)); // p99
     quantiles.set(0.999, calculateQuantile(99.9)); // p999
 
     return {
@@ -169,7 +185,7 @@ export class MetricsCollector {
       const { name, tags } = this.parseKey(key);
       metrics.push({
         name,
-        type: 'counter',
+        type: "counter",
         value,
         tags,
         timestamp: now,
@@ -181,7 +197,7 @@ export class MetricsCollector {
       const { name, tags } = this.parseKey(key);
       metrics.push({
         name,
-        type: 'gauge',
+        type: "gauge",
         value,
         tags,
         timestamp: now,
@@ -210,14 +226,17 @@ export class MetricsCollector {
     const tagString = Object.entries(tags)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, value]) => `${key}=${value}`)
-      .join(',');
+      .join(",");
     return `${name}{${tagString}}`;
   }
 
   /**
    * Parse a metric key back to name and tags
    */
-  private parseKey(key: string): { name: string; tags?: Record<string, string> } {
+  private parseKey(key: string): {
+    name: string;
+    tags?: Record<string, string>;
+  } {
     const match = key.match(/^([^{]+)(?:\{(.+)\})?$/);
     if (!match || !match[1]) {
       return { name: key };
@@ -231,8 +250,8 @@ export class MetricsCollector {
     }
 
     const tags: Record<string, string> = {};
-    tagString.split(',').forEach((pair) => {
-      const [k, v] = pair.split('=');
+    tagString.split(",").forEach((pair) => {
+      const [k, v] = pair.split("=");
       if (k && v) {
         tags[k] = v;
       }

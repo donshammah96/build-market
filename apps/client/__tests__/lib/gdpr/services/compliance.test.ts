@@ -20,9 +20,8 @@ describe("ComplianceService", () => {
     vi.doMock("@build/db", () => ({
       prisma: mockPrisma,
     }));
-    const serviceModule = await import(
-      "@/app/lib/gdpr/services/compliance.service"
-    );
+    const serviceModule =
+      await import("@/app/lib/gdpr/services/compliance.service");
     ComplianceService = serviceModule.ComplianceService;
     service = new ComplianceService();
   });
@@ -124,9 +123,8 @@ describe("ComplianceService", () => {
       vi.doMock("@build/db", () => ({
         prisma: mockErrorPrisma,
       }));
-      const serviceModule = await import(
-        "@/app/lib/gdpr/services/compliance.service"
-      );
+      const serviceModule =
+        await import("@/app/lib/gdpr/services/compliance.service");
       const errorService = new serviceModule.ComplianceService();
 
       await expect(
@@ -168,9 +166,8 @@ describe("ComplianceService", () => {
         vi.doMock("@build/db", () => ({
           prisma: mockErrorPrisma,
         }));
-        const serviceModule = await import(
-          "@/app/lib/gdpr/services/compliance.service"
-        );
+        const serviceModule =
+          await import("@/app/lib/gdpr/services/compliance.service");
         const errorService = new serviceModule.ComplianceService();
 
         await expect(
@@ -216,9 +213,8 @@ describe("ComplianceService", () => {
       vi.doMock("@build/db", () => ({
         prisma: mockErrorPrisma,
       }));
-      const serviceModule = await import(
-        "@/app/lib/gdpr/services/compliance.service"
-      );
+      const serviceModule =
+        await import("@/app/lib/gdpr/services/compliance.service");
       const errorService = new serviceModule.ComplianceService();
 
       await expect(

@@ -1,4 +1,10 @@
-import { PrismaClient, UserRole, ClientProfile, ProfessionalProfile, User } from '@prisma/client';
+import {
+  PrismaClient,
+  UserRole,
+  ClientProfile,
+  ProfessionalProfile,
+  User,
+} from "@prisma/client";
 
 export interface CreateUserData {
   clerkId: string;
@@ -37,7 +43,7 @@ export class UserRepository {
    */
   async findByClerkId(clerkId: string): Promise<UserWithProfiles | null> {
     return this.prisma.user.findUnique({
-      where: { 
+      where: {
         clerkId,
         deletedAt: null,
       },
@@ -53,7 +59,7 @@ export class UserRepository {
    */
   async findByEmail(email: string): Promise<UserWithProfiles | null> {
     return this.prisma.user.findFirst({
-      where: { 
+      where: {
         email,
         deletedAt: null,
       },
@@ -69,7 +75,7 @@ export class UserRepository {
    */
   async findById(id: string): Promise<UserWithProfiles | null> {
     return this.prisma.user.findFirst({
-      where: { 
+      where: {
         id,
         deletedAt: null,
       },
@@ -96,7 +102,7 @@ export class UserRepository {
         lastName: data.lastName,
         phone: data.phone,
         avatar: data.avatar,
-        role: data.role || 'CLIENT', // Default to CLIENT enum value
+        role: data.role || "CLIENT", // Default to CLIENT enum value
         isProfileComplete: false,
         isEmailVerified: data.isEmailVerified || false,
         isPhoneVerified: data.isPhoneVerified || false,
@@ -120,7 +126,11 @@ export class UserRepository {
   /**
    * Upsert user (create or update)
    */
-  async upsert(clerkId: string, createData: CreateUserData, updateData: UpdateUserData): Promise<User> {
+  async upsert(
+    clerkId: string,
+    createData: CreateUserData,
+    updateData: UpdateUserData,
+  ): Promise<User> {
     return this.prisma.user.upsert({
       where: { clerkId },
       update: {
@@ -134,7 +144,7 @@ export class UserRepository {
         lastName: createData.lastName,
         phone: createData.phone,
         avatar: createData.avatar,
-        role: createData.role || 'CLIENT',
+        role: createData.role || "CLIENT",
         isProfileComplete: false,
         isEmailVerified: createData.isEmailVerified || false,
         isPhoneVerified: createData.isPhoneVerified || false,
@@ -154,4 +164,3 @@ export class UserRepository {
     return user?.isProfileComplete || false;
   }
 }
-

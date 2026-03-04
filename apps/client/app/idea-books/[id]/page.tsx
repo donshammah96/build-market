@@ -112,7 +112,8 @@ export default function IdeaBookDetailPage() {
               Idea book not found
             </h2>
             <p className="text-zinc-500 mb-6">
-              {error?.message ?? "This idea book may have been deleted or you don't have access."}
+              {error?.message ??
+                "This idea book may have been deleted or you don't have access."}
             </p>
             <Link href={ROUTES.ideaBooks}>
               <Button variant="outline">Back to Idea Books</Button>
@@ -162,7 +163,12 @@ export default function IdeaBookDetailPage() {
                 <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-zinc-400">
                   <span>{formatCategory(book.category)}</span>
                   <span>•</span>
-                  <span>Updated {formatDistanceToNow(new Date(book.updatedAt), { addSuffix: true })}</span>
+                  <span>
+                    Updated{" "}
+                    {formatDistanceToNow(new Date(book.updatedAt), {
+                      addSuffix: true,
+                    })}
+                  </span>
                   <span>•</span>
                   <span className="flex items-center gap-1.5">
                     <LayoutGrid className="h-3.5 w-3.5" />
@@ -180,7 +186,11 @@ export default function IdeaBookDetailPage() {
           >
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="border-zinc-200">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="border-zinc-200"
+                >
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -206,7 +216,9 @@ export default function IdeaBookDetailPage() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.1 }}
         >
-          <h2 className="text-lg font-semibold text-zinc-900 mb-4">Saved items</h2>
+          <h2 className="text-lg font-semibold text-zinc-900 mb-4">
+            Saved items
+          </h2>
           {attachments.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               <AnimatePresence mode="popLayout">
@@ -250,9 +262,12 @@ export default function IdeaBookDetailPage() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-white rounded-2xl shadow-2xl z-50 p-6"
             >
-              <h3 className="text-lg font-semibold text-zinc-900">Delete idea book?</h3>
+              <h3 className="text-lg font-semibold text-zinc-900">
+                Delete idea book?
+              </h3>
               <p className="text-zinc-500 mt-2 text-sm">
-                This will permanently delete &quot;{book.title}&quot; and all its items. This action cannot be undone.
+                This will permanently delete &quot;{book.title}&quot; and all
+                its items. This action cannot be undone.
               </p>
               <div className="flex gap-3 mt-6">
                 <Button
@@ -323,7 +338,9 @@ function AttachmentCard({
       {/* Overlay with caption and delete */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-3">
         {attachment.caption && (
-          <p className="text-white text-sm line-clamp-2">{attachment.caption}</p>
+          <p className="text-white text-sm line-clamp-2">
+            {attachment.caption}
+          </p>
         )}
         <div className="flex justify-end">
           <DropdownMenu open={showMenu} onOpenChange={setShowMenu}>

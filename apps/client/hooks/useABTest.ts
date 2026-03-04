@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import { useUser } from '@clerk/nextjs';
+import { useState, useEffect, useMemo } from "react";
+import { useUser } from "@clerk/nextjs";
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-export type ABTestVariant = 'A' | 'B';
+export type ABTestVariant = "A" | "B";
 
 export interface ABTestConfig {
   /** Unique experiment name */
@@ -33,7 +33,7 @@ export interface ABTestResult {
 // STORAGE
 // ============================================================================
 
-const AB_TEST_STORAGE_KEY = 'ab_tests';
+const AB_TEST_STORAGE_KEY = "ab_tests";
 
 interface StoredABTests {
   [experimentName: string]: {
@@ -43,7 +43,7 @@ interface StoredABTests {
 }
 
 function getStoredTests(): StoredABTests {
-  if (typeof window === 'undefined') return {};
+  if (typeof window === "undefined") return {};
   try {
     const stored = localStorage.getItem(AB_TEST_STORAGE_KEY);
     return stored ? JSON.parse(stored) : {};
@@ -53,7 +53,7 @@ function getStoredTests(): StoredABTests {
 }
 
 function storeTest(name: string, variant: ABTestVariant): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === "undefined") return;
   try {
     const tests = getStoredTests();
     tests[name] = { variant, assignedAt: Date.now() };
@@ -83,11 +83,15 @@ function hashString(str: string): number {
 /**
  * Assign variant based on user ID and experiment name
  */
-function assignVariant(userId: string, experimentName: string, splitPercentage: number): ABTestVariant {
+function assignVariant(
+  userId: string,
+  experimentName: string,
+  splitPercentage: number,
+): ABTestVariant {
   const hashInput = `${experimentName}:${userId}`;
   const hash = hashString(hashInput);
   const bucket = hash % 100; // 0-99
-  return bucket < splitPercentage ? 'B' : 'A';
+  return bucket < splitPercentage ? "B" : "A";
 }
 
 // ============================================================================
@@ -102,11 +106,11 @@ function trackABEvent(
   experimentName: string,
   variant: ABTestVariant,
   eventName: string,
-  data?: Record<string, unknown>
+  data?: Record<string, unknown>,
 ) {
   // Log to console in development
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[A/B Test]', {
+  if (process.env.NODE_ENV === "development") {
+    console.log("[A/B Test]", {
       experiment: experimentName,
       variant,
       event: eventName,
@@ -116,23 +120,27 @@ function trackABEvent(
   }
 
   // Google Analytics 4 (if available)
-  if (typeof window !== 'undefined' && 'gtag' in window) {
-    (window as { gtag?: (cmd: string, event: string, params: Record<string, unknown>) => void }).gtag?.(
-      'event',
-      `ab_${experimentName}_${eventName}`,
-      {
-        ab_variant: variant,
-        ab_experiment: experimentName,
-        ...data,
+  if (typeof window !== "undefined" && "gtag" in window) {
+    (
+      window as {
+        gtag?: (
+          cmd: string,
+          event: string,
+          params: Record<string, unknown>,
+        ) => void;
       }
-    );
+    ).gtag?.("event", `ab_${experimentName}_${eventName}`, {
+      ab_variant: variant,
+      ab_experiment: experimentName,
+      ...data,
+    });
   }
 
   // Store event for later analysis
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     try {
       const eventsKey = `ab_events_${experimentName}`;
-      const events = JSON.parse(localStorage.getItem(eventsKey) || '[]');
+      const events = JSON.parse(localStorage.getItem(eventsKey) || "[]");
       events.push({
         variant,
         event: eventName,
@@ -153,19 +161,19 @@ function trackABEvent(
 
 /**
  * A/B Testing Hook
- * 
+ *
  * Assigns users to test variants consistently based on their user ID.
  * Tracks exposure and conversion events.
- * 
+ *
  * @example
  * ```tsx
  * const { variant, trackConversion } = useABTest({ name: 'onboarding_skip' });
- * 
+ *
  * // Show different UI based on variant
  * if (variant === 'B') {
  *   return <SkipButton onClick={() => { handleSkip(); trackConversion(); }} />;
  * }
- * 
+ *
  * // Variant A: full form only
  * return <FullForm />;
  * ```
@@ -176,7 +184,7 @@ export function useABTest({
   allowAnonymous = true,
 }: ABTestConfig): ABTestResult {
   const { user, isLoaded } = useUser();
-  const [variant, setVariant] = useState<ABTestVariant>('A');
+  const [variant, setVariant] = useState<ABTestVariant>("A");
   const [isLoading, setIsLoading] = useState(true);
   const [hasTrackedExposure, setHasTrackedExposure] = useState(false);
 
@@ -184,7 +192,7 @@ export function useABTest({
   useEffect(() => {
     if (!isLoaded) return;
 
-    let assignedVariant: ABTestVariant = 'A';
+    let assignedVariant: ABTestVariant = "A";
 
     // Check if already assigned
     const stored = getStoredTests()[name];
@@ -206,27 +214,41 @@ export function useABTest({
 
     // Track exposure event (once per session)
     if (!hasTrackedExposure) {
-      trackABEvent(name, assignedVariant, 'exposure', {
-        userId: user?.id || 'anonymous',
+      trackABEvent(name, assignedVariant, "exposure", {
+        userId: user?.id || "anonymous",
       });
       setHasTrackedExposure(true);
     }
-  }, [isLoaded, user?.id, name, splitPercentage, allowAnonymous, hasTrackedExposure]);
+  }, [
+    isLoaded,
+    user?.id,
+    name,
+    splitPercentage,
+    allowAnonymous,
+    hasTrackedExposure,
+  ]);
 
   // Track conversion helper
-  const trackConversion = useMemo(() => (eventName = 'conversion') => {
-    trackABEvent(name, variant, eventName, {
-      userId: user?.id || 'anonymous',
-    });
-  }, [name, variant, user?.id]);
+  const trackConversion = useMemo(
+    () =>
+      (eventName = "conversion") => {
+        trackABEvent(name, variant, eventName, {
+          userId: user?.id || "anonymous",
+        });
+      },
+    [name, variant, user?.id],
+  );
 
   // Track custom event helper
-  const trackEvent = useMemo(() => (eventName: string, data?: Record<string, unknown>) => {
-    trackABEvent(name, variant, eventName, {
-      userId: user?.id || 'anonymous',
-      ...data,
-    });
-  }, [name, variant, user?.id]);
+  const trackEvent = useMemo(
+    () => (eventName: string, data?: Record<string, unknown>) => {
+      trackABEvent(name, variant, eventName, {
+        userId: user?.id || "anonymous",
+        ...data,
+      });
+    },
+    [name, variant, user?.id],
+  );
 
   return {
     variant,
@@ -249,10 +271,10 @@ export function getABTestEvents(experimentName: string): Array<{
   data?: Record<string, unknown>;
   timestamp: number;
 }> {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === "undefined") return [];
   try {
     const eventsKey = `ab_events_${experimentName}`;
-    return JSON.parse(localStorage.getItem(eventsKey) || '[]');
+    return JSON.parse(localStorage.getItem(eventsKey) || "[]");
   } catch {
     return [];
   }
@@ -266,27 +288,29 @@ export function calculateConversionRate(experimentName: string): {
   variantB: { exposures: number; conversions: number; rate: number };
 } {
   const events = getABTestEvents(experimentName);
-  
+
   const stats = {
     variantA: { exposures: 0, conversions: 0, rate: 0 },
     variantB: { exposures: 0, conversions: 0, rate: 0 },
   };
 
   for (const event of events) {
-    const key = event.variant === 'A' ? 'variantA' : 'variantB';
-    if (event.event === 'exposure') {
+    const key = event.variant === "A" ? "variantA" : "variantB";
+    if (event.event === "exposure") {
       stats[key].exposures++;
-    } else if (event.event === 'conversion') {
+    } else if (event.event === "conversion") {
       stats[key].conversions++;
     }
   }
 
-  stats.variantA.rate = stats.variantA.exposures > 0 
-    ? (stats.variantA.conversions / stats.variantA.exposures) * 100 
-    : 0;
-  stats.variantB.rate = stats.variantB.exposures > 0 
-    ? (stats.variantB.conversions / stats.variantB.exposures) * 100 
-    : 0;
+  stats.variantA.rate =
+    stats.variantA.exposures > 0
+      ? (stats.variantA.conversions / stats.variantA.exposures) * 100
+      : 0;
+  stats.variantB.rate =
+    stats.variantB.exposures > 0
+      ? (stats.variantB.conversions / stats.variantB.exposures) * 100
+      : 0;
 
   return stats;
 }

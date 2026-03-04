@@ -1,6 +1,7 @@
 # Example: Run NATS producer & consumer (compiled JS)
 
 Prereqs
+
 - Docker (recommended) or local installs of Redis and NATS with JetStream
 - Node and `pnpm` available
 
@@ -46,9 +47,11 @@ node scripts/dist/producer.js
 ```
 
 Notes
+
 - Default clients connect to `nats://localhost:4222`. To override, set `NATS_URL`.
 - These scripts use the TypeScript source under `packages/nats/src` and compile to `scripts/dist`.
 - If you prefer not to compile, you can use `pnpm dlx ts-node scripts/producer.ts` and `pnpm dlx ts-node scripts/consumer.ts` (requires `ts-node`)
+
 # Scripts
 
 This directory contains utility scripts for development and deployment workflows.
@@ -56,17 +59,21 @@ This directory contains utility scripts for development and deployment workflows
 ## Available Scripts
 
 ### create-pr.ps1 (PowerShell)
+
 PowerShell script for creating a feature branch, committing changes, and creating a pull request.
 
 **Usage (Windows PowerShell):**
+
 ```powershell
 .\scripts\create-pr.ps1
 ```
 
 ### create-pr.sh (Bash)
+
 Bash script for creating a feature branch, committing changes, and creating a pull request.
 
 **Usage (Linux/Mac/Git Bash):**
+
 ```bash
 chmod +x scripts/create-pr.sh
 ./scripts/create-pr.sh
@@ -75,6 +82,7 @@ chmod +x scripts/create-pr.sh
 ## Features
 
 Both scripts automate the following workflow:
+
 - ✅ Create a new feature branch from current branch
 - ✅ Stage and commit changes with conventional commit message
 - ✅ Push the branch to remote
@@ -92,4 +100,3 @@ Both scripts automate the following workflow:
 - The scripts include proper error handling at each step
 - Colored output for better visibility
 - Automatically generates descriptive PR descriptions
-

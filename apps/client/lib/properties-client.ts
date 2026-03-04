@@ -10,14 +10,14 @@
  * - Safe for browser and client-side bundlers (No Server Actions)
  */
 import type { ApiResponse } from "@build/types";
-import { PROPERTIES_CLIENT_CONFIG } from "@/app/lib/config/properties.config";
-import { isValidId } from "@/app/lib/utils/validators";
+import { PROPERTIES_CLIENT_CONFIG } from "@/lib/config/properties.config";
+import { isValidId } from "@/lib/utils/validators";
 import type { z } from "zod";
 import {
   CreatePropertySchema,
   UpdatePropertySchema,
   PropertyQuerySchema,
-} from "@/app/lib/validation/properties-validation";
+} from "@/lib/validation/properties-validation";
 
 const { BULKHEAD_CONCURRENCY } = PROPERTIES_CLIENT_CONFIG;
 
@@ -196,7 +196,9 @@ class PropertiesClient {
       const searchParams = new URLSearchParams();
       if (options?.limit) searchParams.append("limit", String(options.limit));
       if (options?.status) searchParams.append("status", options.status);
-      return apiFetch<any[]>(`/api/properties/me?${searchParams.toString()}`);
+      return apiFetch<any[]>(
+        `/api/properties/my-listings?${searchParams.toString()}`,
+      );
     });
   }
 
@@ -325,7 +327,7 @@ class PropertiesClient {
       apiFetch<any>(
         `/api/properties/${input.propertyId}/documents/${input.documentId}`,
         {
-          method: "PUT",
+          method: "PATCH",
           body: JSON.stringify({
             type: input.type,
             assetId: input.assetId,

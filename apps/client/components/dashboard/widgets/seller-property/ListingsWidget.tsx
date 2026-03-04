@@ -94,7 +94,7 @@ function PropertyCard({ property }: PropertyCardProps) {
           variant="outline"
           className={cn(
             "absolute top-2 right-2 text-[10px] font-medium border",
-            statusConfig.color
+            statusConfig.color,
           )}
         >
           {statusConfig.label}

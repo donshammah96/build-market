@@ -23,11 +23,22 @@ const nextConfig: NextConfig = {
     "@build/nats",
     "@build/redis",
     "@build/resilience",
+    "@build/auth-server",
+    "@build/messaging-server",
+    "@build/mail-server",
+    "@build/queue-server",
   ],
 
   // Turbopack configuration (used in dev mode with --turbopack flag)
   turbopack: {
     // Turbopack will handle optimizations automatically
+    // If you need custom loaders in the future (e.g., for SVGs), you can configure them here:
+    // rules: {
+    //   "*.svg": {
+    //     loaders: ["@svgr/webpack"],
+    //     as: "*.js",
+    //   }
+    // }
   },
 
   // Optimize images for faster loading

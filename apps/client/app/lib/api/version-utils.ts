@@ -14,11 +14,14 @@ export function extractExpectedVersion(
     const parsed = parseInt(ifMatch.replace(/"/g, ""), 10);
     if (!isNaN(parsed)) return parsed;
   }
-  
+
   if (body && typeof body === "object" && "version" in body) {
-    const parsed = parseInt(String((body as Record<string, unknown>).version), 10);
+    const parsed = parseInt(
+      String((body as Record<string, unknown>).version),
+      10,
+    );
     if (!isNaN(parsed)) return parsed;
   }
-  
+
   return null;
 }

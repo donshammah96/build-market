@@ -32,13 +32,16 @@ type PortfolioParams = { id: string };
 async function verifyPortfolioOwnership(
   portfolioId: string,
   userId: string,
-): Promise<{ success: true } | { success: false; error: "not_found" | "forbidden" }> {
+): Promise<
+  { success: true } | { success: false; error: "not_found" | "forbidden" }
+> {
   const portfolio = await prisma.portfolio.findUnique({
     where: { id: portfolioId, deletedAt: null },
     select: { professionalId: true },
   });
   if (!portfolio) return { success: false, error: "not_found" };
-  if (portfolio.professionalId !== userId) return { success: false, error: "forbidden" };
+  if (portfolio.professionalId !== userId)
+    return { success: false, error: "forbidden" };
   return { success: true };
 }
 
@@ -93,7 +96,10 @@ export const GET = withAuth<PortfolioParams>(
         const images = await prisma.portfolioImage.findMany({
           where: {
             portfolioId,
-            ...(categoryFilter && { category: categoryFilter as Prisma.EnumPortfolioImageCategoryFilter }),
+            ...(categoryFilter && {
+              category:
+                categoryFilter as Prisma.EnumPortfolioImageCategoryFilter,
+            }),
           },
           select: portfolioImageSelect,
           orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }],
@@ -105,7 +111,10 @@ export const GET = withAuth<PortfolioParams>(
     );
 
     if (!result.success) {
-      return apiError("Failed to fetch images", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to fetch images",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
     if (result.data?.error === "not_found") {
@@ -163,13 +172,21 @@ export const POST = withAuth<PortfolioParams>(
     if (isBatch) {
       const batchValidation = BatchCreatePortfolioImagesSchema.safeParse(body);
       if (!batchValidation.success) {
-        return apiError("Invalid input", HttpStatus.BAD_REQUEST, batchValidation.error.issues);
+        return apiError(
+          "Invalid input",
+          HttpStatus.BAD_REQUEST,
+          batchValidation.error.issues,
+        );
       }
       imagesToCreate = batchValidation.data.images;
     } else {
       const singleValidation = CreatePortfolioImageSchema.safeParse(body);
       if (!singleValidation.success) {
-        return apiError("Invalid input", HttpStatus.BAD_REQUEST, singleValidation.error.issues);
+        return apiError(
+          "Invalid input",
+          HttpStatus.BAD_REQUEST,
+          singleValidation.error.issues,
+        );
       }
       imagesToCreate = [singleValidation.data];
     }
@@ -201,7 +218,10 @@ export const POST = withAuth<PortfolioParams>(
         const currentCount = await prisma.portfolioImage.count({
           where: { portfolioId },
         });
-        if (currentCount + imagesToCreate.length > PORTFOLIO_CONFIG.MAX_IMAGES_PER_PORTFOLIO) {
+        if (
+          currentCount + imagesToCreate.length >
+          PORTFOLIO_CONFIG.MAX_IMAGES_PER_PORTFOLIO
+        ) {
           return { error: "limit_exceeded" as const };
         }
 
@@ -222,7 +242,9 @@ export const POST = withAuth<PortfolioParams>(
           portfolioId,
           assetId: img.assetId,
           caption: img.caption,
-          category: img.category as Prisma.EnumPortfolioImageCategoryFilter | undefined,
+          category: img.category as
+            | Prisma.EnumPortfolioImageCategoryFilter
+            | undefined,
           isMain:
             !existingMain && !hasMainInBatch
               ? index === 0
@@ -280,8 +302,14 @@ export const POST = withAuth<PortfolioParams>(
         HttpStatus.BAD_REQUEST,
       );
     }
-    if (result.data.error === "asset_not_found" || result.data.error === "asset_forbidden") {
-      return apiError("Unauthorized access to one or more assets", HttpStatus.FORBIDDEN);
+    if (
+      result.data.error === "asset_not_found" ||
+      result.data.error === "asset_forbidden"
+    ) {
+      return apiError(
+        "Unauthorized access to one or more assets",
+        HttpStatus.FORBIDDEN,
+      );
     }
 
     return apiSuccess(result.data.data, HttpStatus.CREATED);
@@ -304,7 +332,10 @@ export const PATCH = withAuth<PortfolioParams>(
     const { searchParams } = new URL(req.url);
     const imageId = searchParams.get("imageId");
     if (!imageId || !isValidId(imageId)) {
-      return apiError("imageId query parameter is required", HttpStatus.BAD_REQUEST);
+      return apiError(
+        "imageId query parameter is required",
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     const sizeError = checkBodySize(req, PORTFOLIO_CONFIG.MAX_BODY_SIZE);
@@ -319,7 +350,11 @@ export const PATCH = withAuth<PortfolioParams>(
 
     const validation = UpdatePortfolioImageSchema.safeParse(body);
     if (!validation.success) {
-      return apiError("Invalid input", HttpStatus.BAD_REQUEST, validation.error.issues);
+      return apiError(
+        "Invalid input",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+      );
     }
 
     const updateData = validation.data;
@@ -366,7 +401,10 @@ export const PATCH = withAuth<PortfolioParams>(
     );
 
     if (!result.success || !result.data) {
-      return apiError("Failed to update image", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to update image",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
     if (result.data.error === "not_found") {
@@ -376,7 +414,10 @@ export const PATCH = withAuth<PortfolioParams>(
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
     if (result.data.error === "image_not_found") {
-      return apiError("Image not found in this portfolio", HttpStatus.NOT_FOUND);
+      return apiError(
+        "Image not found in this portfolio",
+        HttpStatus.NOT_FOUND,
+      );
     }
 
     return apiSuccess(result.data.data, HttpStatus.OK);
@@ -400,7 +441,10 @@ export const DELETE = withAuth<PortfolioParams>(
     const { searchParams } = new URL(req.url);
     const imageId = searchParams.get("imageId");
     if (!imageId || !isValidId(imageId)) {
-      return apiError("imageId query parameter is required", HttpStatus.BAD_REQUEST);
+      return apiError(
+        "imageId query parameter is required",
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     const identifier = getRateLimitIdentifier(req);
@@ -450,7 +494,10 @@ export const DELETE = withAuth<PortfolioParams>(
     );
 
     if (!result.success || !result.data) {
-      return apiError("Failed to delete image", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to delete image",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
     if (result.data.error === "not_found") {
@@ -460,7 +507,10 @@ export const DELETE = withAuth<PortfolioParams>(
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
     if (result.data.error === "image_not_found") {
-      return apiError("Image not found in this portfolio", HttpStatus.NOT_FOUND);
+      return apiError(
+        "Image not found in this portfolio",
+        HttpStatus.NOT_FOUND,
+      );
     }
 
     return apiSuccess(result.data.data, HttpStatus.OK);

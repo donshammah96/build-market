@@ -1,51 +1,91 @@
-import { z } from 'zod';
-import { CountyEnum } from './auth';
+import { z } from "zod";
+import { CountyEnum } from "./auth";
 
 // ========================================================
 // ENUMS
 // ========================================================
 
 export const ProjectTypeEnum = z.enum([
-  "RESIDENTIAL", "COMMERCIAL", "RENOVATION", "INTERIOR_DESIGN", "LANDSCAPING", "INFRASTRUCTURE", "OTHER"
+  "RESIDENTIAL",
+  "COMMERCIAL",
+  "RENOVATION",
+  "INTERIOR_DESIGN",
+  "LANDSCAPING",
+  "INFRASTRUCTURE",
+  "OTHER",
 ]);
 export type ProjectType = z.infer<typeof ProjectTypeEnum>;
 
 export const ProjectStatusEnum = z.enum([
-  "PLANNING", "IN_PROGRESS", "PAUSED", "COMPLETED", "ARCHIVED", "CANCELLED"
+  "PLANNING",
+  "IN_PROGRESS",
+  "PAUSED",
+  "COMPLETED",
+  "ARCHIVED",
+  "CANCELLED",
 ]);
 export type ProjectStatus = z.infer<typeof ProjectStatusEnum>;
 
 export const ContractTypeEnum = z.enum([
-  "LABOR_ONLY", "FULL_CONTRACT", "DESIGN_ONLY", "CONSULTANCY"
+  "LABOR_ONLY",
+  "FULL_CONTRACT",
+  "DESIGN_ONLY",
+  "CONSULTANCY",
 ]);
 export type ContractType = z.infer<typeof ContractTypeEnum>;
 
 export const MilestoneStatusEnum = z.enum([
-  "PENDING", "IN_PROGRESS", "IN_REVIEW", "COMPLETED", "DELAYED"
+  "PENDING",
+  "IN_PROGRESS",
+  "IN_REVIEW",
+  "COMPLETED",
+  "DELAYED",
 ]);
 export type MilestoneStatus = z.infer<typeof MilestoneStatusEnum>;
 
 export const ApprovalStatusEnum = z.enum([
-  "PENDING", "APPROVED", "REJECTED", "REQUESTED_CHANGE"
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+  "REQUESTED_CHANGE",
 ]);
 export type ApprovalStatus = z.infer<typeof ApprovalStatusEnum>;
 
 export const ProjectDocumentTypeEnum = z.enum([
-  "CONTRACT_AGREEMENT", "BOQ", "INVOICE", "RECEIPT", 
-  "BLUEPRINT_ARCHITECTURAL", "BLUEPRINT_STRUCTURAL", 
-  "NCA_PERMIT", "SITE_INSTRUCTION", "HANDOVER_CERTIFICATE", "OTHER"
+  "CONTRACT_AGREEMENT",
+  "BOQ",
+  "INVOICE",
+  "RECEIPT",
+  "BLUEPRINT_ARCHITECTURAL",
+  "BLUEPRINT_STRUCTURAL",
+  "NCA_PERMIT",
+  "SITE_INSTRUCTION",
+  "HANDOVER_CERTIFICATE",
+  "OTHER",
 ]);
 export type ProjectDocumentType = z.infer<typeof ProjectDocumentTypeEnum>;
 
 export const ProjectImageCategoryEnum = z.enum([
-  "SITE_PREPARATION", "FOUNDATION", "WALLING", "ROOFING", 
-  "FINISHING", "SNAG_LIST", "MATERIAL_DELIVERY", "OTHER"
+  "SITE_PREPARATION",
+  "FOUNDATION",
+  "WALLING",
+  "ROOFING",
+  "FINISHING",
+  "SNAG_LIST",
+  "MATERIAL_DELIVERY",
+  "OTHER",
 ]);
 export type ProjectImageCategory = z.infer<typeof ProjectImageCategoryEnum>;
 
 export const IdeaBookCategoryEnum = z.enum([
-  "LIVING_ROOM", "KITCHEN", "BATHROOM", "BEDROOM", 
-  "OUTDOOR_LANDSCAPING", "COMMERCIAL_OFFICE", "RETAIL_SHOP", "WHOLE_HOUSE"
+  "LIVING_ROOM",
+  "KITCHEN",
+  "BATHROOM",
+  "BEDROOM",
+  "OUTDOOR_LANDSCAPING",
+  "COMMERCIAL_OFFICE",
+  "RETAIL_SHOP",
+  "WHOLE_HOUSE",
 ]);
 export type IdeaBookCategory = z.infer<typeof IdeaBookCategoryEnum>;
 
@@ -193,18 +233,18 @@ export const IdeaBookCollaboratorSchema = z.object({
 export const IdeaBookSchema = z.object({
   id: z.string().uuid(),
   clientId: z.string(),
-  title: z.string().min(1, 'Idea book title is required'),
+  title: z.string().min(1, "Idea book title is required"),
   slug: z.string(),
   description: z.string().optional().nullable(),
   category: IdeaBookCategoryEnum.default("WHOLE_HOUSE"),
   privacy: IdeaBookPrivacyEnum.default("PUBLIC"),
-  
+
   viewCount: z.number().int().default(0),
   likes: z.number().int().default(0),
-  
+
   createdAt: z.date(),
   updatedAt: z.date(),
-  
+
   // Relations
   collaborators: z.array(IdeaBookCollaboratorSchema).optional(),
   savedProducts: z.array(SavedProductSchema).optional(),

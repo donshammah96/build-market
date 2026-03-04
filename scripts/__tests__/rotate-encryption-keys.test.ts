@@ -88,7 +88,8 @@ describe("Key Rotation - Checkpoint Management", () => {
       mockFs.existsSync.mockReturnValue(true);
       mockFs.readFileSync.mockReturnValue(JSON.stringify(existingCheckpoint));
 
-      const checkpointContent = mockFs.readFileSync.mock.results[0]?.value as string;
+      const checkpointContent = mockFs.readFileSync.mock.results[0]
+        ?.value as string;
       const checkpoint = JSON.parse(checkpointContent);
 
       expect(checkpoint.lastProcessedTable).toBe("User");
@@ -108,7 +109,7 @@ describe("Key Rotation - Checkpoint Management", () => {
       // Simulate the checkpoint save operation
       const checkpointPath = "exports/key-rotation-checkpoint.json";
       const checkpointContent = JSON.stringify(checkpointData, null, 2);
-      
+
       // Verify that writeFileSync would be called with correct parameters
       expect(checkpointPath).toBe("exports/key-rotation-checkpoint.json");
       expect(checkpointContent).toContain("UserProfile");

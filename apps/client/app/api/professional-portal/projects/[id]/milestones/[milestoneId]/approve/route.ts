@@ -20,7 +20,10 @@ import {
   verifyMilestoneOwnership,
   isValidApprovalTransition,
 } from "@/app/lib/services/project-operations.service";
-import { ApproveMilestoneSchema, milestoneDetailSelect } from "@/app/lib/validation/projects-validation";
+import {
+  ApproveMilestoneSchema,
+  milestoneDetailSelect,
+} from "@/app/lib/validation/projects-validation";
 import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
 import { AuditAction } from "@prisma/client";
@@ -39,8 +42,10 @@ export const POST = withAuth<ApproveParams>(
     const correlationId = initializeCorrelationId(req);
 
     if (
-      !params?.id || !isValidId(params.id) ||
-      !params.milestoneId || !isValidId(params.milestoneId)
+      !params?.id ||
+      !isValidId(params.id) ||
+      !params.milestoneId ||
+      !isValidId(params.milestoneId)
     ) {
       return apiError("Invalid IDs", HttpStatus.BAD_REQUEST);
     }
@@ -58,7 +63,11 @@ export const POST = withAuth<ApproveParams>(
 
     const validation = ApproveMilestoneSchema.safeParse(body);
     if (!validation.success) {
-      return apiError("Invalid input", HttpStatus.BAD_REQUEST, validation.error.issues);
+      return apiError(
+        "Invalid input",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+      );
     }
 
     const { approvalStatus, rejectionReason } = validation.data;
@@ -77,7 +86,10 @@ export const POST = withAuth<ApproveParams>(
       "APPROVE",
     );
     if (!idempotencyCheck) {
-      return apiError("Failed to process idempotency key", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to process idempotency key",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
     if (idempotencyCheck.status === "completed") {
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
@@ -116,11 +128,20 @@ export const POST = withAuth<ApproveParams>(
           return { error: "forbidden" as const };
         }
 
-        const milestoneCheck = await verifyMilestoneOwnership(milestoneId, projectId);
-        if (!milestoneCheck.success) return { error: milestoneCheck.error as string };
+        const milestoneCheck = await verifyMilestoneOwnership(
+          milestoneId,
+          projectId,
+        );
+        if (!milestoneCheck.success)
+          return { error: milestoneCheck.error as string };
 
         // Validate approval transition
-        if (!isValidApprovalTransition(milestoneCheck.data.approvalStatus, approvalStatus)) {
+        if (
+          !isValidApprovalTransition(
+            milestoneCheck.data.approvalStatus,
+            approvalStatus,
+          )
+        ) {
           return { error: "invalid_transition" as const };
         }
 
@@ -198,7 +219,10 @@ export const POST = withAuth<ApproveParams>(
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
-      return apiError("Failed to process approval", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to process approval",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
     if (result.data.error === "not_found") {
@@ -207,11 +231,17 @@ export const POST = withAuth<ApproveParams>(
     }
     if (result.data.error === "forbidden") {
       await IdempotencyService.fail(idempotencyKey);
-      return apiError("Only the project client can approve milestones", HttpStatus.FORBIDDEN);
+      return apiError(
+        "Only the project client can approve milestones",
+        HttpStatus.FORBIDDEN,
+      );
     }
     if (result.data.error === "invalid_transition") {
       await IdempotencyService.fail(idempotencyKey);
-      return apiError("Invalid approval status transition", HttpStatus.BAD_REQUEST);
+      return apiError(
+        "Invalid approval status transition",
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     await IdempotencyService.complete(idempotencyKey, result.data.data);

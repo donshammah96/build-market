@@ -163,7 +163,9 @@ export function PipelineWidget({
   };
 
   return (
-    <Card className={cn("border border-zinc-200 shadow-sm bg-white", className)}>
+    <Card
+      className={cn("border border-zinc-200 shadow-sm bg-white", className)}
+    >
       <CardHeader className="pb-3 pt-5 px-5 flex flex-row items-center justify-between">
         <CardTitle className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
           Sales Pipeline

@@ -10,7 +10,6 @@ vi.mock("@build/db", () => ({
   },
 }));
 
-
 describe("System Settings Service", () => {
   beforeEach(async () => {
     vi.resetModules();

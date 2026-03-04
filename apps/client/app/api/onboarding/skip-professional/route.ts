@@ -110,10 +110,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       });
 
       // Already completed full onboarding
-      if (
-        existingUser?.isProfileComplete &&
-        existingUser.professionalProfile
-      ) {
+      if (existingUser?.isProfileComplete && existingUser.professionalProfile) {
         return {
           _error: true as const,
           message: "Onboarding already completed",
@@ -181,10 +178,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       correlationId,
       clerkId,
     });
-    return apiError(
-      "Skip onboarding failed",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
+    return apiError("Skip onboarding failed", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
   // Handle business-rule errors returned from the executor

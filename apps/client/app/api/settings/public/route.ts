@@ -24,18 +24,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     60_000,
   );
   if (!rateLimitResult.success) {
-    return NextResponse.json(
-      { error: "Too many requests" },
-      { status: 429 },
-    );
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   const settings = await getPublicSettings();
 
   return NextResponse.json(settings, {
     headers: {
-      "Cache-Control":
-        "public, s-maxage=60, stale-while-revalidate=120",
+      "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
     },
   });
 }

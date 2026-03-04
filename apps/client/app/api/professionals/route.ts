@@ -58,7 +58,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     county: searchParams.get("county") || undefined,
     city: searchParams.get("city") || undefined,
     sortBy: searchParams.get("sortBy") || "rating",
-    limit: searchParams.get("limit") || String(PROFESSIONAL_CONFIG.DEFAULT_LIMIT),
+    limit:
+      searchParams.get("limit") || String(PROFESSIONAL_CONFIG.DEFAULT_LIMIT),
     offset: searchParams.get("offset") || "0",
   };
 
@@ -88,4 +89,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   return apiSuccess(result.data, HttpStatus.OK);
+}
+
+export function HEAD(): NextResponse {
+  return new NextResponse(null, { status: HttpStatus.OK });
 }

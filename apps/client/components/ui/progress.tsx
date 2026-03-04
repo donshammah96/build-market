@@ -5,7 +5,9 @@ import * as ProgressPrimitive from "@radix-ui/react-progress";
 
 import { cn } from "./utils";
 
-interface ProgressProps extends React.ComponentProps<typeof ProgressPrimitive.Root> {
+interface ProgressProps extends React.ComponentProps<
+  typeof ProgressPrimitive.Root
+> {
   indicatorClassName?: string;
 }
 

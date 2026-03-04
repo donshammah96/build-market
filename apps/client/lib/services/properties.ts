@@ -8,6 +8,7 @@
 import { prisma } from "../db";
 import {
   Prisma,
+  AttachmentType,
   UserStatus,
   ConsentType,
   ImageCategory,
@@ -20,20 +21,20 @@ import {
   propertyListSelect,
   propertyDetailSelect,
   generatePropertySlug,
-} from "@/app/lib/validation/properties-validation";
+} from "@/lib/validation/properties-validation";
 import type { z } from "zod";
 import type {
   CreatePropertySchema,
   UpdatePropertySchema,
   PropertyQuerySchema,
-} from "@/app/lib/validation/properties-validation";
+} from "@/lib/validation/properties-validation";
 import {
   updatePropertyWithOptimisticLock,
   deletePropertyWithOptimisticLock,
   type UpdatePropertyData,
   type PropertyOperationContext,
-} from "@/app/lib/services/property-operations.service";
-import { PropertyRepository } from "@/app/lib/repositories/property.repository";
+} from "@/lib/services/property-operations.service";
+import { PropertyRepository } from "@/lib/repositories/property.repository";
 
 export type CreatePropertyInput = z.infer<typeof CreatePropertySchema>;
 export type UpdatePropertyInput = z.infer<typeof UpdatePropertySchema>;
@@ -75,10 +76,31 @@ export type AddPropertyDocumentInput = {
   notes?: string;
 };
 
+export type UpdatePropertyDocumentInput = {
+  type?: string;
+  assetId?: string;
+  notes?: string;
+};
+
+export type AddPropertyAttachmentInput = {
+  title: string;
+  assetId: string;
+  type: AttachmentType;
+  notes?: string;
+};
+
+export type UpdatePropertyAttachmentInput = {
+  attachmentId: string;
+  title?: string;
+  assetId?: string;
+  type?: AttachmentType;
+  notes?: string;
+};
+
 // ─── Ensure User Can Create Properties ────────────────────────────────────
 
 export async function ensureUserCanCreateProperties(
-  userId: string
+  userId: string,
 ): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -100,7 +122,7 @@ export async function ensureUserCanCreateProperties(
 // ─── List Properties (Public) ────────────────────────────────────────────────
 
 export async function getProperties(
-  filters: PropertyQueryInput
+  filters: PropertyQueryInput,
 ): Promise<PropertyListResult> {
   const {
     type,
@@ -204,7 +226,7 @@ export async function getPropertyById(id: string) {
 
 export async function getSimilarProperties(
   propertyId: string,
-  limit: number = 4
+  limit: number = 4,
 ): Promise<unknown[]> {
   const repo = new PropertyRepository(prisma);
   return repo.findSimilar(propertyId, limit);
@@ -214,7 +236,7 @@ export async function getSimilarProperties(
 
 export async function getMyProperties(
   userId: string,
-  options?: { limit?: number; status?: "all" | "active" | "pending" | "sold" }
+  options?: { limit?: number; status?: "all" | "active" | "pending" | "sold" },
 ): Promise<MyPropertyListing[]> {
   const limitNum = Math.min(options?.limit ?? 50, 50);
   const status = options?.status ?? "active";
@@ -301,7 +323,7 @@ export async function getMyProperties(
         img.asset?.cdnUrl ||
         img.asset?.thumbnailUrl ||
         img.url ||
-        "/placeholder-property.jpg"
+        "/placeholder-property.jpg",
     ),
     version: p.version ?? 0,
     createdAt: p.createdAt,
@@ -314,12 +336,11 @@ export async function getMyProperties(
 export async function createProperty(
   userId: string,
   data: CreatePropertyInput,
-  options?: { ipAddress?: string; userAgent?: string }
+  options?: { ipAddress?: string; userAgent?: string },
 ) {
   await ensureUserCanCreateProperties(userId);
 
-  let slug =
-    data.slug || generatePropertySlug(data.title ?? "");
+  let slug = data.slug || generatePropertySlug(data.title ?? "");
   let attempt = 0;
 
   while (attempt < 5) {
@@ -431,7 +452,7 @@ export async function createProperty(
 export async function createPropertiesBatch(
   userId: string,
   propertiesData: CreatePropertyInput[],
-  options?: { ipAddress?: string; userAgent?: string }
+  options?: { ipAddress?: string; userAgent?: string },
 ) {
   await ensureUserCanCreateProperties(userId);
 
@@ -557,14 +578,14 @@ export async function updateProperty(
   userId: string,
   data: UpdatePropertyData,
   context: PropertyOperationContext,
-  expectedVersion: number
+  expectedVersion: number,
 ) {
   return updatePropertyWithOptimisticLock(
     propertyId,
     userId,
     data,
     context,
-    expectedVersion
+    expectedVersion,
   );
 }
 
@@ -574,13 +595,13 @@ export async function deleteProperty(
   propertyId: string,
   userId: string,
   context: PropertyOperationContext,
-  expectedVersion: number
+  expectedVersion: number,
 ) {
   return deletePropertyWithOptimisticLock(
     propertyId,
     userId,
     context,
-    expectedVersion
+    expectedVersion,
   );
 }
 
@@ -615,7 +636,7 @@ export async function getPropertyDocuments(propertyId: string, userId: string) {
 export async function addPropertyDocument(
   propertyId: string,
   userId: string,
-  data: AddPropertyDocumentInput
+  data: AddPropertyDocumentInput,
 ) {
   const property = await prisma.property.findUnique({
     where: { id: propertyId },
@@ -652,7 +673,7 @@ export async function addPropertyDocument(
 export async function removePropertyDocument(
   propertyId: string,
   documentId: string,
-  userId: string
+  userId: string,
 ) {
   const property = await prisma.property.findUnique({
     where: { id: propertyId },
@@ -673,4 +694,210 @@ export async function removePropertyDocument(
   });
 
   return { success: true };
+}
+
+export async function updatePropertyDocument(
+  propertyId: string,
+  documentId: string,
+  userId: string,
+  data: UpdatePropertyDocumentInput,
+) {
+  const property = await prisma.property.findUnique({
+    where: { id: propertyId },
+    select: { agentId: true },
+  });
+
+  if (!property) throw new Error("Property not found");
+  if (property.agentId !== userId) throw new Error("Unauthorized");
+
+  const existing = await prisma.propertyDocument.findFirst({
+    where: { id: documentId, propertyId },
+  });
+  if (!existing) throw new Error("Document not found");
+
+  if (data.assetId) {
+    const asset = await prisma.asset.findUnique({
+      where: { id: data.assetId },
+    });
+    if (!asset) throw new Error("Asset not found");
+    if (asset.uploaderId !== userId && asset.uploaderId !== "system") {
+      throw new Error("Unauthorized access to asset");
+    }
+  }
+
+  return prisma.propertyDocument.update({
+    where: { id: documentId },
+    data: {
+      ...(data.type !== undefined && { type: data.type as PropertyDocumentType }),
+      ...(data.assetId !== undefined && { assetId: data.assetId }),
+      ...(data.notes !== undefined && { notes: data.notes }),
+      status: DocumentStatus.PENDING,
+    },
+    include: { asset: true },
+  });
+}
+
+export async function getPropertyAttachments(
+  propertyId: string,
+  userId: string,
+): Promise<unknown[]> {
+  try {
+    const property = await prisma.property.findUnique({
+      where: { id: propertyId },
+      select: { agentId: true },
+    });
+    if (!property) throw new Error("Property not found");
+    if (property.agentId !== userId) throw new Error("Unauthorized");
+
+    const attachments = await prisma.propertyAttachment.findMany({
+      where: { propertyId },
+      include: {
+        asset: {
+          select: {
+            id: true,
+            cdnUrl: true,
+            originalName: true,
+            mimeType: true,
+            size: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    return attachments;
+  } catch {
+    throw new Error("Failed to fetch property attachments");
+  }
+}
+
+export async function addPropertyAttachment(
+  propertyId: string,
+  userId: string,
+  data: {
+    title: string;
+    assetId: string;
+    type: AttachmentType;
+    notes?: string;
+  },
+): Promise<unknown> {
+  try {
+    const property = await prisma.property.findUnique({
+      where: { id: propertyId },
+      select: { agentId: true, verificationStatus: true },
+    });
+    if (!property) throw new Error("Property not found");
+    if (property.agentId !== userId) throw new Error("Unauthorized");
+
+    const asset = await prisma.asset.findUnique({
+      where: { id: data.assetId },
+    });
+    if (!asset) throw new Error("Asset not found");
+    if (asset.uploaderId !== userId && asset.uploaderId !== "system") {
+      throw new Error("Unauthorized access to asset");
+    }
+
+    if (property.verificationStatus !== "PENDING") {
+      await prisma.property.update({
+        where: { id: propertyId },
+        data: { verificationStatus: "PENDING", submittedAt: new Date() },
+      });
+    }
+
+    const attachment = await prisma.propertyAttachment.create({
+      data: {
+        title: data.title,
+        propertyId,
+        assetId: data.assetId,
+        type: data.type,
+        notes: data.notes,
+        uploadedById: userId,
+      },
+      include: { asset: true },
+    });
+    return attachment;
+  } catch {
+    throw new Error("Failed to create property attachment");
+  }
+}
+
+export async function updatePropertyAttachment(
+  propertyId: string,
+  userId: string,
+  data: UpdatePropertyAttachmentInput,
+) {
+  try {
+    const property = await prisma.property.findUnique({
+      where: { id: propertyId },
+      select: { agentId: true, verificationStatus: true },
+    });
+    if (!property) throw new Error("Property not found");
+    if (property.agentId !== userId) throw new Error("Unauthorized");
+
+    const existing = await prisma.propertyAttachment.findUnique({
+      where: { id: data.attachmentId },
+    });
+    if (!existing) throw new Error("Attachment not found");
+    if (existing.propertyId !== propertyId) {
+      throw new Error("Attachment does not belong to this property");
+    }
+
+    if (data.assetId) {
+      const asset = await prisma.asset.findUnique({
+        where: { id: data.assetId },
+      });
+      if (!asset) throw new Error("Asset not found");
+      if (asset.uploaderId !== userId && asset.uploaderId !== "system") {
+        throw new Error("Unauthorized access to asset");
+      }
+    }
+
+    const attachment = await prisma.propertyAttachment.update({
+      where: { id: data.attachmentId },
+      data: {
+        ...(data.title !== undefined && { title: data.title }),
+        ...(data.assetId !== undefined && { assetId: data.assetId }),
+        ...(data.type !== undefined && { type: data.type }),
+        ...(data.notes !== undefined && { notes: data.notes }),
+      },
+    });
+
+    if (property.verificationStatus !== "PENDING") {
+      await prisma.property.update({
+        where: { id: propertyId },
+        data: { verificationStatus: "PENDING", submittedAt: new Date() },
+      });
+    }
+
+    return attachment;
+  } catch {
+    throw new Error("Failed to update property attachment");
+  }
+}
+
+export async function removePropertyAttachment(
+  propertyId: string,
+  attachmentId: string,
+  userId: string,
+) {
+  try {
+    const property = await prisma.property.findUnique({
+      where: { id: propertyId },
+      select: { agentId: true },
+    });
+    if (!property) throw new Error("Property not found");
+    if (property.agentId !== userId) throw new Error("Unauthorized");
+
+    const existing = await prisma.propertyAttachment.findUnique({
+      where: { id: attachmentId },
+    });
+    if (!existing) throw new Error("Attachment not found");
+    if (existing.propertyId !== propertyId) {
+      throw new Error("Attachment does not belong to this property");
+    }
+
+    await prisma.propertyAttachment.delete({ where: { id: attachmentId } });
+    return { success: true };
+  } catch {
+    throw new Error("Failed to delete property attachment");
+  }
 }

@@ -99,7 +99,8 @@ export async function getProfessionalInquiryById(
   });
 
   if (!inquiry) return { success: false, error: "not_found" };
-  if (inquiry.property.agentId !== dbUserId) return { success: false, error: "forbidden" };
+  if (inquiry.property.agentId !== dbUserId)
+    return { success: false, error: "forbidden" };
 
   const { property, ...rest } = inquiry;
   const { agentId: _agentId, price, ...propertyData } = property;
@@ -134,7 +135,8 @@ export async function updateProfessionalInquiry(
   });
 
   if (!existing) return { success: false, error: "not_found" };
-  if (existing.property.agentId !== dbUserId) return { success: false, error: "forbidden" };
+  if (existing.property.agentId !== dbUserId)
+    return { success: false, error: "forbidden" };
 
   const updated = await prisma.propertyInquiry.update({
     where: { id: inquiryId },
@@ -164,7 +166,8 @@ export async function deleteProfessionalInquiry(
   });
 
   if (!existing) return { success: false, error: "not_found" };
-  if (existing.property.agentId !== dbUserId) return { success: false, error: "forbidden" };
+  if (existing.property.agentId !== dbUserId)
+    return { success: false, error: "forbidden" };
 
   await prisma.propertyInquiry.delete({ where: { id: inquiryId } });
 

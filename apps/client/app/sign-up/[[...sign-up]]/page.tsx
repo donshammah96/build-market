@@ -117,6 +117,27 @@ export default function ClientSignUpPage() {
             />
           </div>
 
+          {/* Layer 1: Clickwrap Agreement */}
+          <p className="text-center text-xs text-zinc-400 leading-relaxed">
+            By creating an account, you agree to Build Market&apos;s{" "}
+            <Link
+              href="/legal/professional-terms"
+              target="_blank"
+              className="text-emerald-600 hover:underline"
+            >
+              Terms of Service
+            </Link>{" "}
+            and{" "}
+            <Link
+              href="/legal/privacy"
+              target="_blank"
+              className="text-emerald-600 hover:underline"
+            >
+              Privacy Policy
+            </Link>
+            .
+          </p>
+
           {/* Footer Action */}
           <div className="text-center space-y-4">
             <p className="text-sm text-zinc-500">

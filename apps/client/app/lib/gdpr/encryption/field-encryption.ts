@@ -199,7 +199,12 @@ export class FieldEncryption {
       // Detect format: versioned (4 parts) vs legacy (3 parts)
       if (parts.length === 4 && parts[0]?.startsWith("v")) {
         // Versioned format: v1:iv:authTag:encrypted
-        [version, ivHex, authTagHex, encryptedHex] = parts as [string, string, string, string];
+        [version, ivHex, authTagHex, encryptedHex] = parts as [
+          string,
+          string,
+          string,
+          string,
+        ];
       } else if (parts.length === 3) {
         // Legacy format: iv:authTag:encrypted (uses v1 key)
         version = "v1";

@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { signIn } from 'next-auth/react';
+import { signIn } from "next-auth/react";
 
 export default function GoogleSignIn() {
   const handleGoogleSignIn = async () => {
-    await signIn('google', { callbackUrl: '/dashboard' });
+    await signIn("google", { callbackUrl: "/dashboard" });
   };
 
   return (
@@ -34,5 +34,3 @@ export default function GoogleSignIn() {
     </button>
   );
 }
-
-

@@ -1,8 +1,6 @@
 import { NextRequest } from "next/server";
 import { createProfessionalPortalGet } from "@/app/lib/api/professional-portal-handler";
-import {
-  TransactionQuerySchema,
-} from "@/app/lib/validation/finance-validation";
+import { TransactionQuerySchema } from "@/app/lib/validation/finance-validation";
 import { getProfessionalTransactions } from "@/lib/services/finance";
 
 function parseTransactionQuery(req: NextRequest) {

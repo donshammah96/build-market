@@ -17,11 +17,7 @@ import type {
 } from "@/app/lib/validation/documents-validation";
 import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
 
-export type {
-  DocumentQueryInput,
-  CreateDocumentInput,
-  UpdateDocumentInput,
-};
+export type { DocumentQueryInput, CreateDocumentInput, UpdateDocumentInput };
 
 export async function getProfessionalDocuments(
   dbUserId: string,

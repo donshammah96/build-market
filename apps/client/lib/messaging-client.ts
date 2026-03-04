@@ -204,7 +204,6 @@ class MessagingClient {
       } as PaginatedResponse<Message>;
     return this.bulkhead.run(() => {
       const params = new URLSearchParams();
-      params.append("threadId", threadId);
       if (opts?.cursor) params.append("cursor", String(opts.cursor));
       if (opts?.limit) params.append("limit", String(opts.limit));
       if (opts && "direction" in opts)
@@ -213,7 +212,7 @@ class MessagingClient {
           String((opts as Record<string, unknown>).direction),
         );
       return apiFetchPaginated<Message>(
-        `${API_ROUTES.messagingMessages}?${params.toString()}`,
+        `${API_ROUTES.messagingMessages}/conversation/${threadId}?${params.toString()}`,
       );
     });
   }

@@ -84,10 +84,7 @@ export async function GET(
           licenses: {
             where: {
               status: "VERIFIED",
-              OR: [
-                { validUntil: { gt: new Date() } },
-                { validUntil: null },
-              ],
+              OR: [{ validUntil: { gt: new Date() } }, { validUntil: null }],
             },
             select: {
               authority: true,

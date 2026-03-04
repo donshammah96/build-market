@@ -1,6 +1,6 @@
 /**
  * Service Provider Dashboard Widgets
- * 
+ *
  * Widgets for engineers, architects, contractors, and trades professionals.
  */
 

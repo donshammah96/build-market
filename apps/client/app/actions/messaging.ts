@@ -12,6 +12,10 @@ import {
   markMessageAsRead,
   deleteMessage,
   verifyParticipant,
+  assertCanDeleteMessage,
+  assertCanDeleteThread,
+  assertCanReadThread,
+  assertCanSendMessage,
 } from "@/lib/services/messaging";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@build/db";
@@ -55,9 +59,7 @@ export async function sendMessageAction(
 ) {
   const dbUserId = await resolveDbUserId();
 
-  // Verify participant before sending
-  const participant = await verifyParticipant(threadId, dbUserId);
-  if (!participant) throw new Error("Not a participant in this thread");
+  await assertCanSendMessage(threadId, dbUserId);
 
   const message = await sendMessage(threadId, dbUserId, content, options);
   revalidatePath(`/messages/${threadId}`);
@@ -67,9 +69,7 @@ export async function sendMessageAction(
 export async function getThreadAction(threadId: string) {
   const dbUserId = await resolveDbUserId();
 
-  // Verify participant
-  const participant = await verifyParticipant(threadId, dbUserId);
-  if (!participant) throw new Error("Not a participant in this thread");
+  await assertCanReadThread(threadId, dbUserId);
 
   return await getThread(threadId);
 }
@@ -86,8 +86,7 @@ export async function getThreadMessagesAction(
 ) {
   const dbUserId = await resolveDbUserId();
 
-  const participant = await verifyParticipant(threadId, dbUserId);
-  if (!participant) throw new Error("Not a participant in this thread");
+  await assertCanReadThread(threadId, dbUserId);
 
   return await getThreadMessages(threadId, options);
 }
@@ -95,8 +94,7 @@ export async function getThreadMessagesAction(
 export async function markThreadAsReadAction(threadId: string) {
   const dbUserId = await resolveDbUserId();
 
-  const participant = await verifyParticipant(threadId, dbUserId);
-  if (!participant) throw new Error("Not a participant in this thread");
+  await assertCanReadThread(threadId, dbUserId);
 
   const result = await markThreadAsRead(threadId, dbUserId);
   revalidatePath("/messages");
@@ -108,9 +106,7 @@ export async function deleteThreadAction(threadId: string) {
 
   const participant = await verifyParticipant(threadId, dbUserId);
   if (!participant) throw new Error("Not a participant in this thread");
-  if (participant.role !== "OWNER" && participant.role !== "ADMIN") {
-    throw new Error("Only thread owners or admins can delete threads");
-  }
+  assertCanDeleteThread(participant.role);
 
   await deleteThread(threadId);
   revalidatePath("/messages");
@@ -123,8 +119,7 @@ export async function getMessageAction(messageId: string) {
   if (!message) throw new Error("Message not found");
 
   // Verify user is in the thread
-  const participant = await verifyParticipant(message.threadId, dbUserId);
-  if (!participant) throw new Error("Not a participant in this thread");
+  await assertCanReadThread(message.threadId, dbUserId);
 
   return message;
 }
@@ -135,8 +130,7 @@ export async function markMessageAsReadAction(messageId: string) {
   const message = await getMessage(messageId);
   if (!message) throw new Error("Message not found");
 
-  const participant = await verifyParticipant(message.threadId, dbUserId);
-  if (!participant) throw new Error("Not a participant in this thread");
+  await assertCanReadThread(message.threadId, dbUserId);
 
   const result = await markMessageAsRead(messageId, dbUserId);
   revalidatePath("/messages");
@@ -152,13 +146,11 @@ export async function deleteMessageAction(messageId: string) {
   // Only sender or thread owner/admin can delete
   const participant = await verifyParticipant(message.threadId, dbUserId);
   if (!participant) throw new Error("Not a participant in this thread");
-  if (
-    message.senderId !== dbUserId &&
-    participant.role !== "OWNER" &&
-    participant.role !== "ADMIN"
-  ) {
-    throw new Error("Only the sender or thread admins can delete messages");
-  }
+  assertCanDeleteMessage({
+    senderId: message.senderId,
+    actorId: dbUserId,
+    participantRole: participant.role,
+  });
 
   await deleteMessage(messageId);
   revalidatePath("/messages");

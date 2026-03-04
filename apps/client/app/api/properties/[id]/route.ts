@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@build/db";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { auth } from "@clerk/nextjs/server";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
@@ -19,16 +18,10 @@ import { UpdatePropertySchema } from "@/app/lib/validation/properties-validation
 import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import {
-  updatePropertyWithOptimisticLock,
-  deletePropertyWithOptimisticLock,
   buildPropertyConflictResponse,
   isOptimisticRetryEnabled,
 } from "@/app/lib/services/property-operations.service";
-import {
-  getPropertyById,
-  getSimilarProperties,
-} from "@/lib/services/properties";
-import { ConsentType, Prisma } from "@prisma/client";
+import { propertiesService } from "@/app/lib/domains/properties";
 
 const logger = getClientLogger();
 
@@ -108,90 +101,18 @@ export async function GET(
   });
 
   const resilientExecutor = getResilientExecutor();
+  const { userId: clerkId } = await auth().catch(() => ({ userId: null }));
   const result = await resilientExecutor.execute(
-    async () => {
-      const property = await getPropertyById(id);
-
-      if (!property) {
-        logger.warn("Property not found", {
-          correlationId,
-          propertyId: id,
-        });
-        return { error: "not_found" as const };
-      }
-
-      logger.info("Property details fetched successfully", {
-        correlationId,
-        propertyId: id,
-        propertyTitle: property.title,
-      });
-
-      try {
-        const { userId: clerkId } = await auth();
-        if (clerkId) {
-          const user = await prisma.user.findUnique({
-            where: { clerkId },
-            select: { id: true },
-          });
-
-          if (user?.id && user.id === property.agent.userId) {
-            await prisma.consentRecord.create({
-              data: {
-                userId: property.agent.userId,
-                type: ConsentType.PRIVACY_POLICY,
-                granted: true,
-                grantedAt: new Date(),
-                documentVersion: "v1.0",
-                metadata: {
-                  propertyId: property.id,
-                  propertyName: property.title,
-                  action: "read",
-                  ipAddress,
-                  userAgent,
-                } as Prisma.InputJsonValue,
-              },
-            });
-          }
-        }
-      } catch (error) {
-        logger.warn("Failed to record property read access", {
-          correlationId,
-          propertyId: property.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-
-      // Increment view count (fire-and-forget)
-      prisma.property
-        .update({
-          where: { id },
-          data: { viewCount: { increment: 1 } },
-        })
-        .catch(() => {
-          /* swallow — non-critical */
-        });
-
-      let similarProperties: unknown[] = [];
-      try {
-        similarProperties = await getSimilarProperties(id, 4);
-      } catch {
-        logger.warn("Failed to fetch similar properties", {
-          correlationId,
-          propertyId: id,
-        });
-      }
-
-      logger.info("Property details fetched", {
-        correlationId,
-        propertyId: id,
-      });
-
-      return { property, similarProperties };
-    },
+    () =>
+      propertiesService.getPropertyDetail(id, {
+        clerkId,
+        ipAddress,
+        userAgent,
+      }),
     { operationName: "get_property_detail" },
   );
 
-  if (!result.success) {
+  if (!result.success || !result.data) {
     logger.error("Property fetch failed", result.error, {
       correlationId,
       propertyId: id,
@@ -199,30 +120,32 @@ export async function GET(
     return apiError(
       "Failed to fetch property",
       HttpStatus.INTERNAL_SERVER_ERROR,
+      undefined,
+      correlationId,
     );
   }
 
-  if (
-    result.data &&
-    "error" in result.data &&
-    result.data.error === "not_found"
-  ) {
-    return apiError("Property not found", HttpStatus.NOT_FOUND);
+  if (!result.data.ok) {
+    return apiError(
+      result.data.message,
+      result.data.status,
+      undefined,
+      correlationId,
+    );
   }
 
-  const data = result.data as {
-    property: { version: number; [key: string]: unknown };
-    similarProperties: unknown[];
-  };
+  const data = (result.data as { ok: true; data: Record<string, unknown> })
+    .data;
+  const property = data.property as { version: number; [key: string]: unknown };
   const response = apiSuccess(
     {
-      property: data.property,
+      property,
       similarProperties: data.similarProperties,
     },
     HttpStatus.OK,
     correlationId,
   );
-  response.headers.set("ETag", `"${data.property.version}"`);
+  response.headers.set("ETag", `"${property.version}"`);
   return response;
 }
 
@@ -344,7 +267,7 @@ export const PATCH = withAuth(
 
       let result;
       for (let attempt = 0; attempt < maxRetries; attempt++) {
-        result = await updatePropertyWithOptimisticLock(
+        result = await propertiesService.updateProperty(
           propertyId,
           dbUserId,
           validation.data,
@@ -352,7 +275,7 @@ export const PATCH = withAuth(
           expectedVersion + attempt,
         );
 
-        if (result.success || result.error !== "conflict") break;
+        if (result.ok || result.status !== HttpStatus.CONFLICT) break;
 
         if (attempt < maxRetries - 1) {
           await new Promise((r) =>
@@ -372,29 +295,29 @@ export const PATCH = withAuth(
         );
       }
 
-      if (!result.success) {
+      if (!result.ok) {
         await IdempotencyService.fail(idempotencyKey);
-        switch (result.error) {
-          case "not_found":
-            return apiError("Property not found", HttpStatus.NOT_FOUND);
-          case "forbidden":
-            return apiError(
-              "You do not have permission to update this property",
-              HttpStatus.FORBIDDEN,
-            );
-          case "conflict":
-            return await buildPropertyConflictResponse(
-              "Property has been modified. Retry with the latest version.",
-              propertyId,
-            );
-          default:
-            return apiError("Update failed", HttpStatus.INTERNAL_SERVER_ERROR);
+        if (result.status === HttpStatus.CONFLICT) {
+          return await buildPropertyConflictResponse(
+            result.message,
+            propertyId,
+          );
         }
+        return apiError(
+          result.message,
+          result.status,
+          undefined,
+          correlationId,
+        );
       } else {
         // Success Path
+        const optimisticResult = result.data as {
+          data: { property: Record<string, unknown>; newVersion: number };
+          newVersion: number;
+        };
         const responseData = {
-          ...(result.data as { property: Record<string, unknown> }).property,
-          _meta: { version: result.newVersion },
+          ...optimisticResult.data.property,
+          _meta: { version: optimisticResult.newVersion },
         };
 
         await IdempotencyService.complete(idempotencyKey, responseData);
@@ -402,11 +325,11 @@ export const PATCH = withAuth(
         logger.info("Property updated successfully", {
           correlationId,
           propertyId,
-          newVersion: result.newVersion,
+          newVersion: optimisticResult.newVersion,
         });
 
         const response = apiSuccess(responseData, HttpStatus.OK, correlationId);
-        response.headers.set("ETag", `"${result.newVersion}"`);
+        response.headers.set("ETag", `"${optimisticResult.newVersion}"`);
         return response;
       }
     } catch (error) {
@@ -419,6 +342,8 @@ export const PATCH = withAuth(
       return apiError(
         "Failed to update property",
         HttpStatus.INTERNAL_SERVER_ERROR,
+        undefined,
+        correlationId,
       );
     }
   },
@@ -517,39 +442,43 @@ export const DELETE = withAuth(
     };
 
     try {
-      const result = await deletePropertyWithOptimisticLock(
+      const result = await propertiesService.deleteProperty(
         propertyId,
         dbUserId,
         operationContext,
         expectedVersion,
       );
 
-      if (!result.success) {
+      if (!result.ok) {
         await IdempotencyService.fail(idempotencyKey);
-        switch (result.error) {
-          case "not_found":
-            return apiError("Property not found", HttpStatus.NOT_FOUND);
-          case "forbidden":
-            return apiError(
-              "You do not have permission to delete this property",
-              HttpStatus.FORBIDDEN,
-            );
-          case "conflict":
-            return await buildPropertyConflictResponse(
-              "Property has been modified. Retry with the latest version.",
-              propertyId,
-            );
-          default:
-            return apiError("Delete failed", HttpStatus.INTERNAL_SERVER_ERROR);
+        if (result.status === HttpStatus.CONFLICT) {
+          return await buildPropertyConflictResponse(
+            result.message,
+            propertyId,
+          );
         }
+        return apiError(
+          result.message,
+          result.status,
+          undefined,
+          correlationId,
+        );
       } else {
         // Success Path
+        const optimisticResult = result.data as {
+          data: {
+            propertyId: string;
+            propertyTitle: string;
+            newVersion: number;
+          };
+          newVersion: number;
+        };
         const responseData = {
           message: "Property deleted successfully",
-          propertyId: result.data.propertyId,
-          propertyTitle: result.data.propertyTitle,
+          propertyId: optimisticResult.data.propertyId,
+          propertyTitle: optimisticResult.data.propertyTitle,
           _meta: {
-            version: result.newVersion,
+            version: optimisticResult.newVersion,
             deletedAt: new Date().toISOString(),
           },
         };
@@ -557,7 +486,7 @@ export const DELETE = withAuth(
         logger.info("Property soft-deleted", {
           correlationId,
           propertyId,
-          newVersion: result.newVersion,
+          newVersion: optimisticResult.newVersion,
         });
         await IdempotencyService.complete(idempotencyKey, responseData);
         return apiSuccess(responseData, HttpStatus.OK, correlationId);
@@ -572,6 +501,8 @@ export const DELETE = withAuth(
       return apiError(
         "Failed to delete property",
         HttpStatus.INTERNAL_SERVER_ERROR,
+        undefined,
+        correlationId,
       );
     }
   },

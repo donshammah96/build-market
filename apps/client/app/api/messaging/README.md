@@ -2,7 +2,7 @@
 
 Full-featured messaging subsystem for Build Market, providing real-time-ready thread-based messaging with participant management, read receipts, reactions, and file attachments.
 
-# Messaging API — Architecture & Conventions
+## Messaging API — Architecture & Conventions
 
 This folder implements the messaging REST API used by the browser-safe client facade.
 
@@ -18,20 +18,31 @@ Key conventions applied:
   - Else: `const data = result.data; if (data && "_error" in data && data._error) { ... } else { apiSuccess(data) }`
 - Idempotency keys: include `Idempotency-Key` on client write requests to allow dedup and server-side caching via `IdempotencyService`.
 
+## Architecture Shift: Thin Adapters + Domain Core
+
+Messaging routes now follow a strict adapter pattern:
+
+- Route files in `app/api/messaging/*` handle transport concerns only (auth, rate limits, body parse/validation, idempotency, status mapping).
+- Business logic and authorization live in `app/lib/domains/messaging/service.ts`.
+- Data access lives in `app/lib/domains/messaging/repository.ts`.
+- Shared messaging contracts/schemas/selects are re-exported from `app/lib/domains/messaging/contracts.ts`.
+
+This removes direct route-level Prisma orchestration and centralizes domain behavior in one canonical server-side module.
+
 ### Schema Models
 
 | Model               | Purpose                                      |
 | ------------------- | -------------------------------------------- |
 | `MessageThread`     | Conversation container (DIRECT/GROUP/etc.)   |
 | `ThreadParticipant` | Join table: users ↔ threads with roles       |
-| `Message`           | Individual message with type and reply chain  |
-| `ReadReceipt`       | Per-user per-message read tracking            |
-| `MessageReaction`   | Emoji reactions (unique per user+emoji)       |
-| `MessageAttachment` | Links messages to `Asset` records             |
+| `Message`           | Individual message with type and reply chain |
+| `ReadReceipt`       | Per-user per-message read tracking           |
+| `MessageReaction`   | Emoji reactions (unique per user+emoji)      |
+| `MessageAttachment` | Links messages to `Asset` records            |
 
 ### Entity Relationship
 
-```
+```text
 MessageThread ──< ThreadParticipant
 MessageThread ──< Message
 Message ──< MessageReaction
@@ -47,57 +58,57 @@ All routes implement:
 - **Authentication**: `withAuth` middleware (Clerk → DB user resolution)
 - **Rate Limiting**: `checkRateLimit` with scoped keys per operation type
 - **Resilience**: `getResilientExecutor().execute()` with circuit breaker
-- **Validation**: Zod schemas from `messaging-validation.ts`
+- **Validation**: Zod schemas from `app/lib/domains/messaging/contracts.ts` (re-exported from validation module)
 - **Idempotency**: `IdempotencyService` on create/send operations
 - **Soft Delete**: `deletedAt` filter on all queries
-- **Participant Verification**: Every operation confirms user membership
+- **Participant Verification**: Domain service methods enforce participant and policy checks
 - **Body Size Limits**: `checkBodySize` on all mutation endpoints
 
 ## Endpoints
 
 ### Health Check
 
-| Method | Path              | Description              |
-| ------ | ----------------- | ------------------------ |
-| GET    | `/api/messaging`  | Service health + stats   |
+| Method | Path             | Description            |
+| ------ | ---------------- | ---------------------- |
+| GET    | `/api/messaging` | Service health + stats |
 
 ### Threads (Conversations)
 
-| Method | Path                                        | Description                        |
-| ------ | ------------------------------------------- | ---------------------------------- |
-| GET    | `/api/messaging/conversations`              | List user's threads (paginated)    |
-| POST   | `/api/messaging/conversations`              | Create a new thread                |
-| GET    | `/api/messaging/conversations/:id`          | Get thread detail                  |
-| PATCH  | `/api/messaging/conversations/:id`          | Update subject / archive status    |
-| DELETE | `/api/messaging/conversations/:id`          | Soft-delete (OWNER/ADMIN)          |
-| POST   | `/api/messaging/conversations/:id/read`     | Mark all messages as read          |
+| Method | Path                                    | Description                     |
+| ------ | --------------------------------------- | ------------------------------- |
+| GET    | `/api/messaging/conversations`          | List user's threads (paginated) |
+| POST   | `/api/messaging/conversations`          | Create a new thread             |
+| GET    | `/api/messaging/conversations/:id`      | Get thread detail               |
+| PATCH  | `/api/messaging/conversations/:id`      | Update subject / archive status |
+| DELETE | `/api/messaging/conversations/:id`      | Soft-delete (OWNER/ADMIN)       |
+| POST   | `/api/messaging/conversations/:id/read` | Mark all messages as read       |
 
 ### Participants
 
-| Method | Path                                               | Description                   |
-| ------ | -------------------------------------------------- | ----------------------------- |
-| GET    | `/api/messaging/conversations/:id/participants`    | List thread participants      |
-| POST   | `/api/messaging/conversations/:id/participants`    | Add participant (ADMIN+)      |
-| PATCH  | `/api/messaging/conversations/:id/participants`    | Update own settings           |
-| DELETE | `/api/messaging/conversations/:id/participants`    | Remove/leave (?userId=...)    |
+| Method | Path                                            | Description                |
+| ------ | ----------------------------------------------- | -------------------------- |
+| GET    | `/api/messaging/conversations/:id/participants` | List thread participants   |
+| POST   | `/api/messaging/conversations/:id/participants` | Add participant (ADMIN+)   |
+| PATCH  | `/api/messaging/conversations/:id/participants` | Update own settings        |
+| DELETE | `/api/messaging/conversations/:id/participants` | Remove/leave (?userId=...) |
 
 ### Messages
 
-| Method | Path                                                       | Description                         |
-| ------ | ---------------------------------------------------------- | ----------------------------------- |
-| POST   | `/api/messaging/messages`                                  | Send a message                      |
-| GET    | `/api/messaging/messages/:id`                              | Get message detail + read receipts  |
-| PATCH  | `/api/messaging/messages/:id`                              | Edit message (sender only)          |
-| DELETE | `/api/messaging/messages/:id`                              | Soft-delete (sender/admin)          |
-| POST   | `/api/messaging/messages/:id/read`                         | Mark single message as read         |
-| GET    | `/api/messaging/messages/conversation/:conversationId`     | List messages (cursor pagination)   |
+| Method | Path                                                   | Description                        |
+| ------ | ------------------------------------------------------ | ---------------------------------- |
+| POST   | `/api/messaging/messages`                              | Send a message                     |
+| GET    | `/api/messaging/messages/:id`                          | Get message detail + read receipts |
+| PATCH  | `/api/messaging/messages/:id`                          | Edit message (sender only)         |
+| DELETE | `/api/messaging/messages/:id`                          | Soft-delete (sender/admin)         |
+| POST   | `/api/messaging/messages/:id/read`                     | Mark single message as read        |
+| GET    | `/api/messaging/messages/conversation/:conversationId` | List messages (cursor pagination)  |
 
 ### Reactions
 
-| Method | Path                                       | Description                         |
-| ------ | ------------------------------------------ | ----------------------------------- |
-| POST   | `/api/messaging/messages/:id/reactions`    | Add emoji reaction                  |
-| DELETE | `/api/messaging/messages/:id/reactions`    | Remove reaction (?emoji=...)        |
+| Method | Path                                    | Description                  |
+| ------ | --------------------------------------- | ---------------------------- |
+| POST   | `/api/messaging/messages/:id/reactions` | Add emoji reaction           |
+| DELETE | `/api/messaging/messages/:id/reactions` | Remove reaction (?emoji=...) |
 
 ## Request/Response Examples
 
@@ -174,7 +185,7 @@ Response (201):
 
 ### List Messages (Cursor Pagination)
 
-```
+```text
 GET /api/messaging/messages/conversation/{threadId}?cursor=msg-uuid&limit=50&direction=before
 ```
 
@@ -202,7 +213,7 @@ POST /api/messaging/messages/{id}/reactions
 
 ### Mark Thread as Read
 
-```
+```text
 POST /api/messaging/conversations/{id}/read
 ```
 
@@ -232,42 +243,42 @@ All errors follow the standard format:
 }
 ```
 
-| Status | Meaning                        |
-| ------ | ------------------------------ |
-| 400    | Validation failed              |
-| 401    | Not authenticated              |
-| 403    | Not a participant / no access  |
-| 404    | Thread or message not found    |
-| 409    | Idempotency conflict           |
-| 429    | Rate limited                   |
-| 500    | Internal server error          |
+| Status | Meaning                       |
+| ------ | ----------------------------- |
+| 400    | Validation failed             |
+| 401    | Not authenticated             |
+| 403    | Not a participant / no access |
+| 404    | Thread or message not found   |
+| 409    | Idempotency conflict          |
+| 429    | Rate limited                  |
+| 500    | Internal server error         |
 
 ## Enums
 
-| Enum            | Values                               |
-| --------------- | ------------------------------------ |
-| MessageType     | TEXT, IMAGE, FILE, PDF, SYSTEM       |
-| ThreadType      | DIRECT, GROUP, PROJECT, SUPPORT      |
-| ParticipantRole | OWNER, ADMIN, MEMBER                 |
+| Enum            | Values                          |
+| --------------- | ------------------------------- |
+| MessageType     | TEXT, IMAGE, FILE, PDF, SYSTEM  |
+| ThreadType      | DIRECT, GROUP, PROJECT, SUPPORT |
+| ParticipantRole | OWNER, ADMIN, MEMBER            |
 
 ## Authorization Matrix
 
-| Action                  | OWNER | ADMIN | MEMBER |
-| ----------------------- | ----- | ----- | ------ |
-| Read thread/messages    | ✓     | ✓     | ✓      |
-| Send message            | ✓     | ✓     | ✓      |
-| Edit own message        | ✓     | ✓     | ✓      |
-| Delete own message      | ✓     | ✓     | ✓      |
-| Delete others' messages | ✓     | ✓     | ✗      |
-| Update thread subject   | ✓     | ✓     | ✗      |
-| Delete thread           | ✓     | ✓     | ✗      |
-| Add participant         | ✓     | ✓     | ✗      |
+| Action                  | OWNER | ADMIN | MEMBER        |
+| ----------------------- | ----- | ----- | ------------- |
+| Read thread/messages    | ✓     | ✓     | ✓             |
+| Send message            | ✓     | ✓     | ✓             |
+| Edit own message        | ✓     | ✓     | ✓             |
+| Delete own message      | ✓     | ✓     | ✓             |
+| Delete others' messages | ✓     | ✓     | ✗             |
+| Update thread subject   | ✓     | ✓     | ✗             |
+| Delete thread           | ✓     | ✓     | ✗             |
+| Add participant         | ✓     | ✓     | ✗             |
 | Remove participant      | ✓     | ✓     | ✗ (self only) |
-| React to messages       | ✓     | ✓     | ✓      |
+| React to messages       | ✓     | ✓     | ✓             |
 
 ## Validation Module
 
-Schemas and Prisma select objects are centralized in `app/lib/messaging-validation.ts`:
+Schemas and Prisma select objects are centralized in `app/lib/validation/messaging-validation.ts` and re-exported via `app/lib/domains/messaging/contracts.ts`:
 
 - `ThreadQuerySchema` — GET params for thread listing
 - `CreateThreadSchema` — POST body for new threads
@@ -284,12 +295,12 @@ Schemas and Prisma select objects are centralized in `app/lib/messaging-validati
 
 Constants in `MESSAGING_CONFIG`:
 
-| Key                         | Value   |
-| --------------------------- | ------- |
-| MAX_BODY_SIZE               | 64 KB   |
-| MAX_THREAD_PARTICIPANTS     | 50      |
-| MAX_MESSAGE_LENGTH          | 10,000  |
-| MAX_ATTACHMENTS_PER_MESSAGE | 10      |
-| MAX_REACTION_EMOJI_LENGTH   | 10      |
-| DEFAULT_MESSAGE_LIMIT       | 50      |
-| DEFAULT_THREAD_LIMIT        | 20      |
+| Key                         | Value  |
+| --------------------------- | ------ |
+| MAX_BODY_SIZE               | 64 KB  |
+| MAX_THREAD_PARTICIPANTS     | 50     |
+| MAX_MESSAGE_LENGTH          | 10,000 |
+| MAX_ATTACHMENTS_PER_MESSAGE | 10     |
+| MAX_REACTION_EMOJI_LENGTH   | 10     |
+| DEFAULT_MESSAGE_LIMIT       | 50     |
+| DEFAULT_THREAD_LIMIT        | 20     |

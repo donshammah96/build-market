@@ -108,7 +108,7 @@ export function ProfessionalSidebar({
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative",
                   isActive
                     ? "bg-emerald-600 text-white shadow-lg shadow-emerald-900/20"
-                    : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                    : "text-zinc-400 hover:bg-zinc-800 hover:text-white",
                 )}
               >
                 <Icon
@@ -116,7 +116,7 @@ export function ProfessionalSidebar({
                     "h-4 w-4",
                     isActive
                       ? "text-white"
-                      : "text-zinc-500 group-hover:text-white"
+                      : "text-zinc-500 group-hover:text-white",
                   )}
                 />
                 <span>{item.label}</span>
@@ -143,7 +143,7 @@ export function ProfessionalSidebar({
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all mb-1",
                   pathname === "/professional-portal/settings/complete-profile"
                     ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                    : "text-amber-400 hover:bg-amber-500/10 border border-transparent"
+                    : "text-amber-400 hover:bg-amber-500/10 border border-transparent",
                 )}
               >
                 <div className="relative">
@@ -156,7 +156,7 @@ export function ProfessionalSidebar({
                     "text-[10px] font-bold px-1.5 py-0.5 rounded-md",
                     percentage < 50
                       ? "bg-orange-500/20 text-orange-400"
-                      : "bg-amber-500/20 text-amber-400"
+                      : "bg-amber-500/20 text-amber-400",
                   )}
                 >
                   {percentage}%
@@ -172,7 +172,7 @@ export function ProfessionalSidebar({
                 pathname === "/professional-portal/settings" ||
                   pathname.startsWith("/professional-portal/settings/")
                   ? "bg-emerald-600 text-white shadow-lg shadow-emerald-900/20"
-                  : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                  : "text-zinc-400 hover:bg-zinc-800 hover:text-white",
               )}
             >
               <Settings className="h-4 w-4" />

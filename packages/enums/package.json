@@ -5,8 +5,10 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
+    "lint": "echo \"No lint configured\" && exit 0",
     "check-types": "tsc --noEmit",
     "build": "tsc",
+    "test": "echo \"No tests configured\" && exit 0",
     "clean": "rm -rf dist"
   },
   "devDependencies": {

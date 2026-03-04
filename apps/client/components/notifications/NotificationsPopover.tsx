@@ -92,21 +92,23 @@ export function NotificationsPopover() {
                   key={notification.id}
                   className={cn(
                     "w-full text-left px-4 py-3 hover:bg-zinc-50 transition-colors flex gap-3",
-                    !notification.isRead && "bg-blue-50/30"
+                    !notification.isRead && "bg-blue-50/30",
                   )}
                   onClick={() => handleNotificationClick(notification)}
                 >
                   <div
                     className={cn(
                       "h-2 w-2 mt-1.5 rounded-full flex-shrink-0",
-                      !notification.isRead ? "bg-blue-500" : "bg-transparent"
+                      !notification.isRead ? "bg-blue-500" : "bg-transparent",
                     )}
                   />
                   <div className="flex-1 space-y-1">
                     <p
                       className={cn(
                         "text-sm font-medium leading-none",
-                        !notification.isRead ? "text-zinc-900" : "text-zinc-600"
+                        !notification.isRead
+                          ? "text-zinc-900"
+                          : "text-zinc-600",
                       )}
                     >
                       {notification.title}

@@ -120,11 +120,11 @@ export default function ProductsPage() {
               <div className="bg-gray-200 h-64 rounded-lg mb-4 flex items-center justify-center group-hover:shadow-lg transition-shadow">
                 <span className="text-gray-400">Product Image</span>
               </div>
-              
+
               <h3 className="font-semibold text-lg mb-1 group-hover:text-blue-600">
                 {product.name}
               </h3>
-              
+
               <div className="flex items-center gap-2 mb-2">
                 <div className="flex items-center text-yellow-500">
                   <span className="text-sm">★</span>
@@ -134,7 +134,7 @@ export default function ProductsPage() {
                   ({product.reviews} reviews)
                 </span>
               </div>
-              
+
               <p className="font-bold text-xl">${product.price}</p>
             </Link>
           ))}
@@ -143,12 +143,9 @@ export default function ProductsPage() {
 
       {filteredProducts.length === 0 && !loading && (
         <div className="text-center py-16">
-          <p className="text-gray-600">
-            No products found in this category.
-          </p>
+          <p className="text-gray-600">No products found in this category.</p>
         </div>
       )}
     </div>
   );
 }
-

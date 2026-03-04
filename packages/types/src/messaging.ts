@@ -20,12 +20,7 @@ export const MessageTypeEnum = z.enum([
 ]);
 export type MessageType = z.infer<typeof MessageTypeEnum>;
 
-export const ThreadTypeEnum = z.enum([
-  "DIRECT",
-  "GROUP",
-  "PROJECT",
-  "SUPPORT",
-]);
+export const ThreadTypeEnum = z.enum(["DIRECT", "GROUP", "PROJECT", "SUPPORT"]);
 export type ThreadType = z.infer<typeof ThreadTypeEnum>;
 
 export const ParticipantRoleEnum = z.enum(["OWNER", "ADMIN", "MEMBER"]);
@@ -186,7 +181,9 @@ export type Notification = z.infer<typeof NotificationSchema>;
 export const CreateConversationSchema = z.object({
   type: ThreadTypeEnum.default("DIRECT"),
   subject: z.string().optional(),
-  participants: z.array(z.string().uuid()).min(1, "At least 1 participant required"),
+  participants: z
+    .array(z.string().uuid())
+    .min(1, "At least 1 participant required"),
   projectId: z.string().uuid().optional(),
   initialMessage: z.string().optional(),
 });

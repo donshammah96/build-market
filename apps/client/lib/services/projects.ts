@@ -12,14 +12,14 @@ import {
   projectDetailSelect,
   milestoneListSelect,
   milestoneDetailSelect,
-} from "@/app/lib/validation/projects-validation";
+} from "@/lib/validation/projects-validation";
 import type {
   CreateProjectInput,
   UpdateProjectInput,
   ProjectQueryInput,
   CreateMilestoneInput,
   UpdateMilestoneInput,
-} from "@/app/lib/validation/projects-validation";
+} from "@/lib/validation/projects-validation";
 import {
   updateProjectWithOptimisticLock,
   deleteProjectWithOptimisticLock,
@@ -27,8 +27,8 @@ import {
   deleteMilestoneWithOptimisticLock,
   verifyProjectOwnership,
   type ProjectOperationContext,
-} from "@/app/lib/services/project-operations.service";
-import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
+} from "@/lib/services/project-operations.service";
+import { PROJECT_CONFIG } from "@/lib/config/project.config";
 import { ConsentType, Prisma } from "@prisma/client";
 
 export type { CreateProjectInput, UpdateProjectInput, ProjectQueryInput };

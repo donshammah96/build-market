@@ -15,9 +15,9 @@ export default function SignInPage() {
     try {
       setLoading(provider);
       setError("");
-      await signIn(provider, { 
+      await signIn(provider, {
         callbackUrl: ROUTES.onboarding,
-        redirect: true 
+        redirect: true,
       });
     } catch {
       setError("Failed to sign in. Please try again.");
@@ -67,9 +67,7 @@ export default function SignInPage() {
           <h2 className="text-3xl font-bold text-gray-900 mb-2">
             Welcome to Build Market
           </h2>
-          <p className="text-gray-600">
-            Sign in to continue to your account
-          </p>
+          <p className="text-gray-600">Sign in to continue to your account</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-lg p-8 space-y-6">
@@ -160,4 +158,3 @@ export default function SignInPage() {
     </div>
   );
 }
-

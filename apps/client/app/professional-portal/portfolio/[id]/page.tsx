@@ -156,7 +156,7 @@ export default function PortfolioDetailPage() {
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : "Failed to update portfolio"
+        error instanceof Error ? error.message : "Failed to update portfolio",
       );
     },
   });
@@ -180,7 +180,7 @@ export default function PortfolioDetailPage() {
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete portfolio"
+        error instanceof Error ? error.message : "Failed to delete portfolio",
       );
     },
   });
@@ -558,7 +558,7 @@ export default function PortfolioDetailPage() {
                           year: "numeric",
                           month: "long",
                           day: "numeric",
-                        }
+                        },
                       )}
                     </p>
                   </div>

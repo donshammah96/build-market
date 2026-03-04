@@ -82,7 +82,10 @@ async function checkDependency(
       checkFn(),
       new Promise<never>((_, reject) =>
         setTimeout(
-          () => reject(new Error(`${name} health check timed out after ${timeoutMs}ms`)),
+          () =>
+            reject(
+              new Error(`${name} health check timed out after ${timeoutMs}ms`),
+            ),
           timeoutMs,
         ),
       ),
@@ -95,8 +98,7 @@ async function checkDependency(
       critical,
     };
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : String(error);
+    const message = error instanceof Error ? error.message : String(error);
 
     return {
       name,
@@ -113,9 +115,7 @@ async function checkDependency(
 async function checkDatabase(): Promise<DependencyResult> {
   return checkDependency("database", true, 5000, async () => {
     // Validate connection with a lightweight query
-    const result = await prisma.$queryRaw<
-      { ok: number }[]
-    >`SELECT 1 AS ok`;
+    const result = await prisma.$queryRaw<{ ok: number }[]>`SELECT 1 AS ok`;
     if (!result?.[0]?.ok) {
       throw new Error("Unexpected query result");
     }
@@ -219,7 +219,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const identifier = getRateLimitIdentifier(request);
   const rateLimitResult = await checkRateLimit(
     `health:${identifier}`,
-    60,    // 60 requests
+    60, // 60 requests
     60000, // per minute
   );
   if (!rateLimitResult.success) {

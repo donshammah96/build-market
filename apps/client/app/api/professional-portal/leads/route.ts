@@ -20,14 +20,18 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { getResilientExecutor } from "@/app/lib/api/resilient-api";
 import { withAuth } from "@/app/lib/api/api-middleware";
-import { initializeCorrelationId, getClientLogger } from "@/app/lib/api/resilient-api";
+import {
+  initializeCorrelationId,
+  getClientLogger,
+} from "@/app/lib/api/resilient-api";
 
 const logger = getClientLogger();
 
 export const GET = createProfessionalPortalGet({
   rateLimitKey: "leads-read",
   querySchema: LeadQuerySchema,
-  parseQuery: (req) => Object.fromEntries(new URL(req.url).searchParams.entries()),
+  parseQuery: (req) =>
+    Object.fromEntries(new URL(req.url).searchParams.entries()),
   handler: async ({ dbUserId, query }) => getProfessionalLeads(dbUserId, query),
   operationName: "get_leads",
   errorMessage: "Failed to fetch leads",
@@ -121,10 +125,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
 
   if (!result.success || !result.data) {
     await IdempotencyService.fail(idempotencyKey);
-    return apiError(
-      "Failed to create lead",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
+    return apiError("Failed to create lead", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
   await IdempotencyService.complete(idempotencyKey, result.data);

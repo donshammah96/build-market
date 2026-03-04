@@ -1,4 +1,4 @@
-import postgres from 'postgres';
+import postgres from "postgres";
 
 let sql: ReturnType<typeof postgres> | null = null;
 
@@ -9,18 +9,18 @@ let sql: ReturnType<typeof postgres> | null = null;
 export function getSqlClient() {
   const connectionString = process.env.POSTGRES_URL;
   if (!connectionString) {
-    throw new Error('POSTGRES_URL environment variable is not set');
+    throw new Error("POSTGRES_URL environment variable is not set");
   }
-  
+
   if (!sql) {
-    sql = postgres(connectionString, { 
-      ssl: 'require',
+    sql = postgres(connectionString, {
+      ssl: "require",
       max: 10, // Maximum number of connections in the pool
       idle_timeout: 20, // Close idle connections after 20 seconds
       connect_timeout: 10, // Connection timeout in seconds
     });
   }
-  
+
   return sql;
 }
 

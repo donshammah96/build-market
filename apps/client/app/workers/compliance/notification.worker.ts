@@ -1,12 +1,12 @@
 import { Worker, Job } from "bullmq";
-import { redisConnection } from "@/app/lib/queues/redis-connection";
 import {
+  redisConnection,
   userNotificationQueue,
   UserNotificationJobData,
   ComplianceJobs,
-} from "@/app/lib/queues/compliance.queue";
+} from "@build/queue-server";
 import { prisma } from "@build/db";
-import { sendEmail } from "@/app/lib/infrastructure/mailer";
+import { sendEmail } from "@build/mail-server";
 import { sendSMS } from "@/app/lib/infrastructure/sms";
 
 export const notificationWorker = new Worker<UserNotificationJobData>(

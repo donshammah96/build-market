@@ -1,6 +1,6 @@
 // src/jobs/export-cleanup.ts
 import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
-import { redisConnection } from "@/app/lib/queues/redis-connection";
+import { redisConnection } from "@build/queue-server";
 import { prisma } from "@build/db";
 import { ExportProcessor } from "@/app/workers/export/processor";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";

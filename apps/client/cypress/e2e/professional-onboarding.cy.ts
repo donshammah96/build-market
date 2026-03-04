@@ -227,7 +227,7 @@ describe("Professional Onboarding Form", () => {
       cy.get('input[type="file"]').should(
         "have.attr",
         "accept",
-        ".pdf,.jpg,.jpeg,.png"
+        ".pdf,.jpg,.jpeg,.png",
       );
     });
 
@@ -517,7 +517,7 @@ describe("Professional Onboarding Form", () => {
       // Should have visible focus ring
       cy.get('input[placeholder*="Legal Name"]').should(
         "have.css",
-        "outline-style"
+        "outline-style",
       );
     });
   });
