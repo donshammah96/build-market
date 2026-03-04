@@ -36,7 +36,7 @@ export const ReviewCard = memo(function ReviewCard({
       <Card
         className={cn(
           "h-full border-zinc-100 bg-white shadow-sm flex flex-col p-6 rounded-2xl relative overflow-hidden group",
-          "transition-all duration-300 hover:shadow-lg"
+          "transition-all duration-300 hover:shadow-lg",
         )}
       >
         {/* Background Decoration Quote Icon */}
@@ -59,7 +59,7 @@ export const ReviewCard = memo(function ReviewCard({
               size={16}
               className={cn(
                 "fill-current",
-                i < rating ? "text-amber-400" : "text-gray-200"
+                i < rating ? "text-amber-400" : "text-gray-200",
               )}
               aria-hidden="true"
             />
@@ -76,11 +76,7 @@ export const ReviewCard = memo(function ReviewCard({
         {/* Footer: User Info */}
         <footer className="flex items-center gap-3 mt-auto pt-4 border-t border-zinc-50">
           <Avatar className="h-12 w-12 border-2 border-white shadow-sm">
-            <AvatarImage
-              src={image}
-              alt={name}
-              className="object-cover"
-            />
+            <AvatarImage src={image} alt={name} className="object-cover" />
             <AvatarFallback className="bg-emerald-50 text-emerald-700 font-bold">
               {name.charAt(0)}
             </AvatarFallback>

@@ -14,9 +14,7 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
-import {
-  UpdateDocumentSchema,
-} from "@/app/lib/validation/documents-validation";
+import { UpdateDocumentSchema } from "@/app/lib/validation/documents-validation";
 import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
 import {
@@ -88,7 +86,11 @@ export const GET = withAuth<{ id: string }>(
     }
 
     const document = data.data as { category: string };
-    if (SENSITIVE_CATEGORIES.includes(document.category as (typeof SENSITIVE_CATEGORIES)[number])) {
+    if (
+      SENSITIVE_CATEGORIES.includes(
+        document.category as (typeof SENSITIVE_CATEGORIES)[number],
+      )
+    ) {
       ComplianceService.logAdminAction(
         dbUserId,
         AuditAction.PROFILE_UPDATED,

@@ -12,10 +12,10 @@ List certificates for the authenticated professional.
 
 **Query Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `category` | `EDUCATION_CERT` \| `AWARD_OR_RECOGNITION` | Filter by certificate type |
-| `status` | `VerificationStatus` | Filter by verification status |
+| Parameter  | Type                                       | Description                   |
+| ---------- | ------------------------------------------ | ----------------------------- |
+| `category` | `EDUCATION_CERT` \| `AWARD_OR_RECOGNITION` | Filter by certificate type    |
+| `status`   | `VerificationStatus`                       | Filter by verification status |
 
 **Response:** `200 OK` — Array of certificate documents with linked asset details.
 
@@ -25,14 +25,14 @@ Create a new certificate linked to a pre-uploaded Asset.
 
 **Body:**
 
-| Field | Type | Required | Default |
-|-------|------|----------|---------|
-| `title` | `string` (1–200 chars) | Yes | — |
-| `category` | `EDUCATION_CERT` \| `AWARD_OR_RECOGNITION` | No | `EDUCATION_CERT` |
-| `assetId` | `UUID` | Yes | — |
-| `issuer` | `string` (max 200) | No | — |
-| `issueDate` | ISO 8601 datetime | No | — |
-| `expiryDate` | ISO 8601 datetime | No | — |
+| Field        | Type                                       | Required | Default          |
+| ------------ | ------------------------------------------ | -------- | ---------------- |
+| `title`      | `string` (1–200 chars)                     | Yes      | —                |
+| `category`   | `EDUCATION_CERT` \| `AWARD_OR_RECOGNITION` | No       | `EDUCATION_CERT` |
+| `assetId`    | `UUID`                                     | Yes      | —                |
+| `issuer`     | `string` (max 200)                         | No       | —                |
+| `issueDate`  | ISO 8601 datetime                          | No       | —                |
+| `expiryDate` | ISO 8601 datetime                          | No       | —                |
 
 **Response:** `201 Created` — The created certificate.
 

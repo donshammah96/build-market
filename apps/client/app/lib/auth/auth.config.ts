@@ -1,28 +1,28 @@
-import type { NextAuthConfig } from 'next-auth';
- 
+import type { NextAuthConfig } from "next-auth";
+
 export const authConfig: NextAuthConfig = {
   pages: {
-    signIn: '/login',
+    signIn: "/login",
   },
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
-      const isOnDashboard = nextUrl.pathname.startsWith('/dashboard');
-      const isOnClientArea = nextUrl.pathname.startsWith('/client');
+      const isOnDashboard = nextUrl.pathname.startsWith("/dashboard");
+      const isOnClientArea = nextUrl.pathname.startsWith("/client");
       const userRole = auth?.user?.role;
-      
+
       if (isOnDashboard) {
         if (isLoggedIn) return true;
         return false; // Redirect unauthenticated users to login page
       } else if (isOnClientArea) {
-        if (isLoggedIn && userRole === 'client') return true;
+        if (isLoggedIn && userRole === "client") return true;
         return false; // Redirect non-clients or unauthenticated users to login page
       } else if (isLoggedIn) {
         // Redirect users based on their role after login
-        if (userRole === 'admin' || userRole === 'professional') {
-          return Response.redirect(new URL('/dashboard', nextUrl));
-        } else if (userRole === 'client') {
-          return Response.redirect(new URL('/client', nextUrl));
+        if (userRole === "admin" || userRole === "professional") {
+          return Response.redirect(new URL("/dashboard", nextUrl));
+        } else if (userRole === "client") {
+          return Response.redirect(new URL("/client", nextUrl));
         }
       }
       return true;
@@ -44,7 +44,7 @@ export const authConfig: NextAuthConfig = {
         session.user.role = token.role as string;
       }
       return session;
-    }
+    },
   },
   providers: [],
 } satisfies NextAuthConfig;

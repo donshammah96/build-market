@@ -261,8 +261,12 @@ export const DELETE = withAuth<LicenseParams>(
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
 
-    const { message, licenseId: deletedId, authority, licenseNumber } =
-      data.data;
+    const {
+      message,
+      licenseId: deletedId,
+      authority,
+      licenseNumber,
+    } = data.data;
     ComplianceService.logAdminAction(
       dbUserId,
       AuditAction.DATA_RECTIFIED,

@@ -1,6 +1,6 @@
 // src/services/export.service.ts
 import { prisma } from "@build/db";
-import { addExportJob, ExportJobData } from "@/app/lib/queues/export.queue";
+import { addExportJob, ExportJobData, exportQueue } from "@build/queue-server";
 import { ExportStatus } from "@prisma/client";
 import path from "path";
 import fs from "fs";
@@ -125,7 +125,6 @@ export class ExportService {
 
     if (exportRecord.status === "PROCESSING") {
       // Attempt to remove from queue if not started
-      const { exportQueue } = await import("@/app/lib/queues/export.queue");
       const job = await exportQueue.getJob(exportId);
       if (job && (await job.isWaiting())) {
         await job.remove();

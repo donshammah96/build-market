@@ -36,7 +36,7 @@ export const CTA: FC = memo(function CTA() {
         <div
           className={cn(
             "max-w-2xl text-center md:text-left",
-            isInView && shouldAnimate && "animate-fade-in-up"
+            isInView && shouldAnimate && "animate-fade-in-up",
           )}
         >
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-900/50 border border-emerald-800 text-emerald-400 text-sm font-medium mb-6">
@@ -62,7 +62,7 @@ export const CTA: FC = memo(function CTA() {
         <div
           className={cn(
             "flex flex-col sm:flex-row gap-4 w-full md:w-auto",
-            isInView && shouldAnimate && "animate-slide-in-right"
+            isInView && shouldAnimate && "animate-slide-in-right",
           )}
           style={{
             animationDelay: isInView && shouldAnimate ? "200ms" : "0ms",

@@ -89,7 +89,10 @@ export async function POST(req: NextRequest) {
         correlationId,
         missing: missingSvixHeaders,
       });
-      return apiError("Missing webhook signature headers", HttpStatus.BAD_REQUEST);
+      return apiError(
+        "Missing webhook signature headers",
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     // ── 4. Svix signature verification ─────────────────────────────────
@@ -217,10 +220,7 @@ async function handleUserCreated(data: ClerkUserData, correlationId: string) {
       correlationId,
       clerkId,
     });
-    return apiError(
-      "Missing required email address",
-      HttpStatus.BAD_REQUEST,
-    );
+    return apiError("Missing required email address", HttpStatus.BAD_REQUEST);
   }
 
   const email = primaryEmail.email_address;
@@ -341,36 +341,38 @@ async function handleUserUpdated(data: ClerkUserData, correlationId: string) {
     });
 
     if (!existingUser) {
-      logger.warn("User not found for update — will attempt upsert via user.created path", {
-        correlationId,
-        clerkId,
-      });
+      logger.warn(
+        "User not found for update — will attempt upsert via user.created path",
+        {
+          correlationId,
+          clerkId,
+        },
+      );
       return apiError("User not found", HttpStatus.NOT_FOUND);
     }
 
     // Build update payload — only include fields present in the event
     const primaryEmail = email_addresses?.[0];
     const email = primaryEmail?.email_address;
-    const isEmailVerified =
-      primaryEmail?.verification?.status === "verified";
+    const isEmailVerified = primaryEmail?.verification?.status === "verified";
 
     const primaryPhone = phone_numbers?.[0];
     const phone = primaryPhone?.phone_number;
-    const isPhoneVerified =
-      primaryPhone?.verification?.status === "verified";
+    const isPhoneVerified = primaryPhone?.verification?.status === "verified";
 
     // Compute displayName from updated or existing names
     const effectiveFirstName =
       first_name !== undefined ? first_name : existingUser.firstName;
     const effectiveLastName =
       last_name !== undefined ? last_name : existingUser.lastName;
-    const displayName = computeDisplayName(effectiveFirstName, effectiveLastName);
+    const displayName = computeDisplayName(
+      effectiveFirstName,
+      effectiveLastName,
+    );
 
     // Detect verification state transitions for timestamp updates
-    const emailJustVerified =
-      isEmailVerified && !existingUser.isEmailVerified;
-    const phoneJustVerified =
-      isPhoneVerified && !existingUser.isPhoneVerified;
+    const emailJustVerified = isEmailVerified && !existingUser.isEmailVerified;
+    const phoneJustVerified = isPhoneVerified && !existingUser.isPhoneVerified;
 
     const updateData: Record<string, unknown> = {
       ...(email !== undefined && { email }),
@@ -546,14 +548,11 @@ async function handleSessionCreated(
         clerkId: clerkUserId,
       });
     } else {
-      logger.warn(
-        "Failed to track login activity",
-        {
-          correlationId,
-          clerkId: clerkUserId,
-          error: err instanceof Error ? err.message : String(err),
-        },
-      );
+      logger.warn("Failed to track login activity", {
+        correlationId,
+        clerkId: clerkUserId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
     // Always acknowledge — session tracking failures should not cause retries

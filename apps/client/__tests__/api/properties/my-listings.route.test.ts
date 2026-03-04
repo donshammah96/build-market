@@ -96,7 +96,9 @@ describe("GET /api/properties/my-listings", () => {
       },
     ];
 
-    vi.mocked(prisma.property.findMany).mockResolvedValue(mockProperties as any);
+    vi.mocked(prisma.property.findMany).mockResolvedValue(
+      mockProperties as any,
+    );
 
     const request = new NextRequest(
       "http://localhost:3500/api/properties/my-listings",

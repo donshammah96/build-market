@@ -181,7 +181,8 @@ export class ClientRepository {
       if (p.professional) {
         const firstName = p.professional.user.firstName ?? "";
         const lastName = p.professional.user.lastName ?? "";
-        const name = `${firstName} ${lastName}`.trim() || "Unknown Professional";
+        const name =
+          `${firstName} ${lastName}`.trim() || "Unknown Professional";
         const title =
           p.professional.offeredServices[0]?.service?.name ?? "Professional";
         professional = {

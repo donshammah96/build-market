@@ -168,7 +168,11 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
     );
   }
 
-  if (SENSITIVE_CATEGORIES.includes(docData.category as (typeof SENSITIVE_CATEGORIES)[number])) {
+  if (
+    SENSITIVE_CATEGORIES.includes(
+      docData.category as (typeof SENSITIVE_CATEGORIES)[number],
+    )
+  ) {
     ComplianceService.logAdminAction(
       dbUserId,
       AuditAction.PROFILE_UPDATED,

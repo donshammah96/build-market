@@ -185,11 +185,7 @@ export const WEBHOOK_CONFIG = {
   /** Max webhook payload size (256 KB — Clerk payloads are typically < 10 KB) */
   MAX_PAYLOAD_SIZE: 256 * 1024,
   /** Svix header names required for verification */
-  REQUIRED_HEADERS: [
-    "svix-id",
-    "svix-timestamp",
-    "svix-signature",
-  ] as const,
+  REQUIRED_HEADERS: ["svix-id", "svix-timestamp", "svix-signature"] as const,
 } as const;
 
 // Re-export enums for convenience

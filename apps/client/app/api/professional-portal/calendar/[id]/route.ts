@@ -192,10 +192,7 @@ export const PATCH = withAuth<{ id: string }>(
       await IdempotencyService.fail(idempotencyKey);
       if (data.error === "not_found")
         return apiError("Event not found", HttpStatus.NOT_FOUND);
-      if (
-        data.error === "start_after_end" ||
-        data.error === "end_before_start"
-      )
+      if (data.error === "start_after_end" || data.error === "end_before_start")
         return apiError(
           "End date must be after start date",
           HttpStatus.BAD_REQUEST,

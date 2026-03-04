@@ -35,6 +35,7 @@ __tests__/
 ## Remaining Tests to Generate
 
 ### 1. Compliance Service Tests (`compliance.test.ts`)
+
 - ✓ Get audit logs with filters
 - ✓ Create audit log entries
 - ✓ Get compliance dashboard statistics
@@ -44,6 +45,7 @@ __tests__/
 - ✓ Pagination
 
 ### 2. Consent Service Tests (`consent.test.ts`)
+
 - ✓ Grant new consent
 - ✓ Update existing consent
 - ✓ Revoke consent
@@ -54,6 +56,7 @@ __tests__/
 - ✓ Transaction rollback scenarios
 
 ### 3. Anonymization Service Tests (`anonymization.test.ts`)
+
 - ✓ Request deletion (Phase 1: Deactivate)
 - ✓ Cancel deletion within grace period
 - ✓ Complete anonymization after grace period
@@ -64,6 +67,7 @@ __tests__/
 - ✓ Audit logging for all actions
 
 ### 4. Asset Cleanup Service Tests (`asset-cleanup.test.ts`)
+
 - ✓ Schedule assets for deletion
 - ✓ Restore assets on reactivation
 - ✓ Reference counting (prevent deletion of shared assets)
@@ -73,6 +77,7 @@ __tests__/
 - ✓ Batch processing for CRON job
 
 ### 5. Export Processor Tests (`processor.test.ts`)
+
 - ✓ Fetch complete user data from DB
 - ✓ Create ZIP archive with metadata
 - ✓ Upload to S3 with encryption
@@ -86,6 +91,7 @@ __tests__/
 - **Snapshot**: ZIP file structure
 
 ### 6. Export Worker Tests (`worker.test.ts`)
+
 - ✓ Process export job successfully
 - ✓ Update job progress (0-100%)
 - ✓ Handle job cancellation
@@ -95,6 +101,7 @@ __tests__/
 - ✓ Rate limiting (10 per minute)
 
 ### 7. Incident Worker Tests (`incident.test.ts`)
+
 - ✓ Execute emergency protocol
 - ✓ Notify ODPC within 72 hours
 - ✓ Escalate to DPO
@@ -106,6 +113,7 @@ __tests__/
 - **Snapshot**: ODPC notification email body
 
 ### 8. Notification Worker Tests (`notification.test.ts`)
+
 - ✓ Batch process user notifications (100 per chunk)
 - ✓ Concurrency control (5 batches)
 - ✓ Rate limiting (50 per minute)
@@ -116,6 +124,7 @@ __tests__/
 - ✓ Skip deactivated users
 
 ### 9. Email Service Tests (`email.test.ts`)
+
 - ✓ Send generic email
 - ✓ Send breach notification email
 - ✓ Send ODPC notification email
@@ -127,6 +136,7 @@ __tests__/
 - **Snapshot**: All email templates (HTML and text)
 
 ### 10. SMS Service Tests (`sms.test.ts`)
+
 - ✓ Send generic SMS
 - ✓ Send breach notification SMS
 - ✓ Send password reset required SMS
@@ -142,12 +152,14 @@ __tests__/
 These tests run in parallel to speed up execution:
 
 ### Database Failures
+
 - ✓ Connection timeout during export request
 - ✓ Transaction rollback during consent update
 - ✓ Deadlock during anonymization
 - ✓ Constraint violation during audit log creation
 
 ### S3 Errors
+
 - ✓ Upload timeout (30s)
 - ✓ NoSuchBucket error
 - ✓ Access denied error
@@ -155,26 +167,31 @@ These tests run in parallel to speed up execution:
 - ✓ Partial upload failure
 
 ### Redis Failures
+
 - ✓ Connection refused
 - ✓ Timeout during job queue
 - ✓ Memory exceeded
 
 ### Concurrency Issues
+
 - ✓ Duplicate export requests (race condition)
 - ✓ Concurrent deletion requests
 - ✓ Multiple consent updates simultaneously
 
 ### Expired Sessions
+
 - ✓ Export link expired during download attempt
 - ✓ Grace period expired during reactivation attempt
 - ✓ Consent withdrawn during processing
 
 ### Legal Holds
+
 - ✓ Deletion blocked due to active dispute
 - ✓ Deletion blocked due to pending financial records
 - ✓ Override legal hold with admin privileges
 
 ### Notifications
+
 - ✓ Breach notification to deactivated user (skip)
 - ✓ Email delivery failure with retry logic
 - ✓ SMS to invalid phone number
@@ -228,6 +245,7 @@ pnpm test __tests__/lib/gdpr __tests__/workers
 ## Coverage Enforcement
 
 The vitest config enforces 80% coverage thresholds:
+
 - Lines: 80%
 - Functions: 80%
 - Branches: 80%

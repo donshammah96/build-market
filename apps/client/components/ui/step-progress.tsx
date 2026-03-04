@@ -78,7 +78,7 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
       !isCurrent &&
       (isDark
         ? "bg-zinc-800/50 text-zinc-500 border-2 border-zinc-700"
-        : "bg-zinc-100 text-zinc-400 border-2 border-zinc-200")
+        : "bg-zinc-100 text-zinc-400 border-2 border-zinc-200"),
   );
 
   const clickableClasses = isClickable
@@ -129,14 +129,14 @@ const StepConnector: React.FC<StepConnectorProps> = ({
     <div
       className={cn(
         "relative overflow-hidden",
-        isHorizontal ? "flex-1 h-0.5 mx-2" : "w-0.5 h-8 my-2 mx-auto"
+        isHorizontal ? "flex-1 h-0.5 mx-2" : "w-0.5 h-8 my-2 mx-auto",
       )}
     >
       {/* Background track */}
       <div
         className={cn(
           "absolute inset-0",
-          isDark ? "bg-zinc-800" : "bg-zinc-200"
+          isDark ? "bg-zinc-800" : "bg-zinc-200",
         )}
       />
 
@@ -179,7 +179,9 @@ export function StepProgress({
       <ol
         className={cn(
           "flex",
-          isHorizontal ? "items-center justify-between" : "flex-col items-start"
+          isHorizontal
+            ? "items-center justify-between"
+            : "flex-col items-start",
         )}
       >
         {steps.map((step, index) => {
@@ -195,7 +197,7 @@ export function StepProgress({
                 "flex",
                 isHorizontal
                   ? "items-center flex-1 last:flex-none"
-                  : "flex-col w-full"
+                  : "flex-col w-full",
               )}
             >
               <div
@@ -203,7 +205,7 @@ export function StepProgress({
                   "flex",
                   isHorizontal
                     ? "flex-col items-center"
-                    : "items-center gap-4 w-full"
+                    : "items-center gap-4 w-full",
                 )}
               >
                 <StepIndicator
@@ -223,7 +225,7 @@ export function StepProgress({
                   <div
                     className={cn(
                       "text-center",
-                      isHorizontal ? "mt-2" : "flex-1"
+                      isHorizontal ? "mt-2" : "flex-1",
                     )}
                   >
                     <p
@@ -231,7 +233,7 @@ export function StepProgress({
                         "text-xs font-medium transition-colors",
                         isCompleted && "text-emerald-400",
                         isCurrent && (isDark ? "text-white" : "text-zinc-900"),
-                        !isCompleted && !isCurrent && "text-zinc-500"
+                        !isCompleted && !isCurrent && "text-zinc-500",
                       )}
                     >
                       {step.label}
@@ -249,7 +251,7 @@ export function StepProgress({
                       <p
                         className={cn(
                           "text-[10px] mt-0.5 max-w-[100px] mx-auto hidden sm:block",
-                          isDark ? "text-zinc-500" : "text-zinc-400"
+                          isDark ? "text-zinc-500" : "text-zinc-400",
                         )}
                       >
                         {step.description}
@@ -307,7 +309,7 @@ export function CompactStepProgress({
         <span
           className={cn(
             "text-xs font-medium",
-            isDark ? "text-emerald-400" : "text-emerald-600"
+            isDark ? "text-emerald-400" : "text-emerald-600",
           )}
         >
           {Math.round(progress)}%
@@ -316,7 +318,7 @@ export function CompactStepProgress({
       <div
         className={cn(
           "h-1.5 rounded-full overflow-hidden",
-          isDark ? "bg-zinc-800" : "bg-zinc-200"
+          isDark ? "bg-zinc-800" : "bg-zinc-200",
         )}
       >
         <motion.div
@@ -358,7 +360,7 @@ export function DotStepProgress({
               "rounded-full transition-all duration-300",
               isCurrent && "w-6 h-2 bg-emerald-500",
               isCompleted && !isCurrent && "w-2 h-2 bg-emerald-500/60",
-              !isCompleted && !isCurrent && "w-2 h-2 bg-zinc-700"
+              !isCompleted && !isCurrent && "w-2 h-2 bg-zinc-700",
             )}
             layout
           />

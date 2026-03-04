@@ -25,7 +25,7 @@ export type DashboardGroup =
 
 /**
  * Available widget identifiers
- * 
+ *
  * Note: All widgets should have corresponding implementations in the widget registry.
  * Widgets prefixed with comments indicate their implementation status.
  */

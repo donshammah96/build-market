@@ -68,7 +68,7 @@ function useWizardDraft<T>(storageKey: string | undefined, defaultValue: T) {
         }
       }
     },
-    [storageKey]
+    [storageKey],
   );
 
   // Clear draft function
@@ -132,7 +132,7 @@ function StepIndicator({
                 !isActive &&
                   !isCompleted &&
                   "border-zinc-200 bg-white text-zinc-400",
-                isClickable && !isActive && "cursor-pointer"
+                isClickable && !isActive && "cursor-pointer",
               )}
               aria-label={`Step ${index + 1}: ${step.title}${isCompleted ? " (completed)" : ""}${isActive ? " (current)" : ""}`}
               aria-current={isActive ? "step" : undefined}
@@ -149,7 +149,7 @@ function StepIndicator({
               <div
                 className={cn(
                   "w-12 h-0.5 mx-2 transition-colors duration-300",
-                  isPast || isCompleted ? "bg-emerald-500" : "bg-zinc-200"
+                  isPast || isCompleted ? "bg-emerald-500" : "bg-zinc-200",
                 )}
                 aria-hidden="true"
               />
@@ -347,7 +347,7 @@ export function OnboardingWizard({
         setCurrentStep(index);
       }
     },
-    [currentStep, completedSteps]
+    [currentStep, completedSteps],
   );
 
   // Skip optional step
@@ -400,7 +400,7 @@ export function OnboardingWizard({
       allowSkipOptional,
       isValidating,
       isCompleting,
-    ]
+    ],
   );
 
   const currentStepData = steps[currentStep];

@@ -1,6 +1,6 @@
 /**
  * Dashboard Widgets
- * 
+ *
  * Central export for all dashboard widget components.
  */
 

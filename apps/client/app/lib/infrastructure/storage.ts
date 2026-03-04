@@ -76,8 +76,8 @@ class LocalStorageProvider implements StorageProvider {
     // Optional: Store MIME type in a metadata file for later retrieval
     const metadataPath = `${filepath}.meta.json`;
     await fs.promises.writeFile(
-        metadataPath, 
-        JSON.stringify({ mimeType, originalFilename: filename })
+      metadataPath,
+      JSON.stringify({ mimeType, originalFilename: filename }),
     );
 
     return {

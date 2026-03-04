@@ -44,7 +44,7 @@ export function DashboardHeader({
       <div
         className={cn(
           "flex flex-col sm:flex-row sm:items-end justify-between gap-6 pb-6 border-b border-zinc-100",
-          className
+          className,
         )}
       >
         <div className="space-y-2 animate-pulse">
@@ -63,7 +63,7 @@ export function DashboardHeader({
     <div
       className={cn(
         "flex flex-col sm:flex-row sm:items-end justify-between gap-6 pb-6 border-b border-zinc-100",
-        className
+        className,
       )}
     >
       <div>
@@ -85,7 +85,7 @@ export function DashboardHeader({
               className={cn(
                 action.variant === "primary"
                   ? "bg-zinc-900 hover:bg-zinc-800 text-white shadow-md transition-all hover:shadow-lg"
-                  : "border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 bg-white shadow-sm"
+                  : "border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 bg-white shadow-sm",
               )}
               asChild
             >

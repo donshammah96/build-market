@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@build/db";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -16,9 +15,9 @@ import { checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import {
   SendMessageSchema,
-  messageListSelect,
   MESSAGING_CONFIG,
-} from "@/app/lib/validation/messaging-validation";
+  messagingService,
+} from "@build/messaging-server";
 
 const logger = getClientLogger();
 
@@ -86,107 +85,7 @@ export const POST = withAuth(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      async () => {
-        const participant = await prisma.threadParticipant.findUnique({
-          where: {
-            threadId_userId: { threadId: data.threadId, userId: dbUserId },
-          },
-          select: { id: true },
-        });
-        if (!participant)
-          return {
-            _error: true as const,
-            message: "Not a participant in this conversation",
-            status: HttpStatus.FORBIDDEN,
-          };
-
-        const thread = await prisma.messageThread.findFirst({
-          where: { id: data.threadId, deletedAt: null },
-          select: { id: true },
-        });
-        if (!thread)
-          return {
-            _error: true as const,
-            message: "Conversation not found",
-            status: HttpStatus.NOT_FOUND,
-          };
-
-        if (data.replyToId) {
-          const replyMessage = await prisma.message.findFirst({
-            where: {
-              id: data.replyToId,
-              threadId: data.threadId,
-              deletedAt: null,
-            },
-            select: { id: true },
-          });
-          if (!replyMessage)
-            return {
-              _error: true as const,
-              message: "Reply target message not found in this conversation",
-              status: HttpStatus.BAD_REQUEST,
-            };
-        }
-
-        if (data.attachmentIds && data.attachmentIds.length > 0) {
-          const assets = await prisma.asset.findMany({
-            where: { id: { in: data.attachmentIds }, uploaderId: dbUserId },
-            select: { id: true },
-          });
-          if (assets.length !== data.attachmentIds.length)
-            return {
-              _error: true as const,
-              message:
-                "One or more attachment assets not found or not owned by you",
-              status: HttpStatus.BAD_REQUEST,
-            };
-        }
-
-        return prisma.$transaction(async (tx) => {
-          const message = await tx.message.create({
-            data: {
-              threadId: data.threadId,
-              senderId: dbUserId,
-              content: data.content,
-              type: data.type,
-              replyToId: data.replyToId,
-              ...(data.attachmentIds?.length
-                ? {
-                    attachments: {
-                      create: data.attachmentIds.map((assetId) => ({
-                        assetId,
-                      })),
-                    },
-                  }
-                : {}),
-            },
-            select: messageListSelect,
-          });
-
-          await tx.messageThread.update({
-            where: { id: data.threadId },
-            data: {
-              lastMessage: data.content.substring(0, 500),
-              lastMessageAt: new Date(),
-            },
-          });
-
-          await tx.threadParticipant.updateMany({
-            where: { threadId: data.threadId, userId: { not: dbUserId } },
-            data: { unreadCount: { increment: 1 } },
-          });
-
-          await tx.readReceipt.upsert({
-            where: {
-              messageId_userId: { messageId: message.id, userId: dbUserId },
-            },
-            update: { readAt: new Date() },
-            create: { messageId: message.id, userId: dbUserId },
-          });
-
-          return message;
-        });
-      },
+      () => messagingService.sendMessage(dbUserId, data),
       { operationName: "send_message" },
     );
 
@@ -202,13 +101,19 @@ export const POST = withAuth(
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     } else {
-      const data = result.data;
-      if (data && "_error" in (data as any) && (data as any)._error) {
+      const serviceResult = result.data;
+      if (!serviceResult || !serviceResult.ok) {
         await IdempotencyService.fail(idempotencyKey).catch(() => {});
-        return apiError((data as any).message, (data as any).status);
+        return apiError(
+          serviceResult?.message ?? "Invalid request",
+          serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+        );
       }
-      await IdempotencyService.complete(idempotencyKey, data).catch(() => {});
-      return apiSuccess(data, HttpStatus.CREATED);
+      await IdempotencyService.complete(
+        idempotencyKey,
+        serviceResult.data,
+      ).catch(() => {});
+      return apiSuccess(serviceResult.data, HttpStatus.CREATED);
     }
   },
 );

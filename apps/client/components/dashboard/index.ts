@@ -1,6 +1,6 @@
 /**
  * Dashboard Components
- * 
+ *
  * Central export for all dashboard-related components.
  */
 

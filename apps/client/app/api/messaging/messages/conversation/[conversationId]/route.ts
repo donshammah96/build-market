@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@build/db";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -13,10 +12,7 @@ import {
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { isValidId } from "@/app/lib/api/api-guards";
-import {
-  MessageQuerySchema,
-  messageListSelect,
-} from "@/app/lib/validation/messaging-validation";
+import { MessageQuerySchema, messagingService } from "@build/messaging-server";
 
 const logger = getClientLogger();
 type ConversationParams = { conversationId: string };
@@ -50,55 +46,12 @@ export const GET = withAuth<ConversationParams>(
         queryValidation.error.issues,
       );
 
-    const { cursor, limit, direction } = queryValidation.data;
+    const query = queryValidation.data;
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      async () => {
-        const participant = await prisma.threadParticipant.findUnique({
-          where: { threadId_userId: { threadId, userId: dbUserId } },
-          select: { id: true },
-        });
-        if (!participant)
-          return {
-            _error: true as const,
-            message: "Not a participant in this conversation",
-            status: HttpStatus.FORBIDDEN,
-          };
-
-        let cursorCondition = {};
-        if (cursor) {
-          const cursorMessage = await prisma.message.findUnique({
-            where: { id: cursor },
-            select: { createdAt: true },
-          });
-          if (cursorMessage) {
-            cursorCondition = {
-              createdAt:
-                direction === "before"
-                  ? { lt: cursorMessage.createdAt }
-                  : { gt: cursorMessage.createdAt },
-            };
-          }
-        }
-
-        const messages = await prisma.message.findMany({
-          where: { threadId, deletedAt: null, ...cursorCondition },
-          select: messageListSelect,
-          orderBy: { createdAt: direction === "before" ? "desc" : "asc" },
-          take: limit + 1,
-        });
-
-        const hasMore = messages.length > limit;
-        const items = hasMore ? messages.slice(0, limit) : messages;
-        if (direction === "before") items.reverse();
-
-        return {
-          messages: items,
-          hasMore,
-          nextCursor: hasMore ? items[items.length - 1]?.id : undefined,
-        };
-      },
+      () =>
+        messagingService.listConversationMessages(dbUserId, threadId, query),
       { operationName: "list_thread_messages" },
     );
 
@@ -109,10 +62,14 @@ export const GET = withAuth<ConversationParams>(
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     } else {
-      const data = result.data;
-      if (data && "_error" in (data as any) && (data as any)._error)
-        return apiError((data as any).message, (data as any).status);
-      return apiSuccess(data, HttpStatus.OK);
+      const serviceResult = result.data;
+      if (!serviceResult || !serviceResult.ok) {
+        return apiError(
+          serviceResult?.message ?? "Invalid request",
+          serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+        );
+      }
+      return apiSuccess(serviceResult.data, HttpStatus.OK);
     }
   },
 );

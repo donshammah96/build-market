@@ -97,11 +97,10 @@ export async function getProfessionalOrders(
     client: {
       id: order.client.id,
       name:
-        `${order.client.firstName} ${order.client.lastName}`.trim() || "Unknown",
+        `${order.client.firstName} ${order.client.lastName}`.trim() ||
+        "Unknown",
     },
-    store: order.store
-      ? { id: order.store.id, name: order.store.name }
-      : null,
+    store: order.store ? { id: order.store.id, name: order.store.name } : null,
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
   }));

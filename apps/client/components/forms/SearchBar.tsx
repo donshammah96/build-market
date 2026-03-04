@@ -25,7 +25,7 @@ const SearchBar = () => {
 
     const timeout = setTimeout(async () => {
       const response = await fetch(
-        `api/search/autocomplete?q=${encodeURIComponent(query)}&type=all&limit=5`
+        `api/search/autocomplete?q=${encodeURIComponent(query)}&type=all&limit=5`,
       );
       const data = await response.json();
 
@@ -70,24 +70,22 @@ const SearchBar = () => {
 
       {showSuggestions && suggestions.length > 0 && (
         <div className="absolute top-full left-0 right-0 bg-white border rounded-lg shadow-lg mt-1 z-50">
-        {suggestions.map((item, index) => (
-          <div
-            key={index}
-            className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-            onClick={() => {
-              setQuery(item?.name || item.title || "");
-              setShowSuggestions(false);
-            }}
-          >
-            <div className="font-medium">{item.name || item.title}</div>
-            {item.rating && (
-              <div className="text-sm text-gray-500">
-                ⭐ {item.rating}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+          {suggestions.map((item, index) => (
+            <div
+              key={index}
+              className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+              onClick={() => {
+                setQuery(item?.name || item.title || "");
+                setShowSuggestions(false);
+              }}
+            >
+              <div className="font-medium">{item.name || item.title}</div>
+              {item.rating && (
+                <div className="text-sm text-gray-500">⭐ {item.rating}</div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

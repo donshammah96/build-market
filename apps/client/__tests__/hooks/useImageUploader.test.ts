@@ -166,7 +166,7 @@ describe("useImageUploader", () => {
 
       expect(mockAppendImage).toHaveBeenCalledWith(
         { value: "https://example.com/image.jpg" },
-        { shouldFocus: false }
+        { shouldFocus: false },
       );
       expect(result.current.newImageUrl).toBe("");
       expect(mockToast.success).toHaveBeenCalledWith("Image added");
@@ -200,7 +200,7 @@ describe("useImageUploader", () => {
 
       expect(mockAppendImage).not.toHaveBeenCalled();
       expect(mockToast.error).toHaveBeenCalledWith(
-        "Image URL must start with https:// or be a local path"
+        "Image URL must start with https:// or be a local path",
       );
     });
 
@@ -217,7 +217,7 @@ describe("useImageUploader", () => {
 
       expect(mockAppendImage).toHaveBeenCalledWith(
         { value: "/uploads/image.jpg" },
-        { shouldFocus: false }
+        { shouldFocus: false },
       );
     });
 
@@ -234,7 +234,7 @@ describe("useImageUploader", () => {
 
       expect(mockAppendImage).not.toHaveBeenCalled();
       expect(mockToast.error).toHaveBeenCalledWith(
-        "This image URL is already added"
+        "This image URL is already added",
       );
     });
 
@@ -288,7 +288,7 @@ describe("useImageUploader", () => {
           emptyImageFields,
           mockAppendImage,
           mockUpdateImage,
-          mockRemoveImage
+          mockRemoveImage,
         );
       });
 
@@ -315,7 +315,7 @@ describe("useImageUploader", () => {
           emptyImageFields,
           mockAppendImage,
           mockUpdateImage,
-          mockRemoveImage
+          mockRemoveImage,
         );
       });
 
@@ -343,7 +343,7 @@ describe("useImageUploader", () => {
           emptyImageFields,
           mockAppendImage,
           mockUpdateImage,
-          mockRemoveImage
+          mockRemoveImage,
         );
       });
 
@@ -376,7 +376,7 @@ describe("useImageUploader", () => {
           sampleImageFields, // Already has 2 images
           mockAppendImage,
           mockUpdateImage,
-          mockRemoveImage
+          mockRemoveImage,
         );
       });
 
@@ -406,7 +406,7 @@ describe("useImageUploader", () => {
           emptyImageFields,
           mockAppendImage,
           mockUpdateImage,
-          mockRemoveImage
+          mockRemoveImage,
         );
       });
 
@@ -458,7 +458,7 @@ describe("useImageUploader", () => {
           emptyImageFields,
           mockAppendImage,
           mockUpdateImage,
-          mockRemoveImage
+          mockRemoveImage,
         );
       });
 
@@ -490,7 +490,7 @@ describe("useImageUploader", () => {
           emptyImageFields,
           mockAppendImage,
           mockUpdateImage,
-          mockRemoveImage
+          mockRemoveImage,
         );
       });
 

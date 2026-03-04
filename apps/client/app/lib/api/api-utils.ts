@@ -1,6 +1,6 @@
 /**
  * API Utilities
- * 
+ *
  * Shared utilities for API routes including:
  * - Pagination parsing
  * - Status mapping
@@ -43,14 +43,17 @@ export interface PaginationOptions {
  */
 export function parsePaginationParams(
   searchParams: URLSearchParams,
-  options: PaginationOptions = {}
+  options: PaginationOptions = {},
 ): PaginationParams {
   const { defaultLimit = 20, maxLimit = 100 } = options;
-  
+
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const limit = Math.min(
     maxLimit,
-    Math.max(1, parseInt(searchParams.get("limit") || String(defaultLimit), 10))
+    Math.max(
+      1,
+      parseInt(searchParams.get("limit") || String(defaultLimit), 10),
+    ),
   );
   const skip = (page - 1) * limit;
 
@@ -63,7 +66,7 @@ export function parsePaginationParams(
 export function buildPaginationResponse(
   page: number,
   limit: number,
-  total: number
+  total: number,
 ) {
   return {
     page,
@@ -81,7 +84,7 @@ export function buildPaginationResponse(
  * Generic status mapper that converts lowercase query params to enum values
  */
 export function createStatusMapper<T extends string>(
-  statusMap: Record<string, T>
+  statusMap: Record<string, T>,
 ): (value: string | null) => T | undefined {
   return (value: string | null) => {
     if (!value) return undefined;
@@ -95,7 +98,7 @@ export function createStatusMapper<T extends string>(
  */
 export function parseStatusFilter<T extends string>(
   statusParam: string | null,
-  statusMap: Record<string, T>
+  statusMap: Record<string, T>,
 ): T | { in: T[] } | undefined {
   if (!statusParam) return undefined;
 
@@ -121,7 +124,7 @@ export interface RateLimitedContext extends AuthContext {
 export type RateLimitedHandler<TParams = unknown> = (
   req: NextRequest,
   context: RateLimitedContext,
-  params?: TParams
+  params?: TParams,
 ) => Promise<NextResponse | unknown>;
 
 export interface RateLimitedOptions {
@@ -135,7 +138,7 @@ export interface RateLimitedOptions {
 
 /**
  * Execute a handler with rate limiting, correlation ID, and resilience wrapper
- * 
+ *
  * Usage:
  * ```ts
  * export const GET = withAuth(async (req, { dbUserId }) => {
@@ -154,7 +157,7 @@ export async function withRateLimitedExecution<T>(
   req: NextRequest,
   userId: string,
   options: RateLimitedOptions,
-  handler: (correlationId: string) => Promise<T>
+  handler: (correlationId: string) => Promise<T>,
 ): Promise<NextResponse> {
   const correlationId = initializeCorrelationId(req);
   const { operationName, rateLimit = "read", rateLimitKeyPrefix } = options;
@@ -163,12 +166,13 @@ export async function withRateLimitedExecution<T>(
   const identifier = rateLimitKeyPrefix
     ? `${rateLimitKeyPrefix}:${getRateLimitIdentifier(req)}`
     : getRateLimitIdentifier(req);
-  
-  const rateLimitConfig = rateLimit === "write" ? RateLimits.WRITE : RateLimits.READ;
+
+  const rateLimitConfig =
+    rateLimit === "write" ? RateLimits.WRITE : RateLimits.READ;
   const { success } = await checkRateLimit(
     identifier,
     rateLimitConfig.limit,
-    rateLimitConfig.window
+    rateLimitConfig.window,
   );
 
   if (!success) {
@@ -192,7 +196,7 @@ export async function withRateLimitedExecution<T>(
     {
       operationName,
       successStatus: rateLimit === "write" ? HttpStatus.CREATED : HttpStatus.OK,
-    }
+    },
   );
 }
 

@@ -17,7 +17,9 @@ import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
 
 export type { CreateLicenseInput, UpdateLicenseInput };
 
-export async function getProfessionalLicenses(dbUserId: string): Promise<unknown[]> {
+export async function getProfessionalLicenses(
+  dbUserId: string,
+): Promise<unknown[]> {
   const licenses = await prisma.professionalLicense.findMany({
     where: { professionalId: dbUserId },
     select: professionalLicenseListSelect,
@@ -132,11 +134,7 @@ export async function createProfessionalLicense(
 export type UpdateLicenseResult =
   | { data: unknown }
   | {
-      error:
-        | "not_found"
-        | "forbidden"
-        | "asset_not_found"
-        | "asset_forbidden";
+      error: "not_found" | "forbidden" | "asset_not_found" | "asset_forbidden";
     };
 
 export async function updateProfessionalLicense(

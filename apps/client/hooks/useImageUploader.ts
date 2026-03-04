@@ -95,10 +95,10 @@ export interface UseImageUploaderReturn {
     imageFields: ImageField[],
     appendImage: (
       data: { value: string },
-      options?: { shouldFocus?: boolean }
+      options?: { shouldFocus?: boolean },
     ) => void,
     updateImage: (index: number, data: { value: string }) => void,
-    removeImage: (index: number) => void
+    removeImage: (index: number) => void,
   ) => Promise<void>;
   /** Handle drag over event */
   handleDragOver: (e: React.DragEvent) => void;
@@ -110,23 +110,23 @@ export interface UseImageUploaderReturn {
     imageFields: ImageField[],
     appendImage: (
       data: { value: string },
-      options?: { shouldFocus?: boolean }
+      options?: { shouldFocus?: boolean },
     ) => void,
     updateImage: (index: number, data: { value: string }) => void,
-    removeImage: (index: number) => void
+    removeImage: (index: number) => void,
   ) => void;
   /** Add image from URL input */
   handleAddImage: (
     imageFields: ImageField[],
     appendImage: (
       data: { value: string },
-      options?: { shouldFocus?: boolean }
-    ) => void
+      options?: { shouldFocus?: boolean },
+    ) => void,
   ) => void;
   /** Remove an image by index */
   handleRemoveImage: (
     index: number,
-    removeImage: (index: number) => void
+    removeImage: (index: number) => void,
   ) => void;
 }
 
@@ -175,7 +175,7 @@ const DEFAULT_MAX_IMAGES = 20;
  * @see {@link UseImageUploaderReturn} for return type details
  */
 export function useImageUploader(
-  options: UseImageUploaderOptions = {}
+  options: UseImageUploaderOptions = {},
 ): UseImageUploaderReturn {
   const {
     maxImages = DEFAULT_MAX_IMAGES,
@@ -185,7 +185,7 @@ export function useImageUploader(
 
   // State
   const [uploadingImages, setUploadingImages] = useState<Set<number>>(
-    new Set()
+    new Set(),
   );
   const [isDragging, setIsDragging] = useState(false);
   const [newImageUrl, setNewImageUrl] = useState("");
@@ -217,19 +217,19 @@ export function useImageUploader(
               throw new Error(error.message);
             case UploadErrorCode.NETWORK_ERROR:
               throw new Error(
-                "Network error. Please check your connection and try again."
+                "Network error. Please check your connection and try again.",
               );
             case UploadErrorCode.SERVER_ERROR:
               throw new Error(
-                `Server error (${error.statusCode || "unknown"}). Please try again later.`
+                `Server error (${error.statusCode || "unknown"}). Please try again later.`,
               );
             case UploadErrorCode.INVALID_RESPONSE:
               throw new Error(
-                "Unexpected response from server. Please try again."
+                "Unexpected response from server. Please try again.",
               );
             case UploadErrorCode.MAX_RETRIES_EXCEEDED:
               throw new Error(
-                "Upload failed after multiple attempts. Please try again."
+                "Upload failed after multiple attempts. Please try again.",
               );
             case UploadErrorCode.ABORTED:
               throw new Error("Upload was cancelled.");
@@ -240,7 +240,7 @@ export function useImageUploader(
         throw error;
       }
     },
-    []
+    [],
   );
 
   /**
@@ -253,15 +253,15 @@ export function useImageUploader(
       imageFields: ImageField[],
       appendImage: (
         data: { value: string },
-        options?: { shouldFocus?: boolean }
+        options?: { shouldFocus?: boolean },
       ) => void,
       updateImage: (index: number, data: { value: string }) => void,
-      removeImage: (index: number) => void
+      removeImage: (index: number) => void,
     ) => {
       if (!files || files.length === 0) return;
 
       const imageFiles = Array.from(files).filter((file) =>
-        file.type.startsWith("image/")
+        file.type.startsWith("image/"),
       );
 
       if (imageFiles.length === 0) {
@@ -281,7 +281,7 @@ export function useImageUploader(
       const filesToUpload = imageFiles.slice(0, remainingSlots);
       if (filesToUpload.length < imageFiles.length) {
         toast.warning(
-          `Only uploading ${filesToUpload.length} of ${imageFiles.length} images (max ${maxImages} allowed)`
+          `Only uploading ${filesToUpload.length} of ${imageFiles.length} images (max ${maxImages} allowed)`,
         );
       }
 
@@ -298,7 +298,7 @@ export function useImageUploader(
 
       // Create set of indices that will be uploading
       const tempSet = new Set<number>(
-        Array.from({ length: filesToUpload.length }, (_, i) => startIndex + i)
+        Array.from({ length: filesToUpload.length }, (_, i) => startIndex + i),
       );
 
       // Add placeholder empty objects for loaders to appear
@@ -306,7 +306,7 @@ export function useImageUploader(
         value: "",
       }));
       placeholders.forEach((placeholder) =>
-        appendImage(placeholder, { shouldFocus: false })
+        appendImage(placeholder, { shouldFocus: false }),
       );
 
       // Mark all as uploading
@@ -361,11 +361,11 @@ export function useImageUploader(
           return next;
         });
         toast.error(
-          error instanceof Error ? error.message : "Failed to upload images"
+          error instanceof Error ? error.message : "Failed to upload images",
         );
       }
     },
-    [maxImages, uploadFiles, onImagesAdded]
+    [maxImages, uploadFiles, onImagesAdded],
   );
 
   /**
@@ -395,10 +395,10 @@ export function useImageUploader(
       imageFields: ImageField[],
       appendImage: (
         data: { value: string },
-        options?: { shouldFocus?: boolean }
+        options?: { shouldFocus?: boolean },
       ) => void,
       updateImage: (index: number, data: { value: string }) => void,
-      removeImage: (index: number) => void
+      removeImage: (index: number) => void,
     ) => {
       e.preventDefault();
       e.stopPropagation();
@@ -411,11 +411,11 @@ export function useImageUploader(
           imageFields,
           appendImage,
           updateImage,
-          removeImage
+          removeImage,
         );
       }
     },
-    [handleFileSelect]
+    [handleFileSelect],
   );
 
   /**
@@ -426,8 +426,8 @@ export function useImageUploader(
       imageFields: ImageField[],
       appendImage: (
         data: { value: string },
-        options?: { shouldFocus?: boolean }
-      ) => void
+        options?: { shouldFocus?: boolean },
+      ) => void,
     ) => {
       if (newImageUrl) {
         // Check max images limit
@@ -450,7 +450,7 @@ export function useImageUploader(
             !newImageUrl.startsWith("/")
           ) {
             toast.error(
-              "Image URL must start with https:// or be a local path"
+              "Image URL must start with https:// or be a local path",
             );
             return;
           }
@@ -463,7 +463,7 @@ export function useImageUploader(
         }
       }
     },
-    [newImageUrl, maxImages, onImagesAdded]
+    [newImageUrl, maxImages, onImagesAdded],
   );
 
   /**
@@ -474,7 +474,7 @@ export function useImageUploader(
       removeImage(index);
       onImageRemoved?.(index);
     },
-    [onImageRemoved]
+    [onImageRemoved],
   );
 
   return {

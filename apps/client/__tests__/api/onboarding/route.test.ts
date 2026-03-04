@@ -178,8 +178,10 @@ describe("POST /api/onboarding", () => {
       portfolio: "https://portfolio.example.com",
       website: "https://example.com",
       bio: "Experienced architect",
-      certificatesUrls: ["/uploads/cert1.pdf"],
-      idDocumentsUrls: ["/uploads/id1.pdf"],
+      documents: [
+        { url: "/uploads/cert1.pdf", type: "EDUCATION_CERT" },
+        { url: "/uploads/id1.pdf", type: "ID_OR_PASSPORT" },
+      ],
     };
 
     const request = new NextRequest("http://localhost:3500/api/onboarding", {

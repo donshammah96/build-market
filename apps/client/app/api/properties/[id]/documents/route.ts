@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { PropertyDocumentType, AuditAction } from "@prisma/client";
+import { AuditAction, PropertyDocumentType } from "@prisma/client";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -16,11 +16,7 @@ import {
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
 import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
-import {
-  getPropertyDocuments,
-  addPropertyDocument,
-  removePropertyDocument,
-} from "@/lib/services/properties";
+import { propertiesService } from "@/app/lib/domains/properties";
 
 const logger = getClientLogger();
 
@@ -61,30 +57,33 @@ export const GET = withAuth<{ id: string }>(
     const resilientExecutor = getResilientExecutor();
 
     const result = await resilientExecutor.execute(
-      async () => {
-        const propertyDocuments = await getPropertyDocuments(id, dbUserId);
-        return { data: propertyDocuments };
-      },
+      () => propertiesService.getPropertyDocuments(id, dbUserId),
       { operationName: "get_property_documents" },
     );
 
-    if (result.success && result.data) {
-      return apiSuccess(result.data, HttpStatus.OK, correlationId);
+    if (!result.success || !result.data) {
+      logger.error("Failed to fetch property documents", result.error, {
+        correlationId,
+        propertyId: id,
+      });
+      return apiError(
+        "Failed to fetch property documents",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        undefined,
+        correlationId,
+      );
     }
 
-    const errMsg =
-      result.error instanceof Error ? result.error.message : "Unknown error";
-    logger.error("Failed to fetch property documents", result.error, {
-      correlationId,
-      propertyId: id,
-    });
-    if (errMsg === "Property not found")
-      return apiError(errMsg, HttpStatus.NOT_FOUND);
-    if (errMsg === "Unauthorized") return apiError(errMsg, HttpStatus.FORBIDDEN);
-    return apiError(
-      "Failed to fetch property documents",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
+    if (!result.data.ok) {
+      return apiError(
+        result.data.message,
+        result.data.status,
+        undefined,
+        correlationId,
+      );
+    }
+
+    return apiSuccess(result.data.data, HttpStatus.OK, correlationId);
   },
 );
 
@@ -137,51 +136,50 @@ export const POST = withAuth<{ id: string }>(
       );
     }
 
-    const { type, assetId, notes } = validation.data;
-
     const resilientExecutor = getResilientExecutor();
 
     const result = await resilientExecutor.execute(
-      async () => {
-        const newDoc = await addPropertyDocument(id, dbUserId, {
-          type,
-          assetId,
-          notes,
-        });
-        if (dbUserId) {
-          ComplianceService.logAdminAction(
-            dbUserId,
-            AuditAction.PROFILE_UPDATED,
-            "PropertyDocument",
-            newDoc.id,
-            { propertyId: id, type, assetId },
-          ).catch((err) => logger.error("Failed to create audit log", err));
-        }
-        return { data: newDoc };
-      },
+      () =>
+        propertiesService.addPropertyDocument(id, dbUserId, validation.data),
       { operationName: "create_property_document" },
     );
 
-    if (result.success && result.data) {
-      return apiSuccess(result.data, HttpStatus.CREATED, correlationId);
+    if (!result.success || !result.data) {
+      logger.error("Failed to create property document", result.error, {
+        correlationId,
+        propertyId: id,
+      });
+      return apiError(
+        "Failed to create property document",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        undefined,
+        correlationId,
+      );
     }
 
-    const errMsg =
-      result.error instanceof Error ? result.error.message : "Unknown error";
-    logger.error("Failed to create property document", result.error, {
-      correlationId,
-      propertyId: id,
-    });
-    if (errMsg === "Property not found")
-      return apiError(errMsg, HttpStatus.NOT_FOUND);
-    if (errMsg === "Unauthorized" || errMsg === "Unauthorized access to asset")
-      return apiError(errMsg, HttpStatus.FORBIDDEN);
-    if (errMsg === "Asset not found")
-      return apiError(errMsg, HttpStatus.NOT_FOUND);
-    return apiError(
-      "Failed to create property document",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
+    if (!result.data.ok) {
+      return apiError(
+        result.data.message,
+        result.data.status,
+        undefined,
+        correlationId,
+      );
+    }
+
+    const document = result.data.data as { id: string };
+    ComplianceService.logAdminAction(
+      dbUserId,
+      AuditAction.PROFILE_UPDATED,
+      "PropertyDocument",
+      document.id,
+      {
+        propertyId: id,
+        type: validation.data.type,
+        assetId: validation.data.assetId,
+      },
+    ).catch((err) => logger.error("Failed to create audit log", err));
+
+    return apiSuccess(document, HttpStatus.CREATED, correlationId);
   },
 );
 
@@ -200,45 +198,71 @@ export const DELETE = withAuth<{ id: string }>(
     const { searchParams } = new URL(req.url);
     const documentId = searchParams.get("documentId");
 
-    if (!isValidId(id) || !documentId || !isValidId(documentId)) {
-      return apiError("Invalid IDs provided", HttpStatus.BAD_REQUEST);
+    if (!isValidId(id)) {
+      return apiError("Invalid property ID", HttpStatus.BAD_REQUEST);
+    }
+
+    if (!documentId) {
+      return apiError("Document ID is required", HttpStatus.BAD_REQUEST);
+    }
+
+    const documentIdValidation = z.string().uuid().safeParse(documentId);
+    if (!documentIdValidation.success) {
+      return apiError("Invalid document ID format", HttpStatus.BAD_REQUEST);
+    }
+
+    const identifier = getRateLimitIdentifier(req);
+    const { success } = await checkRateLimit(
+      identifier,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
+    );
+    if (!success) {
+      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
     const resilientExecutor = getResilientExecutor();
 
     const result = await resilientExecutor.execute(
-      async () => {
-        await removePropertyDocument(id, documentId, dbUserId);
-        if (dbUserId) {
-          ComplianceService.logAdminAction(
-            dbUserId,
-            AuditAction.DATA_RECTIFIED,
-            "PropertyDocument",
-            documentId,
-            { propertyId: id, action: "DELETE" },
-          ).catch((err) => logger.error("Failed to log deletion", err));
-        }
-        return { data: { success: true } };
-      },
+      () => propertiesService.removePropertyDocument(id, documentId, dbUserId),
       { operationName: "delete_property_document" },
     );
 
-    if (result.success) {
-      return apiSuccess(
-        { message: "Document deleted successfully" },
-        HttpStatus.OK,
+    if (!result.success || !result.data) {
+      logger.error("Failed to delete property document", result.error, {
+        correlationId,
+        propertyId: id,
+        documentId,
+      });
+      return apiError(
+        "Failed to delete document",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        undefined,
         correlationId,
       );
     }
 
-    const errMsg =
-      result.error instanceof Error ? result.error.message : "Unknown error";
-    if (errMsg === "Property not found" || errMsg === "Document not found")
-      return apiError(errMsg, HttpStatus.NOT_FOUND);
-    if (errMsg === "Unauthorized") return apiError(errMsg, HttpStatus.FORBIDDEN);
-    return apiError(
-      "Failed to delete document",
-      HttpStatus.INTERNAL_SERVER_ERROR,
+    if (!result.data.ok) {
+      return apiError(
+        result.data.message,
+        result.data.status,
+        undefined,
+        correlationId,
+      );
+    }
+
+    ComplianceService.logAdminAction(
+      dbUserId,
+      AuditAction.DATA_RECTIFIED,
+      "PropertyDocument",
+      documentId,
+      { propertyId: id, action: "DELETE" },
+    ).catch((err) => logger.error("Failed to log deletion", err));
+
+    return apiSuccess(
+      { message: "Document deleted successfully" },
+      HttpStatus.OK,
+      correlationId,
     );
   },
 );

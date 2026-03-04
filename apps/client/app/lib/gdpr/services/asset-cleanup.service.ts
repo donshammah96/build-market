@@ -83,9 +83,7 @@ export class AssetCleanupService {
     const [projectRefs, userRefs] = await Promise.all([
       prisma.project.count({
         where: {
-          OR: [
-            { images: { some: { id: assetId } } },
-          ],
+          OR: [{ images: { some: { id: assetId } } }],
         },
       }),
       prisma.user.count({

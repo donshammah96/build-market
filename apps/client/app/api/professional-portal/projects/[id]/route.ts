@@ -34,11 +34,7 @@ type ProjectParams = { id: string };
  * Returns ETag header with project version for optimistic locking.
  */
 export const GET = withAuth<ProjectParams>(
-  async (
-    req: NextRequest,
-    { dbUserId },
-    params,
-  ): Promise<NextResponse> => {
+  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
 
     if (!params?.id || !isValidId(params.id)) {
@@ -105,11 +101,7 @@ export const GET = withAuth<ProjectParams>(
  * Requires If-Match header with current version.
  */
 export const PATCH = withAuth<ProjectParams>(
-  async (
-    req: NextRequest,
-    { dbUserId },
-    params,
-  ): Promise<NextResponse> => {
+  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
     const { ipAddress, userAgent } = getRequestMetadata(req);
 
@@ -310,11 +302,7 @@ export const PATCH = withAuth<ProjectParams>(
  * Requires If-Match header with current version.
  */
 export const DELETE = withAuth<ProjectParams>(
-  async (
-    req: NextRequest,
-    { dbUserId },
-    params,
-  ): Promise<NextResponse> => {
+  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
     const { ipAddress, userAgent } = getRequestMetadata(req);
 
@@ -446,8 +434,8 @@ export const DELETE = withAuth<ProjectParams>(
           case "forbidden":
             return apiError(
               "You do not have permission to delete this project",
-            HttpStatus.FORBIDDEN,
-          );
+              HttpStatus.FORBIDDEN,
+            );
           case "conflict":
             return await buildProjectConflictResponse(
               "Project has been modified by another request. Retry with the latest version.",

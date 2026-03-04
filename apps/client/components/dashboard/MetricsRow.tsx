@@ -153,7 +153,7 @@ const METRIC_CONFIGS: Record<MetricId, MetricDisplayConfig> = {
 
 function getMetricValue(
   metricId: MetricId,
-  data: DashboardMetrics
+  data: DashboardMetrics,
 ): number | undefined {
   const mapping: Record<MetricId, keyof DashboardMetrics | undefined> = {
     total_revenue: "totalRevenue",
@@ -188,7 +188,7 @@ export function MetricsRow({
     <div
       className={cn(
         "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6",
-        className
+        className,
       )}
     >
       {metrics.map((metricId) => {

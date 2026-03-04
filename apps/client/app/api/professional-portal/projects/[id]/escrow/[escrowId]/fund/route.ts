@@ -19,7 +19,10 @@ import {
   verifyProjectParticipant,
   isValidEscrowTransition,
 } from "@/app/lib/services/project-operations.service";
-import { FundEscrowSchema, escrowDetailSelect } from "@/app/lib/validation/projects-validation";
+import {
+  FundEscrowSchema,
+  escrowDetailSelect,
+} from "@/app/lib/validation/projects-validation";
 import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
 
 const logger = getClientLogger();
@@ -38,8 +41,10 @@ export const POST = withAuth<FundParams>(
     const correlationId = initializeCorrelationId(req);
 
     if (
-      !params?.id || !isValidId(params.id) ||
-      !params.escrowId || !isValidId(params.escrowId)
+      !params?.id ||
+      !isValidId(params.id) ||
+      !params.escrowId ||
+      !isValidId(params.escrowId)
     ) {
       return apiError("Invalid IDs", HttpStatus.BAD_REQUEST);
     }
@@ -57,7 +62,11 @@ export const POST = withAuth<FundParams>(
 
     const validation = FundEscrowSchema.safeParse(body);
     if (!validation.success) {
-      return apiError("Invalid input", HttpStatus.BAD_REQUEST, validation.error.issues);
+      return apiError(
+        "Invalid input",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+      );
     }
 
     const { referenceCode } = validation.data;
@@ -77,13 +86,19 @@ export const POST = withAuth<FundParams>(
       "FUND",
     );
     if (!idempotencyCheck) {
-      return apiError("Failed to process idempotency key", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to process idempotency key",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
     if (idempotencyCheck.status === "completed") {
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
     }
     if (idempotencyCheck.status === "pending") {
-      return apiError("Funding request is being processed", HttpStatus.CONFLICT);
+      return apiError(
+        "Funding request is being processed",
+        HttpStatus.CONFLICT,
+      );
     }
 
     const identifier = getRateLimitIdentifier(req);
@@ -172,7 +187,10 @@ export const POST = withAuth<FundParams>(
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
-      return apiError("Failed to fund escrow", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to fund escrow",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
     if (result.data.error === "not_found") {
@@ -186,7 +204,8 @@ export const POST = withAuth<FundParams>(
     if (result.data.error === "invalid_transition") {
       await IdempotencyService.fail(idempotencyKey);
       return apiError(
-        (result.data as { message?: string }).message || "Invalid escrow status for funding",
+        (result.data as { message?: string }).message ||
+          "Invalid escrow status for funding",
         HttpStatus.BAD_REQUEST,
       );
     }

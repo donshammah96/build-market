@@ -10,8 +10,8 @@
  * - Safe for browser and client-side bundlers (No Server Actions)
  */
 import type { ApiResponse } from "@build/types";
-import { PROJECTS_CLIENT_CONFIG } from "@/app/lib/config/project.config";
-import { isValidId } from "@/app/lib/utils/validators";
+import { PROJECTS_CLIENT_CONFIG } from "@/lib/config/project.config";
+import { isValidId } from "@/lib/utils/validators";
 import { API_ROUTES } from "@/lib/links";
 import type { z } from "zod";
 import {
@@ -20,7 +20,7 @@ import {
   UpdateProjectSchema,
   CreateMilestoneSchema,
   UpdateMilestoneSchema,
-} from "@/app/lib/validation/projects-validation";
+} from "@/lib/validation/projects-validation";
 
 const { BULKHEAD_CONCURRENCY } = PROJECTS_CLIENT_CONFIG;
 

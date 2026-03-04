@@ -57,7 +57,9 @@ describe("GET /api/settings/public", () => {
 
   it("returns 429 when rate limited", async () => {
     const { checkRateLimit } = await import("@/app/lib/api/rate-limit");
-    vi.mocked(checkRateLimit).mockResolvedValueOnce({ success: false } as never);
+    vi.mocked(checkRateLimit).mockResolvedValueOnce({
+      success: false,
+    } as never);
 
     const req = new NextRequest("http://localhost/api/settings/public");
     const res = await GET(req);

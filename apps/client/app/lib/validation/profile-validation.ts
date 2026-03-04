@@ -62,8 +62,16 @@ export const completeProfileSchema = z.object({
   yearsExperience: z.number().optional(),
   website: z.string().optional().nullable(),
   bio: z.string().optional().nullable(),
-  certificatesUrls: z.array(z.string()).optional(),
-  idDocumentsUrls: z.array(z.string()).optional(),
+  documents: z
+    .array(
+      z.object({
+        uploadId: z.string(),
+        previewUrl: z.string().optional(),
+        category: z.string(),
+        title: z.string().optional(),
+      }),
+    )
+    .optional(),
   storeData: z.array(z.record(z.string(), z.unknown())).optional(),
   propertyData: z.array(z.record(z.string(), z.unknown())).optional(),
   earbNumber: z.string().optional(),

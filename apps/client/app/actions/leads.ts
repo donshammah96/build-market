@@ -70,7 +70,9 @@ export type CreateLeadActionInput = CreateLeadInput & {
   idempotencyKey?: string;
 };
 
-export async function createProfessionalLeadAction(data: CreateLeadActionInput) {
+export async function createProfessionalLeadAction(
+  data: CreateLeadActionInput,
+) {
   const dbUserId = await resolveDbUserId();
 
   const { idempotencyKey: clientKey, ...rest } = data;

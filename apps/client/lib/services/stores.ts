@@ -6,24 +6,29 @@
  * for optimistic locking.
  */
 import { prisma } from "../db";
-import { Prisma, UserStatus, ConsentType, StoreDocumentType } from "@prisma/client";
+import {
+  Prisma,
+  UserStatus,
+  ConsentType,
+  StoreDocumentType,
+} from "@prisma/client";
 import {
   storeListSelect,
   storeDetailSelect,
   generateSlug,
-} from "@/app/lib/validation/stores-validation";  
+} from "@/lib/validation/stores-validation";
 import type { z } from "zod";
 import type {
   CreateStoreSchema,
   UpdateStoreSchema,
   StoreQuerySchema,
-} from "@/app/lib/validation/stores-validation";
+} from "@/lib/validation/stores-validation";
 import {
   updateStoreWithOptimisticLock,
   deleteStoreWithOptimisticLock,
   type UpdateStoreData,
   type StoreOperationContext,
-} from "@/app/lib/services/store-operations.service";
+} from "@/lib/services/store-operations.service";
 
 export type CreateStoreInput = z.infer<typeof CreateStoreSchema>;
 export type UpdateStoreInput = z.infer<typeof UpdateStoreSchema>;
@@ -72,8 +77,11 @@ export type AddDocumentInput = {
 
 // ─── List Stores (Public) ─────────────────────────────────────────────
 
-export async function getStores(filters: StoreQueryInput): Promise<StoreListResult> {
-  const { category, storeType, city, verified, featured, page, limit } = filters;
+export async function getStores(
+  filters: StoreQueryInput,
+): Promise<StoreListResult> {
+  const { category, storeType, city, verified, featured, page, limit } =
+    filters;
   const pageNum = parseInt(page);
   const limitNum = Math.min(parseInt(limit), 50);
   const skip = (pageNum - 1) * limitNum;
@@ -190,13 +198,13 @@ export async function getMyStores(userId: string): Promise<MyStoreWithStats[]> {
   ]);
 
   const pendingOrdersMap = new Map(
-    pendingOrderCounts.map((item) => [item.storeId, item._count.id])
+    pendingOrderCounts.map((item) => [item.storeId, item._count.id]),
   );
   const revenueMap = new Map(
     revenueData.map((item) => [
       item.storeId,
       Number(item._sum.totalAmount ?? 0),
-    ])
+    ]),
   );
 
   return stores.map((store) => ({
@@ -250,7 +258,7 @@ export async function ensureUserCanCreateStores(userId: string): Promise<void> {
 export async function createStore(
   userId: string,
   data: CreateStoreInput,
-  options?: { ipAddress?: string; userAgent?: string }
+  options?: { ipAddress?: string; userAgent?: string },
 ) {
   await ensureUserCanCreateStores(userId);
 
@@ -464,7 +472,7 @@ export async function createStore(
 export async function createStoresBatch(
   userId: string,
   storesData: CreateStoreInput[],
-  options?: { ipAddress?: string; userAgent?: string }
+  options?: { ipAddress?: string; userAgent?: string },
 ) {
   await ensureUserCanCreateStores(userId);
 
@@ -529,8 +537,8 @@ export async function createStoresBatch(
           categories: true,
           createdAt: true,
         },
-      })
-    )
+      }),
+    ),
   );
 
   // Single consent record for batch (ConsentRecord has unique [userId, type])
@@ -546,14 +554,20 @@ export async function createStoresBatch(
       grantedAt: new Date(),
       ipAddress: options?.ipAddress,
       metadata: {
-        stores: createdStores.map((s) => ({ storeId: s.id, storeName: s.name })),
+        stores: createdStores.map((s) => ({
+          storeId: s.id,
+          storeName: s.name,
+        })),
         ...(options?.userAgent && { userAgent: options.userAgent }),
       } as Prisma.InputJsonValue,
     },
     update: {
       grantedAt: new Date(),
       metadata: {
-        stores: createdStores.map((s) => ({ storeId: s.id, storeName: s.name })),
+        stores: createdStores.map((s) => ({
+          storeId: s.id,
+          storeName: s.name,
+        })),
         ...(options?.userAgent && { userAgent: options.userAgent }),
       } as Prisma.InputJsonValue,
     },
@@ -569,14 +583,14 @@ export async function updateStore(
   userId: string,
   data: UpdateStoreData,
   context: StoreOperationContext,
-  expectedVersion: number
+  expectedVersion: number,
 ) {
   return updateStoreWithOptimisticLock(
     storeId,
     userId,
     data,
     context,
-    expectedVersion
+    expectedVersion,
   );
 }
 
@@ -586,13 +600,13 @@ export async function deleteStore(
   storeId: string,
   userId: string,
   context: StoreOperationContext,
-  expectedVersion: number
+  expectedVersion: number,
 ) {
   return deleteStoreWithOptimisticLock(
     storeId,
     userId,
     context,
-    expectedVersion
+    expectedVersion,
   );
 }
 
@@ -627,7 +641,7 @@ export async function getStoreDocuments(storeId: string, userId: string) {
 export async function addStoreDocument(
   storeId: string,
   userId: string,
-  data: AddDocumentInput
+  data: AddDocumentInput,
 ) {
   const store = await prisma.store.findUnique({
     where: { id: storeId },
@@ -664,7 +678,7 @@ export async function addStoreDocument(
 export async function removeStoreDocument(
   storeId: string,
   documentId: string,
-  userId: string
+  userId: string,
 ) {
   const store = await prisma.store.findUnique({
     where: { id: storeId },

@@ -20,9 +20,7 @@ import {
   getRateLimitIdentifier,
   checkRateLimit,
 } from "@/app/lib/api/rate-limit";
-import {
-  safeParseJsonBody,
-} from "@/app/lib/api/request-utils";
+import { safeParseJsonBody } from "@/app/lib/api/request-utils";
 
 const logger = getClientLogger();
 const executor = getResilientExecutor();
@@ -93,7 +91,10 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
     // Safe JSON parsing
     const parseResult = await safeParseJsonBody<Record<string, unknown>>(req);
     if (!parseResult.success) {
-      return apiError(parseResult.error || "Invalid JSON body", HttpStatus.BAD_REQUEST);
+      return apiError(
+        parseResult.error || "Invalid JSON body",
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     const body = parseResult.data;

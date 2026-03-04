@@ -36,7 +36,9 @@ async function resolveDbUserId(): Promise<string> {
   return user.id;
 }
 
-export async function getCalendarEventsAction(filters?: Partial<CalendarQueryInput>) {
+export async function getCalendarEventsAction(
+  filters?: Partial<CalendarQueryInput>,
+) {
   const dbUserId = await resolveDbUserId();
   const parsed = CalendarQuerySchema.safeParse(filters ?? {});
   if (!parsed.success) {
@@ -59,7 +61,9 @@ export type CreateCalendarEventActionInput = CreateCalendarEventInput & {
   idempotencyKey?: string;
 };
 
-export async function createCalendarEventAction(data: CreateCalendarEventActionInput) {
+export async function createCalendarEventAction(
+  data: CreateCalendarEventActionInput,
+) {
   const dbUserId = await resolveDbUserId();
 
   const { idempotencyKey: clientKey, ...rest } = data;
@@ -101,7 +105,8 @@ export async function createCalendarEventAction(data: CreateCalendarEventActionI
 
   if ("error" in result) {
     await IdempotencyService.fail(idempotencyKey);
-    if (result.error === "client_not_found") throw new Error("Client not found");
+    if (result.error === "client_not_found")
+      throw new Error("Client not found");
     throw new Error("Project not found");
   }
 
@@ -115,7 +120,9 @@ export type UpdateCalendarEventActionInput = UpdateCalendarEventInput & {
   idempotencyKey?: string;
 };
 
-export async function updateCalendarEventAction(data: UpdateCalendarEventActionInput) {
+export async function updateCalendarEventAction(
+  data: UpdateCalendarEventActionInput,
+) {
   const dbUserId = await resolveDbUserId();
   const { eventId, idempotencyKey: clientKey, ...rest } = data;
 
@@ -168,7 +175,8 @@ export async function updateCalendarEventAction(data: UpdateCalendarEventActionI
       result.error === "end_before_start"
     )
       throw new Error("End date must be after start date");
-    if (result.error === "client_not_found") throw new Error("Client not found");
+    if (result.error === "client_not_found")
+      throw new Error("Client not found");
     throw new Error("Project not found");
   }
 
@@ -182,7 +190,9 @@ export type DeleteCalendarEventActionInput = {
   eventId: string;
 };
 
-export async function deleteCalendarEventAction(data: DeleteCalendarEventActionInput) {
+export async function deleteCalendarEventAction(
+  data: DeleteCalendarEventActionInput,
+) {
   const dbUserId = await resolveDbUserId();
   const { eventId } = data;
 

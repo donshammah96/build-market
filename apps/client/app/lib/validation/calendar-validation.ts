@@ -39,14 +39,19 @@ export const CreateCalendarEventSchema = z.object({
   recurrenceRule: z.string().max(200).optional(),
   location: z.string().max(500).optional(),
   meetingUrl: z.string().url().optional().or(z.literal("")),
-  reminders: z.array(z.number().int().min(0).max(10080)).optional().default([30]),
+  reminders: z
+    .array(z.number().int().min(0).max(10080))
+    .optional()
+    .default([30]),
   color: z.string().max(20).optional(),
   clientId: z.string().uuid().optional(),
   projectId: z.string().uuid().optional(),
   guestEmails: z.array(z.string().email()).max(50).optional().default([]),
 });
 
-export type CreateCalendarEventInput = z.infer<typeof CreateCalendarEventSchema>;
+export type CreateCalendarEventInput = z.infer<
+  typeof CreateCalendarEventSchema
+>;
 
 /** Body schema for PATCH /api/professional-portal/calendar/[id] */
 export const UpdateCalendarEventSchema = z.object({
@@ -68,7 +73,9 @@ export const UpdateCalendarEventSchema = z.object({
   guestEmails: z.array(z.string().email()).max(50).optional(),
 });
 
-export type UpdateCalendarEventInput = z.infer<typeof UpdateCalendarEventSchema>;
+export type UpdateCalendarEventInput = z.infer<
+  typeof UpdateCalendarEventSchema
+>;
 
 // ═══════════════════════════════════════════════════════════════════════
 // PRISMA SELECT OBJECTS (Data Minimization)

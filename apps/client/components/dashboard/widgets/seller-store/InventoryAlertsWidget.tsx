@@ -36,13 +36,13 @@ function AlertItem({ alert }: AlertItemProps) {
       <div
         className={cn(
           "p-1.5 rounded-md",
-          isOutOfStock ? "bg-red-100" : "bg-amber-100"
+          isOutOfStock ? "bg-red-100" : "bg-amber-100",
         )}
       >
         <AlertTriangle
           className={cn(
             "h-3.5 w-3.5",
-            isOutOfStock ? "text-red-600" : "text-amber-600"
+            isOutOfStock ? "text-red-600" : "text-amber-600",
           )}
         />
       </div>
@@ -118,9 +118,11 @@ export function InventoryAlertsWidget({
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
 
   const outOfStockCount = safeAlerts.filter(
-    (a) => a.status === "out_of_stock"
+    (a) => a.status === "out_of_stock",
   ).length;
-  const lowStockCount = safeAlerts.filter((a) => a.status === "low_stock").length;
+  const lowStockCount = safeAlerts.filter(
+    (a) => a.status === "low_stock",
+  ).length;
 
   return (
     <Card
@@ -136,7 +138,7 @@ export function InventoryAlertsWidget({
               "text-[10px] font-bold px-2 py-0.5 rounded-full",
               outOfStockCount > 0
                 ? "bg-red-100 text-red-700"
-                : "bg-amber-100 text-amber-700"
+                : "bg-amber-100 text-amber-700",
             )}
           >
             {outOfStockCount > 0

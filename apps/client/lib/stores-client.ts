@@ -10,14 +10,14 @@
  * - Safe for browser and client-side bundlers (No Server Actions)
  */
 import type { ApiResponse } from "@build/types";
-import { STORES_CLIENT_CONFIG } from "@/app/lib/config/stores.config";
-import { isValidId } from "@/app/lib/utils/validators";
+import { STORES_CLIENT_CONFIG } from "@/lib/config/stores.config";
+import { isValidId } from "@/lib/utils/validators";
 import type { z } from "zod";
 import {
   CreateStoreSchema,
   UpdateStoreSchema,
   StoreQuerySchema,
-} from "@/app/lib/validation/stores-validation";
+} from "@/lib/validation/stores-validation";
 
 const { BULKHEAD_CONCURRENCY } = STORES_CLIENT_CONFIG;
 

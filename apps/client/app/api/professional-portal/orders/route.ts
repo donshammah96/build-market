@@ -20,7 +20,8 @@ export const GET = createProfessionalPortalGet({
   rateLimitKey: "prof-orders-read",
   querySchema: OrdersQuerySchema,
   parseQuery: parseOrdersQuery,
-  handler: async ({ dbUserId, query }) => getProfessionalOrders(dbUserId, query),
+  handler: async ({ dbUserId, query }) =>
+    getProfessionalOrders(dbUserId, query),
   operationName: "get_professional_orders",
   errorMessage: "Failed to fetch orders",
 });

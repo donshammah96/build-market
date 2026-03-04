@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest } from "next/server";
 
 /**
  * Simple in-memory rate limiter (for development)
@@ -15,16 +15,19 @@ interface RateLimitStore {
 const store: RateLimitStore = {};
 
 // Clean up old entries every 5 minutes
-if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
-    const now = Date.now();
-    Object.keys(store).forEach((key) => {
-      const entry = store[key];
-      if (entry && entry.resetTime < now) {
-        delete store[key];
-      }
-    });
-  }, 5 * 60 * 1000);
+if (typeof setInterval !== "undefined") {
+  setInterval(
+    () => {
+      const now = Date.now();
+      Object.keys(store).forEach((key) => {
+        const entry = store[key];
+        if (entry && entry.resetTime < now) {
+          delete store[key];
+        }
+      });
+    },
+    5 * 60 * 1000,
+  );
 }
 
 export interface RateLimitResult {
@@ -43,7 +46,7 @@ export interface RateLimitResult {
 export async function checkRateLimit(
   identifier: string,
   limit: number = 10,
-  window: number = 10000 // 10 seconds
+  window: number = 10000, // 10 seconds
 ): Promise<RateLimitResult> {
   const now = Date.now();
   const key = identifier;
@@ -76,9 +79,9 @@ export async function checkRateLimit(
  */
 export function getRateLimitIdentifier(req: NextRequest): string {
   // Try to get real IP from various headers
-  const forwarded = req.headers.get('x-forwarded-for');
-  const realIp = req.headers.get('x-real-ip');
-  const ip = forwarded?.split(',')[0] || realIp || 'anonymous';
+  const forwarded = req.headers.get("x-forwarded-for");
+  const realIp = req.headers.get("x-real-ip");
+  const ip = forwarded?.split(",")[0] || realIp || "anonymous";
 
   return ip;
 }
@@ -108,11 +111,11 @@ export const RateLimits = {
 
 /**
  * NOTE: For production, replace this with Redis-based rate limiting:
- * 
+ *
  * ```typescript
  * import { Ratelimit } from '@upstash/ratelimit';
  * import { Redis } from '@upstash/redis';
- * 
+ *
  * export const ratelimit = new Ratelimit({
  *   redis: Redis.fromEnv(),
  *   limiter: Ratelimit.slidingWindow(10, '10 s'),
@@ -120,4 +123,3 @@ export const RateLimits = {
  * });
  * ```
  */
-

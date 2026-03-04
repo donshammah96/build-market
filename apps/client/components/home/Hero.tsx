@@ -37,7 +37,7 @@ export const Hero: FC = memo(function Hero() {
           <div
             className={cn(
               "relative w-full h-full z-10 transition-opacity duration-1000",
-              imageLoaded ? "opacity-100" : "opacity-0"
+              imageLoaded ? "opacity-100" : "opacity-0",
             )}
           >
             <Image
@@ -70,13 +70,13 @@ export const Hero: FC = memo(function Hero() {
           <div
             className={cn(
               "max-w-2xl text-center lg:text-left space-y-8",
-              shouldAnimate && "animate-fade-in-up"
+              shouldAnimate && "animate-fade-in-up",
             )}
           >
             <h1
               className={cn(
                 "text-5xl sm:text-6xl md:text-7xl font-bold text-white tracking-tight leading-[1.1]",
-                shouldAnimate && "animate-fade-in-up"
+                shouldAnimate && "animate-fade-in-up",
               )}
               style={{ animationDelay: shouldAnimate ? "100ms" : "0ms" }}
             >
@@ -89,7 +89,7 @@ export const Hero: FC = memo(function Hero() {
             <p
               className={cn(
                 "text-lg sm:text-xl text-zinc-300 font-light leading-relaxed max-w-xl mx-auto lg:mx-0",
-                shouldAnimate && "animate-fade-in-up"
+                shouldAnimate && "animate-fade-in-up",
               )}
               style={{ animationDelay: shouldAnimate ? "200ms" : "0ms" }}
             >
@@ -100,7 +100,7 @@ export const Hero: FC = memo(function Hero() {
             <div
               className={cn(
                 "flex flex-col sm:flex-row gap-4 justify-center lg:justify-start",
-                shouldAnimate && "animate-fade-in-up"
+                shouldAnimate && "animate-fade-in-up",
               )}
               style={{ animationDelay: shouldAnimate ? "300ms" : "0ms" }}
             >
@@ -126,7 +126,7 @@ export const Hero: FC = memo(function Hero() {
           <div
             className={cn(
               "w-full max-w-md",
-              shouldAnimate && "animate-slide-in-right"
+              shouldAnimate && "animate-slide-in-right",
             )}
             style={{ animationDelay: shouldAnimate ? "400ms" : "0ms" }}
           >

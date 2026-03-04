@@ -24,7 +24,7 @@ declare global {
        */
       uploadFiles(
         selector: string,
-        files: Array<{ name: string; content: string; mimeType: string }>
+        files: Array<{ name: string; content: string; mimeType: string }>,
       ): Chainable<void>;
 
       /**
@@ -32,7 +32,7 @@ declare global {
        */
       waitForToast(
         message: string,
-        type?: "success" | "error"
+        type?: "success" | "error",
       ): Chainable<void>;
 
       /**
@@ -132,7 +132,7 @@ Cypress.Commands.add(
   "uploadFiles",
   (
     selector: string,
-    files: Array<{ name: string; content: string; mimeType: string }>
+    files: Array<{ name: string; content: string; mimeType: string }>,
   ) => {
     const dataTransfer = new DataTransfer();
 
@@ -147,7 +147,7 @@ Cypress.Commands.add(
       inputEl.files = dataTransfer.files;
       cy.wrap(input).trigger("change", { force: true });
     });
-  }
+  },
 );
 
 Cypress.Commands.add(
@@ -160,7 +160,7 @@ Cypress.Commands.add(
     cy.get(toastSelector, { timeout: 10000 })
       .should("be.visible")
       .and("contain.text", message);
-  }
+  },
 );
 
 Cypress.Commands.add("getByLabel", (label: string) => {
@@ -178,7 +178,7 @@ Cypress.Commands.add(
       .find(".text-red-400")
       .should("exist")
       .and(errorMessage ? "contain.text" : "be.visible", errorMessage);
-  }
+  },
 );
 
 // =============================================================================
@@ -231,7 +231,7 @@ Cypress.Commands.add(
         });
       }
     }).as("submitOnboarding");
-  }
+  },
 );
 
 Cypress.Commands.add("mockClerkAuth", (options: MockClerkOptions = {}) => {

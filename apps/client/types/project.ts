@@ -224,9 +224,8 @@ export function toProjectCardData(project: Project): ProjectCardData {
     : undefined;
 
   const completedMilestones =
-    project.milestones?.filter(
-      (m) => m.status === "COMPLETED" || m.isPaid,
-    ).length ?? 0;
+    project.milestones?.filter((m) => m.status === "COMPLETED" || m.isPaid)
+      .length ?? 0;
 
   return {
     id: project.id,

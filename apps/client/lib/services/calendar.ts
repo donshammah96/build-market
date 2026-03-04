@@ -15,7 +15,11 @@ import type {
   UpdateCalendarEventInput,
 } from "@/app/lib/validation/calendar-validation";
 
-export type { CalendarQueryInput, CreateCalendarEventInput, UpdateCalendarEventInput };
+export type {
+  CalendarQueryInput,
+  CreateCalendarEventInput,
+  UpdateCalendarEventInput,
+};
 
 export async function getCalendarEvents(
   dbUserId: string,

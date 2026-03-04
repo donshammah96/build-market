@@ -93,7 +93,12 @@ export async function markNotificationRead(
       where: { userId, isRead: false },
       data: { isRead: true, readAt: now() },
     });
-    return { data: { message: "All notifications marked as read", count: result.count } };
+    return {
+      data: {
+        message: "All notifications marked as read",
+        count: result.count,
+      },
+    };
   }
 
   const notification = await prisma.notification.findUnique({
@@ -113,21 +118,28 @@ export async function markNotificationRead(
   return { data: updated };
 }
 
-export async function deleteNotifications(userId: string, input: BatchDeleteInput) {
+export async function deleteNotifications(
+  userId: string,
+  input: BatchDeleteInput,
+) {
   const { id } = input;
 
   if (id === "all") {
     const result = await prisma.notification.deleteMany({
       where: { userId },
     });
-    return { data: { message: "All notifications deleted", count: result.count } };
+    return {
+      data: { message: "All notifications deleted", count: result.count },
+    };
   }
 
   if (id === "read") {
     const result = await prisma.notification.deleteMany({
       where: { userId, isRead: true },
     });
-    return { data: { message: "Read notifications deleted", count: result.count } };
+    return {
+      data: { message: "Read notifications deleted", count: result.count },
+    };
   }
 
   const notification = await prisma.notification.findUnique({
@@ -171,7 +183,10 @@ export async function updateNotification(
   return { data: updated };
 }
 
-export async function deleteNotification(userId: string, notificationId: string) {
+export async function deleteNotification(
+  userId: string,
+  notificationId: string,
+) {
   const notification = await prisma.notification.findUnique({
     where: { id: notificationId },
     select: { id: true, userId: true },

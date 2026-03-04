@@ -18,7 +18,11 @@ import type {
 } from "@/app/lib/validation/certificate-validation";
 import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
 
-export type { CertificateQueryInput, CreateCertificateInput, UpdateCertificateInput };
+export type {
+  CertificateQueryInput,
+  CreateCertificateInput,
+  UpdateCertificateInput,
+};
 
 export async function getCertificates(
   dbUserId: string,
@@ -55,8 +59,13 @@ export async function getCertificateById(
   });
 
   if (!cert || cert.deletedAt) return { success: false, error: "not_found" };
-  if (cert.professionalId !== dbUserId) return { success: false, error: "forbidden" };
-  if (!CERTIFICATE_CATEGORIES.includes(cert.category as (typeof CERTIFICATE_CATEGORIES)[number])) {
+  if (cert.professionalId !== dbUserId)
+    return { success: false, error: "forbidden" };
+  if (
+    !CERTIFICATE_CATEGORIES.includes(
+      cert.category as (typeof CERTIFICATE_CATEGORIES)[number],
+    )
+  ) {
     return { success: false, error: "not_found" };
   }
 
@@ -134,7 +143,9 @@ export async function createCertificate(
 
 export type UpdateCertificateResult =
   | { data: unknown }
-  | { error: "not_found" | "forbidden" | "asset_not_found" | "asset_forbidden" };
+  | {
+      error: "not_found" | "forbidden" | "asset_not_found" | "asset_forbidden";
+    };
 
 export async function updateCertificate(
   dbUserId: string,
@@ -154,7 +165,11 @@ export async function updateCertificate(
 
   if (!existing || existing.deletedAt) return { error: "not_found" };
   if (existing.professionalId !== dbUserId) return { error: "forbidden" };
-  if (!CERTIFICATE_CATEGORIES.includes(existing.category as (typeof CERTIFICATE_CATEGORIES)[number])) {
+  if (
+    !CERTIFICATE_CATEGORIES.includes(
+      existing.category as (typeof CERTIFICATE_CATEGORIES)[number],
+    )
+  ) {
     return { error: "not_found" };
   }
 
@@ -183,7 +198,9 @@ export async function updateCertificate(
         issueDate: updateData.issueDate ? new Date(updateData.issueDate) : null,
       }),
       ...(updateData.expiryDate !== undefined && {
-        expiryDate: updateData.expiryDate ? new Date(updateData.expiryDate) : null,
+        expiryDate: updateData.expiryDate
+          ? new Date(updateData.expiryDate)
+          : null,
       }),
       ...(assetChanged && {
         status: "PENDING",
@@ -212,7 +229,11 @@ export async function deleteCertificate(
 
   if (!existing || existing.deletedAt) return { error: "not_found" };
   if (existing.professionalId !== dbUserId) return { error: "forbidden" };
-  if (!CERTIFICATE_CATEGORIES.includes(existing.category as (typeof CERTIFICATE_CATEGORIES)[number])) {
+  if (
+    !CERTIFICATE_CATEGORIES.includes(
+      existing.category as (typeof CERTIFICATE_CATEGORIES)[number],
+    )
+  ) {
     return { error: "not_found" };
   }
 

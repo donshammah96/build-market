@@ -45,9 +45,7 @@ class LeadsClient {
     this.bulkhead = new ConcurrencyLimiter(BULKHEAD_CONCURRENCY);
   }
 
-  async getLeads(
-    filters?: Partial<LeadQueryInput>,
-  ): Promise<ApiResponse<any>> {
+  async getLeads(filters?: Partial<LeadQueryInput>): Promise<ApiResponse<any>> {
     return this.bulkhead.run(async () => {
       const searchParams = new URLSearchParams();
       if (filters) {
@@ -55,7 +53,9 @@ class LeadsClient {
           if (value !== undefined) searchParams.append(key, String(value));
         });
       }
-      return apiFetch<any>(`/api/professional-portal/leads?${searchParams.toString()}`);
+      return apiFetch<any>(
+        `/api/professional-portal/leads?${searchParams.toString()}`,
+      );
     });
   }
 
@@ -74,7 +74,9 @@ class LeadsClient {
       apiFetch<any>("/api/professional-portal/leads", {
         method: "POST",
         body: JSON.stringify(payload),
-        headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+        headers: idempotencyKey
+          ? { "Idempotency-Key": idempotencyKey }
+          : undefined,
       }),
     );
   }

@@ -37,7 +37,7 @@ export function getDashboardGroup(profession: string): DashboardGroup {
   // Check for hybrid first (property developers)
   if (
     HYBRID_PROFESSIONS.includes(
-      profession as (typeof HYBRID_PROFESSIONS)[number]
+      profession as (typeof HYBRID_PROFESSIONS)[number],
     )
   ) {
     return "hybrid";
@@ -46,7 +46,7 @@ export function getDashboardGroup(profession: string): DashboardGroup {
   // Check for suppliers (store owners)
   if (
     SUPPLIER_PROFESSIONS.includes(
-      profession as (typeof SUPPLIER_PROFESSIONS)[number]
+      profession as (typeof SUPPLIER_PROFESSIONS)[number],
     )
   ) {
     return "seller_store";
@@ -55,7 +55,7 @@ export function getDashboardGroup(profession: string): DashboardGroup {
   // Check for real estate (property sellers)
   if (
     REAL_ESTATE_PROFESSIONS.includes(
-      profession as (typeof REAL_ESTATE_PROFESSIONS)[number]
+      profession as (typeof REAL_ESTATE_PROFESSIONS)[number],
     )
   ) {
     return "seller_property";
@@ -212,7 +212,7 @@ const HYBRID_CONFIG: DashboardConfig = {
  * Get the complete dashboard configuration for a profession
  */
 export function getDashboardConfig(
-  profession: string | undefined | null
+  profession: string | undefined | null,
 ): DashboardConfig {
   if (!profession) {
     return SERVICE_PROVIDER_CONFIG; // Default fallback
@@ -290,7 +290,7 @@ export function formatWelcomeMessage(
     products?: number;
     inquiries?: number;
     listings?: number;
-  }
+  },
 ): string {
   let message = config.welcomeMessage;
 

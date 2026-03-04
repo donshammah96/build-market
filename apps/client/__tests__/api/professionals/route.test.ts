@@ -35,7 +35,12 @@ describe("GET /api/professionals", () => {
           profession: "CONTRACTOR",
           verified: true,
           rating: 4.5,
-          user: { id: "prof-1", firstName: "John", lastName: "Doe", avatar: null },
+          user: {
+            id: "prof-1",
+            firstName: "John",
+            lastName: "Doe",
+            avatar: null,
+          },
           professionLabel: "Contractor",
           profileUrl: "http://localhost:3500/professionals/prof-1",
         } as any,

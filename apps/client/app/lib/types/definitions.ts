@@ -25,7 +25,6 @@ export type Customer = {
   image_url: string;
 };
 
-
 export type CustomersTableType = {
   id: string;
   name: string;
@@ -129,7 +128,7 @@ export type ProfessionalForm = {
   years_of_experience: number;
   business_license_number: string;
   license_issuing_county: string;
-  status: 'pending' | 'verified';
+  status: "pending" | "verified";
   business_address_street: string;
   business_address_city: string;
   business_address_county: string;
@@ -158,7 +157,7 @@ export type ProfessionalsTableType = {
   years_of_experience: number;
   business_license_number: string;
   license_issuing_county: string;
-  status: 'pending' | 'verified';
+  status: "pending" | "verified";
   verified_at: string;
   verified_by: string;
   business_address_street: string;
@@ -202,14 +201,14 @@ export type Invoice = {
   customer_id: string;
   amount: number;
   date: string;
-  status: 'pending' | 'paid';
+  status: "pending" | "paid";
 };
 
 export type InvoiceForm = {
   id: string;
   customer_id: string;
   amount: number;
-  status: 'pending' | 'paid';
+  status: "pending" | "paid";
 };
 
 export type LatestInvoice = {
@@ -228,7 +227,7 @@ export type InvoicesTable = {
   image_url: string;
   date: string;
   amount: number;
-  status: 'pending' | 'paid';
+  status: "pending" | "paid";
 };
 
 export type ClientInvoice = {
@@ -236,7 +235,7 @@ export type ClientInvoice = {
   client_id: string;
   amount: number;
   date: string;
-  status: 'pending' | 'paid';
+  status: "pending" | "paid";
 };
 
 export type ProfessionalInvoice = {
@@ -244,24 +243,22 @@ export type ProfessionalInvoice = {
   professional_id: string;
   amount: number;
   date: string;
-  status: 'pending' | 'paid';
+  status: "pending" | "paid";
 };
 
-
-export type ClientInvoiceRaw = Omit<ClientInvoice, 'amount'> & {
+export type ClientInvoiceRaw = Omit<ClientInvoice, "amount"> & {
   amount: number;
 };
 
-export type ProfessionalInvoiceRaw = Omit<ProfessionalInvoice, 'amount'> & {
+export type ProfessionalInvoiceRaw = Omit<ProfessionalInvoice, "amount"> & {
   amount: number;
 };
 
 // The database returns a number for amount, but we later format it to a string with the formatCurrency function
-export type LatestInvoiceRaw = Omit<LatestInvoice, 'amount'> & {
+export type LatestInvoiceRaw = Omit<LatestInvoice, "amount"> & {
   amount: number;
 };
 
 // Remove duplicate types - use ClientInvoice and ProfessionalInvoice instead
 export type ClientInvoiceTable = ClientInvoice;
 export type ProfessionalInvoiceTable = ProfessionalInvoice;
-

@@ -270,7 +270,9 @@ export const CreateProjectDocumentSchema = z.object({
   milestoneId: z.string().uuid().optional(),
 });
 
-export type CreateProjectDocumentInput = z.infer<typeof CreateProjectDocumentSchema>;
+export type CreateProjectDocumentInput = z.infer<
+  typeof CreateProjectDocumentSchema
+>;
 
 /** Prisma select for document list queries */
 export const projectDocumentListSelect = {
@@ -361,7 +363,10 @@ export type FundEscrowInput = z.infer<typeof FundEscrowSchema>;
 
 /** Body schema for POST /projects/[id]/escrow/[escrowId]/dispute */
 export const DisputeEscrowSchema = z.object({
-  disputeReason: z.string().min(10, "Dispute reason must be at least 10 characters").max(2000),
+  disputeReason: z
+    .string()
+    .min(10, "Dispute reason must be at least 10 characters")
+    .max(2000),
 });
 
 export type DisputeEscrowInput = z.infer<typeof DisputeEscrowSchema>;

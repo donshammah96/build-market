@@ -79,7 +79,7 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
         "high-contrast",
         "large-text",
         "enhanced-focus",
-        "dyslexia-font"
+        "dyslexia-font",
       );
       html.removeAttribute("data-color-blind-mode");
       html.removeAttribute("data-line-spacing");
@@ -109,7 +109,7 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
         event.preventDefault();
         // Find and click the accessibility button
         const accessibilityButton = document.querySelector(
-          '[aria-label="Accessibility settings"]'
+          '[aria-label="Accessibility settings"]',
         ) as HTMLButtonElement;
         if (accessibilityButton) {
           accessibilityButton.click();
@@ -121,7 +121,7 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
         const openDialog = document.querySelector('[role="dialog"]');
         if (openDialog) {
           const closeButton = openDialog.querySelector(
-            '[aria-label="Close"]'
+            '[aria-label="Close"]',
           ) as HTMLButtonElement;
           if (closeButton) {
             closeButton.click();
@@ -129,7 +129,7 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
         }
       }
     },
-    [keyboardShortcuts]
+    [keyboardShortcuts],
   );
 
   // Attach keyboard listeners

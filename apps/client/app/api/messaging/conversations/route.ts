@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@build/db";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -17,10 +16,9 @@ import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import {
   ThreadQuerySchema,
   CreateThreadSchema,
-  threadDetailSelect,
-  threadListSelect,
   MESSAGING_CONFIG,
-} from "@/app/lib/validation/messaging-validation";
+  messagingService,
+} from "@build/messaging-server";
 
 const logger = getClientLogger();
 
@@ -59,59 +57,11 @@ export const GET = withAuth(
       );
     }
 
-    const { type, isArchived, search, page, limit } = queryValidation.data;
+    const query = queryValidation.data;
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      async () => {
-        const where = {
-          deletedAt: null,
-          participants: {
-            some: {
-              userId: dbUserId,
-              ...(isArchived !== undefined ? { isArchived } : {}),
-            },
-          },
-          ...(type ? { type } : {}),
-          ...(search
-            ? {
-                OR: [
-                  {
-                    subject: { contains: search, mode: "insensitive" as const },
-                  },
-                  {
-                    lastMessage: {
-                      contains: search,
-                      mode: "insensitive" as const,
-                    },
-                  },
-                ],
-              }
-            : {}),
-        };
-
-        const skip = (page - 1) * limit;
-        const [threads, total] = await Promise.all([
-          prisma.messageThread.findMany({
-            where,
-            select: threadListSelect,
-            orderBy: { lastMessageAt: { sort: "desc", nulls: "last" } },
-            skip,
-            take: limit,
-          }),
-          prisma.messageThread.count({ where }),
-        ]);
-
-        return {
-          threads,
-          pagination: {
-            page,
-            limit,
-            total,
-            totalPages: Math.ceil(total / limit),
-          },
-        };
-      },
+      () => messagingService.listConversations(dbUserId, query),
       { operationName: "list_threads" },
     );
 
@@ -125,14 +75,14 @@ export const GET = withAuth(
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     } else {
-      const data = result.data;
-      if (data && "_error" in (data as any) && (data as any)._error) {
+      const serviceResult = result.data;
+      if (!serviceResult || !serviceResult.ok) {
         return apiError(
-          (data as any).message || "Invalid request",
-          (data as any).status || HttpStatus.BAD_REQUEST,
+          serviceResult?.message || "Invalid request",
+          serviceResult?.status || HttpStatus.BAD_REQUEST,
         );
       }
-      return apiSuccess(data, HttpStatus.OK);
+      return apiSuccess(serviceResult.data, HttpStatus.OK);
     }
   },
 );
@@ -166,14 +116,14 @@ export const POST = withAuth(
         validation.error.issues,
       );
     }
-    const data = validation.data;
+    const input = validation.data;
 
     const idempotencyKey =
       req.headers.get("Idempotency-Key") ||
       IdempotencyService.generateKey(dbUserId, "POST", {
         domain: "messaging-thread",
-        participants: [...data.participantIds].sort(),
-        type: data.type,
+        participants: [...input.participantIds].sort(),
+        type: input.type,
       });
 
     const idempotencyCheck = await IdempotencyService.checkOrCreate(
@@ -205,72 +155,7 @@ export const POST = withAuth(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      async () => {
-        const existingUsers = await prisma.user.findMany({
-          where: { id: { in: data.participantIds } },
-          select: { id: true },
-        });
-        const existingIds = new Set(existingUsers.map((u) => u.id));
-        const missingIds = data.participantIds.filter(
-          (id) => !existingIds.has(id),
-        );
-        if (missingIds.length > 0) {
-          return {
-            _error: true as const,
-            message: `Users not found: ${missingIds.join(", ")}`,
-            status: HttpStatus.BAD_REQUEST,
-          };
-        }
-
-        const allParticipantIds = Array.from(
-          new Set([dbUserId, ...data.participantIds]),
-        );
-
-        if (data.type === "DIRECT" && allParticipantIds.length === 2) {
-          const otherUserId = allParticipantIds.find((id) => id !== dbUserId)!;
-          const existingThread = await prisma.messageThread.findFirst({
-            where: {
-              type: "DIRECT",
-              deletedAt: null,
-              AND: [
-                { participants: { some: { userId: dbUserId } } },
-                { participants: { some: { userId: otherUserId } } },
-              ],
-            },
-            select: threadDetailSelect,
-          });
-          if (existingThread) return existingThread;
-        }
-
-        if (data.projectId) {
-          const project = await prisma.project.findUnique({
-            where: { id: data.projectId },
-            select: { id: true },
-          });
-          if (!project) {
-            return {
-              _error: true as const,
-              message: "Project not found",
-              status: HttpStatus.BAD_REQUEST,
-            };
-          }
-        }
-
-        return prisma.messageThread.create({
-          data: {
-            type: data.type,
-            subject: data.subject,
-            projectId: data.projectId,
-            participants: {
-              create: allParticipantIds.map((userId) => ({
-                userId,
-                role: userId === dbUserId ? "OWNER" : "MEMBER",
-              })),
-            },
-          },
-          select: threadDetailSelect,
-        });
-      },
+      () => messagingService.createConversation(dbUserId, input),
       { operationName: "create_thread" },
     );
 
@@ -285,13 +170,19 @@ export const POST = withAuth(
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     } else {
-      const data = result.data;
-      if (data && "_error" in (data as any) && (data as any)._error) {
+      const serviceResult = result.data;
+      if (!serviceResult || !serviceResult.ok) {
         await IdempotencyService.fail(idempotencyKey).catch(() => {});
-        return apiError((data as any).message, (data as any).status);
+        return apiError(
+          serviceResult?.message ?? "Invalid request",
+          serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+        );
       }
-      await IdempotencyService.complete(idempotencyKey, data).catch(() => {});
-      return apiSuccess(data, HttpStatus.CREATED);
+      await IdempotencyService.complete(
+        idempotencyKey,
+        serviceResult.data,
+      ).catch(() => {});
+      return apiSuccess(serviceResult.data, HttpStatus.CREATED);
     }
   },
 );

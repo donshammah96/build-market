@@ -8,6 +8,7 @@ import {
   checkRateLimit,
   getRateLimitIdentifier,
 } from "@/app/lib/api/rate-limit";
+import { ensureValidInternalSecret } from "@/app/lib/security/internal-secret";
 
 const logger = getClientLogger();
 
@@ -30,14 +31,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const correlationId = initializeCorrelationId(req);
 
   // ── Access control ──────────────────────────────────────────────────
-  const internalSecret = req.headers.get("x-internal-secret");
-  const expectedSecret = process.env.INTERNAL_API_SECRET;
-
-  if (expectedSecret && internalSecret !== expectedSecret) {
+  const secretError = ensureValidInternalSecret(
+    req.headers.get("x-internal-secret"),
+  );
+  if (secretError) {
     logger.warn("Internal user-status forbidden: invalid secret", {
       correlationId,
     });
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return secretError;
   }
 
   // ── Rate limit (guard against runaway middleware loops) ─────────────
@@ -48,19 +49,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     60_000,
   );
   if (!rateLimitResult.success) {
-    return NextResponse.json(
-      { error: "Too many requests" },
-      { status: 429 },
-    );
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   // ── Input ──────────────────────────────────────────────────────────
   const clerkId = req.nextUrl.searchParams.get("clerkId");
   if (!clerkId) {
-    return NextResponse.json(
-      { error: "Missing clerkId" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Missing clerkId" }, { status: 400 });
   }
 
   try {
@@ -85,14 +80,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // Check for professional users without a profile (edge case)
     if (user.role === UserRole.PROFESSIONAL && !user.professionalProfile) {
-      logger.warn(
-        "Professional user exists but has no professional profile",
-        {
-          correlationId,
-          clerkId,
-          userId: user.id,
-        },
-      );
+      logger.warn("Professional user exists but has no professional profile", {
+        correlationId,
+        clerkId,
+        userId: user.id,
+      });
     }
 
     return NextResponse.json({
@@ -106,8 +98,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       { correlationId, clerkId },
     );
 
-    // Return "not onboarded" so middleware handles gracefully
-    // rather than blocking the request entirely
+    // Return "not onboarded" so middleware handles gracefully.
     return NextResponse.json(
       {
         isOnboarded: false,

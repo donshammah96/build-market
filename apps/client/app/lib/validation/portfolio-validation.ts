@@ -17,7 +17,9 @@ import {
 export const ProjectTypeSchema = z.nativeEnum(ProjectType);
 export const CountySchema = z.nativeEnum(County);
 export const DurationUnitSchema = z.nativeEnum(ProjectDurationUnit);
-export const PortfolioImageCategorySchema = z.nativeEnum(PortfolioImageCategory);
+export const PortfolioImageCategorySchema = z.nativeEnum(
+  PortfolioImageCategory,
+);
 
 // ═══════════════════════════════════════════════════════════════════════
 // PORTFOLIO SCHEMAS
@@ -85,7 +87,9 @@ export const CreatePortfolioImageSchema = z.object({
   sortOrder: z.number().int().min(0).optional().default(0),
 });
 
-export type CreatePortfolioImageInput = z.infer<typeof CreatePortfolioImageSchema>;
+export type CreatePortfolioImageInput = z.infer<
+  typeof CreatePortfolioImageSchema
+>;
 
 /** Batch create images schema */
 export const BatchCreatePortfolioImagesSchema = z.object({
@@ -100,7 +104,9 @@ export const UpdatePortfolioImageSchema = z.object({
   sortOrder: z.number().int().min(0).optional(),
 });
 
-export type UpdatePortfolioImageInput = z.infer<typeof UpdatePortfolioImageSchema>;
+export type UpdatePortfolioImageInput = z.infer<
+  typeof UpdatePortfolioImageSchema
+>;
 
 // ═══════════════════════════════════════════════════════════════════════
 // PRISMA SELECT OBJECTS (Data Minimization)
@@ -150,10 +156,7 @@ export const portfolioListSelect = {
   updatedAt: true,
   images: {
     select: portfolioImageSelect,
-    orderBy: [
-      { isMain: "desc" },
-      { sortOrder: "asc" },
-    ] as { isMain: "desc" }[],
+    orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }] as { isMain: "desc" }[],
     take: 5, // Only main + a few preview images for list
   },
   _count: {
@@ -170,10 +173,7 @@ export const portfolioDetailSelect = {
   deletedAt: true,
   images: {
     select: portfolioImageSelect,
-    orderBy: [
-      { isMain: "desc" },
-      { sortOrder: "asc" },
-    ] as { isMain: "desc" }[],
+    orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }] as { isMain: "desc" }[],
     // No take limit for detail — return all images
   },
 } as const;

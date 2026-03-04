@@ -131,7 +131,7 @@ function InquiryItem({ inquiry }: InquiryItemProps) {
               variant="outline"
               className={cn(
                 "text-[10px] font-medium border",
-                statusConfig.color
+                statusConfig.color,
               )}
             >
               {statusConfig.label}
@@ -213,7 +213,7 @@ export function InquiriesWidget({
     <Card
       className={cn(
         "border border-zinc-200 shadow-sm overflow-hidden bg-white",
-        className
+        className,
       )}
     >
       <CardHeader className="border-b border-zinc-100 py-5 px-6 flex flex-row items-center justify-between">

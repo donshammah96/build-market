@@ -22,7 +22,10 @@ import {
   projectDetailSelect,
   milestoneDetailSelect,
 } from "@/app/lib/validation/projects-validation";
-import type { UpdateProjectInput, UpdateMilestoneInput } from "@/app/lib/validation/projects-validation";
+import type {
+  UpdateProjectInput,
+  UpdateMilestoneInput,
+} from "@/app/lib/validation/projects-validation";
 
 const logger = getClientLogger();
 
@@ -41,7 +44,11 @@ export type ProjectOperationResult<T> =
   | { success: true; data: T }
   | {
       success: false;
-      error: "not_found" | "forbidden" | "invalid_transition" | "limit_exceeded";
+      error:
+        | "not_found"
+        | "forbidden"
+        | "invalid_transition"
+        | "limit_exceeded";
       message?: string;
     };
 
@@ -366,9 +373,7 @@ export async function updateProjectWithOptimisticLock(
   updateData: UpdateProjectInput,
   context: ProjectOperationContext,
   expectedVersion: number,
-): Promise<
-  OptimisticLockResult<{ project: unknown; newVersion: number }>
-> {
+): Promise<OptimisticLockResult<{ project: unknown; newVersion: number }>> {
   return prisma.$transaction(
     async (tx) => {
       const project = await tx.project.findUnique({
@@ -492,9 +497,7 @@ export async function updateMilestoneWithOptimisticLock(
   updateData: UpdateMilestoneInput,
   context: ProjectOperationContext,
   expectedVersion: number,
-): Promise<
-  OptimisticLockResult<{ milestone: unknown; newVersion: number }>
-> {
+): Promise<OptimisticLockResult<{ milestone: unknown; newVersion: number }>> {
   return prisma.$transaction(
     async (tx) => {
       const ownership = await verifyProjectOwnership(projectId, userId, tx);
@@ -525,9 +528,7 @@ export async function updateMilestoneWithOptimisticLock(
       const newVersion = expectedVersion + 1;
       const payload: Prisma.ProjectMilestoneUpdateInput = {
         ...updateData,
-        dueDate: updateData.dueDate
-          ? new Date(updateData.dueDate)
-          : undefined,
+        dueDate: updateData.dueDate ? new Date(updateData.dueDate) : undefined,
         completedAt:
           updateData.status === MilestoneStatus.COMPLETED
             ? new Date()
@@ -585,8 +586,7 @@ export async function deleteMilestoneWithOptimisticLock(
       });
 
       if (!milestone) return { success: false, error: "not_found" };
-      if (milestone.escrowId)
-        return { success: false, error: "forbidden" }; // escrow_linked - treat as forbidden for this API
+      if (milestone.escrowId) return { success: false, error: "forbidden" }; // escrow_linked - treat as forbidden for this API
       if ((milestone.version ?? 1) !== expectedVersion)
         return { success: false, error: "conflict" };
 

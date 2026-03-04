@@ -41,7 +41,14 @@ const WIDGET_REGISTRY: Record<WidgetId, WidgetRendererFn> = {
   profile_strength: () => <ProfileStrengthWidget />,
 
   agenda: (data) => (
-    <AgendaWidget events={safeArray<{ id: string; title: string; startDate: string; status: string }>(data.agenda)} />
+    <AgendaWidget
+      events={safeArray<{
+        id: string;
+        title: string;
+        startDate: string;
+        status: string;
+      }>(data.agenda)}
+    />
   ),
 
   leads: (data) => {
@@ -58,7 +65,9 @@ const WIDGET_REGISTRY: Record<WidgetId, WidgetRendererFn> = {
 
   portfolio: (data) => <PortfolioWidget items={safeArray(data.portfolio)} />,
 
-  store_overview: (data) => <StoreOverviewWidget store={data.primaryStore ?? undefined} />,
+  store_overview: (data) => (
+    <StoreOverviewWidget store={data.primaryStore ?? undefined} />
+  ),
 
   orders: (data) => {
     const orders = safeArray<OrderData>(data.orders);
@@ -97,7 +106,9 @@ const WIDGET_REGISTRY: Record<WidgetId, WidgetRendererFn> = {
     />
   ),
 
-  development_projects: (data) => <ProjectsWidget projects={safeArray(data.projects)} />,
+  development_projects: (data) => (
+    <ProjectsWidget projects={safeArray(data.projects)} />
+  ),
 };
 
 // ============================================================================

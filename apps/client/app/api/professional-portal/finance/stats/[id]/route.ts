@@ -60,7 +60,12 @@ export const GET = withAuth<{ id: string }>(
               type: "INCOME",
               status: "SUCCESS",
             },
-            _sum: { amount: true, netAmount: true, platformFee: true, taxAmount: true },
+            _sum: {
+              amount: true,
+              netAmount: true,
+              platformFee: true,
+              taxAmount: true,
+            },
           }),
           prisma.professionalTransaction.aggregate({
             where: {

@@ -1,32 +1,32 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  AlertCircle, 
-  CheckCircle2, 
-  ChevronRight, 
+import { useState } from "react";
+import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronRight,
   X,
   User,
   Building2,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { cn } from '@/lib/utils';
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
 
 interface ProfileCompletionBannerProps {
   percentage: number;
   missingFields: string[];
-  profileType: 'client' | 'professional';
+  profileType: "client" | "professional";
   onDismiss?: () => void;
   className?: string;
 }
 
 /**
  * ProfileCompletionBanner
- * 
+ *
  * Displays a prominent banner encouraging users to complete their profile.
  * Shows progress bar and list of missing required fields.
  */
@@ -45,27 +45,28 @@ export function ProfileCompletionBanner({
   };
 
   // Determine the route based on profile type
-  const completeProfileRoute = profileType === 'professional'
-    ? '/professional-portal/settings/complete-profile'
-    : '/profile/complete';
+  const completeProfileRoute =
+    profileType === "professional"
+      ? "/professional-portal/settings/complete-profile"
+      : "/profile/complete";
 
   // Get appropriate colors based on completion percentage
   const getProgressColor = () => {
-    if (percentage >= 80) return 'bg-emerald-500';
-    if (percentage >= 50) return 'bg-amber-500';
-    return 'bg-orange-500';
+    if (percentage >= 80) return "bg-emerald-500";
+    if (percentage >= 50) return "bg-amber-500";
+    return "bg-orange-500";
   };
 
   const getBorderColor = () => {
-    if (percentage >= 80) return 'border-emerald-200';
-    if (percentage >= 50) return 'border-amber-200';
-    return 'border-orange-200';
+    if (percentage >= 80) return "border-emerald-200";
+    if (percentage >= 50) return "border-amber-200";
+    return "border-orange-200";
   };
 
   const getBgColor = () => {
-    if (percentage >= 80) return 'bg-emerald-50';
-    if (percentage >= 50) return 'bg-amber-50';
-    return 'bg-orange-50';
+    if (percentage >= 80) return "bg-emerald-50";
+    if (percentage >= 50) return "bg-amber-50";
+    return "bg-orange-50";
   };
 
   return (
@@ -73,14 +74,14 @@ export function ProfileCompletionBanner({
       {!isDismissed && (
         <motion.div
           initial={{ opacity: 0, y: -20, height: 0 }}
-          animate={{ opacity: 1, y: 0, height: 'auto' }}
+          animate={{ opacity: 1, y: 0, height: "auto" }}
           exit={{ opacity: 0, y: -20, height: 0 }}
           transition={{ duration: 0.3 }}
           className={cn(
-            'relative overflow-hidden rounded-xl border shadow-sm mb-6',
+            "relative overflow-hidden rounded-xl border shadow-sm mb-6",
             getBorderColor(),
             getBgColor(),
-            className
+            className,
           )}
         >
           {/* Dismiss button */}
@@ -94,26 +95,43 @@ export function ProfileCompletionBanner({
 
           <div className="p-6">
             <div className="flex flex-col lg:flex-row lg:items-center gap-6">
-              
               {/* Icon and Text Section */}
               <div className="flex items-start gap-4 flex-1">
-                <div className={cn(
-                  'p-3 rounded-xl',
-                  percentage >= 80 ? 'bg-emerald-100' : percentage >= 50 ? 'bg-amber-100' : 'bg-orange-100'
-                )}>
-                  {profileType === 'professional' ? (
-                    <Building2 className={cn(
-                      'h-6 w-6',
-                      percentage >= 80 ? 'text-emerald-600' : percentage >= 50 ? 'text-amber-600' : 'text-orange-600'
-                    )} />
+                <div
+                  className={cn(
+                    "p-3 rounded-xl",
+                    percentage >= 80
+                      ? "bg-emerald-100"
+                      : percentage >= 50
+                        ? "bg-amber-100"
+                        : "bg-orange-100",
+                  )}
+                >
+                  {profileType === "professional" ? (
+                    <Building2
+                      className={cn(
+                        "h-6 w-6",
+                        percentage >= 80
+                          ? "text-emerald-600"
+                          : percentage >= 50
+                            ? "text-amber-600"
+                            : "text-orange-600",
+                      )}
+                    />
                   ) : (
-                    <User className={cn(
-                      'h-6 w-6',
-                      percentage >= 80 ? 'text-emerald-600' : percentage >= 50 ? 'text-amber-600' : 'text-orange-600'
-                    )} />
+                    <User
+                      className={cn(
+                        "h-6 w-6",
+                        percentage >= 80
+                          ? "text-emerald-600"
+                          : percentage >= 50
+                            ? "text-amber-600"
+                            : "text-orange-600",
+                      )}
+                    />
                   )}
                 </div>
-                
+
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-semibold text-zinc-900 text-lg">
@@ -125,23 +143,26 @@ export function ProfileCompletionBanner({
                       </span>
                     )}
                   </div>
-                  
+
                   <p className="text-sm text-zinc-600 mb-4">
-                    {profileType === 'professional' 
-                      ? 'A complete profile helps clients find and trust you. Add the missing details to stand out.'
-                      : 'Complete your profile to get personalized recommendations and better matches with professionals.'
-                    }
+                    {profileType === "professional"
+                      ? "A complete profile helps clients find and trust you. Add the missing details to stand out."
+                      : "Complete your profile to get personalized recommendations and better matches with professionals."}
                   </p>
 
                   {/* Progress bar */}
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-zinc-500 font-medium">Profile completion</span>
-                      <span className="text-zinc-900 font-bold">{percentage}%</span>
+                      <span className="text-zinc-500 font-medium">
+                        Profile completion
+                      </span>
+                      <span className="text-zinc-900 font-bold">
+                        {percentage}%
+                      </span>
                     </div>
-                    <Progress 
-                      value={percentage} 
-                      className="h-2.5 bg-zinc-200" 
+                    <Progress
+                      value={percentage}
+                      className="h-2.5 bg-zinc-200"
                       indicatorClassName={getProgressColor()}
                     />
                   </div>
@@ -179,7 +200,7 @@ export function ProfileCompletionBanner({
                     <ChevronRight className="ml-1 h-4 w-4" />
                   </Link>
                 </Button>
-                
+
                 {percentage >= 80 && (
                   <p className="text-xs text-emerald-600 flex items-center gap-1">
                     <CheckCircle2 className="h-3.5 w-3.5" />
@@ -191,7 +212,8 @@ export function ProfileCompletionBanner({
           </div>
 
           {/* Decorative gradient */}
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-400 via-amber-400 to-emerald-400" 
+          <div
+            className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-400 via-amber-400 to-emerald-400"
             style={{
               clipPath: `inset(0 ${100 - percentage}% 0 0)`,
             }}
@@ -210,14 +232,15 @@ export function ProfileCompletionInline({
   profileType,
 }: {
   percentage: number;
-  profileType: 'client' | 'professional';
+  profileType: "client" | "professional";
 }) {
-  const completeProfileRoute = profileType === 'professional'
-    ? '/professional-portal/settings/complete-profile'
-    : '/profile/complete';
+  const completeProfileRoute =
+    profileType === "professional"
+      ? "/professional-portal/settings/complete-profile"
+      : "/profile/complete";
 
   return (
-    <Link 
+    <Link
       href={completeProfileRoute}
       className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors group"
     >

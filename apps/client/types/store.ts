@@ -386,7 +386,7 @@ export const STORE_CATEGORY_OPTIONS: Record<
       value: value as StoreCategory,
       label,
     },
-  ])
+  ]),
 ) as Record<StoreCategory, StoreCategoryOption>;
 
 // ============================================================================

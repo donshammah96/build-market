@@ -84,11 +84,10 @@ export default function ConversationDetailPage() {
     if (!conversationData) return undefined;
     const rawParticipants = (conversationData as { participants?: unknown[] })
       .participants;
-    const participantIds = (Array.isArray(rawParticipants)
-      ? rawParticipants
-      : []
+    const participantIds = (
+      Array.isArray(rawParticipants) ? rawParticipants : []
     ).map((p: unknown) =>
-      typeof p === "string" ? p : (p as { userId?: string }).userId ?? "",
+      typeof p === "string" ? p : ((p as { userId?: string }).userId ?? ""),
     );
     return {
       ...conversationData,
@@ -124,7 +123,9 @@ export default function ConversationDetailPage() {
     const messages = messagesData.items || [];
     const unreadCount =
       conversation?.unreadCount && currentUserDbId
-        ? (conversation.unreadCount as Record<string, number>)[currentUserDbId] ?? 0
+        ? ((conversation.unreadCount as Record<string, number>)[
+            currentUserDbId
+          ] ?? 0)
         : 0;
 
     return {
@@ -278,7 +279,7 @@ export default function ConversationDetailPage() {
                             day: "numeric",
                             hour: "2-digit",
                             minute: "2-digit",
-                          }
+                          },
                         )
                       : "No messages yet"}
                   </p>
@@ -316,7 +317,7 @@ export default function ConversationDetailPage() {
                         day: "numeric",
                         hour: "2-digit",
                         minute: "2-digit",
-                      }
+                      },
                     )}
                   </p>
                 </div>
@@ -334,7 +335,7 @@ export default function ConversationDetailPage() {
                         day: "numeric",
                         hour: "2-digit",
                         minute: "2-digit",
-                      }
+                      },
                     )}
                   </p>
                 </div>
@@ -481,7 +482,7 @@ export default function ConversationDetailPage() {
                       {Math.ceil(
                         (statistics.lastMessageDate.getTime() -
                           statistics.firstMessageDate.getTime()) /
-                          (1000 * 60 * 60 * 24)
+                          (1000 * 60 * 60 * 24),
                       )}{" "}
                       days
                     </span>

@@ -38,7 +38,7 @@ export class UploadError extends Error {
     message: string,
     code: UploadErrorCode,
     statusCode?: number,
-    details?: unknown
+    details?: unknown,
   ) {
     super(message);
     this.name = "UploadError";
@@ -137,19 +137,19 @@ const isRetryableError = (error: unknown): boolean => {
  */
 export const validateFiles = (
   files: File[],
-  type: "images" | "documents"
+  type: "images" | "documents",
 ): void => {
   if (files.length === 0) {
     throw new UploadError(
       "No files provided",
-      UploadErrorCode.VALIDATION_ERROR
+      UploadErrorCode.VALIDATION_ERROR,
     );
   }
 
   if (files.length > FILE_LIMITS.MAX_FILES_PER_UPLOAD) {
     throw new UploadError(
       `Cannot upload more than ${FILE_LIMITS.MAX_FILES_PER_UPLOAD} files at once`,
-      UploadErrorCode.VALIDATION_ERROR
+      UploadErrorCode.VALIDATION_ERROR,
     );
   }
 
@@ -163,7 +163,7 @@ export const validateFiles = (
     if (!(allowedTypes as readonly string[]).includes(file.type)) {
       throw new UploadError(
         `File "${file.name}" has an invalid type. Allowed: ${allowedTypes.join(", ")}`,
-        UploadErrorCode.VALIDATION_ERROR
+        UploadErrorCode.VALIDATION_ERROR,
       );
     }
 
@@ -171,7 +171,7 @@ export const validateFiles = (
       const maxSizeMB = Math.round(maxSize / (1024 * 1024));
       throw new UploadError(
         `File "${file.name}" exceeds the maximum size of ${maxSizeMB}MB`,
-        UploadErrorCode.VALIDATION_ERROR
+        UploadErrorCode.VALIDATION_ERROR,
       );
     }
   }
@@ -182,13 +182,13 @@ export const validateFiles = (
  */
 const parseResponse = (
   json: ApiUploadResponse,
-  fieldName: string
+  fieldName: string,
 ): string[] => {
   // Check for error in response
   if (json.error || json.message) {
     throw new UploadError(
       json.error || json.message || "Upload failed",
-      UploadErrorCode.SERVER_ERROR
+      UploadErrorCode.SERVER_ERROR,
     );
   }
 
@@ -199,7 +199,7 @@ const parseResponse = (
       `Invalid response format: expected data.uploaded.${fieldName} to be an array`,
       UploadErrorCode.INVALID_RESPONSE,
       undefined,
-      json
+      json,
     );
   }
 
@@ -212,7 +212,7 @@ const parseResponse = (
       "No valid URLs returned from upload",
       UploadErrorCode.INVALID_RESPONSE,
       undefined,
-      json
+      json,
     );
   }
 
@@ -253,7 +253,7 @@ const parseResponse = (
 export async function uploadFiles(
   files: File[],
   fieldName: string,
-  options: UploadOptions = {}
+  options: UploadOptions = {},
 ): Promise<UploadResult> {
   const config = { ...DEFAULT_OPTIONS, ...options };
   let lastError: UploadError | null = null;
@@ -290,7 +290,7 @@ export async function uploadFiles(
         throw new UploadError(
           text || `Upload failed with status ${response.status}`,
           UploadErrorCode.SERVER_ERROR,
-          response.status
+          response.status,
         );
       }
 
@@ -309,12 +309,12 @@ export async function uploadFiles(
         }
         lastError = new UploadError(
           error.message,
-          UploadErrorCode.NETWORK_ERROR
+          UploadErrorCode.NETWORK_ERROR,
         );
       } else {
         lastError = new UploadError(
           "Unknown upload error",
-          UploadErrorCode.UNKNOWN
+          UploadErrorCode.UNKNOWN,
         );
       }
 
@@ -324,7 +324,7 @@ export async function uploadFiles(
           config.retryDelay * Math.pow(config.backoffMultiplier, attempt);
         console.warn(
           `Upload attempt ${attempt + 1} failed, retrying in ${delay}ms...`,
-          lastError.message
+          lastError.message,
         );
         await sleep(delay);
         attempt++;
@@ -341,7 +341,7 @@ export async function uploadFiles(
         `Upload failed after ${config.maxRetries + 1} attempts: ${lastError.message}`,
         UploadErrorCode.MAX_RETRIES_EXCEEDED,
         lastError.statusCode,
-        lastError.details
+        lastError.details,
       );
     }
     throw lastError;
@@ -356,14 +356,14 @@ export async function uploadFiles(
 export async function uploadFile(
   file: File,
   fieldName: string,
-  options: UploadOptions = {}
+  options: UploadOptions = {},
 ): Promise<string> {
   const result = await uploadFiles([file], fieldName, options);
   const url = result.urls[0];
   if (!url) {
     throw new UploadError(
       "No URL returned from upload",
-      UploadErrorCode.INVALID_RESPONSE
+      UploadErrorCode.INVALID_RESPONSE,
     );
   }
   return url;

@@ -23,9 +23,8 @@ describe("AnonymizationService", () => {
     vi.doMock("@build/db", () => ({
       prisma: mockPrisma,
     }));
-    const serviceModule = await import(
-      "@/app/lib/gdpr/services/anonymization.service"
-    );
+    const serviceModule =
+      await import("@/app/lib/gdpr/services/anonymization.service");
     AnonymizationService = serviceModule.AnonymizationService;
     service = new AnonymizationService();
   });
@@ -67,9 +66,8 @@ describe("AnonymizationService", () => {
       vi.doMock("@build/db", () => ({
         prisma: mockLegalHoldPrisma,
       }));
-      const serviceModule = await import(
-        "@/app/lib/gdpr/services/anonymization.service"
-      );
+      const serviceModule =
+        await import("@/app/lib/gdpr/services/anonymization.service");
       const legalHoldService = new serviceModule.AnonymizationService();
 
       await expect(
@@ -133,9 +131,8 @@ describe("AnonymizationService", () => {
         vi.doMock("@build/db", () => ({
           prisma: mockErrorPrisma,
         }));
-        const serviceModule = await import(
-          "@/app/lib/gdpr/services/anonymization.service"
-        );
+        const serviceModule =
+          await import("@/app/lib/gdpr/services/anonymization.service");
         const errorService = new serviceModule.AnonymizationService();
 
         await expect(
@@ -279,9 +276,8 @@ describe("AnonymizationService", () => {
         vi.doMock("@build/db", () => ({
           prisma: mockRollbackPrisma,
         }));
-        const serviceModule = await import(
-          "@/app/lib/gdpr/services/anonymization.service"
-        );
+        const serviceModule =
+          await import("@/app/lib/gdpr/services/anonymization.service");
         const rollbackService = new serviceModule.AnonymizationService();
 
         await expect(

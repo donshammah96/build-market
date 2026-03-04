@@ -5,7 +5,10 @@
 import { calendarClient as serverClient } from "./calendar-client";
 
 // Explicitly export only the public API to avoid exposing private/protected members
-type CalendarClientPublic = Pick<typeof serverClient, keyof typeof serverClient>;
+type CalendarClientPublic = Pick<
+  typeof serverClient,
+  keyof typeof serverClient
+>;
 
 export const calendarClient: CalendarClientPublic = serverClient;
 export default calendarClient;

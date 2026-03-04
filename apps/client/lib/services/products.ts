@@ -75,7 +75,9 @@ export async function getTopProducts(
         id: salesData.productId,
         name: product?.name || "Unknown Product",
         imageUrl:
-          product?.images[0]?.thumbnailUrl || product?.images[0]?.cdnUrl || null,
+          product?.images[0]?.thumbnailUrl ||
+          product?.images[0]?.cdnUrl ||
+          null,
         price: product?.price ? Number(product.price) : 0,
         soldCount: salesData._sum.quantity || 0,
         revenue: salesData._sum.price ? Number(salesData._sum.price) : 0,

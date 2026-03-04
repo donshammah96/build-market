@@ -10,6 +10,7 @@ import {
   getRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
+import { ensureValidInternalSecret } from "@/app/lib/security/internal-secret";
 
 const logger = getClientLogger();
 
@@ -67,10 +68,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const correlationId = initializeCorrelationId(request);
 
   // Access control via internal secret
-  const internalSecret = request.headers.get("x-internal-secret");
-  const expectedSecret = process.env.INTERNAL_API_SECRET;
-  if (expectedSecret && internalSecret !== expectedSecret) {
-    return apiError("Forbidden", HttpStatus.FORBIDDEN);
+  const secretError = ensureValidInternalSecret(
+    request.headers.get("x-internal-secret"),
+  );
+  if (secretError) {
+    return secretError;
   }
 
   const identifier = getRateLimitIdentifier(request);
@@ -107,9 +109,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       };
     });
 
-    const activeOperations = operationStats.filter(
-      (op) => op.summary !== null,
-    );
+    const activeOperations = operationStats.filter((op) => op.summary !== null);
 
     const circuitBreakerStates = Object.fromEntries(
       executor.getCircuitBreakerStates(),

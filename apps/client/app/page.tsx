@@ -14,7 +14,7 @@ const FeaturesSection = dynamic(
   {
     loading: () => <SectionSkeleton height="400px" />,
     ssr: true,
-  }
+  },
 );
 
 const Professionals = dynamic(
@@ -25,7 +25,7 @@ const Professionals = dynamic(
   {
     loading: () => <SectionSkeleton height="500px" />,
     ssr: true,
-  }
+  },
 );
 
 const Property = dynamic(
@@ -36,7 +36,7 @@ const Property = dynamic(
   {
     loading: () => <SectionSkeleton height="500px" />,
     ssr: true,
-  }
+  },
 );
 
 const VendorsSection = dynamic(
@@ -47,7 +47,7 @@ const VendorsSection = dynamic(
   {
     loading: () => <SectionSkeleton height="500px" />,
     ssr: true,
-  }
+  },
 );
 
 const ReviewsSection = dynamic(
@@ -58,7 +58,7 @@ const ReviewsSection = dynamic(
   {
     loading: () => <SectionSkeleton height="400px" />,
     ssr: true,
-  }
+  },
 );
 
 const CTA = dynamic(
@@ -66,7 +66,7 @@ const CTA = dynamic(
   {
     loading: () => <SectionSkeleton height="300px" bg="bg-zinc-900" />,
     ssr: true,
-  }
+  },
 );
 
 // Lightweight skeleton component for loading states

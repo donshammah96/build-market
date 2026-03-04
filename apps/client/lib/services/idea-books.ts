@@ -30,7 +30,10 @@ export type {
 
 // ─── Idea Books ─────────────────────────────────────────────────────────────
 
-export async function listIdeaBooks(clientId: string, query: IdeaBookQueryInput) {
+export async function listIdeaBooks(
+  clientId: string,
+  query: IdeaBookQueryInput,
+) {
   const { page, limit, search, category } = query;
   const where = {
     clientId,
@@ -111,13 +114,14 @@ export async function getIdeaBookById(clientId: string, bookId: string) {
 
   if (!ideaBook) return { error: "not_found" as const };
 
-  const isCollaborator = ideaBook.collaborators.some((c) => c.userId === clientId);
+  const isCollaborator = ideaBook.collaborators.some(
+    (c) => c.userId === clientId,
+  );
   const owner = await prisma.ideaBook.findUnique({
     where: { id: bookId },
     select: { clientId: true },
   });
-  const hasAccess =
-    owner?.clientId === clientId || isCollaborator;
+  const hasAccess = owner?.clientId === clientId || isCollaborator;
 
   if (!hasAccess) return { error: "forbidden" as const };
 
@@ -133,7 +137,10 @@ export async function getIdeaBookById(clientId: string, bookId: string) {
   };
 }
 
-export async function createIdeaBook(clientId: string, input: CreateIdeaBookInput) {
+export async function createIdeaBook(
+  clientId: string,
+  input: CreateIdeaBookInput,
+) {
   const slug = generateIdeaBookSlug(input.title);
   const ideaBook = await prisma.ideaBook.create({
     data: {
@@ -294,7 +301,8 @@ export async function getAttachmentById(
   });
 
   if (!attachment) return { error: "not_found" as const };
-  if (attachment.ideaBook.clientId !== clientId) return { error: "forbidden" as const };
+  if (attachment.ideaBook.clientId !== clientId)
+    return { error: "forbidden" as const };
 
   const { ideaBook: _ib, ...rest } = attachment;
   return { data: rest };
@@ -311,7 +319,8 @@ export async function updateAttachment(
   });
 
   if (!attachment) return { error: "not_found" as const };
-  if (attachment.ideaBook.clientId !== clientId) return { error: "forbidden" as const };
+  if (attachment.ideaBook.clientId !== clientId)
+    return { error: "forbidden" as const };
 
   const updated = await prisma.ideaBookAttachment.update({
     where: { id: attachmentId },
@@ -332,7 +341,8 @@ export async function deleteAttachment(clientId: string, attachmentId: string) {
   });
 
   if (!attachment) return { error: "not_found" as const };
-  if (attachment.ideaBook.clientId !== clientId) return { error: "forbidden" as const };
+  if (attachment.ideaBook.clientId !== clientId)
+    return { error: "forbidden" as const };
 
   const deletedKey = attachment.fileKey;
 

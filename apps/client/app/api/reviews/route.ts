@@ -69,17 +69,13 @@ export async function GET(request: NextRequest) {
   const filters = result.data;
 
   const executor = getResilientExecutor();
-  const execResult = await executor.execute(
-    () => getReviews(filters),
-    { operationName: "fetch_reviews" },
-  );
+  const execResult = await executor.execute(() => getReviews(filters), {
+    operationName: "fetch_reviews",
+  });
 
   if (!execResult.success) {
     logger.error("Failed to fetch reviews", execResult.error);
-    return apiError(
-      "Failed to load reviews",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
+    return apiError("Failed to load reviews", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
   return apiSuccess(execResult.data, HttpStatus.OK);

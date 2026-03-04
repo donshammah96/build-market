@@ -8,7 +8,7 @@
  */
 
 import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
-import { redisConnection } from "@/app/lib/queues/redis-connection";
+import { redisConnection } from "@build/queue-server";
 import { prisma } from "@build/db";
 import { AnonymizationService } from "@/app/lib/gdpr/services/anonymization.service";
 
@@ -202,7 +202,7 @@ export function createAnonymizationBatchWorker() {
             entityType: "System",
             entityId: "anonymization-batch-job",
             metadata: {
-                metrics: JSON.parse(JSON.stringify(metrics))
+              metrics: JSON.parse(JSON.stringify(metrics)),
             },
           },
         });

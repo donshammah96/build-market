@@ -127,7 +127,8 @@ export const PATCH = withAuth<NotificationParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => updateNotification(dbUserId, notificationId, { isRead: data.isRead }),
+      () =>
+        updateNotification(dbUserId, notificationId, { isRead: data.isRead }),
       { operationName: "update_notification" },
     );
 

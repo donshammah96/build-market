@@ -14,14 +14,22 @@ export const ProfessionSchema = z.nativeEnum(Profession);
 export const ProfessionalQuerySchema = z.object({
   search: z.string().max(100).optional().default(""),
   category: z.string().max(50).optional().default("all"),
-  profession: z.string().optional().transform((val) => {
-    if (!val) return undefined;
-    const upper = val.trim().toUpperCase().replace(/-/g, "_");
-    return Object.values(Profession).includes(upper as Profession) ? (upper as Profession) : undefined;
-  }),
+  profession: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (!val) return undefined;
+      const upper = val.trim().toUpperCase().replace(/-/g, "_");
+      return Object.values(Profession).includes(upper as Profession)
+        ? (upper as Profession)
+        : undefined;
+    }),
   county: CountySchema.optional(),
   city: z.string().max(100).optional(),
-  sortBy: z.enum(["rating", "experience", "reviews", "newest"]).optional().default("rating"),
+  sortBy: z
+    .enum(["rating", "experience", "reviews", "newest"])
+    .optional()
+    .default("rating"),
   includeUnverified: z.enum(["true", "false"]).optional().default("false"),
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
   offset: z.coerce.number().int().min(0).optional().default(0),

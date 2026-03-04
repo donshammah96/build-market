@@ -56,12 +56,11 @@ export default function ReviewsPage() {
       <ClientNavbar />
 
       <main className="flex-1">
-        
         {/* --- Hero Header --- */}
         <section className="bg-zinc-900 text-white py-20 relative overflow-hidden">
           <div className="absolute inset-0 bg-[url('/hero-bg.jpg')] opacity-10 bg-cover bg-center" />
           <div className="absolute inset-0 bg-gradient-to-b from-transparent to-zinc-900/90" />
-          
+
           <div className="container mx-auto px-4 md:px-6 relative z-10 text-center max-w-3xl">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -73,10 +72,13 @@ export default function ReviewsPage() {
                 <span>Trusted by 10,000+ Kenyan Homeowners</span>
               </div>
               <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-6">
-                Real Stories. <span className="text-emerald-500">Real Homes.</span>
+                Real Stories.{" "}
+                <span className="text-emerald-500">Real Homes.</span>
               </h1>
               <p className="text-lg text-zinc-300 leading-relaxed">
-                See what your neighbors in Nairobi, Mombasa, and beyond are saying about the architects, artisans, and suppliers on Build Market.
+                See what your neighbors in Nairobi, Mombasa, and beyond are
+                saying about the architects, artisans, and suppliers on Build
+                Market.
               </p>
             </motion.div>
           </div>
@@ -87,12 +89,11 @@ export default function ReviewsPage() {
           <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-xl">
             <CardContent className="p-4 md:p-6">
               <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
-                
                 {/* Search */}
                 <div className="relative w-full md:w-96">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-                  <Input 
-                    placeholder="Search reviews or companies..." 
+                  <Input
+                    placeholder="Search reviews or companies..."
                     className="pl-9 bg-white border-zinc-200"
                     value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
@@ -100,7 +101,11 @@ export default function ReviewsPage() {
                 </div>
 
                 {/* Tabs */}
-                <Tabs defaultValue="all" className="w-full md:w-auto" onValueChange={(v) => setActiveTab(v as TabValue)}>
+                <Tabs
+                  defaultValue="all"
+                  className="w-full md:w-auto"
+                  onValueChange={(v) => setActiveTab(v as TabValue)}
+                >
                   <TabsList className="grid w-full grid-cols-3 md:w-[400px]">
                     <TabsTrigger value="all">All Reviews</TabsTrigger>
                     <TabsTrigger value="PROFESSIONAL">Pros</TabsTrigger>
@@ -120,12 +125,16 @@ export default function ReviewsPage() {
         {/* --- Reviews Grid --- */}
         <section className="container mx-auto px-4 md:px-6 pb-20">
           {isLoading ? (
-             <ReviewsSkeleton />
+            <ReviewsSkeleton />
           ) : reviews.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <AnimatePresence mode="popLayout">
                 {reviews.map((review, index) => (
-                  <ReviewListCard key={review.id} review={review} index={index} />
+                  <ReviewListCard
+                    key={review.id}
+                    review={review}
+                    index={index}
+                  />
                 ))}
               </AnimatePresence>
             </div>
@@ -134,12 +143,15 @@ export default function ReviewsPage() {
               <div className="h-16 w-16 bg-zinc-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <MessageSquare className="h-8 w-8 text-zinc-300" />
               </div>
-              <h3 className="text-lg font-semibold text-zinc-900">No reviews found</h3>
-              <p className="text-zinc-500">Try adjusting your search filters.</p>
+              <h3 className="text-lg font-semibold text-zinc-900">
+                No reviews found
+              </h3>
+              <p className="text-zinc-500">
+                Try adjusting your search filters.
+              </p>
             </div>
           )}
         </section>
-
       </main>
       <Footer />
     </div>
@@ -148,10 +160,25 @@ export default function ReviewsPage() {
 
 // --- Sub-Components ---
 
-function ReviewListCard({ review, index }: { review: ReviewListItem; index: number }) {
-  const targetName = review.type === "PROFESSIONAL" ? review.professional?.companyName : review.store?.name;
-  const targetImage = review.type === "PROFESSIONAL" ? review.professional?.imageUrl : review.store?.imageUrl;
-  const isVerified = review.type === "PROFESSIONAL" ? review.professional?.verified : review.store?.verified;
+function ReviewListCard({
+  review,
+  index,
+}: {
+  review: ReviewListItem;
+  index: number;
+}) {
+  const targetName =
+    review.type === "PROFESSIONAL"
+      ? review.professional?.companyName
+      : review.store?.name;
+  const targetImage =
+    review.type === "PROFESSIONAL"
+      ? review.professional?.imageUrl
+      : review.store?.imageUrl;
+  const isVerified =
+    review.type === "PROFESSIONAL"
+      ? review.professional?.verified
+      : review.store?.verified;
   const targetUrl =
     review.type === "PROFESSIONAL" && review.professional
       ? getProfessionalUrl(review.professional.id)
@@ -169,7 +196,6 @@ function ReviewListCard({ review, index }: { review: ReviewListItem; index: numb
     >
       <Card className="h-full border-zinc-200 hover:shadow-lg transition-all duration-300 flex flex-col group">
         <CardContent className="p-6 flex flex-col h-full">
-          
           {/* Header: Reviewer Info */}
           <div className="flex items-center gap-3 mb-4">
             <Avatar className="h-10 w-10 border border-zinc-100">
@@ -183,17 +209,22 @@ function ReviewListCard({ review, index }: { review: ReviewListItem; index: numb
                 {review.reviewer.firstName} {review.reviewer.lastName}
               </p>
               <p className="text-xs text-zinc-500">
-                {review.reviewer.city ?? "Kenya"} • {formatDistanceToNow(new Date(review.createdAt), { addSuffix: true })}
+                {review.reviewer.city ?? "Kenya"} •{" "}
+                {formatDistanceToNow(new Date(review.createdAt), {
+                  addSuffix: true,
+                })}
               </p>
             </div>
             <div className="ml-auto flex">
               {[...Array(5)].map((_, i) => (
-                <Star 
-                  key={i} 
+                <Star
+                  key={i}
                   className={cn(
-                    "h-3.5 w-3.5", 
-                    i < review.rating ? "fill-amber-400 text-amber-400" : "fill-zinc-200 text-zinc-200"
-                  )} 
+                    "h-3.5 w-3.5",
+                    i < review.rating
+                      ? "fill-amber-400 text-amber-400"
+                      : "fill-zinc-200 text-zinc-200",
+                  )}
                 />
               ))}
             </div>
@@ -209,62 +240,98 @@ function ReviewListCard({ review, index }: { review: ReviewListItem; index: numb
 
           {/* Footer: Reviewed Entity (The Hook) */}
           <div className="mt-auto pt-4 border-t border-zinc-100">
-             <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-                {review.type === "PROFESSIONAL" ? <HardHat className="h-3 w-3" /> : <StoreIcon className="h-3 w-3" />}
-                Reviewed
-             </div>
-             
-             {targetUrl ? (
-             <Link href={targetUrl} className="flex items-center gap-3 bg-zinc-50 p-3 rounded-lg group-hover:bg-emerald-50/50 transition-colors cursor-pointer">
-                <div className="h-10 w-10 relative rounded overflow-hidden bg-white border border-zinc-200 shrink-0">
-                   {/* Fallback visual if no image */}
-                   {targetImage ? (
-                      <Image src={targetImage} alt={targetName || ''} fill className="object-cover" />
-                   ) : (
-                      <div className="h-full w-full flex items-center justify-center bg-zinc-100 text-zinc-400">
-                         {review.type === "PROFESSIONAL" ? <HardHat className="h-5 w-5" /> : <StoreIcon className="h-5 w-5" />}
-                      </div>
-                   )}
-                </div>
-                
-                <div className="flex-1 min-w-0">
-                   <h4 className="text-sm font-bold text-zinc-900 truncate flex items-center gap-1">
-                      {targetName}
-                      {isVerified && <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />}
-                   </h4>
-                   <p className="text-xs text-zinc-500 truncate">
-                      {review.type === "PROFESSIONAL" ? "Verified Professional" : "Verified Merchant"}
-                   </p>
-                </div>
-                
-                <Button size="icon" variant="ghost" className="h-8 w-8 text-zinc-400 group-hover:text-emerald-600">
-                   <ThumbsUp className="h-4 w-4" />
-                </Button>
-             </Link>
-             ) : (
-             <div className="flex items-center gap-3 bg-zinc-50 p-3 rounded-lg">
-                <div className="h-10 w-10 relative rounded overflow-hidden bg-white border border-zinc-200 shrink-0">
-                   {targetImage ? (
-                      <Image src={targetImage} alt={targetName ?? ""} fill className="object-cover" />
-                   ) : (
-                      <div className="h-full w-full flex items-center justify-center bg-zinc-100 text-zinc-400">
-                         {review.type === "PROFESSIONAL" ? <HardHat className="h-5 w-5" /> : <StoreIcon className="h-5 w-5" />}
-                      </div>
-                   )}
-                </div>
-                <div className="flex-1 min-w-0">
-                   <h4 className="text-sm font-bold text-zinc-900 truncate flex items-center gap-1">
-                      {targetName}
-                      {isVerified && <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />}
-                   </h4>
-                   <p className="text-xs text-zinc-500 truncate">
-                      {review.type === "PROFESSIONAL" ? "Verified Professional" : "Verified Merchant"}
-                   </p>
-                </div>
-             </div>
-             )}
-          </div>
+            <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+              {review.type === "PROFESSIONAL" ? (
+                <HardHat className="h-3 w-3" />
+              ) : (
+                <StoreIcon className="h-3 w-3" />
+              )}
+              Reviewed
+            </div>
 
+            {targetUrl ? (
+              <Link
+                href={targetUrl}
+                className="flex items-center gap-3 bg-zinc-50 p-3 rounded-lg group-hover:bg-emerald-50/50 transition-colors cursor-pointer"
+              >
+                <div className="h-10 w-10 relative rounded overflow-hidden bg-white border border-zinc-200 shrink-0">
+                  {/* Fallback visual if no image */}
+                  {targetImage ? (
+                    <Image
+                      src={targetImage}
+                      alt={targetName || ""}
+                      fill
+                      className="object-cover"
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center bg-zinc-100 text-zinc-400">
+                      {review.type === "PROFESSIONAL" ? (
+                        <HardHat className="h-5 w-5" />
+                      ) : (
+                        <StoreIcon className="h-5 w-5" />
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-sm font-bold text-zinc-900 truncate flex items-center gap-1">
+                    {targetName}
+                    {isVerified && (
+                      <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />
+                    )}
+                  </h4>
+                  <p className="text-xs text-zinc-500 truncate">
+                    {review.type === "PROFESSIONAL"
+                      ? "Verified Professional"
+                      : "Verified Merchant"}
+                  </p>
+                </div>
+
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 text-zinc-400 group-hover:text-emerald-600"
+                >
+                  <ThumbsUp className="h-4 w-4" />
+                </Button>
+              </Link>
+            ) : (
+              <div className="flex items-center gap-3 bg-zinc-50 p-3 rounded-lg">
+                <div className="h-10 w-10 relative rounded overflow-hidden bg-white border border-zinc-200 shrink-0">
+                  {targetImage ? (
+                    <Image
+                      src={targetImage}
+                      alt={targetName ?? ""}
+                      fill
+                      className="object-cover"
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center bg-zinc-100 text-zinc-400">
+                      {review.type === "PROFESSIONAL" ? (
+                        <HardHat className="h-5 w-5" />
+                      ) : (
+                        <StoreIcon className="h-5 w-5" />
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-sm font-bold text-zinc-900 truncate flex items-center gap-1">
+                    {targetName}
+                    {isVerified && (
+                      <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />
+                    )}
+                  </h4>
+                  <p className="text-xs text-zinc-500 truncate">
+                    {review.type === "PROFESSIONAL"
+                      ? "Verified Professional"
+                      : "Verified Merchant"}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </motion.div>
@@ -275,18 +342,21 @@ function ReviewsSkeleton() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       {[1, 2, 3, 4, 5, 6].map((i) => (
-        <div key={i} className="h-80 bg-white rounded-xl border border-zinc-200 p-6 space-y-4">
-           <div className="flex gap-3">
-              <Skeleton className="h-10 w-10 rounded-full" />
-              <div className="space-y-2">
-                 <Skeleton className="h-4 w-32" />
-                 <Skeleton className="h-3 w-20" />
-              </div>
-           </div>
-           <Skeleton className="h-24 w-full" />
-           <Skeleton className="h-20 w-full mt-auto" />
+        <div
+          key={i}
+          className="h-80 bg-white rounded-xl border border-zinc-200 p-6 space-y-4"
+        >
+          <div className="flex gap-3">
+            <Skeleton className="h-10 w-10 rounded-full" />
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+          </div>
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-20 w-full mt-auto" />
         </div>
       ))}
     </div>
-  )
+  );
 }

@@ -53,7 +53,7 @@ function AgendaItem({ time, title, checked }: AgendaItemProps) {
         <p
           className={cn(
             "text-xs font-semibold",
-            checked ? "text-zinc-400 line-through" : "text-zinc-900"
+            checked ? "text-zinc-400 line-through" : "text-zinc-900",
           )}
         >
           {title}
@@ -84,7 +84,7 @@ export function AgendaWidget({
 
       const res = await fetch(
         API_ROUTES.professionalPortalCalendar +
-          `?start=${start.toISOString()}&end=${end.toISOString()}`
+          `?start=${start.toISOString()}&end=${end.toISOString()}`,
       );
       if (!res.ok) throw new Error("Failed to fetch agenda");
       const json = await res.json();

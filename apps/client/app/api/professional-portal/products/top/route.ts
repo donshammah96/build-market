@@ -18,8 +18,7 @@ export const GET = createProfessionalPortalGet({
   rateLimitKey: "top-products-read",
   querySchema: TopProductsQuerySchema,
   parseQuery: parseTopProductsQuery,
-  handler: async ({ dbUserId, query }) =>
-    getTopProducts(dbUserId, query.limit),
+  handler: async ({ dbUserId, query }) => getTopProducts(dbUserId, query.limit),
   operationName: "get_top_products",
   errorMessage: "Failed to fetch top products",
 });

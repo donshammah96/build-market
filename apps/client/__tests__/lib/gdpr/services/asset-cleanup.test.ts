@@ -24,9 +24,8 @@ describe("AssetCleanupService", () => {
     vi.doMock("@build/db", () => ({
       prisma: mockPrisma,
     }));
-    const serviceModule = await import(
-      "@/app/lib/gdpr/services/asset-cleanup.service"
-    );
+    const serviceModule =
+      await import("@/app/lib/gdpr/services/asset-cleanup.service");
     AssetCleanupService = serviceModule.AssetCleanupService;
     service = new AssetCleanupService();
   });
@@ -155,9 +154,8 @@ describe("AssetCleanupService", () => {
       vi.doMock("@build/db", () => ({
         prisma: mockPrisma,
       }));
-      const serviceModule = await import(
-        "@/app/lib/gdpr/services/asset-cleanup.service"
-      );
+      const serviceModule =
+        await import("@/app/lib/gdpr/services/asset-cleanup.service");
       const errorService = new serviceModule.AssetCleanupService();
 
       const result = await errorService.executeScheduledDeletions();

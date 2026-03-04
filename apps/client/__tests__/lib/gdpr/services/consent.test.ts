@@ -21,9 +21,8 @@ describe("ConsentService", () => {
     vi.doMock("@build/db", () => ({
       prisma: mockPrisma,
     }));
-    const serviceModule = await import(
-      "@/app/lib/gdpr/services/consent.service"
-    );
+    const serviceModule =
+      await import("@/app/lib/gdpr/services/consent.service");
     ConsentService = serviceModule.ConsentService;
     service = new ConsentService();
   });
@@ -123,9 +122,8 @@ describe("ConsentService", () => {
         vi.doMock("@build/db", () => ({
           prisma: mockErrorPrisma,
         }));
-        const serviceModule = await import(
-          "@/app/lib/gdpr/services/consent.service"
-        );
+        const serviceModule =
+          await import("@/app/lib/gdpr/services/consent.service");
         const errorService = new serviceModule.ConsentService();
 
         await expect(
@@ -139,9 +137,8 @@ describe("ConsentService", () => {
       vi.doMock("@build/db", () => ({
         prisma: mockRollbackPrisma,
       }));
-      const serviceModule = await import(
-        "@/app/lib/gdpr/services/consent.service"
-      );
+      const serviceModule =
+        await import("@/app/lib/gdpr/services/consent.service");
       const rollbackService = new serviceModule.ConsentService();
 
       await expect(
@@ -186,9 +183,8 @@ describe("ConsentService", () => {
         vi.doMock("@build/db", () => ({
           prisma: mockErrorPrisma,
         }));
-        const serviceModule = await import(
-          "@/app/lib/gdpr/services/consent.service"
-        );
+        const serviceModule =
+          await import("@/app/lib/gdpr/services/consent.service");
         const errorService = new serviceModule.ConsentService();
 
         await expect(errorService.getConsents("user_123")).rejects.toThrow(
@@ -277,9 +273,8 @@ describe("ConsentService", () => {
         vi.doMock("@build/db", () => ({
           prisma: mockRollbackPrisma,
         }));
-        const serviceModule = await import(
-          "@/app/lib/gdpr/services/consent.service"
-        );
+        const serviceModule =
+          await import("@/app/lib/gdpr/services/consent.service");
         const rollbackService = new serviceModule.ConsentService();
 
         await expect(

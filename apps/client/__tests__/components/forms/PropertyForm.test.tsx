@@ -71,7 +71,7 @@ describe("PropertyForm", () => {
       render(<PropertyForm onSubmit={mockOnSubmit} />);
 
       expect(
-        screen.getByRole("button", { name: /create property/i })
+        screen.getByRole("button", { name: /create property/i }),
       ).toBeInTheDocument();
     });
 
@@ -79,7 +79,7 @@ describe("PropertyForm", () => {
       render(<PropertyForm onSubmit={mockOnSubmit} isEditing />);
 
       expect(
-        screen.getByRole("button", { name: /save changes/i })
+        screen.getByRole("button", { name: /save changes/i }),
       ).toBeInTheDocument();
     });
 
@@ -87,7 +87,7 @@ describe("PropertyForm", () => {
       render(<PropertyForm onSubmit={mockOnSubmit} hideSubmitButton />);
 
       expect(
-        screen.queryByRole("button", { name: /create property/i })
+        screen.queryByRole("button", { name: /create property/i }),
       ).not.toBeInTheDocument();
     });
   });
@@ -102,13 +102,13 @@ describe("PropertyForm", () => {
       };
 
       render(
-        <PropertyForm onSubmit={mockOnSubmit} defaultValues={defaultValues} />
+        <PropertyForm onSubmit={mockOnSubmit} defaultValues={defaultValues} />,
       );
 
       expect(screen.getByDisplayValue("Test Property")).toBeInTheDocument();
       expect(screen.getByDisplayValue("100000")).toBeInTheDocument();
       expect(
-        screen.getByDisplayValue("A test property description")
+        screen.getByDisplayValue("A test property description"),
       ).toBeInTheDocument();
     });
   });
@@ -156,7 +156,7 @@ describe("PropertyForm", () => {
       };
 
       render(
-        <PropertyForm onSubmit={mockOnSubmit} defaultValues={defaultValues} />
+        <PropertyForm onSubmit={mockOnSubmit} defaultValues={defaultValues} />,
       );
 
       const submitButton = screen.getByRole("button", {
@@ -175,7 +175,7 @@ describe("PropertyForm", () => {
       render(<PropertyForm onSubmit={mockOnSubmit} />);
 
       expect(
-        screen.getByRole("button", { name: /add document/i })
+        screen.getByRole("button", { name: /add document/i }),
       ).toBeInTheDocument();
     });
 
@@ -259,7 +259,7 @@ describe("PropertyForm", () => {
             price: 200000,
             currency: "KES",
           }}
-        />
+        />,
       );
       expect(container).toMatchSnapshot();
     });

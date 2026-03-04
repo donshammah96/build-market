@@ -7,8 +7,12 @@ import {
   CompletionStatus,
   AreaUnit,
   ImageCategory,
+  AttachmentType,
+  PropertyDocumentType,
+  DocumentStatus,
   County,
   PropertyStatus,
+  AuditAction,
 } from "@prisma/client";
 
 /**
@@ -28,6 +32,9 @@ export const AreaUnitSchema = z.nativeEnum(AreaUnit);
 export const ImageCategorySchema = z.nativeEnum(ImageCategory);
 export const CountySchema = z.nativeEnum(County);
 export const PropertyStatusSchema = z.nativeEnum(PropertyStatus);
+export const AttachmentTypeSchema = z.nativeEnum(AttachmentType);
+export const PropertyDocumentTypeSchema = z.nativeEnum(PropertyDocumentType);
+export const DocumentStatusSchema = z.nativeEnum(DocumentStatus);
 
 // Helper function to generate URL-safe slug from property title
 export function generatePropertySlug(title: string): string {
@@ -40,6 +47,25 @@ export function generatePropertySlug(title: string): string {
     .substring(0, 100); // Limit length
 }
 
+const MAX_PROPERTY_MEDIA_ITEMS = 20;
+const FLOAT_TOLERANCE = 0.000001;
+
+// Property Attachment schema aligned with PropertyAttachment model
+export const createAttachmentSchema = z.object({
+  title: z.string().min(1, "Title is required").max(255),
+  assetId: z.string().uuid("Invalid asset ID"),
+  type: AttachmentTypeSchema,
+  notes: z.string().optional(),
+});
+
+export const updateAttachmentSchema = z.object({
+  attachmentId: z.string().uuid(),
+  title: z.string().min(1).max(255).optional(),
+  assetId: z.string().uuid("Invalid asset ID").optional(),
+  type: AttachmentTypeSchema.optional(),
+  notes: z.string().optional(),
+});
+
 // Property image schema aligned with PropertyImage model
 export const PropertyImageInputSchema = z.object({
   assetId: z.string().uuid("Asset ID must be a valid UUID"),
@@ -48,6 +74,74 @@ export const PropertyImageInputSchema = z.object({
   isMain: z.boolean().optional().default(false),
   sortOrder: z.number().int().min(0).optional(),
   tags: z.array(z.string()).optional().default([]),
+});
+
+/**
+ * Transitional file reference support:
+ * - Preferred: assetId
+ * - Legacy fallback (deprecating): fileUrl/fileKey + metadata
+ */
+const LegacyFileReferenceSchema = z.object({
+  fileKey: z.string().max(512).optional(),
+  fileUrl: z.string().url("File URL must be a valid URL").optional(),
+  mimeType: z.string().max(255).optional(),
+  size: z.number().int().positive("File size must be positive").optional(),
+});
+
+export const PropertyAttachmentInputSchema = LegacyFileReferenceSchema.extend({
+  title: z.string().min(1, "Attachment title is required").max(200),
+  type: AttachmentTypeSchema,
+  assetId: z.string().uuid("Asset ID must be a valid UUID").optional(),
+  notes: z.string().max(2000).optional(),
+}).superRefine((value, ctx) => {
+  if (!value.assetId && !value.fileUrl && !value.fileKey) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Attachment must include either assetId (preferred) or legacy file reference fields",
+      path: ["assetId"],
+    });
+  }
+});
+
+export const PropertyDocumentInputSchema = LegacyFileReferenceSchema.extend({
+  type: PropertyDocumentTypeSchema,
+  assetId: z.string().uuid("Asset ID must be a valid UUID").optional(),
+  notes: z.string().max(2000).optional(),
+  status: DocumentStatusSchema.optional().default("PENDING"),
+  rejectionReason: z.string().max(2000).optional(),
+  issueDate: z.string().datetime().optional(),
+  expiryDate: z.string().datetime().optional(),
+  isPrivate: z.boolean().optional().default(true),
+}).superRefine((value, ctx) => {
+  if (!value.assetId && !value.fileUrl && !value.fileKey) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Document must include either assetId (preferred) or legacy file reference fields",
+      path: ["assetId"],
+    });
+  }
+
+  if (value.issueDate && value.expiryDate) {
+    const issueDate = new Date(value.issueDate);
+    const expiryDate = new Date(value.expiryDate);
+    if (expiryDate <= issueDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "expiryDate must be after issueDate",
+        path: ["expiryDate"],
+      });
+    }
+  }
+
+  if (value.status === "REJECTED" && !value.rejectionReason) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "rejectionReason is required when status is REJECTED",
+      path: ["rejectionReason"],
+    });
+  }
 });
 
 // Coordinates schema for latitude/longitude
@@ -59,129 +153,280 @@ const CoordinatesSchema = z
   .optional();
 
 // Create property schema
-export const CreatePropertySchema = z.object({
-  title: z.string().min(1, "Property title is required").max(200),
-  description: z.string().max(10000).optional(),
-  slug: z.string().max(100).optional(), // Auto-generated if not provided
-  type: PropertyTypeSchema,
-  category: PropertyCategorySchema,
+export const CreatePropertySchema = z
+  .object({
+    title: z.string().min(1, "Property title is required").max(200),
+    description: z.string().max(10000).optional(),
+    slug: z.string().max(100).optional(), // Auto-generated if not provided
+    type: PropertyTypeSchema,
+    category: PropertyCategorySchema,
 
-  // Pricing
-  price: z.number().positive("Price must be positive"),
-  currency: z.string().default("KES"),
-  priceNegotiable: z.boolean().optional().default(false),
-  serviceCharge: z.number().min(0).optional(),
-  depositRequired: z.string().optional(),
-  paymentTerms: z.string().optional(),
+    // Pricing
+    price: z.number().positive("Price must be positive"),
+    currency: z.string().default("KES"),
+    priceNegotiable: z.boolean().optional().default(false),
+    serviceCharge: z.number().min(0).optional(),
+    depositRequired: z.string().optional(),
+    paymentTerms: z.string().optional(),
 
-  // Tenure
-  tenure: PropertyTenureSchema.optional().default("FREEHOLD"),
-  leaseYearsRemaining: z.number().int().min(0).optional(),
-  titleDeedNumber: z.string().optional(),
-  titleDeedReady: z.boolean().optional().default(false),
+    // Tenure
+    tenure: PropertyTenureSchema.optional().default("FREEHOLD"),
+    leaseYearsRemaining: z.number().int().min(0).optional(),
+    titleDeedNumber: z.string().optional(),
+    titleDeedReady: z.boolean().optional().default(false),
 
-  // Property details
-  bedrooms: z.number().int().min(0).optional(),
-  bathrooms: z.number().int().min(0).optional(),
-  parkingSpaces: z.number().int().min(0).optional(),
-  buildingSize: z.number().positive().optional(),
-  plotSize: z.number().positive().optional(),
-  areaUnit: AreaUnitSchema.optional().default("SQ_METERS"),
-  yearBuilt: z.number().int().min(1900).max(2100).optional(),
-  furnishing: FurnishingStatusSchema.optional().default("UNFURNISHED"),
-  completionStatus: CompletionStatusSchema.optional().default("READY_TO_MOVE"),
+    // Property details
+    bedrooms: z.number().int().min(0).optional(),
+    bathrooms: z.number().int().min(0).optional(),
+    parkingSpaces: z.number().int().min(0).optional(),
+    buildingSize: z.number().positive().optional(),
+    plotSize: z.number().positive().optional(),
+    areaUnit: AreaUnitSchema.optional().default("SQ_METERS"),
+    yearBuilt: z.number().int().min(1900).max(2100).optional(),
+    furnishing: FurnishingStatusSchema.optional().default("UNFURNISHED"),
+    completionStatus:
+      CompletionStatusSchema.optional().default("READY_TO_MOVE"),
 
-  // Location
-  location: z.string().min(1, "Location is required"),
-  address: z.string().optional(),
-  county: CountySchema.optional(),
-  constituency: z.string().optional(),
-  neighbourhood: z.string().optional(),
-  coordinates: CoordinatesSchema,
-  latitude: z.number().min(-90).max(90).optional(),
-  longitude: z.number().min(-180).max(180).optional(),
-  nearbyLandmarks: z.array(z.string()).optional(),
+    // Location
+    location: z.string().min(1, "Location is required"),
+    address: z.string().optional(),
+    county: CountySchema.optional(),
+    constituency: z.string().optional(),
+    neighbourhood: z.string().optional(),
+    coordinates: CoordinatesSchema,
+    latitude: z.number().min(-90).max(90).optional(),
+    longitude: z.number().min(-180).max(180).optional(),
+    nearbyLandmarks: z.array(z.string()).optional(),
 
-  // Amenities
-  hasBorehole: z.boolean().optional().default(false),
-  hasBackupGenerator: z.boolean().optional().default(false),
-  hasElevator: z.boolean().optional().default(false),
-  hasCCTV: z.boolean().optional().default(false),
-  isGatedCommunity: z.boolean().optional().default(false),
-  features: z.array(z.string()).optional().default([]),
+    // Amenities
+    hasBorehole: z.boolean().optional().default(false),
+    hasBackupGenerator: z.boolean().optional().default(false),
+    hasElevator: z.boolean().optional().default(false),
+    hasCCTV: z.boolean().optional().default(false),
+    isGatedCommunity: z.boolean().optional().default(false),
+    features: z.array(z.string()).optional().default([]),
 
-  // Status
-  featured: z.boolean().optional().default(false),
+    // Status
+    featured: z.boolean().optional().default(false),
 
-  // Media
-  images: z.array(PropertyImageInputSchema).max(20).optional().default([]),
-  floorPlanUrl: z.string().url().optional(),
-  videoUrl: z.string().url().optional(),
-  virtualTourUrl: z.string().url().optional(),
-});
+    // Media
+    images: z
+      .array(PropertyImageInputSchema)
+      .max(MAX_PROPERTY_MEDIA_ITEMS)
+      .optional()
+      .default([]),
+    attachments: z
+      .array(PropertyAttachmentInputSchema)
+      .max(MAX_PROPERTY_MEDIA_ITEMS)
+      .optional()
+      .default([]),
+    documents: z
+      .array(PropertyDocumentInputSchema)
+      .max(MAX_PROPERTY_MEDIA_ITEMS)
+      .optional()
+      .default([]),
+    floorPlanUrl: z.string().url().optional(),
+    videoUrl: z.string().url().optional(),
+    virtualTourUrl: z.string().url().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if ((value.latitude === undefined) !== (value.longitude === undefined)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "latitude and longitude must be provided together",
+        path: ["latitude"],
+      });
+    }
+
+    if (
+      value.coordinates &&
+      value.latitude !== undefined &&
+      value.longitude !== undefined
+    ) {
+      if (Math.abs(value.coordinates.lat - value.latitude) > FLOAT_TOLERANCE) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "coordinates.lat must match latitude when both are provided",
+          path: ["coordinates", "lat"],
+        });
+      }
+      if (Math.abs(value.coordinates.lng - value.longitude) > FLOAT_TOLERANCE) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "coordinates.lng must match longitude when both are provided",
+          path: ["coordinates", "lng"],
+        });
+      }
+    }
+
+    if (
+      (value.tenure === "LEASEHOLD" || value.tenure === "SUB_LEASE") &&
+      (!value.leaseYearsRemaining || value.leaseYearsRemaining <= 0)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "leaseYearsRemaining is required and must be greater than 0 for leasehold tenures",
+        path: ["leaseYearsRemaining"],
+      });
+    }
+
+    const mainImageCount = value.images.filter((img) => img.isMain).length;
+    if (mainImageCount > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Only one image can be marked as main",
+        path: ["images"],
+      });
+    }
+  });
 
 // Update property schema (all fields optional)
-export const UpdatePropertySchema = z.object({
-  title: z.string().min(1).max(200).optional(),
-  slug: z.string().max(100).optional(),
-  description: z.string().max(10000).optional(),
-  type: PropertyTypeSchema.optional(),
-  category: PropertyCategorySchema.optional(),
+export const UpdatePropertySchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    slug: z.string().max(100).optional(),
+    description: z.string().max(10000).optional(),
+    type: PropertyTypeSchema.optional(),
+    category: PropertyCategorySchema.optional(),
 
-  // Pricing
-  price: z.number().positive().optional(),
-  currency: z.string().optional(),
-  priceNegotiable: z.boolean().optional(),
-  serviceCharge: z.number().min(0).optional(),
-  depositRequired: z.string().optional(),
-  paymentTerms: z.string().optional(),
+    // Pricing
+    price: z.number().positive().optional(),
+    currency: z.string().optional(),
+    priceNegotiable: z.boolean().optional(),
+    serviceCharge: z.number().min(0).optional(),
+    depositRequired: z.string().optional(),
+    paymentTerms: z.string().optional(),
 
-  // Tenure
-  tenure: PropertyTenureSchema.optional(),
-  leaseYearsRemaining: z.number().int().min(0).optional(),
-  titleDeedNumber: z.string().optional(),
-  titleDeedReady: z.boolean().optional(),
+    // Tenure
+    tenure: PropertyTenureSchema.optional(),
+    leaseYearsRemaining: z.number().int().min(0).optional(),
+    titleDeedNumber: z.string().optional(),
+    titleDeedReady: z.boolean().optional(),
 
-  // Property details
-  bedrooms: z.number().int().min(0).optional(),
-  bathrooms: z.number().int().min(0).optional(),
-  parkingSpaces: z.number().int().min(0).optional(),
-  buildingSize: z.number().positive().optional(),
-  plotSize: z.number().positive().optional(),
-  areaUnit: AreaUnitSchema.optional(),
-  yearBuilt: z.number().int().min(1900).max(2100).optional(),
-  furnishing: FurnishingStatusSchema.optional(),
-  completionStatus: CompletionStatusSchema.optional(),
+    // Property details
+    bedrooms: z.number().int().min(0).optional(),
+    bathrooms: z.number().int().min(0).optional(),
+    parkingSpaces: z.number().int().min(0).optional(),
+    buildingSize: z.number().positive().optional(),
+    plotSize: z.number().positive().optional(),
+    areaUnit: AreaUnitSchema.optional(),
+    yearBuilt: z.number().int().min(1900).max(2100).optional(),
+    furnishing: FurnishingStatusSchema.optional(),
+    completionStatus: CompletionStatusSchema.optional(),
 
-  // Location
-  location: z.string().min(1).optional(),
-  address: z.string().optional(),
-  county: CountySchema.optional(),
-  constituency: z.string().optional(),
-  neighbourhood: z.string().optional(),
-  coordinates: CoordinatesSchema,
-  latitude: z.number().min(-90).max(90).optional(),
-  longitude: z.number().min(-180).max(180).optional(),
-  nearbyLandmarks: z.array(z.string()).optional(),
+    // Location
+    location: z.string().min(1).optional(),
+    address: z.string().optional(),
+    county: CountySchema.optional(),
+    constituency: z.string().optional(),
+    neighbourhood: z.string().optional(),
+    coordinates: CoordinatesSchema,
+    latitude: z.number().min(-90).max(90).optional(),
+    longitude: z.number().min(-180).max(180).optional(),
+    nearbyLandmarks: z.array(z.string()).optional(),
 
-  // Amenities
-  hasBorehole: z.boolean().optional(),
-  hasBackupGenerator: z.boolean().optional(),
-  hasElevator: z.boolean().optional(),
-  hasCCTV: z.boolean().optional(),
-  isGatedCommunity: z.boolean().optional(),
-  features: z.array(z.string()).optional(),
+    // Amenities
+    hasBorehole: z.boolean().optional(),
+    hasBackupGenerator: z.boolean().optional(),
+    hasElevator: z.boolean().optional(),
+    hasCCTV: z.boolean().optional(),
+    isGatedCommunity: z.boolean().optional(),
+    features: z.array(z.string()).optional(),
 
-  // Status
-  status: PropertyStatusSchema.optional(),
-  featured: z.boolean().optional(),
+    // Status
+    status: PropertyStatusSchema.optional(),
+    featured: z.boolean().optional(),
 
-  // Media
-  images: z.array(PropertyImageInputSchema).max(20).optional(),
-  floorPlanUrl: z.string().url().optional(),
-  videoUrl: z.string().url().optional(),
-  virtualTourUrl: z.string().url().optional(),
-});
+    // Media
+    images: z
+      .array(PropertyImageInputSchema)
+      .max(MAX_PROPERTY_MEDIA_ITEMS)
+      .optional(),
+    attachments: z
+      .array(PropertyAttachmentInputSchema)
+      .max(MAX_PROPERTY_MEDIA_ITEMS)
+      .optional(),
+    documents: z
+      .array(PropertyDocumentInputSchema)
+      .max(MAX_PROPERTY_MEDIA_ITEMS)
+      .optional(),
+    floorPlanUrl: z.string().url().optional(),
+    videoUrl: z.string().url().optional(),
+    virtualTourUrl: z.string().url().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if ((value.latitude === undefined) !== (value.longitude === undefined)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "latitude and longitude must be provided together",
+        path: ["latitude"],
+      });
+    }
+
+    if (
+      value.coordinates &&
+      value.latitude !== undefined &&
+      value.longitude !== undefined
+    ) {
+      if (Math.abs(value.coordinates.lat - value.latitude) > FLOAT_TOLERANCE) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "coordinates.lat must match latitude when both are provided",
+          path: ["coordinates", "lat"],
+        });
+      }
+      if (Math.abs(value.coordinates.lng - value.longitude) > FLOAT_TOLERANCE) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "coordinates.lng must match longitude when both are provided",
+          path: ["coordinates", "lng"],
+        });
+      }
+    }
+
+    if (
+      (value.tenure === "LEASEHOLD" || value.tenure === "SUB_LEASE") &&
+      value.leaseYearsRemaining !== undefined &&
+      value.leaseYearsRemaining <= 0
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "leaseYearsRemaining must be greater than 0 for leasehold tenures",
+        path: ["leaseYearsRemaining"],
+      });
+    }
+
+    if (value.status === "SOLD" && value.type && value.type !== "SALE") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Only SALE properties can be marked as SOLD",
+        path: ["status"],
+      });
+    }
+
+    if (value.status === "RENTED" && value.type && value.type === "SALE") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "SALE properties cannot be marked as RENTED",
+        path: ["status"],
+      });
+    }
+
+    if (value.images) {
+      const mainImageCount = value.images.filter((img) => img.isMain).length;
+      if (mainImageCount > 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Only one image can be marked as main",
+          path: ["images"],
+        });
+      }
+    }
+  });
 
 // Batch create properties schema
 export const BatchCreatePropertiesSchema = z.object({

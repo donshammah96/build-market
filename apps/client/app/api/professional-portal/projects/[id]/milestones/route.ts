@@ -14,9 +14,7 @@ import {
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
-import {
-  CreateMilestoneSchema,
-} from "@/app/lib/validation/projects-validation";
+import { CreateMilestoneSchema } from "@/app/lib/validation/projects-validation";
 import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
 import { getMilestones, createMilestone } from "@/lib/services/projects";
 
@@ -198,7 +196,10 @@ export const POST = withAuth<ProjectParams>(
           `Maximum ${PROJECT_CONFIG.MAX_MILESTONES_PER_PROJECT} milestones per project`,
           HttpStatus.BAD_REQUEST,
         );
-      return apiError("Failed to create milestone", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to create milestone",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     } else {
       await IdempotencyService.complete(idempotencyKey, createResult.data);
       return apiSuccess(createResult.data, HttpStatus.CREATED);

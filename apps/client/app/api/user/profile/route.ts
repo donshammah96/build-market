@@ -23,10 +23,7 @@ import {
   getClientLogger,
   getResilientExecutor,
 } from "@/app/lib/api/resilient-api";
-import {
-  safeParseJsonBody,
-  TimeoutConfig,
-} from "@/app/lib/api/request-utils";
+import { safeParseJsonBody, TimeoutConfig } from "@/app/lib/api/request-utils";
 
 const logger = getClientLogger();
 const executor = getResilientExecutor();
@@ -46,34 +43,36 @@ const ProfileUpdateSchema = z.object({
   analyticsConsent: z.boolean().optional(),
 
   // Role-specific profile updates (nested object)
-  profileData: z.object({
-    // Client fields
-    type: z.nativeEnum(ClientType).optional(),
-    companyName: z.string().max(200).optional(), // Required in ProfessionalProfile but optional to omit
-    website: z.string().url().optional().nullable(),
-    address: z.string().max(500).optional().nullable(),
-    city: z.string().max(100).optional().nullable(),
-    county: z.nativeEnum(County).optional().nullable(),
-    zipCode: z.string().max(20).optional().nullable(),
-    budgetRangeMin: z.number().min(0).optional().nullable(),
-    budgetRangeMax: z.number().min(0).optional().nullable(),
-    interests: z.array(z.string()).optional(),
-    preferences: z.unknown().optional(), // JSON - accept any valid JSON
+  profileData: z
+    .object({
+      // Client fields
+      type: z.nativeEnum(ClientType).optional(),
+      companyName: z.string().max(200).optional(), // Required in ProfessionalProfile but optional to omit
+      website: z.string().url().optional().nullable(),
+      address: z.string().max(500).optional().nullable(),
+      city: z.string().max(100).optional().nullable(),
+      county: z.nativeEnum(County).optional().nullable(),
+      zipCode: z.string().max(20).optional().nullable(),
+      budgetRangeMin: z.number().min(0).optional().nullable(),
+      budgetRangeMax: z.number().min(0).optional().nullable(),
+      interests: z.array(z.string()).optional(),
+      preferences: z.unknown().optional(), // JSON - accept any valid JSON
 
-    // Professional fields
-    bio: z.string().max(5000).optional().nullable(),
-    profession: z.nativeEnum(Profession).optional().nullable(),
-    businessEmail: z.string().email().optional().nullable(),
-    businessPhone: z.string().max(20).optional().nullable(),
-    socials: z.unknown().optional(), // JSON - accept any valid JSON
-    serviceRadiusKm: z.number().int().min(0).max(500).optional().nullable(),
-    availability: z.nativeEnum(AvailabilityStatus).optional(),
-    operatingHours: z.unknown().optional(), // JSON - accept any valid JSON
-    yearsExperience: z.number().int().min(0).max(100).optional().nullable(),
-    minProjectBudget: z.number().min(0).optional().nullable(),
-    hourlyRate: z.number().min(0).optional().nullable(),
-    acceptedPayments: z.array(z.string()).optional(),
-  }).optional(),
+      // Professional fields
+      bio: z.string().max(5000).optional().nullable(),
+      profession: z.nativeEnum(Profession).optional().nullable(),
+      businessEmail: z.string().email().optional().nullable(),
+      businessPhone: z.string().max(20).optional().nullable(),
+      socials: z.unknown().optional(), // JSON - accept any valid JSON
+      serviceRadiusKm: z.number().int().min(0).max(500).optional().nullable(),
+      availability: z.nativeEnum(AvailabilityStatus).optional(),
+      operatingHours: z.unknown().optional(), // JSON - accept any valid JSON
+      yearsExperience: z.number().int().min(0).max(100).optional().nullable(),
+      minProjectBudget: z.number().min(0).optional().nullable(),
+      hourlyRate: z.number().min(0).optional().nullable(),
+      acceptedPayments: z.array(z.string()).optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -95,226 +94,226 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         return await prisma.user.findUnique({
           where: { id: dbUserId },
           select: {
-                // Core Identity
-                id: true,
-                clerkId: true,
-                email: true,
-                firstName: true,
-                lastName: true,
-                displayName: true,
-                phone: true,
-                avatar: true,
-                bio: true,
+            // Core Identity
+            id: true,
+            clerkId: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            displayName: true,
+            phone: true,
+            avatar: true,
+            bio: true,
 
-                // Account Status & Security
-                role: true,
-                status: true,
-                isProfileComplete: true,
-                isEmailVerified: true,
-                isPhoneVerified: true,
-                emailVerifiedAt: true,
-                phoneVerifiedAt: true,
-                lockedUntil: true,
-                passwordResetRequired: true,
+            // Account Status & Security
+            role: true,
+            status: true,
+            isProfileComplete: true,
+            isEmailVerified: true,
+            isPhoneVerified: true,
+            emailVerifiedAt: true,
+            phoneVerifiedAt: true,
+            lockedUntil: true,
+            passwordResetRequired: true,
 
-                // Activity Tracking
-                lastLoginAt: true,
-                lastActiveAt: true,
-                loginCount: true,
+            // Activity Tracking
+            lastLoginAt: true,
+            lastActiveAt: true,
+            loginCount: true,
 
-                // GDPR Compliance & Consent
-                termsAcceptedAt: true,
-                termsVersion: true,
-                privacyAcceptedAt: true,
-                emailMarketingConsent: true,
-                smsMarketingConsent: true,
-                analyticsConsent: true,
-                marketingConsentWithdrawnAt: true,
-                dataRetentionDays: true,
-                scheduledDeletionAt: true,
+            // GDPR Compliance & Consent
+            termsAcceptedAt: true,
+            termsVersion: true,
+            privacyAcceptedAt: true,
+            emailMarketingConsent: true,
+            smsMarketingConsent: true,
+            analyticsConsent: true,
+            marketingConsentWithdrawnAt: true,
+            dataRetentionDays: true,
+            scheduledDeletionAt: true,
 
-                // Metadata
-                metadata: true,
+            // Metadata
+            metadata: true,
 
-                // Timestamps
+            // Timestamps
+            createdAt: true,
+            updatedAt: true,
+
+            // Client Profile (comprehensive)
+            clientProfile: {
+              select: {
+                userId: true,
+                type: true,
+                companyName: true,
+                companyRegistration: true,
+                kraPin: true,
+                vatRegistered: true,
+                website: true,
+
+                // Location
+                address: true,
+                city: true,
+                county: true,
+                neighborhood: true,
+                landmark: true,
+                zipCode: true,
+                latitude: true,
+                longitude: true,
+
+                // Preferences & Budget
+                budgetRangeMin: true,
+                budgetRangeMax: true,
+                interests: true,
+                preferences: true,
+
+                // Verification & Loyalty
+                isVerified: true,
+                verifiedAt: true,
+                loyaltyPoints: true,
+                membershipTier: true,
+
                 createdAt: true,
                 updatedAt: true,
+              },
+            },
 
-                // Client Profile (comprehensive)
-                clientProfile: {
-                  select: {
-                    userId: true,
-                    type: true,
-                    companyName: true,
-                    companyRegistration: true,
-                    kraPin: true,
-                    vatRegistered: true,
-                    website: true,
+            // Professional Profile (comprehensive)
+            professionalProfile: {
+              select: {
+                userId: true,
+                companyName: true,
+                profession: true,
+                slug: true,
+                bio: true,
+                portfolioUrl: true,
 
-                    // Location
-                    address: true,
-                    city: true,
-                    county: true,
-                    neighborhood: true,
-                    landmark: true,
-                    zipCode: true,
-                    latitude: true,
-                    longitude: true,
+                // Business Contact
+                businessEmail: true,
+                businessPhone: true,
+                website: true,
+                socials: true,
 
-                    // Preferences & Budget
-                    budgetRangeMin: true,
-                    budgetRangeMax: true,
-                    interests: true,
-                    preferences: true,
+                // Location & Service Area
+                city: true,
+                county: true,
+                country: true,
+                latitude: true,
+                longitude: true,
+                serviceRadiusKm: true,
 
-                    // Verification & Loyalty
-                    isVerified: true,
-                    verifiedAt: true,
-                    loyaltyPoints: true,
-                    membershipTier: true,
+                // Availability
+                availability: true,
+                operatingHours: true,
 
-                    createdAt: true,
-                    updatedAt: true,
-                  },
-                },
+                // Credentials & Compliance
+                kraPin: true,
+                isInsured: true,
+                insuranceExpiry: true,
+                insuranceProvider: true,
+                insurancePolicyNumber: true,
+                yearsExperience: true,
 
-                // Professional Profile (comprehensive)
-                professionalProfile: {
-                  select: {
-                    userId: true,
-                    companyName: true,
-                    profession: true,
-                    slug: true,
-                    bio: true,
-                    portfolioUrl: true,
+                // Verification Status
+                verified: true,
+                verificationStatus: true,
+                verificationNotes: true,
+                verifiedAt: true,
 
-                    // Business Contact
-                    businessEmail: true,
-                    businessPhone: true,
-                    website: true,
-                    socials: true,
+                // Reputation & Performance
+                rating: true,
+                reviewCount: true,
+                completedProjects: true,
+                projectCount: true,
+                responseRate: true,
+                responseTime: true,
 
-                    // Location & Service Area
-                    city: true,
-                    county: true,
-                    country: true,
-                    latitude: true,
-                    longitude: true,
-                    serviceRadiusKm: true,
+                // Pricing
+                minProjectBudget: true,
+                hourlyRate: true,
+                acceptedPayments: true,
 
-                    // Availability
-                    availability: true,
-                    operatingHours: true,
-
-                    // Credentials & Compliance
-                    kraPin: true,
-                    isInsured: true,
-                    insuranceExpiry: true,
-                    insuranceProvider: true,
-                    insurancePolicyNumber: true,
-                    yearsExperience: true,
-
-                    // Verification Status
-                    verified: true,
-                    verificationStatus: true,
-                    verificationNotes: true,
-                    verifiedAt: true,
-
-                    // Reputation & Performance
-                    rating: true,
-                    reviewCount: true,
-                    completedProjects: true,
-                    projectCount: true,
-                    responseRate: true,
-                    responseTime: true,
-
-                    // Pricing
-                    minProjectBudget: true,
-                    hourlyRate: true,
-                    acceptedPayments: true,
-
-                    // Licenses
-                    licenses: {
-                      select: {
-                        id: true,
-                        authority: true,
-                        licenseNumber: true,
-                        category: true,
-                        status: true,
-                        validFrom: true,
-                        validUntil: true,
-                        isAnnualRenewal: true,
-                        verifiedAt: true,
-                        notes: true,
-                      },
-                      orderBy: {
-                        validFrom: "desc",
-                      },
-                    },
-
-                    // Documents
-                    documents: {
-                      select: {
-                        id: true,
-                        category: true,
-                        title: true,
-                        issuer: true,
-                        issueDate: true,
-                        expiryDate: true,
-                        status: true,
-                        verifiedAt: true,
-                        rejectionReason: true,
-                      },
-                      where: {
-                        deletedAt: null,
-                      },
-                      orderBy: {
-                        createdAt: "desc",
-                      },
-                    },
-
-                    // Services Offered
-                    offeredServices: {
-                      select: {
-                        id: true,
-                        serviceId: true,
-                        price: true,
-                        pricingUnit: true,
-                        yearsExperience: true,
-                        isPrimary: true,
-                        service: {
-                          select: {
-                            id: true,
-                            name: true,
-                            categoryId: true,
-                          },
-                        },
-                      },
-                      where: {
-                        deletedAt: null,
-                      },
-                    },
-
-                    createdAt: true,
-                    updatedAt: true,
-                  },
-                },
-
-                // Active Consent Records (GDPR)
-                consents: {
+                // Licenses
+                licenses: {
                   select: {
                     id: true,
-                    type: true,
-                    granted: true,
-                    grantedAt: true,
-                    withdrawnAt: true,
+                    authority: true,
+                    licenseNumber: true,
+                    category: true,
+                    status: true,
+                    validFrom: true,
+                    validUntil: true,
+                    isAnnualRenewal: true,
+                    verifiedAt: true,
+                    notes: true,
                   },
                   orderBy: {
-                    grantedAt: "desc",
+                    validFrom: "desc",
                   },
                 },
+
+                // Documents
+                documents: {
+                  select: {
+                    id: true,
+                    category: true,
+                    title: true,
+                    issuer: true,
+                    issueDate: true,
+                    expiryDate: true,
+                    status: true,
+                    verifiedAt: true,
+                    rejectionReason: true,
+                  },
+                  where: {
+                    deletedAt: null,
+                  },
+                  orderBy: {
+                    createdAt: "desc",
+                  },
+                },
+
+                // Services Offered
+                offeredServices: {
+                  select: {
+                    id: true,
+                    serviceId: true,
+                    price: true,
+                    pricingUnit: true,
+                    yearsExperience: true,
+                    isPrimary: true,
+                    service: {
+                      select: {
+                        id: true,
+                        name: true,
+                        categoryId: true,
+                      },
+                    },
+                  },
+                  where: {
+                    deletedAt: null,
+                  },
+                },
+
+                createdAt: true,
+                updatedAt: true,
               },
-            });
+            },
+
+            // Active Consent Records (GDPR)
+            consents: {
+              select: {
+                id: true,
+                type: true,
+                granted: true,
+                grantedAt: true,
+                withdrawnAt: true,
+              },
+              orderBy: {
+                grantedAt: "desc",
+              },
+            },
+          },
+        });
       },
       {
         timeout: TimeoutConfig.NORMAL,
@@ -327,10 +326,15 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     if (!result.success) {
       logger.error(
         "Profile fetch failed",
-        result.error instanceof Error ? result.error : new Error(String(result.error)),
+        result.error instanceof Error
+          ? result.error
+          : new Error(String(result.error)),
         { userId: dbUserId, correlationId },
       );
-      return apiError("Failed to fetch profile", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to fetch profile",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
     const user = result.data;
@@ -541,7 +545,10 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
     // Safe JSON parsing
     const parseResult = await safeParseJsonBody(req);
     if (!parseResult.success) {
-      return apiError(parseResult.error || "Invalid JSON body", HttpStatus.BAD_REQUEST);
+      return apiError(
+        parseResult.error || "Invalid JSON body",
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     // Validate with Zod schema
@@ -619,170 +626,167 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
     const updateResult = await executor.execute(
       async () => {
         return await prisma.$transaction(async (tx) => {
-              // Update base user record
-              const user = await tx.user.update({
-                where: { id: dbUserId },
-                data: userUpdateData,
-                select: {
-                  id: true,
-                  firstName: true,
-                  lastName: true,
-                  phone: true,
-                  avatar: true,
-                  bio: true,
-                  role: true,
-                  emailMarketingConsent: true,
-                  smsMarketingConsent: true,
-                  analyticsConsent: true,
-                  updatedAt: true,
+          // Update base user record
+          const user = await tx.user.update({
+            where: { id: dbUserId },
+            data: userUpdateData,
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+              avatar: true,
+              bio: true,
+              role: true,
+              emailMarketingConsent: true,
+              smsMarketingConsent: true,
+              analyticsConsent: true,
+              updatedAt: true,
+            },
+          });
+
+          // Update role-specific profile if data provided
+          if (profileData && Object.keys(profileData).length > 0) {
+            if (currentUser.role === "CLIENT" && currentUser.clientProfile) {
+              await tx.clientProfile.update({
+                where: { userId: dbUserId },
+                data: {
+                  ...(profileData.companyName !== undefined && {
+                    companyName: profileData.companyName,
+                  }),
+                  ...(profileData.type !== undefined && {
+                    type: profileData.type,
+                  }),
+                  ...(profileData.website !== undefined && {
+                    website: profileData.website,
+                  }),
+                  ...(profileData.address !== undefined && {
+                    address: profileData.address,
+                  }),
+                  ...(profileData.city !== undefined && {
+                    city: profileData.city,
+                  }),
+                  ...(profileData.county !== undefined && {
+                    county: profileData.county,
+                  }),
+                  ...(profileData.zipCode !== undefined && {
+                    zipCode: profileData.zipCode,
+                  }),
+                  ...(profileData.budgetRangeMin !== undefined && {
+                    budgetRangeMin: profileData.budgetRangeMin,
+                  }),
+                  ...(profileData.budgetRangeMax !== undefined && {
+                    budgetRangeMax: profileData.budgetRangeMax,
+                  }),
+                  ...(profileData.interests !== undefined && {
+                    interests: profileData.interests,
+                  }),
+                  ...(profileData.preferences !== undefined && {
+                    preferences:
+                      profileData.preferences === null
+                        ? Prisma.JsonNull
+                        : (profileData.preferences as Prisma.InputJsonValue),
+                  }),
                 },
               });
+            } else if (
+              currentUser.role === "PROFESSIONAL" &&
+              currentUser.professionalProfile
+            ) {
+              await tx.professionalProfile.update({
+                where: { userId: dbUserId },
+                data: {
+                  ...(profileData.companyName !== undefined && {
+                    companyName: profileData.companyName,
+                  }),
+                  ...(profileData.profession !== undefined && {
+                    profession: profileData.profession,
+                  }),
+                  ...(profileData.bio !== undefined && {
+                    bio: profileData.bio,
+                  }),
+                  ...(profileData.businessEmail !== undefined && {
+                    businessEmail: profileData.businessEmail,
+                  }),
+                  ...(profileData.businessPhone !== undefined && {
+                    businessPhone: profileData.businessPhone,
+                  }),
+                  ...(profileData.website !== undefined && {
+                    website: profileData.website,
+                  }),
+                  ...(profileData.socials !== undefined && {
+                    socials:
+                      profileData.socials === null
+                        ? Prisma.JsonNull
+                        : (profileData.socials as Prisma.InputJsonValue),
+                  }),
+                  ...(profileData.city !== undefined && {
+                    city: profileData.city,
+                  }),
+                  ...(profileData.county !== undefined && {
+                    county: profileData.county,
+                  }),
+                  ...(profileData.serviceRadiusKm !== undefined && {
+                    serviceRadiusKm: profileData.serviceRadiusKm,
+                  }),
+                  ...(profileData.availability !== undefined && {
+                    availability: profileData.availability,
+                  }),
+                  ...(profileData.operatingHours !== undefined && {
+                    operatingHours:
+                      profileData.operatingHours === null
+                        ? Prisma.JsonNull
+                        : (profileData.operatingHours as Prisma.InputJsonValue),
+                  }),
+                  ...(profileData.yearsExperience !== undefined && {
+                    yearsExperience: profileData.yearsExperience,
+                  }),
+                  ...(profileData.minProjectBudget !== undefined && {
+                    minProjectBudget: profileData.minProjectBudget,
+                  }),
+                  ...(profileData.hourlyRate !== undefined && {
+                    hourlyRate: profileData.hourlyRate,
+                  }),
+                  ...(profileData.acceptedPayments !== undefined && {
+                    acceptedPayments: profileData.acceptedPayments,
+                  }),
+                },
+              });
+            }
+          }
 
-              // Update role-specific profile if data provided
-              if (profileData && Object.keys(profileData).length > 0) {
-                if (
-                  currentUser.role === "CLIENT" &&
-                  currentUser.clientProfile
-                ) {
-                  await tx.clientProfile.update({
-                    where: { userId: dbUserId },
-                    data: {
-                      ...(profileData.companyName !== undefined && {
-                        companyName: profileData.companyName,
-                      }),
-                      ...(profileData.type !== undefined && {
-                        type: profileData.type,
-                      }),
-                      ...(profileData.website !== undefined && {
-                        website: profileData.website,
-                      }),
-                      ...(profileData.address !== undefined && {
-                        address: profileData.address,
-                      }),
-                      ...(profileData.city !== undefined && {
-                        city: profileData.city,
-                      }),
-                      ...(profileData.county !== undefined && {
-                        county: profileData.county,
-                      }),
-                      ...(profileData.zipCode !== undefined && {
-                        zipCode: profileData.zipCode,
-                      }),
-                      ...(profileData.budgetRangeMin !== undefined && {
-                        budgetRangeMin: profileData.budgetRangeMin,
-                      }),
-                      ...(profileData.budgetRangeMax !== undefined && {
-                        budgetRangeMax: profileData.budgetRangeMax,
-                      }),
-                      ...(profileData.interests !== undefined && {
-                        interests: profileData.interests,
-                      }),
-                      ...(profileData.preferences !== undefined && {
-                        preferences:
-                          profileData.preferences === null
-                            ? Prisma.JsonNull
-                            : (profileData.preferences as Prisma.InputJsonValue),
-                      }),
-                    },
-                  });
-                } else if (
-                  currentUser.role === "PROFESSIONAL" &&
-                  currentUser.professionalProfile
-                ) {
-                  await tx.professionalProfile.update({
-                    where: { userId: dbUserId },
-                    data: {
-                      ...(profileData.companyName !== undefined && {
-                        companyName: profileData.companyName,
-                      }),
-                      ...(profileData.profession !== undefined && {
-                        profession: profileData.profession,
-                      }),
-                      ...(profileData.bio !== undefined && {
-                        bio: profileData.bio,
-                      }),
-                      ...(profileData.businessEmail !== undefined && {
-                        businessEmail: profileData.businessEmail,
-                      }),
-                      ...(profileData.businessPhone !== undefined && {
-                        businessPhone: profileData.businessPhone,
-                      }),
-                      ...(profileData.website !== undefined && {
-                        website: profileData.website,
-                      }),
-                      ...(profileData.socials !== undefined && {
-                        socials:
-                          profileData.socials === null
-                            ? Prisma.JsonNull
-                            : (profileData.socials as Prisma.InputJsonValue),
-                      }),
-                      ...(profileData.city !== undefined && {
-                        city: profileData.city,
-                      }),
-                      ...(profileData.county !== undefined && {
-                        county: profileData.county,
-                      }),
-                      ...(profileData.serviceRadiusKm !== undefined && {
-                        serviceRadiusKm: profileData.serviceRadiusKm,
-                      }),
-                      ...(profileData.availability !== undefined && {
-                        availability: profileData.availability,
-                      }),
-                      ...(profileData.operatingHours !== undefined && {
-                        operatingHours:
-                          profileData.operatingHours === null
-                            ? Prisma.JsonNull
-                            : (profileData.operatingHours as Prisma.InputJsonValue),
-                      }),
-                      ...(profileData.yearsExperience !== undefined && {
-                        yearsExperience: profileData.yearsExperience,
-                      }),
-                      ...(profileData.minProjectBudget !== undefined && {
-                        minProjectBudget: profileData.minProjectBudget,
-                      }),
-                      ...(profileData.hourlyRate !== undefined && {
-                        hourlyRate: profileData.hourlyRate,
-                      }),
-                      ...(profileData.acceptedPayments !== undefined && {
-                        acceptedPayments: profileData.acceptedPayments,
-                      }),
-                    },
-                  });
-                }
-              }
-
-              // Record consent changes in audit log
-              if (
-                emailMarketingConsent !== undefined ||
-                smsMarketingConsent !== undefined ||
-                analyticsConsent !== undefined
-              ) {
-                await tx.consentRecord.create({
-                  data: {
-                    userId: dbUserId,
-                    type:
-                      emailMarketingConsent !== undefined
-                        ? "MARKETING_EMAIL"
-                        : smsMarketingConsent !== undefined
-                          ? "MARKETING_SMS"
-                          : "ANALYTICS_COOKIES",
-                    granted:
-                      emailMarketingConsent ??
-                      smsMarketingConsent ??
-                      analyticsConsent ??
-                      false,
-                    grantedAt: new Date(),
-                    documentVersion: "v1.0",
-                    metadata: {
-                      source: "profile_update",
-                      correlationId,
-                    },
-                  },
-                });
-              }
-
-              return user;
+          // Record consent changes in audit log
+          if (
+            emailMarketingConsent !== undefined ||
+            smsMarketingConsent !== undefined ||
+            analyticsConsent !== undefined
+          ) {
+            await tx.consentRecord.create({
+              data: {
+                userId: dbUserId,
+                type:
+                  emailMarketingConsent !== undefined
+                    ? "MARKETING_EMAIL"
+                    : smsMarketingConsent !== undefined
+                      ? "MARKETING_SMS"
+                      : "ANALYTICS_COOKIES",
+                granted:
+                  emailMarketingConsent ??
+                  smsMarketingConsent ??
+                  analyticsConsent ??
+                  false,
+                grantedAt: new Date(),
+                documentVersion: "v1.0",
+                metadata: {
+                  source: "profile_update",
+                  correlationId,
+                },
+              },
             });
+          }
+
+          return user;
+        });
       },
       {
         timeout: TimeoutConfig.NORMAL,
@@ -795,7 +799,9 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
     if (!updateResult.success || !updateResult.data) {
       logger.error(
         "Profile update failed",
-        updateResult.error instanceof Error ? updateResult.error : new Error("Update failed"),
+        updateResult.error instanceof Error
+          ? updateResult.error
+          : new Error("Update failed"),
         { userId: dbUserId, correlationId },
       );
       return apiError(

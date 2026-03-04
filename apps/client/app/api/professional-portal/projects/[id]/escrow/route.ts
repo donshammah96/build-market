@@ -66,7 +66,10 @@ export const GET = withAuth<ProjectParams>(
         correlationId,
         projectId,
       });
-      return apiError("Failed to fetch escrow transactions", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to fetch escrow transactions",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
     if (result.data?.error === "not_found") {

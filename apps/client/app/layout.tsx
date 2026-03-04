@@ -4,6 +4,8 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { DM_Sans } from "next/font/google";
 import { ToastContainer } from "react-toastify";
 import { QueryProvider } from "@/components/providers/QueryProvider";
+import { CookieConsentProvider } from "@/components/providers/CookieConsentProvider";
+import { CookieBanner } from "@/components/gdpr/CookieBanner";
 import { AccessibilityProvider } from "@/components/accessibility";
 
 // Single, distinctive font with multiple weights for better performance
@@ -72,11 +74,15 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { auth } = await import("@clerk/nextjs/server");
+  const { userId } = await auth();
+  const isSignedIn = !!userId;
+
   return (
     <ClerkProvider>
       <html lang="en" className={dmSans.variable}>
@@ -136,15 +142,18 @@ export default function RootLayout({
 
           <QueryProvider>
             <AccessibilityProvider>
-              <div id="main-content">{children}</div>
-              <ToastContainer
-                position="bottom-right"
-                autoClose={4000}
-                hideProgressBar={false}
-                closeOnClick
-                pauseOnHover
-                limit={3}
-              />
+              <CookieConsentProvider isSignedIn={isSignedIn}>
+                <div id="main-content">{children}</div>
+                <CookieBanner />
+                <ToastContainer
+                  position="bottom-right"
+                  autoClose={4000}
+                  hideProgressBar={false}
+                  closeOnClick
+                  pauseOnHover
+                  limit={3}
+                />
+              </CookieConsentProvider>
             </AccessibilityProvider>
           </QueryProvider>
         </body>

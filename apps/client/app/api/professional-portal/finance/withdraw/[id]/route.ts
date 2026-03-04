@@ -71,10 +71,7 @@ export const GET = withAuth<{ id: string }>(
       return apiError("Withdrawal not found", HttpStatus.NOT_FOUND);
     }
 
-    return apiSuccess(
-      serializeTransactionDecimals(result.data),
-      HttpStatus.OK,
-    );
+    return apiSuccess(serializeTransactionDecimals(result.data), HttpStatus.OK);
   },
 );
 

@@ -38,7 +38,7 @@ export default function AuthCallbackPage() {
   const { isLoaded, isSignedIn, user } = useUser();
   const { signOut } = useClerk();
   const [status, setStatus] = useState<"checking" | "redirecting" | "error">(
-    "checking"
+    "checking",
   );
   const [message, setMessage] = useState("Verifying your session...");
   const retryCount = useRef(0);
@@ -57,7 +57,7 @@ export default function AuthCallbackPage() {
         ? ROUTES.professionalDashboard
         : ROUTES.userDashboard;
     },
-    []
+    [],
   );
 
   /**
@@ -76,7 +76,7 @@ export default function AuthCallbackPage() {
       // Use router.replace for smooth SPA navigation
       router.replace(path);
     },
-    [router]
+    [router],
   );
 
   /**
@@ -97,7 +97,7 @@ export default function AuthCallbackPage() {
     if (retryCount.current < MAX_RETRIES) {
       retryCount.current++;
       setMessage(
-        `Refreshing session (attempt ${retryCount.current}/${MAX_RETRIES})...`
+        `Refreshing session (attempt ${retryCount.current}/${MAX_RETRIES})...`,
       );
 
       try {

@@ -10,7 +10,9 @@ export const MainImage: FC = () => {
     <div className="px-4 sm:px-6 md:px-20" ref={ref}>
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
-        animate={isInView ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.95 }}
+        animate={
+          isInView ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.95 }
+        }
         transition={{ duration: 0.6 }}
         whileHover={{ scale: 1.01 }}
       >

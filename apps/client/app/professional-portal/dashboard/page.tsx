@@ -23,7 +23,11 @@ import { useProfileStatus } from "@/hooks/useProfileStatus";
 import { useDashboardData } from "@/hooks/useDashboardData";
 
 // Dashboard components
-import { DashboardHeader, MetricsRow, WidgetRenderer } from "@/components/dashboard";
+import {
+  DashboardHeader,
+  MetricsRow,
+  WidgetRenderer,
+} from "@/components/dashboard";
 
 // ============================================================================
 // ERROR ALERT COMPONENT
@@ -67,7 +71,13 @@ export default function ProfessionalDashboardPage() {
 
   // Dashboard data with conditional fetching based on profession
   const dashboardData = useDashboardData();
-  const { config, metrics, isLoading: dataLoading, error, refetch } = dashboardData;
+  const {
+    config,
+    metrics,
+    isLoading: dataLoading,
+    error,
+    refetch,
+  } = dashboardData;
 
   // Check if user skipped onboarding
   const skippedOnboarding =

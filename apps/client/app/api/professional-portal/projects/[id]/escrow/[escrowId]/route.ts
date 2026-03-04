@@ -30,8 +30,10 @@ export const GET = withAuth<EscrowParams>(
     const correlationId = initializeCorrelationId(req);
 
     if (
-      !params?.id || !isValidId(params.id) ||
-      !params.escrowId || !isValidId(params.escrowId)
+      !params?.id ||
+      !isValidId(params.id) ||
+      !params.escrowId ||
+      !isValidId(params.escrowId)
     ) {
       return apiError("Invalid IDs", HttpStatus.BAD_REQUEST);
     }
@@ -70,7 +72,10 @@ export const GET = withAuth<EscrowParams>(
         correlationId,
         escrowId,
       });
-      return apiError("Failed to fetch escrow detail", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to fetch escrow detail",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
     if (result.data?.error === "not_found") {

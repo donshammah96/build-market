@@ -22,7 +22,7 @@ export default defineConfig({
     },
     setupNodeEvents(
       on: Cypress.PluginEvents,
-      config: Cypress.PluginConfigOptions
+      config: Cypress.PluginConfigOptions,
     ) {
       // Implement node event listeners here
       on("task", {

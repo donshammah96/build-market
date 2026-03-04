@@ -141,9 +141,7 @@ export const ideaBooksClient = {
     });
   },
 
-  async delete(
-    id: string,
-  ): Promise<
+  async delete(id: string): Promise<
     ApiResponse<{
       message: string;
       id: string;

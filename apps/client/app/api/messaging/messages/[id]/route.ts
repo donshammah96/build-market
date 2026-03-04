@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@build/db";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -13,12 +12,11 @@ import {
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
-import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import {
   UpdateMessageSchema,
-  messageDetailSelect,
   MESSAGING_CONFIG,
-} from "@/app/lib/validation/messaging-validation";
+  messagingService,
+} from "@build/messaging-server";
 import { extractExpectedVersion } from "@/app/lib/api/request-utils";
 
 const logger = getClientLogger();
@@ -45,33 +43,7 @@ export const GET = withAuth<MessageParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      async () => {
-        const message = await prisma.message.findFirst({
-          where: { id: messageId, deletedAt: null },
-          select: messageDetailSelect,
-        });
-        if (!message)
-          return {
-            _error: true as const,
-            message: "Message not found",
-            status: HttpStatus.NOT_FOUND,
-          };
-
-        const participant = await prisma.threadParticipant.findUnique({
-          where: {
-            threadId_userId: { threadId: message.threadId, userId: dbUserId },
-          },
-          select: { id: true },
-        });
-        if (!participant)
-          return {
-            _error: true as const,
-            message: "Not a participant in this conversation",
-            status: HttpStatus.FORBIDDEN,
-          };
-
-        return message;
-      },
+      () => messagingService.getMessage(dbUserId, messageId),
       { operationName: "get_message" },
     );
 
@@ -81,10 +53,14 @@ export const GET = withAuth<MessageParams>(
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     } else {
-      const data = result.data;
-      if (data && "_error" in (data as any) && (data as any)._error)
-        return apiError((data as any).message, (data as any).status);
-      return apiSuccess(data, HttpStatus.OK);
+      const serviceResult = result.data;
+      if (!serviceResult || !serviceResult.ok) {
+        return apiError(
+          serviceResult?.message ?? "Invalid request",
+          serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+        );
+      }
+      return apiSuccess(serviceResult.data, HttpStatus.OK);
     }
   },
 );
@@ -130,30 +106,8 @@ export const PATCH = withAuth<MessageParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      async () => {
-        const message = await prisma.message.findFirst({
-          where: { id: messageId, deletedAt: null },
-          select: { id: true, senderId: true },
-        });
-        if (!message)
-          return {
-            _error: true as const,
-            message: "Message not found",
-            status: HttpStatus.NOT_FOUND,
-          };
-        if (message.senderId !== dbUserId)
-          return {
-            _error: true as const,
-            message: "Only the sender can edit a message",
-            status: HttpStatus.FORBIDDEN,
-          };
-
-        return prisma.message.update({
-          where: { id: messageId },
-          data: { content: validation.data.content },
-          select: messageDetailSelect,
-        });
-      },
+      () =>
+        messagingService.updateMessage(dbUserId, messageId, validation.data),
       { operationName: "update_message" },
     );
 
@@ -167,10 +121,15 @@ export const PATCH = withAuth<MessageParams>(
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     } else {
-      const data = result.data;
-      if (data && "_error" in (data as any) && (data as any)._error)
-        return apiError((data as any).message, (data as any).status);
-      return apiSuccess(data, HttpStatus.OK);
+      const serviceResult = result.data;
+      if (!serviceResult || !serviceResult.ok) {
+        return apiError(
+          serviceResult?.message ?? "Invalid request",
+          serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+        );
+      }
+      const payload = serviceResult.data as Record<string, unknown>;
+      return apiSuccess({ ...payload, expectedVersion }, HttpStatus.OK);
     }
   },
 );
@@ -206,45 +165,7 @@ export const DELETE = withAuth<MessageParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      async () => {
-        const message = await prisma.message.findFirst({
-          where: { id: messageId, deletedAt: null },
-          select: { id: true, senderId: true, threadId: true },
-        });
-        if (!message)
-          return {
-            _error: true as const,
-            message: "Message not found",
-            status: HttpStatus.NOT_FOUND,
-          };
-
-        if (message.senderId !== dbUserId) {
-          const participant = await prisma.threadParticipant.findUnique({
-            where: {
-              threadId_userId: { threadId: message.threadId, userId: dbUserId },
-            },
-            select: { role: true },
-          });
-          if (!participant)
-            return {
-              _error: true as const,
-              message: "Not a participant",
-              status: HttpStatus.FORBIDDEN,
-            };
-          if (participant.role !== "OWNER" && participant.role !== "ADMIN")
-            return {
-              _error: true as const,
-              message: "Only the sender or thread admins can delete messages",
-              status: HttpStatus.FORBIDDEN,
-            };
-        }
-
-        await prisma.message.update({
-          where: { id: messageId },
-          data: { deletedAt: new Date() },
-        });
-        return { id: messageId, deleted: true, expectedVersion };
-      },
+      () => messagingService.deleteMessage(dbUserId, messageId),
       { operationName: "delete_message" },
     );
 
@@ -258,10 +179,15 @@ export const DELETE = withAuth<MessageParams>(
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     } else {
-      const data = result.data;
-      if (data && "_error" in (data as any) && (data as any)._error)
-        return apiError((data as any).message, (data as any).status);
-      return apiSuccess(data, HttpStatus.OK);
+      const serviceResult = result.data;
+      if (!serviceResult || !serviceResult.ok) {
+        return apiError(
+          serviceResult?.message ?? "Invalid request",
+          serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+        );
+      }
+      const payload = serviceResult.data as Record<string, unknown>;
+      return apiSuccess({ ...payload, expectedVersion }, HttpStatus.OK);
     }
   },
 );

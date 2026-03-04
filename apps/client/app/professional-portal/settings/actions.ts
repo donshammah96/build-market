@@ -245,8 +245,7 @@ export async function completeProfessionalProfileAction(
     yearsExperience,
     website,
     bio,
-    certificatesUrls,
-    idDocumentsUrls,
+    documents,
     storeData,
     propertyData,
     license,
@@ -296,32 +295,70 @@ export async function completeProfessionalProfileAction(
         });
       }
 
-      // Handle Documents - Certificates
-      if (certificatesUrls && certificatesUrls.length > 0) {
-        for (let i = 0; i < certificatesUrls.length; i++) {
-          await tx.professionalDocument.create({
-            data: {
-              professionalId: user.id,
-              category: "EDUCATION_CERT",
-              title: `Professional Certificate ${i + 1}`,
-              issuer: "Self-reported",
-              fileUrl: certificatesUrls[i],
-              status: "PENDING",
-            },
-          });
-        }
-      }
+      // Handle Documents
+      if (documents && documents.length > 0) {
+        const uploadIds = documents.map((d) => d.uploadId).filter(Boolean);
+        const stagedUploads = await tx.onboardingUpload.findMany({
+          where: {
+            id: { in: uploadIds },
+            clerkId,
+            status: "STAGED",
+          },
+        });
 
-      // Handle Documents - ID
-      if (idDocumentsUrls && idDocumentsUrls.length > 0) {
-        for (let i = 0; i < idDocumentsUrls.length; i++) {
+        if (uploadIds.length > 0 && stagedUploads.length !== uploadIds.length) {
+          throw new Error("Invalid or expired document uploads");
+        }
+
+        for (let i = 0; i < documents.length; i++) {
+          const docData = documents[i];
+          if (!docData) continue;
+
+          const staged = stagedUploads.find((s) => s.id === docData.uploadId);
+          let assetId: string | undefined = undefined;
+
+          if (staged) {
+            let asset = await tx.asset.findUnique({
+              where: { checksum: staged.checksum },
+            });
+            if (!asset) {
+              asset = await tx.asset.create({
+                data: {
+                  uploaderId: user.id,
+                  originalName: staged.originalName,
+                  mimeType: staged.mimeType,
+                  size: staged.size,
+                  checksum: staged.checksum,
+                  bucket: staged.storageBucket,
+                  key: staged.storageKey,
+                  cdnUrl: staged.tempUrl,
+                },
+              });
+            }
+            assetId = asset.id;
+
+            await tx.onboardingUpload.update({
+              where: { id: staged.id },
+              data: {
+                status: "CONSUMED",
+                consumedAt: new Date(),
+                consumedByUserId: user.id,
+              },
+            });
+          }
+
           await tx.professionalDocument.create({
             data: {
               professionalId: user.id,
-              category: "ID_OR_PASSPORT",
-              title: `ID Document ${i + 1}`,
-              issuer: "Government/Official",
-              fileUrl: idDocumentsUrls[i],
+              category:
+                docData.category as import("@prisma/client").DocumentCategory,
+              title: docData.title || `Document ${i + 1}`,
+              issuer:
+                docData.category === "ID_OR_PASSPORT"
+                  ? "Government/Official"
+                  : "Self-reported",
+              assetId,
+              fileUrl: docData.previewUrl || staged?.tempUrl || null,
               status: "PENDING",
             },
           });

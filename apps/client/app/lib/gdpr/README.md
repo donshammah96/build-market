@@ -50,17 +50,17 @@ graph TB
     API --> ConsentService[Consent Service]
     API --> AnonymizationService[Anonymization Service]
     API --> ComplianceService[Compliance Service]
-    
+
     ExportService --> ExportQueue[Export Queue]
     ExportQueue --> ExportWorker[Export Worker]
     ExportWorker --> ExportProcessor[Export Processor]
     ExportProcessor --> S3[AWS S3]
     ExportProcessor --> EmailService[Email Service]
     ExportProcessor --> Prisma[(Prisma DB)]
-    
+
     AnonymizationService --> AssetCleanupService[Asset Cleanup Service]
     AssetCleanupService --> S3
-    
+
     IncidentQueue[Incident Queue] --> IncidentWorker[Incident Worker]
     IncidentWorker --> EmailService
     IncidentWorker --> SMSService[SMS Service]
@@ -68,15 +68,15 @@ graph TB
     NotificationQueue --> NotificationWorker[Notification Worker]
     NotificationWorker --> EmailService
     NotificationWorker --> SMSService
-    
+
     ConsentService --> Prisma
     ComplianceService --> Prisma
     IncidentWorker --> Prisma
     NotificationWorker --> Prisma
-    
+
     FieldEncryption[Field Encryption] --> PrismaExtension[Prisma Extension]
     PrismaExtension --> Prisma
-    
+
     ExportQueue -.Redis.-> RedisConnection[Redis Connection]
     IncidentQueue -.Redis.-> RedisConnection
     NotificationQueue -.Redis.-> RedisConnection
@@ -132,9 +132,11 @@ sequenceDiagram
 ### API Reference
 
 #### `GET /api/user/consent`
+
 Retrieves all active consent records for the authenticated user.
 
 **Response**:
+
 ```json
 [
   {
@@ -150,9 +152,11 @@ Retrieves all active consent records for the authenticated user.
 ```
 
 #### `POST /api/user/consent`
+
 Updates a specific consent preference.
 
 **Request**:
+
 ```json
 {
   "type": "MARKETING_EMAIL",
@@ -185,30 +189,30 @@ sequenceDiagram
 
     User->>API: POST /api/user/export
     API->>ExportService: requestExport(userId)
-    
+
     ExportService->>Prisma: findFirst (check existing pending)
     Prisma-->>ExportService: null
     ExportService->>Prisma: findFirst (check rate limit - 1/day)
     Prisma-->>ExportService: null
-    
+
     ExportService->>Prisma: create DataExport (PENDING)
     Prisma-->>ExportService: DataExport { id, status: PENDING }
-    
+
     ExportService->>ExportQueue: addJob({ exportId, userId })
     ExportQueue-->>ExportService: Job { id: "job-123" }
-    
+
     ExportService-->>API: { success, exportId, jobId, status: PENDING }
     API-->>User: 202 Accepted
-    
+
     Note over ExportQueue,ExportWorker: Async Processing
-    
+
     ExportQueue->>ExportWorker: Job { exportId, userId }
     ExportWorker->>Prisma: findUnique DataExport
     Prisma-->>ExportWorker: DataExport
     ExportWorker->>Prisma: update (status: PROCESSING)
-    
+
     ExportWorker->>ExportProcessor: processExport(exportId)
-    
+
     ExportProcessor->>Prisma: findUnique User
     Prisma-->>ExportProcessor: User data
     ExportProcessor->>Prisma: findMany Professional
@@ -221,24 +225,24 @@ sequenceDiagram
     Prisma-->>ExportProcessor: Transactions
     ExportProcessor->>Prisma: findMany Asset
     Prisma-->>ExportProcessor: Assets
-    
+
     ExportProcessor->>ExportProcessor: Create ZIP (metadata.json, profile.json, ...)
-    
+
     ExportProcessor->>S3: PutObject (upload ZIP)
     S3-->>ExportProcessor: { ETag, Location }
-    
+
     ExportProcessor->>S3: GetSignedUrl (7-day expiry)
     S3-->>ExportProcessor: Signed URL
-    
+
     ExportProcessor->>Prisma: update DataExport (READY, fileUrl, fileKey)
     Prisma-->>ExportProcessor: Updated DataExport
-    
+
     ExportProcessor->>ExportProcessor: Clean up local temp files
-    
+
     ExportProcessor-->>ExportWorker: { fileSize, fileUrl }
     ExportWorker->>EmailService: sendExportReadyEmail(user, downloadUrl)
     EmailService-->>ExportWorker: Email sent
-    
+
     ExportWorker-->>ExportQueue: Job complete
 ```
 
@@ -254,34 +258,36 @@ sequenceDiagram
 
     ExportQueue->>ExportWorker: Job { exportId, userId }
     ExportWorker->>ExportProcessor: processExport(exportId)
-    
+
     ExportProcessor->>Prisma: Fetch user data
     Prisma-->>ExportProcessor: Data
     ExportProcessor->>ExportProcessor: Create ZIP
-    
+
     ExportProcessor->>S3: PutObject (upload)
     S3--xExportProcessor: Timeout (30s exceeded)
-    
+
     ExportProcessor--xExportWorker: throw Error("S3 upload timeout")
-    
+
     ExportWorker->>Prisma: update DataExport (FAILED, error message)
     Prisma-->>ExportWorker: Updated
-    
+
     ExportWorker-->>ExportQueue: Job failed
-    
+
     Note over ExportQueue: Retry with exponential backoff<br/>(3 attempts: 1min, 2min, 4min)
-    
+
     ExportQueue->>ExportWorker: Job retry attempt 2
 ```
 
 ### API Reference
 
 #### `POST /api/user/export`
+
 Initiates a data export request.
 
 **Rate Limiting**: 1 export per user per 24 hours.
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -293,9 +299,11 @@ Initiates a data export request.
 ```
 
 #### `GET /api/user/export/:id`
+
 Checks the status of an export request.
 
 **Response**:
+
 ```json
 {
   "id": "export_abc123",
@@ -345,7 +353,7 @@ sequenceDiagram
 
     User->>API: POST /api/user/delete
     API->>AnonymizationService: requestDeletion(userId, actorId)
-    
+
     Note over AnonymizationService: Phase 1: Legal Hold Check
     AnonymizationService->>Prisma: findUnique User (check legalHold flag)
     Prisma-->>AnonymizationService: User { legalHold: false }
@@ -353,28 +361,28 @@ sequenceDiagram
     Prisma-->>AnonymizationService: [] (no disputes)
     AnonymizationService->>Prisma: findMany Transaction (check pending)
     Prisma-->>AnonymizationService: [] (no pending)
-    
+
     Note over AnonymizationService: Phase 2: Deactivation (30-day grace)
     AnonymizationService->>Prisma: update User (isActive: false, deactivatedAt)
     Prisma-->>AnonymizationService: User
     AnonymizationService->>Prisma: update Professional (storeOpen: false)
     Prisma-->>AnonymizationService: Professional
-    
+
     AnonymizationService->>AssetCleanupService: scheduleAssetsForDeletion(userId)
     AssetCleanupService->>Prisma: update Asset (scheduledForDeletion)
     Prisma-->>AssetCleanupService: Assets updated
-    
+
     AnonymizationService->>AuditLog: log(ACCOUNT_DEACTIVATED)
     AuditLog-->>AnonymizationService: Logged
-    
+
     AnonymizationService-->>API: { success, gracePeriodEnds }
     API-->>User: 200 OK (30-day grace period)
-    
+
     Note over AnonymizationService,Prisma: 30 days later (CRON job)
-    
+
     AnonymizationService->>Prisma: findMany User (deactivatedAt < 30 days ago)
     Prisma-->>AnonymizationService: [User]
-    
+
     Note over AnonymizationService: Phase 3: Anonymization
     AnonymizationService->>Prisma: transaction START
     AnonymizationService->>Prisma: update User (email: ANONYMIZED-{UUID}@deleted.local)
@@ -383,11 +391,11 @@ sequenceDiagram
     AnonymizationService->>Prisma: update Professional (companyName: ANONYMIZED-{UUID})
     AnonymizationService->>Prisma: transaction COMMIT
     Prisma-->>AnonymizationService: User anonymized
-    
+
     AnonymizationService->>AssetCleanupService: executeScheduledDeletions()
     AssetCleanupService->>Prisma: findMany Asset (scheduledForDeletion)
     Prisma-->>AssetCleanupService: [Assets]
-    
+
     loop For each asset
         AssetCleanupService->>AssetCleanupService: countReferences(assetId)
         alt Asset still referenced
@@ -398,7 +406,7 @@ sequenceDiagram
             AssetCleanupService->>Prisma: delete Asset
         end
     end
-    
+
     AnonymizationService->>AuditLog: log(ACCOUNT_ANONYMIZED)
 ```
 
@@ -413,10 +421,10 @@ sequenceDiagram
 
     User->>API: POST /api/user/delete
     API->>AnonymizationService: requestDeletion(userId, actorId)
-    
+
     AnonymizationService->>Prisma: findUnique User
     Prisma-->>AnonymizationService: User { legalHold: true }
-    
+
     AnonymizationService-->>API: throw Error("Cannot delete: legal hold")
     API-->>User: 403 Forbidden
 ```
@@ -424,9 +432,11 @@ sequenceDiagram
 ### API Reference
 
 #### `POST /api/user/deletion`
+
 Request account deletion (starts 30-day grace period).
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -436,9 +446,11 @@ Request account deletion (starts 30-day grace period).
 ```
 
 #### `POST /api/user/reactivate`
+
 Cancel deletion within grace period.
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -469,19 +481,19 @@ sequenceDiagram
     participant ODPC as Data Protection Commissioner
 
     Note over System: Security breach detected!
-    
+
     System->>Prisma: create SecurityIncident (CRITICAL)
     Prisma-->>System: Incident { id, severity: CRITICAL }
-    
+
     System->>IncidentQueue: queueEmergencyProtocol(incidentId)
-    
+
     IncidentQueue->>IncidentWorker: Job { type: EMERGENCY_PROTOCOL }
-    
+
     Note over IncidentWorker: Emergency Protocol Execution
-    
+
     IncidentWorker->>Prisma: findUnique SecurityIncident
     Prisma-->>IncidentWorker: Incident
-    
+
     par ODPC Notification (Priority 100)
         IncidentWorker->>IncidentQueue: add ODPC_NOTIFICATION job
         IncidentQueue->>IncidentWorker: Job { type: ODPC_NOTIFICATION }
@@ -501,17 +513,17 @@ sequenceDiagram
             IncidentWorker->>Prisma: update Session (revoke all sessions)
         end
     end
-    
+
     Note over IncidentWorker: Queue User Notifications (Batched)
-    
+
     IncidentWorker->>NotificationQueue: queueUserNotifications(incidentId, userIds)
-    
+
     NotificationQueue->>NotificationWorker: Job { incidentId, users: batch 1-100 }
-    
+
     loop For each batch of 100 users
         NotificationWorker->>Prisma: findMany User (batch)
         Prisma-->>NotificationWorker: [Users]
-        
+
         par Email Notifications
             loop For each user
                 NotificationWorker->>EmailService: sendBreachNotificationEmail(user)
@@ -523,11 +535,11 @@ sequenceDiagram
                 SMSService-->>NotificationWorker: Sent
             end
         end
-        
+
         NotificationWorker->>Prisma: create NotificationLog (delivery status)
         Prisma-->>NotificationWorker: Logged
     end
-    
+
     NotificationWorker->>Prisma: update SecurityIncident (usersNotified: true)
     Prisma-->>NotificationWorker: Updated
 ```
@@ -545,21 +557,21 @@ sequenceDiagram
     IncidentWorker->>EmailService: sendODPCNotificationEmail(incident)
     EmailService->>ODPC: SMTP connection
     ODPC--xEmailService: Connection timeout
-    
+
     EmailService--xIncidentWorker: throw Error("SMTP failed")
-    
+
     IncidentWorker->>Prisma: update SecurityIncident (metadata: attempt 1)
     Prisma-->>IncidentWorker: Updated
-    
+
     IncidentWorker-->>IncidentQueue: Job failed (retry)
-    
+
     Note over IncidentQueue: Exponential backoff<br/>10 attempts: 1min, 2min, 4min, ...
-    
+
     IncidentQueue->>IncidentWorker: Retry attempt 2
     IncidentWorker->>EmailService: sendODPCNotificationEmail(incident)
     EmailService->>ODPC: SMTP connection
     ODPC-->>EmailService: 250 OK
-    
+
     IncidentWorker->>Prisma: update SecurityIncident (odpcNotified: true)
 ```
 
@@ -577,24 +589,24 @@ sequenceDiagram
 graph LR
     API[API Request] --> Prisma[Prisma Client]
     Prisma --> Extension[Prisma Extension]
-    
+
     Extension --> Encrypt{Encrypt Fields?}
     Encrypt -->|Yes| FieldEncryption[Field Encryption]
     Encrypt -->|No| DB[(Database)]
-    
+
     FieldEncryption --> Deterministic{Searchable?}
     Deterministic -->|Yes| HMAC[HMAC-derived IV<br/>Same input = Same output]
     Deterministic -->|No| Random[Random IV<br/>Semantic security]
-    
+
     HMAC --> AES[AES-256-GCM]
     Random --> AES
-    
+
     AES --> DB
-    
+
     DB --> Decrypt[Decrypt on Read]
     Decrypt --> Prisma
     Prisma --> API
-    
+
     style FieldEncryption fill:#4ade80
     style AES fill:#fbbf24
     style DB fill:#60a5fa
@@ -606,12 +618,12 @@ graph LR
 // apps/client/app/lib/gdpr/encryption/prisma-extension.ts
 const encryptionConfig = {
   User: {
-    kraPIN: 'deterministic',        // Searchable (HMAC IV)
-    phoneNumber: 'randomized',       // Non-searchable (random IV)
-    nationalId: 'deterministic',
+    kraPIN: "deterministic", // Searchable (HMAC IV)
+    phoneNumber: "randomized", // Non-searchable (random IV)
+    nationalId: "deterministic",
   },
   Professional: {
-    taxIdentificationNumber: 'deterministic',
+    taxIdentificationNumber: "deterministic",
   },
 };
 ```
@@ -623,6 +635,7 @@ enc:v1:<base64-encrypted-data>:<base64-iv>:<base64-auth-tag>
 ```
 
 **Example**:
+
 ```
 enc:v1:a2V5...==:b2l2...==:c3RhZw==
 ```
@@ -643,21 +656,21 @@ enum AuditAction {
   DATA_EXPORT_REQUESTED
   DATA_EXPORT_COMPLETED
   DATA_EXPORT_DOWNLOADED
-  
+
   // Consent
   CONSENT_GRANTED
   CONSENT_REVOKED
-  
+
   // Deletion
   ACCOUNT_DEACTIVATED
   ACCOUNT_REACTIVATED
   ACCOUNT_ANONYMIZED
-  
+
   // Breaches
   BREACH_DETECTED
   BREACH_REPORTED_ODPC
   BREACH_USERS_NOTIFIED
-  
+
   // Admin Actions
   ADMIN_DATA_ACCESS
   ADMIN_LEGAL_HOLD_APPLIED
@@ -668,9 +681,11 @@ enum AuditAction {
 ### API Reference
 
 #### `GET /api/admin/audit-logs`
+
 Query audit logs with filters.
 
 **Query Parameters**:
+
 - `userId` (optional): Filter by user ID
 - `action` (optional): Filter by action type
 - `startDate` (optional): Filter by date range
@@ -679,6 +694,7 @@ Query audit logs with filters.
 - `limit` (default: 50)
 
 **Response**:
+
 ```json
 {
   "logs": [
@@ -726,20 +742,21 @@ pnpm test __tests__/workers
 ```
 
 **Test Files**:
-- [__tests__/lib/gdpr/services/export.test.ts](../../../__tests__/lib/gdpr/services/export.test.ts)
-- [__tests__/lib/gdpr/services/compliance.test.ts](../../../__tests__/lib/gdpr/services/compliance.test.ts)
-- [__tests__/lib/gdpr/services/consent.test.ts](../../../__tests__/lib/gdpr/services/consent.test.ts)
-- [__tests__/lib/gdpr/services/anonymization.test.ts](../../../__tests__/lib/gdpr/services/anonymization.test.ts)
-- [__tests__/workers/export/processor.test.ts](../../../__tests__/workers/export/processor.test.ts)
-- [__tests__/workers/compliance/incident.test.ts](../../../__tests__/workers/compliance/incident.test.ts)
 
-**Mock Factories**: [__tests__/mocks/index.ts](../../../__tests__/mocks/index.ts)
+- [**tests**/lib/gdpr/services/export.test.ts](../../../__tests__/lib/gdpr/services/export.test.ts)
+- [**tests**/lib/gdpr/services/compliance.test.ts](../../../__tests__/lib/gdpr/services/compliance.test.ts)
+- [**tests**/lib/gdpr/services/consent.test.ts](../../../__tests__/lib/gdpr/services/consent.test.ts)
+- [**tests**/lib/gdpr/services/anonymization.test.ts](../../../__tests__/lib/gdpr/services/anonymization.test.ts)
+- [**tests**/workers/export/processor.test.ts](../../../__tests__/workers/export/processor.test.ts)
+- [**tests**/workers/compliance/incident.test.ts](../../../__tests__/workers/compliance/incident.test.ts)
+
+**Mock Factories**: [**tests**/mocks/index.ts](../../../__tests__/mocks/index.ts)
 
 ### Integration Tests
 
 Full workflow testing against real Redis and PostgreSQL instances.
 
-See [__tests__/setup-integration.md](../../../__tests__/setup-integration.md) for Docker Compose setup and instructions.
+See [**tests**/setup-integration.md](../../../__tests__/setup-integration.md) for Docker Compose setup and instructions.
 
 ---
 
@@ -776,9 +793,10 @@ See [__tests__/setup-integration.md](../../../__tests__/setup-integration.md) fo
 ## Support
 
 For questions or issues:
+
 - **Data Protection Officer**: dpo@buildmarket.co.ke
 - **Security Team**: security@buildmarket.co.ke
 - **Developer Documentation**: This README + inline code comments
-- **Test Plan**: [__tests__/TEST_PLAN.md](../../../__tests__/TEST_PLAN.md)
+- **Test Plan**: [**tests**/TEST_PLAN.md](../../../__tests__/TEST_PLAN.md)
 
 Last Updated: February 2, 2026

@@ -16,15 +16,11 @@ import {
   CreatePropertySchema,
   BatchCreatePropertiesSchema,
   PropertyQuerySchema,
-} from "@/app/lib/validation/properties-validation";
+  propertiesService,
+} from "@/app/lib/domains/properties";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
-import {
-  getProperties,
-  createProperty,
-  createPropertiesBatch,
-} from "@/lib/services/properties";
 
 const logger = getClientLogger();
 
@@ -47,6 +43,8 @@ export async function GET(req: NextRequest) {
     return apiError(
       "Too many requests. Please try again later.",
       HttpStatus.TOO_MANY_REQUESTS,
+      undefined,
+      correlationId,
     );
   }
 
@@ -85,6 +83,7 @@ export async function GET(req: NextRequest) {
       "Invalid query parameters",
       HttpStatus.BAD_REQUEST,
       queryValidation.error.issues,
+      correlationId,
     );
   }
 
@@ -95,19 +94,30 @@ export async function GET(req: NextRequest) {
 
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
-    async () => getProperties(queryValidation.data),
+    () => propertiesService.listProperties(queryValidation.data),
     { operationName: "list_properties" },
   );
 
-  if (result.success && result.data) {
-    return apiSuccess(result.data, HttpStatus.OK, correlationId);
+  if (!result.success || !result.data) {
+    logger.error("Failed to fetch properties", result.error, { correlationId });
+    return apiError(
+      "Failed to fetch properties",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      undefined,
+      correlationId,
+    );
   }
 
-  logger.error("Failed to fetch properties", result.error, { correlationId });
-  return apiError(
-    "Failed to fetch properties",
-    HttpStatus.INTERNAL_SERVER_ERROR,
-  );
+  if (!result.data.ok) {
+    return apiError(
+      result.data.message,
+      result.data.status,
+      undefined,
+      correlationId,
+    );
+  }
+
+  return apiSuccess(result.data.data, HttpStatus.OK, correlationId);
 }
 
 /**
@@ -132,6 +142,8 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
     return apiError(
       "Too many requests. Please try again later.",
       HttpStatus.TOO_MANY_REQUESTS,
+      undefined,
+      correlationId,
     );
   }
 
@@ -163,6 +175,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
         "Invalid batch property data",
         HttpStatus.BAD_REQUEST,
         validation.error.issues,
+        correlationId,
       );
     }
     validatedData = {
@@ -180,6 +193,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
         "Invalid property data",
         HttpStatus.BAD_REQUEST,
         validation.error.issues,
+        correlationId,
       );
     }
     validatedData = { type: "single" as const, data: validation.data };
@@ -211,41 +225,67 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
     return apiError(
       "A request with this idempotency key is already being processed",
       HttpStatus.CONFLICT,
+      undefined,
+      correlationId,
     );
   }
 
   try {
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      async () => {
+      () => {
         const options = { ipAddress, userAgent };
         if (validatedData.type === "batch") {
-          return createPropertiesBatch(dbUserId, validatedData.data, options);
-        } else {
-          return createProperty(dbUserId, validatedData.data, options);
+          return propertiesService.createPropertiesBatch(
+            dbUserId,
+            validatedData.data,
+            options,
+          );
         }
+        return propertiesService.createProperty(
+          dbUserId,
+          validatedData.data,
+          options,
+        );
       },
       { operationName: "create_property" },
     );
-    if (result.success && result.data) {
-      const responseData = result.data;
-      await IdempotencyService.complete(idempotencyKey, responseData);
 
-      logger.info("Property created successfully", {
+    if (!result.success || !result.data) {
+      await IdempotencyService.fail(idempotencyKey);
+      logger.error("Failed to create property", result.error, {
         correlationId,
         userId: dbUserId,
-        isBatch: validatedData.type === "batch",
-        count: validatedData.type === "batch" ? validatedData.data.length : 1,
       });
-
-      return apiSuccess(responseData, HttpStatus.CREATED, correlationId);
+      return apiError(
+        "Failed to create property",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        undefined,
+        correlationId,
+      );
     }
 
-    await IdempotencyService.fail(idempotencyKey);
-    return apiError(
-      "Failed to create property",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
+    if (!result.data.ok) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        result.data.message,
+        result.data.status,
+        undefined,
+        correlationId,
+      );
+    }
+
+    const responseData = result.data.data;
+    await IdempotencyService.complete(idempotencyKey, responseData);
+
+    logger.info("Property created successfully", {
+      correlationId,
+      userId: dbUserId,
+      isBatch: validatedData.type === "batch",
+      count: validatedData.type === "batch" ? validatedData.data.length : 1,
+    });
+
+    return apiSuccess(responseData, HttpStatus.CREATED, correlationId);
   } catch (error) {
     await IdempotencyService.fail(idempotencyKey);
 
@@ -254,7 +294,12 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       err.message.includes("suspended") ||
       err.message.includes("professionals")
     ) {
-      return apiError(err.message, HttpStatus.FORBIDDEN);
+      return apiError(
+        err.message,
+        HttpStatus.FORBIDDEN,
+        undefined,
+        correlationId,
+      );
     }
     if (
       error &&
@@ -269,6 +314,8 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       return apiError(
         "A property with this slug or title deed number already exists",
         HttpStatus.CONFLICT,
+        undefined,
+        correlationId,
       );
     }
 
@@ -277,6 +324,8 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
     return apiError(
       "Failed to create property",
       HttpStatus.INTERNAL_SERVER_ERROR,
+      undefined,
+      correlationId,
     );
   }
 });

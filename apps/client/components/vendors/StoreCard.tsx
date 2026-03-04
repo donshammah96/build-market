@@ -1,7 +1,7 @@
-import React from 'react';
-import Image from 'next/image';
-import { motion } from 'framer-motion';
-import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import React from "react";
+import Image from "next/image";
+import { motion } from "framer-motion";
+import { Card, CardHeader, CardTitle, CardDescription } from "../ui/card";
 
 interface Store {
   title: string;
@@ -11,7 +11,12 @@ interface Store {
   href: string;
 }
 
-const StoreCard: React.FC<Store> = ({ title, description, image, imageAlt }) => (
+const StoreCard: React.FC<Store> = ({
+  title,
+  description,
+  image,
+  imageAlt,
+}) => (
   <motion.div
     whileHover={{ y: -8 }}
     transition={{ duration: 0.3 }}
@@ -35,8 +40,12 @@ const StoreCard: React.FC<Store> = ({ title, description, image, imageAlt }) => 
         />
       </motion.div>
       <CardHeader>
-        <CardTitle className="text-2xl font-medium font-inter leading-9">{title}</CardTitle>
-        <CardDescription className="text-2xl font-normal font-inter leading-9">{description}</CardDescription>
+        <CardTitle className="text-2xl font-medium font-inter leading-9">
+          {title}
+        </CardTitle>
+        <CardDescription className="text-2xl font-normal font-inter leading-9">
+          {description}
+        </CardDescription>
       </CardHeader>
     </Card>
   </motion.div>
