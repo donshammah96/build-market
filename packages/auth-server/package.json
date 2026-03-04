@@ -1,0 +1,24 @@
+{
+  "name": "@build/auth-server",
+  "version": "1.0.0",
+  "description": "Server-side auth contracts and utilities",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "lint": "echo \"No lint configured\" && exit 0",
+    "check-types": "tsc --noEmit",
+    "test": "echo \"No tests configured\" && exit 0"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@build/typescript-config": "workspace:*",
+    "@types/node": "^24.8.1",
+    "typescript": "^5.9.3"
+  }
+}
