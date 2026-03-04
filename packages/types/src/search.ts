@@ -1,34 +1,47 @@
-import { z } from 'zod';
-import { CountyEnum, ProfessionEnum, StoreCategoryEnum } from './auth';
+import { z } from "zod";
+import { CountyEnum, ProfessionEnum, StoreCategoryEnum } from "./auth";
 
 // ========================================================
 // SEARCH SCHEMAS
 // ========================================================
 
-export const SearchTypeEnum = z.enum(["PROFESSIONAL", "STORE", "PRODUCT", "PROJECT", "PROPERTY"]);
+export const SearchTypeEnum = z.enum([
+  "PROFESSIONAL",
+  "STORE",
+  "PRODUCT",
+  "PROJECT",
+  "PROPERTY",
+]);
 export type SearchType = z.infer<typeof SearchTypeEnum>;
 
-export const SearchSortEnum = z.enum(["RELEVANCE", "RATING", "NEWEST", "PRICE_ASC", "PRICE_DESC", "DISTANCE"]);
+export const SearchSortEnum = z.enum([
+  "RELEVANCE",
+  "RATING",
+  "NEWEST",
+  "PRICE_ASC",
+  "PRICE_DESC",
+  "DISTANCE",
+]);
 export type SearchSort = z.infer<typeof SearchSortEnum>;
 
 export const SearchQuerySchema = z.object({
   query: z.string().optional(),
   type: SearchTypeEnum.optional(), // If omitted, global search
-  
+
   // Filters
   location: z.string().optional(),
   county: CountyEnum.optional(),
-  
+
   minPrice: z.number().optional(),
   maxPrice: z.number().optional(),
-  
+
   minRating: z.number().min(1).max(5).optional(),
   verifiedOnly: z.boolean().optional(),
-  
+
   // Specific Filters
   profession: ProfessionEnum.optional(),
   storeCategory: StoreCategoryEnum.optional(),
-  
+
   // Pagination & Sort
   page: z.number().int().min(1).default(1),
   limit: z.number().int().min(1).max(100).default(20),

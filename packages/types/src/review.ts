@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 // ========================================================
 // ENUMS
@@ -37,33 +37,33 @@ export type ReviewImage = z.infer<typeof ReviewImageSchema>;
 export const ReviewSchema = z.object({
   id: z.string().uuid(),
   reviewerId: z.string(),
-  
+
   // Targets
   professionalId: z.string().optional().nullable(),
   storeId: z.string().optional().nullable(),
   productId: z.string().optional().nullable(),
-  
+
   // Context
   projectId: z.string().optional().nullable(),
   orderId: z.string().optional().nullable(),
-  
+
   type: ReviewTypeEnum,
   rating: z.number().int().min(1).max(5),
   subRatings: z.any().optional().nullable(),
   title: z.string().optional().nullable(),
   comment: z.string().optional().nullable(),
-  
+
   images: z.array(ReviewImageSchema).optional(),
-  
+
   status: ReviewStatusEnum.default("PENDING"),
   isVerified: z.boolean().default(false),
-  
+
   replyComment: z.string().optional().nullable(),
   replyAt: z.date().optional().nullable(),
-  
+
   helpfulCount: z.number().int().default(0),
   reportedCount: z.number().int().default(0),
-  
+
   createdAt: z.date(),
   updatedAt: z.date(),
 });

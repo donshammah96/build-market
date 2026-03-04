@@ -11,10 +11,15 @@
     "dev:frontend": "turbo run dev --filter=client --filter=admin",
     "dev:messaging": "turbo run dev --filter=messaging-service",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\" --log-level warn",
+    "format:check": "prettier --check \"**/*.{ts,tsx,md}\" --log-level warn",
     "check-types": "turbo run check-types",
+    "test": "turbo run test",
+    "validate": "pnpm run format:check && pnpm run lint && pnpm run check-types && pnpm run test",
     "clean": "turbo run clean && rimraf node_modules",
-    "clean:cache": "turbo daemon clean && rimraf .turbo"
+    "clean:cache": "turbo daemon clean && rimraf .turbo",
+    "deps:outdated": "pnpm outdated -r",
+    "deps:audit": "pnpm audit --prod"
   },
   "devDependencies": {
     "prettier": "^3.6.2",
@@ -24,9 +29,25 @@
   },
   "packageManager": "pnpm@10.29.2",
   "engines": {
-    "node": ">=18"
+    "node": ">=20",
+    "pnpm": ">=10"
   },
   "dependencies": {
     "ngrok": "5.0.0-beta.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@clerk/shared",
+      "bcrypt",
+      "cypress",
+      "esbuild",
+      "msgpackr-extract",
+      "ngrok",
+      "sharp",
+      "unrs-resolver",
+      "prisma",
+      "@prisma/client",
+      "@prisma/engines"
+    ]
   }
 }

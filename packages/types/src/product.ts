@@ -102,14 +102,14 @@ export const ProductFormSchema = z
   .refine(
     (data) => {
       const missingImages = data.colors.filter(
-        (color: string) => !data.images?.[color]
+        (color: string) => !data.images?.[color],
       );
       return missingImages.length === 0;
     },
     {
       message: "Image is required for each selected color!",
       path: ["images"],
-    }
+    },
   );
 
 export type CategoryType = Category;

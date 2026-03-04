@@ -17,17 +17,20 @@ Review and rating management service for professionals, stores, and products.
 ## Setup
 
 1. Install dependencies:
+
 ```bash
 pnpm install
 ```
 
 2. Configure environment:
+
 ```bash
 PORT=3012
 MONGODB_URI=mongodb://localhost:27017/reviews
 ```
 
 3. Start the service:
+
 ```bash
 pnpm run dev
 ```
@@ -37,11 +40,13 @@ pnpm run dev
 ### Reviews
 
 #### Get Reviews
+
 ```
 GET /api/reviews/:entityType/:entityId?page=1&limit=10
 ```
 
 #### Create Review
+
 ```
 POST /api/reviews
 Body: {
@@ -59,17 +64,20 @@ Body: {
 ```
 
 #### Mark as Helpful
+
 ```
 POST /api/reviews/:id/helpful
 Body: { "userId": "user123" }
 ```
 
 #### Flag Review
+
 ```
 POST /api/reviews/:id/flag
 ```
 
 #### Moderate Review (Admin)
+
 ```
 PATCH /api/reviews/:id/moderate
 Body: { "moderationStatus": "approved|rejected" }
@@ -78,6 +86,7 @@ Body: { "moderationStatus": "approved|rejected" }
 ### Ratings
 
 #### Get Aggregate Rating
+
 ```
 GET /api/ratings/:entityType/:entityId
 
@@ -97,6 +106,7 @@ Response: {
 ## Database Schema
 
 ### Review
+
 - `userId`: User ID
 - `userName`: Display name
 - `entityType`: professional | store | product
@@ -112,4 +122,3 @@ Response: {
 - `helpfulBy`: Users who voted helpful
 - `flagged`: Flagged for moderation
 - `moderationStatus`: pending | approved | rejected
-

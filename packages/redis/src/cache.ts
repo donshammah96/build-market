@@ -17,7 +17,7 @@ export class RedisCache<T = unknown> {
 
   constructor(
     namespace: string,
-    options: CacheOptions & { serializer?: Serializer<T> } = {}
+    options: CacheOptions & { serializer?: Serializer<T> } = {},
   ) {
     this.prefix = options.prefix ? `${options.prefix}:${namespace}` : namespace;
     this.defaultTtl = options.ttl ?? 3600; // 1 hour default
@@ -68,7 +68,7 @@ export class RedisCache<T = unknown> {
   async getOrSet(
     key: string,
     fetcher: () => Promise<T>,
-    ttl?: number
+    ttl?: number,
   ): Promise<T> {
     const cached = await this.get(key);
     if (cached !== null) {

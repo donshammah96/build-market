@@ -1,6 +1,6 @@
-import { z } from 'zod';
-import { CountyEnum } from './auth';
-import { ProjectTypeEnum } from './project';
+import { z } from "zod";
+import { CountyEnum } from "./auth";
+import { ProjectTypeEnum } from "./project";
 
 // ========================================================
 // ENUMS
@@ -51,33 +51,33 @@ export type PortfolioImage = z.infer<typeof PortfolioImageSchema>;
 export const PortfolioSchema = z.object({
   id: z.string().uuid(),
   professionalId: z.string(),
-  
-  title: z.string().min(1, 'Portfolio title is required'),
+
+  title: z.string().min(1, "Portfolio title is required"),
   slug: z.string(),
   description: z.string().optional().nullable(),
   projectType: ProjectTypeEnum.default("RESIDENTIAL"),
   tags: z.array(z.string()).default([]),
-  
+
   location: z.string().optional().nullable(),
   county: CountyEnum.optional().nullable(),
-  
+
   budget: z.number().optional().nullable(), // Decimal in DB
   currency: z.string().default("KES"),
-  
+
   durationValue: z.number().int().optional().nullable(),
   durationUnit: ProjectDurationUnitEnum.default("WEEKS"),
   completionDate: z.date().optional().nullable(),
-  
+
   linkedProjectId: z.string().optional().nullable(),
   isVerified: z.boolean().default(false),
-  
+
   clientTestimonial: z.string().optional().nullable(),
   clientName: z.string().optional().nullable(),
-  
+
   createdAt: z.date(),
   updatedAt: z.date(),
   deletedAt: z.date().optional().nullable(),
-  
+
   // Relations
   images: z.array(PortfolioImageSchema).optional(),
 });

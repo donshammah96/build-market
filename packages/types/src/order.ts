@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 // ========================================================
 // ENUMS
@@ -64,14 +64,14 @@ export const OrderSchema = z.object({
   clientId: z.string(),
   storeId: z.string().optional().nullable(),
   professionalId: z.string().optional().nullable(),
-  
+
   totalAmount: z.number(), // Decimal in DB
   status: OrderStatusEnum.default("PENDING"),
   paymentMethod: z.string().optional().nullable(),
-  
+
   createdAt: z.date(),
   updatedAt: z.date(),
-  
+
   // Relations
   items: z.array(OrderItemSchema).optional(),
   payments: z.array(PaymentSchema).optional(),

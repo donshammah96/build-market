@@ -318,9 +318,6 @@ export const StoreOnboardingSchema = z.object({
     )
     .optional(),
   documents: z.array(StoreDocumentSchema).optional(),
-
-  certificatesUrls: z.array(z.string().url()).optional(),
-  idDocumentsUrls: z.array(z.string().url()).optional(),
   // Business verification
   businessRegNo: z.string().optional(),
   kraPin: z.string().optional(),
@@ -435,8 +432,6 @@ export const PropertyOnboardingSchema = z.object({
 
   // Property verification documents (Legal)
   documents: z.array(PropertyDocumentSchema).optional(),
-  certificatesUrls: z.array(z.string().url()).optional(),
-  idDocumentsUrls: z.array(z.string().url()).optional(),
 });
 
 export const ProfessionalOnboardingSchema = z.object({
@@ -460,8 +455,6 @@ export const ProfessionalOnboardingSchema = z.object({
 
   // Professional Verification Documents (e.g. NCA_ACCREDITATION, BUSINESS_REGISTRATION)
   documents: z.array(professionalDocumentSchema).optional(),
-  certificatesUrls: z.array(z.string().url()).optional(),
-  idDocumentsUrls: z.array(z.string().url()).optional(),
 
   // Upload status flags
   documentsPending: z.boolean().optional(),

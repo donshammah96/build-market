@@ -34,7 +34,7 @@ export class JetStreamProducer {
   async publish<T extends object>(
     subject: string,
     message: T,
-    options?: PublishOptions
+    options?: PublishOptions,
   ): Promise<PubAck> {
     if (!this.client) {
       throw new Error("[NATS Producer] Not connected. Call connect() first.");
@@ -73,7 +73,7 @@ export class JetStreamProducer {
     try {
       const ack = await js.publish(subject, payload, pubOpts);
       console.log(
-        `[NATS Producer] Published to ${subject}, seq: ${ack.seq}, stream: ${ack.stream}`
+        `[NATS Producer] Published to ${subject}, seq: ${ack.seq}, stream: ${ack.stream}`,
       );
       return ack;
     } catch (error) {
@@ -86,7 +86,10 @@ export class JetStreamProducer {
    * Publish without waiting for JetStream acknowledgment (fire-and-forget)
    * Uses core NATS publish - faster but no delivery guarantee
    */
-  async publishFast<T extends object>(subject: string, message: T): Promise<void> {
+  async publishFast<T extends object>(
+    subject: string,
+    message: T,
+  ): Promise<void> {
     if (!this.client) {
       throw new Error("[NATS Producer] Not connected. Call connect() first.");
     }
@@ -102,7 +105,7 @@ export class JetStreamProducer {
   async publishWithRetry<T extends object>(
     subject: string,
     message: T,
-    options?: PublishOptions & { maxRetries?: number; retryDelay?: number }
+    options?: PublishOptions & { maxRetries?: number; retryDelay?: number },
   ): Promise<PubAck> {
     const maxRetries = options?.maxRetries ?? 3;
     const retryDelay = options?.retryDelay ?? 1000;
@@ -115,10 +118,12 @@ export class JetStreamProducer {
         lastError = error as Error;
         console.warn(
           `[NATS Producer] Publish attempt ${attempt}/${maxRetries} failed:`,
-          error
+          error,
         );
         if (attempt < maxRetries) {
-          await new Promise((resolve) => setTimeout(resolve, retryDelay * attempt));
+          await new Promise((resolve) =>
+            setTimeout(resolve, retryDelay * attempt),
+          );
         }
       }
     }
@@ -150,7 +155,7 @@ export class JetStreamProducer {
  */
 export function createProducer(
   serviceName: string,
-  config?: Partial<NatsConfig>
+  config?: Partial<NatsConfig>,
 ): JetStreamProducer {
   return new JetStreamProducer(serviceName, config);
 }
@@ -161,7 +166,7 @@ export function createProducer(
 export async function publishMessage<T extends object>(
   subject: string,
   message: T,
-  options?: PublishOptions
+  options?: PublishOptions,
 ): Promise<PubAck> {
   const client = getNatsClient();
   const payload = sc.encode(JSON.stringify(message));

@@ -1,7 +1,15 @@
-export declare const shouldBeUser: import("hono").MiddlewareHandler<{
+export declare const shouldBeUser: import("hono").MiddlewareHandler<
+  {
     Variables: {
-        userId: string;
+      userId: string;
     };
-}, string, {}>;
-export declare const shouldBeAdmin: import("hono").MiddlewareHandler<any, string, {}>;
+  },
+  string,
+  {}
+>;
+export declare const shouldBeAdmin: import("hono").MiddlewareHandler<
+  any,
+  string,
+  {}
+>;
 //# sourceMappingURL=authMiddleware.d.ts.map

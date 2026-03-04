@@ -81,7 +81,7 @@ const reviewSchema = new Schema<IReview>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Compound indexes
@@ -90,4 +90,3 @@ reviewSchema.index({ userId: 1, entityType: 1, entityId: 1 }, { unique: true });
 reviewSchema.index({ moderationStatus: 1, createdAt: -1 });
 
 export const Review = mongoose.model<IReview>("Review", reviewSchema);
-
