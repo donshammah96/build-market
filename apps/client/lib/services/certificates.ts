@@ -10,13 +10,13 @@ import {
   certificateListSelect,
   certificateDetailSelect,
   CERTIFICATE_CATEGORIES,
-} from "@/app/lib/validation/certificate-validation";
+} from "@/lib/validation/certificate-validation";
 import type {
   CertificateQueryInput,
   CreateCertificateInput,
   UpdateCertificateInput,
-} from "@/app/lib/validation/certificate-validation";
-import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
+} from "@/lib/validation/certificate-validation";
+import { DOCUMENT_CONFIG } from "@/lib/config/document.config";
 
 export type {
   CertificateQueryInput,

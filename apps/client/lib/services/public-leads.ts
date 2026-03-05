@@ -10,8 +10,8 @@ import {
   publicLeadCreateSelect,
   publicLeadStatusSelect,
   LEAD_STATUS_LABELS,
-} from "@/app/lib/validation/leads-validation";
-import type { CreatePublicLeadInput } from "@/app/lib/validation/leads-validation";
+} from "@/lib/validation/leads-validation";
+import type { CreatePublicLeadInput } from "@/lib/validation/leads-validation";
 
 export type { CreatePublicLeadInput };
 

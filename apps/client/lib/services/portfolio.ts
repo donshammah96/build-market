@@ -10,13 +10,13 @@ import {
   portfolioListSelect,
   portfolioDetailSelect,
   generatePortfolioSlug,
-} from "@/app/lib/validation/portfolio-validation";
-import { PORTFOLIO_CONFIG } from "@/app/lib/config/portfolio.config";
+} from "@/lib/validation/portfolio-validation";
+import { PORTFOLIO_CONFIG } from "@/lib/config/portfolio.config";
 import type {
   PortfolioQueryInput,
   CreatePortfolioInput,
   UpdatePortfolioInput,
-} from "@/app/lib/validation/portfolio-validation";
+} from "@/lib/validation/portfolio-validation";
 
 export type { PortfolioQueryInput, CreatePortfolioInput, UpdatePortfolioInput };
 

@@ -9,13 +9,13 @@ import { ConsentType, Prisma } from "@prisma/client";
 import {
   professionalDocumentListSelect,
   professionalDocumentDetailSelect,
-} from "@/app/lib/validation/documents-validation";
+} from "@/lib/validation/documents-validation";
 import type {
   DocumentQueryInput,
   CreateDocumentInput,
   UpdateDocumentInput,
-} from "@/app/lib/validation/documents-validation";
-import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
+} from "@/lib/validation/documents-validation";
+import { DOCUMENT_CONFIG } from "@/lib/config/document.config";
 
 export type { DocumentQueryInput, CreateDocumentInput, UpdateDocumentInput };
 

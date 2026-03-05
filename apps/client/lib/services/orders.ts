@@ -4,7 +4,7 @@
  * List orders for professional's stores.
  */
 import { prisma } from "../db";
-import type { OrdersQueryInput } from "@/app/lib/validation/orders-validation";
+import type { OrdersQueryInput } from "@/lib/validation/orders-validation";
 
 export type { OrdersQueryInput };
 

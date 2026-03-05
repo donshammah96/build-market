@@ -16,7 +16,7 @@ import {
   SendMessageClientInput,
 } from "@/lib/messaging-client";
 import type { Conversation, Message } from "@build/types";
-import { MESSAGING_CLIENT_CONFIG } from "@/app/lib/config/messaging.config";
+import { MESSAGING_CLIENT_CONFIG } from "@/lib/config/messaging.config";
 
 const { DEFAULT_MESSAGE_LIMIT } = MESSAGING_CLIENT_CONFIG;
 

@@ -3,9 +3,9 @@
  */
 import { apiFetch, ConcurrencyLimiter } from "@/lib/api-client-utils";
 import type { ApiResponse } from "@build/types";
-import type { CalendarQueryInput } from "@/app/lib/validation/calendar-validation";
-import { CALENDAR_CLIENT_CONFIG } from "@/app/lib/config/calendar.config";
-import { isValidId } from "@/app/lib/utils/validators";
+import type { CalendarQueryInput } from "@/lib/validation/calendar-validation";
+import { CALENDAR_CLIENT_CONFIG } from "@/lib/config/calendar.config";
+import { isValidId } from "@/lib/utils/validators";
 
 export type { CalendarQueryInput };
 

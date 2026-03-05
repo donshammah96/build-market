@@ -9,12 +9,12 @@ import { LeadStatus } from "@prisma/client";
 import {
   leadListSelect,
   leadDetailSelect,
-} from "@/app/lib/validation/leads-validation";
+} from "@/lib/validation/leads-validation";
 import type {
   LeadQueryInput,
   CreateLeadInput,
   UpdateLeadInput,
-} from "@/app/lib/validation/leads-validation";
+} from "@/lib/validation/leads-validation";
 
 export type { LeadQueryInput, CreateLeadInput, UpdateLeadInput };
 

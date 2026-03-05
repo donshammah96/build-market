@@ -10,8 +10,8 @@ import {
   transactionListSelect,
   transactionDetailSelect,
   serializeTransactionDecimals,
-} from "@/app/lib/validation/finance-validation";
-import type { TransactionQueryInput } from "@/app/lib/validation/finance-validation";
+} from "@/lib/validation/finance-validation";
+import type { TransactionQueryInput } from "@/lib/validation/finance-validation";
 
 export type { TransactionQueryInput };
 

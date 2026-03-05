@@ -12,13 +12,13 @@ import {
   threadListSelect,
   threadDetailSelect,
   messageListSelect,
-} from "@/app/lib/validation/messaging-validation";
+} from "@/lib/validation/messaging-validation";
 import {
   canDeleteMessage,
   canDeleteThread,
   canReadThread,
   canSendMessage,
-} from "@/app/lib/security/policies";
+} from "@/lib/security/policies";
 
 // =============================================================================
 // Participant Verification

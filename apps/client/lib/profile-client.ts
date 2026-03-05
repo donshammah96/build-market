@@ -11,7 +11,7 @@ import type { ApiResponse } from "@build/types";
 import type {
   UpdateProfileInput,
   completeProfileSchema,
-} from "@/app/lib/validation/profile-validation";
+} from "@/lib/validation/profile-validation";
 import type { z } from "zod";
 
 export type CompleteProfileInput = z.infer<typeof completeProfileSchema>;

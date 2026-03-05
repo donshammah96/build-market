@@ -7,15 +7,15 @@
  * Read-only domain — no mutations, no optimistic locking.
  */
 import { prisma } from "../db";
-import { ProfessionalRepository } from "@/app/lib/repositories/professional.repository";
-import type { ProfessionalFilters } from "@/app/lib/repositories/professional.repository";
+import { ProfessionalRepository } from "@/lib/repositories/professional.repository";
+import type { ProfessionalFilters } from "@/lib/repositories/professional.repository";
 import type {
   ProfessionalCardDTO,
   ProfessionalDetailDTO,
-} from "@/app/lib/repositories/professional.repository";
+} from "@/lib/repositories/professional.repository";
 import { getProfessionLabel } from "@/lib/constants/professionalCategories";
-import type { ProfessionalQueryInput } from "@/app/lib/validation/professionals-validation";
-import { env } from "@/app/lib/infrastructure/env";
+import type { ProfessionalQueryInput } from "@/lib/validation/professionals-validation";
+import { env } from "@/lib/infrastructure/env";
 
 export type { ProfessionalCardDTO, ProfessionalDetailDTO };
 

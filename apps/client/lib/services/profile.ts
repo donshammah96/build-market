@@ -4,7 +4,7 @@
  * Core business logic for professional-portal profile operations.
  */
 import { prisma } from "../db";
-import type { UpdateProfileInput } from "@/app/lib/validation/profile-validation";
+import type { UpdateProfileInput } from "@/lib/validation/profile-validation";
 
 export type GetProfileResult =
   | { success: true; data: unknown }

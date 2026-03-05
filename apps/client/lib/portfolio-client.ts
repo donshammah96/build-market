@@ -13,14 +13,14 @@ import {
   unwrapApiResponse,
 } from "@/lib/api-client-utils";
 import { API_ROUTES } from "@/lib/links";
-import { isValidId } from "@/app/lib/utils/validators";
+import { isValidId } from "@/lib/utils/validators";
 import type { z } from "zod";
 import {
   PortfolioQuerySchema,
   CreatePortfolioSchema,
   UpdatePortfolioSchema,
   ProjectTypeSchema,
-} from "@/app/lib/validation/portfolio-validation";
+} from "@/lib/validation/portfolio-validation";
 
 // ─── Input Types (Derived locally to avoid server imports) ────────────────────
 //

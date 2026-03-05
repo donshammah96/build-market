@@ -11,10 +11,10 @@
  * - Safe for browser and client-side bundlers (No Server Actions)
  */
 import type { ApiResponse } from "@build/types";
-import { PROFESSIONALS_CLIENT_CONFIG } from "@/app/lib/config/professional.config";
-import { isValidId } from "@/app/lib/utils/validators";
+import { PROFESSIONALS_CLIENT_CONFIG } from "@/lib/config/professional.config";
+import { isValidId } from "@/lib/utils/validators";
 import type { z } from "zod";
-import { ProfessionalQuerySchema } from "@/app/lib/validation/professionals-validation";
+import { ProfessionalQuerySchema } from "@/lib/validation/professionals-validation";
 
 const { BULKHEAD_CONCURRENCY } = PROFESSIONALS_CLIENT_CONFIG;
 

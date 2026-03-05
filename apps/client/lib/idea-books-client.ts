@@ -19,7 +19,7 @@ import type {
   UpdateIdeaBookInput,
   AddAttachmentInput,
   UpdateAttachmentInput,
-} from "@/app/lib/validation/idea-books-validation";
+} from "@/lib/validation/idea-books-validation";
 
 export type {
   IdeaBookQueryInput,
