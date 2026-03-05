@@ -25,7 +25,7 @@ const config = [
     files: ["lib/services/**/*.ts"],
     rules: {
       "no-restricted-imports": [
-        "warn",
+        "error",
         {
           patterns: ["@/app/actions/*", "@/app/api/*", "@/app/api/**"],
         },
@@ -36,7 +36,7 @@ const config = [
     files: ["lib/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
-        "warn",
+        "error",
         {
           patterns: ["@/app/lib/services/*", "@/app/lib/repositories/*"],
         },
