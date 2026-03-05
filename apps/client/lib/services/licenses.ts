@@ -8,12 +8,12 @@ import { ConsentType, Prisma } from "@prisma/client";
 import {
   professionalLicenseListSelect,
   professionalLicenseDetailSelect,
-} from "@/app/lib/validation/documents-validation";
+} from "@/lib/validation/documents-validation";
 import type {
   CreateLicenseInput,
   UpdateLicenseInput,
-} from "@/app/lib/validation/documents-validation";
-import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
+} from "@/lib/validation/documents-validation";
+import { DOCUMENT_CONFIG } from "@/lib/config/document.config";
 
 export type { CreateLicenseInput, UpdateLicenseInput };
 

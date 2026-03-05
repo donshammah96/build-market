@@ -7,13 +7,13 @@ import { prisma } from "../db";
 import {
   notificationListSelect,
   notificationDetailSelect,
-} from "@/app/lib/validation/notifications-validation";
+} from "@/lib/validation/notifications-validation";
 import type {
   NotificationQueryInput,
   MarkReadInput,
   BatchDeleteInput,
   UpdateNotificationInput,
-} from "@/app/lib/validation/notifications-validation";
+} from "@/lib/validation/notifications-validation";
 
 export type {
   NotificationQueryInput,

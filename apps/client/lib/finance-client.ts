@@ -6,9 +6,9 @@
  */
 import type { ApiResponse } from "@build/types";
 import { apiFetch, ConcurrencyLimiter } from "@/lib/api-client-utils";
-import { FINANCE_CLIENT_CONFIG } from "@/app/lib/config/finance.config";
+import { FINANCE_CLIENT_CONFIG } from "@/lib/config/finance.config";
 import type { z } from "zod";
-import { WithdrawSchema } from "@/app/lib/validation/finance-validation";
+import { WithdrawSchema } from "@/lib/validation/finance-validation";
 
 const { BULKHEAD_CONCURRENCY } = FINANCE_CLIENT_CONFIG;
 
@@ -31,16 +31,19 @@ class FinanceClient {
 
   async requestWithdrawal(
     data: RequestWithdrawalClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<RequestWithdrawalClientInput>> {
     const { idempotencyKey, ...payload } = data;
     return this.bulkhead.run(() =>
-      apiFetch<any>("/api/professional-portal/finance/withdraw", {
-        method: "POST",
-        body: JSON.stringify(payload),
-        headers: idempotencyKey
-          ? { "Idempotency-Key": idempotencyKey }
-          : undefined,
-      }),
+      apiFetch<RequestWithdrawalClientInput>(
+        "/api/professional-portal/finance/withdraw",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+          headers: idempotencyKey
+            ? { "Idempotency-Key": idempotencyKey }
+            : undefined,
+        },
+      ),
     );
   }
 }

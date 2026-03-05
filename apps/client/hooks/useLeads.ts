@@ -15,8 +15,10 @@ import type {
   CreateLeadClientInput,
   UpdateLeadClientInput,
   DeleteLeadClientInput,
+  DeleteLeadResponse,
+  LeadListResponse,
 } from "@/lib/leads-client";
-import type { Lead, LeadList } from "@/app/lib/validation/leads-validation";
+import type { Lead } from "@/lib/validation/leads-validation";
 import { unwrapApiResponse } from "@/lib/api-client-utils";
 
 export const leadKeys = {
@@ -32,7 +34,8 @@ export function useLeads(filters?: Partial<LeadQueryInput>) {
   return useQuery({
     queryKey: leadKeys.list(filters),
     queryFn: async () =>
-      unwrapApiResponse<LeadList[]>(await leadsClient.getLeads(filters)),
+      unwrapApiResponse<LeadListResponse>(await leadsClient.getLeads(filters))
+        .leads,
   });
 }
 
@@ -81,7 +84,11 @@ export function useUpdateLead(
 }
 
 export function useDeleteLead(
-  options?: UseMutationOptions<null, Error, DeleteLeadClientInput>,
+  options?: UseMutationOptions<
+    DeleteLeadResponse,
+    Error,
+    DeleteLeadClientInput
+  >,
 ) {
   const queryClient = useQueryClient();
 

@@ -12,7 +12,7 @@
 import { API_ROUTES, withQueryParams } from "@/lib/links";
 import { apiFetch } from "@/lib/api-client-utils";
 import type { ApiResponse } from "@build/types";
-import type { NotificationQueryInput } from "@/app/lib/validation/notifications-validation";
+import type { NotificationQueryInput } from "@/lib/validation/notifications-validation";
 
 export type { NotificationQueryInput };
 

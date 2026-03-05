@@ -4,12 +4,12 @@
  * Business logic for idea books and attachments.
  */
 import { prisma } from "../db";
-import { generateIdeaBookSlug } from "@/app/lib/utils/slug-generator";
+import { generateIdeaBookSlug } from "@/lib/utils/slug-generator";
 import {
   ideaBookListSelect,
   ideaBookDetailSelect,
   attachmentListSelect,
-} from "@/app/lib/validation/idea-books-validation";
+} from "@/lib/validation/idea-books-validation";
 import type {
   IdeaBookQueryInput,
   AttachmentQueryInput,
@@ -17,7 +17,7 @@ import type {
   UpdateIdeaBookInput,
   AddAttachmentInput,
   UpdateAttachmentInput,
-} from "@/app/lib/validation/idea-books-validation";
+} from "@/lib/validation/idea-books-validation";
 
 export type {
   IdeaBookQueryInput,

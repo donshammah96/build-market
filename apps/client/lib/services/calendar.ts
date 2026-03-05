@@ -8,12 +8,12 @@ import type { Prisma } from "@prisma/client";
 import {
   calendarEventListSelect,
   calendarEventDetailSelect,
-} from "@/app/lib/validation/calendar-validation";
+} from "@/lib/validation/calendar-validation";
 import type {
   CalendarQueryInput,
   CreateCalendarEventInput,
   UpdateCalendarEventInput,
-} from "@/app/lib/validation/calendar-validation";
+} from "@/lib/validation/calendar-validation";
 
 export type {
   CalendarQueryInput,

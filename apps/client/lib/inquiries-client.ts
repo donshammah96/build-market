@@ -7,15 +7,15 @@
 import type { ApiResponse } from "@build/types";
 import { apiFetch, ConcurrencyLimiter } from "@/lib/api-client-utils";
 import { API_ROUTES, withQueryParams, type QueryParams } from "@/lib/links";
-import { INQUIRIES_CLIENT_CONFIG } from "@/app/lib/config/inquiry.config";
-import { isValidId } from "@/app/lib/utils/validators";
+import { INQUIRIES_CLIENT_CONFIG } from "@/lib/config/inquiry.config";
+import { isValidId } from "@/lib/utils/validators";
 import type { z } from "zod";
 import {
   InquiriesQuerySchema,
   UpdateInquirySchema,
   PropertyInquiry,
   PropertyInquiryList,
-} from "@/app/lib/validation/inquiries-validation";
+} from "@/lib/validation/inquiries-validation";
 
 const { BULKHEAD_CONCURRENCY } = INQUIRIES_CLIENT_CONFIG;
 

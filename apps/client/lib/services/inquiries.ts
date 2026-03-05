@@ -7,11 +7,11 @@ import { prisma } from "../db";
 import {
   inquiryListSelect,
   inquiryDetailSelect,
-} from "@/app/lib/validation/inquiries-validation";
+} from "@/lib/validation/inquiries-validation";
 import type {
   InquiriesQueryInput,
   UpdateInquiryInput,
-} from "@/app/lib/validation/inquiries-validation";
+} from "@/lib/validation/inquiries-validation";
 
 export type { InquiriesQueryInput, UpdateInquiryInput };
 
