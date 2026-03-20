@@ -34,6 +34,7 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+.env.vercel
 
 # Keep templates and non-secret configs committed
 !.env.example
@@ -41,6 +42,7 @@ yarn-error.log*
 !.env.development
 !.env.test
 !.env.production
+!.env.vercel.example
 
 # vercel
 .vercel

@@ -113,12 +113,74 @@ async function setupAuthMocks(
 describe("API Middleware", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   // =========================================================================
   // withAuth
   // =========================================================================
   describe("withAuth", () => {
+    it("should allow local development BYPASS_AUTH on localhost", async () => {
+      vi.stubEnv("BYPASS_AUTH", "true");
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3500");
+
+      const mockHandler = vi
+        .fn()
+        .mockResolvedValue(NextResponse.json({ success: true }));
+
+      const wrappedHandler = withAuth(mockHandler);
+      const request = new NextRequest("http://localhost:3500/test");
+
+      const response = await wrappedHandler(request);
+
+      expect(response.status).toBe(200);
+      expect(mockHandler).toHaveBeenCalledWith(
+        request,
+        expect.objectContaining({
+          clerkId: expect.any(String),
+          dbUserId: expect.any(String),
+          userRole: expect.any(String),
+        }),
+        undefined,
+      );
+    });
+
+    it("should block BYPASS_AUTH in CI", async () => {
+      vi.stubEnv("BYPASS_AUTH", "true");
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("CI", "true");
+      vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3500");
+
+      const mockHandler = vi.fn();
+      const wrappedHandler = withAuth(mockHandler);
+      const request = new NextRequest("http://localhost:3500/test");
+
+      const response = await wrappedHandler(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.error).toContain("Unsafe BYPASS_AUTH");
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it("should block BYPASS_AUTH for non-local request hosts", async () => {
+      vi.stubEnv("BYPASS_AUTH", "true");
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3500");
+
+      const mockHandler = vi.fn();
+      const wrappedHandler = withAuth(mockHandler);
+      const request = new NextRequest("https://preview.buildmarket.co.ke/test");
+
+      const response = await wrappedHandler(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.error).toContain("Unsafe BYPASS_AUTH");
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
     it("should call handler with auth context when authenticated", async () => {
       const user = mockActiveUser();
       await setupAuthMocks("clerk_123", user);
