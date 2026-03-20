@@ -75,10 +75,50 @@ export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
 
     // --- DEV AUTH BYPASS ---
     // Short-circuit auth for local offline development
-    if (
-      process.env.BYPASS_AUTH === "true" &&
-      process.env.NODE_ENV === "development"
-    ) {
+    if (process.env.BYPASS_AUTH === "true") {
+      const requestHost = req.nextUrl.hostname.toLowerCase();
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.AUTH_URL;
+      let appHost = "";
+
+      if (appUrl) {
+        try {
+          appHost = new URL(appUrl).hostname.toLowerCase();
+        } catch {
+          appHost = "";
+        }
+      }
+
+      const localHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+      const isDevelopment = process.env.NODE_ENV === "development";
+      const isCI = process.env.CI === "true";
+      const isLocalRequest = localHosts.has(requestHost);
+      const isLocalAppUrl = appHost ? localHosts.has(appHost) : true;
+
+      if (!isDevelopment || isCI || !isLocalRequest || !isLocalAppUrl) {
+        logger.error(
+          "Blocked unsafe BYPASS_AUTH configuration",
+          new Error("BYPASS_AUTH is only allowed on local development hosts"),
+          {
+            correlationId,
+            nodeEnv: process.env.NODE_ENV,
+            ci: process.env.CI,
+            requestHost,
+            appHost,
+          },
+        );
+
+        return apiError(
+          "Unsafe BYPASS_AUTH configuration. Disable BYPASS_AUTH outside local development.",
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      logger.warn("BYPASS_AUTH enabled for local development", {
+        correlationId,
+        requestHost,
+        appHost,
+      });
+
       const devContext: AuthContext = {
         clerkId: process.env.DEV_CLERK_ID || "user_35Z6M7pKOJKZB9yNEZvS5udrrGo",
         dbUserId:
