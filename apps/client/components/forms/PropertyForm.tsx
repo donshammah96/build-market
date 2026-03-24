@@ -9,6 +9,8 @@ import {
   Control,
   UseFormRegister,
   FieldErrors,
+  FieldPath,
+  Path,
 } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -17,6 +19,7 @@ import {
   Home,
   MapPin,
   ImagePlus,
+  GripVertical,
   X,
   Loader2,
   AlertCircle,
@@ -35,9 +38,27 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
-import { isLocalUpload } from "@/lib/services/upload";
+import { isLocalUpload } from "@/lib/utils/upload";
 import { useImageUploader } from "@/hooks/useImageUploader";
 import Image from "next/image";
+import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  KeyboardSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  rectSortingStrategy,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { restrictToParentElement } from "@dnd-kit/modifiers";
 // @build/enums — single source of truth for all Prisma-aligned enums
 import {
   COUNTIES,
@@ -104,6 +125,8 @@ const MAX_ATTACHMENTS = 5;
 
 /** Threshold for enabling lazy loading on images */
 const LAZY_LOAD_THRESHOLD = 4;
+const PROPERTY_FORM_DRAFT_STORAGE_KEY = "properties-form-draft-v1";
+const IMAGE_URL_INPUT_ID = "property-images-url-input";
 
 /**
  * Allowed domains for external URLs (for security).
@@ -156,6 +179,44 @@ const getAttachmentIcon = (url: string, type: string): React.ReactNode => {
 
   return <File className="h-4 w-4 text-zinc-500" />;
 };
+
+function findFirstInvalidFieldPath(
+  errors: unknown,
+  parentPath = "",
+): string | null {
+  if (!errors || typeof errors !== "object") {
+    return null;
+  }
+
+  for (const [key, value] of Object.entries(
+    errors as Record<string, unknown>,
+  )) {
+    if (!value) continue;
+
+    const fieldPath = parentPath ? `${parentPath}.${key}` : key;
+
+    if (Array.isArray(value)) {
+      for (let index = 0; index < value.length; index++) {
+        const nested = findFirstInvalidFieldPath(
+          value[index],
+          `${fieldPath}.${index}`,
+        );
+        if (nested) return nested;
+      }
+      continue;
+    }
+
+    if (typeof value === "object") {
+      if ("message" in (value as Record<string, unknown>)) {
+        return fieldPath;
+      }
+      const nested = findFirstInvalidFieldPath(value, fieldPath);
+      if (nested) return nested;
+    }
+  }
+
+  return null;
+}
 
 // Property Type options — derived from @build/enums (single source of truth)
 const PROPERTY_TYPE_OPTIONS: Array<{ value: PropertyType; label: string }> =
@@ -417,6 +478,7 @@ const FormField: React.FC<{
   error?: string;
   description?: string;
   className?: string;
+  fieldId?: string;
 }> = ({
   label,
   children,
@@ -425,39 +487,91 @@ const FormField: React.FC<{
   error,
   description,
   className,
-}) => (
-  <div className={cn("space-y-1.5", className)}>
-    <div className="space-y-1">
-      <Label className="text-sm font-medium text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
-        {label}
-        {required && <span className="text-emerald-500 text-xs ml-0.5">*</span>}
-        {optional && !required && (
-          <span className="text-zinc-400 text-xs ml-1 font-normal">
-            (optional)
-          </span>
+  fieldId,
+}) => {
+  const generatedId = React.useId();
+  const resolvedFieldId = fieldId || `property-field-${generatedId}`;
+  const descriptionId = description
+    ? `${resolvedFieldId}-description`
+    : undefined;
+  const errorId = error ? `${resolvedFieldId}-error` : undefined;
+  const describedBy = [descriptionId, errorId].filter(Boolean).join(" ");
+
+  let renderedChildren = children;
+  if (React.isValidElement(children)) {
+    const existingDescribedBy = (
+      children.props as { "aria-describedby"?: string }
+    )["aria-describedby"];
+    renderedChildren = React.cloneElement(
+      children as React.ReactElement<Record<string, unknown>>,
+      {
+        id: (children.props as { id?: string }).id ?? resolvedFieldId,
+        "aria-invalid":
+          error !== undefined
+            ? true
+            : (children.props as { "aria-invalid"?: boolean })["aria-invalid"],
+        "aria-describedby": [existingDescribedBy, describedBy]
+          .filter(Boolean)
+          .join(" "),
+      },
+    );
+  }
+
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      <div className="space-y-1">
+        <Label
+          htmlFor={resolvedFieldId}
+          className="text-sm font-medium text-zinc-700 dark:text-zinc-300 flex items-center gap-1"
+        >
+          {label}
+          {required && (
+            <span
+              className="text-emerald-500 text-xs ml-0.5"
+              aria-hidden="true"
+            >
+              *
+            </span>
+          )}
+          {optional && !required && (
+            <span className="text-zinc-400 text-xs ml-1 font-normal">
+              (optional)
+            </span>
+          )}
+        </Label>
+        {description && (
+          <p
+            id={descriptionId}
+            className="text-xs text-zinc-500 dark:text-zinc-400"
+          >
+            {description}
+          </p>
         )}
-      </Label>
-      {description && (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          {description}
+      </div>
+      {renderedChildren}
+      {error && (
+        <p
+          id={errorId}
+          role="alert"
+          aria-live="polite"
+          className="text-xs text-red-500 flex items-center gap-1.5 animate-in slide-in-from-top-1"
+        >
+          <AlertCircle className="h-3 w-3" />
+          {error}
         </p>
       )}
     </div>
-    {children}
-    {error && (
-      <p className="text-xs text-red-500 flex items-center gap-1.5 animate-in slide-in-from-top-1">
-        <AlertCircle className="h-3 w-3" />
-        {error}
-      </p>
-    )}
-  </div>
-);
+  );
+};
 
 // Features multi-input component - Memoized to prevent unnecessary re-renders
 const FeaturesInput = memo<{
   value: string[];
   onChange: (features: string[]) => void;
-}>(({ value, onChange }) => {
+  inputId?: string;
+  ariaDescribedBy?: string;
+  hasError?: boolean;
+}>(({ value, onChange, inputId, ariaDescribedBy, hasError }) => {
   const [newFeature, setNewFeature] = useState("");
 
   const handleAddFeature = useCallback(() => {
@@ -478,6 +592,9 @@ const FeaturesInput = memo<{
     <div className="space-y-3">
       <div className="flex gap-2">
         <Input
+          id={inputId}
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={hasError ? true : undefined}
           value={newFeature}
           onChange={(e) => setNewFeature(e.target.value)}
           placeholder="e.g. Swimming Pool, Gym, Borehole"
@@ -529,6 +646,7 @@ interface ImageGalleryProps {
   images: Array<{ id: string; value: string }>;
   uploadingImages: Set<number>;
   onRemove: (index: number) => void;
+  onReorder: (activeId: string, overId: string) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
@@ -541,21 +659,91 @@ interface ImageGalleryProps {
   error?: string;
 }
 
+interface SortableImageItemProps {
+  imageId: string;
+  index: number;
+  url: string;
+  isUploading: boolean;
+  onRemove: (index: number) => void;
+}
+
+const SortableImageItem = memo<SortableImageItemProps>(function SortableImageItem({
+  imageId,
+  index,
+  url,
+  isUploading,
+  onRemove,
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: imageId });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  const shouldLazyLoad = index >= LAZY_LOAD_THRESHOLD;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "relative group aspect-square rounded-lg overflow-hidden border border-zinc-200 bg-zinc-100 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 touch-none",
+        isDragging && "opacity-60 ring-2 ring-emerald-500",
+      )}
+    >
+      {isUploading ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-zinc-200 dark:bg-zinc-700">
+          <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
+        </div>
+      ) : (
+        <>
+          <Image
+            src={url}
+            alt={`Property image ${index + 1}`}
+            fill
+            className="object-cover"
+            unoptimized={!isLocalUpload(url)}
+            priority={index === 0}
+            loading={shouldLazyLoad ? "lazy" : undefined}
+          />
+          <button
+            type="button"
+            className="absolute left-2 top-2 h-7 w-7 rounded-full bg-black/55 text-white flex items-center justify-center cursor-grab active:cursor-grabbing"
+            aria-label={`Drag image ${index + 1} to reorder`}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center justify-center">
+            <Button
+              type="button"
+              variant="destructive"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              onClick={() => onRemove(index)}
+              aria-label={`Remove image ${index + 1}`}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+});
+
 /**
  * Memoized ImageGallery component for displaying and managing property images.
  * Supports drag-and-drop upload, URL input, and lazy loading for performance.
- *
- * @future To add drag-to-reorder functionality:
- * 1. Install: npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities
- * 2. Wrap grid in DndContext with SortableContext
- * 3. Make each image item a SortableItem with useSortable hook
- * 4. Handle onDragEnd to reorder via useFieldArray's `move` function
- * 5. For mobile touch support, add @dnd-kit/modifiers for touch handling
  */
 const ImageGallery = memo<ImageGalleryProps>(function ImageGallery({
   images,
   uploadingImages,
   onRemove,
+  onReorder,
   onDragOver,
   onDragLeave,
   onDrop,
@@ -567,6 +755,27 @@ const ImageGallery = memo<ImageGalleryProps>(function ImageGallery({
   onAddImage,
   error,
 }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 150, tolerance: 8 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      onReorder(String(active.id), String(over.id));
+    },
+    [onReorder],
+  );
+
   return (
     <div className="space-y-4">
       {/* Drag and Drop Zone */}
@@ -618,24 +827,30 @@ const ImageGallery = memo<ImageGalleryProps>(function ImageGallery({
       </div>
 
       {/* URL Input */}
-      <div className="flex gap-2 mb-4">
-        <Input
-          value={newImageUrl}
-          onChange={(e) => onImageUrlChange(e.target.value)}
-          placeholder="Or paste image URL (must start with https://...)"
-          className={cn("flex-1", THEME.input)}
-          onKeyDown={(e) =>
-            e.key === "Enter" && (e.preventDefault(), onAddImage())
-          }
-        />
-        <Button
-          type="button"
-          onClick={onAddImage}
-          variant="secondary"
-          className={THEME.secondaryButton}
-        >
-          Add URL
-        </Button>
+      <div className="mb-4 space-y-1.5">
+        <Label htmlFor={IMAGE_URL_INPUT_ID} className="text-sm font-medium">
+          Image URL
+        </Label>
+        <div className="flex gap-2">
+          <Input
+            id={IMAGE_URL_INPUT_ID}
+            value={newImageUrl}
+            onChange={(e) => onImageUrlChange(e.target.value)}
+            placeholder="Or paste image URL (must start with https://...)"
+            className={cn("flex-1", THEME.input)}
+            onKeyDown={(e) =>
+              e.key === "Enter" && (e.preventDefault(), onAddImage())
+            }
+          />
+          <Button
+            type="button"
+            onClick={onAddImage}
+            variant="secondary"
+            className={THEME.secondaryButton}
+          >
+            Add URL
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -656,50 +871,35 @@ const ImageGallery = memo<ImageGalleryProps>(function ImageGallery({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {images.map((field, index) => {
-            const url = field.value;
-            const isUploading = uploadingImages.has(index) || !url;
-            // Lazy load images after the threshold for better performance
-            const shouldLazyLoad = index >= LAZY_LOAD_THRESHOLD;
-            return (
-              <div
-                key={field.id}
-                className="relative group aspect-square rounded-lg overflow-hidden border border-zinc-200 bg-zinc-100 shadow-sm dark:border-zinc-700 dark:bg-zinc-800"
-              >
-                {isUploading ? (
-                  <div className="absolute inset-0 flex items-center justify-center bg-zinc-200 dark:bg-zinc-700">
-                    <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
-                  </div>
-                ) : (
-                  <>
-                    <Image
-                      src={url}
-                      alt={`Property image ${index + 1}`}
-                      fill
-                      className="object-cover"
-                      unoptimized={!isLocalUpload(url)}
-                      priority={index === 0}
-                      loading={shouldLazyLoad ? "lazy" : undefined}
-                    />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="icon"
-                        className="h-8 w-8 rounded-full"
-                        onClick={() => onRemove(index)}
-                        aria-label={`Remove image ${index + 1}`}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[restrictToParentElement]}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={images.map((image) => image.id)}
+            strategy={rectSortingStrategy}
+          >
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {images.map((field, index) => {
+                const url = field.value;
+                const isUploading = uploadingImages.has(index) || !url;
+
+                return (
+                  <SortableImageItem
+                    key={field.id}
+                    imageId={field.id}
+                    index={index}
+                    url={url}
+                    isUploading={isUploading}
+                    onRemove={onRemove}
+                  />
+                );
+              })}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
     </div>
   );
@@ -714,6 +914,10 @@ interface AttachmentListProps {
   errors: FieldErrors<PropertyFormData>;
   control: Control<PropertyFormData>;
   register: UseFormRegister<PropertyFormData>;
+  resolveError: (
+    path: Path<PropertyFormData>,
+    message: unknown,
+  ) => string | undefined;
   onRemove: (index: number) => void;
   onAdd: () => void;
   attachmentTypes: Array<{ value: PropertyAttachmentType; label: string }>;
@@ -724,6 +928,7 @@ const AttachmentList: React.FC<AttachmentListProps> = ({
   errors,
   control,
   register,
+  resolveError,
   onRemove,
   onAdd,
   attachmentTypes,
@@ -746,6 +951,13 @@ const AttachmentList: React.FC<AttachmentListProps> = ({
           render={({ field: attachmentField }) => {
             const currentType = attachmentField.value?.type || "";
             const currentUrl = attachmentField.value?.fileUrl || "";
+            const attachmentTypeFieldId = `property-field-attachments-${index}-type`;
+            const attachmentTypeDescribedBy = `${attachmentTypeFieldId}-error`;
+            const attachmentFileFieldId = `property-field-attachments-${index}-fileUrl`;
+            const attachmentFileDescribedBy = [
+              `${attachmentFileFieldId}-description`,
+              `${attachmentFileFieldId}-error`,
+            ].join(" ");
 
             return (
               <div className={cn(THEME.fieldContainer, "space-y-3")}>
@@ -772,13 +984,27 @@ const AttachmentList: React.FC<AttachmentListProps> = ({
                   <FormField
                     label="Document Type"
                     required
-                    error={errors.attachments?.[index]?.type?.message}
+                    fieldId={attachmentTypeFieldId}
+                    error={resolveError(
+                      `attachments.${index}.type` as Path<PropertyFormData>,
+                      errors.attachments?.[index]?.type?.message,
+                    )}
                   >
                     <Controller
                       name={`attachments.${index}.type`}
                       control={control}
                       render={({ field }) => (
                         <Combobox
+                          id={attachmentTypeFieldId}
+                          aria-describedby={attachmentTypeDescribedBy}
+                          aria-invalid={
+                            resolveError(
+                              `attachments.${index}.type` as Path<PropertyFormData>,
+                              errors.attachments?.[index]?.type?.message,
+                            )
+                              ? true
+                              : undefined
+                          }
                           options={attachmentTypes}
                           value={field.value}
                           onChange={field.onChange}
@@ -792,11 +1018,25 @@ const AttachmentList: React.FC<AttachmentListProps> = ({
                   <FormField
                     label="File URL"
                     required
-                    error={errors.attachments?.[index]?.fileUrl?.message}
+                    fieldId={attachmentFileFieldId}
+                    error={resolveError(
+                      `attachments.${index}.fileUrl` as Path<PropertyFormData>,
+                      errors.attachments?.[index]?.fileUrl?.message,
+                    )}
                     description="Must be an HTTPS URL"
                   >
                     <div className="relative">
                       <Input
+                        id={attachmentFileFieldId}
+                        aria-describedby={attachmentFileDescribedBy}
+                        aria-invalid={
+                          resolveError(
+                            `attachments.${index}.fileUrl` as Path<PropertyFormData>,
+                            errors.attachments?.[index]?.fileUrl?.message,
+                          )
+                            ? true
+                            : undefined
+                        }
                         {...register(`attachments.${index}.fileUrl`)}
                         placeholder="https://..."
                         className={cn(THEME.input, currentUrl && "pr-10")}
@@ -819,12 +1059,15 @@ const AttachmentList: React.FC<AttachmentListProps> = ({
                 <FormField
                   label="Notes"
                   optional
-                  error={errors.attachments?.[index]?.notes?.message}
+                  error={resolveError(
+                    `attachments.${index}.notes` as Path<PropertyFormData>,
+                    errors.attachments?.[index]?.notes?.message,
+                  )}
                 >
                   <Textarea
                     {...register(`attachments.${index}.notes`)}
                     placeholder="Additional notes about this document..."
-                    className="bg-zinc-50/50 border-zinc-200 focus:bg-white dark:bg-zinc-800/50 dark:border-zinc-700 resize-none min-h-[80px]"
+                    className="bg-zinc-50/50 border-zinc-200 focus:bg-white dark:bg-zinc-800/50 dark:border-zinc-700 resize-none min-h-20"
                   />
                 </FormField>
               </div>
@@ -860,6 +1103,29 @@ export default function PropertyForm({
   hideSubmitButton = false,
   onChange,
 }: PropertyFormProps) {
+  const errorSummaryHeadingRef = React.useRef<HTMLHeadingElement | null>(null);
+  const hasHydratedDraftRef = React.useRef(false);
+  const draftStorageKey = React.useMemo(
+    () => `${PROPERTY_FORM_DRAFT_STORAGE_KEY}:${isEditing ? "edit" : "create"}`,
+    [isEditing],
+  );
+
+  const fieldA11y = React.useCallback(
+    (path: string, hasDescription = false) => {
+      const base = `property-field-${path.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+      return {
+        fieldId: base,
+        describedBy: [
+          hasDescription ? `${base}-description` : undefined,
+          `${base}-error`,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      };
+    },
+    [],
+  );
+
   // Use the image uploader hook for file management
   const {
     uploadingImages,
@@ -879,11 +1145,14 @@ export default function PropertyForm({
     register,
     control,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, touchedFields, submitCount },
     watch,
     setValue,
+    setFocus,
   } = useForm<PropertyFormData>({
     resolver: zodResolver(propertySchema),
+    mode: "onBlur",
+    reValidateMode: "onChange",
     defaultValues: {
       title: "",
       description: "",
@@ -919,6 +1188,7 @@ export default function PropertyForm({
     append: appendImage,
     remove: removeImage,
     update: updateImage,
+    move: moveImage,
   } = useFieldArray({
     control,
     name: "images",
@@ -956,6 +1226,42 @@ export default function PropertyForm({
     }
   }, [debouncedFormValues]);
 
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const serializedDraft = window.sessionStorage.getItem(draftStorageKey);
+    if (!serializedDraft) {
+      hasHydratedDraftRef.current = true;
+      return;
+    }
+
+    try {
+      const parsedDraft = JSON.parse(
+        serializedDraft,
+      ) as Partial<PropertyFormData>;
+      Object.entries(parsedDraft).forEach(([key, value]) => {
+        setValue(key as Path<PropertyFormData>, value as never, {
+          shouldDirty: false,
+          shouldTouch: false,
+          shouldValidate: false,
+        });
+      });
+    } catch {
+      window.sessionStorage.removeItem(draftStorageKey);
+    } finally {
+      hasHydratedDraftRef.current = true;
+    }
+  }, [draftStorageKey, setValue]);
+
+  React.useEffect(() => {
+    if (!hasHydratedDraftRef.current || typeof window === "undefined") return;
+
+    window.sessionStorage.setItem(
+      draftStorageKey,
+      JSON.stringify(debouncedFormValues),
+    );
+  }, [debouncedFormValues, draftStorageKey]);
+
   // Memoized image fields for stable reference
   const stableImageFields = useMemo(
     () => imageFields.map((f) => ({ id: f.id, value: f.value })),
@@ -985,6 +1291,17 @@ export default function PropertyForm({
     handleRemoveImageBase(index, removeImage);
   };
 
+  const handleReorderImages = useCallback(
+    (activeId: string, overId: string) => {
+      const oldIndex = stableImageFields.findIndex((item) => item.id === activeId);
+      const newIndex = stableImageFields.findIndex((item) => item.id === overId);
+
+      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+      moveImage(oldIndex, newIndex);
+    },
+    [moveImage, stableImageFields],
+  );
+
   const handleAddAttachment = () => {
     appendAttachment({
       fileUrl: "",
@@ -1003,6 +1320,82 @@ export default function PropertyForm({
     if (msg === null || msg === undefined) return "Unknown error";
     return msg?.toString?.() ?? String(msg ?? "Unknown error");
   };
+
+  const getNestedValue = React.useCallback((obj: unknown, path: string) => {
+    return path.split(".").reduce<unknown>((acc, key) => {
+      if (!acc || typeof acc !== "object") return undefined;
+      return (acc as Record<string, unknown>)[key];
+    }, obj);
+  }, []);
+
+  const shouldShowFieldError = React.useCallback(
+    (path: FieldPath<PropertyFormData>): boolean => {
+      if (submitCount > 0) return true;
+      return Boolean(getNestedValue(touchedFields, path));
+    },
+    [getNestedValue, submitCount, touchedFields],
+  );
+
+  const visibleError = React.useCallback(
+    (
+      path: FieldPath<PropertyFormData>,
+      message: unknown,
+    ): string | undefined => {
+      if (!message || !shouldShowFieldError(path)) return undefined;
+      return safeMessage(message);
+    },
+    [shouldShowFieldError],
+  );
+
+  const resolveFieldDomId = React.useCallback(
+    (path: string): string | null => {
+      const attachmentMatch = path.match(/^attachments\.(\d+)\.(type|fileUrl)$/);
+      if (attachmentMatch) {
+        const [, index, field] = attachmentMatch;
+        return `property-field-attachments-${index}-${field}`;
+      }
+
+      if (path === "images") return IMAGE_URL_INPUT_ID;
+
+      const explicitA11yFields = new Set([
+        "type",
+        "category",
+        "price",
+        "currency",
+        "location",
+        "county",
+        "features",
+      ]);
+
+      if (explicitA11yFields.has(path)) {
+        return fieldA11y(path, path === "features").fieldId;
+      }
+
+      return null;
+    },
+    [fieldA11y],
+  );
+
+  const focusFieldByPath = React.useCallback(
+    (path: string) => {
+      try {
+        setFocus(path as Path<PropertyFormData>);
+      } catch {
+        // Ignore setFocus mismatches for non-registered summary-only paths.
+      }
+
+      requestAnimationFrame(() => {
+        const domId = resolveFieldDomId(path);
+        if (!domId) return;
+
+        const target = document.getElementById(domId) as
+          | HTMLElement
+          | null;
+        target?.focus();
+      });
+    },
+    [resolveFieldDomId, setFocus],
+  );
 
   /**
    * Field labels grouped by section for user-friendly error display.
@@ -1049,11 +1442,13 @@ export default function PropertyForm({
     field: string;
     message: string;
     section: string;
+    path?: string;
   }> => {
     const errorList: Array<{
       field: string;
       message: string;
       section: string;
+      path?: string;
     }> = [];
 
     // Array field names to skip in top-level loop (handled separately)
@@ -1071,6 +1466,7 @@ export default function PropertyForm({
           field: fieldInfo.label,
           message: safeMessage(value.message),
           section: fieldInfo.section,
+          path: key,
         });
       }
     });
@@ -1087,6 +1483,7 @@ export default function PropertyForm({
           field: "Attachments",
           message: safeMessage(errors.attachments.message),
           section: "Documents",
+          path: "attachments",
         });
       }
       // Per-item errors
@@ -1105,6 +1502,7 @@ export default function PropertyForm({
                   field: `Attachment ${index + 1} - ${fieldLabel}`,
                   message: safeMessage(value.message),
                   section: "Documents",
+                  path: `attachments.${index}.${key}`,
                 });
               }
             });
@@ -1125,6 +1523,7 @@ export default function PropertyForm({
           field: "Images",
           message: safeMessage(errors.images.message),
           section: "Media",
+          path: "images",
         });
       }
       // Per-item errors
@@ -1145,6 +1544,7 @@ export default function PropertyForm({
                   (valueError as { message: unknown }).message,
                 ),
                 section: "Media",
+                path: "images",
               });
             } else if ("message" in image) {
               // Direct message on the image item
@@ -1152,6 +1552,7 @@ export default function PropertyForm({
                 field: `Image ${index + 1}`,
                 message: safeMessage((image as { message: unknown }).message),
                 section: "Media",
+                path: "images",
               });
             }
           }
@@ -1171,6 +1572,7 @@ export default function PropertyForm({
           field: "Features",
           message: safeMessage(errors.features.message),
           section: "Features",
+          path: "features",
         });
       }
       // Per-item errors
@@ -1181,6 +1583,7 @@ export default function PropertyForm({
               field: `Feature ${index + 1}`,
               message: safeMessage((feature as { message: unknown }).message),
               section: "Features",
+              path: "features",
             });
           }
         });
@@ -1214,6 +1617,10 @@ export default function PropertyForm({
       // This handles both sync and async onSubmit implementations
       await Promise.resolve(onSubmit(submitData));
 
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(draftStorageKey);
+      }
+
       toast.dismiss(loadingToast);
       toast.success("Property saved successfully!");
     } catch (error) {
@@ -1227,9 +1634,25 @@ export default function PropertyForm({
   const allErrors = getAllErrors();
   const hasErrors = allErrors.length > 0;
 
+  const handleInvalidSubmit = React.useCallback(
+    (formErrors: FieldErrors<PropertyFormData>) => {
+      const firstInvalidField = findFirstInvalidFieldPath(formErrors);
+      if (firstInvalidField) {
+        focusFieldByPath(firstInvalidField);
+        return;
+      }
+
+      errorSummaryHeadingRef.current?.focus();
+    },
+    [focusFieldByPath],
+  );
+
   // Group errors by section for better organization
   const errorsBySection = allErrors.reduce<
-    Record<string, Array<{ field: string; message: string; section: string }>>
+    Record<
+      string,
+      Array<{ field: string; message: string; section: string; path?: string }>
+    >
   >((acc, err) => {
     if (!acc[err.section]) {
       acc[err.section] = [];
@@ -1257,14 +1680,26 @@ export default function PropertyForm({
   );
 
   return (
-    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6">
+    <form
+      onSubmit={handleSubmit(onFormSubmit, handleInvalidSubmit)}
+      className="space-y-6"
+    >
       {/* Error Summary - Grouped by Section */}
       {hasErrors && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4">
+        <div
+          className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4"
+          role="region"
+          aria-live="polite"
+          aria-label="Form validation errors"
+        >
           <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
             <div className="flex-1">
-              <h3 className="text-sm font-semibold text-red-900 dark:text-red-100 mb-3">
+              <h3
+                ref={errorSummaryHeadingRef}
+                tabIndex={-1}
+                className="text-sm font-semibold text-red-900 dark:text-red-100 mb-3"
+              >
                 Please fix the following errors ({allErrors.length}):
               </h3>
               <div className="space-y-3">
@@ -1277,10 +1712,21 @@ export default function PropertyForm({
                       {errorsBySection[section]?.map((err, idx) => (
                         <li key={idx} className="flex items-start gap-2">
                           <span className="text-red-500 mt-0.5">•</span>
-                          <span>
-                            <span className="font-medium">{err.field}:</span>{" "}
-                            {err.message}
-                          </span>
+                          {err.path ? (
+                            <button
+                              type="button"
+                              className="text-left underline decoration-red-300 underline-offset-2 hover:decoration-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded-sm"
+                              onClick={() => focusFieldByPath(err.path!)}
+                            >
+                              <span className="font-medium">{err.field}:</span>{" "}
+                              {err.message}
+                            </button>
+                          ) : (
+                            <span>
+                              <span className="font-medium">{err.field}:</span>{" "}
+                              {err.message}
+                            </span>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -1302,7 +1748,7 @@ export default function PropertyForm({
           <FormField
             label="Property Title"
             required
-            error={errors.title?.message}
+            error={visibleError("title", errors.title?.message)}
             className="md:col-span-2"
           >
             <Input
@@ -1315,13 +1761,19 @@ export default function PropertyForm({
           <FormField
             label="Property Type"
             required
-            error={errors.type?.message}
+            error={visibleError("type", errors.type?.message)}
+            fieldId={fieldA11y("type").fieldId}
           >
             <Controller
               name="type"
               control={control}
               render={({ field }) => (
                 <Combobox
+                  id={fieldA11y("type").fieldId}
+                  aria-describedby={fieldA11y("type").describedBy}
+                  aria-invalid={
+                    visibleError("type", errors.type?.message) ? true : undefined
+                  }
                   options={PROPERTY_TYPE_OPTIONS}
                   value={field.value}
                   onChange={field.onChange}
@@ -1332,12 +1784,24 @@ export default function PropertyForm({
             />
           </FormField>
 
-          <FormField label="Category" required error={errors.category?.message}>
+          <FormField
+            label="Category"
+            required
+            error={visibleError("category", errors.category?.message)}
+            fieldId={fieldA11y("category").fieldId}
+          >
             <Controller
               name="category"
               control={control}
               render={({ field }) => (
                 <Combobox
+                  id={fieldA11y("category").fieldId}
+                  aria-describedby={fieldA11y("category").describedBy}
+                  aria-invalid={
+                    visibleError("category", errors.category?.message)
+                      ? true
+                      : undefined
+                  }
                   options={PROPERTY_CATEGORY_OPTIONS}
                   value={field.value}
                   onChange={field.onChange}
@@ -1348,12 +1812,24 @@ export default function PropertyForm({
             />
           </FormField>
 
-          <FormField label="Price" required error={errors.price?.message}>
+          <FormField
+            label="Price"
+            required
+            error={visibleError("price", errors.price?.message)}
+            fieldId={fieldA11y("price").fieldId}
+          >
             <div className="relative">
               <span className="absolute left-3 top-3 text-zinc-500 text-sm font-medium">
                 {watch("currency") || "KES"}
               </span>
               <Input
+                id={fieldA11y("price").fieldId}
+                aria-describedby={fieldA11y("price").describedBy}
+                aria-invalid={
+                  visibleError("price", errors.price?.message)
+                    ? true
+                    : undefined
+                }
                 {...register("price", { valueAsNumber: true })}
                 type="number"
                 placeholder="0.00"
@@ -1362,12 +1838,24 @@ export default function PropertyForm({
             </div>
           </FormField>
 
-          <FormField label="Currency" optional error={errors.currency?.message}>
+          <FormField
+            label="Currency"
+            optional
+            error={visibleError("currency", errors.currency?.message)}
+            fieldId={fieldA11y("currency").fieldId}
+          >
             <Controller
               name="currency"
               control={control}
               render={({ field }) => (
                 <Combobox
+                  id={fieldA11y("currency").fieldId}
+                  aria-describedby={fieldA11y("currency").describedBy}
+                  aria-invalid={
+                    visibleError("currency", errors.currency?.message)
+                      ? true
+                      : undefined
+                  }
                   options={CURRENCY_OPTIONS}
                   value={field.value || "KES"}
                   onChange={field.onChange}
@@ -1380,13 +1868,13 @@ export default function PropertyForm({
 
           <FormField
             label="Description"
-            error={errors.description?.message}
+            error={visibleError("description", errors.description?.message)}
             className="md:col-span-2"
           >
             <Textarea
               {...register("description")}
               placeholder="Describe the property, its features, and what makes it special..."
-              className="bg-zinc-50/50 border-zinc-200 focus:bg-white resize-none min-h-[120px]"
+              className="bg-zinc-50/50 border-zinc-200 focus:bg-white resize-none min-h-30"
             />
           </FormField>
         </div>
@@ -1399,10 +1887,22 @@ export default function PropertyForm({
         icon={<MapPin className="h-5 w-5" />}
       >
         <div className="space-y-4">
-          <FormField label="Location" required error={errors.location?.message}>
+          <FormField
+            label="Location"
+            required
+            error={visibleError("location", errors.location?.message)}
+            fieldId={fieldA11y("location").fieldId}
+          >
             <div className="relative">
               <MapPin className="absolute left-3 top-3 h-5 w-5 text-zinc-400" />
               <Input
+                id={fieldA11y("location").fieldId}
+                aria-describedby={fieldA11y("location").describedBy}
+                aria-invalid={
+                  visibleError("location", errors.location?.message)
+                    ? true
+                    : undefined
+                }
                 {...register("location")}
                 placeholder="e.g. Kilimani, Nairobi"
                 className="pl-10 h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white"
@@ -1413,7 +1913,7 @@ export default function PropertyForm({
           <FormField
             label="Street Address"
             optional
-            error={errors.address?.message}
+            error={visibleError("address", errors.address?.message)}
           >
             <Input
               {...register("address")}
@@ -1426,7 +1926,7 @@ export default function PropertyForm({
             <FormField
               label="City/Constituency"
               optional
-              error={errors.constituency?.message}
+              error={visibleError("constituency", errors.constituency?.message)}
             >
               <Input
                 {...register("constituency")}
@@ -1438,7 +1938,10 @@ export default function PropertyForm({
             <FormField
               label="Neighbourhood"
               optional
-              error={errors.neighbourhood?.message}
+              error={visibleError(
+                "neighbourhood",
+                errors.neighbourhood?.message,
+              )}
             >
               <Input
                 {...register("neighbourhood")}
@@ -1447,12 +1950,24 @@ export default function PropertyForm({
               />
             </FormField>
 
-            <FormField label="County" required error={errors.county?.message}>
+            <FormField
+              label="County"
+              required
+              error={visibleError("county", errors.county?.message)}
+              fieldId={fieldA11y("county").fieldId}
+            >
               <Controller
                 name="county"
                 control={control}
                 render={({ field }) => (
                   <Combobox
+                    id={fieldA11y("county").fieldId}
+                    aria-describedby={fieldA11y("county").describedBy}
+                    aria-invalid={
+                      visibleError("county", errors.county?.message)
+                        ? true
+                        : undefined
+                    }
                     options={COUNTY_OPTIONS}
                     value={field.value || ""}
                     onChange={field.onChange}
@@ -1467,7 +1982,7 @@ export default function PropertyForm({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField
               label="Latitude"
-              error={errors.latitude?.message}
+              error={visibleError("latitude", errors.latitude?.message)}
               description="Optional: Provide both latitude and longitude together"
             >
               <Input
@@ -1481,7 +1996,7 @@ export default function PropertyForm({
 
             <FormField
               label="Longitude"
-              error={errors.longitude?.message}
+              error={visibleError("longitude", errors.longitude?.message)}
               description="Optional: Provide both latitude and longitude together"
             >
               <Input
@@ -1503,7 +2018,11 @@ export default function PropertyForm({
         icon={<Home className="h-5 w-5" />}
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          <FormField label="Bedrooms" optional error={errors.bedrooms?.message}>
+          <FormField
+            label="Bedrooms"
+            optional
+            error={visibleError("bedrooms", errors.bedrooms?.message)}
+          >
             <Input
               {...register("bedrooms", { valueAsNumber: true })}
               type="number"
@@ -1517,7 +2036,7 @@ export default function PropertyForm({
           <FormField
             label="Bathrooms"
             optional
-            error={errors.bathrooms?.message}
+            error={visibleError("bathrooms", errors.bathrooms?.message)}
           >
             <Input
               {...register("bathrooms", { valueAsNumber: true })}
@@ -1532,7 +2051,7 @@ export default function PropertyForm({
           <FormField
             label="Area (sq ft)"
             optional
-            error={errors.areaSqFt?.message}
+            error={visibleError("areaSqFt", errors.areaSqFt?.message)}
           >
             <Input
               {...register("areaSqFt", { valueAsNumber: true })}
@@ -1546,7 +2065,7 @@ export default function PropertyForm({
           <FormField
             label="Lot Size (sq ft)"
             optional
-            error={errors.lotSize?.message}
+            error={visibleError("lotSize", errors.lotSize?.message)}
           >
             <Input
               {...register("lotSize", { valueAsNumber: true })}
@@ -1561,7 +2080,7 @@ export default function PropertyForm({
         <FormField
           label="Land Reference Number"
           optional
-          error={errors.lrNumber?.message}
+          error={visibleError("lrNumber", errors.lrNumber?.message)}
         >
           <Input
             {...register("lrNumber")}
@@ -1574,11 +2093,13 @@ export default function PropertyForm({
           label="Features"
           optional
           description="Add features like Swimming Pool, Gym, Borehole, etc. (Max 20 features, 100 characters each)"
-          error={
+          error={visibleError(
+            "features",
             errors.features?.message ||
-            (errors.features as { root?: { message?: string } } | undefined)
-              ?.root?.message
-          }
+              (errors.features as { root?: { message?: string } } | undefined)
+                ?.root?.message,
+          )}
+          fieldId={fieldA11y("features", true).fieldId}
         >
           <Controller
             name="features"
@@ -1586,6 +2107,19 @@ export default function PropertyForm({
             render={({ field }) => (
               <FeaturesInput
                 value={field.value || []}
+                inputId={fieldA11y("features", true).fieldId}
+                ariaDescribedBy={fieldA11y("features", true).describedBy}
+                hasError={
+                  visibleError(
+                    "features",
+                    errors.features?.message ||
+                      (
+                        errors.features as
+                          | { root?: { message?: string } }
+                          | undefined
+                      )?.root?.message,
+                  ) !== undefined
+                }
                 onChange={(features) =>
                   setValue("features", features, { shouldValidate: true })
                 }
@@ -1605,6 +2139,7 @@ export default function PropertyForm({
           images={imageFields}
           uploadingImages={uploadingImages}
           onRemove={handleRemoveImage}
+          onReorder={handleReorderImages}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -1632,7 +2167,7 @@ export default function PropertyForm({
           <FormField
             label="Floor Plan URL"
             optional
-            error={errors.floorPlan?.message}
+            error={visibleError("floorPlan", errors.floorPlan?.message)}
             description="Must be an HTTPS URL"
           >
             <Input
@@ -1645,7 +2180,7 @@ export default function PropertyForm({
           <FormField
             label="Video URL"
             optional
-            error={errors.videoUrl?.message}
+            error={visibleError("videoUrl", errors.videoUrl?.message)}
             description="Must be an HTTPS URL"
           >
             <Input
@@ -1668,6 +2203,7 @@ export default function PropertyForm({
           errors={errors}
           control={control}
           register={register}
+          resolveError={visibleError}
           onRemove={removeAttachment}
           onAdd={handleAddAttachment}
           attachmentTypes={ATTACHMENT_TYPES}
@@ -1678,12 +2214,10 @@ export default function PropertyForm({
         <div className="pt-4 flex justify-end">
           <Button
             type="submit"
-            disabled={isSubmitting}
-            className="min-w-[150px] bg-emerald-600 hover:bg-emerald-700 text-white h-11 text-base shadow-md shadow-emerald-200"
+            isLoading={isSubmitting}
+            loadingText={isEditing ? "Saving Changes" : "Creating Property"}
+            className="min-w-37.5 bg-emerald-600 hover:bg-emerald-700 text-white h-11 text-base shadow-md shadow-emerald-200"
           >
-            {isSubmitting ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : null}
             {isEditing ? "Save Changes" : "Create Property"}
           </Button>
         </div>
