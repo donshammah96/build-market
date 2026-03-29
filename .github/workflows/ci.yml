@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  PNPM_VERSION: "10"
+
+jobs:
+  client-changelog-guard:
+    name: Client Changelog Guard
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Require client changelog update for client code changes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pull_number = context.payload.pull_request.number;
+
+            const files = await github.paginate(
+              github.rest.pulls.listFiles,
+              { owner, repo, pull_number, per_page: 100 },
+            );
+
+            const isClientCodeFile = (filename) =>
+              filename.startsWith("apps/client/") &&
+              !filename.startsWith("apps/client/docs/");
+
+            const clientCodeChanged = files.some((f) => isClientCodeFile(f.filename));
+            const changelogUpdated = files.some(
+              (f) =>
+                f.filename === "apps/client/docs/CHANGELOG.md" &&
+                f.status !== "removed",
+            );
+
+            if (clientCodeChanged && !changelogUpdated) {
+              core.setFailed(
+                "apps/client code changed but apps/client/docs/CHANGELOG.md was not updated.",
+              );
+            } else {
+              core.info("Client changelog guard passed.");
+            }
+
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Production dependency audit
+        run: pnpm run deps:audit
+
+      # Run static checks first for fast feedback — exit before running tests
+      # if formatting, lint, or types fail.
+      - name: Check formatting
+        run: pnpm run format:check
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Env contract check
+        run: pnpm run client:check-env-contract
+
+      - name: Type check
+        run: pnpm run check-types
+
+      - name: Test
+        run: pnpm run test

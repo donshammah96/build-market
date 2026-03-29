@@ -14,6 +14,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\" --log-level warn",
     "format:check": "prettier --check \"**/*.{ts,tsx,md}\" --log-level warn",
     "check-types": "turbo run check-types",
+    "sync:instructions-aligned-date": "node ./scripts/sync-instruction-alignment-date.mjs",
+    "check:instructions": "pnpm run sync:instructions-aligned-date && node ./scripts/check-instructions-frontmatter.mjs",
     "test": "turbo run test",
     "validate": "pnpm run format:check && pnpm run lint && pnpm run check-types && pnpm run test",
     "clean": "turbo run clean && rimraf node_modules",
@@ -30,14 +32,31 @@
     "client:tsc-noemit": "pnpm -C apps/client exec tsc --noEmit",
     "client:check-env-contract": "pnpm -C apps/client run check-env-contract",
     "client:test:all": "pnpm -C apps/client exec vitest --run",
+    "client:test:properties-risk": "pnpm -C apps/client exec vitest --run __tests__/contracts/properties/repository-input.contract.test.ts __tests__/contracts/properties/service-boundary.contract.test.ts __tests__/policy/properties/authorization.policy.test.ts __tests__/lib/domains/properties.service.test.ts __tests__/api/properties/property-id.route.test.ts __tests__/api/properties/property-documents.route.test.ts",
     "client:test:projects-api": "pnpm -C apps/client exec vitest run __tests__/api/projects --reporter=verbose",
+    "test:projects-api:json": "pnpm -C apps/client exec vitest run __tests__/api/projects --reporter=json --outputFile=.vitest-projects-api.json",
+    "test:projects-api": "pnpm run client:test:projects-api",
     "client:test:portfolio-api": "pnpm -C apps/client exec vitest run __tests__/api/portfolio --reporter=verbose",
+    "test:portfolio-api": "pnpm run client:test:portfolio-api",
     "client:test:secure-action": "pnpm -C apps/client exec vitest run __tests__/lib/secure-action.test.ts --reporter=verbose",
+    "test:secure-action": "pnpm run client:test:secure-action",
+    "test:leads": "pnpm -C apps/client exec vitest run __tests__/api/leads/public.route.test.ts __tests__/api/leads/professional.route.test.ts __tests__/actions/leads.test.ts --reporter=verbose",
+    "test:projects-envelope-focused": "pnpm -C apps/client exec vitest --run __tests__/api/projects/project-core-routes.test.ts __tests__/lib/projects-client-contracts.test.ts __tests__/hooks/useProjects.test.tsx __tests__/hooks/useDashboardData.test.ts",
     "client:test:stores-route": "pnpm -C apps/client exec vitest run __tests__/api/stores/route.test.ts",
+    "test:stores-route": "pnpm run client:test:stores-route",
     "client:test:projects-property-focused": "pnpm -C apps/client exec vitest run __tests__/lib/domains/properties.service.test.ts __tests__/hooks/useProjects.test.tsx --reporter=verbose",
+    "test:projects-property-focused": "pnpm run client:test:projects-property-focused",
     "client:test:browser-hook-sweep": "pnpm -C apps/client exec vitest run __tests__/hooks/profile-client-hooks.test.ts __tests__/lib/non-dashboard-browser-clients.test.ts __tests__/lib/dashboard-browser-clients.test.ts --reporter=verbose",
+    "test:browser-hook-sweep": "pnpm run client:test:browser-hook-sweep",
     "client:test:dashboard-hook": "pnpm -C apps/client exec vitest run __tests__/hooks/useDashboardData.test.ts --reporter=verbose --pool=threads --maxWorkers=1",
-    "client:test:dashboard-browser-clients": "pnpm -C apps/client exec vitest run __tests__/lib/dashboard-browser-clients.test.ts --reporter=verbose --pool=threads --maxWorkers=1"
+    "test:dashboard-hook": "pnpm run client:test:dashboard-hook",
+    "client:test:dashboard-browser-clients": "pnpm -C apps/client exec vitest run __tests__/lib/dashboard-browser-clients.test.ts --reporter=verbose --pool=threads --maxWorkers=1",
+    "test:dashboard-browser-clients": "pnpm run client:test:dashboard-browser-clients",
+    "test:properties-risk": "pnpm run client:test:properties-risk",
+    "test:properties-service-once": "pnpm -C apps/client exec vitest --run __tests__/lib/domains/properties.service.test.ts",
+    "test:button-slot-regression": "pnpm -C apps/client exec vitest run __tests__/components/ui/button.test.tsx",
+    "test:button-slot-regression:single-worker": "pnpm -C apps/client exec vitest run --pool=threads --maxWorkers=1 __tests__/components/ui/button.test.tsx",
+    "test:onboarding-ui-a11y:single-worker": "pnpm -C apps/client exec vitest run --pool=threads --maxWorkers=1 __tests__/app/onboarding/onboarding-route-ui.test.tsx __tests__/app/onboarding/onboarding-form-a11y.test.tsx"
   },
   "devDependencies": {
     "prettier": "^3.6.2",
@@ -66,6 +85,19 @@
       "prisma",
       "@prisma/client",
       "@prisma/engines"
-    ]
+    ],
+    "overrides": {
+      "@hono/node-server": ">=1.19.10",
+      "effect": ">=3.20.0",
+      "fast-xml-parser": ">=5.5.7",
+      "hono": ">=4.12.7",
+      "lodash": ">=4.17.23",
+      "mailparser": ">=3.9.3",
+      "nodemailer": ">=8.0.4",
+      "path-to-regexp": ">=8.4.0",
+      "qs": ">=6.14.2",
+      "socket.io-parser": ">=4.2.6",
+      "yaml": ">=2.8.3"
+    }
   }
 }
