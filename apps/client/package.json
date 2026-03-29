@@ -31,9 +31,9 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.978.0",
-    "@aws-sdk/lib-storage": "^3.978.0",
-    "@aws-sdk/s3-request-presigner": "^3.978.0",
+    "@aws-sdk/client-s3": "^3.1019.0",
+    "@aws-sdk/lib-storage": "^3.1019.0",
+    "@aws-sdk/s3-request-presigner": "^3.1019.0",
     "@build/auth-server": "workspace:*",
     "@build/db": "workspace:*",
     "@build/enums": "workspace:*",
@@ -131,7 +131,7 @@
     "@vitest/ui": "^4.0.10",
     "cypress": "^14.4.0",
     "eslint": "^9.35.0",
-    "eslint-config-next": "15.5.3",
+    "eslint-config-next": "15.5.14",
     "jsdom": "^27.2.0",
     "start-server-and-test": "^2.0.10",
     "tailwindcss": "^4",
