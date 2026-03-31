@@ -1,0 +1,21 @@
+{
+  "name": "pros",
+  "rank": "auntit17734347975271",
+  "request": {
+    "type": "http",
+    "url": "{{CLIENT_APP}}/professionals",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": "",
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

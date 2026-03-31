@@ -1,12 +1,5 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
-import {
-  mockPrismaSuccess,
-  mockS3Success,
-  mockS3WithUploadFailure,
-  generateMockUser,
-  generateTestUUID,
-  generateTestDate,
-} from "../../../mocks";
+import { mockPrismaSuccess } from "../../../mocks";
 
 vi.mock("@build/db", () => ({
   prisma: mockPrismaSuccess(),
@@ -16,11 +9,10 @@ describe("AssetCleanupService", () => {
   let AssetCleanupService: any;
   let service: any;
   let mockPrisma: ReturnType<typeof mockPrismaSuccess>;
-  let mockS3: ReturnType<typeof mockS3Success>;
 
   beforeEach(async () => {
+    vi.resetModules();
     mockPrisma = mockPrismaSuccess();
-    mockS3 = mockS3Success();
     vi.doMock("@build/db", () => ({
       prisma: mockPrisma,
     }));
@@ -33,20 +25,16 @@ describe("AssetCleanupService", () => {
   describe("scheduleAssetsForDeletion", () => {
     it("should schedule all user assets for deletion", async () => {
       const userId = "user_123";
-      const scheduledAt = generateTestDate(30);
 
       (mockPrisma.asset.updateMany as Mock).mockResolvedValue({ count: 10 });
 
-      const result = await service.scheduleAssetsForDeletion(
-        userId,
-        scheduledAt,
-      );
+      const result = await service.scheduleAssetsForDeletion(userId, 30);
 
       expect(result.count).toBe(10);
       expect(mockPrisma.asset.updateMany).toHaveBeenCalledWith({
-        where: { uploadedBy: userId },
+        where: { uploaderId: userId },
         data: {
-          scheduledForDeletion: scheduledAt,
+          deleteAfter: expect.any(Date),
         },
       });
     });
@@ -72,9 +60,9 @@ describe("AssetCleanupService", () => {
 
       expect(result.count).toBe(5);
       expect(mockPrisma.asset.updateMany).toHaveBeenCalledWith({
-        where: { uploadedBy: userId },
+        where: { uploaderId: userId },
         data: {
-          scheduledForDeletion: null,
+          deleteAfter: null,
         },
       });
     });
@@ -85,22 +73,20 @@ describe("AssetCleanupService", () => {
       const assets = [
         {
           id: "asset_1",
-          fileKey: "uploads/file1.jpg",
-          uploadedBy: "user_123",
+          key: "uploads/file1.jpg",
+          uploaderId: "user_123",
         },
       ];
 
       (mockPrisma.asset.findMany as Mock).mockResolvedValue(assets);
       (mockPrisma.project.count as Mock).mockResolvedValue(0);
-      (mockPrisma.order.count as Mock).mockResolvedValue(0);
       (mockPrisma.user.count as Mock).mockResolvedValue(0);
-      (mockS3.send as Mock).mockResolvedValue({});
       (mockPrisma.asset.delete as Mock).mockResolvedValue(assets[0]);
 
       const result = await service.executeScheduledDeletions();
 
       expect(result.deletedCount).toBe(1);
-      expect(mockS3.send).toHaveBeenCalledTimes(1);
+      expect(result.failedDeletions).toEqual([]);
       expect(mockPrisma.asset.delete).toHaveBeenCalledWith({
         where: { id: "asset_1" },
       });
@@ -110,57 +96,49 @@ describe("AssetCleanupService", () => {
       const assets = [
         {
           id: "asset_1",
-          fileKey: "uploads/file1.jpg",
-          uploadedBy: "user_123",
+          key: "uploads/file1.jpg",
+          uploaderId: "user_123",
         },
       ];
 
       (mockPrisma.asset.findMany as Mock).mockResolvedValue(assets);
       (mockPrisma.project.count as Mock).mockResolvedValue(1); // Still referenced
+      (mockPrisma.user.count as Mock).mockResolvedValue(0);
       (mockPrisma.asset.update as Mock).mockResolvedValue({
         ...assets[0],
-        uploadedBy: "system-user",
+        uploaderId: "system",
       });
 
       const result = await service.executeScheduledDeletions();
 
-      expect(result.retainedCount).toBe(1);
       expect(result.deletedCount).toBe(0);
-      expect(mockS3.send).not.toHaveBeenCalled();
+      expect(result.failedDeletions).toEqual([]);
       expect(mockPrisma.asset.update).toHaveBeenCalledWith({
         where: { id: "asset_1" },
         data: {
-          uploadedBy: "system-user",
-          scheduledForDeletion: null,
+          uploaderId: "system",
+          deleteAfter: null,
         },
       });
     });
 
-    it.concurrent("should handle S3 deletion failures gracefully", async () => {
-      const mockS3Error = mockS3WithUploadFailure();
+    it("should handle per-asset failures gracefully", async () => {
       const assets = [
         {
           id: "asset_1",
-          fileKey: "uploads/file1.jpg",
-          uploadedBy: "user_123",
+          key: "uploads/file1.jpg",
+          uploaderId: "user_123",
         },
       ];
 
       (mockPrisma.asset.findMany as Mock).mockResolvedValue(assets);
-      (mockPrisma.project.count as Mock).mockResolvedValue(0);
-      (mockPrisma.order.count as Mock).mockResolvedValue(0);
-      (mockPrisma.user.count as Mock).mockResolvedValue(0);
+      (mockPrisma.project.count as Mock).mockRejectedValue(
+        new Error("Count failure"),
+      );
 
-      vi.doMock("@build/db", () => ({
-        prisma: mockPrisma,
-      }));
-      const serviceModule =
-        await import("@/app/lib/gdpr/services/asset-cleanup.service");
-      const errorService = new serviceModule.AssetCleanupService();
+      const result = await service.executeScheduledDeletions();
 
-      const result = await errorService.executeScheduledDeletions();
-
-      expect(result.failedDeletions).toHaveLength(1);
+      expect(result.failedDeletions).toEqual(["asset_1"]);
       expect(result.deletedCount).toBe(0);
     });
   });
@@ -170,19 +148,17 @@ describe("AssetCleanupService", () => {
       const assetId = "asset_123";
 
       (mockPrisma.project.count as Mock).mockResolvedValue(2);
-      (mockPrisma.order.count as Mock).mockResolvedValue(1);
-      (mockPrisma.user.count as Mock).mockResolvedValue(0);
+      (mockPrisma.user.count as Mock).mockResolvedValue(1);
 
       const count = await service.countReferences(assetId);
 
-      expect(count).toBe(3); // 2 + 1 + 0
+      expect(count).toBe(3);
     });
 
     it("should return zero for unreferenced assets", async () => {
       const assetId = "asset_456";
 
       (mockPrisma.project.count as Mock).mockResolvedValue(0);
-      (mockPrisma.order.count as Mock).mockResolvedValue(0);
       (mockPrisma.user.count as Mock).mockResolvedValue(0);
 
       const count = await service.countReferences(assetId);
@@ -192,24 +168,22 @@ describe("AssetCleanupService", () => {
   });
 
   describe("Batch processing", () => {
-    it("should process assets in batches of 100", async () => {
-      const assets = Array.from({ length: 250 }, (_, i) => ({
+    it("should process all discovered assets", async () => {
+      const assets = Array.from({ length: 20 }, (_, i) => ({
         id: `asset_${i}`,
-        fileKey: `uploads/file${i}.jpg`,
-        uploadedBy: "user_123",
+        key: `uploads/file${i}.jpg`,
+        uploaderId: "user_123",
       }));
 
       (mockPrisma.asset.findMany as Mock).mockResolvedValue(assets);
       (mockPrisma.project.count as Mock).mockResolvedValue(0);
-      (mockPrisma.order.count as Mock).mockResolvedValue(0);
       (mockPrisma.user.count as Mock).mockResolvedValue(0);
-      (mockS3.send as Mock).mockResolvedValue({});
       (mockPrisma.asset.delete as Mock).mockResolvedValue({});
 
       const result = await service.executeScheduledDeletions();
 
-      expect(result.deletedCount).toBe(250);
-      expect(mockS3.send).toHaveBeenCalledTimes(250);
+      expect(result.deletedCount).toBe(20);
+      expect(mockPrisma.asset.delete).toHaveBeenCalledTimes(20);
     });
   });
 });

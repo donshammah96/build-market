@@ -1,5 +1,5 @@
-import { prisma, Prisma } from "@build/db";
-import { ConsentType } from "@prisma/client";
+import { prisma } from "@build/db";
+import { ConsentType, Prisma } from "@prisma/client";
 
 // Valid consent types for runtime validation
 const VALID_CONSENT_TYPES: ConsentType[] = [

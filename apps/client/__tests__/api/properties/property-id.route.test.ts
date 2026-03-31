@@ -83,7 +83,7 @@ vi.mock("@/app/lib/api/request-utils", () => ({
 
 vi.mock("@/app/lib/api/api-guards", () => ({
   checkBodySize: vi.fn().mockReturnValue(null),
-  isValidId: vi.fn().mockReturnValue(null),
+  isValidId: vi.fn().mockReturnValue(true),
 }));
 
 vi.mock("@/app/lib/repositories/property.repository", () => ({
@@ -164,13 +164,7 @@ describe("GET /api/properties/[id]", () => {
 
   it("returns 400 for invalid ID", async () => {
     const { isValidId } = await import("@/app/lib/api/api-guards");
-    const mockErrorResponse = new Response(
-      JSON.stringify({ error: "Invalid ID" }),
-      {
-        status: 400,
-      },
-    );
-    vi.mocked(isValidId).mockReturnValueOnce(mockErrorResponse as any);
+    vi.mocked(isValidId).mockReturnValueOnce(false as any);
 
     const request = new NextRequest("http://localhost:3500/api/properties/");
     const response = await GET(request, {

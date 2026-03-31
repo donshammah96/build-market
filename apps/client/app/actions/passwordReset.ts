@@ -9,16 +9,17 @@ import { getSqlClient } from "@/app/lib/infrastructure/db";
 import { verifyHCaptcha } from "@/app/lib/infrastructure/hcaptcha";
 import { sendEmail } from "@/app/lib/infrastructure/mailer";
 import { prisma } from "@build/db";
+import { env } from "@/app/lib/infrastructure/env";
 import {
   hashPasswordScrypt,
   scryptAsync,
   verifyScryptPassword,
-} from "@build/auth-server";
+} from "@build/auth-server/password-hash";
 
 // Redis client initialization
 const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL || "",
-  token: process.env.UPSTASH_REDIS_REST_TOKEN || "",
+  url: env.redis.upstashRestUrl,
+  token: env.redis.upstashRestToken,
 });
 
 export async function authenticate(
@@ -243,7 +244,7 @@ export async function requestPasswordReset(
         INSERT INTO password_reset_requests (email, created_at)
         VALUES (${email}, CURRENT_TIMESTAMP)
       `;
-    const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${rawToken}`;
+    const resetUrl = `${env.appUrl}/reset-password?token=${rawToken}`;
     await sendEmail({
       to: email,
       subject: "Password Reset Request",

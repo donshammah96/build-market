@@ -1,0 +1,329 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build-client-tsc-noemit",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"client:tsc-noemit"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-admin-check-types",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"admin:check-types"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "build-queue-server-check-types",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"queue-server:check-types"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "redis-healthcheck",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"redis:healthcheck"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "redis-audit",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"redis:audit"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "test-projects-api",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"test:projects-api"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "test-portfolio-api",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"test:portfolio-api"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "test-secure-action",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"test:secure-action"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "test-projects-property-focused",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"test:projects-property-focused"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "test-browser-hook-sweep",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"test:browser-hook-sweep"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "test-dashboard-hook",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"test:dashboard-hook"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "test-dashboard-browser-clients",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"test:dashboard-browser-clients"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "test-projects-envelope-focused",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"test:projects-envelope-focused"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "build-client-tsc-noemit-reattempt",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"client:tsc-noemit"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "test-properties-risk",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"test:properties-risk"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "test-properties-service-once",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"test:properties-service-once"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "build-client-tsc-noemit-checkpoint",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"-C",
+				"apps/client",
+				"exec",
+				"tsc",
+				"--noEmit"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "test-dashboard-visual-e2e",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"-C",
+				"apps/client",
+				"exec",
+				"cypress",
+				"run",
+				"--spec",
+				"cypress/e2e/professional-dashboard-visual.cy.ts",
+				"--browser",
+				"chrome"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "test-dashboard-visual-e2e-v2",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"-C",
+				"apps/client",
+				"exec",
+				"cypress",
+				"run",
+				"--spec",
+				"cypress/e2e/professional-dashboard-visual.cy.ts",
+				"--browser",
+				"chrome"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "test-button-slot-regression",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"test:button-slot-regression"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "test-button-slot-regression-single-worker",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"test:button-slot-regression:single-worker"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "test-onboarding-ui-a11y-single-worker",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"test:onboarding-ui-a11y:single-worker"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "verify-projects-envelope-single-worker",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"run",
+				"test:projects-envelope-focused:single-worker"
+			],
+			"isBackground": false,
+			"group": "test"
+		}
+	]
+}

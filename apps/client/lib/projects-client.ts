@@ -13,16 +13,58 @@ import type { ApiResponse } from "@build/types";
 import { PROJECTS_CLIENT_CONFIG } from "@/lib/config/project.config";
 import { isValidId } from "@/lib/utils/validators";
 import { API_ROUTES } from "@/lib/links";
-import type { z } from "zod";
+import { envConfig } from "@/lib/env";
+import { z } from "zod";
 import {
   ProjectQuerySchema,
   CreateProjectSchema,
   UpdateProjectSchema,
   CreateMilestoneSchema,
   UpdateMilestoneSchema,
+  ApproveMilestoneSchema,
+  FundEscrowSchema,
 } from "@/lib/validation/projects-validation";
+import {
+  ProjectListResponseSchema,
+  ProjectDetailResponseSchema,
+  MilestoneListResponseSchema,
+  MilestoneMutationResponseSchema,
+  EscrowMutationResponseSchema,
+  GenericMutationResponseSchema,
+} from "@/app/lib/domains/projects/client/contracts";
+export * from "@/app/lib/domains/projects/client";
 
 const { BULKHEAD_CONCURRENCY } = PROJECTS_CLIENT_CONFIG;
+
+const isGenericProjectsReadEnabled = envConfig.features.genericProjectsApi;
+const isGenericProjectsMutationEnabled =
+  isGenericProjectsReadEnabled &&
+  envConfig.features.genericProjectsApiMutations;
+
+function genericReadApiDisabled<T>(): ApiResponse<T> {
+  return {
+    success: false,
+    error:
+      "Generic projects API is disabled. Use professional portal projects APIs or enable NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API.",
+  };
+}
+
+function genericMutationApiDisabled<T>(): ApiResponse<T> {
+  return {
+    success: false,
+    error:
+      "Generic projects mutations are disabled. Keep read-only rollout enabled or set NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API_MUTATIONS=true to enable writes.",
+  };
+}
+
+// ─── Response Schemas (Project Vertical Slice) ───────────────────────────────
+
+const ProjectListPayloadSchema = ProjectListResponseSchema;
+const ProjectDetailPayloadSchema = ProjectDetailResponseSchema;
+const MilestoneListPayloadSchema = MilestoneListResponseSchema;
+const MilestoneMutationPayloadSchema = MilestoneMutationResponseSchema;
+const EscrowMutationPayloadSchema = EscrowMutationResponseSchema;
+const GenericMutationPayloadSchema = GenericMutationResponseSchema;
 
 // ─── Input Types (Derived locally to avoid server imports) ──────────────────
 
@@ -31,7 +73,16 @@ export type CreateProjectInput = z.infer<typeof CreateProjectSchema>;
 export type UpdateProjectInput = z.infer<typeof UpdateProjectSchema>;
 export type CreateMilestoneInput = z.infer<typeof CreateMilestoneSchema>;
 export type UpdateMilestoneInput = z.infer<typeof UpdateMilestoneSchema>;
-
+export type ProjectListPayload = z.infer<typeof ProjectListPayloadSchema>;
+export type ProjectDetailPayload = z.infer<typeof ProjectDetailPayloadSchema>;
+export type MilestoneListPayload = z.infer<typeof MilestoneListPayloadSchema>;
+export type MilestoneMutationPayload = z.infer<
+  typeof MilestoneMutationPayloadSchema
+>;
+export type EscrowMutationPayload = z.infer<typeof EscrowMutationPayloadSchema>;
+export type GenericMutationPayload = z.infer<
+  typeof GenericMutationPayloadSchema
+>;
 export type CreateProfessionalProjectClientInput = CreateProjectInput & {
   idempotencyKey?: string;
 };
@@ -63,12 +114,31 @@ export type DeleteMilestoneClientInput = {
   version: number;
   idempotencyKey?: string;
 };
+export type ApproveMilestoneClientInput = {
+  projectId: string;
+  milestoneId: string;
+  approvalStatus: z.infer<typeof ApproveMilestoneSchema>["approvalStatus"];
+  rejectionReason?: string;
+  idempotencyKey?: string;
+};
+export type FundEscrowClientInput = {
+  projectId: string;
+  escrowId: string;
+  referenceCode: z.infer<typeof FundEscrowSchema>["referenceCode"];
+  idempotencyKey?: string;
+};
+export type ReleaseEscrowClientInput = {
+  projectId: string;
+  escrowId: string;
+  idempotencyKey?: string;
+};
 
 // ─── Helper API Fetcher ─────────────────────────────────────────────────────
 
 async function apiFetch<T>(
   endpoint: string,
   options?: RequestInit,
+  schema?: z.ZodType<T>,
 ): Promise<ApiResponse<T>> {
   try {
     const res = await fetch(endpoint, {
@@ -92,7 +162,20 @@ async function apiFetch<T>(
       };
     }
 
-    return { success: true, data: json?.data !== undefined ? json.data : json };
+    const payload = json?.data !== undefined ? json.data : json;
+    if (!schema) {
+      return { success: true, data: payload as T };
+    }
+
+    const parsed = schema.safeParse(payload);
+    if (!parsed.success) {
+      return {
+        success: false,
+        error: "Invalid API response shape for projects client",
+      };
+    }
+
+    return { success: true, data: parsed.data };
   } catch (error) {
     return {
       success: false,
@@ -135,7 +218,11 @@ class ProjectsClient {
 
   async getProjects(
     filters?: Partial<ProjectQueryInput>,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<ProjectListPayload>> {
+    if (!isGenericProjectsReadEnabled) {
+      return genericReadApiDisabled();
+    }
+
     return this.bulkhead.run(() => {
       const searchParams = new URLSearchParams();
       if (filters) {
@@ -143,94 +230,156 @@ class ProjectsClient {
           if (value !== undefined) searchParams.append(key, String(value));
         });
       }
-      return apiFetch<any>(`/api/projects?${searchParams.toString()}`);
+      return apiFetch<ProjectListPayload>(
+        `/api/projects?${searchParams.toString()}`,
+        undefined,
+        ProjectListPayloadSchema,
+      );
     });
   }
 
-  async getProject(projectId: string): Promise<ApiResponse<any>> {
+  async getProject(
+    projectId: string,
+  ): Promise<ApiResponse<ProjectDetailPayload>> {
+    if (!isGenericProjectsReadEnabled) {
+      return genericReadApiDisabled();
+    }
+
     if (!isValidId(projectId))
       return { success: false, error: "Invalid project ID" };
-    return this.bulkhead.run(() => apiFetch<any>(`/api/projects/${projectId}`));
+    return this.bulkhead.run(() =>
+      apiFetch<ProjectDetailPayload>(
+        `/api/projects/${projectId}`,
+        undefined,
+        ProjectDetailPayloadSchema,
+      ),
+    );
   }
 
   async createProject(
     data: CreateProfessionalProjectClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<ProjectDetailPayload>> {
+    if (!isGenericProjectsMutationEnabled) {
+      return genericMutationApiDisabled();
+    }
+
     return this.bulkhead.run(() =>
-      apiFetch<any>("/api/projects", {
-        method: "POST",
-        body: JSON.stringify(data),
-        headers: data.idempotencyKey
-          ? { "Idempotency-Key": data.idempotencyKey }
-          : undefined,
-      }),
+      apiFetch<ProjectDetailPayload>(
+        "/api/projects",
+        {
+          method: "POST",
+          body: JSON.stringify(data),
+          headers: data.idempotencyKey
+            ? { "Idempotency-Key": data.idempotencyKey }
+            : undefined,
+        },
+        ProjectDetailPayloadSchema,
+      ),
     );
   }
 
   async updateProject(
     input: UpdateProjectClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<ProjectDetailPayload>> {
+    if (!isGenericProjectsMutationEnabled) {
+      return genericMutationApiDisabled();
+    }
+
     if (!isValidId(input.projectId))
       return { success: false, error: "Invalid project ID" };
     return this.bulkhead.run(() =>
-      apiFetch<any>(`/api/projects/${input.projectId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ ...input.data, version: input.version }),
-        headers: input.idempotencyKey
-          ? { "Idempotency-Key": input.idempotencyKey }
-          : undefined,
-      }),
+      apiFetch<ProjectDetailPayload>(
+        `/api/projects/${input.projectId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ ...input.data, version: input.version }),
+          headers: input.idempotencyKey
+            ? { "Idempotency-Key": input.idempotencyKey }
+            : undefined,
+        },
+        ProjectDetailPayloadSchema,
+      ),
     );
   }
 
   async deleteProject(
     input: DeleteProjectClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<GenericMutationPayload>> {
+    if (!isGenericProjectsMutationEnabled) {
+      return genericMutationApiDisabled();
+    }
+
     if (!isValidId(input.projectId))
       return { success: false, error: "Invalid project ID" };
     return this.bulkhead.run(() =>
-      apiFetch<any>(`/api/projects/${input.projectId}`, {
-        method: "DELETE",
-        body: JSON.stringify({ version: input.version }),
-        headers: input.idempotencyKey
-          ? { "Idempotency-Key": input.idempotencyKey }
-          : undefined,
-      }),
+      apiFetch<GenericMutationPayload>(
+        `/api/projects/${input.projectId}`,
+        {
+          method: "DELETE",
+          body: JSON.stringify({ version: input.version }),
+          headers: input.idempotencyKey
+            ? { "Idempotency-Key": input.idempotencyKey }
+            : undefined,
+        },
+        GenericMutationPayloadSchema,
+      ),
     );
   }
 
-  async getMilestones(projectId: string): Promise<ApiResponse<any>> {
+  async getMilestones(
+    projectId: string,
+  ): Promise<ApiResponse<MilestoneListPayload>> {
+    if (!isGenericProjectsReadEnabled) {
+      return genericReadApiDisabled();
+    }
+
     if (!isValidId(projectId))
       return { success: false, error: "Invalid project ID" };
     return this.bulkhead.run(() =>
-      apiFetch<any>(`/api/projects/${projectId}/milestones`),
+      apiFetch<MilestoneListPayload>(
+        `/api/projects/${projectId}/milestones`,
+        undefined,
+        MilestoneListPayloadSchema,
+      ),
     );
   }
 
   async createMilestone(
     input: CreateMilestoneClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<MilestoneMutationPayload>> {
+    if (!isGenericProjectsMutationEnabled) {
+      return genericMutationApiDisabled();
+    }
+
     if (!isValidId(input.projectId))
       return { success: false, error: "Invalid project ID" };
     return this.bulkhead.run(() =>
-      apiFetch<any>(`/api/projects/${input.projectId}/milestones`, {
-        method: "POST",
-        body: JSON.stringify(input),
-        headers: input.idempotencyKey
-          ? { "Idempotency-Key": input.idempotencyKey }
-          : undefined,
-      }),
+      apiFetch<MilestoneMutationPayload>(
+        `/api/projects/${input.projectId}/milestones`,
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+          headers: input.idempotencyKey
+            ? { "Idempotency-Key": input.idempotencyKey }
+            : undefined,
+        },
+        MilestoneMutationPayloadSchema,
+      ),
     );
   }
 
   async updateMilestone(
     input: UpdateMilestoneClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<MilestoneMutationPayload>> {
+    if (!isGenericProjectsMutationEnabled) {
+      return genericMutationApiDisabled();
+    }
+
     if (!isValidId(input.projectId) || !isValidId(input.milestoneId)) {
       return { success: false, error: "Invalid IDs" };
     }
     return this.bulkhead.run(() =>
-      apiFetch<any>(
+      apiFetch<MilestoneMutationPayload>(
         `/api/projects/${input.projectId}/milestones/${input.milestoneId}`,
         {
           method: "PATCH",
@@ -239,18 +388,23 @@ class ProjectsClient {
             ? { "Idempotency-Key": input.idempotencyKey }
             : undefined,
         },
+        MilestoneMutationPayloadSchema,
       ),
     );
   }
 
   async deleteMilestone(
     input: DeleteMilestoneClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<GenericMutationPayload>> {
+    if (!isGenericProjectsMutationEnabled) {
+      return genericMutationApiDisabled();
+    }
+
     if (!isValidId(input.projectId) || !isValidId(input.milestoneId)) {
       return { success: false, error: "Invalid IDs" };
     }
     return this.bulkhead.run(() =>
-      apiFetch<any>(
+      apiFetch<GenericMutationPayload>(
         `/api/projects/${input.projectId}/milestones/${input.milestoneId}`,
         {
           method: "DELETE",
@@ -259,6 +413,7 @@ class ProjectsClient {
             ? { "Idempotency-Key": input.idempotencyKey }
             : undefined,
         },
+        GenericMutationPayloadSchema,
       ),
     );
   }
@@ -266,41 +421,149 @@ class ProjectsClient {
   // These target /api/professional-portal/projects (the authenticated portal
   // API), as opposed to the generic /api/projects used by the methods above.
 
-  async getPortalProjects(): Promise<ApiResponse<unknown[]>> {
+  async getPortalProjects(): Promise<ApiResponse<ProjectListPayload>> {
     return this.bulkhead.run(() =>
-      apiFetch<unknown[]>(API_ROUTES.professionalPortalProjects),
+      apiFetch<ProjectListPayload>(
+        API_ROUTES.professionalPortalProjects,
+        undefined,
+        ProjectListPayloadSchema,
+      ),
     );
   }
 
-  async getPortalProject(projectId: string): Promise<ApiResponse<unknown>> {
+  async getPortalProject(
+    projectId: string,
+  ): Promise<ApiResponse<ProjectDetailPayload>> {
     if (!isValidId(projectId))
       return { success: false, error: "Invalid project ID" };
     return this.bulkhead.run(() =>
-      apiFetch<unknown>(API_ROUTES.professionalPortalProjectDetail(projectId)),
+      apiFetch<ProjectDetailPayload>(
+        API_ROUTES.professionalPortalProjectDetail(projectId),
+        undefined,
+        ProjectDetailPayloadSchema,
+      ),
     );
   }
 
   async updatePortalProject(
     projectId: string,
     data: Record<string, unknown>,
-  ): Promise<ApiResponse<unknown>> {
+  ): Promise<ApiResponse<ProjectDetailPayload>> {
     if (!isValidId(projectId))
       return { success: false, error: "Invalid project ID" };
     return this.bulkhead.run(() =>
-      apiFetch<unknown>(API_ROUTES.professionalPortalProjectDetail(projectId), {
-        method: "PATCH",
-        body: JSON.stringify(data),
-      }),
+      apiFetch<ProjectDetailPayload>(
+        API_ROUTES.professionalPortalProjectDetail(projectId),
+        {
+          method: "PATCH",
+          body: JSON.stringify(data),
+        },
+        ProjectDetailPayloadSchema,
+      ),
     );
   }
 
-  async deletePortalProject(projectId: string): Promise<ApiResponse<unknown>> {
+  async deletePortalProject(
+    projectId: string,
+  ): Promise<ApiResponse<GenericMutationPayload>> {
     if (!isValidId(projectId))
       return { success: false, error: "Invalid project ID" };
     return this.bulkhead.run(() =>
-      apiFetch<unknown>(API_ROUTES.professionalPortalProjectDetail(projectId), {
-        method: "DELETE",
-      }),
+      apiFetch<GenericMutationPayload>(
+        API_ROUTES.professionalPortalProjectDetail(projectId),
+        {
+          method: "DELETE",
+        },
+        GenericMutationPayloadSchema,
+      ),
+    );
+  }
+
+  async getPortalMilestones(
+    projectId: string,
+  ): Promise<ApiResponse<MilestoneListPayload>> {
+    if (!isValidId(projectId))
+      return { success: false, error: "Invalid project ID" };
+    return this.bulkhead.run(() =>
+      apiFetch<MilestoneListPayload>(
+        API_ROUTES.professionalPortalProjectMilestones(projectId),
+        undefined,
+        MilestoneListPayloadSchema,
+      ),
+    );
+  }
+
+  async approvePortalMilestone(
+    input: ApproveMilestoneClientInput,
+  ): Promise<ApiResponse<MilestoneMutationPayload>> {
+    if (!isValidId(input.projectId) || !isValidId(input.milestoneId)) {
+      return { success: false, error: "Invalid IDs" };
+    }
+    return this.bulkhead.run(() =>
+      apiFetch<MilestoneMutationPayload>(
+        API_ROUTES.professionalPortalProjectMilestoneApprove(
+          input.projectId,
+          input.milestoneId,
+        ),
+        {
+          method: "POST",
+          body: JSON.stringify({
+            approvalStatus: input.approvalStatus,
+            rejectionReason: input.rejectionReason,
+          }),
+          headers: input.idempotencyKey
+            ? { "Idempotency-Key": input.idempotencyKey }
+            : undefined,
+        },
+        MilestoneMutationPayloadSchema,
+      ),
+    );
+  }
+
+  async fundPortalEscrow(
+    input: FundEscrowClientInput,
+  ): Promise<ApiResponse<EscrowMutationPayload>> {
+    if (!isValidId(input.projectId) || !isValidId(input.escrowId)) {
+      return { success: false, error: "Invalid IDs" };
+    }
+    return this.bulkhead.run(() =>
+      apiFetch<EscrowMutationPayload>(
+        API_ROUTES.professionalPortalProjectEscrowFund(
+          input.projectId,
+          input.escrowId,
+        ),
+        {
+          method: "POST",
+          body: JSON.stringify({ referenceCode: input.referenceCode }),
+          headers: input.idempotencyKey
+            ? { "Idempotency-Key": input.idempotencyKey }
+            : undefined,
+        },
+        EscrowMutationPayloadSchema,
+      ),
+    );
+  }
+
+  async releasePortalEscrow(
+    input: ReleaseEscrowClientInput,
+  ): Promise<ApiResponse<EscrowMutationPayload>> {
+    if (!isValidId(input.projectId) || !isValidId(input.escrowId)) {
+      return { success: false, error: "Invalid IDs" };
+    }
+    return this.bulkhead.run(() =>
+      apiFetch<EscrowMutationPayload>(
+        API_ROUTES.professionalPortalProjectEscrowRelease(
+          input.projectId,
+          input.escrowId,
+        ),
+        {
+          method: "POST",
+          headers: input.idempotencyKey
+            ? { "Idempotency-Key": input.idempotencyKey }
+            : undefined,
+        },
+        EscrowMutationPayloadSchema,
+      ),
     );
   }
 }

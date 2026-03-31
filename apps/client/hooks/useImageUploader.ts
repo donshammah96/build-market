@@ -444,15 +444,15 @@ export function useImageUploader(
         }
 
         try {
-          new URL(newImageUrl);
-          if (
-            !newImageUrl.startsWith("https://") &&
-            !newImageUrl.startsWith("/")
-          ) {
-            toast.error(
-              "Image URL must start with https:// or be a local path",
-            );
-            return;
+          const isLocalPath = newImageUrl.startsWith("/");
+          if (!isLocalPath) {
+            new URL(newImageUrl);
+            if (!newImageUrl.startsWith("https://")) {
+              toast.error(
+                "Image URL must start with https:// or be a local path",
+              );
+              return;
+            }
           }
           appendImage({ value: newImageUrl }, { shouldFocus: false });
           setNewImageUrl("");

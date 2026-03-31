@@ -16,6 +16,7 @@ describe("ComplianceService", () => {
   let mockPrisma: ReturnType<typeof mockPrismaSuccess>;
 
   beforeEach(async () => {
+    vi.resetModules();
     mockPrisma = mockPrismaSuccess();
     vi.doMock("@build/db", () => ({
       prisma: mockPrisma,
@@ -42,17 +43,14 @@ describe("ComplianceService", () => {
       });
 
       expect(result.logs).toEqual(logs);
-      expect(result.pagination).toEqual({
-        total: 50,
-        page: 1,
-        limit: 10,
-        pages: 5,
-      });
+      expect(result.total).toBe(50);
+      expect(result.page).toBe(1);
+      expect(result.totalPages).toBe(5);
       expect(mockPrisma.auditLog.findMany).toHaveBeenCalledWith({
         where: {},
         skip: 0,
         take: 10,
-        orderBy: { timestamp: "desc" },
+        orderBy: { createdAt: "desc" },
       });
     });
 
@@ -66,10 +64,10 @@ describe("ComplianceService", () => {
       await service.getAuditLogs({ userId, page: 1, limit: 10 });
 
       expect(mockPrisma.auditLog.findMany).toHaveBeenCalledWith({
-        where: { userId },
+        where: { actorId: userId },
         skip: 0,
         take: 10,
-        orderBy: { timestamp: "desc" },
+        orderBy: { createdAt: "desc" },
       });
     });
 
@@ -86,7 +84,7 @@ describe("ComplianceService", () => {
         where: { action },
         skip: 0,
         take: 10,
-        orderBy: { timestamp: "desc" },
+        orderBy: { createdAt: "desc" },
       });
     });
 
@@ -107,28 +105,24 @@ describe("ComplianceService", () => {
 
       expect(mockPrisma.auditLog.findMany).toHaveBeenCalledWith({
         where: {
-          timestamp: {
-            gte: startDate,
-            lte: endDate,
+          createdAt: {
+            gte: new Date(startDate.toISOString()),
+            lte: new Date(endDate.toISOString()),
           },
         },
         skip: 0,
         take: 10,
-        orderBy: { timestamp: "desc" },
+        orderBy: { createdAt: "desc" },
       });
     });
 
-    it.concurrent("should handle database errors gracefully", async () => {
-      const mockErrorPrisma = mockPrismaWithDBError();
-      vi.doMock("@build/db", () => ({
-        prisma: mockErrorPrisma,
-      }));
-      const serviceModule =
-        await import("@/app/lib/gdpr/services/compliance.service");
-      const errorService = new serviceModule.ComplianceService();
+    it("should handle database errors gracefully", async () => {
+      (mockPrisma.auditLog.findMany as Mock).mockRejectedValue(
+        new Error("Database connection failed"),
+      );
 
       await expect(
-        errorService.getAuditLogs({ page: 1, limit: 10 }),
+        service.getAuditLogs({ page: 1, limit: 10 }),
       ).rejects.toThrow("Database connection failed");
     });
   });
@@ -150,34 +144,26 @@ describe("ComplianceService", () => {
       });
 
       expect(stats).toEqual({
-        consentsGranted: 10,
-        consentsRevoked: 5,
-        exportsRequested: 15,
-        exportsCompleted: 12,
-        accountsAnonymized: 3,
-        securityIncidents: 2,
+        consentGranted: 10,
+        consentRevoked: 5,
+        dataExportRequested: 15,
+        accountsDeactivated: 12,
       });
     });
 
-    it.concurrent(
-      "should handle database errors in stats retrieval",
-      async () => {
-        const mockErrorPrisma = mockPrismaWithDBError();
-        vi.doMock("@build/db", () => ({
-          prisma: mockErrorPrisma,
-        }));
-        const serviceModule =
-          await import("@/app/lib/gdpr/services/compliance.service");
-        const errorService = new serviceModule.ComplianceService();
+    it("should handle database errors in stats retrieval", async () => {
+      (mockPrisma.auditLog.count as Mock)
+        .mockResolvedValueOnce(10)
+        .mockResolvedValueOnce(5)
+        .mockRejectedValueOnce(new Error("Database connection failed"));
 
-        await expect(
-          errorService.getDashboardStats({
-            startDate: generateTestDate(-30).toISOString(),
-            endDate: generateTestDate().toISOString(),
-          }),
-        ).rejects.toThrow("Database connection failed");
-      },
-    );
+      await expect(
+        service.getDashboardStats({
+          startDate: generateTestDate(-30).toISOString(),
+          endDate: generateTestDate().toISOString(),
+        }),
+      ).rejects.toThrow("Database connection failed");
+    });
   });
 
   describe("createAuditLog", () => {
@@ -202,23 +188,23 @@ describe("ComplianceService", () => {
       expect(result).toEqual(createdLog);
       expect(mockPrisma.auditLog.create).toHaveBeenCalledWith({
         data: {
-          ...logData,
-          timestamp: expect.any(Date),
+          actorId: logData.userId,
+          actorType: "USER",
+          action: logData.action,
+          entityType: logData.entityType,
+          entityId: logData.entityId,
+          metadata: logData.metadata,
         },
       });
     });
 
-    it.concurrent("should handle audit log creation failures", async () => {
-      const mockErrorPrisma = mockPrismaWithDBError();
-      vi.doMock("@build/db", () => ({
-        prisma: mockErrorPrisma,
-      }));
-      const serviceModule =
-        await import("@/app/lib/gdpr/services/compliance.service");
-      const errorService = new serviceModule.ComplianceService();
+    it("should handle audit log creation failures", async () => {
+      (mockPrisma.auditLog.create as Mock).mockRejectedValue(
+        new Error("Database connection failed"),
+      );
 
       await expect(
-        errorService.createAuditLog({
+        service.createAuditLog({
           userId: "user_123",
           action: "CONSENT_GRANTED",
           entityType: "USER",
@@ -259,7 +245,7 @@ describe("ComplianceService", () => {
         where: { severity: "CRITICAL" },
         skip: 0,
         take: 10,
-        orderBy: { detectedAt: "desc" },
+        orderBy: { createdAt: "desc" },
       });
     });
   });

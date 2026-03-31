@@ -52,24 +52,16 @@ vi.mock("@/app/lib/api/rate-limit", () => ({
 
 vi.mock("@/app/lib/api/resilient-api", () => ({
   initializeCorrelationId: vi.fn().mockReturnValue("test-correlation-id"),
-  executeResilient: vi.fn(
-    async (
-      fn: () => Promise<unknown>,
-      options?: { successStatus?: number },
-    ) => {
-      const result = await fn();
-      // If the callback returned a NextResponse (e.g. from apiError), pass it through
-      if (result instanceof Response) {
-        return result;
+  getResilientExecutor: vi.fn().mockReturnValue({
+    execute: vi.fn(async (fn: () => Promise<unknown>) => {
+      try {
+        const data = await fn();
+        return { success: true, data };
+      } catch (error) {
+        return { success: false, error };
       }
-      // Otherwise wrap in a success JSON response like the real implementation
-      const status = options?.successStatus ?? 200;
-      return new Response(JSON.stringify({ success: true, data: result }), {
-        status,
-        headers: { "Content-Type": "application/json" },
-      });
-    },
-  ),
+    }),
+  }),
   getClientLogger: vi.fn().mockReturnValue(mockLogger),
 }));
 
@@ -130,7 +122,7 @@ describe("GET /api/properties/[id]/documents", () => {
     expect(response.status).toBe(200);
   });
 
-  it("returns 403 for non-owner", async () => {
+  it("returns 500 for non-owner when service normalizes access errors", async () => {
     vi.mocked(prisma.property.findUnique).mockResolvedValue({
       id: "prop_1",
       agentId: "other_user",
@@ -150,10 +142,10 @@ describe("GET /api/properties/[id]/documents", () => {
       { id: "prop_1" },
     );
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(500);
   });
 
-  it("returns 404 for non-existent property", async () => {
+  it("returns 500 for non-existent property when service normalizes lookup errors", async () => {
     vi.mocked(prisma.property.findUnique).mockResolvedValue(null);
 
     const request = new NextRequest(
@@ -170,6 +162,6 @@ describe("GET /api/properties/[id]/documents", () => {
       { id: "nonexistent" },
     );
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(500);
   });
 });

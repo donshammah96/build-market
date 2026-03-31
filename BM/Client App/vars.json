@@ -1,0 +1,8 @@
+{
+  "CLIENT_APP": {
+    "value": "http://localhost:3500",
+    "type": "string",
+    "id": "8fefbc5a-317d-4713-bb05-35d9563bfd00",
+    "isSecret": false
+  }
+}

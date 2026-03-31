@@ -5,22 +5,21 @@ import "@testing-library/jest-dom/vitest";
 import { useImageUploader } from "@/hooks/useImageUploader";
 import type { ImageField } from "@/hooks/useImageUploader";
 
-// Mock sonner toast
-const mockToast = {
-  loading: vi.fn(() => "loading-toast-id"),
-  success: vi.fn(),
-  error: vi.fn(),
-  dismiss: vi.fn(),
-  warning: vi.fn(),
-};
+const { mockToast, mockUploadFiles, mockValidateFiles } = vi.hoisted(() => ({
+  mockToast: {
+    loading: vi.fn(() => "loading-toast-id"),
+    success: vi.fn(),
+    error: vi.fn(),
+    dismiss: vi.fn(),
+    warning: vi.fn(),
+  },
+  mockUploadFiles: vi.fn(),
+  mockValidateFiles: vi.fn(),
+}));
 
 vi.mock("sonner", () => ({
   toast: mockToast,
 }));
-
-// Mock the upload service
-const mockUploadFiles = vi.fn();
-const mockValidateFiles = vi.fn();
 
 vi.mock("@/lib/services/upload", () => ({
   uploadFiles: (...args: unknown[]) => mockUploadFiles(...args),
