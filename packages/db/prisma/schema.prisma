@@ -854,17 +854,17 @@ model SystemSettings {
 
 // Idempotency for M-Pesa & external webhooks
 model IdempotencyKey {
-  id        String            @id @default(uuid())
-  key       String            @unique // SHA256 of transaction details
-  scope     String // 'mpesa_stk', 'withdrawal', 'project_creation', 'property'
-  operation String // "PATCH", "DELETE", etc.
-  status    IdempotencyStatus
-  response  Json?             @db.JsonB
+  id         String            @id @default(uuid())
+  key        String            @unique // SHA256 of transaction details
+  scope      String // 'mpesa_stk', 'withdrawal', 'project_creation', 'property'
+  operation  String // "PATCH", "DELETE", etc.
+  status     IdempotencyStatus
+  response   Json?             @db.JsonB
   storeId    String?
   propertyId String?
-  userId    String
-  expiresAt DateTime
-  createdAt DateTime          @default(now())
+  userId     String
+  expiresAt  DateTime
+  createdAt  DateTime          @default(now())
 
   store    Store?    @relation(fields: [storeId], references: [id])
   property Property? @relation(fields: [propertyId], references: [id])
@@ -1470,7 +1470,7 @@ model ProjectMilestone {
 
   dueDate     DateTime?
   completedAt DateTime?
-  version     Int                  @default(1)
+  version     Int       @default(1)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1707,9 +1707,9 @@ model OnboardingUpload {
 
   createdAt DateTime @default(now())
 
+  @@unique([id, clerkId])
   @@index([clerkId])
   @@index([expiresAt])
-  @@unique([id, clerkId])
 }
 
 // ========================================================
