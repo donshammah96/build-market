@@ -1,4 +1,5 @@
 // @ts-nocheck
+// @ts-nocheck
 "use server";
 
 import { prisma } from "@build/db";
@@ -113,103 +114,34 @@ export async function assertAdmin(): Promise<{
   }
 
   // 3. Fast Role Check (from Clerk session claims)
-  const metadata = parseSessionMetadata(sessionClaims);
-  const sessionRole = normalizeAdminAccessRole(metadata?.role);
-  if (sessionRole === "admin") {
-    return { clerkId, dbUserId: user.id, role: "admin" };
-  }
-
-  const dbRole = normalizeAdminAccessRole(String(user.role));
-  if (dbRole !== "admin") {
-    throw new Error("Forbidden: Admin privileges required");
-  }
-
-  return { clerkId, dbUserId: user.id, role: "admin" };
-}
-
-export async function getAdminPermissions() {
-  try {
-    const { userId: clerkId } = await auth();
-    if (!clerkId) return { isAuthorized: false, granularRole: null };
-
-    const user = await prisma.user.findUnique({
-      where: { clerkId },
-      select: { id: true, role: true },
-    });
-
-    const normalizedRole = user
-      ? normalizeAdminAccessRole(String(user.role))
-      : undefined;
-
-    if (!user || !normalizedRole) {
-      return { isAuthorized: false, granularRole: null };
-    }
-
-    const profile = await prisma.adminProfile.findUnique({
-      where: { userId: user.id },
-      select: { role: true, isActive: true },
-    });
-
-    if (profile && !profile.isActive) {
-      return { isAuthorized: false, granularRole: null };
-    }
-
-    return {
-      isAuthorized: true,
-      granularRole: profile?.role || null,
-      userId: user.id,
-    };
-  } catch (err) {
-    console.error("Error fetching permissions:", err);
-    return { isAuthorized: false, granularRole: null };
-  }
-}
-
-/**
- * Enforces granular admin role authorization for sensitive actions.
- * SUPER_ADMIN is always allowed.
- */
-export async function requireAdminGranularRole(
-  allowedRoles: string[],
-  adminUserId?: string,
-): Promise<string> {
-  let granularRole: string | null = null;
-
-  if (adminUserId) {
-    const profile = await prisma.adminProfile.findUnique({
-      where: { userId: adminUserId },
-      select: { role: true, isActive: true },
-    });
-
-    if (profile?.isActive === false) {
-      throw new Error("Forbidden: Admin profile is inactive");
-    }
-
-    granularRole = profile?.role || null;
-  }
-
-  if (!granularRole) {
-    const permissions = await getAdminPermissions();
-    if (!permissions.isAuthorized) {
-      throw new Error("Forbidden: Admin privileges required");
-    }
-    granularRole = permissions.granularRole;
-  }
-
-  if (!granularRole) {
-    throw new Error("Forbidden: Missing granular admin role");
-  }
+  const metadata = sessionClaims?.metadata as { role?: string } | undefined;
+  const clerkRole = metadata?.role;
 
   if (
-    ADMIN_SUPER_ROLES.includes(
-      granularRole as (typeof ADMIN_SUPER_ROLES)[number],
-    ) ||
-    allowedRoles.includes(granularRole)
+    clerkRole &&
+    VERIFICATION_ALLOWED_ROLES.includes(
+      clerkRole as (typeof VERIFICATION_ALLOWED_ROLES)[number],
+    )
   ) {
-    return granularRole;
+    return { userId, role: clerkRole };
   }
 
-  throw new Error("Forbidden: Insufficient admin permissions");
+  // 4. Deep DB Check (Fallback)
+  const user = await prisma.user.findUnique({
+    where: { clerkId: userId },
+    select: { role: true },
+  });
+
+  if (
+    !user?.role ||
+    !VERIFICATION_ALLOWED_ROLES.includes(
+      user.role as (typeof VERIFICATION_ALLOWED_ROLES)[number],
+    )
+  ) {
+    throw new Error("Forbidden: Verification admin privileges required");
+  }
+
+  return { userId, role: user.role };
 }
 
 /**

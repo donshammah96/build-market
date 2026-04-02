@@ -1,4 +1,5 @@
 // @ts-nocheck
+// @ts-nocheck
 import { getProfessionalDetails } from "@/actions/admin";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,7 @@ export default async function ProfessionalDetailsPage({
 }) {
   const { id } = await params;
   const { success, data: pro } = await getProfessionalDetails(id);
+  const { granularRole } = await getAdminPermissions();
   const { granularRole } = await getAdminPermissions();
 
   if (!success || !pro) return notFound();

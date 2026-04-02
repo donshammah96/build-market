@@ -18,6 +18,26 @@
  *    That double cast bypassed TypeScript completely. All five routes had it.
  */
 
+/**
+ * POST /api/onboarding
+ * app/api/onboarding/route.ts
+ *
+ * KEY CHANGES FROM ORIGINAL:
+ *
+ * 1. CLERK UPDATE ORDERING FIX (critical)
+ *    Original: domain logic → IdempotencyService.complete() → Clerk update
+ *    Fixed:    domain logic → Clerk update → IdempotencyService.complete()
+ *
+ *    If Clerk update ran after complete() and failed silently, any retry
+ *    returned the cached "completed" response without re-attempting the Clerk
+ *    update. The user ended up with DB isOnboarded=true but stale Clerk
+ *    metadata, breaking every middleware auth check on next page load.
+ *
+ * 2. SHARED CLERK HELPER replaces the duplicated:
+ *    (await clerkClient()) as unknown as ClerkMetadataClient
+ *    That double cast bypassed TypeScript completely. All five routes had it.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { OnboardingSchema } from "@build/types";
@@ -181,8 +201,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     {
       role: clerkRole,
       isOnboarded: true,
-      status:
-        clerkRole === "PROFESSIONAL" ? "PENDING_VERIFICATION" : "ACTIVE",
+      status: clerkRole === "PROFESSIONAL" ? "PENDING_VERIFICATION" : "ACTIVE",
     },
     { correlationId, operation: "complete_onboarding" },
   );

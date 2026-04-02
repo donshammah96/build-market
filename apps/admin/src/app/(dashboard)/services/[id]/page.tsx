@@ -1,4 +1,5 @@
 // @ts-nocheck
+// @ts-nocheck
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getServiceCategoryDetails } from "@/actions/admin";
@@ -42,10 +43,9 @@ export default async function ServiceDetailPage({
   const service = response.data;
 
   const { granularRole } = await getAdminPermissions();
-  const canManageServices = [
-    "SUPER_ADMIN",
-    "CONTENT_MODERATOR",
-  ].includes(granularRole || "");
+  const canManageServices = ["SUPER_ADMIN", "CONTENT_MODERATOR"].includes(
+    granularRole || "",
+  );
 
   return (
     <div className="space-y-6">

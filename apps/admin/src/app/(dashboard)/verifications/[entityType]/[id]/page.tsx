@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { getVerificationDetails } from "@/actions/admin";
 import { getAdminPermissions } from "@/actions/admin/shared";
+import { getAdminPermissions } from "@/actions/admin/shared";
 import { VerificationDetailView } from "@/components/admin/verification/VerificationDetailView";
+import { ActionErrorState } from "@/components/ui/action-error-state";
 import { ActionErrorState } from "@/components/ui/action-error-state";
 import type { EntityType } from "@/actions/admin";
 
@@ -38,16 +40,16 @@ export default async function VerificationDetailPage({
   }
 
   const { granularRole } = await getAdminPermissions();
-  const canVerify = [
-    "SUPER_ADMIN",
-    "VERIFICATION_SPECIALIST",
-  ].includes(granularRole || "");
+  const canVerify = ["SUPER_ADMIN", "VERIFICATION_SPECIALIST"].includes(
+    granularRole || "",
+  );
 
   return (
     <VerificationDetailView
       entityType={entityType as EntityType}
       entityId={id}
       details={response.data}
+      canVerify={canVerify}
       canVerify={canVerify}
     />
   );

@@ -16,6 +16,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import Image from "next/image";
+import {
+  getStoreDetails,
+  verifyStore,
+  rejectStore,
+  toggleStoreFeatured,
+} from "@/actions/admin";
+import { getAdminPermissions } from "@/actions/admin/shared";
+import { createAdminIdempotencyKey } from "@/lib/security/idempotency-key";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -55,14 +71,12 @@ export default async function StoreDetailPage({
   const store = response.data;
 
   const { granularRole } = await getAdminPermissions();
-  const canVerify = [
-    "SUPER_ADMIN",
-    "VERIFICATION_SPECIALIST",
-  ].includes(granularRole || "");
-  const canManageStores = [
-    "SUPER_ADMIN",
-    "CONTENT_MODERATOR",
-  ].includes(granularRole || "");
+  const canVerify = ["SUPER_ADMIN", "VERIFICATION_SPECIALIST"].includes(
+    granularRole || "",
+  );
+  const canManageStores = ["SUPER_ADMIN", "CONTENT_MODERATOR"].includes(
+    granularRole || "",
+  );
 
   return (
     <div className="space-y-6">

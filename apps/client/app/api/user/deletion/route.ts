@@ -87,142 +87,149 @@ const DeletionRequestSchema = z.object({
  * Rate Limited: 5 requests per hour per user (prevent abuse)
  */
 
-export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
+export const POST = withAuth(
+  async (req: NextRequest, { dbUserId }) => {
+    const correlationId = initializeCorrelationId(req);
 
-  try {
-    const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window,
-    );
-
-    if (!success) {
-      logger.warn("Rate limit exceeded for deletion request", {
+    try {
+      const identifier = getRateLimitIdentifier(req);
+      const { success } = await checkRateLimit(
         identifier,
-        correlationId,
-        operationName: "request-account-deletion",
-      });
-      return apiError(
-        "Rate limit exceeded. Please try again later.",
-        HttpStatus.TOO_MANY_REQUESTS,
+        RateLimits.WRITE.limit,
+        RateLimits.WRITE.window,
       );
-    }
 
-    // Safely parse JSON body
-    const bodyResult = await safeParseJsonBody(req);
-    if (!bodyResult.success) {
-      logger.warn("Failed to parse deletion request body", {
-        error: bodyResult.error,
+      if (!success) {
+        logger.warn("Rate limit exceeded for deletion request", {
+          identifier,
+          correlationId,
+          operationName: "request-account-deletion",
+        });
+        return apiError(
+          "Rate limit exceeded. Please try again later.",
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+
+      // Safely parse JSON body
+      const bodyResult = await safeParseJsonBody(req);
+      if (!bodyResult.success) {
+        logger.warn("Failed to parse deletion request body", {
+          error: bodyResult.error,
+          correlationId,
+          operationName: "request-account-deletion",
+        });
+        return apiError(bodyResult.error, HttpStatus.BAD_REQUEST);
+      }
+
+      const validationResult = DeletionRequestSchema.safeParse(bodyResult.data);
+
+      if (!validationResult.success) {
+        logger.warn("Deletion request validation failed", {
+          errors: validationResult.error.issues,
+          correlationId,
+          operationName: "request-account-deletion",
+        });
+        return apiError(
+          "Validation failed",
+          HttpStatus.BAD_REQUEST,
+          validationResult.error.issues,
+        );
+      }
+
+      const { reason, confirmEmail } = validationResult.data;
+
+      // Capture request metadata for audit
+      const { ipAddress, userAgent } = getRequestMetadata(req);
+
+      logger.info("Processing account deletion request", {
+        hasReason: !!reason,
+        hasEmailConfirmation: !!confirmEmail,
+        ipAddress,
         correlationId,
         operationName: "request-account-deletion",
       });
-      return apiError(bodyResult.error, HttpStatus.BAD_REQUEST);
-    }
 
-    const validationResult = DeletionRequestSchema.safeParse(bodyResult.data);
-
-    if (!validationResult.success) {
-      logger.warn("Deletion request validation failed", {
-        errors: validationResult.error.issues,
-        correlationId,
-        operationName: "request-account-deletion",
-      });
-      return apiError(
-        "Validation failed",
-        HttpStatus.BAD_REQUEST,
-        validationResult.error.issues,
+      // Execute with resilience patterns
+      const result = await executor.execute(
+        async () =>
+          userProfileComplianceService.requestDeletion({
+            actor: { userId: dbUserId, correlationId },
+            reason,
+            confirmEmail,
+            ipAddress,
+            userAgent,
+          }),
+        {
+          timeout: TimeoutConfig.BACKGROUND,
+          retry: { maxAttempts: 2 },
+          circuitBreaker: true,
+          operationName: "request-account-deletion",
+        },
       );
-    }
 
-    const { reason, confirmEmail } = validationResult.data;
+      if (!result.success || !result.data) {
+        logger.error(
+          "Deletion request failed",
+          result.error || new Error("Unknown error"),
+          {
+            correlationId,
+            operationName: "request-account-deletion",
+            outcome: "failed",
+          },
+        );
+        return apiError(
+          "Failed to process deletion request",
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
 
-    // Capture request metadata for audit
-    const { ipAddress, userAgent } = getRequestMetadata(req);
+      if (!result.data.ok) {
+        return apiError(
+          result.data.message || "Failed to process deletion request",
+          result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
 
-    logger.info("Processing account deletion request", {
-      hasReason: !!reason,
-      hasEmailConfirmation: !!confirmEmail,
-      ipAddress,
-      correlationId,
-      operationName: "request-account-deletion",
-    });
-
-    // Execute with resilience patterns
-    const result = await executor.execute(
-      async () =>
-        userProfileComplianceService.requestDeletion({
-          actor: { userId: dbUserId, correlationId },
-          reason,
-          confirmEmail,
-          ipAddress,
-          userAgent,
-        }),
-      {
-        timeout: TimeoutConfig.BACKGROUND,
-        retry: { maxAttempts: 2 },
-        circuitBreaker: true,
+      logger.info("Account deletion scheduled successfully", {
+        scheduledDate: result.data.data.scheduledDeletionAt,
+        correlationId,
         operationName: "request-account-deletion",
-      },
-    );
+        outcome: "scheduled",
+      });
 
-    if (!result.success || !result.data) {
+      return apiSuccess(result.data.data, HttpStatus.OK);
+    } catch (error) {
       logger.error(
-        "Deletion request failed",
-        result.error || new Error("Unknown error"),
+        "Deletion request error",
+        error instanceof Error ? error : new Error(String(error)),
         {
           correlationId,
           operationName: "request-account-deletion",
           outcome: "failed",
         },
       );
+
+      if (error instanceof z.ZodError) {
+        return apiError(
+          "Validation failed",
+          HttpStatus.BAD_REQUEST,
+          error.issues,
+        );
+      }
+
       return apiError(
-        "Failed to process deletion request",
+        "Failed to process deletion request. Please contact support if the issue persists.",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-
-    if (!result.data.ok) {
-      return apiError(
-        result.data.message || "Failed to process deletion request",
-        result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-
-    logger.info("Account deletion scheduled successfully", {
-      scheduledDate: result.data.data.scheduledDeletionAt,
-      correlationId,
-      operationName: "request-account-deletion",
-      outcome: "scheduled",
-    });
-
-    return apiSuccess(result.data.data, HttpStatus.OK);
-  } catch (error) {
-    logger.error(
-      "Deletion request error",
-      error instanceof Error ? error : new Error(String(error)),
-      {
-        correlationId,
-        operationName: "request-account-deletion",
-        outcome: "failed",
-      },
-    );
-
-    if (error instanceof z.ZodError) {
-      return apiError(
-        "Validation failed",
-        HttpStatus.BAD_REQUEST,
-        error.issues,
-      );
-    }
-
-    return apiError(
-      "Failed to process deletion request. Please contact support if the issue persists.",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
-  }
-});
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+  },
+);
 
 /**
  * DELETE /api/user/deletion

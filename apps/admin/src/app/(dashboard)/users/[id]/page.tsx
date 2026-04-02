@@ -1,10 +1,12 @@
 import { getUserDetails } from "@/actions/admin";
 import { getAdminPermissions } from "@/actions/admin/shared";
+import { getAdminPermissions } from "@/actions/admin/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { notFound } from "next/navigation";
 import { Mail, Phone, Calendar, ShoppingBag } from "lucide-react";
 import Link from "next/link";
+import { UserActionControls } from "../user-action-controls";
 import { UserActionControls } from "../user-action-controls";
 
 export default async function UserDetailsPage({
@@ -23,6 +25,40 @@ export default async function UserDetailsPage({
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <Avatar className="h-20 w-20">
+          <AvatarImage src={user.avatar || ""} />
+          <AvatarFallback>{user.firstName?.[0] || "U"}</AvatarFallback>
+        </Avatar>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {user.firstName} {user.lastName}
+          </h1>
+          <div className="flex flex-col gap-1 text-muted-foreground text-sm mt-1">
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4" /> {user.email}
+            </div>
+            {user.phone && (
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4" /> {user.phone}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="ml-auto flex flex-col items-end gap-2">
+          <span className="px-3 py-1 bg-secondary rounded-full text-sm capitalize">
+            {user.role}
+          </span>
+          <UserActionControls
+            canManageUsers={canManageUsers}
+            mode="buttons"
+            userId={user.id}
+            currentRole={user.role}
+            showInvite={true}
+            showRoleActions={true}
+          />
+        </div>
+      </div>
       <div className="flex items-center gap-4">
         <Avatar className="h-20 w-20">
           <AvatarImage src={user.avatar || ""} />

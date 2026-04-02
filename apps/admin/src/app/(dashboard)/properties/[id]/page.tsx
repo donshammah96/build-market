@@ -7,6 +7,7 @@ import {
   togglePropertyFeatured,
 } from "@/actions/admin";
 import { getAdminPermissions } from "@/actions/admin/shared";
+import { getAdminPermissions } from "@/actions/admin/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,14 +59,12 @@ export default async function PropertyDetailPage({
   const property = response.data;
 
   // Role checks
-  const canModifyStatus = [
-    "SUPER_ADMIN",
-    "CONTENT_MODERATOR",
-  ].includes(granularRole || "");
-  const canVerify = [
-    "SUPER_ADMIN",
-    "VERIFICATION_SPECIALIST",
-  ].includes(granularRole || "");
+  const canModifyStatus = ["SUPER_ADMIN", "CONTENT_MODERATOR"].includes(
+    granularRole || "",
+  );
+  const canVerify = ["SUPER_ADMIN", "VERIFICATION_SPECIALIST"].includes(
+    granularRole || "",
+  );
 
   return (
     <div className="space-y-6">
@@ -169,22 +168,22 @@ export default async function PropertyDetailPage({
                       caption: string | null;
                       isMain: boolean;
                     }) => (
-                    <div
-                      key={image.id}
-                      className="relative aspect-video rounded-lg overflow-hidden bg-zinc-100"
-                    >
-                      <Image
-                        src={image.url}
-                        alt={image.caption || "Property image"}
-                        fill
-                        className="object-cover w-full h-full"
-                      />
-                      {image.isMain && (
-                        <Badge className="absolute top-2 left-2 text-xs">
-                          Main
-                        </Badge>
-                      )}
-                    </div>
+                      <div
+                        key={image.id}
+                        className="relative aspect-video rounded-lg overflow-hidden bg-zinc-100"
+                      >
+                        <Image
+                          src={image.url}
+                          alt={image.caption || "Property image"}
+                          fill
+                          className="object-cover w-full h-full"
+                        />
+                        {image.isMain && (
+                          <Badge className="absolute top-2 left-2 text-xs">
+                            Main
+                          </Badge>
+                        )}
+                      </div>
                     ),
                   )}
                 </div>
@@ -352,42 +351,42 @@ export default async function PropertyDetailPage({
                       type: string;
                       isVerified: boolean;
                     }) => (
-                    <div
-                      key={attachment.id}
-                      className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg"
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-4 w-4 text-zinc-500" />
-                        <div>
-                          <p className="text-sm font-medium">
-                            {attachment.fileUrl}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {attachment.type}
-                          </p>
+                      <div
+                        key={attachment.id}
+                        className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-4 w-4 text-zinc-500" />
+                          <div>
+                            <p className="text-sm font-medium">
+                              {attachment.fileUrl}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {attachment.type}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {attachment.isVerified ? (
+                            <Badge className="bg-emerald-100 text-emerald-700 text-xs">
+                              <CheckCircle className="mr-1 h-3 w-3" />
+                              Verified
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs">
+                              Pending
+                            </Badge>
+                          )}
+                          <a
+                            href={attachment.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-700"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {attachment.isVerified ? (
-                          <Badge className="bg-emerald-100 text-emerald-700 text-xs">
-                            <CheckCircle className="mr-1 h-3 w-3" />
-                            Verified
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="text-xs">
-                            Pending
-                          </Badge>
-                        )}
-                        <a
-                          href={attachment.fileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-700"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                      </div>
-                    </div>
                     ),
                   )}
                 </div>

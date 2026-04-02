@@ -1,4 +1,101 @@
 import type { NextConfig } from "next";
+import { env } from "@/app/lib/infrastructure/env";
+
+const toOrigin = (value?: string): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+};
+
+const appOrigin = toOrigin(env.appUrl) ?? "http://localhost:3500";
+const apiOrigin = toOrigin(env.apiUrl) ?? `${appOrigin}/api`;
+const clerkFrontendApiOrigin = toOrigin(env.clerk.frontendApi);
+const analyticsOrigin = toOrigin(env.analytics.posthogHost);
+
+const selfAndFirstParty = Array.from(new Set(["'self'", appOrigin, apiOrigin]));
+
+const connectOrigins = Array.from(
+  new Set(
+    [
+      ...selfAndFirstParty,
+      // Third-party (identity): Clerk frontend API for auth/session operations.
+      clerkFrontendApiOrigin,
+      // Third-party (analytics): PostHog ingestion/query endpoint.
+      analyticsOrigin,
+      // Dev-only HMR websocket endpoint; no wildcard host.
+      env.nodeEnv === "development" ? appOrigin.replace(/^http/, "ws") : null,
+    ].filter((origin): origin is string => Boolean(origin)),
+  ),
+);
+
+const scriptOrigins = Array.from(
+  new Set(
+    [
+      ...selfAndFirstParty,
+      // Third-party (identity): Clerk hosted assets for client auth widgets.
+      "https://clerk.buildmarket.co.ke",
+      "https://cdn.jsdelivr.net",
+      "https://img.clerk.com",
+      // Third-party (analytics): PostHog web SDK assets.
+      analyticsOrigin,
+    ].filter((origin): origin is string => Boolean(origin)),
+  ),
+);
+
+const styleOrigins = Array.from(
+  new Set([
+    "'self'",
+    // Next.js and some UI libraries inject inline style attributes at runtime.
+    "'unsafe-inline'",
+    // Third-party (typography): Google Fonts stylesheet host.
+    "https://fonts.googleapis.com",
+  ]),
+);
+
+const imageOrigins = Array.from(
+  new Set([
+    "'self'",
+    "data:",
+    "blob:",
+    // Third-party (identity avatars): Clerk image CDN.
+    "https://img.clerk.com",
+    // Third-party (media hosting): Cloudinary.
+    "https://res.cloudinary.com",
+    // Third-party (image catalog): Unsplash and related hostnames.
+    "https://images.unsplash.com",
+    "https://unsplash.com",
+    // Third-party (placeholder avatars): Pravatar.
+    "https://i.pravatar.cc",
+  ]),
+);
+
+const fontOrigins = Array.from(
+  new Set([
+    "'self'",
+    "data:",
+    // Third-party (typography): Google Fonts file host.
+    "https://fonts.gstatic.com",
+  ]),
+);
+
+const cspValue = [
+  "default-src 'self'",
+  `script-src ${scriptOrigins.join(" ")}`,
+  `style-src ${styleOrigins.join(" ")}`,
+  `img-src ${imageOrigins.join(" ")}`,
+  `font-src ${fontOrigins.join(" ")}`,
+  `connect-src ${connectOrigins.join(" ")}`,
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join("; ");
 
 const nextConfig: NextConfig = {
   // Disable linting during build since turbo will handle it separately
@@ -92,7 +189,7 @@ const nextConfig: NextConfig = {
   compiler: {
     // Remove console.log in production (except errors)
     removeConsole:
-      process.env.NODE_ENV === "production"
+      env.nodeEnv === "production"
         ? {
             exclude: ["error", "warn"],
           }
@@ -112,6 +209,22 @@ const nextConfig: NextConfig = {
           {
             key: "X-Content-Type-Options",
             value: "nosniff",
+          },
+          {
+            key: "X-Frame-Options",
+            value: "SAMEORIGIN",
+          },
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
+          {
+            key: "Content-Security-Policy",
+            value: cspValue,
           },
         ],
       },

@@ -154,4 +154,9 @@ export const POST = withAuth<DisputeParams>(
     await IdempotencyService.complete(idempotencyKey, result.data.data);
     return apiSuccess(result.data.data, HttpStatus.OK);
   },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+  },
 );

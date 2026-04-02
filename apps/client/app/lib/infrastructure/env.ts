@@ -60,6 +60,10 @@ const envGroups: EnvGroup[] = [
         required: false,
         default: "/sign-up",
       },
+      {
+        name: "NEXT_PUBLIC_CLERK_FRONTEND_API",
+        required: false,
+      },
     ],
   },
   {
@@ -474,6 +478,7 @@ function buildEnvConfig() {
     // Clerk
     clerk: {
       publishableKey: getStringEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"),
+      frontendApi: getStringEnv("NEXT_PUBLIC_CLERK_FRONTEND_API"),
       secretKey: getStringEnv("CLERK_SECRET_KEY"),
       webhookSecret: getStringEnv("CLERK_WEBHOOK_SECRET"),
       replayWindowSeconds: getNumberEnv(

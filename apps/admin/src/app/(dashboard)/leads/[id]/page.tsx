@@ -25,6 +25,7 @@ import {
 import { UpdateStatusButton } from "@/components/admin/leads/UpdateStatusButton";
 import { LeadActions } from "@/components/admin/leads/LeadActions";
 import { getAdminPermissions } from "@/actions/admin/shared";
+import { getAdminPermissions } from "@/actions/admin/shared";
 
 interface LeadDetailPageProps {
   params: Promise<{ id: string }>;
@@ -77,10 +78,9 @@ export default async function LeadDetailPage({ params }: LeadDetailPageProps) {
   }
 
   const { granularRole } = await getAdminPermissions();
-  const canManageLeads = [
-    "SUPER_ADMIN",
-    "SALES_MANAGER",
-  ].includes(granularRole || "");
+  const canManageLeads = ["SUPER_ADMIN", "SALES_MANAGER"].includes(
+    granularRole || "",
+  );
 
   return (
     <div className="space-y-6">

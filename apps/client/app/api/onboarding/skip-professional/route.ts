@@ -11,6 +11,19 @@
  * 2. SHARED CLERK HELPER replaces (await clerkClient()) as unknown as ClerkMetadataClient
  */
 
+/**
+ * POST /api/onboarding/skip-professional
+ * app/api/onboarding/skip-professional/route.ts
+ *
+ * KEY CHANGES FROM ORIGINAL:
+ *
+ * 1. CLERK UPDATE ORDERING FIX (critical)
+ *    Original: domain logic → IdempotencyService.complete() → Clerk update
+ *    Fixed:    domain logic → Clerk update → IdempotencyService.complete()
+ *
+ * 2. SHARED CLERK HELPER replaces (await clerkClient()) as unknown as ClerkMetadataClient
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { apiError, HttpStatus } from "@/app/lib/api/api-response";

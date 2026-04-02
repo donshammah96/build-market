@@ -88,6 +88,13 @@ export default clerkMiddleware(async (auth, req: Request) => {
             reason: settingsResult.reason,
           },
         );
+        logMiddlewareDecision(
+          nextReq,
+          "mw_redirect_professional_signup_closed",
+          {
+            reason: settingsResult.reason,
+          },
+        );
         return redirectToProfessionalSignupClosed(nextReq);
       }
     }
@@ -108,8 +115,8 @@ export default clerkMiddleware(async (auth, req: Request) => {
       typeof sessionClaims === "object" &&
       "metadata" in sessionClaims &&
       typeof (sessionClaims as { metadata?: unknown }).metadata === "object"
-        ? ((sessionClaims as { metadata?: Record<string, unknown> })
-            .metadata ?? {})
+        ? ((sessionClaims as { metadata?: Record<string, unknown> }).metadata ??
+          {})
         : undefined;
 
     // Unauthenticated users trying to access onboarding should sign in first
@@ -177,8 +184,8 @@ export default clerkMiddleware(async (auth, req: Request) => {
       typeof sessionClaims === "object" &&
       "metadata" in sessionClaims &&
       typeof (sessionClaims as { metadata?: unknown }).metadata === "object"
-        ? ((sessionClaims as { metadata?: Record<string, unknown> })
-            .metadata ?? {})
+        ? ((sessionClaims as { metadata?: Record<string, unknown> }).metadata ??
+          {})
         : undefined;
 
     // Redirect unauthenticated users to sign-in with return URL
@@ -223,10 +230,14 @@ export default clerkMiddleware(async (auth, req: Request) => {
         return redirectToProfessionalPendingVerification(nextReq);
       }
 
-      logMiddlewareDecision(nextReq, "mw_allow_professional_pending_verification", {
-        source: status.source,
-        status: status.status,
-      });
+      logMiddlewareDecision(
+        nextReq,
+        "mw_allow_professional_pending_verification",
+        {
+          source: status.source,
+          status: status.status,
+        },
+      );
       return NextResponse.next();
     }
 

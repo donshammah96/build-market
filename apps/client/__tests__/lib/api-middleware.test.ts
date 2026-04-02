@@ -107,9 +107,10 @@ function mockActiveUser(overrides: Record<string, unknown> = {}) {
 async function setupAuthMocks(
   clerkId: string | null,
   user: Record<string, unknown> | null = null,
+  sessionClaims: Record<string, unknown> | null = null,
 ) {
   const { auth } = await import("@clerk/nextjs/server");
-  vi.mocked(auth).mockResolvedValue({ userId: clerkId } as any);
+  vi.mocked(auth).mockResolvedValue({ userId: clerkId, sessionClaims } as any);
   vi.mocked(prisma.user.findUnique).mockResolvedValue(user as any);
 }
 
@@ -241,6 +242,75 @@ describe("API Middleware", () => {
       expect(response.headers.get("Cache-Control")).toBe("no-store, private");
       expect(response.headers.get("Pragma")).toBe("no-cache");
       expect(response.headers.get("Expires")).toBe("0");
+    });
+
+    it("blocks requests requiring recent authentication when claims are stale", async () => {
+      const user = mockActiveUser();
+      const nowSeconds = Math.floor(Date.now() / 1000);
+
+      await setupAuthMocks("clerk_123", user, {
+        iat: nowSeconds - 900,
+      });
+
+      const mockHandler = vi.fn();
+      const wrappedHandler = withAuth(mockHandler, {
+        recentAuth: { maxAgeSeconds: 300 },
+      });
+      const request = new NextRequest("http://localhost:3500/test", {
+        method: "POST",
+      });
+
+      const response = await wrappedHandler(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.error).toContain("Recent authentication required");
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it("blocks requests requiring recent authentication when token freshness claim is missing", async () => {
+      const user = mockActiveUser();
+
+      await setupAuthMocks("clerk_123", user, {});
+
+      const mockHandler = vi.fn();
+      const wrappedHandler = withAuth(mockHandler, {
+        recentAuth: { maxAgeSeconds: 300 },
+      });
+      const request = new NextRequest("http://localhost:3500/test", {
+        method: "POST",
+      });
+
+      const response = await wrappedHandler(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.error).toContain("Recent authentication required");
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it("allows requests requiring recent authentication when token is fresh", async () => {
+      const user = mockActiveUser();
+      const nowSeconds = Math.floor(Date.now() / 1000);
+
+      await setupAuthMocks("clerk_123", user, {
+        auth_time: nowSeconds - 120,
+      });
+
+      const mockHandler = vi
+        .fn()
+        .mockResolvedValue(NextResponse.json({ success: true }));
+      const wrappedHandler = withAuth(mockHandler, {
+        recentAuth: { maxAgeSeconds: 300 },
+      });
+      const request = new NextRequest("http://localhost:3500/test", {
+        method: "POST",
+      });
+
+      const response = await wrappedHandler(request);
+
+      expect(response.status).toBe(200);
+      expect(mockHandler).toHaveBeenCalled();
     });
 
     it("blocks authenticated unsafe mutations from untrusted origins", async () => {

@@ -156,4 +156,9 @@ export const POST = withAuth(
     await IdempotencyService.complete(idempotencyKey, data.data);
     return apiSuccess(data.data, HttpStatus.CREATED);
   },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+  },
 );

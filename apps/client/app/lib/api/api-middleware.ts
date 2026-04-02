@@ -47,6 +47,56 @@ const BLOCKED_STATUSES: Record<string, { message: string; status: number }> = {
   },
 };
 
+const DEFAULT_RECENT_AUTH_MAX_AGE_SECONDS = 300;
+
+type RecentAuthValidationResult =
+  | { ok: true }
+  | { ok: false; reason: "missing_claim" | "stale_claim" };
+
+function parseNumericClaim(claim: unknown): number | null {
+  if (typeof claim === "number" && Number.isFinite(claim)) {
+    return claim;
+  }
+
+  if (typeof claim === "string") {
+    const parsed = Number.parseInt(claim, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function validateRecentAuth(
+  sessionClaims: unknown,
+  maxAgeSeconds: number,
+): RecentAuthValidationResult {
+  if (!sessionClaims || typeof sessionClaims !== "object") {
+    return { ok: false, reason: "missing_claim" };
+  }
+
+  const claims = sessionClaims as Record<string, unknown>;
+  const authTime = parseNumericClaim(claims.auth_time);
+  const issuedAt = parseNumericClaim(claims.iat);
+  const authEpochSeconds = authTime ?? issuedAt;
+
+  if (authEpochSeconds === null) {
+    return { ok: false, reason: "missing_claim" };
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const ageSeconds = Math.max(0, nowSeconds - authEpochSeconds);
+
+  if (ageSeconds > maxAgeSeconds) {
+    return { ok: false, reason: "stale_claim" };
+  }
+
+  return { ok: true };
+}
+
+function recentAuthFailureMessage(): string {
+  return "Recent authentication required. Please sign in again and retry.";
+}
+
 /**
  * Context provided to authenticated route handlers
  */
@@ -61,7 +111,7 @@ export interface AuthContext {
 /**
  * Handler function with authentication context
  */
-// eslint-disable-next-line/typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AuthenticatedHandler<T = any> = (
   req: NextRequest,
   context: AuthContext,
@@ -74,6 +124,9 @@ export interface WithAuthOptions {
     extraTrustedOrigins?: string[];
   };
   cachePolicy?: "private-no-store" | "passthrough";
+  recentAuth?: {
+    maxAgeSeconds?: number;
+  };
 }
 
 /**
@@ -83,7 +136,7 @@ export interface WithAuthOptions {
  * Rejects blocked users (SUSPENDED, BANNED, DEACTIVATED, ARCHIVED)
  * and soft-deleted users.
  */
-// eslint-disable-next-line/typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function withAuth<T = any>(
   handler: AuthenticatedHandler<T>,
   options: WithAuthOptions = {},
@@ -96,7 +149,7 @@ export function withAuth<T = any>(
   // Using rest parameters to handle both static and dynamic routes
   const routeHandler = async (
     req: NextRequest,
-    // eslint-disable-next-line/typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...args: any[]
   ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
@@ -169,18 +222,21 @@ export function withAuth<T = any>(
         req,
         options.csrf,
       );
-      if (!csrfCheck.ok) {
+      const csrfFailureReason =
+        "reason" in csrfCheck ? csrfCheck.reason : undefined;
+
+      if (csrfFailureReason) {
         logger.warn("Blocked untrusted authenticated mutation", {
           correlationId,
           actorRole: devContext.userRole,
           method: req.method,
           outcome: "blocked",
-          reason: csrfCheck.reason,
+          reason: csrfFailureReason,
         });
 
         return finalizeResponse(
           apiError(
-            mutationOriginFailureMessage(csrfCheck.reason),
+            mutationOriginFailureMessage(csrfFailureReason),
             HttpStatus.FORBIDDEN,
           ),
         );
@@ -192,13 +248,37 @@ export function withAuth<T = any>(
 
     try {
       // Get Clerk user ID
-      const { userId: clerkId } = await auth();
+      const authResult = await auth();
+      const clerkId = authResult.userId;
 
       if (!clerkId) {
         logger.warn("Unauthorized access attempt", { correlationId });
         return finalizeResponse(
           apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED),
         );
+      }
+
+      if (options.recentAuth) {
+        const maxAgeSeconds =
+          options.recentAuth.maxAgeSeconds ??
+          DEFAULT_RECENT_AUTH_MAX_AGE_SECONDS;
+        const freshness = validateRecentAuth(
+          authResult.sessionClaims,
+          maxAgeSeconds,
+        );
+
+        if (!freshness.ok) {
+          logger.warn("Blocked request requiring recent authentication", {
+            correlationId,
+            outcome: "blocked",
+            reason: freshness.reason,
+            maxAgeSeconds,
+          });
+
+          return finalizeResponse(
+            apiError(recentAuthFailureMessage(), HttpStatus.UNAUTHORIZED),
+          );
+        }
       }
 
       // Get database user with timeout protection against long-running queries
@@ -289,23 +369,25 @@ export function withAuth<T = any>(
       const params = routeContext?.params
         ? await routeContext.params
         : undefined;
-
       const csrfCheck = validateTrustedMutationOriginForRequest(
         req,
         options.csrf,
       );
-      if (!csrfCheck.ok) {
+      const csrfFailureReason =
+        "reason" in csrfCheck ? csrfCheck.reason : undefined;
+
+      if (csrfFailureReason) {
         logger.warn("Blocked untrusted authenticated mutation", {
           correlationId,
           actorRole: user.role,
           method: req.method,
           outcome: "blocked",
-          reason: csrfCheck.reason,
+          reason: csrfFailureReason,
         });
 
         return finalizeResponse(
           apiError(
-            mutationOriginFailureMessage(csrfCheck.reason),
+            mutationOriginFailureMessage(csrfFailureReason),
             HttpStatus.FORBIDDEN,
           ),
         );

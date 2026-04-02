@@ -81,72 +81,121 @@ const executor = getResilientExecutor();
  * Rate Limited: 1 request per 24 hours (GDPR compliance)
  */
 
-export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
+export const POST = withAuth(
+  async (req: NextRequest, { dbUserId }) => {
+    const correlationId = initializeCorrelationId(req);
 
-  try {
-    const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
-      RateLimits.EXPORT.limit,
-      RateLimits.EXPORT.window,
-    );
-
-    if (!success) {
-      logger.warn("Rate limit exceeded for export request", {
+    try {
+      const identifier = getRateLimitIdentifier(req);
+      const { success } = await checkRateLimit(
         identifier,
-        correlationId,
-        operationName: "request-data-export",
-      });
-      return apiError(
-        "Rate limit exceeded. Please try again later.",
-        HttpStatus.TOO_MANY_REQUESTS,
+        RateLimits.EXPORT.limit,
+        RateLimits.EXPORT.window,
       );
-    }
 
-    // Capture request metadata for audit
-    const { ipAddress, userAgent } = getRequestMetadata(req);
-
-    logger.info("Processing data export request", {
-      ipAddress,
-      correlationId,
-      operationName: "request-data-export",
-    });
-
-    // Execute with resilience patterns
-    const result = await executor.execute(
-      async () =>
-        userProfileComplianceService.requestExport({
-          actor: { userId: dbUserId, correlationId },
-          ipAddress,
-          userAgent,
-        }),
-      {
-        timeout: TimeoutConfig.BACKGROUND,
-        retry: { maxAttempts: 2 },
-        circuitBreaker: true,
-        operationName: "request-data-export",
-      },
-    );
-
-    if (!result.success) {
-      const error = result.error;
-
-      // Handle rate limit from service layer
-      if (error?.message?.includes("rate limit")) {
-        logger.warn("Export rate limit exceeded", {
+      if (!success) {
+        logger.warn("Rate limit exceeded for export request", {
+          identifier,
           correlationId,
           operationName: "request-data-export",
         });
         return apiError(
-          "You can only request one data export per 24 hours. Please try again later.",
+          "Rate limit exceeded. Please try again later.",
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }
 
+      // Capture request metadata for audit
+      const { ipAddress, userAgent } = getRequestMetadata(req);
+
+      logger.info("Processing data export request", {
+        ipAddress,
+        correlationId,
+        operationName: "request-data-export",
+      });
+
+      // Execute with resilience patterns
+      const result = await executor.execute(
+        async () =>
+          userProfileComplianceService.requestExport({
+            actor: { userId: dbUserId, correlationId },
+            ipAddress,
+            userAgent,
+          }),
+        {
+          timeout: TimeoutConfig.BACKGROUND,
+          retry: { maxAttempts: 2 },
+          circuitBreaker: true,
+          operationName: "request-data-export",
+        },
+      );
+
+      if (!result.success) {
+        const error = result.error;
+
+        // Handle rate limit from service layer
+        if (error?.message?.includes("rate limit")) {
+          logger.warn("Export rate limit exceeded", {
+            correlationId,
+            operationName: "request-data-export",
+          });
+          return apiError(
+            "You can only request one data export per 24 hours. Please try again later.",
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+
+        logger.error(
+          "Export request failed",
+          error || new Error("Unknown error"),
+          {
+            correlationId,
+            operationName: "request-data-export",
+            outcome: "failed",
+          },
+        );
+        return apiError(
+          "Failed to process export request",
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      const exportResult = result.data;
+      if (!exportResult) {
+        return apiError(
+          "Failed to process export request",
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+      if (!exportResult.ok) {
+        const status = exportResult.status || HttpStatus.INTERNAL_SERVER_ERROR;
+
+        logger.warn("Export request rejected", {
+          message: exportResult.message,
+          correlationId,
+          operationName: "request-data-export",
+          outcome: "rejected",
+        });
+
+        return apiError(
+          exportResult.message || "Export request failed",
+          status,
+        );
+      }
+
+      logger.info("Export request completed successfully", {
+        exportId: exportResult.data.exportId,
+        status: exportResult.data.status,
+        correlationId,
+        operationName: "request-data-export",
+        outcome: "accepted",
+      });
+
+      return apiSuccess(exportResult.data, HttpStatus.ACCEPTED);
+    } catch (error) {
       logger.error(
-        "Export request failed",
-        error || new Error("Unknown error"),
+        "Export request error",
+        error instanceof Error ? error : new Error(String(error)),
         {
           correlationId,
           operationName: "request-data-export",
@@ -154,56 +203,17 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
         },
       );
       return apiError(
-        "Failed to process export request",
+        "Failed to process export request. Please try again.",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-
-    const exportResult = result.data;
-    if (!exportResult) {
-      return apiError(
-        "Failed to process export request",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-    if (!exportResult.ok) {
-      const status = exportResult.status || HttpStatus.INTERNAL_SERVER_ERROR;
-
-      logger.warn("Export request rejected", {
-        message: exportResult.message,
-        correlationId,
-        operationName: "request-data-export",
-        outcome: "rejected",
-      });
-
-      return apiError(exportResult.message || "Export request failed", status);
-    }
-
-    logger.info("Export request completed successfully", {
-      exportId: exportResult.data.exportId,
-      status: exportResult.data.status,
-      correlationId,
-      operationName: "request-data-export",
-      outcome: "accepted",
-    });
-
-    return apiSuccess(exportResult.data, HttpStatus.ACCEPTED);
-  } catch (error) {
-    logger.error(
-      "Export request error",
-      error instanceof Error ? error : new Error(String(error)),
-      {
-        correlationId,
-        operationName: "request-data-export",
-        outcome: "failed",
-      },
-    );
-    return apiError(
-      "Failed to process export request. Please try again.",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
-  }
-});
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+  },
+);
 
 /**
  * GET /api/user/export?id={exportId}

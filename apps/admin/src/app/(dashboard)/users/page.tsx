@@ -1,7 +1,12 @@
 import { getUsers } from "@/actions/admin";
 import { getAdminPermissions } from "@/actions/admin/shared";
 import { getUserColumns, UserData } from "./columns";
+import { getAdminPermissions } from "@/actions/admin/shared";
+import { getUserColumns, UserData } from "./columns";
 import { DataTable } from "@/components/ui/data-table";
+import { UserActionControls } from "./user-action-controls";
+
+import { UsersFilter } from "./users-filter";
 import { UserActionControls } from "./user-action-controls";
 
 import { UsersFilter } from "./users-filter";
@@ -13,6 +18,35 @@ export default async function UsersPage({
 }) {
   const resolvedSearchParams = await searchParams;
   const page = Number(resolvedSearchParams.page) || 1;
+  const search =
+    typeof resolvedSearchParams.search === "string"
+      ? resolvedSearchParams.search
+      : "";
+  const role =
+    typeof resolvedSearchParams.role === "string"
+      ? resolvedSearchParams.role
+      : undefined;
+  const verified =
+    resolvedSearchParams.verified === "true"
+      ? true
+      : resolvedSearchParams.verified === "false"
+        ? false
+        : undefined;
+  const sortBy =
+    (resolvedSearchParams.sortBy as "createdAt" | "firstName") || "createdAt";
+  const sortOrder =
+    (resolvedSearchParams.sortOrder as "asc" | "desc") || "desc";
+
+  const response = await getUsers(
+    page,
+    10,
+    search,
+    role,
+    verified,
+    sortBy,
+    sortOrder,
+  );
+
   const search =
     typeof resolvedSearchParams.search === "string"
       ? resolvedSearchParams.search

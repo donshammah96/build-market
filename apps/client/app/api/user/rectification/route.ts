@@ -121,118 +121,129 @@ const RectificationRequestSchema = z.object({
  * - Masks sensitive data in audit logs
  * - Tracks all changes with actor attribution
  */
-export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
+export const POST = withAuth(
+  async (req: NextRequest, { dbUserId }) => {
+    const correlationId = initializeCorrelationId(req);
 
-  try {
-    // Safe JSON parsing
-    const parseResult = await safeParseJsonBody(req);
-    if (!parseResult.success) {
-      return apiError(
-        parseResult.error || "Invalid JSON body",
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+    try {
+      // Safe JSON parsing
+      const parseResult = await safeParseJsonBody(req);
+      if (!parseResult.success) {
+        return apiError(
+          parseResult.error || "Invalid JSON body",
+          HttpStatus.BAD_REQUEST,
+        );
+      }
 
-    const body = parseResult.data;
+      const body = parseResult.data;
 
-    logger.info("Rectification request received", {
-      correlationId,
-      operationName: "user-data-rectification",
-      fieldsRequested: Object.keys(body || {}),
-    });
-
-    // Validate request body
-    const validationResult = RectificationRequestSchema.safeParse(body);
-    if (!validationResult.success) {
-      logger.warn("Rectification validation failed", {
+      logger.info("Rectification request received", {
         correlationId,
         operationName: "user-data-rectification",
-        errors: validationResult.error.issues,
+        fieldsRequested: Object.keys(body || {}),
       });
-      return apiError(
-        "Validation failed",
-        HttpStatus.BAD_REQUEST,
-        validationResult.error.issues,
+
+      // Validate request body
+      const validationResult = RectificationRequestSchema.safeParse(body);
+      if (!validationResult.success) {
+        logger.warn("Rectification validation failed", {
+          correlationId,
+          operationName: "user-data-rectification",
+          errors: validationResult.error.issues,
+        });
+        return apiError(
+          "Validation failed",
+          HttpStatus.BAD_REQUEST,
+          validationResult.error.issues,
+        );
+      }
+
+      const data = validationResult.data;
+
+      // Capture request metadata for audit using shared utility
+      const { ipAddress, userAgent } = getRequestMetadata(req);
+
+      // Execute rectification with resilience patterns
+      const result = await executor.execute(
+        async () =>
+          userProfileComplianceService.submitRectification({
+            actor: { userId: dbUserId, correlationId },
+            data,
+            ipAddress,
+            userAgent,
+          }),
+        {
+          timeout: "normal",
+          retry: { maxAttempts: 2 },
+          circuitBreaker: true,
+          operationName: "user-data-rectification",
+        },
       );
-    }
 
-    const data = validationResult.data;
+      if (!result.success || !result.data) {
+        logger.error(
+          "Rectification failed",
+          result.error || new Error("Unknown error"),
+          {
+            correlationId,
+            operationName: "user-data-rectification",
+            outcome: "failed",
+          },
+        );
+        return apiError(
+          "Failed to process rectification request",
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
 
-    // Capture request metadata for audit using shared utility
-    const { ipAddress, userAgent } = getRequestMetadata(req);
+      if (!result.data.ok) {
+        return apiError(
+          result.data.message || "Failed to process rectification request",
+          result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
 
-    // Execute rectification with resilience patterns
-    const result = await executor.execute(
-      async () =>
-        userProfileComplianceService.submitRectification({
-          actor: { userId: dbUserId, correlationId },
-          data,
-          ipAddress,
-          userAgent,
-        }),
-      {
-        timeout: "normal",
-        retry: { maxAttempts: 2 },
-        circuitBreaker: true,
+      const { changedFields } = result.data.data;
+
+      logger.info("Rectification completed successfully", {
+        correlationId,
         operationName: "user-data-rectification",
-      },
-    );
+        changedFieldsCount: changedFields.length,
+        fields: changedFields,
+      });
 
-    if (!result.success || !result.data) {
+      return apiSuccess(result.data.data, HttpStatus.OK);
+    } catch (err) {
       logger.error(
-        "Rectification failed",
-        result.error || new Error("Unknown error"),
+        "Rectification request error",
+        err instanceof Error ? err : new Error(String(err)),
         {
           correlationId,
           operationName: "user-data-rectification",
           outcome: "failed",
         },
       );
+
+      if (err instanceof z.ZodError) {
+        return apiError(
+          "Validation failed",
+          HttpStatus.BAD_REQUEST,
+          err.issues,
+        );
+      }
+
       return apiError(
-        "Failed to process rectification request",
+        "Failed to process rectification request. Please try again.",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-
-    if (!result.data.ok) {
-      return apiError(
-        result.data.message || "Failed to process rectification request",
-        result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-
-    const { changedFields } = result.data.data;
-
-    logger.info("Rectification completed successfully", {
-      correlationId,
-      operationName: "user-data-rectification",
-      changedFieldsCount: changedFields.length,
-      fields: changedFields,
-    });
-
-    return apiSuccess(result.data.data, HttpStatus.OK);
-  } catch (err) {
-    logger.error(
-      "Rectification request error",
-      err instanceof Error ? err : new Error(String(err)),
-      {
-        correlationId,
-        operationName: "user-data-rectification",
-        outcome: "failed",
-      },
-    );
-
-    if (err instanceof z.ZodError) {
-      return apiError("Validation failed", HttpStatus.BAD_REQUEST, err.issues);
-    }
-
-    return apiError(
-      "Failed to process rectification request. Please try again.",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
-  }
-});
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+  },
+);
 
 /**
  * GET /api/user/rectification

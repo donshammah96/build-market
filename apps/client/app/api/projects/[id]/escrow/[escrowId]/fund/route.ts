@@ -159,4 +159,9 @@ export const POST = withAuth<FundParams>(
     await IdempotencyService.complete(idempotencyKey, payload);
     return apiSuccess(payload, HttpStatus.OK);
   },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+  },
 );
