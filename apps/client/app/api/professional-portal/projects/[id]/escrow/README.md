@@ -40,6 +40,7 @@ Release funds to professional after milestone approval.
 - **Idempotency**: Critical — prevents double-release
 - **Guard**: Only from `FUNDS_HELD`, requires milestone `approvalStatus === APPROVED`
 - **Ledger**: DEBIT professional_payable, CREDIT platform_fee, CREDIT tax entries
+- **Finance side effects**: Creates `ProfessionalTransaction` (`INCOME`, `PROJECT_PAYMENT`, `SUCCESS`) so finance stats and transaction history remain consistent with escrow lifecycle
 - **Side effects**: Marks milestone as paid
 
 ### POST `/projects/[id]/escrow/[escrowId]/dispute`
@@ -60,6 +61,16 @@ PENDING_FUNDING -> FUNDS_HELD
 FUNDS_HELD -> RELEASED, DISPUTED
 DISPUTED -> REFUNDED, RELEASED (resolved)
 ```
+
+## Payment Lifecycle Consistency
+
+The canonical vertical flow is:
+
+1. Milestone approval (`PENDING -> APPROVED`)
+2. Escrow release guard validation (`FUNDS_HELD -> RELEASED`)
+3. Ledger writes (double-entry)
+4. Professional transaction write (`INCOME`)
+5. Finance surfaces update (`/finance/stats`, `/finance/transactions`)
 
 ## Platform Commission and Fees
 

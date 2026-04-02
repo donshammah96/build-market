@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
 import { createProfessionalPortalGet } from "@/app/lib/api/professional-portal-handler";
-import { TransactionQuerySchema } from "@/app/lib/validation/finance-validation";
-import { getProfessionalTransactions } from "@/lib/services/finance";
+import {
+  financeService,
+  TransactionQuerySchema,
+} from "@/app/lib/domains/finance";
 
 function parseTransactionQuery(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -22,8 +24,21 @@ export const GET = createProfessionalPortalGet({
   rateLimitKey: "finance-txn-read",
   querySchema: TransactionQuerySchema,
   parseQuery: parseTransactionQuery,
-  handler: async ({ dbUserId, query }) =>
-    getProfessionalTransactions(dbUserId, query),
+  handler: async ({ dbUserId, userRole, query }) => {
+    const result = await financeService.listTransactions(
+      {
+        userId: dbUserId,
+        role: userRole,
+      },
+      query,
+    );
+
+    if (!result.ok) {
+      throw new Error(result.message ?? "Failed to fetch transactions");
+    }
+
+    return result.data;
+  },
   operationName: "get_transactions",
   errorMessage: "Failed to fetch transactions",
 });

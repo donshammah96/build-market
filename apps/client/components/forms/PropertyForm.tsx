@@ -6,15 +6,16 @@ import {
   useForm,
   Controller,
   useFieldArray,
+  useWatch,
   Control,
   UseFormRegister,
   FieldErrors,
   FieldPath,
   Path,
+  Resolver,
 } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useDebounce } from "use-debounce";
 import {
   Home,
   MapPin,
@@ -26,7 +27,6 @@ import {
   FileText,
   Plus,
   Upload,
-  ExternalLink,
   File,
   FileImage,
   FileCheck,
@@ -38,6 +38,21 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
+
+export const SECURITY_PERSISTENCE_ALLOWLIST = [
+  "title",
+  "description",
+  "price",
+  "currency",
+  "location",
+  "address",
+  "county",
+  "type",
+  "category",
+  "status",
+  "features",
+] as const;
+import { uploadForCredential } from "@/lib/upload-client";
 import { isLocalUpload } from "@/lib/utils/upload";
 import { useImageUploader } from "@/hooks/useImageUploader";
 import Image from "next/image";
@@ -67,15 +82,14 @@ import {
   PROPERTY_TYPE_LABELS,
   PROPERTY_CATEGORIES as PROPERTY_CATEGORY_VALUES,
   PROPERTY_CATEGORY_LABELS,
+  PROPERTY_DOCUMENT_TYPES,
+  PROPERTY_DOCUMENT_TYPE_LABELS,
   PROPERTY_TENURES,
+  PROPERTY_TENURE_LABELS,
+  type PropertyDocumentType,
 } from "@build/enums";
-// Local sub-type (only the 3 document types exposed in this form)
-import type {
-  PropertyType,
-  PropertyCategory,
-  PropertyAttachmentType,
-} from "@/types/property";
-import { PROPERTY_ATTACHMENT_TYPE_LABELS as ATTACH_LABELS } from "@/types/property";
+// Local sub-types for type/category fields
+import type { PropertyType, PropertyCategory } from "@/types/property";
 import type { County } from "@build/enums";
 
 // ============================================================================
@@ -89,39 +103,38 @@ import type { County } from "@build/enums";
 const THEME = {
   /** Standard input styling */
   input:
-    "h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white dark:bg-zinc-800/50 dark:border-zinc-700 dark:focus:bg-zinc-800",
+    "h-11 bg-(--color-input-background) border-(--color-input) focus:bg-background",
   /** Input with icon prefix padding */
   inputWithPrefix: "pl-16",
   /** Section card container */
-  section:
-    "bg-white dark:bg-zinc-900/50 rounded-xl border border-zinc-100 dark:border-zinc-800 p-6 shadow-sm",
+  section: "bg-card rounded-xl border border-border p-6 shadow-sm",
   /** Form field container with light background */
   fieldContainer:
-    "p-4 border border-zinc-200 rounded-lg bg-zinc-50/30 dark:border-zinc-700 dark:bg-zinc-800/30",
+    "p-4 border border-border rounded-lg bg-(--color-input-background)",
   /** Drag and drop zone base */
   dropZone:
     "border-2 border-dashed rounded-xl transition-colors cursor-pointer",
   /** Drag and drop zone default state */
   dropZoneDefault:
-    "border-zinc-300 hover:border-zinc-400 bg-zinc-50/30 dark:border-zinc-600 dark:hover:border-zinc-500",
+    "border-border hover:border-ring bg-(--color-input-background)",
   /** Drag and drop zone active state */
-  dropZoneActive: "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20",
+  dropZoneActive: "border-success bg-success/10",
   /** Empty state container */
   emptyState:
-    "border-2 border-dashed border-zinc-200 rounded-xl p-8 text-center bg-zinc-50/30 dark:border-zinc-700",
+    "border-2 border-dashed border-border rounded-xl p-8 text-center bg-(--color-input-background)",
   /** Icon container */
   iconContainer:
-    "w-12 h-12 bg-zinc-100 rounded-full flex items-center justify-center text-zinc-400 dark:bg-zinc-800",
+    "w-12 h-12 bg-muted rounded-full flex items-center justify-center text-muted-foreground",
   /** Secondary button styling */
   secondaryButton:
-    "bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-100",
+    "bg-secondary hover:opacity-90 text-secondary-foreground border border-border",
 } as const;
 
 /** Maximum number of images allowed in the form */
 const MAX_IMAGES = 20;
 
-/** Maximum number of attachments allowed in the form */
-const MAX_ATTACHMENTS = 5;
+/** Maximum number of verification documents allowed in the form */
+const MAX_DOCUMENTS = 5;
 
 /** Threshold for enabling lazy loading on images */
 const LAZY_LOAD_THRESHOLD = 4;
@@ -161,23 +174,23 @@ export const isAllowedUrlDomain = (url: string): boolean => {
 /**
  * Returns an appropriate icon component based on URL or file type.
  */
-const getAttachmentIcon = (url: string, type: string): React.ReactNode => {
-  if (!url) return <File className="h-4 w-4 text-zinc-400" />;
+const getDocumentIcon = (nameOrUrl: string, type: string): React.ReactNode => {
+  if (!nameOrUrl) return <File className="h-4 w-4 text-muted-foreground" />;
 
   // Check file extension from URL
-  const ext = url.split(".").pop()?.toLowerCase();
+  const ext = nameOrUrl.split(".").pop()?.toLowerCase();
 
   if (ext === "pdf" || type.includes("DEED") || type.includes("SEARCH")) {
-    return <FileText className="h-4 w-4 text-red-500" />;
+    return <FileText className="h-4 w-4 text-error" />;
   }
   if (["jpg", "jpeg", "png", "webp", "gif"].includes(ext || "")) {
-    return <FileImage className="h-4 w-4 text-blue-500" />;
+    return <FileImage className="h-4 w-4 text-primary" />;
   }
   if (type.includes("APPROVAL") || type.includes("CERTIFICATE")) {
-    return <FileCheck className="h-4 w-4 text-green-500" />;
+    return <FileCheck className="h-4 w-4 text-success" />;
   }
 
-  return <File className="h-4 w-4 text-zinc-500" />;
+  return <File className="h-4 w-4 text-muted-foreground" />;
 };
 
 function findFirstInvalidFieldPath(
@@ -234,14 +247,23 @@ const PROPERTY_CATEGORY_OPTIONS: Array<{
   label: PROPERTY_CATEGORY_LABELS[v],
 }));
 
-// Property Attachment Type options (form subset — 3 document types only)
-const ATTACHMENT_TYPES: Array<{
-  value: PropertyAttachmentType;
+// Property document type options (form subset — 3 verification document types only)
+const DOCUMENT_TYPES: Array<{
+  value: PropertyDocumentType;
   label: string;
 }> = [
-  { value: "TITLE_DEED", label: ATTACH_LABELS.TITLE_DEED },
-  { value: "OFFICIAL_SEARCH", label: ATTACH_LABELS.OFFICIAL_SEARCH },
-  { value: "MANDATE_LETTER", label: ATTACH_LABELS.MANDATE_LETTER },
+  {
+    value: "TITLE_DEED",
+    label: PROPERTY_DOCUMENT_TYPE_LABELS.TITLE_DEED,
+  },
+  {
+    value: "OFFICIAL_SEARCH",
+    label: PROPERTY_DOCUMENT_TYPE_LABELS.OFFICIAL_SEARCH,
+  },
+  {
+    value: "MANDATE_LETTER",
+    label: PROPERTY_DOCUMENT_TYPE_LABELS.MANDATE_LETTER,
+  },
 ];
 
 // County options — derived from @build/enums COUNTY_LABELS record
@@ -260,32 +282,125 @@ const CURRENCY_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "GBP", label: "GBP - British Pound" },
 ];
 
+const PROPERTY_TENURE_OPTIONS: Array<{ value: string; label: string }> =
+  PROPERTY_TENURES.map((value) => ({
+    value,
+    label: PROPERTY_TENURE_LABELS[value],
+  }));
+
+const SECTION_ORDER = [
+  "Basic Details",
+  "Pricing",
+  "Location",
+  "Property Specs",
+  "Legal Information",
+  "Media",
+  "Features",
+  "Documents",
+  "Other",
+] as const;
+
+const FIELD_LABELS: Record<string, { label: string; section: string }> = {
+  title: { label: "Property Title", section: "Basic Details" },
+  description: { label: "Description", section: "Basic Details" },
+  type: { label: "Property Type", section: "Basic Details" },
+  tenure: { label: "Tenure", section: "Basic Details" },
+  category: { label: "Category", section: "Basic Details" },
+  price: { label: "Price", section: "Pricing" },
+  currency: { label: "Currency", section: "Pricing" },
+  county: { label: "County", section: "Location" },
+  constituency: { label: "Constituency", section: "Location" },
+  neighbourhood: { label: "Neighbourhood", section: "Location" },
+  address: { label: "Address", section: "Location" },
+  latitude: { label: "Latitude", section: "Location" },
+  longitude: { label: "Longitude", section: "Location" },
+  bedrooms: { label: "Bedrooms", section: "Property Specs" },
+  bathrooms: { label: "Bathrooms", section: "Property Specs" },
+  buildingSize: { label: "Area (sq ft)", section: "Property Specs" },
+  plotSize: { label: "Plot Size", section: "Property Specs" },
+  lrNumber: { label: "LR Number", section: "Legal Information" },
+  images: { label: "Images", section: "Media" },
+  videoUrl: { label: "Video URL", section: "Media" },
+  floorPlan: { label: "Floor Plan", section: "Media" },
+  features: { label: "Features", section: "Features" },
+  documents: { label: "Verification Documents", section: "Documents" },
+};
+
+const safeMessage = (msg: unknown): string => {
+  if (typeof msg === "string") return msg;
+  if (msg === null || msg === undefined) return "Unknown error";
+  return msg?.toString?.() ?? String(msg ?? "Unknown error");
+};
+
 // Zod enums — derived from @build/enums as-const arrays (single source of truth)
 const CountyEnum = z.enum(COUNTIES);
 const PropertyTypeEnum = z.enum(PROPERTY_TYPE_VALUES);
 const PropertyCategoryEnum = z.enum(PROPERTY_CATEGORY_VALUES);
-// Attachment type is a narrower 3-element subset used only in this form
-const PropertyAttachmentTypeEnum = z.enum([
-  "TITLE_DEED",
-  "OFFICIAL_SEARCH",
-  "MANDATE_LETTER",
-] as const);
+const PropertyDocumentTypeEnum = z.enum(PROPERTY_DOCUMENT_TYPES);
 
-// Property attachment schema
-const PropertyAttachmentSchema = z.object({
-  fileUrl: z
+// Property document schema with optional UI-only metadata for preview state
+const PropertyDocumentSchema = z.object({
+  assetId: z
     .string()
-    .min(1, "File URL is required")
-    .url("File URL must be a valid URL")
-    .refine((url) => url.startsWith("https://"), {
-      message: "File URL must start with https://",
-    }),
-  type: PropertyAttachmentTypeEnum,
+    .uuid("Asset ID must be a valid UUID")
+    .min(1, "Asset ID is required"),
+  type: PropertyDocumentTypeEnum,
   notes: z
     .string()
     .max(500, "Notes must be less than 500 characters")
     .optional(),
+  fileUrl: z
+    .string()
+    .min(1, "Document preview URL is required")
+    .max(2048, "Document preview URL must be less than 2048 characters")
+    .optional(),
+  fileName: z
+    .string()
+    .max(255, "File name must be less than 255 characters")
+    .optional(),
+  mimeType: z
+    .string()
+    .max(255, "MIME type must be less than 255 characters")
+    .optional(),
+  size: z
+    .number()
+    .int()
+    .positive("Document size must be a positive number")
+    .optional(),
 });
+
+const PropertyImageSchema = z.object({
+  value: z
+    .string()
+    .min(1, "Image URL is required")
+    .url("Image URL must be a valid URL")
+    .refine((url) => url.startsWith("https://") || url.startsWith("/"), {
+      message: "Image URL must be a valid HTTPS or local URL",
+    }),
+  assetId: z
+    .preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.string().uuid("Asset ID must be a valid UUID"),
+    )
+    .optional(),
+});
+
+const optionalNumberInput = <T extends z.ZodNumber>(schema: T) =>
+  z
+    .preprocess(
+      (value) =>
+        typeof value === "number" && Number.isNaN(value) ? undefined : value,
+      schema,
+    )
+    .optional();
+
+const optionalUrlInput = (
+  schema: z.ZodString,
+  emptyValue: string | undefined = "",
+) =>
+  z
+    .preprocess((value) => (value === emptyValue ? undefined : value), schema)
+    .optional();
 
 const propertySchema = z
   .object({
@@ -319,52 +434,59 @@ const propertySchema = z
       .string()
       .max(500, "Address must be less than 500 characters")
       .optional(),
-    latitude: z
-      .number()
-      .min(-90, "Latitude must be between -90 and 90")
-      .max(90, "Latitude must be between -90 and 90")
-      .optional(),
-    longitude: z
-      .number()
-      .min(-180, "Longitude must be between -180 and 180")
-      .max(180, "Longitude must be between -180 and 180")
-      .optional(),
-    bedrooms: z
-      .number()
-      .int()
-      .min(0, "Bedrooms cannot be negative")
-      .max(50, "Bedrooms cannot exceed 50")
-      .optional(),
-    bathrooms: z
-      .number()
-      .int()
-      .min(0, "Bathrooms cannot be negative")
-      .max(50, "Bathrooms cannot exceed 50")
-      .optional(),
-    areaSqFt: z.number().positive("Area must be a positive number").optional(),
+    latitude: optionalNumberInput(
+      z
+        .number()
+        .min(-90, "Latitude must be between -90 and 90")
+        .max(90, "Latitude must be between -90 and 90"),
+    ),
+    longitude: optionalNumberInput(
+      z
+        .number()
+        .min(-180, "Longitude must be between -180 and 180")
+        .max(180, "Longitude must be between -180 and 180"),
+    ),
+    bedrooms: optionalNumberInput(
+      z
+        .number()
+        .int()
+        .min(0, "Bedrooms cannot be negative")
+        .max(50, "Bedrooms cannot exceed 50"),
+    ),
+    bathrooms: optionalNumberInput(
+      z
+        .number()
+        .int()
+        .min(0, "Bathrooms cannot be negative")
+        .max(50, "Bathrooms cannot exceed 50"),
+    ),
+    buildingSize: optionalNumberInput(
+      z.number().positive("Building size must be a positive number"),
+    ),
     areaUnit: z.enum(["SQ_FEET", "ACRES", "SQ_METERS"]).optional(),
-    lotSize: z
-      .number()
-      .positive("Lot size must be a positive number")
-      .optional(),
+    plotSize: optionalNumberInput(
+      z.number().positive("Plot size must be a positive number"),
+    ),
     lrNumber: z
       .string()
       .max(100, "LR Number must be less than 100 characters")
       .optional(),
-    floorPlan: z
-      .string()
-      .url("Floor plan must be a valid URL")
-      .refine((url) => !url || url.startsWith("https://"), {
-        message: "Floor plan URL must start with https://",
-      })
-      .optional(),
-    videoUrl: z
-      .string()
-      .url("Video URL must be a valid URL")
-      .refine((url) => !url || url.startsWith("https://"), {
-        message: "Video URL must start with https://",
-      })
-      .optional(),
+    floorPlan: optionalUrlInput(
+      z
+        .string()
+        .url("Floor plan must be a valid URL")
+        .refine((url) => url.startsWith("https://"), {
+          message: "Floor plan URL must start with https://",
+        }),
+    ),
+    videoUrl: optionalUrlInput(
+      z
+        .string()
+        .url("Video URL must be a valid URL")
+        .refine((url) => url.startsWith("https://"), {
+          message: "Video URL must start with https://",
+        }),
+    ),
     features: z
       .array(
         z
@@ -381,31 +503,26 @@ const propertySchema = z
     hasElevator: z.boolean().optional(),
     hasCCTV: z.boolean().optional(),
     images: z
-      .array(
-        z.object({
-          value: z
-            .string()
-            .min(1, "Image URL is required")
-            .url("Image URL must be a valid URL")
-            .refine(
-              (url) => url.startsWith("https://") || url.startsWith("/"),
-              {
-                message: "Image URL must be a valid HTTPS or local URL",
-              },
-            ),
-        }),
-      )
+      .array(PropertyImageSchema)
       .min(1, "At least one image is required")
-      .max(20, "Maximum 20 images allowed")
-      .optional(),
-    attachments: z
-      .array(PropertyAttachmentSchema)
-      .max(5, "Maximum 5 attachments allowed")
+      .max(20, "Maximum 20 images allowed"),
+    documents: z
+      .array(PropertyDocumentSchema)
+      .max(5, "Maximum 5 verification documents allowed")
       .optional(),
   })
   .refine(
-    (data) =>
-      (data.latitude && data.longitude) || (!data.latitude && !data.longitude),
+    (data) => {
+      const hasLatitude =
+        data.latitude !== undefined &&
+        data.latitude !== null &&
+        Number.isFinite(data.latitude);
+      const hasLongitude =
+        data.longitude !== undefined &&
+        data.longitude !== null &&
+        Number.isFinite(data.longitude);
+      return hasLatitude === hasLongitude;
+    },
     {
       message: "Provide both latitude and longitude or neither",
       path: ["latitude"],
@@ -414,18 +531,40 @@ const propertySchema = z
 
 export type PropertyFormData = z.infer<typeof propertySchema>;
 
-// Transformed data type for submission (images as string array)
-export type PropertyFormSubmitData = Omit<PropertyFormData, "images"> & {
+type PropertyFormSubmitDocument = {
+  assetId: string;
+  type: PropertyDocumentType;
+  notes?: string;
+};
+
+type PropertyFormSubmitImage = {
+  assetId: string;
+  url: string;
+};
+
+// Transformed data type for submission (images as string array plus canonical asset refs)
+export type PropertyFormSubmitData = Omit<
+  PropertyFormData,
+  "images" | "documents"
+> & {
   images?: string[];
+  imageAssets?: PropertyFormSubmitImage[];
+  documents?: PropertyFormSubmitDocument[];
+};
+
+type PropertyFormDefaultValues = Partial<PropertyFormSubmitData> & {
+  id?: string;
 };
 
 interface PropertyFormProps {
   /** Form submission handler - always returns a Promise for consistency */
   onSubmit: (data: PropertyFormSubmitData) => Promise<void>;
   /** Default form values for editing or pre-filling (images as string array) */
-  defaultValues?: Partial<PropertyFormSubmitData>;
+  defaultValues?: PropertyFormDefaultValues;
   /** Whether the form is in edit mode */
   isEditing?: boolean;
+  /** Optional stable property ID to scope edit-mode draft storage */
+  propertyId?: string;
   /** Hide the submit button (useful for controlled forms) */
   hideSubmitButton?: boolean;
   /** Callback fired when form values change (debounced by 300ms) */
@@ -445,22 +584,22 @@ const FormSection: React.FC<{
 }> = ({ title, description, icon, children, className }) => (
   <div
     className={cn(
-      "bg-white dark:bg-zinc-900/50 rounded-xl border border-zinc-100 dark:border-zinc-800 p-6 shadow-sm",
+      THEME.section,
       className,
     )}
   >
-    <div className="flex items-start gap-3 mb-6 border-b border-zinc-100 dark:border-zinc-800 pb-4">
+    <div className="flex items-start gap-3 mb-6 border-b border-border pb-4">
       {icon && (
-        <div className="p-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-lg">
+        <div className="p-2 bg-primary/10 text-primary rounded-lg">
           {icon}
         </div>
       )}
       <div>
-        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+        <h3 className="text-base font-semibold text-foreground">
           {title}
         </h3>
         {description && (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="text-sm text-muted-foreground">
             {description}
           </p>
         )}
@@ -489,6 +628,16 @@ const FormField: React.FC<{
   className,
   fieldId,
 }) => {
+  const LABELABLE_TAGS = new Set([
+    "button",
+    "input",
+    "meter",
+    "output",
+    "progress",
+    "select",
+    "textarea",
+  ]);
+
   const generatedId = React.useId();
   const resolvedFieldId = fieldId || `property-field-${generatedId}`;
   const descriptionId = description
@@ -499,22 +648,31 @@ const FormField: React.FC<{
 
   let renderedChildren = children;
   if (React.isValidElement(children)) {
-    const existingDescribedBy = (
-      children.props as { "aria-describedby"?: string }
-    )["aria-describedby"];
-    renderedChildren = React.cloneElement(
-      children as React.ReactElement<Record<string, unknown>>,
-      {
-        id: (children.props as { id?: string }).id ?? resolvedFieldId,
-        "aria-invalid":
-          error !== undefined
-            ? true
-            : (children.props as { "aria-invalid"?: boolean })["aria-invalid"],
-        "aria-describedby": [existingDescribedBy, describedBy]
-          .filter(Boolean)
-          .join(" "),
-      },
-    );
+    const childType = children.type;
+    const isNativeElement = typeof childType === "string";
+    const canInjectControlProps =
+      !isNativeElement || LABELABLE_TAGS.has(childType);
+
+    if (canInjectControlProps) {
+      const existingDescribedBy = (
+        children.props as { "aria-describedby"?: string }
+      )["aria-describedby"];
+      renderedChildren = React.cloneElement(
+        children as React.ReactElement<Record<string, unknown>>,
+        {
+          id: (children.props as { id?: string }).id ?? resolvedFieldId,
+          "aria-invalid":
+            error !== undefined
+              ? true
+              : (children.props as { "aria-invalid"?: boolean })[
+                  "aria-invalid"
+                ],
+          "aria-describedby": [existingDescribedBy, describedBy]
+            .filter(Boolean)
+            .join(" "),
+        },
+      );
+    }
   }
 
   return (
@@ -522,28 +680,22 @@ const FormField: React.FC<{
       <div className="space-y-1">
         <Label
           htmlFor={resolvedFieldId}
-          className="text-sm font-medium text-zinc-700 dark:text-zinc-300 flex items-center gap-1"
+          className="text-sm font-medium text-foreground flex items-center gap-1"
         >
           {label}
           {required && (
-            <span
-              className="text-emerald-500 text-xs ml-0.5"
-              aria-hidden="true"
-            >
+            <span className="text-success text-xs ml-0.5" aria-hidden="true">
               *
             </span>
           )}
           {optional && !required && (
-            <span className="text-zinc-400 text-xs ml-1 font-normal">
+            <span className="text-muted-foreground text-xs ml-1 font-normal">
               (optional)
             </span>
           )}
         </Label>
         {description && (
-          <p
-            id={descriptionId}
-            className="text-xs text-zinc-500 dark:text-zinc-400"
-          >
+          <p id={descriptionId} className="text-xs text-muted-foreground">
             {description}
           </p>
         )}
@@ -554,7 +706,7 @@ const FormField: React.FC<{
           id={errorId}
           role="alert"
           aria-live="polite"
-          className="text-xs text-red-500 flex items-center gap-1.5 animate-in slide-in-from-top-1"
+          className="text-xs text-error flex items-center gap-1.5 motion-safe:animate-in motion-safe:slide-in-from-top-1"
         >
           <AlertCircle className="h-3 w-3" />
           {error}
@@ -598,7 +750,7 @@ const FeaturesInput = memo<{
           value={newFeature}
           onChange={(e) => setNewFeature(e.target.value)}
           placeholder="e.g. Swimming Pool, Gym, Borehole"
-          className="flex-1 bg-zinc-50/50 border-zinc-200 focus:bg-white h-11"
+          className="flex-1 h-11 bg-(--color-input-background) border-(--color-input) focus:bg-background"
           onKeyDown={(e) =>
             e.key === "Enter" && (e.preventDefault(), handleAddFeature())
           }
@@ -607,7 +759,8 @@ const FeaturesInput = memo<{
           type="button"
           onClick={handleAddFeature}
           variant="secondary"
-          className="bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-200"
+          className="bg-secondary hover:opacity-90 text-secondary-foreground border border-border"
+          aria-label="Add feature"
         >
           <Plus className="h-4 w-4" />
         </Button>
@@ -617,13 +770,13 @@ const FeaturesInput = memo<{
           {value.map((feature) => (
             <div
               key={feature}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full text-sm border border-emerald-200"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-success/10 text-success rounded-full text-sm border border-success/30"
             >
               <span>{feature}</span>
               <button
                 type="button"
                 onClick={() => handleRemoveFeature(feature)}
-                className="ml-1 hover:text-emerald-900"
+                className="ml-1 hover:opacity-75"
                 aria-label={`Remove ${feature}`}
               >
                 <X className="h-3 w-3" />
@@ -643,10 +796,11 @@ FeaturesInput.displayName = "FeaturesInput";
  * Supports drag-and-drop upload, URL input, and image removal.
  */
 interface ImageGalleryProps {
-  images: Array<{ id: string; value: string }>;
+  images: Array<{ id: string; value: string; assetId?: string }>;
   uploadingImages: Set<number>;
   onRemove: (index: number) => void;
   onReorder: (activeId: string, overId: string) => void;
+  disableReorder?: boolean;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
@@ -664,76 +818,92 @@ interface SortableImageItemProps {
   index: number;
   url: string;
   isUploading: boolean;
+  disableDrag?: boolean;
   onRemove: (index: number) => void;
 }
 
-const SortableImageItem = memo<SortableImageItemProps>(function SortableImageItem({
-  imageId,
-  index,
-  url,
-  isUploading,
-  onRemove,
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: imageId });
+const SortableImageItem = memo<SortableImageItemProps>(
+  function SortableImageItem({
+    imageId,
+    index,
+    url,
+    isUploading,
+    disableDrag,
+    onRemove,
+  }) {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({ id: imageId });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+    };
 
-  const shouldLazyLoad = index >= LAZY_LOAD_THRESHOLD;
+    const shouldLazyLoad = index >= LAZY_LOAD_THRESHOLD;
 
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        "relative group aspect-square rounded-lg overflow-hidden border border-zinc-200 bg-zinc-100 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 touch-none",
-        isDragging && "opacity-60 ring-2 ring-emerald-500",
-      )}
-    >
-      {isUploading ? (
-        <div className="absolute inset-0 flex items-center justify-center bg-zinc-200 dark:bg-zinc-700">
-          <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
-        </div>
-      ) : (
-        <>
-          <Image
-            src={url}
-            alt={`Property image ${index + 1}`}
-            fill
-            className="object-cover"
-            unoptimized={!isLocalUpload(url)}
-            priority={index === 0}
-            loading={shouldLazyLoad ? "lazy" : undefined}
-          />
-          <button
-            type="button"
-            className="absolute left-2 top-2 h-7 w-7 rounded-full bg-black/55 text-white flex items-center justify-center cursor-grab active:cursor-grabbing"
-            aria-label={`Drag image ${index + 1} to reorder`}
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical className="h-4 w-4" />
-          </button>
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center justify-center">
-            <Button
-              type="button"
-              variant="destructive"
-              size="icon"
-              className="h-8 w-8 rounded-full"
-              onClick={() => onRemove(index)}
-              aria-label={`Remove image ${index + 1}`}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className={cn(
+          "relative group aspect-square rounded-lg overflow-hidden border border-border bg-muted/40 shadow-sm touch-none",
+          isDragging && "opacity-60 ring-2 ring-ring",
+        )}
+      >
+        {isUploading ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-muted">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
-        </>
-      )}
-    </div>
-  );
-});
+        ) : (
+          <>
+            <Image
+              src={url}
+              alt={`Property image ${index + 1}`}
+              fill
+              className="object-cover"
+              unoptimized={!isLocalUpload(url)}
+              priority={index === 0}
+              loading={shouldLazyLoad ? "lazy" : undefined}
+            />
+            <button
+              type="button"
+              className={cn(
+                "absolute left-2 top-2 h-11 w-11 rounded-full bg-foreground/70 text-background flex items-center justify-center",
+                disableDrag
+                  ? "cursor-not-allowed opacity-60"
+                  : "cursor-grab active:cursor-grabbing",
+              )}
+              aria-label={`Drag image ${index + 1} to reorder`}
+              disabled={disableDrag}
+              {...(disableDrag ? {} : attributes)}
+              {...(disableDrag ? {} : listeners)}
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center justify-center">
+              <Button
+                type="button"
+                variant="destructive"
+                size="icon"
+                className="h-11 w-11 rounded-full"
+                onClick={() => onRemove(index)}
+                aria-label={`Remove image ${index + 1}`}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  },
+);
 
 /**
  * Memoized ImageGallery component for displaying and managing property images.
@@ -744,6 +914,7 @@ const ImageGallery = memo<ImageGalleryProps>(function ImageGallery({
   uploadingImages,
   onRemove,
   onReorder,
+  disableReorder,
   onDragOver,
   onDragLeave,
   onDrop,
@@ -776,28 +947,44 @@ const ImageGallery = memo<ImageGalleryProps>(function ImageGallery({
     [onReorder],
   );
 
+  const canReorder = !disableReorder;
+
+  const renderImageGrid = () => (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {images.map((field, index) => {
+        const url = field.value;
+        const isUploading = uploadingImages.has(index) || !url;
+
+        return (
+          <SortableImageItem
+            key={field.id}
+            imageId={field.id}
+            index={index}
+            url={url}
+            isUploading={isUploading}
+            disableDrag={!canReorder || isUploading}
+            onRemove={onRemove}
+          />
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       {/* Drag and Drop Zone */}
-      <div
+      <button
+        type="button"
         className={cn(
           THEME.dropZone,
-          "p-6 mb-4",
+          "p-6 mb-4 w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2",
           isDragging ? THEME.dropZoneActive : THEME.dropZoneDefault,
         )}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
         onClick={() => fileInputRef.current?.click()}
-        role="button"
-        tabIndex={0}
         aria-label="Upload images by clicking or dragging files here"
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            fileInputRef.current?.click();
-          }
-        }}
       >
         <input
           ref={fileInputRef}
@@ -810,21 +997,21 @@ const ImageGallery = memo<ImageGalleryProps>(function ImageGallery({
         <div className="flex flex-col items-center justify-center text-center">
           <div className={cn(THEME.iconContainer, "mb-3")}>
             {isDragging ? (
-              <Upload className="h-6 w-6 text-emerald-600" />
+              <Upload className="h-6 w-6 text-success" />
             ) : (
               <ImagePlus className="h-6 w-6" />
             )}
           </div>
-          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+          <p className="text-sm font-medium text-foreground mb-1">
             {isDragging
               ? "Drop images here"
               : "Drag and drop images here, or click to browse"}
           </p>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="text-xs text-muted-foreground">
             Supports JPG, PNG, WebP (max 10MB per file, max {MAX_IMAGES} images)
           </p>
         </div>
-      </div>
+      </button>
 
       {/* URL Input */}
       <div className="mb-4 space-y-1.5">
@@ -854,7 +1041,10 @@ const ImageGallery = memo<ImageGalleryProps>(function ImageGallery({
       </div>
 
       {error && (
-        <div className="text-xs text-red-500 flex items-center gap-1.5 mb-2">
+        <div
+          aria-live="polite"
+          className="text-xs text-error flex items-center gap-1.5 mb-2"
+        >
           <AlertCircle className="h-3 w-3" />
           {error}
         </div>
@@ -865,12 +1055,12 @@ const ImageGallery = memo<ImageGalleryProps>(function ImageGallery({
           <div className={cn(THEME.iconContainer, "mx-auto mb-3")}>
             <ImagePlus className="h-6 w-6" />
           </div>
-          <p className="text-sm text-zinc-500">No images added yet.</p>
-          <p className="text-xs text-zinc-400 mt-1">
+          <p className="text-sm text-muted-foreground">No images added yet.</p>
+          <p className="text-xs text-muted-foreground mt-1">
             At least one image is required
           </p>
         </div>
-      ) : (
+      ) : canReorder ? (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -881,36 +1071,240 @@ const ImageGallery = memo<ImageGalleryProps>(function ImageGallery({
             items={images.map((image) => image.id)}
             strategy={rectSortingStrategy}
           >
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {images.map((field, index) => {
-                const url = field.value;
-                const isUploading = uploadingImages.has(index) || !url;
-
-                return (
-                  <SortableImageItem
-                    key={field.id}
-                    imageId={field.id}
-                    index={index}
-                    url={url}
-                    isUploading={isUploading}
-                    onRemove={onRemove}
-                  />
-                );
-              })}
-            </div>
+            {renderImageGrid()}
           </SortableContext>
         </DndContext>
+      ) : (
+        renderImageGrid()
       )}
     </div>
   );
 });
 
-/**
- * AttachmentList component for managing property verification documents.
- * Supports multiple attachments with type selection, file URLs, and notes.
- */
-interface AttachmentListProps {
-  attachments: Array<{ id: string }>;
+interface PropertyDocumentCardProps {
+  index: number;
+  errors: FieldErrors<PropertyFormData>;
+  control: Control<PropertyFormData>;
+  register: UseFormRegister<PropertyFormData>;
+  resolveError: (
+    path: Path<PropertyFormData>,
+    message: unknown,
+  ) => string | undefined;
+  onRemove: (index: number) => void;
+  onUpload: (index: number, file: File) => Promise<void>;
+  isUploading: boolean;
+  documentTypes: Array<{ value: PropertyDocumentType; label: string }>;
+}
+
+const PropertyDocumentCard: React.FC<PropertyDocumentCardProps> = ({
+  index,
+  errors,
+  control,
+  register,
+  resolveError,
+  onRemove,
+  onUpload,
+  isUploading,
+  documentTypes,
+}) => {
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const documentValue = useWatch({
+    control,
+    name: `documents.${index}`,
+  });
+  const currentType = documentValue?.type || "";
+  const currentAssetId = documentValue?.assetId || "";
+  const currentFileUrl = documentValue?.fileUrl || "";
+  const currentFileName = documentValue?.fileName || "";
+  const documentTypeFieldId = `property-field-documents-${index}-type`;
+  const documentAssetFieldId = `property-field-documents-${index}-assetId`;
+  const documentTypeDescribedBy = `${documentTypeFieldId}-error`;
+  const documentFileDescribedBy = [
+    `${documentAssetFieldId}-description`,
+    `${documentAssetFieldId}-error`,
+  ].join(" ");
+
+  const handleChooseFile = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      await onUpload(index, file);
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  return (
+    <div className={cn(THEME.fieldContainer, "space-y-3")}>
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2">
+          {getDocumentIcon(currentFileName || currentFileUrl, currentType)}
+          <div>
+            <h4 className="text-sm font-medium text-foreground">
+              Document {index + 1}
+            </h4>
+            <p className="text-xs text-muted-foreground">
+              Upload a PDF or image and we will store the asset reference for
+              you.
+            </p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-11 w-11 text-error hover:bg-error/10"
+          onClick={() => onRemove(index)}
+          aria-label={`Remove document ${index + 1}`}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <FormField
+          label="Document Type"
+          required
+          fieldId={documentTypeFieldId}
+          error={resolveError(
+            `documents.${index}.type` as Path<PropertyFormData>,
+            errors.documents?.[index]?.type?.message,
+          )}
+        >
+          <Controller
+            name={`documents.${index}.type`}
+            control={control}
+            render={({ field }) => (
+              <Combobox
+                id={documentTypeFieldId}
+                aria-describedby={documentTypeDescribedBy}
+                aria-invalid={
+                  resolveError(
+                    `documents.${index}.type` as Path<PropertyFormData>,
+                    errors.documents?.[index]?.type?.message,
+                  )
+                    ? true
+                    : undefined
+                }
+                options={documentTypes}
+                value={field.value}
+                onChange={field.onChange}
+                placeholder="Select document type"
+                className="h-11"
+              />
+            )}
+          />
+        </FormField>
+
+        <FormField
+          label="Document File"
+          required
+          fieldId={documentAssetFieldId}
+          error={resolveError(
+            `documents.${index}.assetId` as Path<PropertyFormData>,
+            errors.documents?.[index]?.assetId?.message,
+          )}
+          description="PDF, JPG, PNG, or WEBP up to 25MB"
+        >
+          <div className="space-y-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf,image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <div
+              id={documentAssetFieldId}
+              aria-describedby={documentFileDescribedBy}
+              aria-invalid={
+                resolveError(
+                  `documents.${index}.assetId` as Path<PropertyFormData>,
+                  errors.documents?.[index]?.assetId?.message,
+                )
+                  ? true
+                  : undefined
+              }
+              tabIndex={-1}
+              className={cn(
+                "rounded-lg border border-border bg-muted/30 p-3",
+                resolveError(
+                  `documents.${index}.assetId` as Path<PropertyFormData>,
+                  errors.documents?.[index]?.assetId?.message,
+                )
+                  ? "border-error/50"
+                  : undefined,
+              )}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10"
+                  onClick={handleChooseFile}
+                  disabled={isUploading}
+                >
+                  {isUploading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="mr-2 h-4 w-4" />
+                  )}
+                  {currentAssetId ? "Replace File" : "Choose File"}
+                </Button>
+
+                {currentFileUrl ? (
+                  <Button type="button" variant="ghost" asChild>
+                    <a
+                      href={currentFileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Preview
+                    </a>
+                  </Button>
+                ) : null}
+              </div>
+
+              <p className="mt-2 text-sm text-muted-foreground">
+                {currentFileName ||
+                  (currentAssetId
+                    ? `Uploaded asset ${currentAssetId.slice(0, 8)}...`
+                    : "No file uploaded yet")}
+              </p>
+            </div>
+
+            <input type="hidden" {...register(`documents.${index}.assetId`)} />
+          </div>
+        </FormField>
+      </div>
+
+      <FormField
+        label="Notes"
+        optional
+        error={resolveError(
+          `documents.${index}.notes` as Path<PropertyFormData>,
+          errors.documents?.[index]?.notes?.message,
+        )}
+      >
+        <Textarea
+          {...register(`documents.${index}.notes`)}
+          placeholder="Additional notes about this document..."
+          className={cn(THEME.input, "resize-none min-h-20")}
+        />
+      </FormField>
+    </div>
+  );
+};
+
+interface PropertyDocumentListProps {
+  documents: Array<{ id: string }>;
   errors: FieldErrors<PropertyFormData>;
   control: Control<PropertyFormData>;
   register: UseFormRegister<PropertyFormData>;
@@ -920,159 +1314,45 @@ interface AttachmentListProps {
   ) => string | undefined;
   onRemove: (index: number) => void;
   onAdd: () => void;
-  attachmentTypes: Array<{ value: PropertyAttachmentType; label: string }>;
+  onUpload: (index: number, file: File) => Promise<void>;
+  uploadingDocumentIndexes: Set<number>;
+  documentTypes: Array<{ value: PropertyDocumentType; label: string }>;
 }
 
-const AttachmentList: React.FC<AttachmentListProps> = ({
-  attachments,
+const PropertyDocumentList: React.FC<PropertyDocumentListProps> = ({
+  documents,
   errors,
   control,
   register,
   resolveError,
   onRemove,
   onAdd,
-  attachmentTypes,
+  onUpload,
+  uploadingDocumentIndexes,
+  documentTypes,
 }) => {
-  const canAddMore = attachments.length < MAX_ATTACHMENTS;
+  const canAddMore = documents.length < MAX_DOCUMENTS;
 
   return (
     <div className="space-y-4">
-      {attachments.length > 0 && (
-        <p className="text-xs text-zinc-500">
-          {attachments.length} of {MAX_ATTACHMENTS} documents added
+      {documents.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {documents.length} of {MAX_DOCUMENTS} documents added
         </p>
       )}
 
-      {attachments.map((field, index) => (
-        <Controller
+      {documents.map((field, index) => (
+        <PropertyDocumentCard
           key={field.id}
-          name={`attachments.${index}`}
+          index={index}
+          errors={errors}
           control={control}
-          render={({ field: attachmentField }) => {
-            const currentType = attachmentField.value?.type || "";
-            const currentUrl = attachmentField.value?.fileUrl || "";
-            const attachmentTypeFieldId = `property-field-attachments-${index}-type`;
-            const attachmentTypeDescribedBy = `${attachmentTypeFieldId}-error`;
-            const attachmentFileFieldId = `property-field-attachments-${index}-fileUrl`;
-            const attachmentFileDescribedBy = [
-              `${attachmentFileFieldId}-description`,
-              `${attachmentFileFieldId}-error`,
-            ].join(" ");
-
-            return (
-              <div className={cn(THEME.fieldContainer, "space-y-3")}>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    {getAttachmentIcon(currentUrl, currentType)}
-                    <h4 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                      Document {index + 1}
-                    </h4>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                    onClick={() => onRemove(index)}
-                    aria-label={`Remove document ${index + 1}`}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <FormField
-                    label="Document Type"
-                    required
-                    fieldId={attachmentTypeFieldId}
-                    error={resolveError(
-                      `attachments.${index}.type` as Path<PropertyFormData>,
-                      errors.attachments?.[index]?.type?.message,
-                    )}
-                  >
-                    <Controller
-                      name={`attachments.${index}.type`}
-                      control={control}
-                      render={({ field }) => (
-                        <Combobox
-                          id={attachmentTypeFieldId}
-                          aria-describedby={attachmentTypeDescribedBy}
-                          aria-invalid={
-                            resolveError(
-                              `attachments.${index}.type` as Path<PropertyFormData>,
-                              errors.attachments?.[index]?.type?.message,
-                            )
-                              ? true
-                              : undefined
-                          }
-                          options={attachmentTypes}
-                          value={field.value}
-                          onChange={field.onChange}
-                          placeholder="Select document type"
-                          className="h-11"
-                        />
-                      )}
-                    />
-                  </FormField>
-
-                  <FormField
-                    label="File URL"
-                    required
-                    fieldId={attachmentFileFieldId}
-                    error={resolveError(
-                      `attachments.${index}.fileUrl` as Path<PropertyFormData>,
-                      errors.attachments?.[index]?.fileUrl?.message,
-                    )}
-                    description="Must be an HTTPS URL"
-                  >
-                    <div className="relative">
-                      <Input
-                        id={attachmentFileFieldId}
-                        aria-describedby={attachmentFileDescribedBy}
-                        aria-invalid={
-                          resolveError(
-                            `attachments.${index}.fileUrl` as Path<PropertyFormData>,
-                            errors.attachments?.[index]?.fileUrl?.message,
-                          )
-                            ? true
-                            : undefined
-                        }
-                        {...register(`attachments.${index}.fileUrl`)}
-                        placeholder="https://..."
-                        className={cn(THEME.input, currentUrl && "pr-10")}
-                      />
-                      {currentUrl && currentUrl.startsWith("https://") && (
-                        <a
-                          href={currentUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                          aria-label="Open document in new tab"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                      )}
-                    </div>
-                  </FormField>
-                </div>
-
-                <FormField
-                  label="Notes"
-                  optional
-                  error={resolveError(
-                    `attachments.${index}.notes` as Path<PropertyFormData>,
-                    errors.attachments?.[index]?.notes?.message,
-                  )}
-                >
-                  <Textarea
-                    {...register(`attachments.${index}.notes`)}
-                    placeholder="Additional notes about this document..."
-                    className="bg-zinc-50/50 border-zinc-200 focus:bg-white dark:bg-zinc-800/50 dark:border-zinc-700 resize-none min-h-20"
-                  />
-                </FormField>
-              </div>
-            );
-          }}
+          register={register}
+          resolveError={resolveError}
+          onRemove={onRemove}
+          onUpload={onUpload}
+          isUploading={uploadingDocumentIndexes.has(index)}
+          documentTypes={documentTypes}
         />
       ))}
 
@@ -1080,13 +1360,13 @@ const AttachmentList: React.FC<AttachmentListProps> = ({
         type="button"
         onClick={onAdd}
         variant="outline"
-        className="w-full border-dashed border-zinc-300 hover:border-zinc-400 dark:border-zinc-600"
+        className="w-full border-dashed border-border hover:border-ring"
         disabled={!canAddMore}
       >
         <Plus className="h-4 w-4 mr-2" />
         {canAddMore
           ? "Add Document"
-          : `Maximum ${MAX_ATTACHMENTS} documents reached`}
+          : `Maximum ${MAX_DOCUMENTS} documents reached`}
       </Button>
     </div>
   );
@@ -1100,15 +1380,40 @@ export default function PropertyForm({
   onSubmit,
   defaultValues,
   isEditing = false,
+  propertyId,
   hideSubmitButton = false,
   onChange,
 }: PropertyFormProps) {
   const errorSummaryHeadingRef = React.useRef<HTMLHeadingElement | null>(null);
   const hasHydratedDraftRef = React.useRef(false);
-  const draftStorageKey = React.useMemo(
-    () => `${PROPERTY_FORM_DRAFT_STORAGE_KEY}:${isEditing ? "edit" : "create"}`,
-    [isEditing],
-  );
+  const defaultValueId =
+    typeof defaultValues?.id === "string" && defaultValues.id.length > 0
+      ? defaultValues.id
+      : "new";
+  const formDefaultValues = React.useMemo(() => {
+    if (!defaultValues) return undefined;
+    const { id, imageAssets, ...rest } = defaultValues;
+    void imageAssets;
+    void id;
+    return rest;
+  }, [defaultValues]);
+  const normalizedDefaultImages = React.useMemo(() => {
+    if (defaultValues?.imageAssets?.length) {
+      return defaultValues.imageAssets.map((image) => ({
+        value: image.url,
+        assetId: image.assetId,
+      }));
+    }
+
+    return defaultValues?.images?.map((url) => ({ value: url })) || [];
+  }, [defaultValues]);
+  const draftStorageKey = React.useMemo(() => {
+    if (isEditing) {
+      const scopedId = propertyId || defaultValueId;
+      return `${PROPERTY_FORM_DRAFT_STORAGE_KEY}:edit:${scopedId}`;
+    }
+    return `${PROPERTY_FORM_DRAFT_STORAGE_KEY}:create`;
+  }, [defaultValueId, isEditing, propertyId]);
 
   const fieldA11y = React.useCallback(
     (path: string, hasDescription = false) => {
@@ -1150,16 +1455,17 @@ export default function PropertyForm({
     setValue,
     setFocus,
   } = useForm<PropertyFormData>({
-    resolver: zodResolver(propertySchema),
+    resolver: zodResolver(propertySchema) as Resolver<PropertyFormData>,
     mode: "onBlur",
     reValidateMode: "onChange",
     defaultValues: {
       title: "",
       description: "",
-      price: 0,
+      price: undefined,
       currency: "KES",
       type: "SALE",
       category: "RESIDENTIAL",
+      tenure: "FREEHOLD",
       county: undefined,
       location: "",
       constituency: "",
@@ -1169,20 +1475,24 @@ export default function PropertyForm({
       longitude: undefined,
       bedrooms: undefined,
       bathrooms: undefined,
-      areaSqFt: undefined,
-      lotSize: undefined,
+      buildingSize: undefined,
+      plotSize: undefined,
       lrNumber: "",
       floorPlan: "",
       videoUrl: "",
       features: [],
-      attachments: defaultValues?.attachments || [],
-      ...defaultValues,
+      documents: formDefaultValues?.documents || [],
+      ...formDefaultValues,
       // Convert string array to object array for useFieldArray (override after spread)
-      images: defaultValues?.images?.map((url) => ({ value: url })) || [],
+      images: normalizedDefaultImages,
     },
   });
 
-  // Use useFieldArray for both images and attachments
+  const [uploadingDocumentIndexes, setUploadingDocumentIndexes] = useState<
+    Set<number>
+  >(new Set());
+
+  // Use useFieldArray for both images and verification documents
   const {
     fields: imageFields,
     append: appendImage,
@@ -1195,36 +1505,106 @@ export default function PropertyForm({
   });
 
   const {
-    fields: attachmentFields,
-    append: appendAttachment,
-    remove: removeAttachment,
+    fields: documentFields,
+    append: appendDocument,
+    remove: removeDocument,
   } = useFieldArray({
     control,
-    name: "attachments",
+    name: "documents",
   });
 
-  const formValues = watch();
-
-  // Debounce form values to prevent expensive onChange calls on every keystroke
-  const [debouncedFormValues] = useDebounce(formValues, 300);
+  const watchedCurrency = useWatch({ control, name: "currency" });
 
   // Keep a stable ref to the latest onChange callback to prevent infinite useEffect loops
   // when parent components pass inline functions as onChange handlers
   const onChangeRef = React.useRef(onChange);
+  const changeDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   React.useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
 
   React.useEffect(() => {
-    if (onChangeRef.current) {
-      // Transform images from object array to string array for onChange callback
-      const transformedValues: Partial<PropertyFormSubmitData> = {
-        ...debouncedFormValues,
-        images: debouncedFormValues.images?.map((img) => img.value),
-      };
-      onChangeRef.current(transformedValues);
-    }
-  }, [debouncedFormValues]);
+    const subscription = watch((values) => {
+      if (changeDebounceRef.current) {
+        clearTimeout(changeDebounceRef.current);
+      }
+
+      changeDebounceRef.current = setTimeout(() => {
+        if (onChangeRef.current) {
+          const normalizedImages = values.images
+            ?.map((img) => img?.value)
+            .filter(
+              (img): img is string => typeof img === "string" && img.length > 0,
+            );
+          const normalizedImageAssets = values.images
+            ?.filter(
+              (
+                image,
+              ): image is {
+                value: string;
+                assetId: string;
+              } =>
+                Boolean(image) &&
+                typeof image?.value === "string" &&
+                image.value.length > 0 &&
+                typeof image?.assetId === "string" &&
+                image.assetId.length > 0,
+            )
+            .map((image) => ({
+              assetId: image.assetId,
+              url: image.value,
+            }));
+          const normalizedFeatures = values.features?.filter(
+            (feature): feature is string =>
+              typeof feature === "string" && feature.length > 0,
+          );
+          const normalizedDocuments = values.documents
+            ?.filter(
+              (
+                document,
+              ): document is {
+                assetId: string;
+                type: PropertyDocumentType;
+                notes?: string;
+              } =>
+                Boolean(document) &&
+                typeof document?.assetId === "string" &&
+                document.assetId.length > 0 &&
+                typeof document.type === "string",
+            )
+            .map((document) => ({
+              assetId: document.assetId,
+              type: document.type,
+              ...(document.notes ? { notes: document.notes } : {}),
+            }));
+
+          const transformedValues: Partial<PropertyFormSubmitData> = {
+            ...values,
+            features: normalizedFeatures,
+            images: normalizedImages,
+            imageAssets: normalizedImageAssets,
+            documents: normalizedDocuments,
+          };
+          onChangeRef.current(transformedValues);
+        }
+
+        if (!hasHydratedDraftRef.current || typeof window === "undefined") {
+          return;
+        }
+
+        window.sessionStorage.setItem(draftStorageKey, JSON.stringify(values));
+      }, 300);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      if (changeDebounceRef.current) {
+        clearTimeout(changeDebounceRef.current);
+      }
+    };
+  }, [draftStorageKey, watch]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1253,73 +1633,133 @@ export default function PropertyForm({
     }
   }, [draftStorageKey, setValue]);
 
-  React.useEffect(() => {
-    if (!hasHydratedDraftRef.current || typeof window === "undefined") return;
-
-    window.sessionStorage.setItem(
-      draftStorageKey,
-      JSON.stringify(debouncedFormValues),
-    );
-  }, [debouncedFormValues, draftStorageKey]);
-
   // Memoized image fields for stable reference
   const stableImageFields = useMemo(
-    () => imageFields.map((f) => ({ id: f.id, value: f.value })),
+    () =>
+      imageFields.map((f) => ({
+        id: f.id,
+        value: f.value,
+        assetId: f.assetId,
+      })),
     [imageFields],
   );
 
   // Wrapper handlers that connect the hook to useFieldArray
-  const handleFileSelect = (files: FileList | null) => {
-    handleFileSelectBase(
-      files,
-      stableImageFields,
+  const handleFileSelect = useCallback(
+    (files: FileList | null) => {
+      handleFileSelectBase(
+        files,
+        stableImageFields,
+        appendImage,
+        updateImage,
+        removeImage,
+      );
+    },
+    [
       appendImage,
-      updateImage,
+      handleFileSelectBase,
       removeImage,
-    );
-  };
+      stableImageFields,
+      updateImage,
+    ],
+  );
 
-  const handleDrop = (e: React.DragEvent) => {
-    handleDropBase(e, stableImageFields, appendImage, updateImage, removeImage);
-  };
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      handleDropBase(
+        e,
+        stableImageFields,
+        appendImage,
+        updateImage,
+        removeImage,
+      );
+    },
+    [appendImage, handleDropBase, removeImage, stableImageFields, updateImage],
+  );
 
-  const handleAddImage = () => {
+  const handleAddImage = useCallback(() => {
     handleAddImageBase(stableImageFields, appendImage);
-  };
+  }, [appendImage, handleAddImageBase, stableImageFields]);
 
-  const handleRemoveImage = (index: number) => {
-    handleRemoveImageBase(index, removeImage);
-  };
+  const handleRemoveImage = useCallback(
+    (index: number) => {
+      handleRemoveImageBase(index, removeImage);
+    },
+    [handleRemoveImageBase, removeImage],
+  );
 
   const handleReorderImages = useCallback(
     (activeId: string, overId: string) => {
-      const oldIndex = stableImageFields.findIndex((item) => item.id === activeId);
-      const newIndex = stableImageFields.findIndex((item) => item.id === overId);
+      if (uploadingImages.size > 0) return;
+
+      const oldIndex = stableImageFields.findIndex(
+        (item) => item.id === activeId,
+      );
+      const newIndex = stableImageFields.findIndex(
+        (item) => item.id === overId,
+      );
 
       if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
       moveImage(oldIndex, newIndex);
     },
-    [moveImage, stableImageFields],
+    [moveImage, stableImageFields, uploadingImages.size],
   );
 
-  const handleAddAttachment = () => {
-    appendAttachment({
-      fileUrl: "",
-      type: "TITLE_DEED" as PropertyAttachmentType,
+  const handleAddDocument = () => {
+    appendDocument({
+      assetId: "",
+      type: "TITLE_DEED",
       notes: "",
     });
   };
 
-  // Collect all form errors for summary
-  /**
-   * Safely extracts a message string from an error object.
-   * Handles undefined, null, and non-string values safely.
-   */
-  const safeMessage = (msg: unknown): string => {
-    if (typeof msg === "string") return msg;
-    if (msg === null || msg === undefined) return "Unknown error";
-    return msg?.toString?.() ?? String(msg ?? "Unknown error");
-  };
+  const handleUploadDocument = useCallback(
+    async (index: number, file: File) => {
+      setUploadingDocumentIndexes((current) => new Set(current).add(index));
+
+      try {
+        const { assetId, url } = await uploadForCredential(file, "documents");
+        setValue(`documents.${index}.assetId`, assetId, {
+          shouldDirty: true,
+          shouldTouch: true,
+          shouldValidate: true,
+        });
+        setValue(`documents.${index}.fileUrl`, url, {
+          shouldDirty: true,
+          shouldTouch: true,
+          shouldValidate: false,
+        });
+        setValue(`documents.${index}.fileName`, file.name, {
+          shouldDirty: true,
+          shouldTouch: true,
+          shouldValidate: false,
+        });
+        setValue(`documents.${index}.mimeType`, file.type, {
+          shouldDirty: true,
+          shouldTouch: true,
+          shouldValidate: false,
+        });
+        setValue(`documents.${index}.size`, file.size, {
+          shouldDirty: true,
+          shouldTouch: true,
+          shouldValidate: false,
+        });
+        toast.success(`Uploaded ${file.name}`);
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to upload document",
+        );
+        throw error;
+      } finally {
+        setUploadingDocumentIndexes((current) => {
+          const next = new Set(current);
+          next.delete(index);
+          return next;
+        });
+      }
+    },
+    [setValue],
+  );
 
   const getNestedValue = React.useCallback((obj: unknown, path: string) => {
     return path.split(".").reduce<unknown>((acc, key) => {
@@ -1349,16 +1789,20 @@ export default function PropertyForm({
 
   const resolveFieldDomId = React.useCallback(
     (path: string): string | null => {
-      const attachmentMatch = path.match(/^attachments\.(\d+)\.(type|fileUrl)$/);
-      if (attachmentMatch) {
-        const [, index, field] = attachmentMatch;
-        return `property-field-attachments-${index}-${field}`;
+      const documentMatch = path.match(/^documents\.(\d+)\.(type|assetId)$/);
+      if (documentMatch) {
+        const [, index, field] = documentMatch;
+        return `property-field-documents-${index}-${field}`;
       }
 
-      if (path === "images") return IMAGE_URL_INPUT_ID;
+      if (/^images(\.|$)/.test(path)) return IMAGE_URL_INPUT_ID;
+      if (/^features(\.|$)/.test(path)) {
+        return fieldA11y("features", true).fieldId;
+      }
 
       const explicitA11yFields = new Set([
         "type",
+        "tenure",
         "category",
         "price",
         "currency",
@@ -1388,9 +1832,7 @@ export default function PropertyForm({
         const domId = resolveFieldDomId(path);
         if (!domId) return;
 
-        const target = document.getElementById(domId) as
-          | HTMLElement
-          | null;
+        const target = document.getElementById(domId) as HTMLElement | null;
         target?.focus();
       });
     },
@@ -1398,52 +1840,10 @@ export default function PropertyForm({
   );
 
   /**
-   * Field labels grouped by section for user-friendly error display.
-   */
-  const FIELD_LABELS: Record<string, { label: string; section: string }> = {
-    // Basic Details
-    title: { label: "Property Title", section: "Basic Details" },
-    description: { label: "Description", section: "Basic Details" },
-    type: { label: "Property Type", section: "Basic Details" },
-    category: { label: "Category", section: "Basic Details" },
-    // Pricing
-    price: { label: "Price", section: "Pricing" },
-    currency: { label: "Currency", section: "Pricing" },
-    // Location
-    county: { label: "County", section: "Location" },
-    constituency: { label: "Constituency", section: "Location" },
-    neighbourhood: { label: "Neighbourhood", section: "Location" },
-    address: { label: "Address", section: "Location" },
-    latitude: { label: "Latitude", section: "Location" },
-    longitude: { label: "Longitude", section: "Location" },
-    // Property Specs
-    bedrooms: { label: "Bedrooms", section: "Property Specs" },
-    bathrooms: { label: "Bathrooms", section: "Property Specs" },
-    areaSqFt: { label: "Area (sq ft)", section: "Property Specs" },
-    lotSize: { label: "Lot Size", section: "Property Specs" },
-    yearBuilt: { label: "Year Built", section: "Property Specs" },
-    // Legal
-    lrNumber: { label: "LR Number", section: "Legal Information" },
-    // Media
-    images: { label: "Images", section: "Media" },
-    videoUrl: { label: "Video URL", section: "Media" },
-    floorPlan: { label: "Floor Plan", section: "Media" },
-    // Features
-    features: { label: "Features", section: "Features" },
-    // Documents
-    attachments: { label: "Attachments", section: "Documents" },
-  };
-
-  /**
    * Collects all form errors with friendly labels, grouped by section.
    * Handles top-level errors, array-level errors, and per-item array errors.
    */
-  const getAllErrors = (): Array<{
-    field: string;
-    message: string;
-    section: string;
-    path?: string;
-  }> => {
+  const getAllErrors = React.useCallback(() => {
     const errorList: Array<{
       field: string;
       message: string;
@@ -1452,7 +1852,7 @@ export default function PropertyForm({
     }> = [];
 
     // Array field names to skip in top-level loop (handled separately)
-    const arrayFields = ["attachments", "images", "features"];
+    const arrayFields = ["documents", "images", "features"];
 
     // Top-level errors (excluding arrays which are handled separately)
     Object.entries(errors).forEach(([key, value]) => {
@@ -1471,38 +1871,34 @@ export default function PropertyForm({
       }
     });
 
-    // Attachments array errors
-    if (errors.attachments) {
-      // Array-level error (e.g., "At least one attachment required")
+    // Verification documents array errors
+    if (errors.documents) {
+      // Array-level error
       if (
-        typeof errors.attachments === "object" &&
-        "message" in errors.attachments &&
-        !Array.isArray(errors.attachments)
+        typeof errors.documents === "object" &&
+        "message" in errors.documents &&
+        !Array.isArray(errors.documents)
       ) {
         errorList.push({
-          field: "Attachments",
-          message: safeMessage(errors.attachments.message),
+          field: "Verification Documents",
+          message: safeMessage(errors.documents.message),
           section: "Documents",
-          path: "attachments",
+          path: "documents",
         });
       }
       // Per-item errors
-      if (Array.isArray(errors.attachments)) {
-        errors.attachments.forEach((attachment, index) => {
-          if (attachment && typeof attachment === "object") {
-            Object.entries(attachment).forEach(([key, value]) => {
+      if (Array.isArray(errors.documents)) {
+        errors.documents.forEach((document, index) => {
+          if (document && typeof document === "object") {
+            Object.entries(document).forEach(([key, value]) => {
               if (value && typeof value === "object" && "message" in value) {
                 const fieldLabel =
-                  key === "fileUrl"
-                    ? "File URL"
-                    : key === "type"
-                      ? "Type"
-                      : key;
+                  key === "assetId" ? "File" : key === "type" ? "Type" : key;
                 errorList.push({
-                  field: `Attachment ${index + 1} - ${fieldLabel}`,
+                  field: `Document ${index + 1} - ${fieldLabel}`,
                   message: safeMessage(value.message),
                   section: "Documents",
-                  path: `attachments.${index}.${key}`,
+                  path: `documents.${index}.${key}`,
                 });
               }
             });
@@ -1591,7 +1987,7 @@ export default function PropertyForm({
     }
 
     return errorList;
-  };
+  }, [errors]);
 
   /**
    * Handles form submission with loading state and error handling.
@@ -1599,7 +1995,8 @@ export default function PropertyForm({
    */
   /**
    * Handles form submission with loading state and error handling.
-   * Transforms images from object array to string array before submission.
+   * Transforms images from object array to string array and strips document
+   * preview metadata before submission.
    * Wraps the onSubmit prop to ensure it always returns a Promise<void>.
    */
   const onFormSubmit = async (data: PropertyFormData): Promise<void> => {
@@ -1611,6 +2008,28 @@ export default function PropertyForm({
       const submitData: PropertyFormSubmitData = {
         ...data,
         images: data.images?.map((img) => img.value),
+        imageAssets: data.images
+          ?.filter(
+            (
+              image,
+            ): image is {
+              value: string;
+              assetId: string;
+            } =>
+              typeof image.value === "string" &&
+              image.value.length > 0 &&
+              typeof image.assetId === "string" &&
+              image.assetId.length > 0,
+          )
+          .map((image) => ({
+            assetId: image.assetId,
+            url: image.value,
+          })),
+        documents: data.documents?.map((document) => ({
+          assetId: document.assetId,
+          type: document.type,
+          ...(document.notes ? { notes: document.notes } : {}),
+        })),
       };
 
       // Ensure onSubmit returns a Promise and await it
@@ -1631,7 +2050,43 @@ export default function PropertyForm({
     }
   };
 
-  const allErrors = getAllErrors();
+  const { allErrors, errorsBySection, sortedSections } = useMemo(() => {
+    const collectedErrors = getAllErrors();
+    const grouped = collectedErrors.reduce<
+      Record<
+        string,
+        Array<{
+          field: string;
+          message: string;
+          section: string;
+          path?: string;
+        }>
+      >
+    >((acc, err) => {
+      if (!acc[err.section]) {
+        acc[err.section] = [];
+      }
+      acc[err.section]!.push(err);
+      return acc;
+    }, {});
+
+    const sectionOrderIndex = (section: string): number => {
+      const index = SECTION_ORDER.indexOf(
+        section as (typeof SECTION_ORDER)[number],
+      );
+      return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+    };
+
+    const orderedSections = Object.keys(grouped).sort(
+      (a, b) => sectionOrderIndex(a) - sectionOrderIndex(b),
+    );
+
+    return {
+      allErrors: collectedErrors,
+      errorsBySection: grouped,
+      sortedSections: orderedSections,
+    };
+  }, [getAllErrors]);
   const hasErrors = allErrors.length > 0;
 
   const handleInvalidSubmit = React.useCallback(
@@ -1647,37 +2102,14 @@ export default function PropertyForm({
     [focusFieldByPath],
   );
 
-  // Group errors by section for better organization
-  const errorsBySection = allErrors.reduce<
-    Record<
-      string,
-      Array<{ field: string; message: string; section: string; path?: string }>
-    >
-  >((acc, err) => {
-    if (!acc[err.section]) {
-      acc[err.section] = [];
-    }
-    acc[err.section]!.push(err);
-    return acc;
-  }, {});
-
-  // Define section order for consistent display
-  const sectionOrder = [
-    "Basic Details",
-    "Pricing",
-    "Location",
-    "Property Specs",
-    "Legal Information",
-    "Media",
-    "Features",
-    "Documents",
-    "Other",
-  ];
-
-  // Sort sections by defined order
-  const sortedSections = Object.keys(errorsBySection).sort(
-    (a, b) => sectionOrder.indexOf(a) - sectionOrder.indexOf(b),
-  );
+  const typeA11y = fieldA11y("type");
+  const tenureA11y = fieldA11y("tenure");
+  const categoryA11y = fieldA11y("category");
+  const priceA11y = fieldA11y("price");
+  const currencyA11y = fieldA11y("currency");
+  const locationA11y = fieldA11y("location");
+  const countyA11y = fieldA11y("county");
+  const featuresA11y = fieldA11y("features", true);
 
   return (
     <form
@@ -1687,35 +2119,36 @@ export default function PropertyForm({
       {/* Error Summary - Grouped by Section */}
       {hasErrors && (
         <div
-          className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4"
-          role="region"
+          className="bg-error/10 border border-error/30 rounded-xl p-4"
+          role="alert"
           aria-live="polite"
+          aria-atomic="true"
           aria-label="Form validation errors"
         >
           <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+            <AlertCircle className="h-5 w-5 text-error mt-0.5 shrink-0" />
             <div className="flex-1">
               <h3
                 ref={errorSummaryHeadingRef}
                 tabIndex={-1}
-                className="text-sm font-semibold text-red-900 dark:text-red-100 mb-3"
+                className="text-sm font-semibold text-error mb-3"
               >
                 Please fix the following errors ({allErrors.length}):
               </h3>
               <div className="space-y-3">
                 {sortedSections.map((section) => (
                   <div key={section}>
-                    <h4 className="text-xs font-semibold text-red-700 dark:text-red-300 uppercase tracking-wide mb-1">
+                    <h4 className="text-xs font-semibold text-error uppercase tracking-wide mb-1">
                       {section}
                     </h4>
-                    <ul className="space-y-0.5 text-sm text-red-800 dark:text-red-200">
+                    <ul className="space-y-0.5 text-sm text-foreground">
                       {errorsBySection[section]?.map((err, idx) => (
                         <li key={idx} className="flex items-start gap-2">
-                          <span className="text-red-500 mt-0.5">•</span>
+                          <span className="text-error mt-0.5">•</span>
                           {err.path ? (
                             <button
                               type="button"
-                              className="text-left underline decoration-red-300 underline-offset-2 hover:decoration-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded-sm"
+                              className="text-left underline decoration-error/40 underline-offset-2 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded-sm"
                               onClick={() => focusFieldByPath(err.path!)}
                             >
                               <span className="font-medium">{err.field}:</span>{" "}
@@ -1754,7 +2187,7 @@ export default function PropertyForm({
             <Input
               {...register("title")}
               placeholder="e.g. Modern 3-Bedroom Apartment in Kilimani"
-              className="bg-zinc-50/50 border-zinc-200 focus:bg-white transition-all h-11"
+              className={cn(THEME.input, "transition-all")}
             />
           </FormField>
 
@@ -1762,17 +2195,19 @@ export default function PropertyForm({
             label="Property Type"
             required
             error={visibleError("type", errors.type?.message)}
-            fieldId={fieldA11y("type").fieldId}
+            fieldId={typeA11y.fieldId}
           >
             <Controller
               name="type"
               control={control}
               render={({ field }) => (
                 <Combobox
-                  id={fieldA11y("type").fieldId}
-                  aria-describedby={fieldA11y("type").describedBy}
+                  id={typeA11y.fieldId}
+                  aria-describedby={typeA11y.describedBy}
                   aria-invalid={
-                    visibleError("type", errors.type?.message) ? true : undefined
+                    visibleError("type", errors.type?.message)
+                      ? true
+                      : undefined
                   }
                   options={PROPERTY_TYPE_OPTIONS}
                   value={field.value}
@@ -1785,18 +2220,46 @@ export default function PropertyForm({
           </FormField>
 
           <FormField
+            label="Tenure"
+            required
+            error={visibleError("tenure", errors.tenure?.message)}
+            fieldId={tenureA11y.fieldId}
+          >
+            <Controller
+              name="tenure"
+              control={control}
+              render={({ field }) => (
+                <Combobox
+                  id={tenureA11y.fieldId}
+                  aria-describedby={tenureA11y.describedBy}
+                  aria-invalid={
+                    visibleError("tenure", errors.tenure?.message)
+                      ? true
+                      : undefined
+                  }
+                  options={PROPERTY_TENURE_OPTIONS}
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder="Select tenure"
+                  className="h-11"
+                />
+              )}
+            />
+          </FormField>
+
+          <FormField
             label="Category"
             required
             error={visibleError("category", errors.category?.message)}
-            fieldId={fieldA11y("category").fieldId}
+            fieldId={categoryA11y.fieldId}
           >
             <Controller
               name="category"
               control={control}
               render={({ field }) => (
                 <Combobox
-                  id={fieldA11y("category").fieldId}
-                  aria-describedby={fieldA11y("category").describedBy}
+                  id={categoryA11y.fieldId}
+                  aria-describedby={categoryA11y.describedBy}
                   aria-invalid={
                     visibleError("category", errors.category?.message)
                       ? true
@@ -1816,15 +2279,15 @@ export default function PropertyForm({
             label="Price"
             required
             error={visibleError("price", errors.price?.message)}
-            fieldId={fieldA11y("price").fieldId}
+            fieldId={priceA11y.fieldId}
           >
             <div className="relative">
-              <span className="absolute left-3 top-3 text-zinc-500 text-sm font-medium">
-                {watch("currency") || "KES"}
+              <span className="absolute left-3 top-3 text-muted-foreground text-sm font-medium">
+                {watchedCurrency || "KES"}
               </span>
               <Input
-                id={fieldA11y("price").fieldId}
-                aria-describedby={fieldA11y("price").describedBy}
+                id={priceA11y.fieldId}
+                aria-describedby={priceA11y.describedBy}
                 aria-invalid={
                   visibleError("price", errors.price?.message)
                     ? true
@@ -1833,24 +2296,24 @@ export default function PropertyForm({
                 {...register("price", { valueAsNumber: true })}
                 type="number"
                 placeholder="0.00"
-                className="pl-16 h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white"
+                className={cn(THEME.inputWithPrefix, THEME.input)}
               />
             </div>
           </FormField>
 
           <FormField
             label="Currency"
-            optional
+            required
             error={visibleError("currency", errors.currency?.message)}
-            fieldId={fieldA11y("currency").fieldId}
+            fieldId={currencyA11y.fieldId}
           >
             <Controller
               name="currency"
               control={control}
               render={({ field }) => (
                 <Combobox
-                  id={fieldA11y("currency").fieldId}
-                  aria-describedby={fieldA11y("currency").describedBy}
+                  id={currencyA11y.fieldId}
+                  aria-describedby={currencyA11y.describedBy}
                   aria-invalid={
                     visibleError("currency", errors.currency?.message)
                       ? true
@@ -1874,7 +2337,7 @@ export default function PropertyForm({
             <Textarea
               {...register("description")}
               placeholder="Describe the property, its features, and what makes it special..."
-              className="bg-zinc-50/50 border-zinc-200 focus:bg-white resize-none min-h-30"
+              className={cn(THEME.input, "resize-none min-h-30")}
             />
           </FormField>
         </div>
@@ -1891,13 +2354,13 @@ export default function PropertyForm({
             label="Location"
             required
             error={visibleError("location", errors.location?.message)}
-            fieldId={fieldA11y("location").fieldId}
+            fieldId={locationA11y.fieldId}
           >
             <div className="relative">
-              <MapPin className="absolute left-3 top-3 h-5 w-5 text-zinc-400" />
+              <MapPin className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
               <Input
-                id={fieldA11y("location").fieldId}
-                aria-describedby={fieldA11y("location").describedBy}
+                id={locationA11y.fieldId}
+                aria-describedby={locationA11y.describedBy}
                 aria-invalid={
                   visibleError("location", errors.location?.message)
                     ? true
@@ -1905,7 +2368,7 @@ export default function PropertyForm({
                 }
                 {...register("location")}
                 placeholder="e.g. Kilimani, Nairobi"
-                className="pl-10 h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white"
+                className={cn("pl-10", THEME.input)}
               />
             </div>
           </FormField>
@@ -1918,7 +2381,7 @@ export default function PropertyForm({
             <Input
               {...register("address")}
               placeholder="e.g. Road C, Off Enterprise Road"
-              className="h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white"
+              className={THEME.input}
             />
           </FormField>
 
@@ -1931,7 +2394,7 @@ export default function PropertyForm({
               <Input
                 {...register("constituency")}
                 placeholder="Constituency"
-                className="h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white"
+                className={THEME.input}
               />
             </FormField>
 
@@ -1946,7 +2409,7 @@ export default function PropertyForm({
               <Input
                 {...register("neighbourhood")}
                 placeholder="Neighbourhood"
-                className="h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white"
+                className={THEME.input}
               />
             </FormField>
 
@@ -1954,15 +2417,15 @@ export default function PropertyForm({
               label="County"
               required
               error={visibleError("county", errors.county?.message)}
-              fieldId={fieldA11y("county").fieldId}
+              fieldId={countyA11y.fieldId}
             >
               <Controller
                 name="county"
                 control={control}
                 render={({ field }) => (
                   <Combobox
-                    id={fieldA11y("county").fieldId}
-                    aria-describedby={fieldA11y("county").describedBy}
+                    id={countyA11y.fieldId}
+                    aria-describedby={countyA11y.describedBy}
                     aria-invalid={
                       visibleError("county", errors.county?.message)
                         ? true
@@ -1990,7 +2453,7 @@ export default function PropertyForm({
                 type="number"
                 step="any"
                 placeholder="e.g. -1.2921"
-                className="h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white"
+                className={THEME.input}
               />
             </FormField>
 
@@ -2004,7 +2467,7 @@ export default function PropertyForm({
                 type="number"
                 step="any"
                 placeholder="e.g. 36.8219"
-                className="h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white"
+                className={THEME.input}
               />
             </FormField>
           </div>
@@ -2029,7 +2492,7 @@ export default function PropertyForm({
               min="0"
               max="50"
               placeholder="0"
-              className="h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white"
+              className={THEME.input}
             />
           </FormField>
 
@@ -2044,35 +2507,35 @@ export default function PropertyForm({
               min="0"
               max="50"
               placeholder="0"
-              className="h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white"
+              className={THEME.input}
             />
           </FormField>
 
           <FormField
             label="Area (sq ft)"
             optional
-            error={visibleError("areaSqFt", errors.areaSqFt?.message)}
+            error={visibleError("buildingSize", errors.buildingSize?.message)}
           >
             <Input
-              {...register("areaSqFt", { valueAsNumber: true })}
+              {...register("buildingSize", { valueAsNumber: true })}
               type="number"
               step="any"
               placeholder="0"
-              className="h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white"
+              className={THEME.input}
             />
           </FormField>
 
           <FormField
-            label="Lot Size (sq ft)"
+            label="Plot Size (sq ft)"
             optional
-            error={visibleError("lotSize", errors.lotSize?.message)}
+            error={visibleError("plotSize", errors.plotSize?.message)}
           >
             <Input
-              {...register("lotSize", { valueAsNumber: true })}
+              {...register("plotSize", { valueAsNumber: true })}
               type="number"
               step="any"
               placeholder="0"
-              className="h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white"
+              className={THEME.input}
             />
           </FormField>
         </div>
@@ -2085,7 +2548,7 @@ export default function PropertyForm({
           <Input
             {...register("lrNumber")}
             placeholder="e.g. LR 209/12345"
-            className="h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white"
+            className={THEME.input}
           />
         </FormField>
 
@@ -2099,7 +2562,7 @@ export default function PropertyForm({
               (errors.features as { root?: { message?: string } } | undefined)
                 ?.root?.message,
           )}
-          fieldId={fieldA11y("features", true).fieldId}
+          fieldId={featuresA11y.fieldId}
         >
           <Controller
             name="features"
@@ -2107,8 +2570,8 @@ export default function PropertyForm({
             render={({ field }) => (
               <FeaturesInput
                 value={field.value || []}
-                inputId={fieldA11y("features", true).fieldId}
-                ariaDescribedBy={fieldA11y("features", true).describedBy}
+                inputId={featuresA11y.fieldId}
+                ariaDescribedBy={featuresA11y.describedBy}
                 hasError={
                   visibleError(
                     "features",
@@ -2140,6 +2603,7 @@ export default function PropertyForm({
           uploadingImages={uploadingImages}
           onRemove={handleRemoveImage}
           onReorder={handleReorderImages}
+          disableReorder={uploadingImages.size > 0}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -2173,7 +2637,7 @@ export default function PropertyForm({
             <Input
               {...register("floorPlan")}
               placeholder="https://..."
-              className="h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white"
+              className={THEME.input}
             />
           </FormField>
 
@@ -2186,7 +2650,7 @@ export default function PropertyForm({
             <Input
               {...register("videoUrl")}
               placeholder="https://..."
-              className="h-11 bg-zinc-50/50 border-zinc-200 focus:bg-white"
+              className={THEME.input}
             />
           </FormField>
         </div>
@@ -2198,15 +2662,17 @@ export default function PropertyForm({
         description="Upload property verification documents"
         icon={<FileText className="h-5 w-5" />}
       >
-        <AttachmentList
-          attachments={attachmentFields}
+        <PropertyDocumentList
+          documents={documentFields}
           errors={errors}
           control={control}
           register={register}
           resolveError={visibleError}
-          onRemove={removeAttachment}
-          onAdd={handleAddAttachment}
-          attachmentTypes={ATTACHMENT_TYPES}
+          onRemove={removeDocument}
+          onAdd={handleAddDocument}
+          onUpload={handleUploadDocument}
+          uploadingDocumentIndexes={uploadingDocumentIndexes}
+          documentTypes={DOCUMENT_TYPES}
         />
       </FormSection>
       {/* Submit Button */}
@@ -2216,7 +2682,7 @@ export default function PropertyForm({
             type="submit"
             isLoading={isSubmitting}
             loadingText={isEditing ? "Saving Changes" : "Creating Property"}
-            className="min-w-37.5 bg-emerald-600 hover:bg-emerald-700 text-white h-11 text-base shadow-md shadow-emerald-200"
+            className="min-w-37.5 bg-primary hover:bg-primary/90 text-primary-foreground h-11 text-base shadow-md shadow-primary/20"
           >
             {isEditing ? "Save Changes" : "Create Property"}
           </Button>

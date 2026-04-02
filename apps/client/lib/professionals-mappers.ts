@@ -2,7 +2,7 @@
  * Mappers for professionals API response to UI types.
  */
 import type { ProfessionalCardData } from "@/types/professional";
-import type { ProfessionalListResult } from "@/lib/services/professionals";
+import type { ProfessionalListResult } from "@/app/lib/domains/professionals";
 
 /** Map service list result to ProfessionalCardData[] for cards/grids */
 export function mapToListCardData(

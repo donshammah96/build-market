@@ -116,7 +116,7 @@ If `.env.example` is missing, request the approved template and populate values 
 Run database migrations:
 
 ```bash
-pnpm --filter @build/db exec prisma migrate deploy
+pnpm run db:migrate:deploy
 ```
 
 Start runtime by scope:
@@ -322,11 +322,11 @@ This appendix is prescriptive. If an active incident conflicts with this procedu
 
 ### A2. Severity and Response Targets
 
-| Severity | Example impact | Acknowledge | Engage Secondary | Update Cadence |
-| --- | --- | --- | --- | --- |
-| Sev 1 | Full outage, data corruption risk, active security event | 5 min | 10 min | every 15 min |
-| Sev 2 | Major degradation, critical feature unavailable | 10 min | 20 min | every 30 min |
-| Sev 3 | Limited blast radius, workaround exists | 30 min | optional | every 60 min |
+| Severity | Example impact                                           | Acknowledge | Engage Secondary | Update Cadence |
+| -------- | -------------------------------------------------------- | ----------- | ---------------- | -------------- |
+| Sev 1    | Full outage, data corruption risk, active security event | 5 min       | 10 min           | every 15 min   |
+| Sev 2    | Major degradation, critical feature unavailable          | 10 min      | 20 min           | every 30 min   |
+| Sev 3    | Limited blast radius, workaround exists                  | 30 min      | optional         | every 60 min   |
 
 Rules:
 
@@ -456,6 +456,7 @@ Use these templates as-is during and after incidents. Keep timestamps in UTC.
 # Incident Postmortem
 
 ## 1) Metadata
+
 - Incident ID:
 - Severity:
 - Status: Closed
@@ -471,12 +472,14 @@ Use these templates as-is during and after incidents. Keep timestamps in UTC.
 - Related PRs/commits:
 
 ## 2) Executive Summary
+
 - What happened:
 - User impact summary:
 - Business impact summary:
 - Resolution summary:
 
 ## 3) Impact Assessment
+
 - Affected systems/services:
 - Affected user segments:
 - Approximate number of impacted requests/users:
@@ -485,6 +488,7 @@ Use these templates as-is during and after incidents. Keep timestamps in UTC.
 - Financial/compliance impact:
 
 ## 4) Detection and Escalation
+
 - Detection source (alert/customer/internal):
 - First signal timestamp (UTC):
 - Time to acknowledge:
@@ -493,46 +497,55 @@ Use these templates as-is during and after incidents. Keep timestamps in UTC.
 - Escalation path followed:
 
 ## 5) Timeline (UTC)
-| Time (UTC) | Event | Owner | Notes/Evidence |
-| --- | --- | --- | --- |
-| YYYY-MM-DD HH:MM | Incident detected | name | link/log/query |
-| YYYY-MM-DD HH:MM | Severity declared | name | link |
-| YYYY-MM-DD HH:MM | Mitigation started | name | link |
-| YYYY-MM-DD HH:MM | Service stabilized | name | link |
-| YYYY-MM-DD HH:MM | Incident resolved | name | link |
+
+| Time (UTC)       | Event              | Owner | Notes/Evidence |
+| ---------------- | ------------------ | ----- | -------------- |
+| YYYY-MM-DD HH:MM | Incident detected  | name  | link/log/query |
+| YYYY-MM-DD HH:MM | Severity declared  | name  | link           |
+| YYYY-MM-DD HH:MM | Mitigation started | name  | link           |
+| YYYY-MM-DD HH:MM | Service stabilized | name  | link           |
+| YYYY-MM-DD HH:MM | Incident resolved  | name  | link           |
 
 ## 6) Root Cause Analysis
+
 - Primary root cause:
 - Contributing factors:
 - Why existing controls did not prevent this:
 - Why detection was/was not fast enough:
 
 ## 7) What Worked / What Did Not
+
 ### Worked
-- 
-- 
+
+-
+-
 
 ### Did Not Work
-- 
-- 
+
+-
+-
 
 ## 8) Corrective and Preventive Actions
+
 | Action | Type (Corrective/Preventive) | Owner | Priority | Due Date (UTC) | Status |
-| --- | --- | --- | --- | --- | --- |
-| | | | P0/P1/P2 | YYYY-MM-DD | Open |
-| | | | P0/P1/P2 | YYYY-MM-DD | Open |
+| ------ | ---------------------------- | ----- | -------- | -------------- | ------ |
+|        |                              |       | P0/P1/P2 | YYYY-MM-DD     | Open   |
+|        |                              |       | P0/P1/P2 | YYYY-MM-DD     | Open   |
 
 ## 9) Validation Plan
+
 - How fixes will be tested:
 - Monitoring/alerts added or updated:
 - Rollback criteria for follow-up releases:
 
 ## 10) Communications and Follow-ups
+
 - Customer/internal communication sent:
 - Required stakeholder reviews:
 - Lessons shared with engineering org:
 
 ## 11) Sign-off
+
 - Incident commander sign-off:
 - Service owner sign-off:
 - Engineering manager sign-off:
@@ -545,6 +558,7 @@ Use these templates as-is during and after incidents. Keep timestamps in UTC.
 # Incident Timeline
 
 ## Incident Header
+
 - Incident ID:
 - Severity:
 - Status: Investigating / Mitigating / Monitoring / Resolved
@@ -557,33 +571,38 @@ Use these templates as-is during and after incidents. Keep timestamps in UTC.
 - Incident doc:
 
 ## Impact Statement
+
 - Current user impact:
 - Current service impact:
 - Current business impact:
 
 ## Live Timeline (UTC)
-| Time (UTC) | Category | Event | Owner | Evidence/Link | Next Step |
-| --- | --- | --- | --- | --- | --- |
-| YYYY-MM-DD HH:MM | detect | Alert fired / report received | name | link | validate impact |
-| YYYY-MM-DD HH:MM | declare | Severity set to Sev X | name | link | start triage |
-| YYYY-MM-DD HH:MM | mitigate | Rollback/flag/traffic action | name | link | confirm recovery |
-| YYYY-MM-DD HH:MM | verify | Smoke checks passed/failed | name | link | continue monitoring |
-| YYYY-MM-DD HH:MM | resolve | Incident resolved | name | link | prepare postmortem |
+
+| Time (UTC)       | Category | Event                         | Owner | Evidence/Link | Next Step           |
+| ---------------- | -------- | ----------------------------- | ----- | ------------- | ------------------- |
+| YYYY-MM-DD HH:MM | detect   | Alert fired / report received | name  | link          | validate impact     |
+| YYYY-MM-DD HH:MM | declare  | Severity set to Sev X         | name  | link          | start triage        |
+| YYYY-MM-DD HH:MM | mitigate | Rollback/flag/traffic action  | name  | link          | confirm recovery    |
+| YYYY-MM-DD HH:MM | verify   | Smoke checks passed/failed    | name  | link          | continue monitoring |
+| YYYY-MM-DD HH:MM | resolve  | Incident resolved             | name  | link          | prepare postmortem  |
 
 ## Open Action Tracker
-| Action | Owner | Priority | ETA (UTC) | Status |
-| --- | --- | --- | --- | --- |
-| | | P0/P1/P2 | YYYY-MM-DD HH:MM | open |
-| | | P0/P1/P2 | YYYY-MM-DD HH:MM | open |
+
+| Action | Owner | Priority | ETA (UTC)        | Status |
+| ------ | ----- | -------- | ---------------- | ------ |
+|        |       | P0/P1/P2 | YYYY-MM-DD HH:MM | open   |
+|        |       | P0/P1/P2 | YYYY-MM-DD HH:MM | open   |
 
 ## Update Log (for status broadcasts)
-| Time (UTC) | Message Summary | Posted By | Audience |
-| --- | --- | --- | --- |
-| YYYY-MM-DD HH:MM | Initial incident declaration | name | internal |
-| YYYY-MM-DD HH:MM | Mitigation in progress | name | internal/external |
-| YYYY-MM-DD HH:MM | Resolved and monitoring | name | internal/external |
+
+| Time (UTC)       | Message Summary              | Posted By | Audience          |
+| ---------------- | ---------------------------- | --------- | ----------------- |
+| YYYY-MM-DD HH:MM | Initial incident declaration | name      | internal          |
+| YYYY-MM-DD HH:MM | Mitigation in progress       | name      | internal/external |
+| YYYY-MM-DD HH:MM | Resolved and monitoring      | name      | internal/external |
 
 ## Resolution Criteria Checklist
+
 - [ ] Error rate returned to baseline
 - [ ] Latency returned to baseline
 - [ ] Critical user paths validated

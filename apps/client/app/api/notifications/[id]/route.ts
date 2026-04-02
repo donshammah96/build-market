@@ -16,22 +16,48 @@ import {
   UpdateNotificationSchema,
   NOTIFICATION_CONFIG,
 } from "@/app/lib/validation/notifications-validation";
-import {
-  getNotificationById,
-  updateNotification,
-  deleteNotification,
-} from "@/lib/services/notifications";
+import { notificationsService } from "@/app/lib/domains/notifications";
 
 const logger = getClientLogger();
 
 type NotificationParams = { id: string };
+
+function mapNotificationError(error: {
+  error: string;
+  status?: number;
+  message?: string;
+}) {
+  switch (error.error) {
+    case "not_found":
+      return apiError(
+        error.message || "Notification not found",
+        HttpStatus.NOT_FOUND,
+      );
+    case "forbidden":
+      return apiError(error.message || "Forbidden", HttpStatus.FORBIDDEN);
+    case "no_update":
+      return apiError(
+        error.message || "No fields to update",
+        HttpStatus.BAD_REQUEST,
+      );
+    default:
+      return apiError(
+        error.message || "Notification operation failed",
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+  }
+}
 
 /**
  * GET /api/notifications/[id]
  * Get a single notification with full detail.
  */
 export const GET = withAuth<NotificationParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     initializeCorrelationId(req);
 
     if (!params?.id || !isValidId(params.id)) {
@@ -51,7 +77,11 @@ export const GET = withAuth<NotificationParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => getNotificationById(dbUserId, notificationId),
+      () =>
+        notificationsService.getById(
+          { userId: dbUserId, role: userRole },
+          notificationId,
+        ),
       { operationName: "get_notification" },
     );
 
@@ -62,17 +92,11 @@ export const GET = withAuth<NotificationParams>(
       );
     }
 
-    const serviceResult = result.data as
-      | { data: unknown }
-      | { error: "not_found" | "forbidden" };
-    if ("error" in serviceResult) {
-      if (serviceResult.error === "not_found") {
-        return apiError("Notification not found", HttpStatus.NOT_FOUND);
-      }
-      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    if (!result.data.ok) {
+      return mapNotificationError(result.data);
     }
 
-    return apiSuccess(serviceResult.data, HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );
 
@@ -83,7 +107,11 @@ export const GET = withAuth<NotificationParams>(
  * Body: { isRead?: boolean }
  */
 export const PATCH = withAuth<NotificationParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
 
     if (!params?.id || !isValidId(params.id)) {
@@ -128,7 +156,11 @@ export const PATCH = withAuth<NotificationParams>(
     const executor = getResilientExecutor();
     const result = await executor.execute(
       () =>
-        updateNotification(dbUserId, notificationId, { isRead: data.isRead }),
+        notificationsService.updateById(
+          { userId: dbUserId, role: userRole },
+          notificationId,
+          { isRead: data.isRead },
+        ),
       { operationName: "update_notification" },
     );
 
@@ -143,20 +175,11 @@ export const PATCH = withAuth<NotificationParams>(
       );
     }
 
-    const serviceResult = result.data as
-      | { data: unknown }
-      | { error: "not_found" | "forbidden" | "no_update" };
-    if ("error" in serviceResult) {
-      if (serviceResult.error === "not_found") {
-        return apiError("Notification not found", HttpStatus.NOT_FOUND);
-      }
-      if (serviceResult.error === "forbidden") {
-        return apiError("Forbidden", HttpStatus.FORBIDDEN);
-      }
-      return apiError("No fields to update", HttpStatus.BAD_REQUEST);
+    if (!result.data.ok) {
+      return mapNotificationError(result.data);
     }
 
-    return apiSuccess(serviceResult.data, HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );
 
@@ -165,7 +188,11 @@ export const PATCH = withAuth<NotificationParams>(
  * Delete a single notification (ownership verified).
  */
 export const DELETE = withAuth<NotificationParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
 
     if (!params?.id || !isValidId(params.id)) {
@@ -185,7 +212,11 @@ export const DELETE = withAuth<NotificationParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => deleteNotification(dbUserId, notificationId),
+      () =>
+        notificationsService.deleteById(
+          { userId: dbUserId, role: userRole },
+          notificationId,
+        ),
       { operationName: "delete_notification" },
     );
 
@@ -200,16 +231,10 @@ export const DELETE = withAuth<NotificationParams>(
       );
     }
 
-    const serviceResult = result.data as
-      | { data: unknown }
-      | { error: "not_found" | "forbidden" };
-    if ("error" in serviceResult) {
-      if (serviceResult.error === "not_found") {
-        return apiError("Notification not found", HttpStatus.NOT_FOUND);
-      }
-      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    if (!result.data.ok) {
+      return mapNotificationError(result.data);
     }
 
-    return apiSuccess(serviceResult.data, HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );

@@ -1,264 +1,390 @@
-# API Architecture Documentation
+# API Architecture
 
-## Overview
+## Purpose
 
-The Build Market API layer is built with a modular, composable architecture that prioritizes **resilience**, **observability**, and **developer experience**. This document explains the relationship between the core API utility files and how to use them effectively.
+This document describes the canonical server-side architecture for `apps/client`.
 
----
+It is the staff-level reference for how API routes, server actions, domain services, repositories, and shared transport utilities should fit together after the current migration work. If a route, action, or service disagrees with this document, treat the domain-first pattern described here as the target state.
 
-## Core Files & Responsibilities
+## Executive Summary
 
+`apps/client` uses a thin-adapter, domain-core architecture.
+
+- `app/api/**` contains HTTP adapters only.
+- `app/actions/**` contains server-action adapters only.
+- `app/lib/domains/**` contains canonical business logic.
+- repositories inside `app/lib/domains/**` are persistence-only.
+- shared transport and policy utilities live under `app/lib/**`.
+- browser consumers use `lib/*-client.ts` facades and hooks, never server-only modules directly.
+
+The central rule is simple: adapters own transport concerns, domains own business decisions.
+
+## Canonical Layers
+
+### 1. Transport Adapters
+
+Folders:
+
+- `app/api/**`
+- `app/actions/**`
+
+Responsibilities:
+
+- extract actor context from Clerk and database identity
+- apply rate limits
+- validate request shape
+- enforce idempotency at the adapter boundary where required
+- call resilient executors for route-side work
+- translate domain `Result<T, DomainError>` outcomes into HTTP or action responses
+- trigger cache revalidation in server actions
+
+Non-responsibilities:
+
+- Prisma query orchestration for domain behavior
+- role or ownership policy logic
+- resource-specific state transitions
+- route-local business-rule sentinels
+
+### 2. Domain Layer
+
+Folder:
+
+- `app/lib/domains/**`
+
+Responsibilities:
+
+- business rules
+- actor and ownership checks
+- domain orchestration across repositories and side effects
+- normalized `Result<T, DomainError>` outcomes
+- DTO shaping for client-safe or public-safe consumers
+
+Patterns already established in migrated slices:
+
+- messaging
+- projects
+- properties
+- stores
+- portfolio
+- CRM (`leads`, `inquiries`, `pipeline`)
+- user-profile and compliance
+
+### 3. Repositories
+
+Usually colocated inside each domain folder.
+
+Responsibilities:
+
+- execute Prisma reads and writes
+- expose persistence-oriented helpers to services
+- keep query composition and transactional primitives out of adapters
+
+Repositories must not:
+
+- enforce role checks
+- encode HTTP semantics
+- shape transport envelopes
+- assume caller authorization already happened unless the service guarantees it
+
+### 4. Shared Cross-Cutting Utilities
+
+Key folders:
+
+- `app/lib/security/**`
+- `app/lib/actions/**`
+- `app/lib/errors/**`
+- `app/lib/api-*`
+- `app/lib/resilient-api.ts`
+- `app/lib/rate-limit.ts`
+
+These modules provide the stable transport and policy primitives used across adapters and domains.
+
+### 5. Browser Facades
+
+Examples:
+
+- `lib/projects-client.ts`
+- `lib/messaging-client.ts`
+- `lib/properties-client.ts`
+
+Responsibilities:
+
+- browser-safe request construction
+- response envelope normalization
+- rollout-gate enforcement where applicable
+- keeping client components and hooks decoupled from server-only runtime code
+
+## Dependency Direction
+
+Preferred flow:
+
+```text
+app/api or app/actions -> app/lib/domains -> repositories / shared infrastructure
+app/api or app/actions -> app/lib/security and transport helpers
+client hooks/components -> lib/*-client facades
 ```
-apps/client/app/lib/
-├── api-middleware.ts      # Authentication & Authorization
-├── api-response.ts        # Response types & utilities (backward compat)
-├── api-utils.ts          # Request parsing & helper wrappers
-├── resilient-api.ts      # Resilience patterns & response functions
-└── rate-limit.ts         # Rate limiting logic
+
+Disallowed flow:
+
+```text
+domains -> route handlers
+domains -> server actions
+browser code -> app/api internals or server-only app/lib modules
+repositories -> authorization policy logic
 ```
 
-### 1. **api-middleware.ts** - Authentication & Authorization
+## Canonical Route Pattern
 
-**Purpose:** Ensures requests are authenticated and authorized before reaching handlers.
+API routes are thin HTTP adapters.
 
-**Exports:**
-
-- `withAuth<T>(handler)` - Wraps route handlers with Clerk authentication
-- `withRole(allowedRoles)` - Checks user roles for authorization
-- `AuthContext` - Type definition for authenticated context
-
-**Features:**
-
-- Automatic Clerk user lookup
-- Database user resolution with timeout protection
-- Role-based access control (RBAC)
-- Correlation ID tracking
-- Structured logging
-
-**Usage Example:**
+### Public GET
 
 ```typescript
-import { withAuth, withRole } from "@/app/lib/api-middleware";
-
-// Basic authentication
-export const GET = withAuth(async (req, context) => {
-  const { dbUserId, userEmail, userRole } = context;
-  // Your logic here
-});
-
-// Role-based authorization
-export const POST = withRole(["ADMIN", "PROFESSIONAL"])(async (
-  req,
-  context,
-) => {
-  // Only admins and professionals can access
-});
-```
-
----
-
-### 2. **resilient-api.ts** - Resilience Patterns & Response Functions
-
-**Purpose:** Single source of truth for API responses with built-in resilience patterns.
-
-**Exports:**
-
-- `apiSuccess(data, status?, headers?)` - Build success responses with correlation ID
-- `apiError(message, status?, details?)` - Build error responses with logging
-- `executeResilient(operation, options)` - Execute with retry, circuit breaker, cache
-- `resilientFetch(url, options)` - Resilient HTTP client
-- `initializeCorrelationId(req)` - Extract or generate correlation ID
-- `getClientLogger()` - Get shared logger instance
-- `getResilientExecutor()` - Get shared executor instance
-- `healthCheck(serviceName, checks)` - Health check endpoint helper
-
-**Features:**
-
-- Automatic retry with exponential backoff
-- Circuit breaker pattern
-- Request/response caching
-- Timeout protection
-- Correlation ID propagation
-- Comprehensive metrics collection
-
-**Usage Example:**
-
-```typescript
-import {
-  apiSuccess,
-  apiError,
-  executeResilient,
-  initializeCorrelationId,
-  getClientLogger,
-} from "@/app/lib/resilient-api";
-
-const logger = getClientLogger();
-
-export const GET = withAuth(async (req, context) => {
+export async function GET(req: NextRequest) {
   const correlationId = initializeCorrelationId(req);
+  const identifier = getRateLimitIdentifier(req);
 
-  return executeResilient(
-    async () => {
-      const data = await prisma.item.findMany();
-      logger.info("Items fetched", { correlationId, count: data.length });
-      return { items: data };
-    },
-    {
-      operationName: "fetch-items",
-      timeout: 5000,
-      retry: { maxAttempts: 3 },
-      cache: { ttl: 60000 },
-      metrics: true,
-    },
+  const rateLimit = await checkRateLimit(
+    identifier,
+    RateLimits.READ.limit,
+    RateLimits.READ.window,
   );
-});
-```
 
----
+  if (!rateLimit.success) {
+    return apiError("Rate limit exceeded", HttpStatus.TOO_MANY_REQUESTS);
+  }
 
-### 3. **api-response.ts** - Response Types & Constants
+  const executor = getResilientExecutor();
+  const result = await executor.execute(() => domainService.listSomething(), {
+    operationName: "list-something",
+  });
 
-**Purpose:** Provides TypeScript types, constants, and legacy response builders.
+  if (!result.success || !result.data) {
+    return apiError(
+      "Failed to fetch resources",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
 
-**Exports:**
-
-- **Types:** `ApiSuccessResponse<T>`, `ApiErrorResponse`, `ApiListResponse<T>`
-- **Constants:** `HttpStatus`, `ErrorCodes`
-- **Utilities:** `buildSuccessResponse()`, `buildListResponse()`, `buildErrorResponse()`
-- **Legacy:** `apiSuccess()`, `apiError()` (deprecated - use resilient-api.ts instead)
-
-**Features:**
-
-- Strong type safety for API responses
-- Standardized HTTP status codes
-- Business error codes for client-side handling
-- Pagination types
-
-**Usage Example:**
-
-```typescript
-import {
-  HttpStatus,
-  ErrorCodes,
-  ApiSuccessResponse,
-} from "@/app/lib/api-response";
-import { apiSuccess, apiError } from "@/app/lib/resilient-api";
-
-// Use types for better intellisense
-type ItemResponse = ApiSuccessResponse<{ items: Item[] }>;
-
-// Use constants for consistency
-if (!authorized) {
-  return apiError("Forbidden", HttpStatus.FORBIDDEN);
+  return apiSuccess(result.data, HttpStatus.OK);
 }
 ```
 
----
-
-### 4. **api-utils.ts** - Request Parsing & Helper Wrappers
-
-**Purpose:** Provides utilities for parsing requests and composing middleware patterns.
-
-**Exports:**
-
-- `parsePaginationParams(searchParams, options?)` - Extract page/limit from query
-- `buildPaginationResponse(page, limit, total)` - Build pagination metadata
-- `parseStatusFilter(statusParam, statusMap)` - Parse comma-separated statuses
-- `createStatusMapper(statusMap)` - Generic status enum mapper
-- `withRateLimitedExecution(req, userId, options, handler)` - Composite wrapper
-
-**Constants:**
-
-- `LEAD_STATUS_MAP`, `ORDER_STATUS_MAP`, `INQUIRY_STATUS_MAP`, `PROJECT_STATUS_MAP`
-
-**Features:**
-
-- Type-safe pagination helpers
-- Status enum conversions
-- Composable middleware patterns
-- Rate limiting integration
-
-**Usage Example:**
+### Authenticated Mutation
 
 ```typescript
-import {
-  parsePaginationParams,
-  buildPaginationResponse,
-  withRateLimitedExecution,
-} from "@/app/lib/api-utils";
-
-export const GET = withAuth(async (req, { dbUserId }) => {
-  return withRateLimitedExecution(
-    req,
-    dbUserId,
-    {
-      operationName: "list-items",
-      rateLimit: "read",
-    },
-    async (correlationId) => {
-      const { page, limit, skip } = parsePaginationParams(
-        req.nextUrl.searchParams,
-      );
-
-      const [items, total] = await Promise.all([
-        prisma.item.findMany({ skip, take: limit }),
-        prisma.item.count(),
-      ]);
-
-      return {
-        data: items,
-        pagination: buildPaginationResponse(page, limit, total),
-      };
-    },
-  );
-});
-```
-
----
-
-### 5. **rate-limit.ts** - Rate Limiting
-
-**Purpose:** In-memory rate limiter for API protection (production: use Redis).
-
-**Exports:**
-
-- `checkRateLimit(identifier, limit, window)` - Check and increment rate limit
-- `getRateLimitIdentifier(req)` - Extract IP from request
-- `RateLimits` - Predefined rate limit configurations
-
-**Configurations:**
-
-- `AUTH`: 5 req/min - Strict for authentication
-- `EXPORT`: 5 req/hour - Very strict for heavy operations
-- `WRITE`: 10 req/min - Moderate for mutations
-- `READ`: 100 req/min - Relaxed for queries
-- `WEBHOOK`: 100 req/min - Generous for external services
-
-**Usage Example:**
-
-```typescript
-import {
-  checkRateLimit,
-  getRateLimitIdentifier,
-  RateLimits,
-} from "@/app/lib/rate-limit";
-import { apiError, HttpStatus } from "@/app/lib/resilient-api";
-
-export const POST = withAuth(async (req, context) => {
+export const POST = withAuth(async (req, actor) => {
+  const correlationId = initializeCorrelationId(req);
   const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
+
+  const rateLimit = await checkRateLimit(
     identifier,
     RateLimits.WRITE.limit,
     RateLimits.WRITE.window,
   );
 
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+  if (!rateLimit.success) {
+    return apiError("Rate limit exceeded", HttpStatus.TOO_MANY_REQUESTS);
   }
 
-  // Continue with operation
+  const payload = await schema.parseAsync(await req.json());
+  const domainResult = await someDomainService.createSomething(actor, payload);
+
+  if (!domainResult.success) {
+    return mapDomainErrorToResponse(domainResult.error, correlationId);
+  }
+
+  return apiSuccess(domainResult.data, HttpStatus.CREATED);
 });
 ```
+
+### Notes
+
+- Use `withAuth` or `withRole` only for identity extraction and coarse entry checks.
+- Keep resource authorization in the domain service.
+- When collection GET routes need precise `403` versus `404` mapping, inline them instead of hiding domain errors behind a generic wrapper.
+
+## Canonical Server Action Pattern
+
+Server actions follow the same adapter rule.
+
+Use `secureAction` for:
+
+- actor resolution
+- input validation
+- structured failure mapping
+
+Server actions should:
+
+- call domain services with full actor context
+- keep `revalidatePath()` in the action layer
+- avoid direct Prisma access unless the slice has not yet been migrated and the work is explicitly transitional
+
+Example shape:
+
+```typescript
+export const updateThing = secureAction(
+  inputSchema,
+  async ({ actor, input }) => {
+    const result = await thingService.updateThing(actor, input);
+
+    if (!result.success) {
+      return mapDomainErrorToActionFailure(result.error);
+    }
+
+    revalidatePath("/dashboard/things");
+    return { success: true, data: result.data };
+  },
+);
+```
+
+## Actor Model
+
+Routes and actions should pass full actor context into the domain, not bare user IDs.
+
+The minimum useful actor shape is:
+
+- `clerkId`
+- `dbUserId`
+- `userEmail`
+- `userRole`
+
+Why:
+
+- role-bearing actors let the domain keep authorization local
+- ownership and admin override rules stay testable inside services
+- detail and collection routes can preserve `forbidden` versus `not_found` semantics without caller discipline
+
+## Result and Error Contracts
+
+Migrated domains should prefer a shared result contract:
+
+```typescript
+type Result<T, E> = { success: true; data: T } | { success: false; error: E };
+```
+
+`DomainError` values should be domain-oriented, not HTTP-oriented.
+
+Examples:
+
+- `forbidden`
+- `not_found`
+- `conflict`
+- `validation_error`
+- `rate_limited`
+- `external_dependency_failed`
+
+Adapters then map those outcomes into:
+
+- HTTP status codes for routes
+- structured action failures for server actions
+
+## Response Contract
+
+The canonical route envelope is:
+
+### Success
+
+```json
+{
+  "success": true,
+  "data": {},
+  "timestamp": "2026-03-11T00:00:00.000Z",
+  "correlationId": "..."
+}
+```
+
+### Error
+
+```json
+{
+  "success": false,
+  "error": "Error message",
+  "timestamp": "2026-03-11T00:00:00.000Z",
+  "correlationId": "..."
+}
+```
+
+Use `apiSuccess()` and `apiError()` from `resilient-api.ts` as the canonical builders.
+
+`api-response.ts` remains important for types and constants, but new route code should not treat its legacy helpers as the primary response layer.
+
+## Resilience and Observability
+
+Routes should use `getResilientExecutor().execute(...)` for durable operations.
+
+Standard expectations:
+
+- initialize a correlation ID at the start of each request
+- use shared structured logging
+- guard external or slow database work with the resilient executor
+- keep fallback and error mapping in the adapter layer
+
+Avoid using route-local retry, cache, or timeout logic when the shared executor already covers the case.
+
+## Rate Limiting
+
+Use `rate-limit.ts` consistently.
+
+Primary tiers:
+
+- `READ`
+- `WRITE`
+- `AUTH`
+- `EXPORT`
+- `WEBHOOK`
+
+Do not create route-local ad hoc rate buckets when an existing family is sufficient. If a vertical needs a new bucket, add it centrally.
+
+## Rollout-Gated Surfaces
+
+The generic projects API remains rollout-gated.
+
+Current rule:
+
+- enforce `NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API` and mutation gating in both the canonical projects client and the public `lib/projects-client.ts` facade
+
+This is important because public facades can otherwise bypass the intended release gate.
+
+## What Good Looks Like
+
+Use this checklist before adding or refactoring an API surface.
+
+- route or action is thin and transport-only
+- domain service owns policy and business rules
+- repository stays persistence-only
+- actor context is full and role-bearing
+- domain returns structured results instead of throwing transport-specific errors for expected control flow
+- adapter maps domain errors explicitly
+- tests cover both boundary and direct domain behavior where risk justifies it
+
+## Anti-Patterns
+
+Avoid these patterns in new work:
+
+- route-local Prisma authorization checks
+- server actions that resolve auth, validate input, and persist data manually when `secureAction` is available
+- passing only `dbUserId` into an authorization-sensitive service
+- hiding meaningful domain failures behind generic `500` handling
+- browser code importing `app/lib/domains/**` or other server-only modules directly
+
+## Reference Documents
+
+- `app/api/API.md`
+- `app/api/DESIGN.md`
+- `app/lib/domains/README.md`
+- `docs/adr/ADR-001-auth-model.md`
+- `docs/adr/ADR-002-client-layer-boundaries.md`
+- `docs/adr/ADR-003-domain-structure-and-import-direction.md`
+- `docs/adr/ADR-004-cannonical-env-access-boundary.md`
+- `docs/adr/ADR-005-cannonical-observability-contract.md`
+- `docs/adr/ADR-006-data-classification.md`
+- `docs/adr/ADR-007-role-model-admin-sub-roles-and-actor-context-shape.md`
+- `docs/adr/ADR-008-http-surface-security.md`
+
+## Bottom Line
+
+The target architecture is not "helpers around big route files". It is a domain-centered system where routes and actions are small transport shells over actor-aware services with explicit result contracts. That is now the established pattern across the major migrated slices, and new work should follow it by default.
 
 ---
 

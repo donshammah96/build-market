@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { UpdateStatusButton } from "@/components/admin/leads/UpdateStatusButton";
 import { LeadActions } from "@/components/admin/leads/LeadActions";
+import { getAdminPermissions } from "@/actions/admin/shared";
 
 interface LeadDetailPageProps {
   params: Promise<{ id: string }>;
@@ -75,6 +76,12 @@ export default async function LeadDetailPage({ params }: LeadDetailPageProps) {
     notFound();
   }
 
+  const { granularRole } = await getAdminPermissions();
+  const canManageLeads = [
+    "SUPER_ADMIN",
+    "SALES_MANAGER",
+  ].includes(granularRole || "");
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -98,7 +105,9 @@ export default async function LeadDetailPage({ params }: LeadDetailPageProps) {
             <p className="text-zinc-500 mt-1">Lead #{lead.id.slice(0, 8)}</p>
           </div>
         </div>
-        <UpdateStatusButton leadId={lead.id} currentStatus={lead.status} />
+        {canManageLeads && (
+          <UpdateStatusButton leadId={lead.id} currentStatus={lead.status} />
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -344,18 +353,20 @@ export default async function LeadDetailPage({ params }: LeadDetailPageProps) {
           </Card>
 
           {/* Quick Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <LeadActions
-                leadId={lead.id}
-                clientEmail={lead.clientEmail}
-                clientPhone={lead.clientPhone}
-              />
-            </CardContent>
-          </Card>
+          {canManageLeads && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Quick Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <LeadActions
+                  leadId={lead.id}
+                  clientEmail={lead.clientEmail}
+                  clientPhone={lead.clientPhone}
+                />
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

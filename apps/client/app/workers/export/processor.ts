@@ -5,7 +5,7 @@ import path from "path";
 import { Upload } from "@aws-sdk/lib-storage";
 import { S3Client } from "@aws-sdk/client-s3";
 import { createReadStream } from "fs";
-import { envConfig } from "@/lib/env";
+import { env } from "@/app/lib/infrastructure/env";
 
 export class ExportProcessor {
   private s3Client: S3Client | null = null;
@@ -14,13 +14,13 @@ export class ExportProcessor {
   private readonly s3Disabled: boolean;
 
   constructor() {
-    this.s3Disabled = envConfig.s3.disabled;
-    this.bucketName = envConfig.s3.exportBucket;
-    this.exportDir = path.join(process.cwd(), envConfig.s3.localDir);
+    this.s3Disabled = env.s3.disabled;
+    this.bucketName = env.s3.exportBucket;
+    this.exportDir = path.join(process.cwd(), env.s3.localDir);
 
     // Initialize S3 client only if not disabled
     if (!this.s3Disabled) {
-      const { accessKeyId, secretAccessKey } = envConfig.s3;
+      const { accessKeyId, secretAccessKey } = env.s3;
 
       if (!accessKeyId || !secretAccessKey) {
         console.warn(
@@ -31,7 +31,7 @@ export class ExportProcessor {
         this.s3Disabled = true;
       } else {
         this.s3Client = new S3Client({
-          region: envConfig.s3.region,
+          region: env.s3.region,
           credentials: { accessKeyId, secretAccessKey },
         });
       }

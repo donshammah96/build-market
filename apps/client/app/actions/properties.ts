@@ -1,53 +1,86 @@
 "use server";
 
-import {
-  getProperties,
-  getPropertyById,
-  getMyProperties,
-  getSimilarProperties,
-  createProperty,
-  createPropertiesBatch,
-  updateProperty,
-  deleteProperty,
-  getPropertyDocuments,
-  addPropertyDocument,
-  removePropertyDocument,
-  type MyPropertyListing,
-} from "@/lib/services/properties";
+import { z } from "zod";
+import { randomUUID } from "crypto";
 import type {
   CreatePropertyInput,
   UpdatePropertyInput,
   PropertyQueryInput,
-} from "@/lib/services/properties";
+} from "@/app/lib/domains/properties/contracts";
 import {
   CreatePropertySchema,
   UpdatePropertySchema,
   PropertyQuerySchema,
   BatchCreatePropertiesSchema,
-  propertyDetailSelect,
+  createDocumentSchema,
 } from "@/app/lib/validation/properties-validation";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
-import { isValidId } from "@/app/lib/utils/validators";
-import { auth } from "@clerk/nextjs/server";
-import { Prisma } from "@prisma/client";
-import { prisma } from "@build/db";
+import {
+  type ActionErrorCode,
+  createActionFailure,
+  executeThrowingSecureAction,
+  statusForActionError,
+  throwActionFailure,
+  unwrapResultOrThrow,
+} from "@/app/lib/actions/secure-action";
+import {
+  propertiesService,
+  type MyPropertyListing,
+  type PropertyDetail,
+  type PropertyDeleteResultDto,
+  type PropertyActor,
+  type PropertyUpdateResultDto,
+} from "@/app/lib/domains/properties";
 import { revalidatePath } from "next/cache";
 
-/**
- * Resolve Clerk userId to database user ID.
- */
-async function resolveDbUserId(): Promise<string> {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) throw new Error("Unauthorized");
+const PropertyIdActionSchema = z.object({
+  id: z.string().uuid("Invalid property ID"),
+});
 
-  const user = await prisma.user.findUnique({
-    where: { clerkId },
-    select: { id: true },
-  });
-  if (!user) throw new Error("User not found");
+const CreatePropertyActionSchema = CreatePropertySchema.extend({
+  idempotencyKey: z.string().optional(),
+});
 
-  return user.id;
+function normalizePropertyActionErrorCode(code?: string): ActionErrorCode {
+  switch (code) {
+    case "unauthorized":
+    case "forbidden":
+    case "not_found":
+    case "validation_error":
+    case "conflict":
+    case "invalid_input":
+    case "invalid_state":
+    case "limit_exceeded":
+    case "internal":
+      return code;
+    case "internal_error":
+      return "internal";
+    case "suspended_account":
+    case "not_professional":
+    case "asset_unauthorized":
+      return "forbidden";
+    case "slug_conflict":
+    case "duplicate":
+    case "attachment_mismatch":
+      return "conflict";
+    case "asset_not_found":
+    case "document_not_found":
+    case "attachment_not_found":
+      return "not_found";
+    default:
+      return "internal";
+  }
+}
+
+function toPropertyActor(actor: {
+  dbUserId: string;
+  role: "ADMIN" | "PROFESSIONAL" | "CLIENT" | "SUPPORT" | null;
+}): PropertyActor {
+  return {
+    userId: actor.dbUserId,
+    role: actor.role ?? "unknown",
+  };
 }
 
 export type CreatePropertyActionInput = CreatePropertyInput & {
@@ -57,34 +90,67 @@ export type CreatePropertyActionInput = CreatePropertyInput & {
 export async function getPropertiesAction(
   filters?: Partial<PropertyQueryInput>,
 ) {
-  const defaultFilters: PropertyQueryInput = {
-    page: "1",
-    limit: "20",
-    sortBy: "createdAt",
-    sortOrder: "desc",
-    ...filters,
-  };
-  const parsed = PropertyQuerySchema.safeParse(defaultFilters);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid query parameters");
-  }
-  return getProperties(parsed.data);
+  return executeThrowingSecureAction({
+    operationName: "list_properties",
+    input: filters,
+    requireActor: false,
+    schema: PropertyQuerySchema.partial().optional(),
+    handler: async ({ input }) => {
+      const parsed = PropertyQuerySchema.parse({
+        page: "1",
+        limit: "20",
+        sortBy: "createdAt",
+        sortOrder: "desc",
+        ...input,
+      });
+
+      return unwrapResultOrThrow(
+        await propertiesService.listProperties(parsed),
+        "Failed to fetch properties",
+      );
+    },
+  });
 }
 
 export async function getPropertyAction(id: string) {
-  if (!isValidId(id)) throw new Error("Invalid property ID");
-  const property = await getPropertyById(id);
-  if (!property) throw new Error("Property not found");
-  return property;
+  return executeThrowingSecureAction({
+    operationName: "get_property_detail",
+    input: { id },
+    schema: PropertyIdActionSchema,
+    requireActor: false,
+    handler: async ({ input }) => {
+      const detail = unwrapResultOrThrow(
+        await propertiesService.getPropertyDetail(input.id),
+        "Property not found",
+      ) as { property: unknown };
+      return detail.property;
+    },
+  });
 }
 
 export async function getSimilarPropertiesAction(
   propertyId: string,
   limit?: number,
 ) {
-  if (!isValidId(propertyId)) throw new Error("Invalid property ID");
-  return getSimilarProperties(propertyId, limit);
+  return executeThrowingSecureAction({
+    operationName: "get_similar_properties",
+    input: { id: propertyId, limit },
+    requireActor: false,
+    schema: z.object({
+      id: z.string().uuid("Invalid property ID"),
+      limit: z.number().int().positive().max(20).optional(),
+    }),
+    handler: async ({ input }) => {
+      const result = unwrapResultOrThrow(
+        await propertiesService.getSimilarProperties(
+          input.id,
+          input.limit ?? 4,
+        ),
+        "Failed to fetch similar properties",
+      ) as { properties: unknown[] };
+      return result.properties;
+    },
+  });
 }
 
 export type MyPropertyListingDTO = Omit<
@@ -99,60 +165,76 @@ export async function getMyPropertiesAction(options?: {
   limit?: number;
   status?: "all" | "active" | "pending" | "sold";
 }): Promise<MyPropertyListingDTO[]> {
-  const dbUserId = await resolveDbUserId();
-  const properties = await getMyProperties(dbUserId, options);
-  return properties.map((p) => ({
-    ...p,
-    createdAt: p.createdAt.toISOString(),
-    updatedAt: p.updatedAt.toISOString(),
-  }));
+  return executeThrowingSecureAction({
+    operationName: "get_my_listings",
+    input: options,
+    handler: async ({ actor, input }) => {
+      const listingResult = unwrapResultOrThrow(
+        await propertiesService.getMyListings(toPropertyActor(actor!), input),
+        "Failed to fetch listings",
+      ) as { properties: MyPropertyListing[] };
+      return listingResult.properties;
+    },
+  });
 }
 
 export async function createPropertyAction(data: CreatePropertyActionInput) {
-  const dbUserId = await resolveDbUserId();
+  return executeThrowingSecureAction({
+    operationName: "create_property",
+    input: data,
+    schema: CreatePropertyActionSchema,
+    handler: async ({ actor, input }) => {
+      const { idempotencyKey: clientKey, ...payload } = input;
+      const idempotencyKey =
+        clientKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "POST", payload);
 
-  const { idempotencyKey: clientKey, ...rest } = data;
-  const parsed = CreatePropertySchema.safeParse(rest);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid property data");
-  }
+      const idempotencyCheck = await IdempotencyService.checkOrCreate(
+        idempotencyKey,
+        "property",
+        actor!.dbUserId,
+        "POST",
+        undefined,
+        PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      );
 
-  const payload = parsed.data;
-  const idempotencyKey =
-    clientKey ?? IdempotencyService.generateKey(dbUserId, "POST", payload);
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
+        revalidatePath("/professional-portal/settings/properties");
+        revalidatePath("/professional-portal");
+        return idempotencyCheck.response as unknown;
+      }
 
-  const idempotencyCheck = await IdempotencyService.checkOrCreate(
-    idempotencyKey,
-    "property",
-    dbUserId,
-    "POST",
-    undefined,
-    PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
+          ),
+        );
+      }
 
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath("/professional-portal/settings/properties");
-    revalidatePath("/professional-portal");
-    return idempotencyCheck.response as Awaited<
-      ReturnType<typeof createProperty>
-    >;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  try {
-    const property = await createProperty(dbUserId, payload);
-    await IdempotencyService.complete(idempotencyKey, property);
-    revalidatePath("/professional-portal/settings/properties");
-    revalidatePath("/professional-portal");
-    return property;
-  } catch (err) {
-    await IdempotencyService.fail(idempotencyKey);
-    throw err;
-  }
+      try {
+        const property = unwrapResultOrThrow(
+          await propertiesService.createProperty(
+            toPropertyActor(actor!),
+            payload,
+          ),
+          "Failed to create property",
+        );
+        await IdempotencyService.complete(idempotencyKey, property);
+        revalidatePath("/professional-portal/settings/properties");
+        revalidatePath("/professional-portal");
+        return property;
+      } catch (error) {
+        await IdempotencyService.fail(idempotencyKey);
+        throw error;
+      }
+    },
+  });
 }
 
 export type CreatePropertiesBatchActionInput = {
@@ -163,50 +245,66 @@ export type CreatePropertiesBatchActionInput = {
 export async function createPropertiesBatchAction(
   data: CreatePropertiesBatchActionInput,
 ) {
-  const dbUserId = await resolveDbUserId();
+  return executeThrowingSecureAction({
+    operationName: "create_property_batch",
+    input: data,
+    schema: z.object({
+      properties: BatchCreatePropertiesSchema.shape.properties,
+      idempotencyKey: z.string().optional(),
+    }),
+    handler: async ({ actor, input }) => {
+      const { idempotencyKey: clientKey, properties } = input;
+      const payload = { properties };
+      const idempotencyKey =
+        clientKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "POST", payload);
 
-  const { idempotencyKey: clientKey, properties } = data;
-  const parsed = BatchCreatePropertiesSchema.safeParse({ properties });
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid property data");
-  }
+      const idempotencyCheck = await IdempotencyService.checkOrCreate(
+        idempotencyKey,
+        "property",
+        actor!.dbUserId,
+        "POST",
+        undefined,
+        PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      );
 
-  const payload = parsed.data;
-  const idempotencyKey =
-    clientKey ?? IdempotencyService.generateKey(dbUserId, "POST", payload);
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
+        revalidatePath("/professional-portal/settings/properties");
+        revalidatePath("/professional-portal");
+        return idempotencyCheck.response as unknown;
+      }
 
-  const idempotencyCheck = await IdempotencyService.checkOrCreate(
-    idempotencyKey,
-    "property",
-    dbUserId,
-    "POST",
-    undefined,
-    PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
+          ),
+        );
+      }
 
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath("/professional-portal/settings/properties");
-    revalidatePath("/professional-portal");
-    return idempotencyCheck.response as Awaited<
-      ReturnType<typeof createPropertiesBatch>
-    >;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  try {
-    const result = await createPropertiesBatch(dbUserId, payload.properties);
-    await IdempotencyService.complete(idempotencyKey, result);
-    revalidatePath("/professional-portal/settings/properties");
-    revalidatePath("/professional-portal");
-    return result;
-  } catch (err) {
-    await IdempotencyService.fail(idempotencyKey);
-    throw err;
-  }
+      try {
+        const result = unwrapResultOrThrow(
+          await propertiesService.createPropertiesBatch(
+            toPropertyActor(actor!),
+            properties,
+          ),
+          "Failed to create properties",
+        );
+        await IdempotencyService.complete(idempotencyKey, result);
+        revalidatePath("/professional-portal/settings/properties");
+        revalidatePath("/professional-portal");
+        return result;
+      } catch (error) {
+        await IdempotencyService.fail(idempotencyKey);
+        throw error;
+      }
+    },
+  });
 }
 
 export type UpdatePropertyActionInput = {
@@ -216,83 +314,85 @@ export type UpdatePropertyActionInput = {
   idempotencyKey?: string;
 };
 
-export type PropertyDetailDTO = Prisma.PropertyGetPayload<{
-  select: typeof propertyDetailSelect;
-}>;
-
-export type UpdatePropertyResult = {
-  property: PropertyDetailDTO;
-  version: number;
-};
+export type PropertyDetailDTO = PropertyDetail;
+export type UpdatePropertyResult = PropertyUpdateResultDto;
 
 export async function updatePropertyAction(
   input: UpdatePropertyActionInput,
 ): Promise<UpdatePropertyResult> {
-  const dbUserId = await resolveDbUserId();
+  return executeThrowingSecureAction({
+    operationName: "update_property",
+    input,
+    schema: z.object({
+      id: z.string().uuid("Invalid property ID"),
+      data: UpdatePropertySchema,
+      version: z.number().int().min(0),
+      idempotencyKey: z.string().optional(),
+    }),
+    handler: async ({ actor, input }) => {
+      const actorRef = toPropertyActor(actor!);
+      const idempotencyKey =
+        input.idempotencyKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "PATCH", {
+          propertyId: input.id,
+          version: input.version,
+        });
 
-  if (!isValidId(input.id)) throw new Error("Invalid property ID");
-  const parsed = UpdatePropertySchema.safeParse(input.data);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid update data");
-  }
-
-  const idempotencyKey =
-    input.idempotencyKey ??
-    IdempotencyService.generateKey(dbUserId, "PATCH", {
-      propertyId: input.id,
-      ...input.data,
-    });
-
-  const idempotencyCheck = await IdempotencyService.checkOrCreate(
-    idempotencyKey,
-    "property",
-    dbUserId,
-    "PATCH",
-    input.id,
-    PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
-
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath("/professional-portal/settings/properties");
-    revalidatePath(`/professional-portal/settings/properties/${input.id}`);
-    return idempotencyCheck.response as UpdatePropertyResult;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  const context = {
-    correlationId: "",
-    userId: dbUserId,
-    propertyId: input.id,
-    ipAddress: "",
-    userAgent: "",
-    idempotencyKey,
-  };
-
-  let lastError: Error | undefined;
-  let effectiveVersion = input.version;
-
-  for (
-    let attempt = 0;
-    attempt < PROPERTY_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES;
-    attempt++
-  ) {
-    try {
-      const result = await updateProperty(
+      const idempotencyCheck = await IdempotencyService.checkOrCreate(
+        idempotencyKey,
+        "property",
+        actor!.dbUserId,
+        "PATCH",
         input.id,
-        dbUserId,
-        parsed.data,
-        context,
-        effectiveVersion,
+        PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
       );
 
-      if (result.success && result.data) {
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
+        return idempotencyCheck.response as UpdatePropertyResult;
+      }
+
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
+          ),
+        );
+      }
+
+      // FIX: correlationId is now generated rather than passed as empty string.
+      // An empty correlationId was stored in consent records and made log events
+      // uncorrelatable (ADR-005).
+      const context = {
+        correlationId: randomUUID(),
+        userId: actor!.dbUserId,
+        propertyId: input.id,
+        ipAddress: "",
+        userAgent: "",
+        idempotencyKey,
+      };
+
+      const serviceResult = await propertiesService.updatePropertyWithRetry(
+        input.id,
+        actorRef,
+        input.data,
+        context,
+        input.version,
+        {
+          maxRetries: PROPERTY_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES,
+          retryDelayMs: PROPERTY_CONFIG.OPTIMISTIC_LOCK_RETRY_DELAY_MS,
+        },
+      );
+
+      if (serviceResult.ok) {
+        const result = serviceResult.data as PropertyUpdateResultDto;
         const response = {
-          property: result.data.property,
-          version: result.newVersion,
+          property: result.property,
+          version: result.version,
         };
         await IdempotencyService.complete(idempotencyKey, response);
         revalidatePath("/professional-portal/settings/properties");
@@ -300,37 +400,19 @@ export async function updatePropertyAction(
         return response;
       }
 
-      if (!result.success && result.error === "not_found")
-        throw new Error("Property not found");
-      if (!result.success && result.error === "forbidden")
-        throw new Error("Forbidden");
-      if (!result.success && result.error === "conflict") {
-        if (attempt >= PROPERTY_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) {
-          throw new Error(
-            "Property was modified by another request. Please refresh and try again.",
-          );
-        }
-        const current = await prisma.property.findUnique({
-          where: { id: input.id },
-          select: { version: true },
-        });
-        effectiveVersion = current?.version ?? effectiveVersion + 1;
-        await new Promise((r) =>
-          setTimeout(
-            r,
-            PROPERTY_CONFIG.OPTIMISTIC_LOCK_RETRY_DELAY_MS * (attempt + 1),
-          ),
-        );
-        continue;
-      }
-    } catch (err) {
-      lastError = err as Error;
-      if (attempt === PROPERTY_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) break;
-    }
-  }
+      await IdempotencyService.fail(idempotencyKey);
+      const actionCode = normalizePropertyActionErrorCode(serviceResult.error);
+      throwActionFailure(
+        createActionFailure(
+          actionCode,
+          serviceResult.message ?? "Failed to update property",
+          statusForActionError(actionCode),
+        ),
+      );
 
-  await IdempotencyService.fail(idempotencyKey);
-  throw lastError ?? new Error("Failed to update property");
+      throw new Error("unreachable");
+    },
+  });
 }
 
 export type DeletePropertyActionInput = {
@@ -342,6 +424,7 @@ export type DeletePropertyActionInput = {
 export type DeletePropertyResult = {
   message: string;
   propertyId: string;
+  propertyTitle?: string;
   deletedAt: string;
   version: number;
 };
@@ -349,96 +432,140 @@ export type DeletePropertyResult = {
 export async function deletePropertyAction(
   input: DeletePropertyActionInput,
 ): Promise<DeletePropertyResult> {
-  const dbUserId = await resolveDbUserId();
+  return executeThrowingSecureAction({
+    operationName: "delete_property",
+    input,
+    schema: z.object({
+      id: z.string().uuid("Invalid property ID"),
+      version: z.number().int().min(0),
+      idempotencyKey: z.string().optional(),
+    }),
+    handler: async ({ actor, input }) => {
+      const actorRef = toPropertyActor(actor!);
+      const idempotencyKey =
+        input.idempotencyKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "DELETE", {
+          propertyId: input.id,
+        });
 
-  if (!isValidId(input.id)) throw new Error("Invalid property ID");
-
-  const idempotencyKey =
-    input.idempotencyKey ??
-    IdempotencyService.generateKey(dbUserId, "DELETE", {
-      propertyId: input.id,
-    });
-
-  const idempotencyCheck = await IdempotencyService.checkOrCreate(
-    idempotencyKey,
-    "property",
-    dbUserId,
-    "DELETE",
-    input.id,
-    PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
-
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath("/professional-portal/settings/properties");
-    revalidatePath("/professional-portal");
-    return idempotencyCheck.response as DeletePropertyResult;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  const context = {
-    correlationId: "",
-    userId: dbUserId,
-    propertyId: input.id,
-    ipAddress: "",
-    userAgent: "",
-    idempotencyKey,
-  };
-
-  const result = await deleteProperty(
-    input.id,
-    dbUserId,
-    context,
-    input.version,
-  );
-
-  if (!result.success) {
-    await IdempotencyService.fail(idempotencyKey);
-    if (result.error === "not_found") throw new Error("Property not found");
-    if (result.error === "forbidden") throw new Error("Forbidden");
-    if (result.error === "conflict")
-      throw new Error(
-        "Property was modified by another request. Please refresh and try again.",
+      const idempotencyCheck = await IdempotencyService.checkOrCreate(
+        idempotencyKey,
+        "property",
+        actor!.dbUserId,
+        "DELETE",
+        input.id,
+        PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
       );
-    throw new Error("Failed to delete property");
-  }
 
-  const response = {
-    message: "Property deleted successfully",
-    propertyId: input.id,
-    deletedAt: new Date().toISOString(),
-    version: result.newVersion,
-  };
-  await IdempotencyService.complete(idempotencyKey, response);
-  revalidatePath("/professional-portal/settings/properties");
-  revalidatePath("/professional-portal");
-  return response;
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
+        revalidatePath("/professional-portal/settings/properties");
+        revalidatePath("/professional-portal");
+        return idempotencyCheck.response as DeletePropertyResult;
+      }
+
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
+          ),
+        );
+      }
+
+      // FIX: correlationId generated rather than empty string (ADR-005)
+      const context = {
+        correlationId: randomUUID(),
+        userId: actor!.dbUserId,
+        propertyId: input.id,
+        ipAddress: "",
+        userAgent: "",
+        idempotencyKey,
+      };
+
+      try {
+        const result = unwrapResultOrThrow(
+          await propertiesService.deleteProperty(
+            input.id,
+            actorRef,
+            context,
+            input.version,
+          ),
+          "Failed to delete property",
+        ) as PropertyDeleteResultDto;
+
+        const response = {
+          message: result.message,
+          propertyId: result.propertyId,
+          propertyTitle: result.propertyTitle,
+          deletedAt: result.deletedAt,
+          version: result.version,
+        };
+        await IdempotencyService.complete(idempotencyKey, response);
+        revalidatePath("/professional-portal/settings/properties");
+        revalidatePath("/professional-portal");
+        return response;
+      } catch (error) {
+        await IdempotencyService.fail(idempotencyKey);
+        throw error;
+      }
+    },
+  });
 }
 
 export async function getPropertyDocumentsAction(propertyId: string) {
-  const dbUserId = await resolveDbUserId();
-  if (!isValidId(propertyId)) throw new Error("Invalid property ID");
-  return getPropertyDocuments(propertyId, dbUserId);
+  return executeThrowingSecureAction({
+    operationName: "get_property_documents",
+    input: { propertyId },
+    schema: z.object({
+      propertyId: z.string().uuid("Invalid property ID"),
+    }),
+    handler: async ({ actor, input }) =>
+      unwrapResultOrThrow(
+        await propertiesService.getPropertyDocuments(input.propertyId, {
+          userId: actor!.dbUserId,
+          role: actor!.role ?? "unknown",
+        }),
+        "Failed to fetch property documents",
+      ),
+  });
 }
 
 export type AddPropertyDocumentActionInput = {
   propertyId: string;
-  type: string;
-  assetId: string;
-  notes?: string;
-};
+} & z.infer<typeof createDocumentSchema>;
 
 export async function addPropertyDocumentAction(
   input: AddPropertyDocumentActionInput,
 ) {
-  const dbUserId = await resolveDbUserId();
-  if (!isValidId(input.propertyId)) throw new Error("Invalid property ID");
-  return addPropertyDocument(input.propertyId, dbUserId, {
-    type: input.type,
-    assetId: input.assetId,
-    notes: input.notes,
+  return executeThrowingSecureAction({
+    operationName: "create_property_document",
+    input,
+    schema: z.object({
+      propertyId: z.string().uuid("Invalid property ID"),
+      type: createDocumentSchema.shape.type,
+      assetId: createDocumentSchema.shape.assetId,
+      notes: createDocumentSchema.shape.notes,
+    }),
+    handler: async ({ actor, input }) => {
+      const documentInput = createDocumentSchema.parse({
+        type: input.type,
+        assetId: input.assetId,
+        notes: input.notes,
+      });
+
+      return unwrapResultOrThrow(
+        await propertiesService.addPropertyDocument(
+          input.propertyId,
+          toPropertyActor(actor!),
+          documentInput,
+        ),
+        "Failed to create property document",
+      );
+    },
   });
 }
 
@@ -450,44 +577,85 @@ export type RemovePropertyDocumentActionInput = {
 export async function removePropertyDocumentAction(
   input: RemovePropertyDocumentActionInput,
 ) {
-  const dbUserId = await resolveDbUserId();
-  if (!isValidId(input.propertyId) || !isValidId(input.documentId)) {
-    throw new Error("Invalid IDs");
-  }
-  return removePropertyDocument(input.propertyId, input.documentId, dbUserId);
+  return executeThrowingSecureAction({
+    operationName: "delete_property_document",
+    input,
+    schema: z.object({
+      propertyId: z.string().uuid("Invalid property ID"),
+      documentId: z.string().uuid("Invalid document ID"),
+    }),
+    handler: async ({ actor, input }) =>
+      unwrapResultOrThrow(
+        await propertiesService.removePropertyDocument(
+          input.propertyId,
+          input.documentId,
+          toPropertyActor(actor!),
+        ),
+        "Failed to delete document",
+      ),
+  });
 }
 
 export type ReplacePropertyDocumentActionInput = {
   propertyId: string;
   /** ID of the document to replace */
   documentId: string;
-  /** Asset ID for the new replacement document */
-  assetId: string;
-  /** Document type (e.g., TITLE_DEED) */
-  type: string;
-  notes?: string;
-};
+} & z.infer<typeof createDocumentSchema>;
 
 /**
- * Replaces a property document: removes the old one and adds a new one.
- * Uses a transaction to ensure atomicity.
+ * Replaces a property document atomically.
+ *
+ * FIX: Previously this action called removePropertyDocument and
+ * addPropertyDocument sequentially with no transaction. If the second call
+ * failed, the old document was already deleted with no rollback. The comment
+ * even claimed it "uses a transaction to ensure atomicity" — which was
+ * incorrect.
+ *
+ * The atomic replace is now implemented in propertiesService.replacePropertyDocument,
+ * which runs both operations inside a single repository transaction. The action
+ * simply delegates.
  */
 export async function replacePropertyDocumentAction(
   input: ReplacePropertyDocumentActionInput,
 ) {
-  const dbUserId = await resolveDbUserId();
-  if (!isValidId(input.propertyId) || !isValidId(input.documentId)) {
-    throw new Error("Invalid IDs");
-  }
+  return executeThrowingSecureAction({
+    operationName: "replace_property_document",
+    input,
+    schema: z.object({
+      propertyId: z.string().uuid("Invalid property ID"),
+      documentId: z.string().uuid("Invalid document ID"),
+      type: createDocumentSchema.shape.type,
+      assetId: createDocumentSchema.shape.assetId,
+      notes: createDocumentSchema.shape.notes,
+    }),
+    handler: async ({ actor, input }) => {
+      const documentInput = createDocumentSchema.parse({
+        type: input.type,
+        assetId: input.assetId,
+        notes: input.notes,
+      });
 
-  // Remove old and add new in sequence (both functions validate ownership)
-  await removePropertyDocument(input.propertyId, input.documentId, dbUserId);
-  const newDoc = await addPropertyDocument(input.propertyId, dbUserId, {
-    type: input.type,
-    assetId: input.assetId,
-    notes: input.notes,
+      const context = {
+        correlationId: randomUUID(),
+        userId: actor!.dbUserId,
+        propertyId: input.propertyId,
+        ipAddress: "",
+        userAgent: "",
+      };
+
+      const result = unwrapResultOrThrow(
+        await propertiesService.replacePropertyDocument(
+          input.propertyId,
+          input.documentId,
+          toPropertyActor(actor!),
+          documentInput,
+          context,
+        ),
+        "Failed to replace property document",
+      );
+
+      revalidatePath("/professional-portal/settings/properties");
+      return result;
+    },
   });
-
-  revalidatePath("/professional-portal/settings/properties");
-  return newDoc;
 }

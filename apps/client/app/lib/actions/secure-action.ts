@@ -6,6 +6,7 @@ import { normalizeRole, type AppRole } from "@/app/lib/security/roles";
 import type { Result } from "@/app/lib/errors/result";
 import { getClientLogger } from "@/app/lib/api/resilient-api";
 import {
+  type CsrfExemption,
   mutationOriginFailureMessage,
   validateTrustedMutationOriginForServerAction,
 } from "@/app/lib/api/http-security";
@@ -50,7 +51,7 @@ type SecureActionOptions<TInput, TParsed, TOutput> = {
   schema?: z.ZodType<TParsed>;
   requireActor?: boolean;
   csrf?: {
-    exempt?: boolean;
+    exempt?: CsrfExemption;
     extraTrustedOrigins?: string[];
   };
   policy?: (params: {
@@ -134,16 +135,16 @@ export async function resolveRequiredActionActor(): Promise<ActionActor> {
     );
   }
 
+  const role: AppRole | null = normalizeRole(String(user.role)) ?? null;
+
   let adminRole: AdminRole | undefined;
-  if (String(user.role).toUpperCase() === "ADMIN") {
+  if (role === "ADMIN") {
     const adminProfile = await prisma.adminProfile.findUnique({
       where: { userId: user.id },
       select: { role: true },
     });
     adminRole = adminProfile?.role;
   }
-
-  const role: AppRole | null = normalizeRole(String(user.role)) ?? null;
 
   return {
     clerkId,
@@ -352,7 +353,11 @@ function parseInput<TInput, TParsed>(
   if (!schema) {
     return input;
   }
-  return schema.parse(input);
+  const result = schema.safeParse(input);
+  if (!result.success) {
+    throw result.error;
+  }
+  return result.data;
 }
 
 function normalizeActionErrorCode(code?: string): ActionErrorCode {

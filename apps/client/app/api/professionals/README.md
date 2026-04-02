@@ -2,7 +2,7 @@
 
 Public read-only API for listing and viewing professional profiles.
 
-Aligned with API-to-frontend architecture: Service → API routes (thin adapters).
+Aligned with API-to-frontend architecture: Domain service → API routes (thin adapters).
 
 ## Endpoints
 
@@ -32,11 +32,11 @@ Get detailed professional profile by user ID.
 
 ## Architecture
 
-- **Service layer** — `lib/services/professionals.ts` — `getProfessionals`, `getProfessionalById`
-- **Server Actions** — `app/actions/professionals.ts` — `getProfessionalsAction`, `getProfessionalByIdAction` (public, no auth)
-- **Client facade** — `lib/professionals-client.ts` — ResilientExecutor, bulkhead
+- **Domain layer** — `app/lib/domains/professionals/` — contracts, repository entrypoint, service
+- **Server Actions** — `app/actions/professionals.ts` — public compatibility adapters over the domain service
+- **Client facade** — `lib/professionals-client.ts` — browser-safe REST client with explicit DTOs
 - **Hooks** — `hooks/useProfessionals.ts` — `useProfessionals`, `useProfessional`
-- **API routes** — Thin adapters: validate → call service → respond
+- **API routes** — Thin adapters: validate → call domain → respond
 
 ## Validation
 
@@ -45,4 +45,5 @@ Get detailed professional profile by user ID.
 
 ## Repository
 
-- `app/lib/repositories/professional.repository.ts` — `findMany`, `findByUserId` (used by service)
+- `app/lib/domains/professionals/repository.ts` — canonical repository entrypoint for the slice
+- `app/lib/repositories/professional.repository.ts` — existing Prisma-backed implementation used by the domain repository entrypoint

@@ -24,7 +24,6 @@
  */
 
 import { NextRequest } from "next/server";
-import { ConsentService } from "@/app/lib/gdpr/services/consent.service";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -46,6 +45,7 @@ import {
   safeParseJsonBody,
   TimeoutConfig,
 } from "@/app/lib/api/request-utils";
+import { userProfileComplianceService } from "@/app/lib/domains/user-profile";
 
 const logger = getClientLogger();
 const executor = getResilientExecutor();
@@ -100,9 +100,9 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     if (!success) {
       logger.warn("Rate limit exceeded for consent update", {
-        userId: dbUserId,
         identifier,
         correlationId,
+        operationName: "update-user-consent",
       });
       return apiError(
         "Rate limit exceeded. Please try again later.",
@@ -114,9 +114,9 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
     const bodyResult = await safeParseJsonBody(req);
     if (!bodyResult.success) {
       logger.warn("Failed to parse consent request body", {
-        userId: dbUserId,
         error: bodyResult.error,
         correlationId,
+        operationName: "update-user-consent",
       });
       return apiError(bodyResult.error, HttpStatus.BAD_REQUEST);
     }
@@ -125,9 +125,9 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     if (!validationResult.success) {
       logger.warn("Consent validation failed", {
-        userId: dbUserId,
         errors: validationResult.error.issues,
         correlationId,
+        operationName: "update-user-consent",
       });
       return apiError(
         "Invalid consent data",
@@ -142,25 +142,22 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
     const { ipAddress } = getRequestMetadata(req);
 
     logger.info("Processing consent update", {
-      userId: dbUserId,
       consentType: type,
       granted,
       documentVersion,
       ipAddress,
       correlationId,
+      operationName: "update-user-consent",
     });
 
     // Execute with resilience patterns
     const executionResult = await executor.execute(
-      async () => {
-        return await ConsentService.updateConsent(
-          dbUserId,
-          type,
-          granted,
+      async () =>
+        userProfileComplianceService.updateConsent({
+          actor: { userId: dbUserId, correlationId },
+          consent: { type, granted, documentVersion },
           ipAddress,
-          documentVersion,
-        );
-      },
+        }),
       {
         timeout: TimeoutConfig.NORMAL,
         retry: { maxAttempts: 2 },
@@ -173,7 +170,11 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.error(
         "Consent update failed",
         executionResult.error || new Error("Unknown error"),
-        { userId: dbUserId, correlationId },
+        {
+          correlationId,
+          operationName: "update-user-consent",
+          outcome: "failed",
+        },
       );
       return apiError(
         "Failed to update consent",
@@ -181,33 +182,39 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       );
     }
 
-    const consent = executionResult.data!;
+    const consentResult = executionResult.data;
+    if (!consentResult) {
+      return apiError(
+        "Failed to update consent",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    if (!consentResult.ok) {
+      return apiError(
+        consentResult.message || "Failed to update consent",
+        consentResult.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
 
     logger.info("Consent updated successfully", {
-      userId: dbUserId,
       consentType: type,
       granted,
-      consentId: consent.id,
+      consentId: consentResult.data.consent.id,
       correlationId,
+      operationName: "update-user-consent",
+      outcome: "succeeded",
     });
 
-    return apiSuccess(
-      {
-        success: true,
-        consent,
-        message: granted
-          ? `Consent granted for ${type}`
-          : `Consent withdrawn for ${type}`,
-        effectiveImmediately: true,
-        documentVersion: documentVersion || null,
-      },
-      HttpStatus.OK,
-    );
+    return apiSuccess(consentResult.data, HttpStatus.OK);
   } catch (error) {
     logger.error(
       "Consent update error",
       error instanceof Error ? error : new Error(String(error)),
-      { userId: dbUserId, correlationId },
+      {
+        correlationId,
+        operationName: "update-user-consent",
+        outcome: "failed",
+      },
     );
 
     if (error instanceof z.ZodError) {
@@ -252,9 +259,9 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     if (!success) {
       logger.warn("Rate limit exceeded for consent fetch", {
-        userId: dbUserId,
         identifier,
         correlationId,
+        operationName: "fetch-user-consents",
       });
       return apiError(
         "Rate limit exceeded. Please try again later.",
@@ -263,15 +270,17 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     }
 
     logger.info("Fetching user consents", {
-      userId: dbUserId,
       correlationId,
+      operationName: "fetch-user-consents",
     });
 
     // Execute with resilience
     const result = await executor.execute(
-      async () => {
-        return await ConsentService.getUserConsents(dbUserId);
-      },
+      async () =>
+        userProfileComplianceService.getConsents({
+          userId: dbUserId,
+          correlationId,
+        }),
       {
         timeout: TimeoutConfig.NORMAL,
         retry: { maxAttempts: 2 },
@@ -284,7 +293,11 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.error(
         "Failed to fetch consents",
         result.error || new Error("Unknown error"),
-        { userId: dbUserId, correlationId },
+        {
+          correlationId,
+          operationName: "fetch-user-consents",
+          outcome: "failed",
+        },
       );
       return apiError(
         "Failed to fetch consent data",
@@ -292,27 +305,37 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       );
     }
 
-    const consents = result.data!;
+    const consentsResult = result.data;
+    if (!consentsResult) {
+      return apiError(
+        "Failed to fetch consent data",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    if (!consentsResult.ok) {
+      return apiError(
+        consentsResult.message || "Failed to fetch consent data",
+        consentsResult.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
 
     logger.info("Consents fetched successfully", {
-      userId: dbUserId,
-      consentCount: Array.isArray(consents) ? consents.length : 0,
+      consentCount: consentsResult.data.total,
       correlationId,
+      operationName: "fetch-user-consents",
+      outcome: "succeeded",
     });
 
-    return apiSuccess(
-      {
-        success: true,
-        consents,
-        total: Array.isArray(consents) ? consents.length : 0,
-      },
-      HttpStatus.OK,
-    );
+    return apiSuccess(consentsResult.data, HttpStatus.OK);
   } catch (error) {
     logger.error(
       "Consent fetch error",
       error instanceof Error ? error : new Error(String(error)),
-      { userId: dbUserId, correlationId },
+      {
+        correlationId,
+        operationName: "fetch-user-consents",
+        outcome: "failed",
+      },
     );
     return apiError(
       "Failed to fetch consent data. Please try again.",
@@ -344,9 +367,9 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     if (!success) {
       logger.warn("Rate limit exceeded for bulk consent update", {
-        userId: dbUserId,
         identifier,
         correlationId,
+        operationName: "bulk-update-user-consents",
       });
       return apiError(
         "Rate limit exceeded. Please try again later.",
@@ -358,9 +381,9 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
     const bodyResult = await safeParseJsonBody(req);
     if (!bodyResult.success) {
       logger.warn("Failed to parse bulk consent request body", {
-        userId: dbUserId,
         error: bodyResult.error,
         correlationId,
+        operationName: "bulk-update-user-consents",
       });
       return apiError(bodyResult.error, HttpStatus.BAD_REQUEST);
     }
@@ -369,9 +392,9 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     if (!validationResult.success) {
       logger.warn("Bulk consent validation failed", {
-        userId: dbUserId,
         errors: validationResult.error.issues,
         correlationId,
+        operationName: "bulk-update-user-consents",
       });
       return apiError(
         "Invalid consent data",
@@ -384,80 +407,65 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
     const { ipAddress } = getRequestMetadata(req);
 
     logger.info("Processing bulk consent update", {
-      userId: dbUserId,
       consentCount: consents.length,
       ipAddress,
       correlationId,
+      operationName: "bulk-update-user-consents",
     });
 
     // Process all consents
-    const results: Array<{
-      type: ConsentType;
-      granted: boolean;
-      success: boolean;
-    }> = [];
+    const result = await executor.execute(
+      async () =>
+        userProfileComplianceService.bulkUpdateConsents({
+          actor: { userId: dbUserId, correlationId },
+          consents,
+          ipAddress,
+        }),
+      {
+        timeout: TimeoutConfig.NORMAL,
+        retry: { maxAttempts: 2 },
+        circuitBreaker: true,
+        operationName: "bulk-update-user-consents",
+      },
+    );
 
-    for (const consentItem of consents) {
-      const executionResult = await executor.execute(
-        async () => {
-          return await ConsentService.updateConsent(
-            dbUserId,
-            consentItem.type,
-            consentItem.granted,
-            ipAddress,
-            consentItem.documentVersion,
-          );
-        },
-        {
-          timeout: TimeoutConfig.NORMAL,
-          retry: { maxAttempts: 2 },
-          circuitBreaker: true,
-          operationName: `update-consent-${consentItem.type}`,
-        },
+    if (!result.success || !result.data) {
+      return apiError(
+        "Failed to update consent preferences. Please try again.",
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
-
-      results.push({
-        type: consentItem.type,
-        granted: consentItem.granted,
-        success: executionResult.success,
-      });
     }
-
-    const allSuccessful = results.every((r) => r.success);
-    const successCount = results.filter((r) => r.success).length;
+    if (!result.data.ok) {
+      return apiError(
+        result.data.message || "Failed to update consent preferences",
+        result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
 
     logger.info("Bulk consent update completed", {
-      userId: dbUserId,
       totalCount: consents.length,
-      successCount,
-      allSuccessful,
+      successCount: result.data.data.results.filter((item) => item.success)
+        .length,
+      allSuccessful: result.data.data.success,
       correlationId,
+      operationName: "bulk-update-user-consents",
+      outcome: result.data.data.success ? "succeeded" : "partial_success",
     });
 
-    if (!allSuccessful) {
-      return apiSuccess(
-        {
-          success: false,
-          message: `Partially updated: ${successCount}/${consents.length} consents saved`,
-          results,
-        },
-        HttpStatus.MULTI_STATUS || 207,
-      );
+    if (!result.data.data.success) {
+      return apiSuccess(result.data.data, HttpStatus.MULTI_STATUS || 207);
     }
 
-    return apiSuccess(
-      {
-        success: true,
-        message: `All ${consents.length} consent preferences have been saved`,
-        results,
-      },
-      HttpStatus.OK,
-    );
+    return apiSuccess(result.data.data, HttpStatus.OK);
   } catch (error) {
     logger.error(
       "Bulk consent update error",
       error instanceof Error ? error : new Error(String(error)),
-      { userId: dbUserId, correlationId },
+      {
+        correlationId,
+        operationName: "bulk-update-user-consents",
+        outcome: "failed",
+      },
     );
     return apiError(
       "Failed to update consent preferences. Please try again.",

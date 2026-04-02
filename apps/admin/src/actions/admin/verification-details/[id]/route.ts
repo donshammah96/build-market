@@ -25,23 +25,15 @@ import { getAuditHistory } from "@/lib/services/verification/audit-service";
 
 const logger = getClientLogger();
 
-interface RouteParams {
-  params: {
-    id: string;
-  };
-}
-
 /**
  * GET handler for verification details
  * Query params:
  * - entityType: professional | store | property (required)
  */
 export const GET = withAdminRole([
-  AdminRole.SYSTEM_ADMIN,
   AdminRole.SUPER_ADMIN,
-])(async (req: NextRequest, context: AuthContext, params: { id: string }) => {
+])(async (req: NextRequest, context: AuthContext, params: unknown) => {
   const correlationId = initializeCorrelationId(req);
-  const { dbUserId } = context;
 
   const identifier = getRateLimitIdentifier(req);
   const { success } = await checkRateLimit(
@@ -54,7 +46,7 @@ export const GET = withAdminRole([
     return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
   }
 
-  const { id } = params;
+  const { id } = params as { id: string };
   const entityType = req.nextUrl.searchParams.get("entityType");
 
   if (

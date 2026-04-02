@@ -26,7 +26,7 @@ export type DomainResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: DomainErrorCode; message?: string };
 
-export type ProjectActorRole = "professional" | "client" | "admin";
+export type ProjectActorRole = "PROFESSIONAL" | "CLIENT" | "ADMIN";
 
 export type ProjectActor = {
   userId: string;

@@ -1,5 +1,5 @@
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
-import { messagingService } from "@build/messaging-server";
+import { messagingService } from "@/app/lib/domains/messaging";
 
 /**
  * GET /api/messaging
@@ -16,7 +16,7 @@ export async function GET() {
       );
     }
     return apiSuccess(serviceResult.data, HttpStatus.OK);
-  } catch (error) {
+  } catch {
     return apiError(
       "Messaging service is unavailable",
       HttpStatus.SERVICE_UNAVAILABLE,

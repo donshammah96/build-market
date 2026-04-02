@@ -12,15 +12,12 @@ import { redisConnection } from "@build/queue-server";
 import { prisma } from "@build/db";
 import { AssetCleanupService } from "@/app/lib/gdpr/services/asset-cleanup.service";
 import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { env } from "@/app/lib/infrastructure/env";
 
 // Configuration
-const ASSET_CLEANUP_CRON_PATTERN =
-  process.env.ASSET_CLEANUP_CRON || "0 5 * * *"; // 5 AM daily
-const CLEANUP_BATCH_SIZE = parseInt(
-  process.env.CLEANUP_BATCH_SIZE || "100",
-  10,
-);
-const S3_DISABLED = process.env.S3_DISABLED === "true";
+const ASSET_CLEANUP_CRON_PATTERN = env.jobs.assetCleanupCron;
+const CLEANUP_BATCH_SIZE = env.jobs.cleanupBatchSize;
+const S3_DISABLED = env.storage.s3Disabled;
 
 const assetCleanupQueue = new Queue("gdpr-asset-cleanup", {
   connection: redisConnection as ConnectionOptions,
@@ -29,18 +26,18 @@ const assetCleanupQueue = new Queue("gdpr-asset-cleanup", {
 // Initialize S3 client if enabled
 let s3Client: S3Client | null = null;
 if (!S3_DISABLED) {
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  const accessKeyId = env.storage.accessKeyId;
+  const secretAccessKey = env.storage.secretAccessKey;
 
   if (accessKeyId && secretAccessKey) {
     s3Client = new S3Client({
-      region: process.env.AWS_REGION || "af-south-1",
+      region: env.storage.awsRegion,
       credentials: { accessKeyId, secretAccessKey },
     });
   }
 }
 
-const ASSET_BUCKET = process.env.S3_ASSET_BUCKET || "buildmarket-assets";
+const ASSET_BUCKET = env.storage.assetBucket;
 
 interface AssetCleanupMetrics {
   totalExpired: number;
@@ -229,7 +226,7 @@ export function createAssetCleanupWorker() {
         const duration = metrics.endTime - metrics.startTime;
 
         console.log("[AssetCleanup] Job completed", {
-          ...metrics,
+          metrics,
           durationMs: duration,
           bytesFreedMB: (metrics.bytesFreed / 1024 / 1024).toFixed(2),
         });
@@ -243,7 +240,7 @@ export function createAssetCleanupWorker() {
             entityType: "System",
             entityId: "asset-cleanup-job",
             metadata: {
-              ...metrics,
+              metrics: JSON.parse(JSON.stringify(metrics)),
               bytesFreedMB: (metrics.bytesFreed / 1024 / 1024).toFixed(2),
             },
           },

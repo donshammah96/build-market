@@ -23,17 +23,15 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ProfileCompletionBanner } from "@/components/shared/ProfileCompletionBanner";
 import { useProfileStatus } from "@/hooks/useProfileStatus";
 import { useClientDashboard } from "@/hooks/useClientDashboard";
 import { useNotifications } from "@/hooks/useNotifications";
 import { cn } from "@/lib/utils";
 import { ROUTES, getProjectUrl, getIdeaBookUrl } from "@/lib/links";
-import type {
-  DashboardProject,
-  DashboardIdeaBook,
-} from "@/lib/client-dashboard-client";
+import { DashboardSkeleton } from "./_components/dashboard-skeleton";
+import { EmptyState } from "./_components/empty-state";
+import { QuickLink } from "./_components/quick-link";
 
 // Activity placeholder — not yet provided by dashboard API
 interface ActivityMock {
@@ -491,92 +489,6 @@ export default function UserDashboardPage() {
         </div>
       </main>
       <Footer />
-    </div>
-  );
-}
-
-// --- Sub-Components ---
-
-function QuickLink({
-  icon,
-  label,
-  href,
-  count,
-  badgeColor = "bg-zinc-100 text-zinc-600",
-}: {
-  icon: React.ReactNode;
-  label: string;
-  href: string;
-  count?: string;
-  badgeColor?: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="flex items-center justify-between p-3 rounded-lg hover:bg-zinc-50 transition-colors group"
-    >
-      <div className="flex items-center gap-3 text-zinc-600 group-hover:text-emerald-700">
-        {icon}
-        <span className="text-sm font-medium">{label}</span>
-      </div>
-      {count && (
-        <span
-          className={cn(
-            "text-[10px] font-bold px-2 py-0.5 rounded-full",
-            badgeColor,
-          )}
-        >
-          {count}
-        </span>
-      )}
-    </Link>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="bg-white rounded-2xl border border-dashed border-zinc-200 p-8 flex flex-col items-center justify-center text-center">
-      <div className="h-12 w-12 rounded-full bg-zinc-50 flex items-center justify-center mb-4">
-        <LayoutTemplate className="h-6 w-6 text-zinc-300" />
-      </div>
-      <h3 className="text-lg font-semibold text-zinc-900">
-        No active projects
-      </h3>
-      <p className="text-zinc-500 max-w-sm mt-1 mb-6">
-        Ready to start building? Find a verified professional to kickstart your
-        dream home.
-      </p>
-      <Button asChild>
-        <Link href={ROUTES.findProfessional}>Find a Pro</Link>
-      </Button>
-    </div>
-  );
-}
-
-function DashboardSkeleton() {
-  return (
-    <div className="min-h-screen bg-zinc-50/50">
-      <ClientNavbar />
-      <div className="container mx-auto px-4 py-8 pt-24 max-w-7xl">
-        <div className="space-y-4 mb-10">
-          <Skeleton className="h-10 w-64" />
-          <Skeleton className="h-6 w-96" />
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-8 space-y-8">
-            <Skeleton className="h-[300px] w-full rounded-2xl" />
-            <div className="grid grid-cols-3 gap-6">
-              <Skeleton className="h-40 w-full rounded-xl" />
-              <Skeleton className="h-40 w-full rounded-xl" />
-              <Skeleton className="h-40 w-full rounded-xl" />
-            </div>
-          </div>
-          <div className="lg:col-span-4 space-y-8">
-            <Skeleton className="h-64 w-full rounded-xl" />
-            <Skeleton className="h-64 w-full rounded-xl" />
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

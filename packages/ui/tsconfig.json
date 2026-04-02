@@ -1,6 +1,7 @@
 {
   "extends": "@build/typescript-config/react-library.json",
   "compilerOptions": {
+    "incremental": true,
     "outDir": "dist"
   },
   "include": ["src"],

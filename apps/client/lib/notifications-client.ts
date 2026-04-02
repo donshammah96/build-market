@@ -1,14 +1,3 @@
-/**
- * Notifications Client
- *
- * Client-side facade for the notifications API. Provides typed fetch wrappers
- * for list, get, mark read, and delete operations.
- *
- *   notificationsClient (this file)
- *     └── API Routes (/api/notifications)
- *           └── Service Layer (lib/services/notifications.ts)
- *                 └── Prisma (Notification)
- */
 import { API_ROUTES, withQueryParams } from "@/lib/links";
 import { apiFetch } from "@/lib/api-client-utils";
 import type { ApiResponse } from "@build/types";

@@ -1,6 +1,7 @@
 {
   "extends": "@build/typescript-config/base.json",
   "compilerOptions": {
+    "incremental": true,
     "outDir": "./dist",
     "baseUrl": ".",
     "paths": {

@@ -92,17 +92,15 @@ const FileListItem = memo<FileListItemProps>(function FileListItem({
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 10 }}
-      className="flex items-center justify-between bg-white/5 px-4 py-3 rounded-lg border border-white/10"
+      className="flex items-center justify-between bg-white/[0.07] px-4 py-3 rounded-lg border border-white/18"
     >
       <div className="flex items-center gap-3">
-        <div className="p-2 bg-emerald-500/20 rounded-lg">
-          <FileText className="h-4 w-4 text-emerald-400" />
+        <div className="p-2 bg-(--color-onboarding-primary)/18 rounded-lg">
+          <FileText className="h-4 w-4 text-(--color-onboarding-primary)" />
         </div>
         <div>
-          <p className="text-sm text-white truncate max-w-[200px]">
-            {file.name}
-          </p>
-          <p className="text-xs text-zinc-500">
+          <p className="text-sm text-white truncate max-w-50">{file.name}</p>
+          <p className="text-xs text-(--color-onboarding-ink)/55">
             {(file.size / 1024).toFixed(0)} KB
           </p>
         </div>
@@ -110,7 +108,7 @@ const FileListItem = memo<FileListItemProps>(function FileListItem({
       <button
         type="button"
         onClick={onRemove}
-        className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+        className="p-1.5 text-(--color-onboarding-ink)/55 hover:text-(--color-error) hover:bg-error/10 rounded-lg transition-colors"
         aria-label={`Remove ${file.name}`}
       >
         <X className="h-4 w-4" />
@@ -198,12 +196,14 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-3">
-        <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">
+        <div className="p-2 bg--onboarding-primary/12 rounded-lg text-(--color-onboarding-primary)">
           {icon}
         </div>
         <div>
           <h3 className="font-medium text-white">{title}</h3>
-          <p className="text-sm text-zinc-400">{description}</p>
+          <p className="text-sm text-(--color-onboarding-ink)/65">
+            {description}
+          </p>
         </div>
       </div>
 
@@ -212,8 +212,8 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
         className={cn(
           "border-2 border-dashed rounded-xl p-6 transition-all cursor-pointer",
           isDragging
-            ? "border-emerald-500 bg-emerald-500/10"
-            : "border-zinc-700 hover:border-zinc-600 bg-white/5",
+            ? "border-(--color-onboarding-primary) bg--onboarding-primary/10"
+            : "border-white/18 hover:border-(--color-onboarding-primary)/35 bg-white/[0.07]",
           files.length >= maxFiles && "opacity-50 cursor-not-allowed",
         )}
         onDragOver={files.length < maxFiles ? handleDragOver : undefined}
@@ -232,15 +232,17 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           <Upload
             className={cn(
               "h-8 w-8 mb-3 transition-colors",
-              isDragging ? "text-emerald-400" : "text-zinc-500",
+              isDragging
+                ? "text-(--color-onboarding-primary)"
+                : "text-(--color-onboarding-ink)/45",
             )}
           />
-          <p className="text-sm text-zinc-400 text-center">
+          <p className="text-sm text-(--color-onboarding-ink)/65 text-center">
             {isDragging
               ? "Drop files here..."
               : "Drag & drop files or click to browse"}
           </p>
-          <p className="text-xs text-zinc-600 mt-1">
+          <p className="text-xs text-onboarding-ink/52 mt-1">
             PDF, JPG, PNG • Max {FILE_CONFIG.maxSizeMB}MB per file
           </p>
         </label>
@@ -257,7 +259,7 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
       {/* File List */}
       {files.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-onboarding-ink/52">
             {files.length} of {maxFiles} files
           </p>
           {files.map((entry, index) => (
@@ -271,7 +273,7 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
       )}
 
       {files.length === 0 && (
-        <p className="text-xs text-zinc-500 italic">
+        <p className="text-xs text-onboarding-ink/52 italic">
           No files uploaded — you can submit and upload later.
         </p>
       )}
@@ -376,7 +378,7 @@ export default function DocumentsStep({
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -384,12 +386,12 @@ export default function DocumentsStep({
         className="text-center"
       >
         <div className="inline-flex items-center justify-center gap-2 mb-4">
-          <FileText className="h-8 w-8 text-emerald-500" />
+          <FileText className="h-8 w-8 text-(--color-onboarding-primary)" />
         </div>
-        <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">
+        <h2 className="font-['Syne'] text-2xl md:text-3xl font-bold leading-[1.1] text-white mb-2 tracking-tight">
           Verification Documents
         </h2>
-        <p className="text-zinc-400 max-w-md mx-auto">
+        <p className="text-(--color-onboarding-ink)/62 max-w-md mx-auto">
           Upload your professional certificates and ID for verification
         </p>
       </motion.div>
@@ -399,15 +401,15 @@ export default function DocumentsStep({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4"
+        className="bg--onboarding-primary/10 border border-(--color-onboarding-primary)/30 rounded-xl p-4"
       >
         <div className="flex items-start gap-3">
-          <ShieldCheck className="h-5 w-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+          <ShieldCheck className="h-5 w-5 text-(--color-onboarding-primary) shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm text-emerald-400 font-medium">
+            <p className="text-sm text-(--color-onboarding-primary) font-medium">
               Documents help verify your credentials
             </p>
-            <p className="text-xs text-zinc-400 mt-1">
+            <p className="text-xs text-(--color-onboarding-ink)/62 mt-1">
               Your documents are securely stored and only reviewed by our
               verification team.
             </p>
@@ -420,7 +422,7 @@ export default function DocumentsStep({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="space-y-8"
+        className="space-y-7"
       >
         <FileUploadSection
           title={documentContext.title}
@@ -432,7 +434,7 @@ export default function DocumentsStep({
           error={errors.certificates?.message}
         />
 
-        <div className="border-t border-white/10" />
+        <div className="border-t border-white/16" />
 
         <FileUploadSection
           title="ID / KRA PIN Documents"
@@ -445,43 +447,50 @@ export default function DocumentsStep({
         />
       </motion.div>
 
-      {/* Navigation */}
+      {/* Navigation
+          One primary CTA: "Continue to Review"
+          Secondary CTAs: Back and Skip for now — visually de-prioritised as ghost/link variants.
+          "Skip for now" must never visually compete with the primary submit action. */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.3 }}
-        className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4"
+        className="space-y-3 pt-3"
       >
+        {/* Primary action — full width, high visual weight */}
         <button
-          type="button"
-          onClick={onBack}
+          type="submit"
           className={cn(
-            WIZARD_STYLES.secondaryButton,
-            "flex items-center gap-2",
+            WIZARD_STYLES.primaryButton,
+            "w-full flex items-center justify-center gap-2",
           )}
         >
-          <ArrowLeft className="h-4 w-4" /> Back
+          Continue to Review{" "}
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </button>
 
-        <div className="flex items-center gap-3">
+        {/* Secondary actions — low visual weight, separated from the primary */}
+        <div className="flex items-center justify-between">
           <button
             type="button"
-            onClick={handleSkip}
+            onClick={onBack}
             className={cn(
               WIZARD_STYLES.secondaryButton,
               "flex items-center gap-2",
             )}
           >
-            <SkipForward className="h-4 w-4" /> Skip for now
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back
           </button>
+
+          {/* Skip is de-prioritised as a text-only link variant.
+              It must never be the same visual weight as "Continue to Review". */}
           <button
-            type="submit"
-            className={cn(
-              WIZARD_STYLES.primaryButton,
-              "flex items-center justify-center gap-2",
-            )}
+            type="button"
+            onClick={handleSkip}
+            className="text-sm text-(--color-onboarding-ink)/62 hover:text-onboarding-ink/92 transition-colors flex items-center gap-1.5 underline-offset-2 hover:underline"
           >
-            Continue to Review <ArrowRight className="h-4 w-4" />
+            <SkipForward className="h-3.5 w-3.5" aria-hidden="true" />
+            Skip for now
           </button>
         </div>
       </motion.div>

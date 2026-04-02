@@ -64,7 +64,8 @@ Client-only approval endpoint.
 - **Rate limit**: WRITE
 - **Idempotency**: Supported
 - **Body**: `{ approvalStatus: APPROVED|REJECTED|REQUESTED_CHANGE, rejectionReason? }`
-- **Side effects**: On APPROVED, triggers escrow release if funds held
+- **Side effects**: On `APPROVED`, attempts escrow release when linked escrow is `FUNDS_HELD`
+- **Finance sync**: Successful release path writes ledger entries and creates a professional `INCOME` transaction (`PROJECT_PAYMENT`)
 - **Audit**: Logged via ComplianceService
 
 #### Approval Transitions

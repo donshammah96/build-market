@@ -165,7 +165,18 @@ describe("uploadService", () => {
     }
     expect(mockStorageUpload).not.toHaveBeenCalled();
     expect(mockCreateAsset).not.toHaveBeenCalled();
-    expect(mockCreateConsentRecord).not.toHaveBeenCalled();
+    expect(mockCreateConsentRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user: { connect: { id: "user_1" } },
+        type: "ANALYTICS_COOKIES",
+        metadata: expect.objectContaining({
+          source: "file_upload",
+          context: "profile_upload",
+          deduplicated: true,
+          existingAssetId: "asset_1",
+        }),
+      }),
+    );
   });
 
   it("soft deletes referenced assets instead of removing storage", async () => {

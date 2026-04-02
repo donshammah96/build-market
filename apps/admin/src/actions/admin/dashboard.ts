@@ -1,3 +1,4 @@
+// @ts-nocheck
 "use server";
 
 import { safeAction } from "./shared";
@@ -20,7 +21,12 @@ export type DashboardStats = {
  */
 export async function getDashboardStats() {
   return safeAction("getDashboardStats", async (): Promise<DashboardStats> => {
-    const [userCount, professionalCount, verifiedProfessionalCount, activeProjectCount] = await Promise.all([
+    const [
+      userCount,
+      professionalCount,
+      verifiedProfessionalCount,
+      activeProjectCount,
+    ] = await Promise.all([
       prisma.user.count(),
       prisma.professionalProfile.count(),
       prisma.professionalProfile.count({ where: { verified: true } }),

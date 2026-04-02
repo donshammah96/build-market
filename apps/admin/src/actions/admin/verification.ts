@@ -1,7 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { safeVerificationAction, callClientApi } from "./shared";
+import { runWithIdempotency } from "./idempotency";
+import {
+  safeVerificationAction,
+  callClientApi,
+  requireAdminGranularRole,
+  logAdminAction,
+} from "./shared";
 import type {
   ActionResponse,
   PaginationMeta,
@@ -23,7 +29,6 @@ import {
   parseBatchVerifyDocuments,
 } from "./types";
 
-// Re-export types for consumers
 export type {
   EntityType,
   VerificationAction,
@@ -38,15 +43,14 @@ export type {
   BatchVerifyDocumentsInput,
 } from "./types";
 
-// ============================================================================
-// Server Actions
-// ============================================================================
+const VERIFICATION_MUTATION_ROLES = ["VERIFICATION_SPECIALIST"];
+const VERIFICATION_IDEMPOTENCY_TTL_HOURS = 0.25;
 
 /**
  * Get pending verifications with filters
  */
 export async function getPendingVerifications(
-  filters: Partial<VerificationFilterInput> = {}
+  filters: Partial<VerificationFilterInput> = {},
 ): Promise<
   ActionResponse<{
     items: VerificationQueueItem[];
@@ -83,7 +87,7 @@ export async function getPendingVerifications(
           entityType: rawItem.entityType as EntityType,
           entityId: String(rawItem.entityId ?? ""),
           name: String(
-            rawItem.companyName ?? rawItem.name ?? rawItem.title ?? "Unknown"
+            rawItem.companyName ?? rawItem.name ?? rawItem.title ?? "Unknown",
           ),
           status: rawItem.status as VerificationStatus,
           submittedAt: rawItem.submittedAt ? String(rawItem.submittedAt) : null,
@@ -100,7 +104,7 @@ export async function getPendingVerifications(
           county: rawItem.county ? String(rawItem.county) : undefined,
           location: rawItem.location ? String(rawItem.location) : undefined,
         };
-      }
+      },
     );
 
     return {
@@ -132,7 +136,7 @@ export async function getVerificationStats(): Promise<
  */
 export async function getVerificationDetails(
   entityType: EntityType,
-  entityId: string
+  entityId: string,
 ): Promise<ActionResponse<VerificationDetails>> {
   return safeVerificationAction("getVerificationDetails", async () => {
     const response = await callClientApi<{
@@ -148,42 +152,66 @@ export async function getVerificationDetails(
  * Verify, reject, or request correction for an entity
  */
 export async function verifyEntity(
-  input: VerifyEntityInput
+  input: VerifyEntityInput,
+  idempotencyKey: string,
 ): Promise<ActionResponse<{ newStatus: VerificationStatus; message: string }>> {
-  return safeVerificationAction("verifyEntity", async () => {
-    const validated = parseVerifyEntity(input);
+  return safeVerificationAction("verifyEntity", async ({ adminUserId }) => {
+    await requireAdminGranularRole(VERIFICATION_MUTATION_ROLES, adminUserId);
 
-    // Validate rejection requires reason
-    if (validated.action === "REJECT" && !validated.reason) {
-      throw new Error("Reason is required when rejecting");
-    }
+    return runWithIdempotency({
+      adminUserId,
+      actionName: "verifyEntity",
+      idempotencyKey,
+      resourceId: `${input.entityType}:${input.entityId}:${input.action}`,
+      ttlHours: VERIFICATION_IDEMPOTENCY_TTL_HOURS,
+      run: async () => {
+        const validated = parseVerifyEntity(input);
 
-    const response = await callClientApi<{
-      success: boolean;
-      data: {
-        newStatus: VerificationStatus;
-        message: string;
-      };
-      message: string;
-    }>("/api/admin/verify", {
-      method: "POST",
-      body: validated,
+        if (validated.action === "REJECT" && !validated.reason) {
+          throw new Error("Reason is required when rejecting");
+        }
+
+        const response = await callClientApi<{
+          success: boolean;
+          data: {
+            newStatus: VerificationStatus;
+            message: string;
+          };
+          message: string;
+        }>("/api/admin/verify", {
+          method: "POST",
+          body: validated,
+        });
+
+        revalidatePath("/verifications");
+        revalidatePath(
+          `/verifications/${validated.entityType}/${validated.entityId}`,
+        );
+
+        if (validated.entityType === "professional") {
+          revalidatePath("/professionals");
+        }
+
+        await logAdminAction({
+          userId: adminUserId,
+          action: "VERIFY_ENTITY",
+          targetType: validated.entityType,
+          targetId: validated.entityId,
+          details: {
+            requestedAction: validated.action,
+            reason: validated.reason,
+            notes: validated.notes,
+            newStatus: response.data.newStatus,
+          },
+          reason: validated.reason,
+        });
+
+        return {
+          newStatus: response.data.newStatus,
+          message: response.message || response.data.message,
+        };
+      },
     });
-
-    // Revalidate affected paths
-    revalidatePath("/verifications");
-    revalidatePath(
-      `/verifications/${validated.entityType}/${validated.entityId}`
-    );
-
-    if (validated.entityType === "professional") {
-      revalidatePath("/professionals");
-    }
-
-    return {
-      newStatus: response.data.newStatus,
-      message: response.message || response.data.message,
-    };
   });
 }
 
@@ -191,28 +219,52 @@ export async function verifyEntity(
  * Verify or reject a single document
  */
 export async function verifyDocument(
-  input: VerifyDocumentInput
+  input: VerifyDocumentInput,
+  idempotencyKey: string,
 ): Promise<ActionResponse<{ message: string }>> {
-  return safeVerificationAction("verifyDocument", async () => {
-    const validated = parseVerifyDocument(input);
+  return safeVerificationAction("verifyDocument", async ({ adminUserId }) => {
+    await requireAdminGranularRole(VERIFICATION_MUTATION_ROLES, adminUserId);
 
-    const response = await callClientApi<{
-      success: boolean;
-      data: unknown;
-      message: string;
-    }>("/api/admin/verify-document", {
-      method: "POST",
-      body: validated,
+    return runWithIdempotency({
+      adminUserId,
+      actionName: "verifyDocument",
+      idempotencyKey,
+      resourceId: `${input.documentType}:${input.documentId}:${input.action}`,
+      ttlHours: VERIFICATION_IDEMPOTENCY_TTL_HOURS,
+      run: async () => {
+        const validated = parseVerifyDocument(input);
+
+        const response = await callClientApi<{
+          success: boolean;
+          data: unknown;
+          message: string;
+        }>("/api/admin/verify-document", {
+          method: "POST",
+          body: validated,
+        });
+
+        revalidatePath("/verifications");
+
+        await logAdminAction({
+          userId: adminUserId,
+          action: "VERIFY_DOCUMENT",
+          targetType: "document",
+          targetId: validated.documentId,
+          details: {
+            documentType: validated.documentType,
+            requestedAction: validated.action,
+            notes: validated.notes,
+          },
+          reason: validated.notes,
+        });
+
+        return {
+          message:
+            response.message ||
+            `Document ${validated.action.toLowerCase()}d successfully`,
+        };
+      },
     });
-
-    // Revalidate verification pages
-    revalidatePath("/verifications");
-
-    return {
-      message:
-        response.message ||
-        `Document ${validated.action.toLowerCase()}d successfully`,
-    };
   });
 }
 
@@ -220,50 +272,85 @@ export async function verifyDocument(
  * Batch verify/reject multiple documents
  */
 export async function batchVerifyDocuments(
-  input: BatchVerifyDocumentsInput
+  input: BatchVerifyDocumentsInput,
+  idempotencyKey: string,
 ): Promise<
   ActionResponse<{
     summary: { total: number; successful: number; failed: number };
     results: Array<{ documentId: string; success: boolean; error?: string }>;
   }>
 > {
-  return safeVerificationAction("batchVerifyDocuments", async () => {
-    const validated = parseBatchVerifyDocuments(input);
+  return safeVerificationAction(
+    "batchVerifyDocuments",
+    async ({ adminUserId }) => {
+      await requireAdminGranularRole(VERIFICATION_MUTATION_ROLES, adminUserId);
 
-    const response = await callClientApi<{
-      success: boolean;
-      data: {
-        results: Array<{
-          documentId: string;
-          success: boolean;
-          result?: unknown;
-        }>;
-        errors: Array<{ documentId: string; success: boolean; error: string }>;
-        summary: { total: number; successful: number; failed: number };
-      };
-    }>("/api/admin/verify-document", {
-      method: "POST",
-      body: validated,
-    });
+      return runWithIdempotency({
+        adminUserId,
+        actionName: "batchVerifyDocuments",
+        idempotencyKey,
+        resourceId: input.documents
+          .map(
+            (document) =>
+              `${document.documentType}:${document.documentId}:${document.action}`,
+          )
+          .sort()
+          .join(","),
+        ttlHours: VERIFICATION_IDEMPOTENCY_TTL_HOURS,
+        run: async () => {
+          const validated = parseBatchVerifyDocuments(input);
 
-    // Revalidate verification pages
-    revalidatePath("/verifications");
+          const response = await callClientApi<{
+            success: boolean;
+            data: {
+              results: Array<{
+                documentId: string;
+                success: boolean;
+                result?: unknown;
+              }>;
+              errors: Array<{
+                documentId: string;
+                success: boolean;
+                error: string;
+              }>;
+              summary: { total: number; successful: number; failed: number };
+            };
+          }>("/api/admin/verify-document", {
+            method: "POST",
+            body: validated,
+          });
 
-    return {
-      summary: response.data.summary,
-      results: [
-        ...response.data.results.map((r) => ({
-          documentId: r.documentId,
-          success: r.success,
-        })),
-        ...response.data.errors.map((e) => ({
-          documentId: e.documentId,
-          success: false,
-          error: e.error,
-        })),
-      ],
-    };
-  });
+          revalidatePath("/verifications");
+
+          await logAdminAction({
+            userId: adminUserId,
+            action: "BATCH_VERIFY_DOCUMENTS",
+            targetType: "document",
+            targetId: "batch",
+            details: {
+              total: validated.documents.length,
+              summary: response.data.summary,
+            },
+          });
+
+          return {
+            summary: response.data.summary,
+            results: [
+              ...response.data.results.map((r) => ({
+                documentId: r.documentId,
+                success: r.success,
+              })),
+              ...response.data.errors.map((e) => ({
+                documentId: e.documentId,
+                success: false,
+                error: e.error,
+              })),
+            ],
+          };
+        },
+      });
+    },
+  );
 }
 
 /**
@@ -272,7 +359,8 @@ export async function batchVerifyDocuments(
 export async function batchVerifyEntities(
   entities: Array<{ entityType: EntityType; entityId: string }>,
   action: VerificationAction,
-  reason?: string
+  idempotencyKey: string,
+  reason?: string,
 ): Promise<
   ActionResponse<{
     summary: { total: number; successful: number; failed: number };
@@ -284,57 +372,86 @@ export async function batchVerifyEntities(
     }>;
   }>
 > {
-  return safeVerificationAction("batchVerifyEntities", async () => {
-    // Validate rejection requires reason
-    if (action === "REJECT" && !reason) {
-      throw new Error("Reason is required when rejecting");
-    }
+  return safeVerificationAction(
+    "batchVerifyEntities",
+    async ({ adminUserId }) => {
+      await requireAdminGranularRole(VERIFICATION_MUTATION_ROLES, adminUserId);
 
-    const results: Array<{
-      entityType: EntityType;
-      entityId: string;
-      success: boolean;
-      error?: string;
-    }> = [];
+      return runWithIdempotency({
+        adminUserId,
+        actionName: "batchVerifyEntities",
+        idempotencyKey,
+        resourceId: entities
+          .map((entity) => `${entity.entityType}:${entity.entityId}`)
+          .sort()
+          .join(","),
+        ttlHours: VERIFICATION_IDEMPOTENCY_TTL_HOURS,
+        run: async () => {
+          if (action === "REJECT" && !reason) {
+            throw new Error("Reason is required when rejecting");
+          }
 
-    // Process entities sequentially to avoid overwhelming the API
-    for (const entity of entities) {
-      try {
-        await callClientApi("/api/admin/verify", {
-          method: "POST",
-          body: {
-            entityType: entity.entityType,
-            entityId: entity.entityId,
-            action,
+          const results: Array<{
+            entityType: EntityType;
+            entityId: string;
+            success: boolean;
+            error?: string;
+          }> = [];
+
+          for (const entity of entities) {
+            try {
+              await callClientApi("/api/admin/verify", {
+                method: "POST",
+                body: {
+                  entityType: entity.entityType,
+                  entityId: entity.entityId,
+                  action,
+                  reason,
+                },
+              });
+              results.push({ ...entity, success: true });
+            } catch (error) {
+              results.push({
+                ...entity,
+                success: false,
+                error: error instanceof Error ? error.message : "Unknown error",
+              });
+            }
+          }
+
+          const successful = results.filter((r) => r.success).length;
+          const failed = results.filter((r) => !r.success).length;
+
+          revalidatePath("/verifications");
+          revalidatePath("/professionals");
+
+          await logAdminAction({
+            userId: adminUserId,
+            action: "BATCH_VERIFY_ENTITIES",
+            targetType: "verification",
+            targetId: "batch",
+            details: {
+              requestedAction: action,
+              total: entities.length,
+              successful,
+              failed,
+              reason,
+            },
             reason,
-          },
-        });
-        results.push({ ...entity, success: true });
-      } catch (error) {
-        results.push({
-          ...entity,
-          success: false,
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
-      }
-    }
+          });
 
-    const successful = results.filter((r) => r.success).length;
-    const failed = results.filter((r) => !r.success).length;
-
-    // Revalidate paths
-    revalidatePath("/verifications");
-    revalidatePath("/professionals");
-
-    return {
-      summary: {
-        total: entities.length,
-        successful,
-        failed,
-      },
-      results,
-    };
-  });
+          return {
+            summary: {
+              total: entities.length,
+              successful,
+              failed,
+            },
+            results,
+          };
+        },
+      });
+    },
+  );
 }
 
 // ============================================================================
@@ -347,7 +464,7 @@ export async function batchVerifyEntities(
  */
 export async function getVerificationUpdates(
   since: string,
-  entityType: EntityType | "all" = "all"
+  entityType: EntityType | "all" = "all",
 ): Promise<
   ActionResponse<{
     items: VerificationQueueItem[];

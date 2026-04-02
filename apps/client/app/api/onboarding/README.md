@@ -67,13 +67,15 @@ Complete user onboarding by setting role and creating a profile. This is the pri
   },
   "documents": [
     {
-      "url": "https://...",
-      "type": "EDUCATION_CERT",
+      "uploadId": "uuid-from-upload-endpoint",
+      "previewUrl": "/uploads/...",
+      "category": "EDUCATION_CERT",
       "title": "Degree Certificate"
     },
     {
-      "url": "https://...",
-      "type": "ID_OR_PASSPORT",
+      "uploadId": "uuid-from-upload-endpoint",
+      "previewUrl": "/uploads/...",
+      "category": "ID_OR_PASSPORT",
       "title": "National ID"
     }
   ]
@@ -276,18 +278,25 @@ Secure file upload endpoint for the onboarding flow. Accepts images and PDFs for
   "data": {
     "uploaded": {
       "certificates": [
-        { "originalName": "cert.pdf", "url": "/uploads/1707123456-uuid.pdf" }
+        {
+          "uploadId": "uuid",
+          "previewUrl": "/uploads/...",
+          "originalName": "cert.pdf"
+        }
       ],
       "idDocuments": [
         {
-          "originalName": "id-front.jpg",
-          "url": "/uploads/1707123457-uuid.jpg"
+          "uploadId": "uuid",
+          "previewUrl": "/uploads/...",
+          "originalName": "id-front.jpg"
         }
       ]
     }
   }
 }
 ```
+
+Use `uploadId` when submitting documents to the onboarding completion endpoint. `previewUrl` is for UI preview only.
 
 ## Error Responses
 

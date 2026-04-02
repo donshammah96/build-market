@@ -12,8 +12,8 @@ import type {
   InquiriesQueryInput,
   UpdateInquiryClientInput,
   DeleteInquiryClientInput,
-  PropertyInquiry,
 } from "@/lib/inquiries-client";
+import type { InquiryDetailResult } from "@/app/lib/domains/inquiries/contracts";
 import { unwrapApiResponse } from "@/lib/api-client-utils";
 
 export const inquiryKeys = {
@@ -47,7 +47,7 @@ export function useInquiry(
 
 export function useUpdateInquiry(
   options?: UseMutationOptions<
-    PropertyInquiry,
+    InquiryDetailResult,
     Error,
     UpdateInquiryClientInput
   >,

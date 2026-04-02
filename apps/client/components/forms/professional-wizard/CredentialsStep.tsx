@@ -131,7 +131,7 @@ export default function CredentialsStep({
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -139,12 +139,15 @@ export default function CredentialsStep({
         className="text-center"
       >
         <div className="inline-flex items-center justify-center gap-2 mb-4">
-          <BadgeCheck className="h-8 w-8 text-emerald-500" />
+          <BadgeCheck
+            className="h-8 w-8 text-(--color-onboarding-primary)"
+            aria-hidden="true"
+          />
         </div>
-        <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">
+        <h2 className="font-['Syne'] text-2xl md:text-3xl font-bold leading-[1.1] text-white mb-2 tracking-tight">
           Verify your Credentials
         </h2>
-        <p className="text-zinc-400 max-w-md mx-auto">{board.description}</p>
+        <p className="text-white/60 max-w-md mx-auto">{board.description}</p>
       </motion.div>
 
       {/* Main Input Card */}
@@ -155,9 +158,12 @@ export default function CredentialsStep({
         className={WIZARD_STYLES.card}
       >
         <div className="space-y-6">
-          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 flex items-start gap-3">
-            <ShieldCheck className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
-            <div className="text-sm text-zinc-300">
+          <div className="bg-onboarding-primary/10 border border-(--color-onboarding-primary)/25 rounded-lg p-4 flex items-start gap-3">
+            <ShieldCheck
+              className="h-5 w-5 text-(--color-onboarding-primary) shrink-0 mt-0.5"
+              aria-hidden="true"
+            />
+            <div className="text-sm text-white/72">
               Your profile will display a{" "}
               <span className="text-white font-semibold">
                 {board.abbr} Verified
@@ -172,25 +178,43 @@ export default function CredentialsStep({
               className={WIZARD_STYLES.label}
             >
               {board.abbr} Registration Number{" "}
-              <span className="text-red-400">*</span>
+              <span className="text-(--color-error)" aria-hidden="true">
+                *
+              </span>
+              <span className="sr-only">(required)</span>
             </label>
+            {/* aria-invalid and aria-describedby wire the error message to the input
+                so screen readers announce the error when the field is focused. */}
             <input
               id="boardRegistrationNumber"
               type="text"
               {...register("boardRegistrationNumber")}
               placeholder={board.placeholder}
+              aria-invalid={errors.boardRegistrationNumber ? "true" : undefined}
+              aria-describedby={
+                errors.boardRegistrationNumber
+                  ? "boardRegistrationNumber-error"
+                  : undefined
+              }
               className={cn(
                 WIZARD_STYLES.input,
                 errors.boardRegistrationNumber
-                  ? "border-red-500/50 ring-1 ring-red-500/50"
+                  ? "border-(--color-error)/50 ring-1 ring-error/50"
                   : "",
               )}
             />
-            {errors.boardRegistrationNumber && (
-              <p className={WIZARD_STYLES.error}>
-                {errors.boardRegistrationNumber.message}
-              </p>
-            )}
+            {/* aria-live="polite" ensures the error is announced without interrupting
+                the user. The id is referenced by aria-describedby above. */}
+            <div aria-live="polite" aria-atomic="true">
+              {errors.boardRegistrationNumber && (
+                <p
+                  id="boardRegistrationNumber-error"
+                  className={WIZARD_STYLES.error}
+                >
+                  {errors.boardRegistrationNumber.message}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </motion.div>
@@ -200,7 +224,7 @@ export default function CredentialsStep({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2 }}
-        className="flex items-center justify-between pt-4"
+        className="flex items-center justify-between pt-3"
       >
         <button
           type="button"

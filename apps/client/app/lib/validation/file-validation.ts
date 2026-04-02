@@ -293,7 +293,7 @@ export function isImageFile(mimeType: string): boolean {
  * Check if file should be scanned for viruses
  * (All uploaded files should be scanned in production)
  */
-// eslint-disable-next-line /typescript-eslint/no-unused-vars
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function requiresVirusScan(_mimeType: string): boolean {
   // In production, ALL files should be scanned
   // For development, you might skip images

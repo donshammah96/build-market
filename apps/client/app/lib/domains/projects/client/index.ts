@@ -2,7 +2,7 @@ import { PROJECTS_CLIENT_CONFIG } from "@/lib/config/project.config";
 import { ConcurrencyLimiter } from "@/app/lib/domains/projects/client/concurrency-limiter";
 import { GenericProjectsClient } from "@/app/lib/domains/projects/client/generic-projects-client";
 import { PortalProjectsClient } from "@/app/lib/domains/projects/client/portal-projects-client";
-import { envConfig } from "@/app/lib/infrastructure/env";
+import { env } from "@/app/lib/infrastructure/env";
 
 const sharedLimiter = new ConcurrencyLimiter(
   PROJECTS_CLIENT_CONFIG.BULKHEAD_CONCURRENCY,
@@ -11,10 +11,10 @@ const sharedLimiter = new ConcurrencyLimiter(
 const genericProjectsClient = new GenericProjectsClient(sharedLimiter);
 const portalProjectsClient = new PortalProjectsClient(sharedLimiter);
 
-const isGenericProjectsReadEnabled = envConfig.features.genericProjectsApi;
+const isGenericProjectsReadEnabled = env.features.genericProjectsApi;
 const isGenericProjectsMutationEnabled =
   isGenericProjectsReadEnabled &&
-  envConfig.features.genericProjectsApiMutations;
+  env.features.genericProjectsApiMutations;
 
 function genericReadApiDisabled(): Promise<never> {
   return Promise.reject(

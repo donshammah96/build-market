@@ -7,8 +7,9 @@ import Google from "next-auth/providers/google";
 import GitHub from "next-auth/providers/github";
 import Facebook from "next-auth/providers/facebook";
 import Azure from "next-auth/providers/azure-ad";
-import { verifyScryptPassword } from "@build/auth-server";
+import { verifyScryptPassword } from "@build/auth-server/password-hash";
 import { getSqlClient } from "@/app/lib/infrastructure/db";
+import { env } from "@/app/lib/infrastructure/env";
 
 async function getUser(email: string): Promise<User | undefined> {
   try {
@@ -76,8 +77,8 @@ const nextAuth = NextAuth({
 
     // Google OAuth Provider
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: env.auth.oauth.google.clientId,
+      clientSecret: env.auth.oauth.google.clientSecret,
       authorization: {
         params: {
           prompt: "consent",
@@ -89,8 +90,8 @@ const nextAuth = NextAuth({
 
     // GitHub OAuth Provider
     GitHub({
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+      clientId: env.auth.oauth.github.clientId,
+      clientSecret: env.auth.oauth.github.clientSecret,
       authorization: {
         params: {
           scope: "read:user user:email",
@@ -100,8 +101,8 @@ const nextAuth = NextAuth({
 
     // Facebook OAuth Provider
     Facebook({
-      clientId: process.env.FACEBOOK_CLIENT_ID!,
-      clientSecret: process.env.FACEBOOK_CLIENT_SECRET!,
+      clientId: env.auth.oauth.facebook.clientId,
+      clientSecret: env.auth.oauth.facebook.clientSecret,
       authorization: {
         params: {
           scope: "email public_profile",
@@ -111,9 +112,9 @@ const nextAuth = NextAuth({
 
     // Microsoft Azure AD OAuth Provider
     Azure({
-      clientId: process.env.AZURE_AD_CLIENT_ID!,
-      clientSecret: process.env.AZURE_AD_CLIENT_SECRET!,
-      issuer: `https://login.microsoftonline.com/${process.env.AZURE_AD_TENANT_ID || "common"}/v2.0`,
+      clientId: env.auth.oauth.azureAd.clientId,
+      clientSecret: env.auth.oauth.azureAd.clientSecret,
+      issuer: `https://login.microsoftonline.com/${env.auth.oauth.azureAd.tenantId}/v2.0`,
       authorization: {
         params: {
           scope: "openid profile email User.Read",

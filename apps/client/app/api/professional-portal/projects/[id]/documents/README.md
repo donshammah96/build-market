@@ -11,7 +11,6 @@ List documents for a project with asset details.
 - **Auth**: Professional (project owner)
 - **Rate limit**: READ
 - **Query**: `?type=CONTRACT_AGREEMENT` to filter by document type
-- **GDPR**: Access to sensitive document types (CONTRACT, INVOICE, BOQ) is audit-logged
 
 ### POST `/projects/[id]/documents`
 
@@ -24,7 +23,14 @@ Create a document linked to a pre-uploaded Asset.
 - **Validations**: Asset ownership verified, milestone verified if provided
 - **GDPR**: Consent record created, audit log for sensitive types
 
-### DELETE `/projects/[id]/documents?documentId=xxx`
+### GET `/projects/[id]/documents/[documentId]`
+
+Get a single project document by ID.
+
+- **Auth**: Professional (project owner)
+- **Rate limit**: READ
+
+### DELETE `/projects/[id]/documents/[documentId]`
 
 Delete a project document. Asset cleanup handled by existing job.
 

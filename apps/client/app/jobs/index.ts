@@ -6,6 +6,7 @@
  * - Data retention enforcement (schedules deletions for expired accounts)
  * - Anonymization batch processing (processes pending anonymizations)
  * - Asset cleanup (deletes orphaned assets after grace period)
+ * - Onboarding upload cleanup (marks expired staged uploads as EXPIRED)
  *
  * Usage:
  *   import { initializeAllSchedulers, shutdownAllSchedulers } from '@/app/jobs';
@@ -30,6 +31,11 @@ import {
   createAssetCleanupWorker,
   assetCleanupQueue,
 } from "./asset-cleanup";
+import {
+  scheduleOnboardingUploadCleanup,
+  createOnboardingUploadCleanupWorker,
+  onboardingUploadCleanupQueue,
+} from "./onboarding-upload-cleanup";
 import { Worker } from "bullmq";
 
 // Track all workers for graceful shutdown
@@ -78,6 +84,7 @@ export async function initializeAllSchedulers(): Promise<void> {
       createDataRetentionWorker(),
       createAnonymizationBatchWorker(),
       createAssetCleanupWorker(),
+      createOnboardingUploadCleanupWorker(),
     ];
 
     console.log("[JobOrchestrator] All workers created");
@@ -121,6 +128,7 @@ export async function shutdownAllSchedulers(): Promise<void> {
       retentionQueue.close(),
       anonymizationQueue.close(),
       assetCleanupQueue.close(),
+      onboardingUploadCleanupQueue.close(),
     ]);
 
     workers = [];
@@ -145,6 +153,7 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
     { name: "Data Retention", queue: retentionQueue },
     { name: "Anonymization Batch", queue: anonymizationQueue },
     { name: "Asset Cleanup", queue: assetCleanupQueue },
+    { name: "Onboarding Upload Cleanup", queue: onboardingUploadCleanupQueue },
   ];
 
   for (const { name, queue } of queues) {
@@ -188,7 +197,8 @@ export async function triggerJob(
     | "export-cleanup"
     | "data-retention"
     | "anonymization-batch"
-    | "asset-cleanup",
+    | "asset-cleanup"
+    | "onboarding-upload-cleanup",
 ): Promise<{ success: boolean; jobId?: string; error?: string }> {
   try {
     let queue;
@@ -206,6 +216,10 @@ export async function triggerJob(
       case "asset-cleanup":
         queue = assetCleanupQueue;
         jobName = "cleanup-expired-assets";
+        break;
+      case "onboarding-upload-cleanup":
+        queue = onboardingUploadCleanupQueue;
+        jobName = "cleanup-expired-staged-uploads";
         break;
       case "export-cleanup":
         // Note: cleanupQueue is not exported from export-cleanup.ts
@@ -266,6 +280,7 @@ export async function healthCheck(): Promise<{
     "data-retention",
     "anonymization",
     "asset-cleanup",
+    "onboarding-upload-cleanup",
   ] as const;
   for (let i = 0; i < workers.length; i++) {
     const worker = workers[i];
@@ -298,4 +313,5 @@ export {
   scheduleDataRetentionEnforcement,
   scheduleAnonymizationBatch,
   scheduleAssetCleanup,
+  scheduleOnboardingUploadCleanup,
 };

@@ -81,7 +81,11 @@ export const GET = withAuth<{ id: string }>(
  * Sets status to CANCELLED instead of hard-deleting.
  */
 export const DELETE = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
     const { id } = params!;
 
@@ -102,7 +106,7 @@ export const DELETE = withAuth<{ id: string }>(
     logger.info("Cancelling withdrawal request", {
       correlationId,
       withdrawalId: id,
-      userId: dbUserId,
+      actorRole: userRole,
     });
 
     const resilientExecutor = getResilientExecutor();

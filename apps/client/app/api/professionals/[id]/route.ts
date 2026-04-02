@@ -11,7 +11,7 @@ import {
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { isValidId } from "@/app/lib/api/api-guards";
-import { getProfessionalById } from "@/lib/services/professionals";
+import { professionalsService } from "@/app/lib/domains/professionals";
 
 const logger = getClientLogger();
 
@@ -46,11 +46,11 @@ export async function GET(
 
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
-    () => getProfessionalById(id),
+    () => professionalsService.getProfessionalById(id),
     { operationName: "get_professional_detail" },
   );
 
-  if (!result.success) {
+  if (!result.success || !result.data) {
     logger.error("Failed to fetch professional", result.error, {
       professionalId: id,
     });
@@ -60,9 +60,19 @@ export async function GET(
     );
   }
 
-  if (!result.data) {
-    return apiError("Professional not found", HttpStatus.NOT_FOUND);
+  if (!result.data.ok) {
+    if (result.data.error === "not_found") {
+      return apiError(
+        result.data.message ?? "Professional not found",
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    return apiError(
+      result.data.message ?? "Failed to fetch professional",
+      result.data.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+    );
   }
 
-  return apiSuccess(result.data, HttpStatus.OK);
+  return apiSuccess(result.data.data, HttpStatus.OK);
 }

@@ -167,6 +167,61 @@ describe("professional certificates routes", () => {
     expect(response.status).toBe(403);
   });
 
+  it("emits required observability keys for certificates list success", async () => {
+    mockCertificatesService.getCertificates.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
+
+    const response = await listCertificatesRoute(
+      new NextRequest(
+        "http://localhost:3500/api/professional-portal/certificates",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      "Professional certificates adapter outcome",
+      expect.objectContaining({
+        correlationId: "test-correlation-id",
+        operationName: "get_certificates",
+        httpMethod: "GET",
+        routePattern: "/api/professional-portal/certificates",
+        actorRole: "professional",
+        outcome: "succeeded",
+        httpStatus: 200,
+        durationMs: expect.any(Number),
+      }),
+    );
+  });
+
+  it("emits required observability keys for certificates list failure", async () => {
+    mockCertificatesService.getCertificates.mockRejectedValue(
+      new Error("boom"),
+    );
+
+    const response = await listCertificatesRoute(
+      new NextRequest(
+        "http://localhost:3500/api/professional-portal/certificates",
+      ),
+    );
+
+    expect(response.status).toBe(500);
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      "Professional certificates adapter outcome",
+      expect.objectContaining({
+        correlationId: "test-correlation-id",
+        operationName: "get_certificates",
+        httpMethod: "GET",
+        routePattern: "/api/professional-portal/certificates",
+        actorRole: "professional",
+        outcome: "failed",
+        httpStatus: 500,
+        durationMs: expect.any(Number),
+      }),
+    );
+  });
+
   it("returns certificate detail from the certificates domain", async () => {
     mockCertificatesService.getCertificateById.mockResolvedValue({
       ok: true,

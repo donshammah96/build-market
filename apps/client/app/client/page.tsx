@@ -1,45 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
-
-interface DashboardData {
-  stats: {
-    activeProjects: number;
-  };
-  projects: unknown[];
-  ideaBooks: unknown[];
-  savedProfessionals: unknown[];
-}
+import { useClientDashboard } from "@/hooks/useClientDashboard";
 
 export default function ClientDashboard() {
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(
-    null,
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch("/api/client/dashboard");
-
-        if (!response.ok) throw new Error("Failed to fetch dashboard data");
-
-        const data = await response.json();
-        setDashboardData(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "An error occurred");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDashboardData();
-  }, []);
+  const {
+    data: dashboardData,
+    isLoading: loading,
+    error,
+  } = useClientDashboard();
 
   if (loading) return <div>Loading...</div>;
-  if (error) return <div>Error: {error}</div>;
+  if (error) return <div>Error: {error.message}</div>;
   if (!dashboardData) return <div>No data available</div>;
 
   const { stats, projects, ideaBooks, savedProfessionals } = dashboardData;

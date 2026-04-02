@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
-import { isLocalUpload } from "@/lib/services/upload";
+import { isLocalUpload } from "@/lib/utils/upload";
 import { useImageUploader } from "@/hooks/useImageUploader";
 import Image from "next/image";
 import {

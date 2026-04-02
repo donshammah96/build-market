@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import { createProfessionalPortalGet } from "@/app/lib/api/professional-portal-handler";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
@@ -22,12 +21,47 @@ import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
 import { AuditAction } from "@prisma/client";
 import { withAuth } from "@/app/lib/api/api-middleware";
-import {
-  getCertificates,
-  createCertificate,
-} from "@/lib/services/certificates";
+import { certificatesService } from "@/app/lib/domains/certificates";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
+const ROUTE_PATTERN = "/api/professional-portal/certificates";
+
+type CertificatesAdapterOutcome =
+  | "started"
+  | "succeeded"
+  | "failed"
+  | "rate_limited"
+  | "bad_request"
+  | "forbidden"
+  | "conflict"
+  | "not_found";
+
+function createCertificatesOutcomeLogger(
+  req: NextRequest,
+  correlationId: string,
+  actorRole: string,
+  requestStartedAt: number,
+  operationName: string,
+) {
+  return (
+    outcome: CertificatesAdapterOutcome,
+    httpStatus: number,
+    additional: Record<string, unknown> = {},
+  ) => {
+    logger.info("Professional certificates adapter outcome", {
+      correlationId,
+      operationName,
+      httpMethod: req.method,
+      routePattern: ROUTE_PATTERN,
+      actorRole,
+      outcome,
+      httpStatus,
+      durationMs: Date.now() - requestStartedAt,
+      additionalContext: additional,
+    });
+  };
+}
 
 function parseCertificateQuery(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -41,132 +75,294 @@ function parseCertificateQuery(req: NextRequest) {
  * GET /api/professional-portal/certificates
  * List certificates for the authenticated professional.
  */
-export const GET = createProfessionalPortalGet({
-  rateLimitKey: "certificates-read",
-  querySchema: CertificateQuerySchema,
-  parseQuery: parseCertificateQuery,
-  handler: async ({ dbUserId, query }) => getCertificates(dbUserId, query),
-  operationName: "get_certificates",
-  errorMessage: "Failed to fetch certificates",
-});
+export const GET = withAuth(
+  async (req: NextRequest, { dbUserId, userRole }) => {
+    const requestStartedAt = Date.now();
+    const correlationId = initializeCorrelationId(req);
+    const actorRole = normalizeRole(String(userRole));
+    if (actorRole !== "PROFESSIONAL" && actorRole !== "ADMIN") {
+      logger.warn("Unauthorized access to certificates endpoint", {
+        correlationId,
+        operationName: "get_certificates",
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        outcome: "forbidden",
+        httpStatus: HttpStatus.FORBIDDEN,
+        durationMs: Date.now() - requestStartedAt,
+      });
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    }
+
+    const operationName = "get_certificates";
+    const logOutcome = createCertificatesOutcomeLogger(
+      req,
+      correlationId,
+      actorRole,
+      requestStartedAt,
+      operationName,
+    );
+
+    const rawQuery = parseCertificateQuery(req);
+    const validation = CertificateQuerySchema.safeParse(rawQuery);
+    if (!validation.success) {
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST);
+      return apiError(
+        "Invalid query parameters",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+      );
+    }
+    const query = validation.data;
+
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `certificates-read:${identifier}`,
+      RateLimits.READ.limit,
+      RateLimits.READ.window,
+    );
+    if (!rateLimitResult.success) {
+      logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    logOutcome("started", HttpStatus.OK);
+
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      () =>
+        certificatesService.getCertificates(
+          { userId: dbUserId, role: actorRole },
+          query,
+        ),
+      { operationName },
+    );
+
+    if (!result.success || !result.data) {
+      logger.error("Failed to fetch certificates", result.error, {
+        correlationId,
+        operationName,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: Date.now() - requestStartedAt,
+      });
+      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to fetch certificates",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const data = result.data;
+    if (!data.ok) {
+      logOutcome("forbidden", HttpStatus.FORBIDDEN, {
+        domainError: (data as { error?: string }).error,
+      });
+      return apiError(
+        (data as { message?: string }).message ?? "Forbidden",
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    logOutcome("succeeded", HttpStatus.OK);
+
+    return apiSuccess(data.data, HttpStatus.OK);
+  },
+);
 
 /**
  * POST /api/professional-portal/certificates
  * Create a new certificate.
  */
-export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
-  const { ipAddress, userAgent } = getRequestMetadata(req);
-
-  const sizeError = checkBodySize(req, DOCUMENT_CONFIG.MAX_BODY_SIZE);
-  if (sizeError) return sizeError;
-
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
-  }
-
-  const validation = CreateCertificateSchema.safeParse(body);
-  if (!validation.success) {
-    return apiError(
-      "Invalid input",
-      HttpStatus.BAD_REQUEST,
-      validation.error.issues,
+export const POST = withAuth(
+  async (req: NextRequest, { dbUserId, userRole }) => {
+    const requestStartedAt = Date.now();
+    const correlationId = initializeCorrelationId(req);
+    const actorRole = normalizeRole(String(userRole));
+    if (actorRole !== "PROFESSIONAL" && actorRole !== "ADMIN") {
+      logger.warn("Unauthorized access to certificates endpoint", {
+        correlationId,
+        operationName: "create_certificate",
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        outcome: "forbidden",
+        httpStatus: HttpStatus.FORBIDDEN,
+        durationMs: Date.now() - requestStartedAt,
+      });
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    }
+    const operationName = "create_certificate";
+    const logOutcome = createCertificatesOutcomeLogger(
+      req,
+      correlationId,
+      actorRole,
+      requestStartedAt,
+      operationName,
     );
-  }
+    const { ipAddress, userAgent } = getRequestMetadata(req);
 
-  const certData = validation.data;
+    const sizeError = checkBodySize(req, DOCUMENT_CONFIG.MAX_BODY_SIZE);
+    if (sizeError) {
+      logOutcome("bad_request", sizeError.status);
+      return sizeError;
+    }
 
-  const idempotencyKey =
-    req.headers.get("Idempotency-Key") ||
-    IdempotencyService.generateKey(dbUserId, "POST", {
-      domain: "certificate",
-      ...certData,
-    });
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST);
+      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+    }
 
-  const idempotencyCheck = await IdempotencyService.checkOrCreate(
-    idempotencyKey,
-    "certificate",
-    dbUserId,
-    "POST",
-  );
-  if (!idempotencyCheck) {
-    return apiError(
-      "Failed to process idempotency key",
-      HttpStatus.INTERNAL_SERVER_ERROR,
+    const validation = CreateCertificateSchema.safeParse(body);
+    if (!validation.success) {
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST);
+      return apiError(
+        "Invalid input",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+      );
+    }
+
+    const certData = validation.data;
+
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      IdempotencyService.generateKey(dbUserId, "POST", {
+        domain: "certificate",
+        ...certData,
+      });
+
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
+      idempotencyKey,
+      "certificate",
+      dbUserId,
+      "POST",
     );
-  }
-  if (idempotencyCheck.status === "completed") {
-    return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
-  }
-  if (idempotencyCheck.status === "pending") {
-    return apiError(
-      "Request is being processed. Please wait.",
-      HttpStatus.CONFLICT,
+    if (!idempotencyCheck) {
+      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to process idempotency key",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    if (idempotencyCheck.status === "completed") {
+      logOutcome("succeeded", HttpStatus.OK, { idempotency: "replay" });
+      return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+    }
+    if (idempotencyCheck.status === "pending") {
+      logOutcome("conflict", HttpStatus.CONFLICT, { idempotency: "pending" });
+      return apiError(
+        "Request is being processed. Please wait.",
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `certificates-write:${identifier}`,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
     );
-  }
+    if (!rateLimitResult.success) {
+      await IdempotencyService.fail(idempotencyKey);
+      logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
 
-  const identifier = getRateLimitIdentifier(req);
-  const rateLimitResult = await checkRateLimit(
-    `certificates-write:${identifier}`,
-    RateLimits.WRITE.limit,
-    RateLimits.WRITE.window,
-  );
-  if (!rateLimitResult.success) {
-    await IdempotencyService.fail(idempotencyKey);
-    return apiError(
-      "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS,
+    logOutcome("started", HttpStatus.OK, { category: certData.category });
+
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      () =>
+        certificatesService.createCertificate(
+          { userId: dbUserId, role: actorRole },
+          certData,
+          { ipAddress, userAgent },
+        ),
+      { operationName },
     );
-  }
 
-  logger.info("Creating certificate", {
-    correlationId,
-    userId: dbUserId,
-    category: certData.category,
-  });
+    if (!result.success || !result.data) {
+      await IdempotencyService.fail(idempotencyKey);
+      logger.error("Failed to create certificate", result.error, {
+        correlationId,
+        operationName,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: Date.now() - requestStartedAt,
+      });
+      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to create certificate",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
 
-  const resilientExecutor = getResilientExecutor();
-  const result = await resilientExecutor.execute(
-    () =>
-      createCertificate(dbUserId, certData, {
-        ipAddress,
-        userAgent,
+    const data = result.data;
+    if (!data.ok) {
+      await IdempotencyService.fail(idempotencyKey);
+      const err = data as { error: string; message?: string };
+      if (err.error === "asset_not_found") {
+        logOutcome("not_found", HttpStatus.NOT_FOUND, {
+          domainError: err.error,
+        });
+        return apiError(err.message ?? "Asset not found", HttpStatus.NOT_FOUND);
+      }
+      if (err.error === "asset_forbidden") {
+        logOutcome("forbidden", HttpStatus.FORBIDDEN, {
+          domainError: err.error,
+        });
+        return apiError(
+          err.message ?? "Unauthorized access to asset",
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
+        domainError: err.error,
+      });
+      return apiError(
+        `Maximum ${DOCUMENT_CONFIG.MAX_DOCUMENTS_PER_PROFESSIONAL} documents per professional`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    ComplianceService.logAdminAction(
+      dbUserId,
+      AuditAction.PROFILE_UPDATED,
+      "ProfessionalDocument",
+      data.data.id,
+      { category: certData.category, action: "CREATE_CERTIFICATE" },
+    ).catch((err) =>
+      logger.error("Failed to create audit log", err, {
+        correlationId,
+        operationName,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.CREATED,
+        durationMs: Date.now() - requestStartedAt,
       }),
-    { operationName: "create_certificate" },
-  );
-
-  if (!result.success || !result.data) {
-    await IdempotencyService.fail(idempotencyKey);
-    return apiError(
-      "Failed to create certificate",
-      HttpStatus.INTERNAL_SERVER_ERROR,
     );
-  }
 
-  const data = result.data;
-  if ("error" in data) {
-    await IdempotencyService.fail(idempotencyKey);
-    if (data.error === "asset_not_found")
-      return apiError("Asset not found", HttpStatus.NOT_FOUND);
-    if (data.error === "asset_forbidden")
-      return apiError("Unauthorized access to asset", HttpStatus.FORBIDDEN);
-    return apiError(
-      `Maximum ${DOCUMENT_CONFIG.MAX_DOCUMENTS_PER_PROFESSIONAL} documents per professional`,
-      HttpStatus.BAD_REQUEST,
-    );
-  }
-
-  ComplianceService.logAdminAction(
-    dbUserId,
-    AuditAction.PROFILE_UPDATED,
-    "ProfessionalDocument",
-    (data.data as { id: string }).id,
-    { category: certData.category, action: "CREATE_CERTIFICATE" },
-  ).catch((err) => logger.error("Failed to create audit log", err));
-
-  await IdempotencyService.complete(idempotencyKey, data.data);
-  return apiSuccess(data.data, HttpStatus.CREATED);
-});
+    await IdempotencyService.complete(idempotencyKey, data.data);
+    logOutcome("succeeded", HttpStatus.CREATED, {
+      category: certData.category,
+    });
+    return apiSuccess(data.data, HttpStatus.CREATED);
+  },
+);

@@ -63,7 +63,7 @@ function mapPrismaError(
     {
       correlationId: actor.correlationId,
       prismaCode: prismaError.code,
-      ...context,
+      context,
     },
   );
 

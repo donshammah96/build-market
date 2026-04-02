@@ -32,6 +32,9 @@ interface ComboboxProps {
   searchPlaceholder?: string;
   emptyMessage?: string;
   className?: string;
+  id?: string;
+  "aria-invalid"?: boolean | "true" | "false" | "grammar" | "spelling";
+  "aria-describedby"?: string;
 }
 
 export function Combobox({
@@ -42,6 +45,9 @@ export function Combobox({
   searchPlaceholder = "Search...",
   emptyMessage = "No option found.",
   className,
+  id,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedby,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
 
@@ -52,6 +58,9 @@ export function Combobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          aria-invalid={ariaInvalid}
+          aria-describedby={ariaDescribedby}
+          id={id}
           className={cn("w-full justify-between", className)}
         >
           {value

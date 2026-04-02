@@ -11,6 +11,118 @@ const config = [
     },
   },
   {
+    files: [
+      "app/**/*.{ts,tsx}",
+      "components/**/*.{ts,tsx}",
+      "hooks/**/*.{ts,tsx}",
+      "lib/**/*.{ts,tsx}",
+    ],
+    ignores: [
+      "**/__tests__/**/*.{ts,tsx}",
+      "**/*.test.{ts,tsx}",
+      "**/*.spec.{ts,tsx}",
+      "cypress/**/*",
+    ],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ImportDeclaration[source.value=/^@\\/app\\/.+\\/page$/]",
+          message:
+            "Do not import Next page modules. Move shared UI into app/**/_components or components/**.",
+        },
+        {
+          selector:
+            "ImportDeclaration[source.value=/^\\.{1,2}(?:\\/[^/]+)*\\/page$/]",
+          message:
+            "Do not import relative page modules. Move shared UI into app/**/_components or components/**.",
+        },
+        {
+          selector:
+            "ExportNamedDeclaration[source.value=/^@\\/app\\/.+\\/page$/]",
+          message:
+            "Do not re-export from Next page modules. Re-export from component modules instead.",
+        },
+        {
+          selector:
+            "ExportNamedDeclaration[source.value=/^\\.{1,2}(?:\\/[^/]+)*\\/page$/]",
+          message:
+            "Do not re-export from relative page modules. Re-export from component modules instead.",
+        },
+        {
+          selector:
+            "ExportAllDeclaration[source.value=/^@\\/app\\/.+\\/page$/]",
+          message:
+            "Do not export * from Next page modules. Re-export from component modules instead.",
+        },
+        {
+          selector:
+            "ExportAllDeclaration[source.value=/^\\.{1,2}(?:\\/[^/]+)*\\/page$/]",
+          message:
+            "Do not export * from relative page modules. Re-export from component modules instead.",
+        },
+        {
+          selector:
+            "Property[key.type='Identifier'][key.name='exempt'][value.type='Literal'][value.value=true]",
+          message:
+            "Do not use boolean CSRF exemption flags. Use a typed CsrfExemption object.",
+        },
+        {
+          selector:
+            "Property[key.type='Identifier'][key.name='exempt'][value.type='Literal'][value.value=false]",
+          message:
+            "Do not use boolean CSRF exemption flags. Use a typed CsrfExemption object.",
+        },
+      ],
+    },
+  },
+  {
+    files: [
+      "app/lib/api/api-middleware.ts",
+      "app/lib/api/cors.ts",
+      "app/lib/infrastructure/storage.ts",
+      "app/lib/infrastructure/webhook-replay.ts",
+      "app/jobs/**/*.ts",
+      "app/workers/**/*.ts",
+      "middleware.ts",
+    ],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "MemberExpression[object.type='MemberExpression'][object.object.name='process'][object.property.name='env']",
+          message:
+            "Use the typed env module instead of direct process.env in guarded runtime files.",
+        },
+      ],
+    },
+  },
+  {
+    files: [
+      "app/**/*.{ts,tsx}",
+      "components/**/*.{ts,tsx}",
+      "hooks/**/*.{ts,tsx}",
+      "lib/**/*.{ts,tsx}",
+      "middleware.ts",
+    ],
+    ignores: [
+      "app/lib/api/cors.ts",
+      "**/__tests__/**/*.{ts,tsx}",
+      "**/*.test.{ts,tsx}",
+      "**/*.spec.{ts,tsx}",
+    ],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Literal[value=/^Access-Control-Allow-/]",
+          message: "Set CORS headers only through app/lib/api/cors.ts helpers.",
+        },
+      ],
+    },
+  },
+  {
     files: ["app/lib/auth/**/*.ts"],
     rules: {
       "no-restricted-imports": [

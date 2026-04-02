@@ -1,28 +1,93 @@
 {
   "typescript.tsdk": "node_modules/typescript/lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.useWorkspaceTsdk": true,
+  "json.schemaDownload.enable": true,
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "explicit"
   },
+  "eslint.workingDirectories": [
+    { "pattern": "apps/*/" },
+    { "pattern": "packages/*/" }
+  ],
   "search.exclude": {
     "**/node_modules": true,
     "**/dist": true,
     "**/.next": true,
     "**/.turbo": true,
-    "**/build": true
+    "**/build": true,"**/coverage/**": true,
+    "**/.git/**": true,
+    "**/*.js.map": true,
+    "**/playwright-report/**": true
   },
   "files.watcherExclude": {
     "**/node_modules/**": true,
     "**/.next/**": true,
     "**/.turbo/**": true,
-    "**/dist/**": true
+    "**/dist/**": true,
+    "**/coverage/**": true,
+    "**/.git/**": true,
+    "**/*.js.map": true,
+    "**/playwright-report/**": true
   },
   "chat.tools.terminal.autoApprove": {
     "pnpm": true,
     "Push-Location": true,
     "Pop-Location": true,
-    "Y": true
+    "/^Copy-Item -Path \\.\\/.*-Destination \\.\\//":{
+      "approve": true, "matchCommandLine": true
+    },
+    "/^Set-Content -Path \\.\\//": { "approve": true, "matchCommandLine": true },
+    "pnpm test:projects-api:json": true,
+    "pnpm test:projects-api": true,
+    "pnpm test:portfolio-api": true,
+    "pnpm test:secure-action": true,
+    "pnpm test:stores-route": true,
+    "pnpm test:projects-property-focused": true,
+    "pnpm test:browser-hook-sweep": true,
+    "pnpm test:dashboard-hook": true,
+    "pnpm test:dashboard-browser-clients": true,
+    "pnpm test:properties-risk": true,
+    "pnpm test:projects-envelope-focused": true,
+    "pnpm test:properties-service-once": true,
+    "pnpm test:button-slot-regression": true,
+    "pnpm test:button-slot-regression:single-worker": true,
+    "pnpm test:onboarding-ui-a11y:single-worker": true,
+    "/^Start-Process .* -NoNewWindow/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "pnpm test:leads": true,
+    "/^Push-Location apps/client; node node_modules/typescript.*/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    ".\\scripts\\invoke-clean.ps1": true,
+    "/^cmd /d /s /c \"set REDIS_FAMILY=4 && pnpm run redis:healthcheck\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  },
+  "git.autoRepositoryDetection": "subFolders",
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "terminal.integrated.defaultLocation": "view",
+  "terminal.integrated.profiles.windows": {
+    "PowerShell": {
+      "source": "PowerShell",
+      "icon": "terminal-powershell"
+    },
+    "Command Prompt": {
+      "path": [
+        "${env:windir}\\Sysnative\\cmd.exe",
+        "${env:windir}\\System32\\cmd.exe"
+      ],
+      "args": [],
+      "icon": "terminal-cmd"
+    },
+    "Git Bash": {
+      "source": "Git Bash",
+      "icon": "terminal-git-bash"
+    }
   }
 }

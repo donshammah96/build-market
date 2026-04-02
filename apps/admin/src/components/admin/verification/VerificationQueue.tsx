@@ -46,12 +46,14 @@ import {
   type PaginationMeta,
   type EntityType,
 } from "@/actions/admin";
+import { createAdminIdempotencyKey } from "@/lib/security/idempotency-key";
 import { RejectionReasonDialog } from "./RejectionReasonDialog";
 
 interface VerificationQueueProps {
   items: VerificationQueueItem[];
   pagination: PaginationMeta;
   filters: VerificationFilterInput;
+  canVerify: boolean;
 }
 
 const entityTypeConfig = {
@@ -110,11 +112,12 @@ export function VerificationQueue({
   items: initialItems,
   pagination,
   filters,
+  canVerify,
 }: VerificationQueueProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
-  
+
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [items, setItems] = useState(initialItems);
   const [isRejectionDialogOpen, setIsRejectionDialogOpen] = useState(false);
@@ -135,14 +138,14 @@ export function VerificationQueue({
   // Polling for updates
   const pollForUpdates = useCallback(async () => {
     if (isPolling) return;
-    
+
     setIsPolling(true);
     try {
       const response = await getVerificationUpdates(
         lastUpdate,
-        filters.entityType === "all" ? "all" : filters.entityType
+        filters.entityType === "all" ? "all" : filters.entityType,
       );
-      
+
       if (response.success && response.data?.hasUpdates) {
         // Refresh the page to get updated data
         router.refresh();
@@ -164,13 +167,19 @@ export function VerificationQueue({
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedItems(new Set(items.map((item) => `${item.entityType}:${item.entityId}`)));
+      setSelectedItems(
+        new Set(items.map((item) => `${item.entityType}:${item.entityId}`)),
+      );
     } else {
       setSelectedItems(new Set());
     }
   };
 
-  const handleSelectItem = (entityType: string, entityId: string, checked: boolean) => {
+  const handleSelectItem = (
+    entityType: string,
+    entityId: string,
+    checked: boolean,
+  ) => {
     const key = `${entityType}:${entityId}`;
     const newSelected = new Set(selectedItems);
     if (checked) {
@@ -182,12 +191,23 @@ export function VerificationQueue({
   };
 
   const handleVerify = async (entityType: EntityType, entityId: string) => {
+    if (!canVerify) {
+      toast.error("You don't have permission to verify entities");
+      return;
+    }
+
     startTransition(async () => {
-      const response = await verifyEntity({
-        entityType,
-        entityId,
-        action: "VERIFY",
-      });
+      const response = await verifyEntity(
+        {
+          entityType,
+          entityId,
+          action: "VERIFY",
+        },
+        createAdminIdempotencyKey(
+          "verifyEntity",
+          `${entityType}:${entityId}:VERIFY`,
+        ),
+      );
 
       if (response.success) {
         toast.success(response.data?.message || "Successfully verified");
@@ -199,6 +219,11 @@ export function VerificationQueue({
   };
 
   const handleReject = (entityType: EntityType, entityId: string) => {
+    if (!canVerify) {
+      toast.error("You don't have permission to reject entities");
+      return;
+    }
+
     setPendingAction({
       type: "single",
       entityType,
@@ -208,7 +233,15 @@ export function VerificationQueue({
     setIsRejectionDialogOpen(true);
   };
 
-  const handleRequestCorrection = (entityType: EntityType, entityId: string) => {
+  const handleRequestCorrection = (
+    entityType: EntityType,
+    entityId: string,
+  ) => {
+    if (!canVerify) {
+      toast.error("You don't have permission to request corrections");
+      return;
+    }
+
     setPendingAction({
       type: "single",
       entityType,
@@ -220,18 +253,35 @@ export function VerificationQueue({
 
   const handleRejectionSubmit = async (reason: string) => {
     if (!pendingAction) return;
+    if (!canVerify) {
+      toast.error("You don't have permission to perform this action");
+      return;
+    }
 
     startTransition(async () => {
-      if (pendingAction.type === "single" && pendingAction.entityType && pendingAction.entityId) {
-        const response = await verifyEntity({
-          entityType: pendingAction.entityType,
-          entityId: pendingAction.entityId,
-          action: pendingAction.action,
-          reason,
-        });
+      if (
+        pendingAction.type === "single" &&
+        pendingAction.entityType &&
+        pendingAction.entityId
+      ) {
+        const response = await verifyEntity(
+          {
+            entityType: pendingAction.entityType,
+            entityId: pendingAction.entityId,
+            action: pendingAction.action,
+            reason,
+          },
+          createAdminIdempotencyKey(
+            "verifyEntity",
+            `${pendingAction.entityType}:${pendingAction.entityId}:${pendingAction.action}`,
+          ),
+        );
 
         if (response.success) {
-          toast.success(response.data?.message || `Successfully ${pendingAction.action === "REJECT" ? "rejected" : "requested correction"}`);
+          toast.success(
+            response.data?.message ||
+              `Successfully ${pendingAction.action === "REJECT" ? "rejected" : "requested correction"}`,
+          );
           router.refresh();
         } else {
           toast.error(response.error || "Action failed");
@@ -242,15 +292,27 @@ export function VerificationQueue({
             const [entityType, entityId] = key.split(":");
             return { entityType: entityType as EntityType, entityId };
           })
-          .filter((e): e is { entityType: EntityType; entityId: string } => 
-            e.entityId !== undefined && e.entityId !== ""
+          .filter(
+            (e): e is { entityType: EntityType; entityId: string } =>
+              e.entityId !== undefined && e.entityId !== "",
           );
 
-        const response = await batchVerifyEntities(entities, pendingAction.action, reason);
+        const response = await batchVerifyEntities(
+          entities,
+          pendingAction.action,
+          createAdminIdempotencyKey(
+            "batchVerifyEntities",
+            `${pendingAction.action}:${entities
+              .map((entity) => `${entity.entityType}:${entity.entityId}`)
+              .sort()
+              .join(",")}`,
+          ),
+          reason,
+        );
 
         if (response.success) {
           toast.success(
-            `Batch action completed: ${response.data?.summary.successful} successful, ${response.data?.summary.failed} failed`
+            `Batch action completed: ${response.data?.summary.successful} successful, ${response.data?.summary.failed} failed`,
           );
           setSelectedItems(new Set());
           router.refresh();
@@ -265,21 +327,38 @@ export function VerificationQueue({
   };
 
   const handleBatchVerify = async () => {
+    if (!canVerify) {
+      toast.error("You don't have permission to perform batch verification");
+      return;
+    }
+
     const entities = Array.from(selectedItems)
       .map((key) => {
         const [entityType, entityId] = key.split(":");
         return { entityType: entityType as EntityType, entityId };
       })
-      .filter((e): e is { entityType: EntityType; entityId: string } => 
-        e.entityId !== undefined && e.entityId !== ""
+      .filter(
+        (e): e is { entityType: EntityType; entityId: string } =>
+          e.entityId !== undefined && e.entityId !== "",
       );
 
     startTransition(async () => {
-      const response = await batchVerifyEntities(entities, "VERIFY");
+      const response = await batchVerifyEntities(
+        entities,
+        "VERIFY",
+        createAdminIdempotencyKey(
+          "batchVerifyEntities",
+          `VERIFY:${entities
+            .map((entity) => `${entity.entityType}:${entity.entityId}`)
+            .sort()
+            .join(",")}`,
+        ),
+        undefined,
+      );
 
       if (response.success) {
         toast.success(
-          `Batch verification completed: ${response.data?.summary.successful} successful, ${response.data?.summary.failed} failed`
+          `Batch verification completed: ${response.data?.summary.successful} successful, ${response.data?.summary.failed} failed`,
         );
         setSelectedItems(new Set());
         router.refresh();
@@ -290,6 +369,11 @@ export function VerificationQueue({
   };
 
   const handleBatchReject = () => {
+    if (!canVerify) {
+      toast.error("You don't have permission to perform batch rejection");
+      return;
+    }
+
     setPendingAction({
       type: "batch",
       action: "REJECT",
@@ -304,15 +388,17 @@ export function VerificationQueue({
   };
 
   const allSelected = items.length > 0 && selectedItems.size === items.length;
-  const someSelected = selectedItems.size > 0 && selectedItems.size < items.length;
+  const someSelected =
+    selectedItems.size > 0 && selectedItems.size < items.length;
 
   return (
     <div className="space-y-4">
       {/* Bulk Actions Bar */}
-      {selectedItems.size > 0 && (
+      {canVerify && selectedItems.size > 0 && (
         <div className="flex items-center gap-4 p-3 bg-muted rounded-lg">
           <span className="text-sm font-medium">
-            {selectedItems.size} item{selectedItems.size > 1 ? "s" : ""} selected
+            {selectedItems.size} item{selectedItems.size > 1 ? "s" : ""}{" "}
+            selected
           </span>
           <div className="flex gap-2">
             <Button
@@ -359,7 +445,9 @@ export function VerificationQueue({
           }}
           disabled={isPending}
         >
-          <RefreshCw className={`h-4 w-4 mr-2 ${isPolling ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`h-4 w-4 mr-2 ${isPolling ? "animate-spin" : ""}`}
+          />
           Refresh
         </Button>
       </div>
@@ -371,6 +459,7 @@ export function VerificationQueue({
             <TableRow>
               <TableHead className="w-12">
                 <Checkbox
+                  disabled={!canVerify}
                   checked={allSelected}
                   onCheckedChange={handleSelectAll}
                   aria-label="Select all"
@@ -399,16 +488,22 @@ export function VerificationQueue({
             ) : (
               items.map((item) => {
                 const typeConfig = entityTypeConfig[item.entityType];
-                const status = statusConfig[item.status as keyof typeof statusConfig];
+                const status =
+                  statusConfig[item.status as keyof typeof statusConfig];
                 const itemKey = `${item.entityType}:${item.entityId}`;
 
                 return (
                   <TableRow key={itemKey}>
                     <TableCell>
                       <Checkbox
+                        disabled={!canVerify}
                         checked={selectedItems.has(itemKey)}
                         onCheckedChange={(checked) =>
-                          handleSelectItem(item.entityType, item.entityId, checked as boolean)
+                          handleSelectItem(
+                            item.entityType,
+                            item.entityId,
+                            checked as boolean,
+                          )
                         }
                         aria-label={`Select ${item.name}`}
                       />
@@ -416,7 +511,9 @@ export function VerificationQueue({
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className={`p-2 rounded-lg ${typeConfig.bgColor}`}>
-                          <typeConfig.icon className={`h-4 w-4 ${typeConfig.color}`} />
+                          <typeConfig.icon
+                            className={`h-4 w-4 ${typeConfig.color}`}
+                          />
                         </div>
                         <div>
                           <Link
@@ -497,24 +594,31 @@ export function VerificationQueue({
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
-                            onClick={() => handleVerify(item.entityType, item.entityId)}
-                            disabled={isPending}
+                            onClick={() =>
+                              handleVerify(item.entityType, item.entityId)
+                            }
+                            disabled={isPending || !canVerify}
                           >
                             <CheckCircle2 className="h-4 w-4 mr-2 text-emerald-500" />
                             Verify
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() =>
-                              handleRequestCorrection(item.entityType, item.entityId)
+                              handleRequestCorrection(
+                                item.entityType,
+                                item.entityId,
+                              )
                             }
-                            disabled={isPending}
+                            disabled={isPending || !canVerify}
                           >
                             <AlertTriangle className="h-4 w-4 mr-2 text-orange-500" />
                             Request Correction
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => handleReject(item.entityType, item.entityId)}
-                            disabled={isPending}
+                            onClick={() =>
+                              handleReject(item.entityType, item.entityId)
+                            }
+                            disabled={isPending || !canVerify}
                             className="text-red-500"
                           >
                             <XCircle className="h-4 w-4 mr-2" />

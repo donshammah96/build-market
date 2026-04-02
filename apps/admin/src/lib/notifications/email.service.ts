@@ -5,7 +5,7 @@
  * Wraps the base mailer with domain-specific templates and logic.
  */
 
-import { sendEmail as baseSendEmail } from "@/app/lib/infrastructure/mailer";
+import { sendEmail as baseSendEmail } from "@/lib/infrastructure/mailer";
 
 export type DPOEscalationMetadata = Record<string, unknown>;
 export interface IncidentSeverityLevel {
@@ -52,7 +52,21 @@ export interface ODPCNotificationEmailData {
  * Send a generic email
  */
 export async function sendEmail(options: EmailOptions) {
-  return await baseSendEmail(options as EmailOptions);
+  const recipients = Array.isArray(options.to) ? options.to : [options.to];
+
+  await Promise.all(
+    recipients.map((recipient) =>
+      baseSendEmail({
+        to: recipient,
+        subject: options.subject,
+        html: options.html,
+        attachments: options.attachments?.map((attachment) => ({
+          filename: attachment.filename,
+          content: attachment.content,
+        })),
+      }),
+    ),
+  );
 }
 
 /**

@@ -13,13 +13,11 @@ import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
 import { redisConnection } from "@build/queue-server";
 import { prisma } from "@build/db";
 import { AnonymizationService } from "@/app/lib/gdpr/services/anonymization.service";
+import { env } from "@/app/lib/infrastructure/env";
 
 // Configuration
-const RETENTION_CRON_PATTERN = process.env.DATA_RETENTION_CRON || "0 3 * * *"; // 3 AM daily
-const RETENTION_BATCH_SIZE = parseInt(
-  process.env.RETENTION_BATCH_SIZE || "100",
-  10,
-);
+const RETENTION_CRON_PATTERN = env.jobs.dataRetentionCron;
+const RETENTION_BATCH_SIZE = env.jobs.retentionBatchSize;
 
 const retentionQueue = new Queue("gdpr-data-retention", {
   connection: redisConnection as ConnectionOptions,
@@ -188,7 +186,7 @@ export function createDataRetentionWorker() {
         const duration = metrics.endTime - metrics.startTime;
 
         console.log("[DataRetention] Job completed", {
-          ...metrics,
+          metrics,
           durationMs: duration,
         });
 

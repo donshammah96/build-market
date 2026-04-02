@@ -58,15 +58,12 @@ import {
   UploadErrorCode,
   validateFiles,
   FILE_LIMITS,
-} from "@/lib/services/upload";
-
-// ============================================================================
-// TYPES
-// ============================================================================
+} from "@/lib/upload-client";
 
 export interface ImageField {
   id: string;
   value: string;
+  assetId?: string;
 }
 
 export interface UseImageUploaderOptions {
@@ -93,13 +90,16 @@ export interface UseImageUploaderReturn {
   handleFileSelect: (
     files: FileList | null,
     imageFields: ImageField[],
-    appendImage: (
-      data: { value: string },
-      options?: { shouldFocus?: boolean },
-    ) => void,
-    updateImage: (index: number, data: { value: string }) => void,
-    removeImage: (index: number) => void,
-  ) => Promise<void>;
+      appendImage: (
+        data: { value: string; assetId?: string },
+        options?: { shouldFocus?: boolean },
+      ) => void,
+      updateImage: (
+        index: number,
+        data: { value: string; assetId?: string },
+      ) => void,
+      removeImage: (index: number) => void,
+    ) => Promise<void>;
   /** Handle drag over event */
   handleDragOver: (e: React.DragEvent) => void;
   /** Handle drag leave event */
@@ -109,17 +109,20 @@ export interface UseImageUploaderReturn {
     e: React.DragEvent,
     imageFields: ImageField[],
     appendImage: (
-      data: { value: string },
+      data: { value: string; assetId?: string },
       options?: { shouldFocus?: boolean },
     ) => void,
-    updateImage: (index: number, data: { value: string }) => void,
+    updateImage: (
+      index: number,
+      data: { value: string; assetId?: string },
+    ) => void,
     removeImage: (index: number) => void,
   ) => void;
   /** Add image from URL input */
   handleAddImage: (
     imageFields: ImageField[],
     appendImage: (
-      data: { value: string },
+      data: { value: string; assetId?: string },
       options?: { shouldFocus?: boolean },
     ) => void,
   ) => void;
@@ -197,7 +200,10 @@ export function useImageUploader(
    * Uploads files using the upload service with proper error handling.
    */
   const uploadFiles = useCallback(
-    async (files: File[], fieldName: string): Promise<string[]> => {
+    async (
+      files: File[],
+      fieldName: string,
+    ): Promise<{ urls: string[]; assetIds: string[] }> => {
       try {
         // Validate files before upload
         validateFiles(files, fieldName === "images" ? "images" : "documents");
@@ -208,7 +214,7 @@ export function useImageUploader(
           retryDelay: 1000,
         });
 
-        return result.urls;
+        return { urls: result.urls, assetIds: result.assetIds };
       } catch (error) {
         // Provide user-friendly error messages based on error code
         if (error instanceof UploadError) {
@@ -252,10 +258,13 @@ export function useImageUploader(
       files: FileList | null,
       imageFields: ImageField[],
       appendImage: (
-        data: { value: string },
+        data: { value: string; assetId?: string },
         options?: { shouldFocus?: boolean },
       ) => void,
-      updateImage: (index: number, data: { value: string }) => void,
+      updateImage: (
+        index: number,
+        data: { value: string; assetId?: string },
+      ) => void,
       removeImage: (index: number) => void,
     ) => {
       if (!files || files.length === 0) return;
@@ -304,6 +313,7 @@ export function useImageUploader(
       // Add placeholder empty objects for loaders to appear
       const placeholders = Array.from({ length: filesToUpload.length }, () => ({
         value: "",
+        assetId: "",
       }));
       placeholders.forEach((placeholder) =>
         appendImage(placeholder, { shouldFocus: false }),
@@ -329,11 +339,15 @@ export function useImageUploader(
             continue;
           }
 
-          const urls = await uploadFiles([file], "images");
+          const { urls, assetIds } = await uploadFiles([file], "images");
           const uploadedUrl = urls[0];
+          const uploadedAssetId = assetIds[0];
           if (uploadedUrl) {
             // Update the placeholder with the actual URL
-            updateImage(startIndex + i, { value: uploadedUrl });
+            updateImage(startIndex + i, {
+              value: uploadedUrl,
+              ...(uploadedAssetId ? { assetId: uploadedAssetId } : {}),
+            });
             uploadedUrls.push(uploadedUrl);
           }
 
@@ -394,10 +408,13 @@ export function useImageUploader(
       e: React.DragEvent,
       imageFields: ImageField[],
       appendImage: (
-        data: { value: string },
+        data: { value: string; assetId?: string },
         options?: { shouldFocus?: boolean },
       ) => void,
-      updateImage: (index: number, data: { value: string }) => void,
+      updateImage: (
+        index: number,
+        data: { value: string; assetId?: string },
+      ) => void,
       removeImage: (index: number) => void,
     ) => {
       e.preventDefault();
@@ -443,17 +460,23 @@ export function useImageUploader(
           return;
         }
 
+        // Local paths (e.g. /uploads/image.jpg) are valid without URL parsing
+        if (newImageUrl.startsWith("/")) {
+          appendImage({ value: newImageUrl }, { shouldFocus: false });
+          setNewImageUrl("");
+          toast.success("Image added");
+          onImagesAdded?.([newImageUrl]);
+          return;
+        }
+
+        // For https URLs, validate format
+        if (!newImageUrl.startsWith("https://")) {
+          toast.error("Image URL must start with https:// or be a local path");
+          return;
+        }
+
         try {
-          const isLocalPath = newImageUrl.startsWith("/");
-          if (!isLocalPath) {
-            new URL(newImageUrl);
-            if (!newImageUrl.startsWith("https://")) {
-              toast.error(
-                "Image URL must start with https:// or be a local path",
-              );
-              return;
-            }
-          }
+          new URL(newImageUrl);
           appendImage({ value: newImageUrl }, { shouldFocus: false });
           setNewImageUrl("");
           toast.success("Image added");

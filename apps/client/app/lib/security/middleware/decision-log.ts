@@ -11,7 +11,10 @@ export type MiddlewareDecisionEvent =
   | "mw_redirect_registration_closed"
   | "mw_redirect_professional_signup_closed"
   | "mw_allow_onboarding"
-  | "mw_allow_protected";
+  | "mw_allow_protected"
+  | "mw_redirect_professional_pending_verification"
+  | "mw_allow_professional_pending_verification"
+  | "mw_redirect_professional_dashboard";
 
 export function logMiddlewareDecision(
   req: NextRequest,

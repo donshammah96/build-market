@@ -33,7 +33,6 @@
  */
 
 import { NextRequest } from "next/server";
-import { ExportService } from "@/app/lib/gdpr/services/export.service";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -53,6 +52,7 @@ import {
   UUIDSchema,
   TimeoutConfig,
 } from "@/app/lib/api/request-utils";
+import { userProfileComplianceService } from "@/app/lib/domains/user-profile";
 
 const logger = getClientLogger();
 const executor = getResilientExecutor();
@@ -94,9 +94,9 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     if (!success) {
       logger.warn("Rate limit exceeded for export request", {
-        userId: dbUserId,
         identifier,
         correlationId,
+        operationName: "request-data-export",
       });
       return apiError(
         "Rate limit exceeded. Please try again later.",
@@ -108,20 +108,19 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
     const { ipAddress, userAgent } = getRequestMetadata(req);
 
     logger.info("Processing data export request", {
-      userId: dbUserId,
       ipAddress,
       correlationId,
+      operationName: "request-data-export",
     });
 
     // Execute with resilience patterns
     const result = await executor.execute(
-      async () => {
-        return await ExportService.requestExport(
-          dbUserId,
+      async () =>
+        userProfileComplianceService.requestExport({
+          actor: { userId: dbUserId, correlationId },
           ipAddress,
           userAgent,
-        );
-      },
+        }),
       {
         timeout: TimeoutConfig.BACKGROUND,
         retry: { maxAttempts: 2 },
@@ -136,8 +135,8 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       // Handle rate limit from service layer
       if (error?.message?.includes("rate limit")) {
         logger.warn("Export rate limit exceeded", {
-          userId: dbUserId,
           correlationId,
+          operationName: "request-data-export",
         });
         return apiError(
           "You can only request one data export per 24 hours. Please try again later.",
@@ -148,7 +147,11 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.error(
         "Export request failed",
         error || new Error("Unknown error"),
-        { userId: dbUserId, correlationId },
+        {
+          correlationId,
+          operationName: "request-data-export",
+          outcome: "failed",
+        },
       );
       return apiError(
         "Failed to process export request",
@@ -157,46 +160,43 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
     }
 
     const exportResult = result.data;
-
-    if (!exportResult?.success) {
-      const message = exportResult?.message || "Export request failed";
-      const status = message.includes("one export per day")
-        ? HttpStatus.TOO_MANY_REQUESTS
-        : message.includes("in progress")
-          ? HttpStatus.CONFLICT
-          : HttpStatus.BAD_REQUEST;
+    if (!exportResult) {
+      return apiError(
+        "Failed to process export request",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    if (!exportResult.ok) {
+      const status = exportResult.status || HttpStatus.INTERNAL_SERVER_ERROR;
 
       logger.warn("Export request rejected", {
-        userId: dbUserId,
-        message,
+        message: exportResult.message,
         correlationId,
+        operationName: "request-data-export",
+        outcome: "rejected",
       });
 
-      return apiError(message, status);
+      return apiError(exportResult.message || "Export request failed", status);
     }
 
     logger.info("Export request completed successfully", {
-      userId: dbUserId,
-      exportId: exportResult.exportId,
-      status: exportResult.status,
+      exportId: exportResult.data.exportId,
+      status: exportResult.data.status,
       correlationId,
+      operationName: "request-data-export",
+      outcome: "accepted",
     });
 
-    return apiSuccess(
-      {
-        success: true,
-        exportId: exportResult.exportId,
-        status: exportResult.status,
-        message: exportResult.message,
-        jobId: exportResult.jobId,
-      },
-      HttpStatus.ACCEPTED, // 202 for async job creation
-    );
+    return apiSuccess(exportResult.data, HttpStatus.ACCEPTED);
   } catch (error) {
     logger.error(
       "Export request error",
       error instanceof Error ? error : new Error(String(error)),
-      { userId: dbUserId, correlationId },
+      {
+        correlationId,
+        operationName: "request-data-export",
+        outcome: "failed",
+      },
     );
     return apiError(
       "Failed to process export request. Please try again.",
@@ -234,9 +234,9 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     if (!success) {
       logger.warn("Rate limit exceeded for export status check", {
-        userId: dbUserId,
         identifier,
         correlationId,
+        operationName: "fetch-export-status",
       });
       return apiError(
         "Rate limit exceeded. Please try again later.",
@@ -250,12 +250,15 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     // Handle list all exports when no ID provided
     if (!exportId) {
       logger.info("Fetching all exports for user", {
-        userId: dbUserId,
         correlationId,
+        operationName: "list-user-exports",
       });
 
       const listResult = await executor.execute(
-        async () => ExportService.listUserExports?.(dbUserId) ?? [],
+        async () =>
+          userProfileComplianceService.getExportStatus({
+            actor: { userId: dbUserId, correlationId },
+          }),
         {
           timeout: TimeoutConfig.NORMAL,
           retry: { maxAttempts: 2 },
@@ -268,7 +271,11 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         logger.error(
           "Failed to list exports",
           listResult.error || new Error("Unknown error"),
-          { userId: dbUserId, correlationId },
+          {
+            correlationId,
+            operationName: "list-user-exports",
+            outcome: "failed",
+          },
         );
         return apiError(
           "Failed to fetch export history",
@@ -276,23 +283,28 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         );
       }
 
-      return apiSuccess(
-        {
-          success: true,
-          exports: listResult.data || [],
-          total: Array.isArray(listResult.data) ? listResult.data.length : 0,
-        },
-        HttpStatus.OK,
-      );
+      if (!listResult.success || !listResult.data) {
+        return apiError(
+          "Failed to fetch export history",
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+      if (!listResult.data.ok) {
+        return apiError(
+          listResult.data.message || "Failed to fetch export history",
+          listResult.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+      return apiSuccess(listResult.data.data, HttpStatus.OK);
     }
 
     // Validate exportId format (UUID)
     const idValidation = UUIDSchema.safeParse(exportId);
     if (!idValidation.success) {
       logger.warn("Invalid export ID format", {
-        userId: dbUserId,
         exportId,
         correlationId,
+        operationName: "fetch-export-status",
       });
       return apiError(
         "Invalid export ID format. Must be a valid UUID.",
@@ -301,9 +313,11 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     }
 
     const result = await executor.execute(
-      async () => {
-        return await ExportService.getExportStatus(exportId, dbUserId);
-      },
+      async () =>
+        userProfileComplianceService.getExportStatus({
+          actor: { userId: dbUserId, correlationId },
+          exportId,
+        }),
       {
         timeout: TimeoutConfig.NORMAL,
         retry: { maxAttempts: 2 },
@@ -316,7 +330,12 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.error(
         "Failed to fetch export status",
         result.error || new Error("Unknown error"),
-        { userId: dbUserId, exportId, correlationId },
+        {
+          exportId,
+          correlationId,
+          operationName: "fetch-export-status",
+          outcome: "failed",
+        },
       );
       return apiError(
         "Failed to fetch export status",
@@ -325,70 +344,35 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     }
 
     const exportData = result.data;
-
     if (!exportData) {
+      return apiError(
+        "Failed to fetch export status",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    if (!exportData.ok) {
       logger.warn("Export not found or unauthorized", {
-        userId: dbUserId,
         exportId,
         correlationId,
+        operationName: "fetch-export-status",
+        outcome: "not_found",
       });
       return apiError(
-        "Export not found or you don't have permission to access it",
-        HttpStatus.NOT_FOUND,
+        exportData.message ||
+          "Export not found or you don't have permission to access it",
+        exportData.status || HttpStatus.NOT_FOUND,
       );
     }
-
-    // Build response - use consistent exportId field name
-    const response: Record<string, unknown> = {
-      success: true,
-      exportId: exportData.id,
-      status: exportData.status,
-      requestedAt: exportData.requestedAt,
-      expiresAt: exportData.expiresAt,
-      downloadedAt: exportData.downloadedAt,
-    };
-
-    if (
-      exportData.status === "READY" &&
-      exportData.fileUrl &&
-      exportData.expiresAt &&
-      new Date(exportData.expiresAt) > new Date()
-    ) {
-      response.downloadUrl = exportData.fileUrl;
-      response.fileSizeBytes = exportData.fileSize;
-      response.message = "Your export is ready for download.";
-
-      const expiresIn = Math.floor(
-        (new Date(exportData.expiresAt).getTime() - Date.now()) /
-          1000 /
-          60 /
-          60,
-      );
-      response.expiresInHours = Math.max(0, expiresIn);
-    } else if (exportData.status === "PENDING") {
-      response.message =
-        "Your export is queued and will begin processing soon.";
-      response.estimatedCompletionMinutes = 15;
-    } else if (exportData.status === "PROCESSING") {
-      response.message =
-        "Your export is being processed. Please check back in a few minutes.";
-      response.estimatedCompletionMinutes = 10;
-    } else if (exportData.status === "FAILED") {
-      response.message =
-        "Your export failed to process. Please request a new export.";
-    } else if (exportData.status === "EXPIRED") {
-      response.message =
-        "Your export link has expired. Please request a new export.";
-    } else if (exportData.status === "CANCELLED") {
-      response.message = "Your export request was cancelled.";
-    }
-
-    return apiSuccess(response, HttpStatus.OK);
+    return apiSuccess(exportData.data, HttpStatus.OK);
   } catch (error) {
     logger.error(
       "Export status fetch error",
       error instanceof Error ? error : new Error(String(error)),
-      { userId: dbUserId, correlationId },
+      {
+        correlationId,
+        operationName: "fetch-export-status",
+        outcome: "failed",
+      },
     );
     return apiError(
       "Failed to fetch export status",

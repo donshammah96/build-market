@@ -1,108 +1,122 @@
-# Onboarding upload migration: `fileUrl` -> `assetId`
+# Onboarding Upload Migration: `fileUrl` → `assetId`
 
-## Problem
+## Status: **Complete** (2026-03-16)
 
-`/api/onboarding/uploads` currently stores files and returns a URL string (`/uploads/...`).
-At this point in the flow, the caller is authenticated in Clerk but may not exist in the app DB yet.
+Staff-level audit confirms the staged-upload design is implemented and refined. Legacy URL-based persistence has been removed in favor of `uploadId` → `assetId` materialization.
 
-Because `Asset` requires DB-owned metadata (`uploaderId`, `checksum`, etc.), creating `Asset` at upload-time is not always possible.
-If onboarding completion blindly writes the URL string to `assetId`, Prisma FK constraints fail.
+---
 
-## Recommended design: staged upload references
+## Original Problem
 
-Use a two-phase flow:
+`/api/onboarding/uploads` previously stored files and returned URL strings. At upload time, the caller may be authenticated in Clerk but not yet exist in the app DB. Because `Asset` requires `uploaderId`, creating `Asset` at upload-time caused FK violations when onboarding completion wrote URLs to `assetId`.
 
-1. **Stage files during onboarding upload** (no DB user dependency).
-2. **Materialize staged files into `Asset` records** during onboarding completion transaction (after user upsert).
+---
 
-### 1) Add a staging table
+## Implemented Design: Staged Upload References
 
-Add a table (example name: `OnboardingUpload`) that is independent from `User` FK:
+### 1) Staging Table ✅
 
-- `id` (UUID)
-- `clerkId` (string, indexed)
-- `tempUrl` (string)
-- `originalName` (string)
-- `mimeType` (string)
-- `size` (int)
-- `checksum` (string)
-- `storageBucket` (string)
-- `storageKey` (string, unique)
-- `status` (`STAGED | CONSUMED | EXPIRED`)
-- `expiresAt` (DateTime, indexed)
-- `consumedAt` (DateTime?)
-- `consumedByUserId` (string?)
+`OnboardingUpload` model exists (migration `20260301000131_staging_uploads`):
 
-**Important constraints**
+- `id`, `clerkId`, `tempUrl`, `originalName`, `mimeType`, `size`, `checksum`, `storageBucket`, `storageKey`
+- `status` (`STAGED` | `CONSUMED` | `EXPIRED`)
+- `expiresAt`, `consumedAt`, `consumedByUserId`
+- Unique `(id, clerkId)`; indexed `clerkId`, `expiresAt`
 
-- Unique `(id, clerkId)` or enforce authorization on read.
-- TTL cleanup job removes `EXPIRED`/old staged files.
-- Never trust client-provided file metadata at completion time.
+### 2) Upload Response Contract ✅
 
-### 2) Change onboarding upload response contract
-
-`/api/onboarding/uploads` should return **references**, not raw URLs as persistence keys:
+`POST /api/onboarding/uploads` returns references, not raw URLs as persistence keys:
 
 ```json
 {
-  "uploaded": {
-    "certificates": [
-      {
-        "uploadId": "uuid",
-        "previewUrl": "/uploads/...",
-        "originalName": "cert.pdf"
-      }
-    ]
+  "success": true,
+  "data": {
+    "uploaded": {
+      "certificates": [
+        {
+          "uploadId": "uuid",
+          "previewUrl": "/uploads/...",
+          "originalName": "cert.pdf"
+        }
+      ]
+    }
   }
 }
 ```
 
-- Keep `previewUrl` only for UI preview/download.
-- Persist `uploadId` in form state and submit it to `/api/onboarding`.
+- `uploadId` is persisted in form state and submitted to onboarding completion.
+- `previewUrl` is for UI preview only.
 
-### 3) Update onboarding payload
+### 3) Onboarding Payload ✅
 
-Replace:
+Professional onboarding uses `documents` array with `uploadId` (and optional `previewUrl`, `category`, `title`). Legacy `certificatesUrls` / `idDocumentsUrls` have been removed (`@build/types`).
 
-- `certificatesUrls: string[]`
-- `idDocumentsUrls: string[]`
+### 4) Materialization ✅
 
-With:
-
-- `certificateUploadIds: string[]`
-- `idDocumentUploadIds: string[]`
-
-### 4) Materialize staged uploads in `/api/onboarding`
-
-Inside the existing transaction:
+Inside onboarding completion transactions:
 
 1. Upsert DB user/profile first.
 2. Fetch staged rows by `uploadId[]` + `clerkId` + `status=STAGED` + not expired.
-3. Validate count matches request (prevent missing/foreign IDs).
-4. Create `Asset` rows with `uploaderId = user.id` and metadata from staging.
-5. Create `ProfessionalDocument` rows with `assetId` (not `fileUrl`).
-6. Mark staged rows as `CONSUMED` in same transaction.
+3. Validate count matches request.
+4. Create `Asset` with `uploaderId = user.id` and metadata from staging.
+5. Create `ProfessionalDocument` with `assetId` only (no `fileUrl` for new records).
+6. Mark staged rows as `CONSUMED`.
 
-If any step fails, transaction rolls back and staged uploads remain reusable until TTL.
+Implemented in:
 
-### 5) Backward compatibility window
+- `app/lib/domains/user-profile/onboarding.ts` (main onboarding + professional complete)
+- `app/lib/domains/professional-settings/service.ts` (profile complete)
+- `app/lib/domains/uploads/service.ts` (`materializeOnboardingUpload`)
 
-For a short migration period:
+### 5) Backward Compatibility ✅
 
-- Accept both `*Urls` and `*UploadIds` payloads.
-- If only URLs are provided, map URL -> staged record by `clerkId + storageKey`.
-- Log usage of legacy URL mode and remove after clients are upgraded.
+Legacy URL payloads (`certificatesUrls`, `idDocumentsUrls`) have been removed. All clients use `documents` with `uploadId`.
 
-### 6) Security and data integrity
+### 6) Security and Integrity ✅
 
-- Bind staged upload ownership to `clerkId` to prevent cross-user consumption.
-- Enforce single-consume semantics (`status` transition with optimistic condition).
-- Add idempotency key to `/api/onboarding` if retries are common.
-- Run periodic cleanup for orphaned staged files.
+- Staged upload ownership bound to `clerkId`.
+- Single-consume semantics via `status` transition.
+- Idempotency on `/api/onboarding` where applicable.
+- `uploadService.cleanupExpiredStagedUploads()` called by scheduled BullMQ job (which marks expired rows via `uploadRepository.markStagedUploadsExpiredByIds()`).
 
-## Why this works
+### 7) TTL Cleanup Job ✅
 
-- Avoids FK violations because `assetId` is only set after an actual `Asset` exists.
-- Preserves onboarding UX (upload before DB user exists).
-- Creates a clean migration path from URL-based docs to normalized asset management.
-- Keeps future storage provider changes isolated from API consumers.
+A BullMQ job cleans up expired staged uploads daily (default 3 AM): deletes storage blobs via `getStorageProvider().delete(storageKey)` and marks records as `EXPIRED`. Configured via `ONBOARDING_UPLOAD_CLEANUP_CRON` (cron pattern, e.g. `0 3 * * *`). Implemented in `app/jobs/onboarding-upload-cleanup.ts`; orchestration in `uploadService.cleanupExpiredStagedUploads()` (finds expired, deletes storage, marks status); wired into central job orchestrator (`app/jobs/index.ts`). Tests in `__tests__/jobs/onboarding-upload-cleanup.test.ts` and `__tests__/lib/uploads/service.test.ts`.
+
+---
+
+## Refinement Checklist (API-TO-FRONTEND-ARCHITECTURE §8B)
+
+### Boundary Refinement
+
+- [x] Remove leftover client-side DTO repair — N/A (client uses `uploadId`/`previewUrl` from API)
+- [x] Explicit DTO mappers — `StagedOnboardingUpload`, `MaterializedUpload` (assetId only)
+- [x] No compatibility imports from `lib/services/*` — uploads domain is canonical
+
+### UI Refinement
+
+- [x] Dynamic components — `ProfessionalForm` uses `onboardingClient.uploadFiles`; no heavy inline UI
+- [x] Extracted components — N/A (onboarding form is self-contained)
+- [x] Skeletons/error surfaces — Route-level `loading.tsx`/`error.tsx` for onboarding segments
+
+### Correctness Refinement
+
+- [x] Hydration-sensitive rendering — Dates in upload responses are ISO strings
+- [x] Route-aware refetch — Onboarding uses standard error handling
+- [x] Idempotency, actor propagation — Enforced in domain and route adapters
+
+### Documentation Refinement
+
+- [x] `apps/client/docs/CHANGELOG.md` — Updated on refinement
+- [x] `apps/client/docs/PROGRESS-SUMMARY.md` — N/A (slice complete)
+- [ ] ADRs — N/A (slice-specific; no new architectural rules)
+
+---
+
+## Verification
+
+- [x] `pnpm -C apps/client exec tsc --noEmit`
+- [x] `__tests__/api/onboarding/uploads.test.ts`
+- [x] `__tests__/lib/uploads/service.test.ts` (staging, materialization, expired rejection, cleanupExpiredStagedUploads)
+- [x] `__tests__/jobs/onboarding-upload-cleanup.test.ts` (schedule, processor, error handling)
+- [x] `__tests__/lib/non-dashboard-browser-clients.test.ts` (onboarding client)

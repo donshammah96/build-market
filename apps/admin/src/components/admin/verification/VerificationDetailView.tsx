@@ -37,6 +37,7 @@ import {
   type EntityType,
   type VerificationDetails,
 } from "@/actions/admin";
+import { createAdminIdempotencyKey } from "@/lib/security/idempotency-key";
 import { RejectionReasonDialog } from "./RejectionReasonDialog";
 import { DocumentViewer } from "./DocumentViewer";
 
@@ -44,6 +45,7 @@ interface VerificationDetailViewProps {
   entityType: EntityType;
   entityId: string;
   details: VerificationDetails;
+  canVerify?: boolean;
 }
 
 const statusConfig = {
@@ -78,6 +80,7 @@ export function VerificationDetailView({
   entityType,
   entityId,
   details,
+  canVerify = false,
 }: VerificationDetailViewProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -95,11 +98,17 @@ export function VerificationDetailView({
 
   const handleVerify = async () => {
     startTransition(async () => {
-      const response = await verifyEntity({
-        entityType,
-        entityId,
-        action: "VERIFY",
-      });
+      const response = await verifyEntity(
+        {
+          entityType,
+          entityId,
+          action: "VERIFY",
+        },
+        createAdminIdempotencyKey(
+          "verifyEntity",
+          `${entityType}:${entityId}:VERIFY`,
+        ),
+      );
 
       if (response.success) {
         toast.success(response.data?.message || "Successfully verified");
@@ -122,12 +131,18 @@ export function VerificationDetailView({
 
   const handleRejectionSubmit = async (reason: string) => {
     startTransition(async () => {
-      const response = await verifyEntity({
-        entityType,
-        entityId,
-        action: pendingAction,
-        reason,
-      });
+      const response = await verifyEntity(
+        {
+          entityType,
+          entityId,
+          action: pendingAction,
+          reason,
+        },
+        createAdminIdempotencyKey(
+          "verifyEntity",
+          `${entityType}:${entityId}:${pendingAction}`,
+        ),
+      );
 
       if (response.success) {
         toast.success(response.data?.message || "Action completed");
@@ -141,7 +156,7 @@ export function VerificationDetailView({
 
   const handleDocumentVerify = async (
     documentId: string,
-    action: "APPROVE" | "REJECT"
+    action: "APPROVE" | "REJECT",
   ) => {
     startTransition(async () => {
       // Determine document type based on entity type
@@ -153,15 +168,21 @@ export function VerificationDetailView({
         documentType = "property_attachment";
       }
 
-      const response = await verifyDocument({
-        documentType,
-        documentId,
-        action,
-      });
+      const response = await verifyDocument(
+        {
+          documentType,
+          documentId,
+          action,
+        },
+        createAdminIdempotencyKey(
+          "verifyDocument",
+          `${documentType}:${documentId}:${action}`,
+        ),
+      );
 
       if (response.success) {
         toast.success(
-          response.data?.message || `Document ${action.toLowerCase()}d`
+          response.data?.message || `Document ${action.toLowerCase()}d`,
         );
         router.refresh();
       } else {
@@ -247,7 +268,7 @@ export function VerificationDetailView({
       </div>
 
       {/* Action Buttons */}
-      {details.status !== "VERIFIED" && (
+      {details.status !== "VERIFIED" && canVerify && (
         <Card>
           <CardContent className="flex items-center justify-between py-4">
             <div className="text-sm text-muted-foreground">
@@ -398,7 +419,7 @@ export function VerificationDetailView({
                               <Eye className="h-4 w-4 mr-1" />
                               View
                             </Button>
-                            {!doc.isVerified && (
+                            {!doc.isVerified && canVerify && (
                               <>
                                 <Button
                                   variant="outline"
@@ -448,14 +469,14 @@ export function VerificationDetailView({
                 </CardHeader>
                 <CardContent>
                   {details.auditHistory && details.auditHistory.length > 0 ? (
-                    <ScrollArea className="h-[400px]">
+                    <ScrollArea className="h-100">
                       <div className="space-y-4">
                         {details.auditHistory.map((entry) => (
                           <div
                             key={entry.id}
                             className="flex gap-4 pb-4 border-b last:border-0"
                           >
-                            <div className="flex-shrink-0">
+                            <div className="shrink-0">
                               <div className="p-2 bg-muted rounded-full">
                                 <History className="h-4 w-4" />
                               </div>
@@ -479,7 +500,7 @@ export function VerificationDetailView({
                                   new Date(entry.createdAt),
                                   {
                                     addSuffix: true,
-                                  }
+                                  },
                                 )}
                               </p>
                             </div>

@@ -179,6 +179,55 @@ describe("professional licenses routes", () => {
     expect(response.status).toBe(403);
   });
 
+  it("emits required observability keys for licenses list success", async () => {
+    mockLicensesService.getLicenses.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
+
+    const response = await listLicensesRoute(
+      new NextRequest("http://localhost:3500/api/professional-portal/licenses"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      "Professional licenses adapter outcome",
+      expect.objectContaining({
+        correlationId: "test-correlation-id",
+        operationName: "get_professional_licenses",
+        httpMethod: "GET",
+        routePattern: "/api/professional-portal/licenses",
+        actorRole: "professional",
+        outcome: "succeeded",
+        httpStatus: 200,
+        durationMs: expect.any(Number),
+      }),
+    );
+  });
+
+  it("emits required observability keys for licenses list failure", async () => {
+    mockLicensesService.getLicenses.mockRejectedValue(new Error("boom"));
+
+    const response = await listLicensesRoute(
+      new NextRequest("http://localhost:3500/api/professional-portal/licenses"),
+    );
+
+    expect(response.status).toBe(500);
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      "Professional licenses adapter outcome",
+      expect.objectContaining({
+        correlationId: "test-correlation-id",
+        operationName: "get_professional_licenses",
+        httpMethod: "GET",
+        routePattern: "/api/professional-portal/licenses",
+        actorRole: "professional",
+        outcome: "failed",
+        httpStatus: 500,
+        durationMs: expect.any(Number),
+      }),
+    );
+  });
+
   it("returns license detail from the licenses domain", async () => {
     mockLicensesService.getLicenseById.mockResolvedValue({
       ok: true,

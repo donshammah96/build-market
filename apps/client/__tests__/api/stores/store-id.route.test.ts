@@ -26,6 +26,28 @@ vi.mock("@clerk/nextjs/server", () => ({
   auth: vi.fn().mockResolvedValue({ userId: "clerk_owner" }),
 }));
 
+vi.mock("@/app/lib/api/api-middleware", () => ({
+  withAuth: (
+    handler: (
+      req: NextRequest,
+      ctx: unknown,
+      params?: unknown,
+    ) => Promise<unknown>,
+  ) => {
+    return async (req: NextRequest, params?: unknown) =>
+      handler(
+        req,
+        {
+          clerkId: "clerk_123",
+          dbUserId: "db_user_123",
+          userEmail: "test@example.com",
+          userRole: "professional",
+        },
+        params,
+      );
+  },
+}));
+
 vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
   getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
@@ -56,25 +78,27 @@ vi.mock("@/app/lib/api/request-utils", () => ({
   }),
 }));
 
-vi.mock("@/lib/services/stores", () => ({
-  getStoreById: vi.fn(),
+vi.mock("@/app/lib/domains/stores", () => ({
+  storesService: {
+    getStoreById: vi.fn(),
+  },
 }));
 
-describe("GET /api/stores/[id] owner access logging", () => {
+describe("GET /api/stores/[id]", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("records consent when owner reads store", async () => {
-    const { getStoreById } = await import("@/lib/services/stores");
-    vi.mocked(getStoreById).mockResolvedValue({
-      id: "store_1",
-      name: "Store One",
-      professional: { userId: "db_owner" },
-    } as any);
-
-    vi.mocked(prisma.user.findUnique).mockResolvedValue({
-      id: "db_owner",
+  it("returns store details from stores domain service", async () => {
+    const { storesService } = await import("@/app/lib/domains/stores");
+    vi.mocked(storesService.getStoreById).mockResolvedValue({
+      ok: true,
+      data: {
+        id: "store_1",
+        name: "Store One",
+        professional: { userId: "db_owner" },
+        version: 1,
+      },
     } as any);
 
     const request = new NextRequest("http://localhost:3500/api/stores/store_1");
@@ -83,30 +107,21 @@ describe("GET /api/stores/[id] owner access logging", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(prisma.consentRecord.create).toHaveBeenCalledTimes(1);
-    expect(prisma.consentRecord.create).toHaveBeenCalledWith(
+    expect(storesService.getStoreById).toHaveBeenCalledWith(
+      "store_1",
       expect.objectContaining({
-        data: expect.objectContaining({
-          userId: "db_owner",
-          metadata: expect.objectContaining({
-            storeId: "store_1",
-            action: "read",
-          }),
-        }),
+        viewerClerkId: "clerk_owner",
       }),
     );
   });
 
-  it("does not record consent when non-owner reads store", async () => {
-    const { getStoreById } = await import("@/lib/services/stores");
-    vi.mocked(getStoreById).mockResolvedValue({
-      id: "store_2",
-      name: "Store Two",
-      professional: { userId: "db_owner" },
-    } as any);
-
-    vi.mocked(prisma.user.findUnique).mockResolvedValue({
-      id: "db_other",
+  it("returns not found when domain reports missing store", async () => {
+    const { storesService } = await import("@/app/lib/domains/stores");
+    vi.mocked(storesService.getStoreById).mockResolvedValue({
+      ok: false,
+      error: "not_found",
+      message: "Store not found",
+      status: 404,
     } as any);
 
     const request = new NextRequest("http://localhost:3500/api/stores/store_2");
@@ -114,7 +129,6 @@ describe("GET /api/stores/[id] owner access logging", () => {
       params: Promise.resolve({ id: "store_2" }),
     });
 
-    expect(response.status).toBe(200);
-    expect(prisma.consentRecord.create).not.toHaveBeenCalled();
+    expect(response.status).toBe(404);
   });
 });

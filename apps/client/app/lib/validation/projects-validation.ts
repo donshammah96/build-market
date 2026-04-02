@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   ProjectStatus,
+  EscrowStatus,
   ProjectType,
   ContractType,
   County,
@@ -24,6 +25,7 @@ export const MilestoneStatusSchema = z.nativeEnum(MilestoneStatus);
 export const ApprovalStatusSchema = z.nativeEnum(ApprovalStatus);
 export const ProjectDocumentTypeSchema = z.nativeEnum(ProjectDocumentType);
 export const ProjectImageCategorySchema = z.nativeEnum(ProjectImageCategory);
+export const EscrowStatusSchema = z.nativeEnum(EscrowStatus);
 
 /** Query parameters for GET /api/professional-portal/projects */
 export const ProjectQuerySchema = z.object({

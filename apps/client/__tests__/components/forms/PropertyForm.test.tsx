@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import PropertyForm from "@/components/forms/PropertyForm";
 
@@ -32,9 +32,32 @@ vi.mock("@/hooks/useImageUploader", () => ({
   }),
 }));
 
+const mockUploadForCredential = vi.fn();
+vi.mock("@/lib/upload-client", () => ({
+  uploadForCredential: (...args: unknown[]) => mockUploadForCredential(...args),
+}));
+
+const normalizeSnapshotMarkup = (markup: string) =>
+  markup
+    .replace(/_r_[a-z0-9_:-]+/gi, "__ID__")
+    .replace(/radix-__ID__/g, "radix-__ID__");
+
 // Mock next/image
 vi.mock("next/image", () => ({
-  default: ({ src, alt, ...props }: { src: string; alt: string }) => (
+  default: ({
+    src,
+    alt,
+    fill: _fill,
+    unoptimized: _unoptimized,
+    priority: _priority,
+    ...props
+  }: {
+    src: string;
+    alt: string;
+    fill?: boolean;
+    unoptimized?: boolean;
+    priority?: boolean;
+  }) => (
     // eslint-disable-next-line @next/next/no-img-element
     <img src={src} alt={alt} {...props} />
   ),
@@ -45,6 +68,11 @@ describe("PropertyForm", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    window.sessionStorage.clear();
+    mockUploadForCredential.mockResolvedValue({
+      assetId: "550e8400-e29b-41d4-a716-446655440000",
+      url: "https://cdn.example.com/title-deed.pdf",
+    });
   });
 
   describe("Rendering", () => {
@@ -52,11 +80,21 @@ describe("PropertyForm", () => {
       render(<PropertyForm onSubmit={mockOnSubmit} />);
 
       // Check for main sections
-      expect(screen.getByText("Basic Details")).toBeInTheDocument();
-      expect(screen.getByText("Pricing")).toBeInTheDocument();
-      expect(screen.getByText("Location")).toBeInTheDocument();
-      expect(screen.getByText("Property Specifications")).toBeInTheDocument();
-      expect(screen.getByText("Property Images")).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Basic Details" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Location" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Property Specifications" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Property Images" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Verification Documents" }),
+      ).toBeInTheDocument();
     });
 
     it("renders required field labels", () => {
@@ -120,7 +158,7 @@ describe("PropertyForm", () => {
       const submitButton = screen.getByRole("button", {
         name: /create property/i,
       });
-      submitButton.click();
+      fireEvent.click(submitButton);
 
       // Wait for validation errors
       await waitFor(() => {
@@ -134,7 +172,7 @@ describe("PropertyForm", () => {
       const submitButton = screen.getByRole("button", {
         name: /create property/i,
       });
-      submitButton.click();
+      fireEvent.click(submitButton);
 
       await waitFor(() => {
         expect(mockOnSubmit).not.toHaveBeenCalled();
@@ -162,10 +200,53 @@ describe("PropertyForm", () => {
       const submitButton = screen.getByRole("button", {
         name: /create property/i,
       });
-      submitButton.click();
+      fireEvent.click(submitButton);
 
       await waitFor(() => {
         expect(mockOnSubmit).toHaveBeenCalled();
+      });
+    });
+
+    it("preserves uploaded image asset references in the submit payload", async () => {
+      const defaultValues = {
+        title: "Asset-backed Property",
+        price: 75000,
+        currency: "KES",
+        type: "SALE" as const,
+        category: "RESIDENTIAL" as const,
+        county: "NAIROBI" as const,
+        location: "Kilimani",
+        images: ["https://example.com/image.jpg"],
+        imageAssets: [
+          {
+            assetId: "550e8400-e29b-41d4-a716-446655440099",
+            url: "https://example.com/image.jpg",
+          },
+        ],
+      };
+
+      render(
+        <PropertyForm onSubmit={mockOnSubmit} defaultValues={defaultValues} />,
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /create property/i,
+        }),
+      );
+
+      await waitFor(() => {
+        expect(mockOnSubmit).toHaveBeenCalledWith(
+          expect.objectContaining({
+            images: ["https://example.com/image.jpg"],
+            imageAssets: [
+              {
+                assetId: "550e8400-e29b-41d4-a716-446655440099",
+                url: "https://example.com/image.jpg",
+              },
+            ],
+          }),
+        );
       });
     });
   });
@@ -183,11 +264,46 @@ describe("PropertyForm", () => {
       render(<PropertyForm onSubmit={mockOnSubmit} />);
 
       const addButton = screen.getByRole("button", { name: /add document/i });
-      addButton.click();
+      fireEvent.click(addButton);
 
       // Check that a document section is added
       await waitFor(() => {
         expect(screen.getByText("Document 1")).toBeInTheDocument();
+      });
+    });
+
+    it("uses file upload instead of manual asset id entry", async () => {
+      const { container } = render(<PropertyForm onSubmit={mockOnSubmit} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /add document/i }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /choose file/i })).toBeInTheDocument();
+      });
+
+      expect(screen.queryByLabelText(/asset id/i)).not.toBeInTheDocument();
+
+      const fileInput = container.querySelector(
+        'input[type="file"][accept*="application/pdf"]',
+      ) as HTMLInputElement | null;
+
+      expect(fileInput).not.toBeNull();
+
+      const file = new File(["pdf"], "title-deed.pdf", {
+        type: "application/pdf",
+      });
+
+      fireEvent.change(fileInput!, { target: { files: [file] } });
+
+      await waitFor(() => {
+        expect(mockUploadForCredential).toHaveBeenCalledWith(
+          file,
+          "documents",
+        );
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("title-deed.pdf")).toBeInTheDocument();
       });
     });
 
@@ -198,7 +314,7 @@ describe("PropertyForm", () => {
 
       // Add 5 attachments
       for (let i = 0; i < 5; i++) {
-        addButton.click();
+        fireEvent.click(addButton);
         // Wait a bit between clicks to allow state updates
         await waitFor(() => {});
       }
@@ -217,7 +333,7 @@ describe("PropertyForm", () => {
 
       // Add an attachment first
       const addButton = screen.getByRole("button", { name: /add document/i });
-      addButton.click();
+      fireEvent.click(addButton);
 
       await waitFor(() => {
         expect(screen.getByText("Document 1")).toBeInTheDocument();
@@ -227,10 +343,12 @@ describe("PropertyForm", () => {
       const removeButton = screen.getByRole("button", {
         name: /remove document 1/i,
       });
-      removeButton.click();
+      fireEvent.click(removeButton);
 
       await waitFor(() => {
-        expect(screen.queryByText("Document 1")).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole("heading", { name: "Document 1" }),
+        ).not.toBeInTheDocument();
       });
     });
   });
@@ -239,14 +357,14 @@ describe("PropertyForm", () => {
     it("renders features input section", () => {
       render(<PropertyForm onSubmit={mockOnSubmit} />);
 
-      expect(screen.getByText("Features & Amenities")).toBeInTheDocument();
+      expect(screen.getByText("Features")).toBeInTheDocument();
     });
   });
 
   describe("Snapshot", () => {
     it("matches snapshot for default state", () => {
       const { container } = render(<PropertyForm onSubmit={mockOnSubmit} />);
-      expect(container).toMatchSnapshot();
+      expect(normalizeSnapshotMarkup(container.innerHTML)).toMatchSnapshot();
     });
 
     it("matches snapshot for editing state", () => {
@@ -261,7 +379,7 @@ describe("PropertyForm", () => {
           }}
         />,
       );
-      expect(container).toMatchSnapshot();
+      expect(normalizeSnapshotMarkup(container.innerHTML)).toMatchSnapshot();
     });
   });
 });

@@ -4,12 +4,26 @@ import { prisma, UserRole, UserStatus, AdminRole } from "@build/db";
 import { apiError, HttpStatus } from "./api-response";
 import { initializeCorrelationId, getClientLogger } from "./resilient-api";
 import { withTimeout, CorrelationIdManager } from "@build/resilience";
+import { env } from "@/app/lib/infrastructure/env";
+import {
+  applyPrivateNoStoreHeaders,
+  type CsrfExemption,
+  mutationOriginFailureMessage,
+  validateTrustedMutationOriginForRequest,
+} from "@/app/lib/api/http-security";
 
 /**
- * Blocked user statuses. Defined as string constants for forward-compatibility
- * until `prisma generate` is run against the updated schema which adds
- * the UserStatus enum. Once regenerated, replace with:
- *   import { UserStatus } from "@build/db";
+ * Onboarding-adjacent statuses that are allowed to access authenticated APIs.
+ * Block-only semantics are enforced through BLOCKED_STATUSES below.
+ */
+const ALLOWED_STATUSES = new Set<string>([
+  UserStatus.ACTIVE,
+  "ONBOARDING",
+  "PENDING_VERIFICATION",
+]);
+
+/**
+ * Blocked user statuses mapped to safe client messages.
  */
 const BLOCKED_STATUSES: Record<string, { message: string; status: number }> = {
   [UserStatus.SUSPENDED]: {
@@ -39,7 +53,6 @@ const BLOCKED_STATUSES: Record<string, { message: string; status: number }> = {
 export interface AuthContext {
   clerkId: string;
   dbUserId: string;
-  userEmail: string;
   userRole: UserRole;
   /** Granular admin role — only populated when userRole is ADMIN */
   adminRole?: AdminRole;
@@ -55,15 +68,31 @@ type AuthenticatedHandler<T = any> = (
   params?: T,
 ) => Promise<NextResponse>;
 
+export interface WithAuthOptions {
+  csrf?: {
+    exempt?: CsrfExemption;
+    extraTrustedOrigins?: string[];
+  };
+  cachePolicy?: "private-no-store" | "passthrough";
+}
+
 /**
  * Middleware that ensures the request is authenticated via Clerk
  * and provides the database user ID in the context.
  *
- * Rejects non-active users (SUSPENDED, BANNED, DEACTIVATED, ARCHIVED)
+ * Rejects blocked users (SUSPENDED, BANNED, DEACTIVATED, ARCHIVED)
  * and soft-deleted users.
  */
 // eslint-disable-next-line/typescript-eslint/no-explicit-any
-export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
+export function withAuth<T = any>(
+  handler: AuthenticatedHandler<T>,
+  options: WithAuthOptions = {},
+) {
+  const finalizeResponse = (response: NextResponse) =>
+    options.cachePolicy === "passthrough"
+      ? response
+      : applyPrivateNoStoreHeaders(response);
+
   // Using rest parameters to handle both static and dynamic routes
   const routeHandler = async (
     req: NextRequest,
@@ -75,9 +104,9 @@ export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
 
     // --- DEV AUTH BYPASS ---
     // Short-circuit auth for local offline development
-    if (process.env.BYPASS_AUTH === "true") {
+    if (env.auth.bypassEnabled) {
       const requestHost = req.nextUrl.hostname.toLowerCase();
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.AUTH_URL;
+      const appUrl = env.appUrl;
       let appHost = "";
 
       if (appUrl) {
@@ -89,8 +118,8 @@ export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
       }
 
       const localHosts = new Set(["localhost", "127.0.0.1", "::1"]);
-      const isDevelopment = process.env.NODE_ENV === "development";
-      const isCI = process.env.CI === "true";
+      const isDevelopment = env.isDev;
+      const isCI = env.isCI;
       const isLocalRequest = localHosts.has(requestHost);
       const isLocalAppUrl = appHost ? localHosts.has(appHost) : true;
 
@@ -100,16 +129,19 @@ export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
           new Error("BYPASS_AUTH is only allowed on local development hosts"),
           {
             correlationId,
-            nodeEnv: process.env.NODE_ENV,
-            ci: process.env.CI,
+            nodeEnv: env.nodeEnv,
+            ci: env.isCI,
             requestHost,
             appHost,
+            outcome: "blocked",
           },
         );
 
-        return apiError(
-          "Unsafe BYPASS_AUTH configuration. Disable BYPASS_AUTH outside local development.",
-          HttpStatus.FORBIDDEN,
+        return finalizeResponse(
+          apiError(
+            "Unsafe BYPASS_AUTH configuration. Disable BYPASS_AUTH outside local development.",
+            HttpStatus.FORBIDDEN,
+          ),
         );
       }
 
@@ -117,15 +149,15 @@ export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
         correlationId,
         requestHost,
         appHost,
+        actorRole: env.auth.devActor.userRole,
+        outcome: "bypassed",
       });
 
       const devContext: AuthContext = {
-        clerkId: process.env.DEV_CLERK_ID || "user_35Z6M7pKOJKZB9yNEZvS5udrrGo",
-        dbUserId:
-          process.env.DEV_DB_USER_ID || "929c4dd1-b8c2-416e-872d-068abdb80c40",
-        userEmail: process.env.DEV_USER_EMAIL || "donshammah1@gmail.com",
+        clerkId: env.auth.devActor.clerkId,
+        dbUserId: env.auth.devActor.dbUserId,
         userRole:
-          (process.env.DEV_USER_ROLE as UserRole) || UserRole.PROFESSIONAL,
+          (env.auth.devActor.userRole as UserRole) || UserRole.PROFESSIONAL,
       };
 
       const routeContext = args[0] as { params?: Promise<T> } | undefined;
@@ -133,7 +165,28 @@ export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
         ? await routeContext.params
         : undefined;
 
-      return handler(req, devContext, params);
+      const csrfCheck = validateTrustedMutationOriginForRequest(
+        req,
+        options.csrf,
+      );
+      if (!csrfCheck.ok) {
+        logger.warn("Blocked untrusted authenticated mutation", {
+          correlationId,
+          actorRole: devContext.userRole,
+          method: req.method,
+          outcome: "blocked",
+          reason: csrfCheck.reason,
+        });
+
+        return finalizeResponse(
+          apiError(
+            mutationOriginFailureMessage(csrfCheck.reason),
+            HttpStatus.FORBIDDEN,
+          ),
+        );
+      }
+
+      return finalizeResponse(await handler(req, devContext, params));
     }
     // --- END DEV AUTH BYPASS ---
 
@@ -143,9 +196,8 @@ export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
 
       if (!clerkId) {
         logger.warn("Unauthorized access attempt", { correlationId });
-        return apiError(
-          "Unauthorized. Please sign in.",
-          HttpStatus.UNAUTHORIZED,
+        return finalizeResponse(
+          apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED),
         );
       }
 
@@ -156,7 +208,6 @@ export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
             where: { clerkId, deletedAt: null },
             select: {
               id: true,
-              email: true,
               role: true,
               status: true,
             },
@@ -168,24 +219,29 @@ export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
 
       if (!user) {
         logger.warn("User not found in database", {
-          clerkId,
           correlationId,
+          outcome: "not_found",
         });
-        return apiError("User account not found", HttpStatus.NOT_FOUND);
+        return finalizeResponse(
+          apiError("User account not found", HttpStatus.NOT_FOUND),
+        );
       }
 
-      // Reject non-active users (status field may not exist on older schema)
+      // Reject blocked users while allowing onboarding lifecycle statuses.
       const userStatus = (user as { status?: string }).status;
-      if (userStatus && userStatus !== "ACTIVE") {
+      if (userStatus && !ALLOWED_STATUSES.has(userStatus)) {
         const statusError = BLOCKED_STATUSES[userStatus];
         logger.warn("Non-active user attempted access", {
-          userId: user.id,
           status: userStatus,
+          actorRole: user.role,
           correlationId,
+          outcome: "blocked",
         });
-        return apiError(
-          statusError?.message ?? "Account is not active",
-          statusError?.status ?? HttpStatus.FORBIDDEN,
+        return finalizeResponse(
+          apiError(
+            statusError?.message ?? "Account is not active",
+            statusError?.status ?? HttpStatus.FORBIDDEN,
+          ),
         );
       }
 
@@ -199,12 +255,15 @@ export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
 
         if (adminProfile && !adminProfile.isActive) {
           logger.warn("Inactive admin attempted access", {
-            userId: user.id,
             correlationId,
+            actorRole: user.role,
+            outcome: "blocked",
           });
-          return apiError(
-            "Your admin account has been deactivated.",
-            HttpStatus.FORBIDDEN,
+          return finalizeResponse(
+            apiError(
+              "Your admin account has been deactivated.",
+              HttpStatus.FORBIDDEN,
+            ),
           );
         }
 
@@ -214,16 +273,15 @@ export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
       const context: AuthContext = {
         clerkId,
         dbUserId: user.id,
-        userEmail: user.email,
         userRole: user.role,
         adminRole,
       };
 
       logger.debug("Request authenticated", {
-        userId: user.id,
-        role: user.role,
-        ...(adminRole && { adminRole }),
+        actorRole: user.role,
+        ...(adminRole && { actorAdminRole: adminRole }),
         correlationId,
+        outcome: "authenticated",
       });
 
       // Resolve params if provided (for dynamic routes)
@@ -232,7 +290,28 @@ export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
         ? await routeContext.params
         : undefined;
 
-      return handler(req, context, params);
+      const csrfCheck = validateTrustedMutationOriginForRequest(
+        req,
+        options.csrf,
+      );
+      if (!csrfCheck.ok) {
+        logger.warn("Blocked untrusted authenticated mutation", {
+          correlationId,
+          actorRole: user.role,
+          method: req.method,
+          outcome: "blocked",
+          reason: csrfCheck.reason,
+        });
+
+        return finalizeResponse(
+          apiError(
+            mutationOriginFailureMessage(csrfCheck.reason),
+            HttpStatus.FORBIDDEN,
+          ),
+        );
+      }
+
+      return finalizeResponse(await handler(req, context, params));
     } catch (error) {
       const logger = getClientLogger();
       logger.error(
@@ -240,7 +319,9 @@ export function withAuth<T = any>(handler: AuthenticatedHandler<T>) {
         error instanceof Error ? error : new Error(String(error)),
         { correlationId },
       );
-      return apiError("Authentication failed", HttpStatus.UNAUTHORIZED);
+      return finalizeResponse(
+        apiError("Authentication failed", HttpStatus.UNAUTHORIZED),
+      );
     }
   };
 
@@ -260,10 +341,10 @@ export function withRole(allowedRoles: UserRole[]) {
 
       if (!allowedRoles.includes(context.userRole)) {
         logger.warn("Access denied - insufficient permissions", {
-          userId: context.dbUserId,
-          userRole: context.userRole,
+          actorRole: context.userRole,
           requiredRoles: allowedRoles,
           correlationId,
+          outcome: "forbidden",
         });
         return apiError(
           "Forbidden. Insufficient permissions.",
@@ -272,9 +353,9 @@ export function withRole(allowedRoles: UserRole[]) {
       }
 
       logger.debug("Role check passed", {
-        userId: context.dbUserId,
-        userRole: context.userRole,
+        actorRole: context.userRole,
         correlationId,
+        outcome: "authorized",
       });
 
       return handler(req, context, params);
@@ -287,15 +368,21 @@ export function withRole(allowedRoles: UserRole[]) {
  * Composes on top of withAuth — first verifies userRole is ADMIN,
  * then checks the granular AdminRole from AdminProfile.
  *
- * SUPER_ADMIN and SYSTEM_ADMIN always pass (full system access).
+ * SUPER_ADMIN always passes. SYSTEM_ADMIN is treated as a legacy alias when
+ * still present in older generated enums during rollout.
  *
  * Usage:
  *   export const POST = withAdminRole(["CONTENT_MODERATOR", "FINANCE_MANAGER"])(handler);
  */
-const ADMIN_SUPER_ROLES: AdminRole[] = [
-  AdminRole.SUPER_ADMIN,
-  AdminRole.SYSTEM_ADMIN,
-];
+const ADMIN_SUPER_ROLES = (() => {
+  const roles = new Set<AdminRole>([AdminRole.SUPER_ADMIN]);
+  const legacySystemAdmin = (AdminRole as Record<string, AdminRole>)
+    .SYSTEM_ADMIN;
+  if (legacySystemAdmin) {
+    roles.add(legacySystemAdmin);
+  }
+  return roles;
+})();
 
 export function withAdminRole(allowedAdminRoles: AdminRole[]) {
   return (handler: AuthenticatedHandler) => {
@@ -306,10 +393,10 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
       // Must be an ADMIN user
       if (context.userRole !== UserRole.ADMIN) {
         logger.warn("Non-admin attempted admin-role-gated action", {
-          userId: context.dbUserId,
-          userRole: context.userRole,
+          actorRole: context.userRole,
           requiredAdminRoles: allowedAdminRoles,
           correlationId,
+          outcome: "forbidden",
         });
         return apiError(
           "Forbidden. Admin access required.",
@@ -320,8 +407,9 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
       // Must have an AdminProfile with a role
       if (!context.adminRole) {
         logger.warn("Admin user missing AdminProfile", {
-          userId: context.dbUserId,
           correlationId,
+          actorRole: context.userRole,
+          outcome: "misconfigured",
         });
         return apiError(
           "Admin profile not configured. Contact a system administrator.",
@@ -329,17 +417,17 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
         );
       }
 
-      // SUPER_ADMIN and SYSTEM_ADMIN always pass
+      // SUPER_ADMIN always passes (plus SYSTEM_ADMIN alias during rollout).
       const hasAccess =
-        ADMIN_SUPER_ROLES.includes(context.adminRole) ||
+        ADMIN_SUPER_ROLES.has(context.adminRole) ||
         allowedAdminRoles.includes(context.adminRole);
 
       if (!hasAccess) {
         logger.warn("Admin role insufficient", {
-          userId: context.dbUserId,
-          adminRole: context.adminRole,
+          actorAdminRole: context.adminRole,
           requiredAdminRoles: allowedAdminRoles,
           correlationId,
+          outcome: "forbidden",
         });
         return apiError(
           "Forbidden. You do not have the required admin permissions.",
@@ -348,9 +436,9 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
       }
 
       logger.debug("Admin role check passed", {
-        userId: context.dbUserId,
-        adminRole: context.adminRole,
+        actorAdminRole: context.adminRole,
         correlationId,
+        outcome: "authorized",
       });
 
       return handler(req, context, params);

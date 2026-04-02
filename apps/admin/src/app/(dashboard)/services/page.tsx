@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ActionErrorState } from "@/components/ui/action-error-state";
 import { Wrench, Plus, Tags, Users, Activity } from "lucide-react";
 import Link from "next/link";
 
@@ -42,10 +43,10 @@ async function ServicesStats() {
   const activeServices = categories.filter((s) => s.isActive).length;
   const totalProfessionals = categories.reduce(
     (sum, s) => sum + s._count.professionals,
-    0
+    0,
   );
   const professionTypes = new Set(
-    categories.map((s) => s.professionType).filter(Boolean)
+    categories.map((s) => s.professionType).filter(Boolean),
   ).size;
 
   return (
@@ -162,13 +163,10 @@ async function ServicesTable({
 
   if (!response.success || !response.data) {
     return (
-      <Card>
-        <CardContent className="p-6">
-          <p className="text-red-500">
-            Failed to load services: {response.error}
-          </p>
-        </CardContent>
-      </Card>
+      <ActionErrorState
+        title="Unable to load services"
+        description={`Failed to load services: ${response.error || "Unknown error"}`}
+      />
     );
   }
 

@@ -1,7 +1,13 @@
 "use server";
 
-import { searchProfessionals } from "@/lib/services/search";
+import { searchService } from "@/app/lib/domains/search";
 
 export async function searchProfessionalsAction(query: string) {
-  return await searchProfessionals(query);
+  const result = await searchService.searchProfessionals({}, query);
+  if (!result.ok) {
+    throw new Error(
+      (result as { message?: string }).message ?? "Search failed",
+    );
+  }
+  return result.data;
 }

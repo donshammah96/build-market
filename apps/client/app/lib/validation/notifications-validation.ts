@@ -6,22 +6,20 @@
  */
 import { z } from "zod";
 import {
-  NotificationType,
-  NotificationPriority,
-  NotificationChannel,
-  NotificationDeliveryStatus,
-} from "@prisma/client";
+  NotificationTypeEnum,
+  NotificationPriorityEnum,
+  NotificationChannelEnum,
+  NotificationDeliveryStatusEnum,
+} from "@build/types";
 
 // =============================================================================
-// Enum Schemas
+// Enum Schemas (re-export from @build/types to avoid @prisma/client in API routes)
 // =============================================================================
 
-export const NotificationTypeSchema = z.nativeEnum(NotificationType);
-export const NotificationPrioritySchema = z.nativeEnum(NotificationPriority);
-export const NotificationChannelSchema = z.nativeEnum(NotificationChannel);
-export const NotificationDeliveryStatusSchema = z.nativeEnum(
-  NotificationDeliveryStatus,
-);
+export const NotificationTypeSchema = NotificationTypeEnum;
+export const NotificationPrioritySchema = NotificationPriorityEnum;
+export const NotificationChannelSchema = NotificationChannelEnum;
+export const NotificationDeliveryStatusSchema = NotificationDeliveryStatusEnum;
 
 // =============================================================================
 // Query Schemas

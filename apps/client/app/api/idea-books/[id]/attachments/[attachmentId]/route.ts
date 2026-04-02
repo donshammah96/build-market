@@ -16,22 +16,43 @@ import {
   UpdateAttachmentSchema,
   IDEA_BOOK_CONFIG,
 } from "@/app/lib/validation/idea-books-validation";
-import {
-  getAttachmentById,
-  updateAttachment,
-  deleteAttachment,
-} from "@/lib/services/idea-books";
+import { ideaBooksService } from "@/app/lib/domains/idea-books";
 
 const logger = getClientLogger();
 
 type AttachmentParams = { id: string; attachmentId: string };
+
+function mapIdeaBooksError(error: {
+  error: string;
+  status?: number;
+  message?: string;
+}) {
+  switch (error.error) {
+    case "not_found":
+      return apiError(
+        error.message || "Attachment not found",
+        HttpStatus.NOT_FOUND,
+      );
+    case "forbidden":
+      return apiError(error.message || "Forbidden", HttpStatus.FORBIDDEN);
+    default:
+      return apiError(
+        error.message || "Idea book operation failed",
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+  }
+}
 
 /**
  * GET /api/idea-books/[id]/attachments/[attachmentId]
  * Get a specific attachment with ownership verification.
  */
 export const GET = withAuth<AttachmentParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     initializeCorrelationId(req);
 
     if (
@@ -56,7 +77,11 @@ export const GET = withAuth<AttachmentParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => getAttachmentById(dbUserId, attachmentId),
+      () =>
+        ideaBooksService.getAttachmentById(
+          { userId: dbUserId, role: userRole },
+          attachmentId,
+        ),
       { operationName: "get_idea_book_attachment" },
     );
 
@@ -67,17 +92,11 @@ export const GET = withAuth<AttachmentParams>(
       );
     }
 
-    const serviceResult = result.data as
-      | { data: unknown }
-      | { error: "not_found" | "forbidden" };
-    if ("error" in serviceResult) {
-      if (serviceResult.error === "not_found") {
-        return apiError("Attachment not found", HttpStatus.NOT_FOUND);
-      }
-      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    if (!result.data.ok) {
+      return mapIdeaBooksError(result.data);
     }
 
-    return apiSuccess(serviceResult.data, HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );
 
@@ -86,7 +105,11 @@ export const GET = withAuth<AttachmentParams>(
  * Update attachment caption.
  */
 export const PATCH = withAuth<AttachmentParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
 
     if (
@@ -131,9 +154,13 @@ export const PATCH = withAuth<AttachmentParams>(
     const executor = getResilientExecutor();
     const result = await executor.execute(
       () =>
-        updateAttachment(dbUserId, attachmentId, {
-          caption: validation.data.caption,
-        }),
+        ideaBooksService.updateAttachment(
+          { userId: dbUserId, role: userRole },
+          attachmentId,
+          {
+            caption: validation.data.caption,
+          },
+        ),
       { operationName: "update_idea_book_attachment" },
     );
 
@@ -148,17 +175,11 @@ export const PATCH = withAuth<AttachmentParams>(
       );
     }
 
-    const serviceResult = result.data as
-      | { data: unknown }
-      | { error: "not_found" | "forbidden" };
-    if ("error" in serviceResult) {
-      if (serviceResult.error === "not_found") {
-        return apiError("Attachment not found", HttpStatus.NOT_FOUND);
-      }
-      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    if (!result.data.ok) {
+      return mapIdeaBooksError(result.data);
     }
 
-    return apiSuccess(serviceResult.data, HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );
 
@@ -167,7 +188,11 @@ export const PATCH = withAuth<AttachmentParams>(
  * Delete an attachment from an idea book.
  */
 export const DELETE = withAuth<AttachmentParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
 
     if (
@@ -192,7 +217,11 @@ export const DELETE = withAuth<AttachmentParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => deleteAttachment(dbUserId, attachmentId),
+      () =>
+        ideaBooksService.deleteAttachment(
+          { userId: dbUserId, role: userRole },
+          attachmentId,
+        ),
       { operationName: "delete_idea_book_attachment" },
     );
 
@@ -207,16 +236,10 @@ export const DELETE = withAuth<AttachmentParams>(
       );
     }
 
-    const serviceResult = result.data as
-      | { data: unknown }
-      | { error: "not_found" | "forbidden" };
-    if ("error" in serviceResult) {
-      if (serviceResult.error === "not_found") {
-        return apiError("Attachment not found", HttpStatus.NOT_FOUND);
-      }
-      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    if (!result.data.ok) {
+      return mapIdeaBooksError(result.data);
     }
 
-    return apiSuccess(serviceResult.data, HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );

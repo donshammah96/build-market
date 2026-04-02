@@ -18,11 +18,7 @@ import {
   BatchDeleteSchema,
   NOTIFICATION_CONFIG,
 } from "@/app/lib/validation/notifications-validation";
-import {
-  getNotifications,
-  markNotificationRead,
-  deleteNotifications,
-} from "@/lib/services/notifications";
+import { notificationsService } from "@/app/lib/domains/notifications";
 
 const logger = getClientLogger();
 
@@ -37,8 +33,34 @@ const logger = getClientLogger();
  * - type (NotificationType enum value)
  * - priority (NotificationPriority enum value)
  */
+function mapNotificationError(error: {
+  error: string;
+  status?: number;
+  message?: string;
+}) {
+  switch (error.error) {
+    case "not_found":
+      return apiError(
+        error.message || "Notification not found",
+        HttpStatus.NOT_FOUND,
+      );
+    case "forbidden":
+      return apiError(error.message || "Forbidden", HttpStatus.FORBIDDEN);
+    case "no_update":
+      return apiError(
+        error.message || "No fields to update",
+        HttpStatus.BAD_REQUEST,
+      );
+    default:
+      return apiError(
+        error.message || "Notification operation failed",
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+  }
+}
+
 export const GET = withAuth(
-  async (req: NextRequest, { dbUserId }): Promise<NextResponse> => {
+  async (req: NextRequest, { dbUserId, userRole }): Promise<NextResponse> => {
     initializeCorrelationId(req);
 
     const identifier = getRateLimitIdentifier(req);
@@ -73,19 +95,22 @@ export const GET = withAuth(
     const executor = getResilientExecutor();
     const result = await executor.execute(
       () =>
-        getNotifications(dbUserId, {
-          page,
-          limit,
-          unreadOnly,
-          type,
-          priority,
-        }),
+        notificationsService.list(
+          { userId: dbUserId, role: userRole },
+          {
+            page,
+            limit,
+            unreadOnly,
+            type,
+            priority,
+          },
+        ),
       { operationName: "list_notifications" },
     );
 
     if (!result.success || !result.data) {
       logger.error("Failed to fetch notifications", result.error, {
-        userId: dbUserId,
+        actorRole: userRole,
       });
       return apiError(
         "Failed to fetch notifications",
@@ -93,7 +118,11 @@ export const GET = withAuth(
       );
     }
 
-    return apiSuccess(result.data, HttpStatus.OK);
+    if (!result.data.ok) {
+      return mapNotificationError(result.data);
+    }
+
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );
 
@@ -106,7 +135,7 @@ export const GET = withAuth(
  * - id=UUID: mark single notification
  */
 export const PATCH = withAuth(
-  async (req: NextRequest, { dbUserId }): Promise<NextResponse> => {
+  async (req: NextRequest, { dbUserId, userRole }): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
 
     const sizeError = checkBodySize(req, NOTIFICATION_CONFIG.MAX_BODY_SIZE);
@@ -142,14 +171,18 @@ export const PATCH = withAuth(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => markNotificationRead(dbUserId, { id, isRead }),
+      () =>
+        notificationsService.markRead(
+          { userId: dbUserId, role: userRole },
+          { id, isRead },
+        ),
       { operationName: "mark_notification_read" },
     );
 
     if (!result.success || !result.data) {
       logger.error("Failed to update notification", result.error, {
         correlationId,
-        userId: dbUserId,
+        actorRole: userRole,
       });
       return apiError(
         "Failed to update notification",
@@ -157,17 +190,11 @@ export const PATCH = withAuth(
       );
     }
 
-    const serviceResult = result.data as
-      | { data: unknown }
-      | { error: "not_found" | "forbidden" };
-    if ("error" in serviceResult) {
-      if (serviceResult.error === "not_found") {
-        return apiError("Notification not found", HttpStatus.NOT_FOUND);
-      }
-      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    if (!result.data.ok) {
+      return mapNotificationError(result.data);
     }
 
-    return apiSuccess(serviceResult.data, HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );
 
@@ -181,7 +208,7 @@ export const PATCH = withAuth(
  * - UUID: delete a single notification
  */
 export const DELETE = withAuth(
-  async (req: NextRequest, { dbUserId }): Promise<NextResponse> => {
+  async (req: NextRequest, { dbUserId, userRole }): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
 
     const sizeError = checkBodySize(req, NOTIFICATION_CONFIG.MAX_BODY_SIZE);
@@ -217,14 +244,18 @@ export const DELETE = withAuth(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => deleteNotifications(dbUserId, { id }),
+      () =>
+        notificationsService.deleteMany(
+          { userId: dbUserId, role: userRole },
+          { id },
+        ),
       { operationName: "delete_notifications" },
     );
 
     if (!result.success || !result.data) {
       logger.error("Failed to delete notification(s)", result.error, {
         correlationId,
-        userId: dbUserId,
+        actorRole: userRole,
       });
       return apiError(
         "Failed to delete notification(s)",
@@ -232,16 +263,10 @@ export const DELETE = withAuth(
       );
     }
 
-    const serviceResult = result.data as
-      | { data: unknown }
-      | { error: "not_found" | "forbidden" };
-    if ("error" in serviceResult) {
-      if (serviceResult.error === "not_found") {
-        return apiError("Notification not found", HttpStatus.NOT_FOUND);
-      }
-      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    if (!result.data.ok) {
+      return mapNotificationError(result.data);
     }
 
-    return apiSuccess(serviceResult.data, HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );

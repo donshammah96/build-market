@@ -15,7 +15,7 @@ export default async function SettingsPage() {
     platformCommission: 10,
     supportEmail: "support@buildmarket.co.ke",
     adminEmailAlerts: true,
-    securityMFA: true
+    securityMFA: true,
   };
 
   return <SettingsClient initialSettings={initialSettings} />;

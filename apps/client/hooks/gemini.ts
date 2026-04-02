@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { envConfig } from "@/lib/env";
+import { env } from "@/app/lib/infrastructure/env";
 
 export const useGemini = () => {
   const [loading, setLoading] = useState(false);
@@ -14,7 +14,7 @@ export const useGemini = () => {
   ) => {
     setLoading(true);
     setError(null);
-    const apiKey = envConfig.ai.geminiApiKey;
+    const apiKey = env.ai.geminiApiKey;
 
     try {
       const payload = {

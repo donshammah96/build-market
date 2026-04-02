@@ -2,16 +2,10 @@
 
 import React, { useState, useCallback, memo } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Button } from "../ui/button";
 import { Menu, X, LayoutDashboard, Accessibility } from "lucide-react";
-import {
-  SignedIn,
-  SignedOut,
-  SignInButton,
-  SignUpButton,
-  UserButton,
-  useUser,
-} from "@clerk/nextjs";
+import { SignInButton, SignUpButton, UserButton, useUser } from "@clerk/nextjs";
 import { ROUTES } from "@/lib/links";
 import { cn } from "@/lib/utils";
 import {
@@ -44,20 +38,24 @@ const NavItem = memo(function NavItem({
   label,
   textColorClass,
   hoverClass,
+  isActive,
 }: {
   href: string;
   label: string;
   textColorClass: string;
   hoverClass: string;
+  isActive: boolean;
 }) {
   return (
     <Link href={href}>
       <Button
         variant="ghost"
+        aria-current={isActive ? "page" : undefined}
         className={cn(
-          "text-sm font-medium transition-colors duration-200",
+          "text-sm font-medium transition-colors duration-200 rounded-full",
           textColorClass,
           hoverClass,
+          isActive && "underline underline-offset-4",
         )}
       >
         {label}
@@ -73,25 +71,32 @@ const MobileNavItem = memo(function MobileNavItem({
   onClick,
   index,
   shouldAnimate,
+  isActive,
 }: {
   href: string;
   label: string;
   onClick: () => void;
   index: number;
   shouldAnimate: boolean;
+  isActive: boolean;
 }) {
   return (
     <div
       className={cn(
         "transform transition-all duration-300",
-        shouldAnimate && "animate-fade-in-up",
+        shouldAnimate && "motion-safe:animate-fade-in-up",
       )}
       style={{ animationDelay: shouldAnimate ? `${index * 50}ms` : "0ms" }}
     >
       <Link
         href={href}
         onClick={onClick}
-        className="block text-2xl font-semibold text-zinc-900 py-2 border-b border-zinc-100 hover:text-emerald-600 transition-colors"
+        aria-current={isActive ? "page" : undefined}
+        className={cn(
+          "block min-h-11 py-2 border-b border-border transition-colors text-2xl font-semibold",
+          "text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-sm",
+          isActive && "text-primary",
+        )}
       >
         {label}
       </Link>
@@ -107,6 +112,8 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
   const isScrolled = useThrottledScroll(20);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user } = useUser();
+  const pathname = usePathname();
+  const isSignedIn = Boolean(user);
   const shouldAnimate = useShouldAnimate();
 
   const userRole = user?.publicMetadata?.role as string | undefined;
@@ -119,9 +126,9 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
       enableIdeaBooks === true ||
       enableIdeaBooks === undefined,
   );
-  const textColorClass = useScrolledStyles ? "text-zinc-900" : "text-white";
+  const textColorClass = useScrolledStyles ? "text-foreground" : "text-white";
   const hoverClass = useScrolledStyles
-    ? "hover:bg-zinc-100"
+    ? "hover:bg-muted"
     : "hover:bg-white/10";
 
   const toggleMobileMenu = useCallback(() => {
@@ -139,9 +146,9 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
           "fixed top-0 left-0 right-0 z-50 border-b",
           // Use CSS transitions instead of framer-motion for simple state changes
           "transition-all duration-300 ease-out",
-          shouldAnimate && "animate-slide-down",
+          shouldAnimate && "motion-safe:animate-slide-down",
           useScrolledStyles
-            ? "bg-white/90 backdrop-blur-md border-zinc-200/50 shadow-sm py-3"
+            ? "bg-background/90 backdrop-blur-md border-border/60 shadow-sm py-3"
             : "bg-transparent border-transparent py-5",
         )}
       >
@@ -154,7 +161,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
                 textColorClass,
               )}
             >
-              Build<span className="text-emerald-500">Market</span>
+              Build<span className="text-primary">Market</span>
             </span>
           </Link>
 
@@ -167,10 +174,11 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
                 label={item.label}
                 textColorClass={textColorClass}
                 hoverClass={hoverClass}
+                isActive={pathname === item.href}
               />
             ))}
 
-            <div className="h-6 w-px bg-zinc-300/30 mx-2" aria-hidden="true" />
+            <div className="h-6 w-px bg-border/70 mx-2" aria-hidden="true" />
 
             {/* Accessibility Settings Button */}
             <AccessibilitySettingsPanel
@@ -191,39 +199,44 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
             />
 
             {/* Auth Buttons */}
-            <SignedOut>
-              <SignInButton mode="modal" forceRedirectUrl={ROUTES.authCallback}>
-                <Button
-                  variant="ghost"
-                  className={cn("font-medium", textColorClass, hoverClass)}
+            {!isSignedIn ? (
+              <>
+                <SignInButton
+                  mode="modal"
+                  forceRedirectUrl={ROUTES.authCallback}
                 >
-                  Sign In
-                </Button>
-              </SignInButton>
-              <SignUpButton mode="modal" forceRedirectUrl={ROUTES.onboarding}>
-                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md rounded-full px-6">
-                  <Link href={ROUTES.professional}>Join as a Pro</Link>
-                </Button>
-              </SignUpButton>
-            </SignedOut>
-
-            <SignedIn>
-              {userRole === "client" && (
-                <Link href={ROUTES.client}>
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className={cn(textColorClass)}
+                    className={cn("font-medium", textColorClass, hoverClass)}
                   >
-                    <LayoutDashboard className="mr-2 h-4 w-4" />
-                    Dashboard
+                    Sign In
                   </Button>
-                </Link>
-              )}
-              <div className="ml-2">
-                <UserButton afterSignOutUrl="/" />
-              </div>
-            </SignedIn>
+                </SignInButton>
+                <SignUpButton mode="modal" forceRedirectUrl={ROUTES.onboarding}>
+                  <Button className="rounded-full px-6 shadow-md bg-primary text-primary-foreground hover:bg-primary/90">
+                    <Link href={ROUTES.professional}>Join as a Pro</Link>
+                  </Button>
+                </SignUpButton>
+              </>
+            ) : (
+              <>
+                {userRole === "client" && (
+                  <Link href={ROUTES.client}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn(textColorClass)}
+                    >
+                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                      Dashboard
+                    </Button>
+                  </Link>
+                )}
+                <div className="ml-2">
+                  <UserButton />
+                </div>
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Toggle */}
@@ -259,7 +272,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
       {/* Mobile Menu Overlay - CSS-based animation instead of framer-motion */}
       <div
         className={cn(
-          "fixed inset-0 bg-white z-40 md:hidden pt-24 px-6 flex flex-col gap-6",
+          "fixed inset-0 bg-background z-40 md:hidden pt-24 px-6 flex flex-col gap-6",
           "transition-all duration-300 ease-out",
           isMobileMenuOpen
             ? "opacity-100 translate-x-0 pointer-events-auto"
@@ -275,61 +288,64 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
             onClick={closeMobileMenu}
             index={index}
             shouldAnimate={shouldAnimate && isMobileMenuOpen}
+            isActive={pathname === item.href}
           />
         ))}
 
         <div className="mt-4 flex flex-col gap-3">
-          <SignedOut>
-            <SignInButton mode="modal">
-              <Button
-                variant="outline"
-                size="lg"
-                className="w-full justify-center"
+          {!isSignedIn ? (
+            <>
+              <SignInButton mode="modal">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="w-full justify-center"
+                >
+                  Sign In
+                </Button>
+              </SignInButton>
+              <SignUpButton mode="modal">
+                <Button
+                  size="lg"
+                  className="w-full justify-center bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  Join as a Pro
+                </Button>
+              </SignUpButton>
+            </>
+          ) : (
+            <>
+              <Link
+                href={
+                  userRole === "professional"
+                    ? "/professional-portal/dashboard"
+                    : "/dashboard"
+                }
               >
-                Sign In
-              </Button>
-            </SignInButton>
-            <SignUpButton mode="modal">
-              <Button
-                size="lg"
-                className="w-full justify-center bg-emerald-600"
-              >
-                Join as a Pro
-              </Button>
-            </SignUpButton>
-          </SignedOut>
-
-          <SignedIn>
-            <Link
-              href={
-                userRole === "professional"
-                  ? "/professional-portal/dashboard"
-                  : "/dashboard"
-              }
-            >
-              <Button
-                variant="secondary"
-                size="lg"
-                className="w-full justify-start"
-              >
-                <LayoutDashboard className="mr-2 h-4 w-4" />
-                My Dashboard
-              </Button>
-            </Link>
-            <div className="flex items-center gap-2 mt-4">
-              <UserButton afterSignOutUrl="/" />
-              <span className="text-zinc-500">Manage Account</span>
-            </div>
-          </SignedIn>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  className="w-full justify-start"
+                >
+                  <LayoutDashboard className="mr-2 h-4 w-4" />
+                  My Dashboard
+                </Button>
+              </Link>
+              <div className="flex items-center gap-2 mt-4">
+                <UserButton />
+                <span className="text-muted-foreground">Manage Account</span>
+              </div>
+            </>
+          )}
 
           {/* Mobile Accessibility Settings Link */}
-          <div className="mt-4 pt-4 border-t border-zinc-100">
+          <div className="mt-4 pt-4 border-t border-border">
             <AccessibilitySettingsPanel
               trigger={
                 <Button
                   variant="outline"
                   size="lg"
-                  className="w-full justify-start text-zinc-600"
+                  className="w-full justify-start text-muted-foreground"
                 >
                   <Accessibility className="mr-2 h-4 w-4" />
                   Accessibility Settings

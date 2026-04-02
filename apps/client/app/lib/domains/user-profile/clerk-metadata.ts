@@ -40,6 +40,7 @@ const logger = getClientLogger();
 export type ClerkOnboardingMetadata = {
   role: string;
   isOnboarded: true;
+  status?: string;
   isProfileComplete?: true;
 };
 
@@ -75,7 +76,10 @@ export async function updateClerkOnboardingMetadata(
     logger.error(
       `Failed to update Clerk metadata during ${context.operation}`,
       error instanceof Error ? error : new Error(String(error)),
-      { correlationId: context.correlationId, clerkId },
+      {
+        correlationId: context.correlationId,
+        hasClerkId: Boolean(clerkId),
+      },
     );
   }
 }

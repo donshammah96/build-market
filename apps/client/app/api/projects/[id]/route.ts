@@ -17,6 +17,8 @@ import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { UpdateProjectSchema } from "@/app/lib/validation/projects-validation";
 import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
 import { projectsService } from "@/app/lib/domains/projects/service";
+import type { ProjectActorRole } from "@/app/lib/domains/projects/contracts";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 type ProjectParams = { id: string };
 const logger = getClientLogger();
@@ -36,6 +38,18 @@ function toStatus(error: string): number {
     default:
       return HttpStatus.INTERNAL_SERVER_ERROR;
   }
+}
+
+function resolveProjectActorRole(userRole: unknown): ProjectActorRole | null {
+  const normalized = normalizeRole(userRole);
+  if (
+    normalized === "ADMIN" ||
+    normalized === "PROFESSIONAL" ||
+    normalized === "CLIENT"
+  ) {
+    return normalized;
+  }
+  return null;
 }
 
 export const GET = withAuth<ProjectParams>(
@@ -60,13 +74,15 @@ export const GET = withAuth<ProjectParams>(
       );
     }
 
+    const actorRole = resolveProjectActorRole(userRole);
+    if (!actorRole) {
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    }
+
     const actor = {
       userId: dbUserId,
       clerkId,
-      role: String(userRole).toLowerCase() as
-        | "professional"
-        | "client"
-        | "admin",
+      role: actorRole,
     };
 
     const executor = getResilientExecutor();
@@ -184,13 +200,16 @@ export const PATCH = withAuth<ProjectParams>(
       );
     }
 
+    const actorRole = resolveProjectActorRole(userRole);
+    if (!actorRole) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    }
+
     const actor = {
       userId: dbUserId,
       clerkId,
-      role: String(userRole).toLowerCase() as
-        | "professional"
-        | "client"
-        | "admin",
+      role: actorRole,
     };
 
     const executor = getResilientExecutor();
@@ -299,13 +318,16 @@ export const DELETE = withAuth<ProjectParams>(
       );
     }
 
+    const actorRole = resolveProjectActorRole(userRole);
+    if (!actorRole) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    }
+
     const actor = {
       userId: dbUserId,
       clerkId,
-      role: String(userRole).toLowerCase() as
-        | "professional"
-        | "client"
-        | "admin",
+      role: actorRole,
     };
 
     const executor = getResilientExecutor();

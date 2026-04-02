@@ -68,17 +68,17 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
 
   const stateClasses = cn(
     isCompleted &&
-      "bg-emerald-500 text-white border-2 border-emerald-500 shadow-lg shadow-emerald-500/30",
+      "bg-(--color-onboarding-primary) text-[oklch(0.08_0.016_222)] border-2 border-(--color-onboarding-primary) shadow-[0_0_0_4px_oklch(0.70_0.21_162/0.18),0_0_20px_oklch(0.70_0.21_162/0.25)]",
     isCurrent &&
       !isCompleted &&
       (isDark
-        ? "bg-emerald-500/10 text-emerald-500 border-2 border-emerald-500 ring-4 ring-emerald-500/20"
-        : "bg-emerald-50 text-emerald-600 border-2 border-emerald-500 ring-4 ring-emerald-100"),
+        ? "bg-(--color-onboarding-primary)/10 text-(--color-onboarding-primary) border-2 border-(--color-onboarding-primary) ring-4 ring-(--color-onboarding-primary)/20"
+        : "bg-(--color-onboarding-primary)/10 text-(--color-onboarding-primary) border-2 border-(--color-onboarding-primary) ring-4 ring-(--color-onboarding-primary)/20"),
     !isCompleted &&
       !isCurrent &&
       (isDark
-        ? "bg-zinc-800/50 text-zinc-500 border-2 border-zinc-700"
-        : "bg-zinc-100 text-zinc-400 border-2 border-zinc-200"),
+        ? "bg-white/[0.03] text-onboarding-ink/35 border-2 border-white/20"
+        : "bg-black/[0.02] text-foreground/45 border-2 border-black/10"),
   );
 
   const clickableClasses = isClickable
@@ -91,6 +91,7 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
       onClick={isClickable ? onClick : undefined}
       disabled={!isClickable}
       className={cn(baseClasses, sizeClasses, stateClasses, clickableClasses)}
+      style={{ fontFamily: "Outfit, sans-serif" }}
       whileHover={isClickable ? { scale: 1.1 } : undefined}
       whileTap={isClickable ? { scale: 0.95 } : undefined}
       aria-current={isCurrent ? "step" : undefined}
@@ -136,13 +137,13 @@ const StepConnector: React.FC<StepConnectorProps> = ({
       <div
         className={cn(
           "absolute inset-0",
-          isDark ? "bg-zinc-800" : "bg-zinc-200",
+          isDark ? "bg-white/[0.08]" : "bg-black/[0.08]",
         )}
       />
 
       {/* Animated fill */}
       <motion.div
-        className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-emerald-400"
+        className="absolute inset-0 bg-(--color-onboarding-primary)"
         initial={{ [isHorizontal ? "scaleX" : "scaleY"]: 0 }}
         animate={{
           [isHorizontal ? "scaleX" : "scaleY"]: isCompleted ? 1 : 0,
@@ -230,17 +231,21 @@ export function StepProgress({
                   >
                     <p
                       className={cn(
-                        "text-xs font-medium transition-colors",
-                        isCompleted && "text-emerald-400",
-                        isCurrent && (isDark ? "text-white" : "text-zinc-900"),
-                        !isCompleted && !isCurrent && "text-zinc-500",
+                        "text-[10px] font-bold uppercase tracking-[0.12em] transition-colors",
+                        "font-['Syne']",
+                        isCompleted && "text-(--color-onboarding-primary)",
+                        isCurrent &&
+                          (isDark ? "text-onboarding-ink" : "text-foreground"),
+                        !isCompleted && !isCurrent && "text-onboarding-ink/35",
                       )}
                     >
                       {step.label}
                       {step.optional && (
                         <span
                           className={
-                            isDark ? "text-zinc-600 ml-1" : "text-zinc-400 ml-1"
+                            isDark
+                              ? "text-onboarding-ink/35 ml-1"
+                              : "text-foreground/45 ml-1"
                           }
                         >
                           (optional)
@@ -251,7 +256,9 @@ export function StepProgress({
                       <p
                         className={cn(
                           "text-[10px] mt-0.5 max-w-[100px] mx-auto hidden sm:block",
-                          isDark ? "text-zinc-500" : "text-zinc-400",
+                          isDark
+                            ? "text-onboarding-ink/45"
+                            : "text-foreground/45",
                         )}
                       >
                         {step.description}
@@ -302,14 +309,17 @@ export function CompactStepProgress({
     <div className={cn("w-full", className)}>
       <div className="flex items-center justify-between mb-2">
         <span
-          className={cn("text-xs", isDark ? "text-zinc-400" : "text-zinc-500")}
+          className={cn(
+            "text-[11px]",
+            isDark ? "text-onboarding-ink/45" : "text-foreground/45",
+          )}
         >
           Step {currentStep + 1} of {totalSteps}
         </span>
         <span
           className={cn(
-            "text-xs font-medium",
-            isDark ? "text-emerald-400" : "text-emerald-600",
+            "text-[11px] font-semibold",
+            "text-(--color-onboarding-primary)",
           )}
         >
           {Math.round(progress)}%
@@ -318,11 +328,11 @@ export function CompactStepProgress({
       <div
         className={cn(
           "h-1.5 rounded-full overflow-hidden",
-          isDark ? "bg-zinc-800" : "bg-zinc-200",
+          isDark ? "bg-white/[0.08]" : "bg-black/[0.08]",
         )}
       >
         <motion.div
-          className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full"
+          className="h-full bg-(--color-onboarding-primary) rounded-full"
           initial={{ width: 0 }}
           animate={{ width: `${progress}%` }}
           transition={{ duration: 0.4, ease: "easeOut" }}
@@ -358,9 +368,11 @@ export function DotStepProgress({
             key={index}
             className={cn(
               "rounded-full transition-all duration-300",
-              isCurrent && "w-6 h-2 bg-emerald-500",
-              isCompleted && !isCurrent && "w-2 h-2 bg-emerald-500/60",
-              !isCompleted && !isCurrent && "w-2 h-2 bg-zinc-700",
+              isCurrent && "w-6 h-2 bg-(--color-onboarding-primary)",
+              isCompleted &&
+                !isCurrent &&
+                "w-2 h-2 bg-(--color-onboarding-primary)/60",
+              !isCompleted && !isCurrent && "w-2 h-2 bg-white/25",
             )}
             layout
           />

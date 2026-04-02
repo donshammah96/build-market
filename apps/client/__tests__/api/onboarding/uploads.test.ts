@@ -210,7 +210,6 @@ describe("POST /api/onboarding/uploads", () => {
       ok: false,
       error: "invalid_input",
       message: "Unsupported upload payload",
-      status: 400,
     });
 
     const formData = new FormData();

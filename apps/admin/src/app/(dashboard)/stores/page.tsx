@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Store, CheckCircle, Clock, Star, Package } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ActionErrorState } from "@/components/ui/action-error-state";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ function StatsLoading() {
 
 async function StoreStatsCards() {
   const response = await getStoreStats();
-  
+
   if (!response.success || !response.data) {
     return null;
   }
@@ -48,7 +49,10 @@ async function StoreStatsCards() {
         <CardContent>
           <div className="text-2xl font-bold">{stats.verified}</div>
           <p className="text-xs text-muted-foreground">
-            {stats.total > 0 ? ((stats.verified / stats.total) * 100).toFixed(1) : 0}% verification rate
+            {stats.total > 0
+              ? ((stats.verified / stats.total) * 100).toFixed(1)
+              : 0}
+            % verification rate
           </p>
         </CardContent>
       </Card>
@@ -91,7 +95,12 @@ export default async function StoresPage({ searchParams }: StoresPageProps) {
   const params = await searchParams;
   const page = Number(params.page) || 1;
   const search = params.search || "";
-  const verified = params.verified === "true" ? true : params.verified === "false" ? false : undefined;
+  const verified =
+    params.verified === "true"
+      ? true
+      : params.verified === "false"
+        ? false
+        : undefined;
   const featured = params.featured === "true" ? true : undefined;
 
   const response = await getStores({
@@ -109,11 +118,14 @@ export default async function StoresPage({ searchParams }: StoresPageProps) {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Stores</h1>
-          <p className="text-muted-foreground">Manage store listings and verifications.</p>
+          <p className="text-muted-foreground">
+            Manage store listings and verifications.
+          </p>
         </div>
-        <div className="p-6 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-700">{response.error || "Failed to load stores"}</p>
-        </div>
+        <ActionErrorState
+          title="Unable to load stores"
+          description={response.error || "Failed to load stores"}
+        />
       </div>
     );
   }
@@ -158,9 +170,9 @@ export default async function StoresPage({ searchParams }: StoresPageProps) {
       )}
 
       {/* Data Table */}
-      <DataTable 
-        columns={columns} 
-        data={stores as unknown as StoreData[]} 
+      <DataTable
+        columns={columns}
+        data={stores as unknown as StoreData[]}
         pageCount={meta.totalPages}
         searchPlaceholder="Search stores..."
       />

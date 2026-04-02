@@ -16,9 +16,10 @@ import type {
   UpdateLeadClientInput,
   DeleteLeadClientInput,
   DeleteLeadResponse,
-  LeadListResponse,
+  LeadListResult,
+  LeadDetailResult,
+  LeadListItem,
 } from "@/lib/leads-client";
-import type { Lead } from "@/lib/validation/leads-validation";
 import { unwrapApiResponse } from "@/lib/api-client-utils";
 
 export const leadKeys = {
@@ -34,7 +35,7 @@ export function useLeads(filters?: Partial<LeadQueryInput>) {
   return useQuery({
     queryKey: leadKeys.list(filters),
     queryFn: async () =>
-      unwrapApiResponse<LeadListResponse>(await leadsClient.getLeads(filters))
+      unwrapApiResponse<LeadListResult>(await leadsClient.getLeads(filters))
         .leads,
   });
 }
@@ -43,13 +44,13 @@ export function useLead(leadId: string | undefined | null, enabled = true) {
   return useQuery({
     queryKey: leadKeys.detail(leadId ?? ""),
     queryFn: async () =>
-      unwrapApiResponse<Lead>(await leadsClient.getLead(leadId!)),
+      unwrapApiResponse<LeadDetailResult>(await leadsClient.getLead(leadId!)),
     enabled: !!leadId && enabled,
   });
 }
 
 export function useCreateLead(
-  options?: UseMutationOptions<Lead, Error, CreateLeadClientInput>,
+  options?: UseMutationOptions<LeadListItem, Error, CreateLeadClientInput>,
 ) {
   const queryClient = useQueryClient();
 
@@ -65,7 +66,7 @@ export function useCreateLead(
 }
 
 export function useUpdateLead(
-  options?: UseMutationOptions<Lead, Error, UpdateLeadClientInput>,
+  options?: UseMutationOptions<LeadDetailResult, Error, UpdateLeadClientInput>,
 ) {
   const queryClient = useQueryClient();
 

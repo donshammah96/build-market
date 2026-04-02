@@ -106,9 +106,9 @@ function resolveProjectActor(params: {
   }
 
   if (
-    params.role !== "admin" &&
-    params.role !== "professional" &&
-    params.role !== "client"
+    params.role !== "ADMIN" &&
+    params.role !== "PROFESSIONAL" &&
+    params.role !== "CLIENT"
   ) {
     throw new Error("Project actor role is required");
   }
@@ -121,7 +121,7 @@ function resolveProjectActor(params: {
 
 export const projectsService = {
   canReadProject(actor: ProjectActor, project: PolicyProjectContext): boolean {
-    if (actor.role === "admin") {
+    if (actor.role === "ADMIN") {
       return true;
     }
 
@@ -135,12 +135,12 @@ export const projectsService = {
     actor: ProjectActor,
     project: PolicyProjectContext,
   ): boolean {
-    if (actor.role === "admin") {
+    if (actor.role === "ADMIN") {
       return true;
     }
 
     return (
-      actor.role === "professional" && project.professionalId === actor.userId
+      actor.role === "PROFESSIONAL" && project.professionalId === actor.userId
     );
   },
 
@@ -149,12 +149,12 @@ export const projectsService = {
     project: PolicyProjectContext,
     milestone: PolicyMilestoneContext,
   ): boolean {
-    if (actor.role === "admin") {
+    if (actor.role === "ADMIN") {
       return true;
     }
 
     return (
-      actor.role === "professional" &&
+      actor.role === "PROFESSIONAL" &&
       project.professionalId === actor.userId &&
       milestone.projectId === project.id
     );
@@ -183,12 +183,12 @@ export const projectsService = {
   async listUserProjects(input: {
     actor?: ProjectActor;
     userId: string;
-    role?: "client" | "professional";
+    role?: "CLIENT" | "PROFESSIONAL";
   }): Promise<DomainResult<unknown>> {
     const actor = resolveProjectActor(input);
     const projects = await projectsRepository.listUserProjects({
       userId: actor.userId,
-      role: input.role ?? "client",
+      role: input.role ?? "CLIENT",
     });
     return { ok: true, data: projects };
   },
@@ -202,7 +202,7 @@ export const projectsService = {
     userAgent?: string;
   }): Promise<DomainResult<unknown>> {
     const actor = resolveProjectActor(input);
-    if (actor.role !== "professional" && actor.role !== "admin") {
+    if (actor.role !== "PROFESSIONAL" && actor.role !== "ADMIN") {
       return fail("forbidden", "Only professionals can create projects");
     }
 
@@ -240,7 +240,7 @@ export const projectsService = {
   ): Promise<DomainResult<ProjectDetailResultDto>> {
     const actor =
       typeof userIdOrActor === "string"
-        ? resolveProjectActor({ userId: userIdOrActor, role: "professional" })
+        ? resolveProjectActor({ userId: userIdOrActor, role: "PROFESSIONAL" })
         : userIdOrActor;
     const participant = await projectsRepository.verifyParticipant(
       projectId,
@@ -295,7 +295,7 @@ export const projectsService = {
       return fail(participant.error, participant.message);
     }
 
-    if (participant.data.role !== "professional") {
+    if (participant.data.role !== "PROFESSIONAL") {
       return fail("forbidden", "Only project professionals can update project");
     }
 
@@ -333,7 +333,7 @@ export const projectsService = {
       return fail(participant.error, participant.message);
     }
 
-    if (participant.data.role !== "professional") {
+    if (participant.data.role !== "PROFESSIONAL") {
       return fail("forbidden", "Only project professionals can delete project");
     }
 
@@ -397,7 +397,7 @@ export const projectsService = {
   ): Promise<DomainResult<MilestoneListResultDto>> {
     const actor =
       typeof userIdOrActor === "string"
-        ? resolveProjectActor({ userId: userIdOrActor, role: "professional" })
+        ? resolveProjectActor({ userId: userIdOrActor, role: "PROFESSIONAL" })
         : userIdOrActor;
     const participant = await projectsRepository.verifyParticipant(
       projectId,
@@ -512,7 +512,7 @@ export const projectsService = {
       return fail(participant.error, participant.message);
     }
 
-    if (participant.data.role !== "professional") {
+    if (participant.data.role !== "PROFESSIONAL") {
       return fail(
         "forbidden",
         "Only project professionals can update milestones",
@@ -558,7 +558,7 @@ export const projectsService = {
       return fail(participant.error, participant.message);
     }
 
-    if (participant.data.role !== "professional") {
+    if (participant.data.role !== "PROFESSIONAL") {
       return fail(
         "forbidden",
         "Only project professionals can delete milestones",
@@ -1089,7 +1089,7 @@ export const projectsService = {
       return { ok: false, error: participant.error };
     }
 
-    if (participant.data.role !== "client") {
+    if (participant.data.role !== "CLIENT") {
       return {
         ok: false,
         error: "forbidden",

@@ -1,7 +1,7 @@
 /**
  * TanStack Query hook for professional-portal withdrawal.
  *
- * Uses financeClient (Server Actions) under the hood.
+ * Uses financeClient REST API under the hood.
  */
 import {
   useMutation,

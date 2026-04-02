@@ -1,4 +1,5 @@
 import postgres from "postgres";
+import { env } from "@/app/lib/infrastructure/env";
 
 let sql: ReturnType<typeof postgres> | null = null;
 
@@ -7,7 +8,7 @@ let sql: ReturnType<typeof postgres> | null = null;
  * Ensures we don't create multiple connections to the database
  */
 export function getSqlClient() {
-  const connectionString = process.env.POSTGRES_URL;
+  const connectionString = env.postgresUrl;
   if (!connectionString) {
     throw new Error("POSTGRES_URL environment variable is not set");
   }

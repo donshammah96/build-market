@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
+// SECURITY_PERSISTENCE_ALLOWLIST: Stores non-sensitive wizard draft state in localStorage.
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -26,64 +28,9 @@ export interface OnboardingWizardProps {
   onComplete: () => void | Promise<void>;
   onStepChange?: (stepIndex: number) => void;
   initialStep?: number;
-  storageKey?: string; // For localStorage draft saving
   className?: string;
   showProgress?: boolean;
   allowSkipOptional?: boolean;
-}
-
-// ============================================================================
-// HOOKS
-// ============================================================================
-
-/**
- * Hook for managing wizard draft in localStorage
- */
-function useWizardDraft<T>(storageKey: string | undefined, defaultValue: T) {
-  const [draft, setDraft] = useState<T>(defaultValue);
-
-  // Load draft on mount
-  useEffect(() => {
-    if (!storageKey) return;
-
-    try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        setDraft(JSON.parse(saved));
-      }
-    } catch (e) {
-      console.warn("Failed to load wizard draft:", e);
-    }
-  }, [storageKey]);
-
-  // Save draft function
-  const saveDraft = useCallback(
-    (data: T) => {
-      setDraft(data);
-      if (storageKey) {
-        try {
-          localStorage.setItem(storageKey, JSON.stringify(data));
-        } catch (e) {
-          console.warn("Failed to save wizard draft:", e);
-        }
-      }
-    },
-    [storageKey],
-  );
-
-  // Clear draft function
-  const clearDraft = useCallback(() => {
-    setDraft(defaultValue);
-    if (storageKey) {
-      try {
-        localStorage.removeItem(storageKey);
-      } catch (e) {
-        console.warn("Failed to clear wizard draft:", e);
-      }
-    }
-  }, [storageKey, defaultValue]);
-
-  return { draft, saveDraft, clearDraft };
 }
 
 // ============================================================================
@@ -249,7 +196,6 @@ export function OnboardingWizard({
   onComplete,
   onStepChange,
   initialStep = 0,
-  storageKey,
   className,
   showProgress = true,
   allowSkipOptional = true,
@@ -272,16 +218,6 @@ export function OnboardingWizard({
     mediaQuery.addEventListener("change", handler);
     return () => mediaQuery.removeEventListener("change", handler);
   }, []);
-
-  // Draft saving
-  const { saveDraft, clearDraft } = useWizardDraft(storageKey, {
-    currentStep: 0,
-  });
-
-  // Save current step to draft when it changes
-  useEffect(() => {
-    saveDraft({ currentStep });
-  }, [currentStep, saveDraft]);
 
   // Notify parent of step change
   useEffect(() => {
@@ -323,13 +259,12 @@ export function OnboardingWizard({
       setIsCompleting(true);
       try {
         await onComplete();
-        clearDraft();
       } catch (e) {
         console.error("Failed to complete wizard:", e);
       }
       setIsCompleting(false);
     }
-  }, [currentStep, steps, onComplete, clearDraft]);
+  }, [currentStep, steps, onComplete]);
 
   // Go to previous step
   const goBack = useCallback(() => {

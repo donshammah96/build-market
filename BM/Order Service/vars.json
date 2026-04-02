@@ -1,8 +1,0 @@
-{
-  "ORDER_SERVICE_URL": {
-    "value": "localhost:8001",
-    "type": "string",
-    "id": 0,
-    "isSecret": false
-  }
-}

@@ -90,7 +90,7 @@ export function createOnboardingUploadCleanupWorker() {
         logger.info("Onboarding upload cleanup job completed", {
           correlationId,
           jobId: job.id,
-          ...result,
+          cleanupResult: result,
           durationMs,
         });
 

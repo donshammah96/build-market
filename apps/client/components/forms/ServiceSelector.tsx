@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import {
   Accordion,
   AccordionContent,
@@ -10,8 +9,9 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
-import { ServiceGroup } from "@/app/professional-portal/settings/actions";
+import type { ServiceGroup } from "@/app/lib/domains/professional-settings";
 
 interface ServiceSelectorProps {
   initialSelectedIds?: string[];
@@ -96,26 +96,30 @@ export function ServiceSelector({
                   )}
                 </span>
               </AccordionTrigger>
-              <div
-                className="flex items-center gap-2 mr-4"
-                onClick={(e) => e.stopPropagation()}
+              {/* Use a native <button> — not a div — so this is keyboard-accessible
+                  and doesn't require stopPropagation hacks against the accordion trigger.
+                  type="button" prevents accidental form submission if nested inside a form. */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleGroup(group);
+                }}
+                className="flex items-center gap-2 mr-4 text-xs text-zinc-500 hover:text-zinc-300 transition-colors min-h-[44px] min-w-[44px] px-2"
+                aria-label={`Select all services in ${group.name}`}
               >
-                {/* Optional: "Select All" button for category */}
                 <Checkbox
                   checked={
                     selectedCount === group.services.length &&
                     group.services.length > 0
                   }
                   onCheckedChange={() => handleToggleGroup(group)}
-                  className="mr-2"
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  className="mr-1 pointer-events-none"
                 />
-                <Label
-                  className="text-xs text-zinc-500 cursor-pointer"
-                  onClick={() => handleToggleGroup(group)}
-                >
-                  Select All
-                </Label>
-              </div>
+                Select All
+              </button>
             </div>
 
             <AccordionContent>

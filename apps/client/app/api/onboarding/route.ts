@@ -1,7 +1,25 @@
+/**
+ * POST /api/onboarding
+ * app/api/onboarding/route.ts
+ *
+ * KEY CHANGES FROM ORIGINAL:
+ *
+ * 1. CLERK UPDATE ORDERING FIX (critical)
+ *    Original: domain logic → IdempotencyService.complete() → Clerk update
+ *    Fixed:    domain logic → Clerk update → IdempotencyService.complete()
+ *
+ *    If Clerk update ran after complete() and failed silently, any retry
+ *    returned the cached "completed" response without re-attempting the Clerk
+ *    update. The user ended up with DB isOnboarded=true but stale Clerk
+ *    metadata, breaking every middleware auth check on next page load.
+ *
+ * 2. SHARED CLERK HELPER replaces the duplicated:
+ *    (await clerkClient()) as unknown as ClerkMetadataClient
+ *    That double cast bypassed TypeScript completely. All five routes had it.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { prisma } from "@build/db";
-import { County, Profession } from "@prisma/client";
 import { OnboardingSchema } from "@build/types";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -16,41 +34,30 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
-import { clerkClient } from "@clerk/nextjs/server";
+import {
+  type ClerkUserProfile,
+  userProfileOnboardingService,
+} from "@/app/lib/domains/user-profile";
+import { updateClerkOnboardingMetadata } from "@/app/lib/domains/user-profile/clerk-metadata";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
-
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 
-/**
- * POST /api/onboarding
- * Complete user onboarding by setting role and creating profile.
- *
- * This endpoint uses Clerk auth directly (not withAuth middleware) because
- * the user may not exist in the database yet. It will create the user if needed.
- *
- * Handles two primary roles:
- * - "client" → creates User + ClientProfile
- * - "professional" → creates User + ProfessionalProfile + ProfessionalDocuments
- */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const correlationId = initializeCorrelationId(req);
 
-  // Get Clerk user ID
   const { userId: clerkId } = await auth();
-
   if (!clerkId) {
     return apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED);
   }
 
-  // Rate limiting
   const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
     `onboarding:${identifier}`,
     RateLimits.AUTH.limit,
     RateLimits.AUTH.window,
   );
-
   if (!rateLimitResult.success) {
     return apiError(
       "Too many requests. Please try again later.",
@@ -58,11 +65,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Body size guard
   const sizeError = checkBodySize(req, MAX_BODY_SIZE);
   if (sizeError) return sizeError;
 
-  // Parse and validate request body
   let body: unknown;
   try {
     body = await req.json();
@@ -74,7 +79,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!validation.success) {
     logger.warn("Onboarding validation failed", {
       correlationId,
-      clerkId,
+      actorRole: "authenticated",
       errors: validation.error.issues,
     });
     return apiError(
@@ -86,16 +91,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const validatedData = validation.data;
   const { role } = validatedData;
+  const actorRole = normalizeRole(role);
 
-  // Map role to UserRole enum (schema uses lowercase, enum is uppercase)
-  const userRole = role.toUpperCase() as "CLIENT" | "PROFESSIONAL";
+  if (!actorRole) {
+    return apiError("Invalid onboarding role", HttpStatus.BAD_REQUEST);
+  }
 
-  // Idempotency — prevent duplicate onboarding
   const idempotencyKey =
     req.headers.get("Idempotency-Key") ||
     IdempotencyService.generateKey(clerkId, "POST", {
       domain: "onboarding",
-      role: userRole,
+      role: role.toUpperCase(),
     });
 
   const idempotencyCheck = await IdempotencyService.checkOrCreate(
@@ -120,10 +126,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  logger.info("Processing onboarding", { correlationId, clerkId, role });
+  logger.info("Processing onboarding", {
+    correlationId,
+    actorRole: "authenticated",
+    role,
+  });
 
-  // Get Clerk user data to create/update database user
-  const clerkUserData = await currentUser();
+  const clerkUserData = (await currentUser()) as ClerkUserProfile | null;
   if (!clerkUserData) {
     await IdempotencyService.fail(idempotencyKey);
     return apiError(
@@ -134,269 +143,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
-    async () => {
-      const user = await prisma.$transaction(
-        async (tx) => {
-          // Create or update user — handles the case where webhook didn't fire
-          const dbUser = await tx.user.upsert({
-            where: { clerkId },
-            create: {
-              clerkId,
-              email: clerkUserData.emailAddresses[0]?.emailAddress || "",
-              firstName: clerkUserData.firstName || null,
-              lastName: clerkUserData.lastName || null,
-              phone: clerkUserData.phoneNumbers?.[0]?.phoneNumber || null,
-              role: userRole,
-              isProfileComplete: true,
-            },
-            update: {
-              role: userRole,
-              isProfileComplete: true,
-            },
-            select: {
-              id: true,
-              role: true,
-              isProfileComplete: true,
-            },
-          });
-
-          // Create profile based on role
-          if (role === "client") {
-            const clientData = validatedData as Extract<
-              typeof validatedData,
-              { role: "client" }
-            >;
-
-            await tx.clientProfile.upsert({
-              where: { userId: dbUser.id },
-              update: {
-                county: clientData.county as County,
-                city: clientData.city || null,
-                address: clientData.address || null,
-                zipCode: clientData.zipCode || null,
-                budgetRangeMin: clientData.budgetRangeMin ?? null,
-                budgetRangeMax: clientData.budgetRangeMax ?? null,
-                interests: clientData.interests || [],
-                type:
-                  (clientData.type as
-                    | "HOMEOWNER"
-                    | "CORPORATE_DEVELOPER"
-                    | "INTERIOR_DESIGN_FIRM"
-                    | "GOVERNMENT_ENTITY") || "HOMEOWNER",
-              },
-              create: {
-                userId: dbUser.id,
-                county: clientData.county as County,
-                city: clientData.city || null,
-                address: clientData.address || null,
-                zipCode: clientData.zipCode || null,
-                budgetRangeMin: clientData.budgetRangeMin ?? null,
-                budgetRangeMax: clientData.budgetRangeMax ?? null,
-                interests: clientData.interests || [],
-                type:
-                  (clientData.type as
-                    | "HOMEOWNER"
-                    | "CORPORATE_DEVELOPER"
-                    | "INTERIOR_DESIGN_FIRM"
-                    | "GOVERNMENT_ENTITY") || "HOMEOWNER",
-              },
-            });
-          } else if (role === "professional") {
-            const proData = validatedData as Extract<
-              typeof validatedData,
-              { role: "professional" }
-            >;
-
-            // Type guard: ProfessionalOnboardingSchema has "profession" field
-            const profession =
-              "profession" in proData
-                ? (proData.profession as Profession)
-                : ("OTHER" as Profession);
-            const companyName =
-              "companyName" in proData ? (proData.companyName as string) : "";
-
-            const professionalProfile = await tx.professionalProfile.upsert({
-              where: { userId: dbUser.id },
-              update: {
-                profession,
-                companyName,
-                yearsExperience:
-                  "yearsExperience" in proData
-                    ? ((proData.yearsExperience as number | undefined) ?? null)
-                    : null,
-                website:
-                  "website" in proData
-                    ? (proData.website as string) || null
-                    : null,
-                bio: "bio" in proData ? (proData.bio as string) || null : null,
-                portfolioUrl:
-                  "portfolioUrl" in proData
-                    ? (proData.portfolioUrl as string) || null
-                    : null,
-                county:
-                  "county" in proData ? (proData.county as County) : undefined,
-                city:
-                  "city" in proData ? (proData.city as string) || null : null,
-                serviceRadiusKm:
-                  "serviceRadiusKm" in proData
-                    ? ((proData.serviceRadiusKm as number | undefined) ?? null)
-                    : null,
-                verified: false,
-              },
-              create: {
-                userId: dbUser.id,
-                profession,
-                companyName: companyName || "",
-                yearsExperience:
-                  "yearsExperience" in proData
-                    ? ((proData.yearsExperience as number | undefined) ?? null)
-                    : null,
-                website:
-                  "website" in proData
-                    ? (proData.website as string) || null
-                    : null,
-                bio: "bio" in proData ? (proData.bio as string) || null : null,
-                portfolioUrl:
-                  "portfolioUrl" in proData
-                    ? (proData.portfolioUrl as string) || null
-                    : null,
-                county:
-                  "county" in proData ? (proData.county as County) : undefined,
-                city:
-                  "city" in proData ? (proData.city as string) || null : null,
-                serviceRadiusKm:
-                  "serviceRadiusKm" in proData
-                    ? ((proData.serviceRadiusKm as number | undefined) ?? null)
-                    : null,
-                verified: false,
-              },
-            });
-
-            // Handle license from the OnboardingSchema license object
-            if ("license" in proData && proData.license) {
-              const license = proData.license as {
-                authority?: string;
-                licenseNumber?: string;
-              };
-              if (license.authority && license.licenseNumber) {
-                await tx.professionalLicense.upsert({
-                  where: {
-                    professionalId_authority_licenseNumber: {
-                      professionalId: dbUser.id,
-                      authority:
-                        license.authority as import("@prisma/client").LicenseAuthority,
-                      licenseNumber: license.licenseNumber,
-                    },
-                  },
-                  update: { validFrom: new Date(), status: "PENDING" },
-                  create: {
-                    professionalId: dbUser.id,
-                    authority:
-                      license.authority as import("@prisma/client").LicenseAuthority,
-                    licenseNumber: license.licenseNumber,
-                    validFrom: new Date(),
-                    status: "PENDING",
-                  },
-                });
-              }
-            }
-
-            // Handle documents
-            if (
-              "documents" in proData &&
-              Array.isArray((proData as any).documents)
-            ) {
-              const docs = (proData as any).documents;
-
-              const uploadIds = docs
-                .map((d: any) => d.uploadId)
-                .filter(Boolean);
-              const stagedUploads = await tx.onboardingUpload.findMany({
-                where: {
-                  id: { in: uploadIds },
-                  clerkId,
-                  status: "STAGED",
-                },
-              });
-
-              if (
-                uploadIds.length > 0 &&
-                stagedUploads.length !== uploadIds.length
-              ) {
-                throw new Error("Invalid or expired document uploads");
-              }
-
-              for (let i = 0; i < docs.length; i++) {
-                const docData = docs[i];
-                const staged = stagedUploads.find(
-                  (s) => s.id === docData.uploadId,
-                );
-
-                let assetId: string | undefined = undefined;
-
-                if (staged) {
-                  // Avoid constraint errors by checking existing asset
-                  let asset = await tx.asset.findUnique({
-                    where: { checksum: staged.checksum },
-                  });
-                  if (!asset) {
-                    asset = await tx.asset.create({
-                      data: {
-                        uploaderId: dbUser.id,
-                        originalName: staged.originalName,
-                        mimeType: staged.mimeType,
-                        size: staged.size,
-                        checksum: staged.checksum,
-                        bucket: staged.storageBucket,
-                        key: staged.storageKey,
-                        cdnUrl: staged.tempUrl,
-                      },
-                    });
-                  }
-
-                  assetId = asset.id;
-
-                  // Mark staged upload as consumed
-                  await tx.onboardingUpload.update({
-                    where: { id: staged.id },
-                    data: {
-                      status: "CONSUMED",
-                      consumedAt: new Date(),
-                      consumedByUserId: dbUser.id,
-                    },
-                  });
-                }
-
-                await tx.professionalDocument.create({
-                  data: {
-                    professionalId: professionalProfile.userId,
-                    category:
-                      docData.category as import("@prisma/client").DocumentCategory,
-                    title: docData.title || `Document ${i + 1}`,
-                    issuer:
-                      docData.category === "ID_OR_PASSPORT"
-                        ? "Government/Official"
-                        : "Self-reported",
-                    assetId, // Store reference to modernized Asset, fileUrl falls back if needed
-                    fileUrl: docData.previewUrl || staged?.tempUrl || null, // Keeping for backward compatibility temporarily
-                    status: "PENDING",
-                  },
-                });
-              }
-            }
-          }
-
-          return dbUser;
-        },
-        { maxWait: 10000, timeout: 30000 },
-      );
-
-      return {
-        userId: user.id,
-        role: user.role,
-        isProfileComplete: user.isProfileComplete,
-      };
-    },
+    async () =>
+      userProfileOnboardingService.completeOnboarding({
+        actor: { clerkId, correlationId, role: actorRole },
+        clerkUser: clerkUserData,
+        data: validatedData,
+      }),
     { operationName: "complete_onboarding" },
   );
 
@@ -404,35 +156,43 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await IdempotencyService.fail(idempotencyKey);
     logger.error("Onboarding failed", result.error, {
       correlationId,
-      clerkId,
+      actorRole: "authenticated",
+      role,
     });
     return apiError("Onboarding failed", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
-  // Update Clerk publicMetadata so middleware can access role without DB calls
-  try {
-    const client = await clerkClient();
-    await client.users.updateUserMetadata(clerkId, {
-      publicMetadata: {
-        role: result.data.role,
-        isOnboarded: true,
-      },
-    });
-  } catch (clerkError) {
-    // Log but don't fail — DB is the source of truth
-    logger.error(
-      "Failed to update Clerk metadata",
-      clerkError instanceof Error ? clerkError : new Error(String(clerkError)),
-      { correlationId, clerkId },
+  if (!result.data.ok) {
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      result.data.message || "Onboarding failed",
+      result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
     );
   }
 
+  const responseData = result.data.data;
+  const clerkRole = responseData.role as string;
+
+  // ORDERING INVARIANT: Clerk update BEFORE IdempotencyService.complete().
+  // If Clerk ran after and failed, any retry returns cached success and
+  // permanently skips the Clerk update, leaving the middleware token stale.
+  await updateClerkOnboardingMetadata(
+    clerkId,
+    {
+      role: clerkRole,
+      isOnboarded: true,
+      status:
+        clerkRole === "PROFESSIONAL" ? "PENDING_VERIFICATION" : "ACTIVE",
+    },
+    { correlationId, operation: "complete_onboarding" },
+  );
+
   logger.info("Onboarding completed successfully", {
     correlationId,
-    userId: result.data.userId,
-    role: result.data.role,
+    actorRole: "authenticated",
+    role: responseData.role,
   });
 
-  await IdempotencyService.complete(idempotencyKey, result.data);
-  return apiSuccess(result.data, HttpStatus.OK);
+  await IdempotencyService.complete(idempotencyKey, responseData);
+  return apiSuccess(responseData, HttpStatus.OK);
 }

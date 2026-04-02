@@ -44,7 +44,12 @@ const envGroups: EnvGroup[] = [
     variables: [
       { name: "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", required: true },
       { name: "CLERK_SECRET_KEY", required: true },
-      { name: "CLERK_WEBHOOK_SECRET", required: false },
+      {
+        name: "CLERK_WEBHOOK_SECRET",
+        required: process.env.NODE_ENV === "production",
+        errorMessage:
+          "CLERK_WEBHOOK_SECRET is required in production for webhook signature verification",
+      },
       {
         name: "NEXT_PUBLIC_CLERK_SIGN_IN_URL",
         required: false,
@@ -211,6 +216,16 @@ const envGroups: EnvGroup[] = [
         name: "ONBOARDING_UPLOAD_CLEANUP_CRON",
         required: false,
         default: "0 3 * * *",
+      },
+      {
+        name: "UPLOAD_PROCESS_INLINE",
+        required: false,
+        default: "false",
+      },
+      {
+        name: "UPLOAD_STATUS_TTL_SECONDS",
+        required: false,
+        default: "1800",
       },
       { name: "EXPORT_CLEANUP_BATCH_SIZE", required: false, default: "100" },
       { name: "EXPORT_CLEANUP_MAX_RETRIES", required: false, default: "3" },
@@ -477,6 +492,7 @@ function buildEnvConfig() {
 
     // Database
     databaseUrl: getStringEnv("DATABASE_URL"),
+    postgresUrl: getStringEnv("POSTGRES_URL", getStringEnv("DATABASE_URL")),
 
     // Redis
     redis: {
@@ -511,6 +527,10 @@ function buildEnvConfig() {
     // Services
     services: {
       messaging: getStringEnv("MESSAGING_SERVICE_URL", "http://localhost:3010"),
+      messagingPublic: getStringEnv(
+        "NEXT_PUBLIC_MESSAGING_SERVICE_URL",
+        "http://localhost:3010",
+      ),
       notification: getStringEnv(
         "NOTIFICATION_SERVICE_URL",
         "http://localhost:3011",
@@ -598,6 +618,11 @@ function buildEnvConfig() {
         "ONBOARDING_UPLOAD_CLEANUP_CRON",
         "0 3 * * *",
       ),
+      uploadProcessInline: getBooleanEnv(
+        "UPLOAD_PROCESS_INLINE",
+        isDev || isTest,
+      ),
+      uploadStatusTtlSeconds: getNumberEnv("UPLOAD_STATUS_TTL_SECONDS", 1800),
       exportCleanupBatchSize: getNumberEnv("EXPORT_CLEANUP_BATCH_SIZE", 100),
       exportCleanupMaxRetries: getNumberEnv("EXPORT_CLEANUP_MAX_RETRIES", 3),
       retentionBatchSize: getNumberEnv("RETENTION_BATCH_SIZE", 100),
@@ -635,24 +660,15 @@ function buildEnvConfig() {
 export const envConfig = buildEnvConfig();
 
 // ============================================
-// Auto-validate on import (development only)
+// Auto-validate on import (server runtime)
 // ============================================
 
 if (typeof window === "undefined" && process.env.NODE_ENV !== "test") {
-  // Only validate on server-side and not during tests
-  try {
-    // Validate critical groups only to avoid blocking startup
-    validateEnv(["clerk", "database", "urls"], false);
-  } catch {
-    // Log but don't block - full validation happens on demand
-    console.warn(
-      "⚠️  Some environment variables may be missing. Run validateEnv() for details.",
-    );
-  }
+  validateEnv(["clerk", "database", "urls", "encryption"]);
 }
 
-export const env = envConfig;
 export default envConfig;
 export function getEnvConfig() {
-  return buildEnvConfig();
+  return envConfig;
 }
+export const env = envConfig;

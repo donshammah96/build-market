@@ -222,7 +222,7 @@ export const POST = withRole(["ADMIN"])(async (
   if (!validation.success) {
     logger.warn("Service creation validation failed", {
       correlationId,
-      userId: dbUserId,
+      actorRole: "ADMIN",
       errors: validation.error.issues,
     });
     return apiError(
@@ -265,7 +265,7 @@ export const POST = withRole(["ADMIN"])(async (
 
   logger.info("Creating service category", {
     correlationId,
-    userId: dbUserId,
+    actorRole: "ADMIN",
     name,
   });
 
@@ -327,7 +327,7 @@ export const POST = withRole(["ADMIN"])(async (
 
   logger.info("Service category created successfully", {
     correlationId,
-    userId: dbUserId,
+    actorRole: "ADMIN",
     serviceId: service.id,
   });
 

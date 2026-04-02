@@ -17,17 +17,30 @@ import {
   ThreadQuerySchema,
   CreateThreadSchema,
   MESSAGING_CONFIG,
+  type MessagingActor,
   messagingService,
-} from "@build/messaging-server";
+} from "@/app/lib/domains/messaging";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
+
+function toMessagingActor(context: {
+  dbUserId: string;
+  userRole: unknown;
+}): MessagingActor {
+  return {
+    userId: context.dbUserId,
+    role: normalizeRole(String(context.userRole)) ?? null,
+  };
+}
 
 /**
  * GET /api/messaging/conversations
  */
 export const GET = withAuth(
-  async (req: NextRequest, { dbUserId }): Promise<NextResponse> => {
+  async (req: NextRequest, context): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
 
     const identifier = getRateLimitIdentifier(req);
     const rateLimitResult = await checkRateLimit(
@@ -61,14 +74,14 @@ export const GET = withAuth(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => messagingService.listConversations(dbUserId, query),
+      () => messagingService.listConversations(actor, query),
       { operationName: "list_threads" },
     );
 
     if (!result.success) {
       logger.error("Failed to fetch threads", result.error, {
         correlationId,
-        userId: dbUserId,
+        actorRole: actor.role,
       });
       return apiError(
         "Failed to fetch conversations",
@@ -91,8 +104,9 @@ export const GET = withAuth(
  * POST /api/messaging/conversations
  */
 export const POST = withAuth(
-  async (req: NextRequest, { dbUserId }): Promise<NextResponse> => {
+  async (req: NextRequest, context): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
 
     const sizeError = checkBodySize(req, MESSAGING_CONFIG.MAX_BODY_SIZE);
     if (sizeError) return sizeError;
@@ -120,7 +134,7 @@ export const POST = withAuth(
 
     const idempotencyKey =
       req.headers.get("Idempotency-Key") ||
-      IdempotencyService.generateKey(dbUserId, "POST", {
+      IdempotencyService.generateKey(actor.userId, "POST", {
         domain: "messaging-thread",
         participants: [...input.participantIds].sort(),
         type: input.type,
@@ -129,7 +143,7 @@ export const POST = withAuth(
     const idempotencyCheck = await IdempotencyService.checkOrCreate(
       idempotencyKey,
       "messaging",
-      dbUserId,
+      actor.userId,
       "POST",
     );
     if (!idempotencyCheck)
@@ -155,7 +169,7 @@ export const POST = withAuth(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => messagingService.createConversation(dbUserId, input),
+      () => messagingService.createConversation(actor, input),
       { operationName: "create_thread" },
     );
 
@@ -163,7 +177,7 @@ export const POST = withAuth(
       await IdempotencyService.fail(idempotencyKey).catch(() => {});
       logger.error("Failed to create thread", result.error, {
         correlationId,
-        userId: dbUserId,
+        actorRole: actor.role,
       });
       return apiError(
         "Failed to create conversation",

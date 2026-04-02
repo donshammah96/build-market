@@ -186,6 +186,59 @@ describe("professional documents routes", () => {
     expect(response.status).toBe(403);
   });
 
+  it("emits required observability keys for documents list success", async () => {
+    mockDocumentsService.getDocuments.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
+
+    const response = await listDocumentsRoute(
+      new NextRequest(
+        "http://localhost:3500/api/professional-portal/documents",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      "Professional documents adapter outcome",
+      expect.objectContaining({
+        correlationId: "test-correlation-id",
+        operationName: "get_professional_documents",
+        httpMethod: "GET",
+        routePattern: "/api/professional-portal/documents",
+        actorRole: "professional",
+        outcome: "succeeded",
+        httpStatus: 200,
+        durationMs: expect.any(Number),
+      }),
+    );
+  });
+
+  it("emits required observability keys for documents list failure", async () => {
+    mockDocumentsService.getDocuments.mockRejectedValue(new Error("boom"));
+
+    const response = await listDocumentsRoute(
+      new NextRequest(
+        "http://localhost:3500/api/professional-portal/documents",
+      ),
+    );
+
+    expect(response.status).toBe(500);
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      "Professional documents adapter outcome",
+      expect.objectContaining({
+        correlationId: "test-correlation-id",
+        operationName: "get_professional_documents",
+        httpMethod: "GET",
+        routePattern: "/api/professional-portal/documents",
+        actorRole: "professional",
+        outcome: "failed",
+        httpStatus: 500,
+        durationMs: expect.any(Number),
+      }),
+    );
+  });
+
   it("returns document detail from the documents domain", async () => {
     mockDocumentsService.getDocumentById.mockResolvedValue({
       ok: true,

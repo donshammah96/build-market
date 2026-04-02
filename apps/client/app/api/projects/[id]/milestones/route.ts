@@ -17,10 +17,24 @@ import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { CreateMilestoneSchema } from "@/app/lib/validation/projects-validation";
 import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
 import { projectsService } from "@/app/lib/domains/projects/service";
+import type { ProjectActorRole } from "@/app/lib/domains/projects/contracts";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
 
 type ProjectParams = { id: string };
+
+function resolveProjectActorRole(userRole: unknown): ProjectActorRole | null {
+  const normalized = normalizeRole(userRole);
+  if (
+    normalized === "ADMIN" ||
+    normalized === "PROFESSIONAL" ||
+    normalized === "CLIENT"
+  ) {
+    return normalized;
+  }
+  return null;
+}
 
 /**
  * GET /api/professional-portal/projects/[id]/milestones
@@ -52,13 +66,15 @@ export const GET = withAuth<ProjectParams>(
       );
     }
 
+    const actorRole = resolveProjectActorRole(userRole);
+    if (!actorRole) {
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    }
+
     const actor = {
       userId: dbUserId,
       clerkId,
-      role: String(userRole).toLowerCase() as
-        | "professional"
-        | "client"
-        | "admin",
+      role: actorRole,
     };
 
     const resilientExecutor = getResilientExecutor();
@@ -187,13 +203,16 @@ export const POST = withAuth<ProjectParams>(
       title: milestoneData.title,
     });
 
+    const actorRole = resolveProjectActorRole(userRole);
+    if (!actorRole) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    }
+
     const actor = {
       userId: dbUserId,
       clerkId,
-      role: String(userRole).toLowerCase() as
-        | "professional"
-        | "client"
-        | "admin",
+      role: actorRole,
     };
 
     const resilientExecutor = getResilientExecutor();

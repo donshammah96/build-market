@@ -15,19 +15,32 @@ import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import {
   UpdateMessageSchema,
   MESSAGING_CONFIG,
+  type MessagingActor,
   messagingService,
-} from "@build/messaging-server";
+} from "@/app/lib/domains/messaging";
 import { extractExpectedVersion } from "@/app/lib/api/request-utils";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
 type MessageParams = { id: string };
+
+function toMessagingActor(context: {
+  dbUserId: string;
+  userRole: unknown;
+}): MessagingActor {
+  return {
+    userId: context.dbUserId,
+    role: normalizeRole(String(context.userRole)) ?? null,
+  };
+}
 
 /**
  * GET /api/messaging/messages/[id]
  */
 export const GET = withAuth<MessageParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
-    const correlationId = initializeCorrelationId(req);
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
+    initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
     if (!params?.id || !isValidId(params.id))
       return apiError("Invalid message ID", HttpStatus.BAD_REQUEST);
     const messageId = params.id;
@@ -43,7 +56,7 @@ export const GET = withAuth<MessageParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => messagingService.getMessage(dbUserId, messageId),
+      () => messagingService.getMessage(actor, messageId),
       { operationName: "get_message" },
     );
 
@@ -69,8 +82,9 @@ export const GET = withAuth<MessageParams>(
  * PATCH /api/messaging/messages/[id]
  */
 export const PATCH = withAuth<MessageParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
     if (!params?.id || !isValidId(params.id))
       return apiError("Invalid message ID", HttpStatus.BAD_REQUEST);
     const messageId = params.id;
@@ -106,8 +120,7 @@ export const PATCH = withAuth<MessageParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () =>
-        messagingService.updateMessage(dbUserId, messageId, validation.data),
+      () => messagingService.updateMessage(actor, messageId, validation.data),
       { operationName: "update_message" },
     );
 
@@ -138,8 +151,9 @@ export const PATCH = withAuth<MessageParams>(
  * DELETE /api/messaging/messages/[id]
  */
 export const DELETE = withAuth<MessageParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
     if (!params?.id || !isValidId(params.id))
       return apiError("Invalid message ID", HttpStatus.BAD_REQUEST);
     const messageId = params.id;
@@ -165,7 +179,7 @@ export const DELETE = withAuth<MessageParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => messagingService.deleteMessage(dbUserId, messageId),
+      () => messagingService.deleteMessage(actor, messageId),
       { operationName: "delete_message" },
     );
 

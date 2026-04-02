@@ -1,12 +1,3 @@
-/**
- * Messaging Client (browser-safe)
- *
- * - No Server Action imports
- * - Uses REST fetch() against /api/messaging endpoints
- * - Derives input types from zod validation
- * - Normalizes ApiResponse<T>
- */
-
 import type {
   ApiResponse,
   PaginatedResponse,

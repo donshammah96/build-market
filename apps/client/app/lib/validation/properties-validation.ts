@@ -89,7 +89,7 @@ const LegacyFileReferenceSchema = z.object({
 });
 
 export const PropertyAttachmentInputSchema = LegacyFileReferenceSchema.extend({
-  title: z.string().min(1, "Attachment title is required").max(200),
+  title: z.string().min(1, "Attachment title is required").max(200).optional(),
   type: AttachmentTypeSchema,
   assetId: z.string().uuid("Asset ID must be a valid UUID").optional(),
   notes: z.string().max(2000).optional(),
@@ -143,6 +143,28 @@ export const PropertyDocumentInputSchema = LegacyFileReferenceSchema.extend({
     });
   }
 });
+
+export const createDocumentSchema = z.object({
+  type: PropertyDocumentTypeSchema,
+  assetId: z.string().uuid("Invalid asset ID"),
+  notes: z.string().max(2000).optional(),
+});
+
+export const updateDocumentSchema = z
+  .object({
+    type: PropertyDocumentTypeSchema.optional(),
+    assetId: z.string().uuid("Invalid asset ID").optional(),
+    notes: z.string().max(2000).optional(),
+  })
+  .refine(
+    (value) =>
+      value.type !== undefined ||
+      value.assetId !== undefined ||
+      value.notes !== undefined,
+    {
+      message: "At least one document field must be provided",
+    },
+  );
 
 // Coordinates schema for latitude/longitude
 const CoordinatesSchema = z

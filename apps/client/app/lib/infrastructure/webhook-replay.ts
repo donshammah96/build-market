@@ -1,5 +1,5 @@
 import { createRedisClient, getRedisClient } from "@build/redis";
-import { getEnvConfig } from "@/app/lib/infrastructure/env";
+import { env } from "@/app/lib/infrastructure/env";
 
 type ReplayClaimResult =
   | { status: "accepted"; deliveryId: string }
@@ -13,8 +13,6 @@ function getReplayKeys(deliveryId: string) {
 }
 
 async function getReplayClient() {
-  const env = getEnvConfig();
-
   if (env.isProd) {
     if (!env.redis.enabled) {
       throw new Error(
@@ -48,7 +46,6 @@ export function isWebhookTimestampFresh(
 export async function claimClerkWebhookDelivery(
   deliveryId: string,
 ): Promise<ReplayClaimResult> {
-  const env = getEnvConfig();
   const client = await getReplayClient();
   const keys = getReplayKeys(deliveryId);
 
@@ -74,11 +71,15 @@ export async function claimClerkWebhookDelivery(
 export async function markClerkWebhookDeliveryProcessed(
   deliveryId: string,
 ): Promise<void> {
-  const env = getEnvConfig();
   const client = await getReplayClient();
   const keys = getReplayKeys(deliveryId);
 
-  await client.set(keys.processed, "processed", "EX", env.clerk.processedTtlSeconds);
+  await client.set(
+    keys.processed,
+    "processed",
+    "EX",
+    env.clerk.processedTtlSeconds,
+  );
   await client.del(keys.processing);
 }
 

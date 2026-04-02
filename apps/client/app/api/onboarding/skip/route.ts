@@ -1,7 +1,18 @@
+/**
+ * POST /api/onboarding/skip
+ * app/api/onboarding/skip/route.ts
+ *
+ * KEY CHANGES FROM ORIGINAL:
+ *
+ * 1. CLERK UPDATE ORDERING FIX (critical)
+ *    Original: domain logic → IdempotencyService.complete() → Clerk update
+ *    Fixed:    domain logic → Clerk update → IdempotencyService.complete()
+ *
+ * 2. SHARED CLERK HELPER replaces (await clerkClient()) as unknown as ClerkMetadataClient
+ */
+
 import { NextRequest, NextResponse } from "next/server";
-import { auth, currentUser, clerkClient } from "@clerk/nextjs/server";
-import { prisma } from "@build/db";
-import { County } from "@prisma/client";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { apiError, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
@@ -15,37 +26,28 @@ import {
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import {
+  type ClerkUserProfile,
+  userProfileOnboardingService,
+} from "@/app/lib/domains/user-profile";
+import { updateClerkOnboardingMetadata } from "@/app/lib/domains/user-profile/clerk-metadata";
 
 const logger = getClientLogger();
 
-/**
- * POST /api/onboarding/skip
- * Skip onboarding for homeowners — creates minimal profile and redirects to dashboard.
- *
- * This allows homeowners to go directly to their dashboard without filling the
- * onboarding form. They can complete their profile later from the client portal.
- *
- * This endpoint uses Clerk auth directly (not withAuth middleware) because
- * the user may not exist in the database yet. It will create the user if needed.
- */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const correlationId = initializeCorrelationId(req);
 
-  // Get Clerk user ID
   const { userId: clerkId } = await auth();
-
   if (!clerkId) {
     return apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED);
   }
 
-  // Rate limiting
   const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
     `onboarding-skip:${identifier}`,
     RateLimits.AUTH.limit,
     RateLimits.AUTH.window,
   );
-
   if (!rateLimitResult.success) {
     return apiError(
       "Too many requests. Please try again later.",
@@ -53,7 +55,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Idempotency — prevent duplicate skip actions
   const idempotencyKey =
     req.headers.get("Idempotency-Key") ||
     IdempotencyService.generateKey(clerkId, "POST", {
@@ -84,11 +85,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   logger.info("Processing skip onboarding request", {
     correlationId,
-    clerkId,
+    actorRole: "authenticated",
   });
 
-  // Get Clerk user data to create/update database user
-  const clerkUserData = await currentUser();
+  const clerkUserData = (await currentUser()) as ClerkUserProfile | null;
   if (!clerkUserData) {
     await IdempotencyService.fail(idempotencyKey);
     return apiError(
@@ -99,83 +99,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
-    async () => {
-      // Pre-transaction guard: check business rules
-      const existingUser = await prisma.user.findUnique({
-        where: { clerkId },
-        select: {
-          id: true,
-          isProfileComplete: true,
-          professionalProfile: { select: { userId: true } },
-        },
-      });
-
-      // Professionals should use the professional onboarding flow
-      if (existingUser?.professionalProfile) {
-        return {
-          _error: true as const,
-          message:
-            "Professionals cannot skip onboarding. Please complete the full form.",
-          status: HttpStatus.BAD_REQUEST,
-        };
-      }
-
-      // Already completed
-      if (existingUser?.isProfileComplete) {
-        return {
-          _error: true as const,
-          message: "Onboarding already completed",
-          status: HttpStatus.CONFLICT,
-        };
-      }
-
-      // Create user and client profile in a transaction
-      const user = await prisma.$transaction(
-        async (tx) => {
-          const dbUser = await tx.user.upsert({
-            where: { clerkId },
-            create: {
-              clerkId,
-              email: clerkUserData.emailAddresses[0]?.emailAddress || "",
-              firstName: clerkUserData.firstName || null,
-              lastName: clerkUserData.lastName || null,
-              phone: clerkUserData.phoneNumbers?.[0]?.phoneNumber || null,
-              role: "CLIENT",
-              isProfileComplete: false,
-            },
-            update: {
-              role: "CLIENT",
-              isProfileComplete: false,
-            },
-            select: { id: true, role: true, isProfileComplete: true },
-          });
-
-          // Create empty client profile with required defaults
-          await tx.clientProfile.upsert({
-            where: { userId: dbUser.id },
-            update: {},
-            create: {
-              userId: dbUser.id,
-              county: "NAIROBI" as County,
-              preferences: {},
-            },
-          });
-
-          return dbUser;
-        },
-        { maxWait: 10000, timeout: 30000 },
-      );
-
-      return {
-        userId: user.id,
-        role: user.role,
-        isProfileComplete: user.isProfileComplete,
-        skipped: true,
-        redirectTo: "/dashboard",
-        message:
-          "Onboarding skipped. You can complete your profile from the dashboard.",
-      };
-    },
+    async () =>
+      userProfileOnboardingService.skipClientOnboarding({
+        actor: { clerkId, correlationId, role: "CLIENT" },
+        clerkUser: clerkUserData,
+      }),
     { operationName: "skip_onboarding" },
   );
 
@@ -183,45 +111,35 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await IdempotencyService.fail(idempotencyKey);
     logger.error("Skip onboarding failed", result.error, {
       correlationId,
-      clerkId,
+      actorRole: "authenticated",
     });
     return apiError("Skip onboarding failed", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
-  // Handle business-rule errors returned from the executor
-  if ("_error" in result.data && result.data._error) {
+  if (!result.data.ok) {
     await IdempotencyService.fail(idempotencyKey);
     return apiError(
-      (result.data as { message: string }).message,
-      (result.data as { status: number }).status,
+      result.data.message || "Skip onboarding failed",
+      result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
     );
   }
 
-  // Update Clerk metadata so middleware can detect onboarding is complete
-  try {
-    const client = await clerkClient();
-    await client.users.updateUserMetadata(clerkId, {
-      publicMetadata: {
-        role: "CLIENT",
-        isOnboarded: true,
-      },
-    });
-  } catch (clerkError) {
-    // Log but don't fail — DB is source of truth
-    logger.error(
-      "Failed to update Clerk metadata during skip",
-      clerkError instanceof Error ? clerkError : new Error(String(clerkError)),
-      { correlationId, clerkId },
-    );
-  }
+  const responseData = result.data.data;
+
+  // ORDERING INVARIANT: Clerk update BEFORE IdempotencyService.complete().
+  await updateClerkOnboardingMetadata(
+    clerkId,
+    { role: "CLIENT", isOnboarded: true, status: "ACTIVE" },
+    { correlationId, operation: "skip_onboarding" },
+  );
 
   logger.info("Skip onboarding completed successfully", {
     correlationId,
-    userId: (result.data as { userId: string }).userId,
+    actorRole: "authenticated",
     role: "CLIENT",
     skipped: true,
   });
 
-  await IdempotencyService.complete(idempotencyKey, result.data);
-  return apiSuccess(result.data, HttpStatus.OK);
+  await IdempotencyService.complete(idempotencyKey, responseData);
+  return apiSuccess(responseData, HttpStatus.OK);
 }

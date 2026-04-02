@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, MapPin, Store, Home } from "lucide-react";
+import { Loader2, MapPin, Store, Home, FileCheck } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
@@ -179,6 +179,28 @@ export default function SettingsPage() {
                 </Button>
               </div>
               <Store className="h-8 w-8 text-zinc-400" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border border-zinc-200 shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-zinc-900 mb-1">
+                  Credentials & Verification
+                </h3>
+                <p className="text-sm text-zinc-600 mb-4">
+                  Manage your documents, certificates, and professional licenses
+                </p>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/professional-portal/settings/credentials">
+                    <FileCheck className="mr-2 h-4 w-4" />
+                    Manage Credentials
+                  </Link>
+                </Button>
+              </div>
+              <FileCheck className="h-8 w-8 text-zinc-400" />
             </div>
           </CardContent>
         </Card>

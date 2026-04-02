@@ -125,4 +125,4 @@ From `@/app/lib/validation/projects-validation`:
 - **Validation schemas**: `@/app/lib/validation/projects-validation`
 - **Config**: `@/app/lib/config/project.config` (PROJECT_CONFIG)
 - **Service**: `@/lib/services/projects`
-- **Project operations** (ownership, milestones): `@/app/lib/services/project-operations.service`
+- **Project operations** (ownership, milestones): `@/app/lib/domains/projects/operations`

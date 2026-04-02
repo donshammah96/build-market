@@ -1,7 +1,7 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { parseMiddlewareSessionMetadata } from "@build/auth-server";
+import { parseMiddlewareSessionMetadata } from "@build/auth-server/session-claims";
 import {
   isOnboardingRoute,
   isProfessionalRoute,
@@ -16,12 +16,15 @@ import {
   redirectToDashboardForRole,
   redirectToMaintenance,
   redirectToOnboarding,
+  redirectToProfessionalPendingVerification,
   redirectToProfessionalSignupClosed,
   redirectToRegistrationClosed,
   redirectToSignIn,
 } from "@/app/lib/security/middleware/redirect-policy";
 import { resolveSystemSettings } from "@/app/lib/security/middleware/system-settings-resolver";
 import { logMiddlewareDecision } from "@/app/lib/security/middleware/decision-log";
+import { env } from "@/app/lib/infrastructure/env";
+import { ROUTES } from "@/lib/links";
 
 // =============================================================================
 // Middleware
@@ -34,10 +37,7 @@ export default clerkMiddleware(async (auth, req: Request) => {
 
   // --- DEV AUTH BYPASS ---
   // Allow all routes during local offline development without triggering Clerk checks
-  if (
-    process.env.BYPASS_AUTH === "true" &&
-    process.env.NODE_ENV === "development"
-  ) {
+  if (env.auth.bypassEnabled && env.isDev) {
     logMiddlewareDecision(nextReq, "mw_dev_bypass");
     return NextResponse.next();
   }
@@ -52,11 +52,13 @@ export default clerkMiddleware(async (auth, req: Request) => {
     if (settings.maintenanceMode) {
       const authObject = await auth();
       const metadata = parseMiddlewareSessionMetadata(authObject.sessionClaims);
-      const isAdmin = metadata?.role === "admin";
+      const isAdmin = String(metadata?.role ?? "").toUpperCase() === "ADMIN";
 
       const forwarded = nextReq.headers.get("x-forwarded-for");
       const clientIp =
-        forwarded?.split(",")[0]?.trim() ?? nextReq.headers.get("x-real-ip") ?? "";
+        forwarded?.split(",")[0]?.trim() ??
+        nextReq.headers.get("x-real-ip") ??
+        "";
       const isAllowedIp = settings.allowedIPs.includes(clientIp);
 
       if (!isAdmin && !isAllowedIp) {
@@ -79,9 +81,13 @@ export default clerkMiddleware(async (auth, req: Request) => {
         pathname.startsWith("/professional/sign-up") &&
         !settings.allowProfessionalSignup
       ) {
-        logMiddlewareDecision(nextReq, "mw_redirect_professional_signup_closed", {
-          reason: settingsResult.reason,
-        });
+        logMiddlewareDecision(
+          nextReq,
+          "mw_redirect_professional_signup_closed",
+          {
+            reason: settingsResult.reason,
+          },
+        );
         return redirectToProfessionalSignupClosed(nextReq);
       }
     }
@@ -97,6 +103,14 @@ export default clerkMiddleware(async (auth, req: Request) => {
   if (isOnboardingRoute(nextReq)) {
     const authObject = await auth();
     const { userId, sessionClaims } = authObject;
+    const claimsMetadata =
+      sessionClaims &&
+      typeof sessionClaims === "object" &&
+      "metadata" in sessionClaims &&
+      typeof (sessionClaims as { metadata?: unknown }).metadata === "object"
+        ? ((sessionClaims as { metadata?: Record<string, unknown> })
+            .metadata ?? {})
+        : undefined;
 
     // Unauthenticated users trying to access onboarding should sign in first
     if (!userId) {
@@ -109,10 +123,32 @@ export default clerkMiddleware(async (auth, req: Request) => {
     const metadata = parseMiddlewareSessionMetadata(sessionClaims);
     const status = await resolveOnboardingStatus(
       userId,
-      metadata,
+      {
+        ...metadata,
+        status:
+          typeof claimsMetadata?.status === "string"
+            ? claimsMetadata.status
+            : undefined,
+      },
       baseUrl,
       "lenient",
     );
+
+    if (
+      status.role === "PROFESSIONAL" &&
+      status.status === "PENDING_VERIFICATION"
+    ) {
+      logMiddlewareDecision(
+        nextReq,
+        "mw_redirect_professional_pending_verification",
+        {
+          routeClass: "onboarding",
+          source: status.source,
+          status: status.status,
+        },
+      );
+      return redirectToProfessionalPendingVerification(nextReq);
+    }
 
     // If already onboarded, redirect to their dashboard (prevent accessing onboarding again)
     if (status.isOnboarded) {
@@ -136,6 +172,14 @@ export default clerkMiddleware(async (auth, req: Request) => {
   if (isProtectedRoute(nextReq)) {
     const authObject = await auth();
     const { userId, sessionClaims } = authObject;
+    const claimsMetadata =
+      sessionClaims &&
+      typeof sessionClaims === "object" &&
+      "metadata" in sessionClaims &&
+      typeof (sessionClaims as { metadata?: unknown }).metadata === "object"
+        ? ((sessionClaims as { metadata?: Record<string, unknown> })
+            .metadata ?? {})
+        : undefined;
 
     // Redirect unauthenticated users to sign-in with return URL
     if (!userId) {
@@ -148,10 +192,51 @@ export default clerkMiddleware(async (auth, req: Request) => {
     const metadata = parseMiddlewareSessionMetadata(sessionClaims);
     const status = await resolveOnboardingStatus(
       userId,
-      metadata,
+      {
+        ...metadata,
+        status:
+          typeof claimsMetadata?.status === "string"
+            ? claimsMetadata.status
+            : undefined,
+      },
       baseUrl,
       "strict",
     );
+
+    const isPendingVerification =
+      status.role === "PROFESSIONAL" &&
+      status.status === "PENDING_VERIFICATION";
+    const isPendingVerificationRoute =
+      pathname === ROUTES.professionalPendingVerification;
+
+    if (isPendingVerification) {
+      if (!isPendingVerificationRoute) {
+        logMiddlewareDecision(
+          nextReq,
+          "mw_redirect_professional_pending_verification",
+          {
+            source: status.source,
+            status: status.status,
+            role: status.role,
+          },
+        );
+        return redirectToProfessionalPendingVerification(nextReq);
+      }
+
+      logMiddlewareDecision(nextReq, "mw_allow_professional_pending_verification", {
+        source: status.source,
+        status: status.status,
+      });
+      return NextResponse.next();
+    }
+
+    if (isPendingVerificationRoute && status.role === "PROFESSIONAL") {
+      logMiddlewareDecision(nextReq, "mw_redirect_professional_dashboard", {
+        source: status.source,
+        status: status.status,
+      });
+      return redirectToDashboardForRole(nextReq, status.role);
+    }
 
     // If user hasn't completed onboarding yet, redirect to onboarding
     if (status.state === "indeterminate" || !status.isOnboarded) {
@@ -164,7 +249,7 @@ export default clerkMiddleware(async (auth, req: Request) => {
     }
 
     // Check role-based access for professional routes
-    if (isProfessionalRoute(nextReq) && status.role !== "professional") {
+    if (isProfessionalRoute(nextReq) && status.role !== "PROFESSIONAL") {
       // Non-professionals trying to access professional routes
       logMiddlewareDecision(nextReq, "mw_redirect_dashboard", {
         routeClass: "professional",

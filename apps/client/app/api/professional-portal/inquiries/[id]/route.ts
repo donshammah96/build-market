@@ -14,11 +14,8 @@ import {
 import { checkBodySize, isValidId } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { UpdateInquirySchema } from "@/app/lib/validation/inquiries-validation";
-import {
-  getProfessionalInquiryById,
-  updateProfessionalInquiry,
-  deleteProfessionalInquiry,
-} from "@/lib/services/inquiries";
+import { inquiriesService } from "@/app/lib/domains/inquiries";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
@@ -32,7 +29,11 @@ type InquiryParams = { id: string };
  * GET /api/professional-portal/inquiries/[id]
  */
 export const GET = withAuth<InquiryParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     initializeCorrelationId(req);
     const inquiryId = params?.id;
 
@@ -52,7 +53,14 @@ export const GET = withAuth<InquiryParams>(
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      async () => getProfessionalInquiryById(dbUserId, inquiryId),
+      async () =>
+        inquiriesService.getProfessionalInquiryById(
+          {
+            userId: dbUserId,
+            role: normalizeRole(String(userRole)),
+          },
+          inquiryId,
+        ),
       { operationName: "get_property_inquiry" },
     );
 
@@ -70,10 +78,10 @@ export const GET = withAuth<InquiryParams>(
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-    if (data.success === false) {
+    if (!data.ok) {
       if (data.error === "not_found")
         return apiError("Inquiry not found", HttpStatus.NOT_FOUND);
-      return apiError("Unauthorized", HttpStatus.FORBIDDEN);
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
     return apiSuccess(data.data, HttpStatus.OK);
   },
@@ -83,7 +91,11 @@ export const GET = withAuth<InquiryParams>(
  * PATCH /api/professional-portal/inquiries/[id]
  */
 export const PATCH = withAuth<InquiryParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
     const inquiryId = params?.id;
 
@@ -159,12 +171,20 @@ export const PATCH = withAuth<InquiryParams>(
     logger.info("Updating property inquiry", {
       correlationId,
       inquiryId,
-      userId: dbUserId,
+      actorRole: normalizeRole(String(userRole)),
     });
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      async () => updateProfessionalInquiry(dbUserId, inquiryId, updateData),
+      async () =>
+        inquiriesService.updateProfessionalInquiry(
+          {
+            userId: dbUserId,
+            role: normalizeRole(String(userRole)),
+          },
+          inquiryId,
+          updateData,
+        ),
       { operationName: "update_property_inquiry" },
     );
 
@@ -177,11 +197,11 @@ export const PATCH = withAuth<InquiryParams>(
     }
 
     const data = result.data;
-    if (data.success === false) {
+    if (!data.ok) {
       await IdempotencyService.fail(idempotencyKey);
       if (data.error === "not_found")
         return apiError("Inquiry not found", HttpStatus.NOT_FOUND);
-      return apiError("Unauthorized", HttpStatus.FORBIDDEN);
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
     await IdempotencyService.complete(idempotencyKey, data.data);
     return apiSuccess(data.data, HttpStatus.OK);
@@ -192,7 +212,11 @@ export const PATCH = withAuth<InquiryParams>(
  * DELETE /api/professional-portal/inquiries/[id]
  */
 export const DELETE = withAuth<InquiryParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
     const inquiryId = params?.id;
 
@@ -241,12 +265,19 @@ export const DELETE = withAuth<InquiryParams>(
     logger.info("Deleting property inquiry", {
       correlationId,
       inquiryId,
-      userId: dbUserId,
+      actorRole: normalizeRole(String(userRole)),
     });
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      async () => deleteProfessionalInquiry(dbUserId, inquiryId),
+      async () =>
+        inquiriesService.deleteProfessionalInquiry(
+          {
+            userId: dbUserId,
+            role: normalizeRole(String(userRole)),
+          },
+          inquiryId,
+        ),
       { operationName: "delete_property_inquiry" },
     );
 
@@ -259,19 +290,14 @@ export const DELETE = withAuth<InquiryParams>(
     }
 
     const data = result.data;
-    if (data.success === false) {
+    if (!data.ok) {
       await IdempotencyService.fail(idempotencyKey);
       if (data.error === "not_found")
         return apiError("Inquiry not found", HttpStatus.NOT_FOUND);
-      return apiError("Unauthorized", HttpStatus.FORBIDDEN);
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
 
-    await IdempotencyService.complete(idempotencyKey, {
-      message: "Inquiry deleted successfully",
-    });
-    return apiSuccess(
-      { message: "Inquiry deleted successfully" },
-      HttpStatus.OK,
-    );
+    await IdempotencyService.complete(idempotencyKey, data.data);
+    return apiSuccess(data.data, HttpStatus.OK);
   },
 );

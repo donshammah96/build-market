@@ -1,6 +1,7 @@
 {
   "extends": "@build/typescript-config/nextjs.json",
   "compilerOptions": {
+    "incremental": true,
     "plugins": [
       {
         "name": "next"

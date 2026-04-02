@@ -5,8 +5,7 @@
  *
  *   clientDashboardClient (this file)
  *     └── API Routes (/api/client/dashboard)
- *           └── Service Layer (lib/services/client-dashboard.ts)
- *                 └── ClientRepository → Prisma
+ *           └── client-dashboard domain (app/lib/domains/client-dashboard)
  */
 import { API_ROUTES } from "@/lib/links";
 import { apiFetch } from "@/lib/api-client-utils";

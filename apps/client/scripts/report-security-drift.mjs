@@ -44,6 +44,7 @@ const DANGEROUS_HTML_PATTERN = /\bdangerouslySetInnerHTML\b/g;
 
 const LOGGER_CALL_PATTERN =
   /\b(?:logger|console)\s*\.\s*(?:info|warn|error|debug|log)\s*\(/;
+const SPREAD_PROPERTY_PATTERN = /\.\.\.\s*[A-Za-z_$][\w$]*/;
 const BANNED_LOG_KEYS = [
   "userId",
   "clerkId",
@@ -55,9 +56,21 @@ const BANNED_LOG_KEYS = [
   "nationalId",
   "idNumber",
 ];
-const BANNED_LOG_KEY_PATTERN = new RegExp(
-  `\\b(${BANNED_LOG_KEYS.join("|")})\\s*:`,
-);
+
+const BANNED_LOG_KEY_PATTERNS = BANNED_LOG_KEYS.map((key) => ({
+  key,
+  explicit: new RegExp(`(?:["'])?${key}(?:["'])?\\s*:`),
+  shorthand: new RegExp(`(?<!\\$)(?:\\{|,)\\s*${key}\\s*(?:,|\\})`),
+}));
+
+function findBannedLogKeyInSegment(segment) {
+  for (const candidate of BANNED_LOG_KEY_PATTERNS) {
+    if (candidate.explicit.test(segment) || candidate.shorthand.test(segment)) {
+      return candidate.key;
+    }
+  }
+  return null;
+}
 
 const ENV_ALLOWLIST_FILES = new Set([
   "app/lib/infrastructure/env.ts",
@@ -114,6 +127,7 @@ function collectEnvDrift() {
 
 function collectLogDrift() {
   const offenders = [];
+  const spreadReviewCandidates = [];
 
   for (const filePath of collectFiles(SERVER_SCAN_PATHS)) {
     const lines = readLines(filePath);
@@ -124,30 +138,43 @@ function collectLogDrift() {
       }
 
       const windowLines = [lines[index]];
-      let cursor = index + 1;
-      while (cursor < lines.length && cursor <= index + 12) {
-        windowLines.push(lines[cursor]);
-        if (lines[cursor].includes(");")) {
-          break;
+      if (!lines[index].includes(");")) {
+        let cursor = index + 1;
+        while (cursor < lines.length && cursor <= index + 12) {
+          windowLines.push(lines[cursor]);
+          if (lines[cursor].includes(");")) {
+            break;
+          }
+          cursor += 1;
         }
-        cursor += 1;
       }
 
       const segment = windowLines.join("\n");
-      const keyMatch = segment.match(BANNED_LOG_KEY_PATTERN);
-      if (!keyMatch) {
+
+      if (SPREAD_PROPERTY_PATTERN.test(segment)) {
+        spreadReviewCandidates.push({
+          file: relativeToApp(filePath),
+          line: index + 1,
+        });
+      }
+
+      const bannedKey = findBannedLogKeyInSegment(segment);
+      if (!bannedKey) {
         continue;
       }
 
       offenders.push({
         file: relativeToApp(filePath),
         line: index + 1,
-        key: keyMatch[1],
+        key: bannedKey,
       });
     }
   }
 
-  return offenders;
+  return {
+    offenders,
+    spreadReviewCandidates,
+  };
 }
 
 function collectStorageDrift() {
@@ -227,17 +254,21 @@ function collectDangerousHtmlDrift() {
   return offenders;
 }
 
+const logSafetyDrift = collectLogDrift();
+
 const report = {
   generatedAt: new Date().toISOString(),
   summary: {
     envBoundary: 0,
     logSafety: 0,
+    logSafetySpreadReview: 0,
     browserPersistence: 0,
     dangerousHtml: 0,
   },
   findings: {
     envBoundary: collectEnvDrift(),
-    logSafety: collectLogDrift(),
+    logSafety: logSafetyDrift.offenders,
+    logSafetySpreadReview: logSafetyDrift.spreadReviewCandidates,
     browserPersistence: collectStorageDrift(),
     dangerousHtml: collectDangerousHtmlDrift(),
   },
@@ -245,6 +276,8 @@ const report = {
 
 report.summary.envBoundary = report.findings.envBoundary.length;
 report.summary.logSafety = report.findings.logSafety.length;
+report.summary.logSafetySpreadReview =
+  report.findings.logSafetySpreadReview.length;
 report.summary.browserPersistence = report.findings.browserPersistence.length;
 report.summary.dangerousHtml = report.findings.dangerousHtml.length;
 
@@ -255,6 +288,9 @@ console.log(
   `[security/drift-report] envBoundary: ${report.summary.envBoundary}`,
 );
 console.log(`[security/drift-report] logSafety: ${report.summary.logSafety}`);
+console.log(
+  `[security/drift-report] logSafetySpreadReview: ${report.summary.logSafetySpreadReview}`,
+);
 console.log(
   `[security/drift-report] browserPersistence: ${report.summary.browserPersistence}`,
 );

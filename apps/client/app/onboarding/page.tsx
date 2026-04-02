@@ -7,10 +7,10 @@ import {
   NullAnalytics,
 } from "@/lib/analytics/OnboardingAnalyticsContext";
 import { PostHogOnboardingAnalytics } from "@/lib/analytics/posthog-onboarding-analytics";
-import { envConfig } from "@/lib/env";
+import { env } from "@/app/lib/infrastructure/env";
 
 const onboardingAnalytics =
-  envConfig.isProd && envConfig.analytics.posthogKey.length > 0
+  env.isProd && env.analytics.posthogKey.length > 0
     ? PostHogOnboardingAnalytics
     : NullAnalytics;
 

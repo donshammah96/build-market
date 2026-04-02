@@ -86,7 +86,7 @@ type ProfessionalSettingsResult<T> = Result<
 async function ensureProfessionalProfile(
   actor: ProfessionalSettingsActor,
 ): Promise<ProfessionalSettingsResult<true>> {
-  if (actor.role && actor.role !== "professional" && actor.role !== "admin") {
+  if (actor.role && actor.role !== "PROFESSIONAL" && actor.role !== "ADMIN") {
     return err({
       error: "invalid_input",
       message: "Professional profile access is only available to professionals",
@@ -442,7 +442,7 @@ export const professionalSettingsService = {
 
       if (propertyData && propertyData.length > 0) {
         const propertiesResult = await propertiesService.createPropertiesBatch(
-          { userId: actor.userId, role: actor.role ?? "professional" },
+          { userId: actor.userId, role: actor.role ?? "PROFESSIONAL" },
           propertyData as CreatePropertyInput[],
         );
         if (!propertiesResult.ok) {

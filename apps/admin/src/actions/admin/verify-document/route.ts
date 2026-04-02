@@ -53,7 +53,6 @@ const batchDocumentVerificationSchema = z.object({
  * POST handler for single document verification
  */
 export const POST = withAdminRole([
-  AdminRole.SYSTEM_ADMIN,
   AdminRole.SUPER_ADMIN,
 ])(async (req: NextRequest, context: AuthContext) => {
   const { dbUserId } = context;

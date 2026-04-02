@@ -6,8 +6,7 @@
  *
  *   ideaBooksClient (this file)
  *     └── API Routes (/api/idea-books)
- *           └── Service Layer (lib/services/idea-books.ts)
- *                 └── Prisma (IdeaBook, IdeaBookAttachment)
+ *           └── idea-books domain (app/lib/domains/idea-books)
  */
 import { API_ROUTES, withQueryParams } from "@/lib/links";
 import { apiFetch } from "@/lib/api-client-utils";
@@ -54,6 +53,34 @@ export interface IdeaBookAttachment {
   } | null;
 }
 
+export interface IdeaBookAttachmentPreview {
+  id: string;
+  sourceUrl: string | null;
+  fileUrl: string | null;
+  caption: string | null;
+  mimeType: string | null;
+  asset?: {
+    id: string;
+    cdnUrl: string | null;
+    thumbnailUrl: string | null;
+    originalName: string | null;
+    mimeType: string | null;
+  } | null;
+}
+
+export interface IdeaBookCollaborator {
+  id: string;
+  userId: string;
+  canEdit: boolean;
+  addedAt: string;
+  user: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    avatar: string | null;
+  };
+}
+
 export interface IdeaBookListItem {
   id: string;
   title: string;
@@ -64,7 +91,7 @@ export interface IdeaBookListItem {
   viewCount: number;
   likes: number;
   coverImage: string | null;
-  attachments: IdeaBookAttachment[];
+  attachments: IdeaBookAttachmentPreview[];
   collaboratorCount: number;
   attachmentCount: number;
   savedProductCount: number;
@@ -74,8 +101,9 @@ export interface IdeaBookListItem {
   updatedAt: string;
 }
 
-export interface IdeaBookDetail extends IdeaBookListItem {
-  collaborators?: unknown[];
+export interface IdeaBookDetail extends Omit<IdeaBookListItem, "attachments"> {
+  attachments: IdeaBookAttachment[];
+  collaborators: IdeaBookCollaborator[];
 }
 
 export interface IdeaBookListResult {

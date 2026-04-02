@@ -1,14 +1,3 @@
-/**
- * Properties Client
- *
- * Client-side facade for the properties subsystem. Provides a resilient,
- * type-safe API that interacts directly with browser-safe REST APIs.
- *
- * Features:
- * - Bulkhead (concurrency limiter) for heavy operations
- * - Normalized ApiResponse format
- * - Safe for browser and client-side bundlers (No Server Actions)
- */
 import type { ApiResponse } from "@build/types";
 import { PROPERTIES_CLIENT_CONFIG } from "@/lib/config/properties.config";
 import { isValidId } from "@/lib/utils/validators";
@@ -18,6 +7,29 @@ import {
   UpdatePropertySchema,
   PropertyQuerySchema,
 } from "@/lib/validation/properties-validation";
+
+import type {
+  PropertyListItem,
+  PropertyDetail,
+  PropertyListResultEnvelope,
+  PropertyDetailResultEnvelope,
+  MyPropertyListing,
+  PropertyDocumentDto,
+  PropertyAttachmentDto,
+  PropertyCreateResultDto,
+  PropertyMutationResultDto,
+} from "@/app/lib/domains/properties/contracts";
+
+export type {
+  PropertyListItem,
+  PropertyDetail,
+  PropertyListResultEnvelope,
+  MyPropertyListing,
+  PropertyDocumentDto,
+  PropertyAttachmentDto,
+  PropertyCreateResultDto,
+  PropertyMutationResultDto,
+};
 
 const { BULKHEAD_CONCURRENCY } = PROPERTIES_CLIENT_CONFIG;
 
@@ -63,47 +75,34 @@ export type ReplacePropertyDocumentClientInput = {
   notes?: string;
 };
 
-export interface Property {
-  id: string;
-  title: string;
-  price: number;
-  location: string;
-  type: string;
-  status: "active" | "pending" | "sold" | "rented";
-  views: number;
-  inquiries: number;
-  images: string[];
-  version: number;
-  verificationStatus?:
-    | "UNVERIFIED"
-    | "PENDING"
-    | "VERIFIED"
-    | "REJECTED"
-    | "NEEDS_CORRECTION";
-  rejectionReason?: string | null;
-}
+/** Backward-compatible alias for components still using the old name. */
+export type PropertyListPayload = PropertyListResultEnvelope;
+export type PropertyDetailPayload = PropertyDetailResultEnvelope;
+export type MyPropertiesPayload = { properties: MyPropertyListing[] };
+export type SimilarPropertiesPayload = { properties: PropertyListItem[] };
 
-export interface PropertyAttachment {
-  id: string;
-  asset?: {
-    id: string;
-    cdnUrl: string;
-  } | null;
-  /** @deprecated use asset.cdnUrl instead */
-  fileUrl?: string | null;
-  /** @deprecated */
-  fileKey?: string | null;
-  type: string;
-  isVerified: boolean;
-  verifiedAt?: Date | string | null;
-  notes?: string | null;
-  createdAt: Date | string;
-}
+/** Create returns PropertyCreateResultDto; update/delete return PropertyMutationResultDto. */
+export type PropertyMutationPayload =
+  | PropertyCreateResultDto
+  | PropertyMutationResultDto;
+
+export type CreatePropertiesBatchPayload = {
+  properties: PropertyCreateResultDto[];
+  count?: number;
+};
+
+/** @deprecated Use PropertyDocumentDto for documents. */
+export type PropertyAttachment = PropertyDocumentDto;
+
+export type PropertyDocumentsPayload = PropertyDocumentDto[];
+
+export type PropertyDocumentMutationPayload = PropertyMutationResultDto;
 
 // ─── Helper API Fetcher ─────────────────────────────────────────────────────
 
 async function apiFetch<T>(
   endpoint: string,
+
   options?: RequestInit,
 ): Promise<ApiResponse<T>> {
   try {
@@ -171,7 +170,7 @@ class PropertiesClient {
 
   async getProperties(
     filters?: Partial<PropertyQueryInput>,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<PropertyListPayload>> {
     return this.bulkhead.run(() => {
       const searchParams = new URLSearchParams();
       if (filters) {
@@ -179,24 +178,28 @@ class PropertiesClient {
           if (value !== undefined) searchParams.append(key, String(value));
         });
       }
-      return apiFetch<any>(`/api/properties?${searchParams.toString()}`);
+      return apiFetch<PropertyListPayload>(
+        `/api/properties?${searchParams.toString()}`,
+      );
     });
   }
 
-  async getProperty(id: string): Promise<ApiResponse<any>> {
+  async getProperty(id: string): Promise<ApiResponse<PropertyDetailPayload>> {
     if (!isValidId(id)) return { success: false, error: "Invalid property ID" };
-    return this.bulkhead.run(() => apiFetch<any>(`/api/properties/${id}`));
+    return this.bulkhead.run(() =>
+      apiFetch<PropertyDetailPayload>(`/api/properties/${id}`),
+    );
   }
 
   async getMyProperties(options?: {
     limit?: number;
     status?: string;
-  }): Promise<ApiResponse<any[]>> {
+  }): Promise<ApiResponse<MyPropertiesPayload>> {
     return this.bulkhead.run(() => {
       const searchParams = new URLSearchParams();
       if (options?.limit) searchParams.append("limit", String(options.limit));
       if (options?.status) searchParams.append("status", options.status);
-      return apiFetch<any[]>(
+      return apiFetch<MyPropertiesPayload>(
         `/api/properties/my-listings?${searchParams.toString()}`,
       );
     });
@@ -205,12 +208,12 @@ class PropertiesClient {
   async getSimilarProperties(
     propertyId: string,
     limit?: number,
-  ): Promise<ApiResponse<any[]>> {
+  ): Promise<ApiResponse<SimilarPropertiesPayload>> {
     if (!isValidId(propertyId))
       return { success: false, error: "Invalid property ID" };
     return this.bulkhead.run(() => {
       const limitQuery = limit ? `?limit=${limit}` : "";
-      return apiFetch<any[]>(
+      return apiFetch<SimilarPropertiesPayload>(
         `/api/properties/${propertyId}/similar${limitQuery}`,
       );
     });
@@ -218,9 +221,9 @@ class PropertiesClient {
 
   async createProperty(
     data: CreatePropertyClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<PropertyMutationPayload>> {
     return this.bulkhead.run(() =>
-      apiFetch<any>("/api/properties", {
+      apiFetch<PropertyMutationPayload>("/api/properties", {
         method: "POST",
         body: JSON.stringify(data),
         headers: data.idempotencyKey
@@ -232,9 +235,9 @@ class PropertiesClient {
 
   async createPropertiesBatch(
     data: CreatePropertiesBatchClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<CreatePropertiesBatchPayload>> {
     return this.bulkhead.run(() =>
-      apiFetch<any>("/api/properties", {
+      apiFetch<CreatePropertiesBatchPayload>("/api/properties", {
         method: "POST",
         body: JSON.stringify(data),
         headers: data.idempotencyKey
@@ -246,11 +249,11 @@ class PropertiesClient {
 
   async updateProperty(
     input: UpdatePropertyClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<PropertyMutationPayload>> {
     if (!isValidId(input.id))
       return { success: false, error: "Invalid property ID" };
     return this.bulkhead.run(() =>
-      apiFetch<any>(`/api/properties/${input.id}`, {
+      apiFetch<PropertyMutationPayload>(`/api/properties/${input.id}`, {
         method: "PATCH",
         body: JSON.stringify({ ...input.data, version: input.version }),
         headers: input.idempotencyKey
@@ -262,11 +265,11 @@ class PropertiesClient {
 
   async deleteProperty(
     input: DeletePropertyClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<PropertyMutationPayload>> {
     if (!isValidId(input.id))
       return { success: false, error: "Invalid property ID" };
     return this.bulkhead.run(() =>
-      apiFetch<any>(`/api/properties/${input.id}`, {
+      apiFetch<PropertyMutationPayload>(`/api/properties/${input.id}`, {
         method: "DELETE",
         body: JSON.stringify({ version: input.version }),
         headers: input.idempotencyKey
@@ -276,39 +279,46 @@ class PropertiesClient {
     );
   }
 
-  async getPropertyDocuments(propertyId: string): Promise<ApiResponse<any[]>> {
+  async getPropertyDocuments(
+    propertyId: string,
+  ): Promise<ApiResponse<PropertyDocumentsPayload>> {
     if (!isValidId(propertyId))
       return { success: false, error: "Invalid property ID" };
     return this.bulkhead.run(() =>
-      apiFetch<any[]>(`/api/properties/${propertyId}/documents`),
+      apiFetch<PropertyDocumentsPayload>(
+        `/api/properties/${propertyId}/documents`,
+      ),
     );
   }
 
   async addPropertyDocument(
     input: AddPropertyDocumentClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<PropertyDocumentMutationPayload>> {
     if (!isValidId(input.propertyId))
       return { success: false, error: "Invalid property ID" };
     return this.bulkhead.run(() =>
-      apiFetch<any>(`/api/properties/${input.propertyId}/documents`, {
-        method: "POST",
-        body: JSON.stringify({
-          type: input.type,
-          assetId: input.assetId,
-          notes: input.notes,
-        }),
-      }),
+      apiFetch<PropertyDocumentMutationPayload>(
+        `/api/properties/${input.propertyId}/documents`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            type: input.type,
+            assetId: input.assetId,
+            notes: input.notes,
+          }),
+        },
+      ),
     );
   }
 
   async removePropertyDocument(
     input: RemovePropertyDocumentClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<PropertyDocumentMutationPayload>> {
     if (!isValidId(input.propertyId) || !isValidId(input.documentId)) {
       return { success: false, error: "Invalid IDs" };
     }
     return this.bulkhead.run(() =>
-      apiFetch<any>(
+      apiFetch<PropertyDocumentMutationPayload>(
         `/api/properties/${input.propertyId}/documents/${input.documentId}`,
         {
           method: "DELETE",
@@ -319,12 +329,12 @@ class PropertiesClient {
 
   async replacePropertyDocument(
     input: ReplacePropertyDocumentClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<PropertyDocumentMutationPayload>> {
     if (!isValidId(input.propertyId) || !isValidId(input.documentId)) {
       return { success: false, error: "Invalid IDs" };
     }
     return this.bulkhead.run(() =>
-      apiFetch<any>(
+      apiFetch<PropertyDocumentMutationPayload>(
         `/api/properties/${input.propertyId}/documents/${input.documentId}`,
         {
           method: "PATCH",

@@ -163,6 +163,10 @@ type OnboardingRequestMetadata = {
   userAgent?: string;
 };
 
+const USER_STATUS_ONBOARDING = "ONBOARDING";
+const USER_STATUS_PENDING_VERIFICATION = "PENDING_VERIFICATION";
+const USER_STATUS_ACTIVE = "ACTIVE";
+
 function buildUniqueSlug(value: string) {
   const baseSlug = value
     .toLowerCase()
@@ -218,7 +222,10 @@ export const userProfileOnboardingService = {
       const preMaterializedAssets = new Map<string, string>(); // uploadId → assetId
 
       if (data.role === "professional") {
-        const proData = data as Extract<OnboardingInput, { role: "professional" }>;
+        const proData = data as Extract<
+          OnboardingInput,
+          { role: "professional" }
+        >;
         if ("documents" in proData && Array.isArray(proData.documents)) {
           const docs = proData.documents as ProfessionalDocumentInput[];
           for (const docData of docs) {
@@ -233,14 +240,15 @@ export const userProfileOnboardingService = {
               select: { id: true },
             });
 
-            const materialized = await uploadService.materializeOnboardingUpload({
-              actor: {
-                userId: existingForMaterialization?.id ?? "",
-                correlationId: actor.correlationId,
-              },
-              clerkId: actor.clerkId,
-              uploadId: docData.uploadId,
-            });
+            const materialized =
+              await uploadService.materializeOnboardingUpload({
+                actor: {
+                  userId: existingForMaterialization?.id ?? "",
+                  correlationId: actor.correlationId,
+                },
+                clerkId: actor.clerkId,
+                uploadId: docData.uploadId,
+              });
 
             if (!materialized.ok) {
               if (materialized.error === "invalid_input") {
@@ -252,12 +260,16 @@ export const userProfileOnboardingService = {
               }
               return err({
                 error: "internal",
-                message: materialized.message || "Failed to process document upload",
+                message:
+                  materialized.message || "Failed to process document upload",
                 status: 500,
               });
             }
 
-            preMaterializedAssets.set(docData.uploadId, materialized.data.assetId);
+            preMaterializedAssets.set(
+              docData.uploadId,
+              materialized.data.assetId,
+            );
           }
         }
       }
@@ -276,9 +288,17 @@ export const userProfileOnboardingService = {
               lastName: clerkUser.lastName || null,
               phone: clerkUser.phoneNumbers?.[0]?.phoneNumber || null,
               role: userRole,
+              status:
+                (userRole === "PROFESSIONAL"
+                  ? USER_STATUS_PENDING_VERIFICATION
+                  : USER_STATUS_ACTIVE) as any,
             },
             update: {
               role: userRole,
+              status:
+                (userRole === "PROFESSIONAL"
+                  ? USER_STATUS_PENDING_VERIFICATION
+                  : USER_STATUS_ACTIVE) as any,
             },
             select: {
               id: true,
@@ -537,10 +557,12 @@ export const userProfileOnboardingService = {
               phone: clerkUser.phoneNumbers?.[0]?.phoneNumber || null,
               role: "CLIENT",
               isProfileComplete: false,
+              status: USER_STATUS_ACTIVE as any,
             },
             update: {
               role: "CLIENT",
               isProfileComplete: false,
+              status: USER_STATUS_ACTIVE as any,
             },
             select: { id: true, role: true, isProfileComplete: true },
           });
@@ -616,10 +638,12 @@ export const userProfileOnboardingService = {
               phone: clerkUser.phoneNumbers?.[0]?.phoneNumber || null,
               role: "PROFESSIONAL",
               isProfileComplete: false,
+              status: USER_STATUS_PENDING_VERIFICATION as any,
             },
             update: {
               role: "PROFESSIONAL",
               isProfileComplete: false,
+              status: USER_STATUS_PENDING_VERIFICATION as any,
             },
             select: { id: true, role: true, isProfileComplete: true },
           });
@@ -671,7 +695,7 @@ export const userProfileOnboardingService = {
   > {
     const { actor, data, requestMetadata } = params;
 
-    if (actor.role && actor.role !== "professional" && actor.role !== "admin") {
+    if (actor.role && actor.role !== "PROFESSIONAL" && actor.role !== "ADMIN") {
       return err({
         error: "forbidden",
         message: "This endpoint is only for professional users",
@@ -721,6 +745,7 @@ export const userProfileOnboardingService = {
       }
 
       const now = new Date();
+      const currentStatus = String(currentUserRecord.status);
       const consentWithdrawn =
         (currentUserRecord.emailMarketingConsent &&
           data.emailMarketingConsent === false) ||
@@ -755,12 +780,16 @@ export const userProfileOnboardingService = {
             }
             return err({
               error: "internal",
-              message: materialized.message || "Failed to process document upload",
+              message:
+                materialized.message || "Failed to process document upload",
               status: 500,
             });
           }
 
-          preMaterializedAssets.set(document.uploadId, materialized.data.assetId);
+          preMaterializedAssets.set(
+            document.uploadId,
+            materialized.data.assetId,
+          );
         }
       }
 
@@ -936,6 +965,9 @@ export const userProfileOnboardingService = {
             where: { id: actor.userId },
             data: {
               isProfileComplete: true,
+              ...(currentStatus === USER_STATUS_ONBOARDING && {
+                status: USER_STATUS_PENDING_VERIFICATION as any,
+              }),
               ...(data.emailMarketingConsent !== undefined && {
                 emailMarketingConsent: data.emailMarketingConsent,
               }),

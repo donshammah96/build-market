@@ -1,6 +1,6 @@
 import { headers as getRequestHeaders } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
-import { getEnvConfig } from "@/app/lib/infrastructure/env";
+import { env } from "@/app/lib/infrastructure/env";
 
 const UNSAFE_MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -13,11 +13,24 @@ export type MutationOriginCheckResult =
   | { ok: true; trustedOrigin?: string }
   | { ok: false; reason: MutationOriginFailureReason };
 
+export type CsrfExemptionReason =
+  | "webhook_signature"
+  | "stripe_callback"
+  | "mpesa_callback"
+  | "clerk_webhook"
+  | "internal_service";
+
+export type CsrfExemption = {
+  reason: CsrfExemptionReason;
+  validatedBy: string;
+  addedOn: string;
+};
+
 type MutationOriginCheckInput = {
   method: string;
   originHeader: string | null;
   cookieHeader: string | null;
-  exempt?: boolean;
+  exempt?: CsrfExemption;
   extraTrustedOrigins?: string[];
 };
 
@@ -32,7 +45,6 @@ function normalizeOrigin(value: string): string | null {
 function getTrustedMutationOrigins(
   extraTrustedOrigins: string[] = [],
 ): Set<string> {
-  const env = getEnvConfig();
   const trusted = new Set<string>();
 
   for (const value of [
@@ -91,7 +103,7 @@ export function validateTrustedMutationOrigin(
 export function validateTrustedMutationOriginForRequest(
   request: NextRequest,
   options: {
-    exempt?: boolean;
+    exempt?: CsrfExemption;
     extraTrustedOrigins?: string[];
   } = {},
 ): MutationOriginCheckResult {
@@ -105,7 +117,7 @@ export function validateTrustedMutationOriginForRequest(
 
 export async function validateTrustedMutationOriginForServerAction(
   options: {
-    exempt?: boolean;
+    exempt?: CsrfExemption;
     extraTrustedOrigins?: string[];
   } = {},
 ): Promise<MutationOriginCheckResult> {

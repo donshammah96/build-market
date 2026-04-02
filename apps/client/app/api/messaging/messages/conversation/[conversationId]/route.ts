@@ -12,17 +12,33 @@ import {
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { isValidId } from "@/app/lib/api/api-guards";
-import { MessageQuerySchema, messagingService } from "@build/messaging-server";
+import {
+  MessageQuerySchema,
+  type MessagingActor,
+  messagingService,
+} from "@/app/lib/domains/messaging";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
 type ConversationParams = { conversationId: string };
+
+function toMessagingActor(context: {
+  dbUserId: string;
+  userRole: unknown;
+}): MessagingActor {
+  return {
+    userId: context.dbUserId,
+    role: normalizeRole(String(context.userRole)) ?? null,
+  };
+}
 
 /**
  * GET /api/messaging/messages/conversation/[conversationId]
  */
 export const GET = withAuth<ConversationParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
-    const correlationId = initializeCorrelationId(req);
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
+    initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
     if (!params?.conversationId || !isValidId(params.conversationId))
       return apiError("Invalid conversation ID", HttpStatus.BAD_REQUEST);
     const threadId = params.conversationId;
@@ -50,8 +66,7 @@ export const GET = withAuth<ConversationParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () =>
-        messagingService.listConversationMessages(dbUserId, threadId, query),
+      () => messagingService.listConversationMessages(actor, threadId, query),
       { operationName: "list_thread_messages" },
     );
 

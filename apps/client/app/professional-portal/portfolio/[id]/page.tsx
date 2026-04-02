@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import {
@@ -56,43 +56,14 @@ import {
 } from "@/components/ui/select";
 import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
-
-// Portfolio interface matching API response
-interface PortfolioImage {
-  id: string;
-  url: string;
-  key?: string | null;
-  caption?: string | null;
-  isMain: boolean;
-  isBefore: boolean;
-  isAfter: boolean;
-  sortOrder: number;
-  createdAt: Date | string;
-}
-
-interface Portfolio {
-  id: string;
-  title: string;
-  description?: string | null;
-  projectType: string;
-  clientTestimonial?: string | null;
-  completedAt?: Date | string | null;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-  images?: PortfolioImage[];
-  professional?: {
-    companyName: string;
-    city?: string | null;
-    county?: string | null;
-    country?: string | null;
-  };
-}
+import { portfolioClient, type PortfolioDetail } from "@/lib/portfolio-client";
+import { ProjectTypeSchema } from "@/lib/validation/portfolio-validation";
 
 // Schema for updating portfolio
 const updatePortfolioSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters"),
   description: z.string().optional(),
-  projectType: z.string().min(1, "Project type is required"),
+  projectType: ProjectTypeSchema,
   clientTestimonial: z.string().optional(),
   completedAt: z.string().optional().nullable(),
 });
@@ -114,17 +85,14 @@ export default function PortfolioDetailPage() {
     data: portfolio,
     isLoading,
     error,
-  } = useQuery<Portfolio>({
+  } = useQuery<PortfolioDetail>({
     queryKey: ["portfolio", id],
     queryFn: async () => {
-      const res = await fetch(`/api/professional-portal/portfolio/${id}`);
-      if (!res.ok) {
-        if (res.status === 404) {
-          throw new Error("Portfolio not found");
-        }
-        throw new Error("Failed to fetch portfolio");
+      const res = await portfolioClient.getPortfolioDetail(id);
+      if (!res.success || res.data === undefined) {
+        throw new Error(res.error || "Failed to fetch portfolio");
       }
-      return res.json();
+      return res.data;
     },
     enabled: !!id,
     retry: 2,
@@ -134,19 +102,19 @@ export default function PortfolioDetailPage() {
   // Update Portfolio Mutation
   const updatePortfolioMutation = useMutation({
     mutationFn: async (data: UpdatePortfolioFormValues) => {
-      const res = await fetch(`/api/professional-portal/portfolio/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const res = await portfolioClient.updatePortfolio({
+        portfolioId: id,
+        data: {
           ...data,
-          completedAt: data.completedAt || null,
-        }),
+          completionDate: data.completedAt
+            ? new Date(data.completedAt).toISOString()
+            : null,
+        },
       });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to update portfolio");
+      if (!res.success) {
+        throw new Error(res.error || "Failed to update portfolio");
       }
-      return res.json();
+      return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["portfolio", id] });
@@ -164,14 +132,13 @@ export default function PortfolioDetailPage() {
   // Delete Portfolio Mutation
   const deletePortfolioMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/professional-portal/portfolio/${id}`, {
-        method: "DELETE",
+      const res = await portfolioClient.deletePortfolio({
+        portfolioId: id,
       });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to delete portfolio");
+      if (!res.success) {
+        throw new Error(res.error || "Failed to delete portfolio");
       }
-      return res.json();
+      return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["professional-portfolio"] });
@@ -190,7 +157,8 @@ export default function PortfolioDetailPage() {
     defaultValues: {
       title: portfolio?.title || "",
       description: portfolio?.description || "",
-      projectType: portfolio?.projectType || "",
+      projectType: (portfolio?.projectType ??
+        "OTHER") as UpdatePortfolioFormValues["projectType"],
       clientTestimonial: portfolio?.clientTestimonial || "",
       completedAt: portfolio?.completedAt
         ? new Date(portfolio.completedAt).toISOString().split("T")[0]
@@ -198,12 +166,16 @@ export default function PortfolioDetailPage() {
     },
   });
 
+  const formControl =
+    form.control as unknown as Control<UpdatePortfolioFormValues>;
+
   // Update form when portfolio data loads
   if (portfolio && form.getValues().title === "") {
     form.reset({
       title: portfolio.title,
       description: portfolio.description || "",
-      projectType: portfolio.projectType,
+      projectType:
+        portfolio.projectType as UpdatePortfolioFormValues["projectType"],
       clientTestimonial: portfolio.clientTestimonial || "",
       completedAt: portfolio.completedAt
         ? new Date(portfolio.completedAt).toISOString().split("T")[0]
@@ -694,7 +666,7 @@ export default function PortfolioDetailPage() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
-                control={form.control}
+                control={formControl}
                 name="title"
                 render={({ field }) => (
                   <FormItem>
@@ -736,7 +708,7 @@ export default function PortfolioDetailPage() {
                 )}
               />
               <FormField
-                control={form.control}
+                control={formControl}
                 name="description"
                 render={({ field }) => (
                   <FormItem>
@@ -770,7 +742,7 @@ export default function PortfolioDetailPage() {
                 )}
               />
               <FormField
-                control={form.control}
+                control={formControl}
                 name="completedAt"
                 render={({ field }) => (
                   <FormItem>

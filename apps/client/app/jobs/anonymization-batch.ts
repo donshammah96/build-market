@@ -11,18 +11,12 @@ import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
 import { redisConnection } from "@build/queue-server";
 import { prisma } from "@build/db";
 import { AnonymizationService } from "@/app/lib/gdpr/services/anonymization.service";
+import { env } from "@/app/lib/infrastructure/env";
 
 // Configuration
-const ANONYMIZATION_CRON_PATTERN =
-  process.env.ANONYMIZATION_BATCH_CRON || "0 4 * * *"; // 4 AM daily
-const ANONYMIZATION_BATCH_SIZE = parseInt(
-  process.env.ANONYMIZATION_BATCH_SIZE || "50",
-  10,
-);
-const GRACE_PERIOD_DAYS = parseInt(
-  process.env.DELETION_GRACE_PERIOD_DAYS || "30",
-  10,
-);
+const ANONYMIZATION_CRON_PATTERN = env.jobs.anonymizationBatchCron;
+const ANONYMIZATION_BATCH_SIZE = env.jobs.anonymizationBatchSize;
+const GRACE_PERIOD_DAYS = env.gdpr.deletionGraceDays;
 
 const anonymizationQueue = new Queue("gdpr-anonymization-batch", {
   connection: redisConnection as ConnectionOptions,
@@ -189,7 +183,7 @@ export function createAnonymizationBatchWorker() {
         const duration = metrics.endTime - metrics.startTime;
 
         console.log("[AnonymizationBatch] Job completed", {
-          ...metrics,
+          metrics,
           durationMs: duration,
         });
 

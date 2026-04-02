@@ -1,7 +1,9 @@
 import { createHash } from "crypto";
-import { HttpStatus } from "@/app/lib/api/api-response";
-import { getClientLogger } from "@/app/lib/api/resilient-api";
-import { getStorageProvider } from "@/app/lib/infrastructure/storage";
+import {
+  getStorageProvider,
+  type StorageProvider,
+  type UploadedFile,
+} from "@/app/lib/infrastructure/storage";
 import {
   err,
   ok,
@@ -16,8 +18,17 @@ import {
 } from "@/app/lib/domains/uploads/repository";
 import { prisma, type Prisma } from "@build/db";
 
-const logger = getClientLogger();
-const storage = getStorageProvider();
+let storageProviderOverride: StorageProvider | null = null;
+
+export function setUploadServiceStorageProviderForTests(
+  provider: StorageProvider | null,
+): void {
+  storageProviderOverride = provider;
+}
+
+function resolveStorageProvider(): StorageProvider {
+  return storageProviderOverride ?? getStorageProvider();
+}
 
 type UploadClient = Prisma.TransactionClient | typeof prisma;
 
@@ -70,6 +81,40 @@ export type PersistedUploadResponse = {
   expiresAt?: string;
 };
 
+export type PreparedStoredUpload = {
+  storedChecksum: string;
+  uploadedFile: UploadedFile;
+  thumbnailFile?: UploadedFile;
+  deleteAfter: Date | null;
+};
+
+export type PrepareUploadedAssetPersistenceResult =
+  | {
+      kind: "deduplicated";
+      response: PersistedUploadResponse;
+    }
+  | {
+      kind: "prepared";
+      prepared: PreparedStoredUpload;
+    };
+
+export type PersistPreparedUploadedAssetInput = {
+  actor: UploadActor;
+  originalName: string;
+  mimeType: string;
+  originalSize: number;
+  width?: number | null;
+  height?: number | null;
+  blurHash?: string | null;
+  temporary: boolean;
+  consent: {
+    ipAddress?: string;
+    userAgent?: string;
+    context: string;
+  };
+  prepared: PreparedStoredUpload;
+};
+
 export type OwnedAssetMetadata = {
   id: string;
   filename: string;
@@ -119,11 +164,10 @@ export type StagedOnboardingUpload = {
 
 function fail<T>(
   error: UploadServiceErrorCode,
-  status: number,
   message: string,
   details?: unknown,
 ): UploadServiceResult<T> {
-  return err({ error, status, message, details });
+  return err({ error, message, details });
 }
 
 function getChecksum(buffer: Buffer): string {
@@ -131,9 +175,175 @@ function getChecksum(buffer: Buffer): string {
 }
 
 export const uploadService = {
+  async prepareUploadedAssetPersistence(
+    input: PersistUploadedAssetInput,
+  ): Promise<UploadServiceResult<PrepareUploadedAssetPersistenceResult>> {
+    const storage = resolveStorageProvider();
+    const storedChecksum = getChecksum(input.storedBuffer);
+
+    try {
+      const existingAsset =
+        await uploadRepository.findAssetByChecksum(storedChecksum);
+      if (existingAsset) {
+        await uploadRepository.createConsentRecord({
+          user: { connect: { id: input.actor.userId } },
+          type: "ANALYTICS_COOKIES",
+          granted: true,
+          grantedAt: new Date(),
+          documentVersion: "v1.0",
+          ipAddress: input.consent.ipAddress,
+          metadata: {
+            source: "file_upload",
+            correlationId: input.actor.correlationId,
+            userAgent: input.consent.userAgent,
+            fileName: input.originalName,
+            fileSize: input.originalSize,
+            mimeType: input.mimeType,
+            temporary: input.temporary,
+            context: input.consent.context,
+            deduplicated: true,
+            existingAssetId: existingAsset.id,
+          },
+        });
+
+        return ok({
+          kind: "deduplicated",
+          response: {
+            asset: existingAsset,
+            storedChecksum,
+            deduplicated: true,
+            expiresAt: existingAsset.deleteAfter?.toISOString(),
+          },
+        });
+      }
+
+      let uploadedFile: UploadedFile | undefined;
+      let thumbnailFile: UploadedFile | undefined;
+
+      try {
+        uploadedFile = await storage.upload(
+          input.storedBuffer,
+          input.storedFilename,
+          input.mimeType,
+        );
+
+        if (input.thumbnailBuffer && input.thumbnailFilename) {
+          thumbnailFile = await storage.upload(
+            input.thumbnailBuffer,
+            input.thumbnailFilename,
+            "image/jpeg",
+          );
+        }
+      } catch {
+        if (thumbnailFile) {
+          try {
+            await storage.delete(thumbnailFile.key);
+          } catch {
+            // Best-effort cleanup only.
+          }
+        }
+        if (uploadedFile) {
+          try {
+            await storage.delete(uploadedFile.key);
+          } catch {
+            // Best-effort cleanup only.
+          }
+        }
+        return fail("processing_failed", "Failed to persist upload");
+      }
+
+      const deleteAfter = input.temporary
+        ? new Date(Date.now() + input.tempExpiryHours * 60 * 60 * 1000)
+        : null;
+
+      return ok({
+        kind: "prepared",
+        prepared: {
+          storedChecksum,
+          uploadedFile,
+          thumbnailFile,
+          deleteAfter,
+        },
+      });
+    } catch {
+      return fail("processing_failed", "Failed to persist upload");
+    }
+  },
+
+  async persistPreparedUploadedAsset(
+    input: PersistPreparedUploadedAssetInput,
+  ): Promise<UploadServiceResult<PersistedUploadResponse>> {
+    try {
+      const asset = await uploadRepository.createAsset({
+        uploader: { connect: { id: input.actor.userId } },
+        originalName: input.originalName,
+        mimeType: input.mimeType,
+        size: input.prepared.uploadedFile.size,
+        checksum: input.prepared.storedChecksum,
+        bucket: input.prepared.uploadedFile.bucket,
+        key: input.prepared.uploadedFile.key,
+        cdnUrl:
+          input.prepared.uploadedFile.cdnUrl || input.prepared.uploadedFile.url,
+        thumbnailUrl: input.prepared.thumbnailFile?.url ?? null,
+        width: input.width ?? null,
+        height: input.height ?? null,
+        blurHash: input.blurHash ?? null,
+        deleteAfter: input.prepared.deleteAfter,
+      });
+
+      await uploadRepository.createConsentRecord({
+        user: { connect: { id: input.actor.userId } },
+        type: "ANALYTICS_COOKIES",
+        granted: true,
+        grantedAt: new Date(),
+        documentVersion: "v1.0",
+        ipAddress: input.consent.ipAddress,
+        metadata: {
+          source: "file_upload",
+          correlationId: input.actor.correlationId,
+          userAgent: input.consent.userAgent,
+          fileName: input.originalName,
+          fileSize: input.originalSize,
+          mimeType: input.mimeType,
+          temporary: input.temporary,
+          context: input.consent.context,
+        },
+      });
+
+      return ok({
+        asset,
+        storedChecksum: input.prepared.storedChecksum,
+        deduplicated: false,
+        expiresAt: input.prepared.deleteAfter?.toISOString(),
+      });
+    } catch {
+      return fail("processing_failed", "Failed to persist upload");
+    }
+  },
+
+  async cleanupPreparedUploadedAssetArtifacts(
+    prepared: PreparedStoredUpload,
+  ): Promise<void> {
+    const storage = resolveStorageProvider();
+    if (prepared.thumbnailFile) {
+      try {
+        await storage.delete(prepared.thumbnailFile.key);
+      } catch {
+        // Best-effort cleanup only.
+      }
+    }
+
+    try {
+      await storage.delete(prepared.uploadedFile.key);
+    } catch {
+      // Best-effort cleanup only.
+    }
+  },
+
   async stageOnboardingUpload(
     input: StageOnboardingUploadInput,
   ): Promise<UploadServiceResult<StagedOnboardingUpload>> {
+    const storage = resolveStorageProvider();
     const expiresAt = new Date(
       Date.now() + (input.expiresInHours ?? 24) * 60 * 60 * 1000,
     );
@@ -165,120 +375,35 @@ export const uploadService = {
         previewUrl: staged.tempUrl,
         expiresAt: staged.expiresAt.toISOString(),
       });
-    } catch (error) {
-      logger.error(
-        "Failed to stage onboarding upload",
-        error instanceof Error ? error : new Error(String(error)),
-        {
-          correlationId: input.actor.correlationId,
-          originalName: input.file.originalName,
-          operationName: "stage-onboarding-upload",
-          outcome: "failed",
-        },
-      );
-      return fail(
-        "processing_failed",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        "Failed to stage upload",
-      );
+    } catch {
+      return fail("processing_failed", "Failed to stage upload");
     }
   },
 
   async persistUploadedAsset(
     input: PersistUploadedAssetInput,
   ): Promise<UploadServiceResult<PersistedUploadResponse>> {
-    const storedChecksum = getChecksum(input.storedBuffer);
-
-    try {
-      const existingAsset =
-        await uploadRepository.findAssetByChecksum(storedChecksum);
-      if (existingAsset) {
-        return ok({
-          asset: existingAsset,
-          storedChecksum,
-          deduplicated: true,
-          expiresAt: existingAsset.deleteAfter?.toISOString(),
-        });
-      }
-
-      const uploaded = await storage.upload(
-        input.storedBuffer,
-        input.storedFilename,
-        input.mimeType,
-      );
-
-      let thumbnailUrl: string | null = null;
-      if (input.thumbnailBuffer && input.thumbnailFilename) {
-        const thumbUploaded = await storage.upload(
-          input.thumbnailBuffer,
-          input.thumbnailFilename,
-          "image/jpeg",
-        );
-        thumbnailUrl = thumbUploaded.url;
-      }
-
-      const deleteAfter = input.temporary
-        ? new Date(Date.now() + input.tempExpiryHours * 60 * 60 * 1000)
-        : null;
-
-      const asset = await uploadRepository.createAsset({
-        uploader: { connect: { id: input.actor.userId } },
-        originalName: input.originalName,
-        mimeType: input.mimeType,
-        size: uploaded.size,
-        checksum: storedChecksum,
-        bucket: uploaded.bucket,
-        key: uploaded.key,
-        cdnUrl: uploaded.cdnUrl || uploaded.url,
-        thumbnailUrl,
-        width: input.width ?? null,
-        height: input.height ?? null,
-        blurHash: input.blurHash ?? null,
-        deleteAfter,
-      });
-
-      await uploadRepository.createConsentRecord({
-        user: { connect: { id: input.actor.userId } },
-        type: "ANALYTICS_COOKIES",
-        granted: true,
-        grantedAt: new Date(),
-        documentVersion: "v1.0",
-        ipAddress: input.consent.ipAddress,
-        metadata: {
-          source: "file_upload",
-          correlationId: input.actor.correlationId,
-          userAgent: input.consent.userAgent,
-          fileName: input.originalName,
-          fileSize: input.originalSize,
-          mimeType: input.mimeType,
-          temporary: input.temporary,
-          context: input.consent.context,
-        },
-      });
-
-      return ok({
-        asset,
-        storedChecksum,
-        deduplicated: false,
-        expiresAt: deleteAfter?.toISOString(),
-      });
-    } catch (error) {
-      logger.error(
-        "Failed to persist uploaded asset",
-        error instanceof Error ? error : new Error(String(error)),
-        {
-          correlationId: input.actor.correlationId,
-          originalName: input.originalName,
-          operationName: "persist-uploaded-asset",
-          outcome: "failed",
-        },
-      );
-      return fail(
-        "processing_failed",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        "Failed to persist upload",
-      );
+    const prepared = await uploadService.prepareUploadedAssetPersistence(input);
+    if (!prepared.ok) {
+      return prepared;
     }
+
+    if (prepared.data.kind === "deduplicated") {
+      return ok(prepared.data.response);
+    }
+
+    return uploadService.persistPreparedUploadedAsset({
+      actor: input.actor,
+      originalName: input.originalName,
+      mimeType: input.mimeType,
+      originalSize: input.originalSize,
+      width: input.width,
+      height: input.height,
+      blurHash: input.blurHash,
+      temporary: input.temporary,
+      consent: input.consent,
+      prepared: prepared.data.prepared,
+    });
   },
 
   async getOwnedAssetMetadataAndTrackAccess(
@@ -291,7 +416,7 @@ export const uploadService = {
         actor.userId,
       );
       if (!asset) {
-        return fail("not_found", HttpStatus.NOT_FOUND, "File not found");
+        return fail("not_found", "File not found");
       }
 
       await uploadRepository.incrementAssetAccess(assetId);
@@ -312,22 +437,8 @@ export const uploadService = {
         temporary: !!asset.deleteAfter,
         expiresAt: asset.deleteAfter?.toISOString(),
       });
-    } catch (error) {
-      logger.error(
-        "Failed to fetch owned asset metadata",
-        error instanceof Error ? error : new Error(String(error)),
-        {
-          correlationId: actor.correlationId,
-          assetId,
-          operationName: "get-owned-asset-metadata",
-          outcome: "failed",
-        },
-      );
-      return fail(
-        "processing_failed",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        "Failed to fetch file metadata",
-      );
+    } catch {
+      return fail("processing_failed", "Failed to fetch file metadata");
     }
   },
 
@@ -336,16 +447,16 @@ export const uploadService = {
     assetId: string,
     metadata: { ipAddress?: string; userAgent?: string },
   ): Promise<UploadServiceResult<DeleteOwnedAssetResponse>> {
+    const storage = resolveStorageProvider();
     try {
       return await prisma.$transaction(async (tx) => {
         const asset = await uploadRepository.findAssetForDeletion(assetId, tx);
         if (!asset || asset.deletedAt) {
-          return fail("not_found", HttpStatus.NOT_FOUND, "File not found");
+          return fail("not_found", "File not found");
         }
         if (asset.uploaderId !== actor.userId) {
           return fail(
             "forbidden",
-            HttpStatus.FORBIDDEN,
             "You do not have permission to delete this file",
           );
         }
@@ -380,14 +491,8 @@ export const uploadService = {
 
         try {
           await storage.delete(asset.key);
-        } catch (storageError) {
-          logger.error(
-            "Failed to delete asset from storage",
-            storageError instanceof Error
-              ? storageError
-              : new Error(String(storageError)),
-            { correlationId: actor.correlationId, assetId, key: asset.key },
-          );
+        } catch {
+          // Preserve current behavior: continue DB hard-delete even if blob deletion fails.
         }
 
         await uploadRepository.hardDeleteAsset(assetId, tx);
@@ -417,22 +522,8 @@ export const uploadService = {
           permanent: true,
         });
       });
-    } catch (error) {
-      logger.error(
-        "Failed to delete owned asset",
-        error instanceof Error ? error : new Error(String(error)),
-        {
-          correlationId: actor.correlationId,
-          assetId,
-          operationName: "delete-owned-asset",
-          outcome: "failed",
-        },
-      );
-      return fail(
-        "processing_failed",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        "Failed to delete file",
-      );
+    } catch {
+      return fail("processing_failed", "Failed to delete file");
     }
   },
 
@@ -452,11 +543,7 @@ export const uploadService = {
       );
       const staged = stagedUploads[0];
       if (!staged || staged.expiresAt.getTime() <= Date.now()) {
-        return fail(
-          "invalid_input",
-          HttpStatus.BAD_REQUEST,
-          "Invalid or expired document uploads",
-        );
+        return fail("invalid_input", "Invalid or expired document uploads");
       }
 
       let asset = await uploadRepository.findAssetByChecksum(
@@ -488,22 +575,8 @@ export const uploadService = {
       return ok({
         assetId: asset.id,
       });
-    } catch (error) {
-      logger.error(
-        "Failed to materialize onboarding upload",
-        error instanceof Error ? error : new Error(String(error)),
-        {
-          correlationId: input.actor.correlationId,
-          uploadId: input.uploadId,
-          operationName: "materialize-onboarding-upload",
-          outcome: "failed",
-        },
-      );
-      return fail(
-        "processing_failed",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        "Failed to materialize upload",
-      );
+    } catch {
+      return fail("processing_failed", "Failed to materialize upload");
     }
   },
 
@@ -520,11 +593,7 @@ export const uploadService = {
       client,
     );
     if (!asset) {
-      return fail(
-        "forbidden",
-        HttpStatus.FORBIDDEN,
-        "Unauthorized asset access",
-      );
+      return fail("forbidden", "Unauthorized asset access");
     }
     return ok(asset);
   },
@@ -538,6 +607,7 @@ export const uploadService = {
     deletedFromStorage: number;
     failedDeletions: string[];
   }> {
+    const storage = resolveStorageProvider();
     const expired =
       await uploadRepository.findExpiredStagedUploadsForCleanup(prisma);
 
@@ -548,12 +618,7 @@ export const uploadService = {
       try {
         await storage.delete(row.storageKey);
         deletedFromStorage++;
-      } catch (error) {
-        logger.error(
-          "Failed to delete expired staged upload from storage",
-          error instanceof Error ? error : new Error(String(error)),
-          { uploadId: row.id, storageKey: row.storageKey },
-        );
+      } catch {
         failedDeletions.push(row.id);
       }
     }

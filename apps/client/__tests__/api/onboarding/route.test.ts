@@ -1,27 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/onboarding/route";
-import { NextRequest } from "next/server";
-import { prisma } from "@build/db";
+import { NextRequest, NextResponse } from "next/server";
 
-// Mock dependencies
-vi.mock("@build/db", () => ({
-  prisma: {
-    $transaction: vi.fn(),
-    user: {
-      upsert: vi.fn(),
-      findUnique: vi.fn(),
-    },
-    clientProfile: {
-      upsert: vi.fn(),
-    },
-    professionalProfile: {
-      upsert: vi.fn(),
-    },
-    certificate: {
-      create: vi.fn(),
-    },
-  },
-}));
+const mockCompleteOnboarding = vi.hoisted(() => vi.fn());
 
 // Mock Clerk - the new implementation uses auth() and currentUser() directly
 vi.mock("@clerk/nextjs/server", () => ({
@@ -50,23 +31,14 @@ vi.mock("@/app/lib/api/rate-limit", () => ({
 
 vi.mock("@/app/lib/api/resilient-api", () => ({
   initializeCorrelationId: vi.fn().mockReturnValue("test-correlation-id"),
-  executeResilient: vi.fn().mockImplementation(async (fn, options) => {
-    const { NextResponse } = await import("next/server");
-    try {
-      const result = await fn();
-      return NextResponse.json(
-        { success: true, data: result },
-        { status: options.successStatus || 200 },
-      );
-    } catch (error) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: error instanceof Error ? error.message : "Unknown error",
-        },
-        { status: 500 },
-      );
-    }
+  getResilientExecutor: vi.fn().mockReturnValue({
+    execute: vi.fn(async (fn: () => Promise<unknown>) => {
+      try {
+        return { success: true, data: await fn() };
+      } catch (error) {
+        return { success: false, error };
+      }
+    }),
   }),
   getClientLogger: vi.fn().mockReturnValue({
     info: vi.fn(),
@@ -76,20 +48,26 @@ vi.mock("@/app/lib/api/resilient-api", () => ({
   }),
 }));
 
+vi.mock("@/app/lib/domains/user-profile", () => ({
+  userProfileOnboardingService: {
+    completeOnboarding: mockCompleteOnboarding,
+  },
+}));
+
 vi.mock("@/app/lib/api/api-response", () => ({
   apiError: vi
     .fn()
-    .mockImplementation((message: string, status: number, details?: any) => {
-      const { NextResponse } = require("next/server");
-      return NextResponse.json(
+    .mockImplementation((message: string, status: number, details?: unknown) =>
+      NextResponse.json(
         { success: false, error: message, details },
         { status },
-      );
-    }),
-  apiSuccess: vi.fn().mockImplementation((data: any, status: number = 200) => {
-    const { NextResponse } = require("next/server");
-    return NextResponse.json({ success: true, data }, { status });
-  }),
+      ),
+    ),
+  apiSuccess: vi
+    .fn()
+    .mockImplementation((data: unknown, status: number = 200) =>
+      NextResponse.json({ success: true, data }, { status }),
+    ),
   HttpStatus: {
     OK: 200,
     CREATED: 201,
@@ -101,31 +79,34 @@ vi.mock("@/app/lib/api/api-response", () => ({
   },
 }));
 
+vi.mock("@/app/lib/services/idempotency.service", () => ({
+  IdempotencyService: {
+    generateKey: vi.fn().mockReturnValue("idem-key"),
+    checkOrCreate: vi.fn().mockResolvedValue({ status: "new" }),
+    fail: vi.fn().mockResolvedValue(undefined),
+    complete: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 describe("POST /api/onboarding", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCompleteOnboarding.mockResolvedValue({
+      ok: true,
+      data: {
+        userId: "db_user_123",
+        role: "CLIENT",
+        isProfileComplete: true,
+      },
+    });
   });
 
   it("should complete client onboarding successfully (creates user if not exists)", async () => {
-    const mockUser = {
-      id: "db_user_123",
-      role: "client",
-      isProfileComplete: true,
-    };
-
-    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
-      return callback({
-        user: {
-          upsert: vi.fn().mockResolvedValue(mockUser),
-        },
-        clientProfile: {
-          upsert: vi.fn().mockResolvedValue({}),
-        },
-      });
-    });
-
     const requestBody = {
       role: "client",
+      county: "NAIROBI",
+      city: "Nairobi",
+      type: "HOMEOWNER",
       projectType: "new_construction",
       projectLocation: "Nairobi",
       estimatedBudget: "1000000-5000000",
@@ -142,46 +123,39 @@ describe("POST /api/onboarding", () => {
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
-    expect(data.data.role).toBe("client");
+    expect(data.data.role).toBe("CLIENT");
     expect(data.data.isProfileComplete).toBe(true);
+    expect(mockCompleteOnboarding).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: {
+          clerkId: "clerk_123",
+          correlationId: "test-correlation-id",
+          role: "client",
+        },
+        data: expect.objectContaining({ role: "client" }),
+      }),
+    );
   });
 
   it("should complete professional onboarding successfully", async () => {
-    const mockUser = {
-      id: "db_user_123",
-      role: "professional",
-      isProfileComplete: true,
-    };
-
-    const mockProfessionalProfile = { userId: "db_user_123" };
-
-    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
-      return callback({
-        user: {
-          upsert: vi.fn().mockResolvedValue(mockUser),
-        },
-        professionalProfile: {
-          upsert: vi.fn().mockResolvedValue(mockProfessionalProfile),
-        },
-        certificate: {
-          create: vi.fn().mockResolvedValue({}),
-        },
-      });
+    mockCompleteOnboarding.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        userId: "db_user_123",
+        role: "PROFESSIONAL",
+        isProfileComplete: true,
+      },
     });
 
     const requestBody = {
       role: "professional",
-      profession: "architect",
+      profession: "ARCHITECT",
       companyName: "Test Company Ltd",
-      licenseNumber: "NCA/1234/5678",
+      county: "NAIROBI",
       yearsExperience: 5,
-      portfolio: "https://portfolio.example.com",
+      portfolioUrl: "https://portfolio.example.com",
       website: "https://example.com",
       bio: "Experienced architect",
-      documents: [
-        { url: "/uploads/cert1.pdf", type: "EDUCATION_CERT" },
-        { url: "/uploads/id1.pdf", type: "ID_OR_PASSPORT" },
-      ],
     };
 
     const request = new NextRequest("http://localhost:3500/api/onboarding", {
@@ -194,7 +168,7 @@ describe("POST /api/onboarding", () => {
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
-    expect(data.data.role).toBe("professional");
+    expect(data.data.role).toBe("PROFESSIONAL");
   });
 
   it("should reject invalid role", async () => {
@@ -215,7 +189,9 @@ describe("POST /api/onboarding", () => {
 
   it("should reject unauthenticated requests", async () => {
     const { auth } = await import("@clerk/nextjs/server");
-    vi.mocked(auth).mockResolvedValueOnce({ userId: null } as any);
+    vi.mocked(auth).mockResolvedValueOnce({ userId: null } as Awaited<
+      ReturnType<typeof auth>
+    >);
 
     const request = new NextRequest("http://localhost:3500/api/onboarding", {
       method: "POST",
@@ -254,12 +230,13 @@ describe("POST /api/onboarding", () => {
     const { currentUser } = await import("@clerk/nextjs/server");
     vi.mocked(currentUser).mockResolvedValueOnce(null);
 
-    // Provide complete valid body so validation passes and currentUser check is reached
-    // ClientOnboardingSchema requires: role, projectType, projectLocation, estimatedBudget, description (min 10 chars)
     const request = new NextRequest("http://localhost:3500/api/onboarding", {
       method: "POST",
       body: JSON.stringify({
         role: "client",
+        county: "NAIROBI",
+        city: "Nairobi",
+        type: "HOMEOWNER",
         projectType: "new_home",
         projectLocation: "Nairobi",
         estimatedBudget: "1000000-5000000",
@@ -272,5 +249,56 @@ describe("POST /api/onboarding", () => {
 
     expect(response.status).toBe(500);
     expect(data.error).toContain("Could not retrieve user data");
+  });
+
+  it("returns 409 when onboarding already completed (isProfileComplete guard)", async () => {
+    mockCompleteOnboarding.mockResolvedValueOnce({
+      ok: false,
+      error: "conflict",
+      message: "Onboarding already completed",
+      status: 409,
+    });
+
+    const request = new NextRequest("http://localhost:3500/api/onboarding", {
+      method: "POST",
+      body: JSON.stringify({
+        role: "client",
+        county: "NAIROBI",
+        city: "Nairobi",
+        type: "HOMEOWNER",
+      }),
+    });
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(data.error).toBe("Onboarding already completed");
+  });
+
+  it("maps onboarding domain invalid_input failures to 400", async () => {
+    mockCompleteOnboarding.mockResolvedValueOnce({
+      ok: false,
+      error: "invalid_input",
+      message: "Invalid or expired document uploads",
+      status: 400,
+    });
+
+    const request = new NextRequest("http://localhost:3500/api/onboarding", {
+      method: "POST",
+      body: JSON.stringify({
+        role: "professional",
+        profession: "ARCHITECT",
+        companyName: "Test Company Ltd",
+        county: "NAIROBI",
+        yearsExperience: 5,
+      }),
+    });
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toContain("Invalid or expired document uploads");
   });
 });

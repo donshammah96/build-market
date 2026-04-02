@@ -3,18 +3,22 @@ import { z } from "zod";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
-  initializeCorrelationId,
   getResilientExecutor,
-  getClientLogger,
+  initializeCorrelationId,
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  RateLimits,
   getRateLimitIdentifier,
+  RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { propertiesService } from "@/app/lib/domains/properties";
-
-const logger = getClientLogger();
+import {
+  actorRoleLabel,
+  domainErrorCodeToStatus,
+  domainResultToErrorResponse,
+  logPropertiesRouteOutcome,
+  now,
+} from "@/app/api/properties/shared";
 
 const querySchema = z.object({
   limit: z.string().regex(/^\d+$/).optional().default("10"),
@@ -24,72 +28,127 @@ const querySchema = z.object({
     .default("active"),
 });
 
-/**
- * GET /api/properties/my-listings
- * Get property listings owned by the authenticated user.
- * Returns property data formatted for dashboard widget.
- * Excludes soft-deleted properties.
- */
-export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
+export const GET = withAuth(
+  async (req: NextRequest, { dbUserId, userRole }) => {
+    const startedAt = now();
+    const correlationId = initializeCorrelationId(req);
+    const operationName = "get_my_listings";
+    const actorRole = actorRoleLabel(userRole);
 
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
-    `my-listings:${identifier}`,
-    RateLimits.READ.limit,
-    RateLimits.READ.window,
-  );
-
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  const { searchParams } = new URL(req.url);
-  const queryParams = {
-    limit: searchParams.get("limit") || "10",
-    status: searchParams.get("status") || "active",
-  };
-
-  const queryValidation = querySchema.safeParse(queryParams);
-  if (!queryValidation.success) {
-    return apiError(
-      "Invalid query parameters",
-      HttpStatus.BAD_REQUEST,
-      queryValidation.error.issues,
+    const identifier = getRateLimitIdentifier(req);
+    const { success } = await checkRateLimit(
+      `my-listings:${identifier}`,
+      RateLimits.READ.limit,
+      RateLimits.READ.window,
     );
-  }
 
-  const { limit, status } = queryValidation.data;
-  const limitNum = Math.min(parseInt(limit), 50);
+    if (!success) {
+      const response = apiError(
+        "Too many requests",
+        HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+        resourceType: "property",
+      });
+      return response;
+    }
 
-  logger.info("Fetching user property listings", {
-    correlationId,
-    userId: dbUserId,
-    limit: limitNum,
-    status,
-  });
+    const { searchParams } = new URL(req.url);
+    const queryValidation = querySchema.safeParse({
+      limit: searchParams.get("limit") || "10",
+      status: searchParams.get("status") || "active",
+    });
 
-  const resilientExecutor = getResilientExecutor();
-  const result = await resilientExecutor.execute(
-    async () =>
-      propertiesService.getMyListings(dbUserId, {
-        limit: limitNum,
-        status,
-      }),
-    { operationName: "get_my_listings" },
-  );
+    if (!queryValidation.success) {
+      const response = apiError(
+        "Invalid query parameters",
+        HttpStatus.BAD_REQUEST,
+        queryValidation.error.issues,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+      });
+      return response;
+    }
 
-  if (result.success && result.data?.ok) {
-    return apiSuccess(result.data.data, HttpStatus.OK, correlationId);
-  }
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      () =>
+        propertiesService.getMyListings(
+          { userId: dbUserId, role: userRole },
+          {
+            limit: Math.min(Number.parseInt(queryValidation.data.limit, 10), 50),
+            status: queryValidation.data.status,
+          },
+        ),
+      { operationName },
+    );
 
-  if (result.success && result.data && !result.data.ok) {
-    return apiError(result.data.message, result.data.status);
-  }
+    if (!result.success || !result.data) {
+      const response = apiError(
+        "Failed to fetch listings",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "internal_error",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: now() - startedAt,
+        resourceType: "property",
+      });
+      return response;
+    }
 
-  logger.error("Failed to fetch listings", result.error, {
-    correlationId,
-    userId: dbUserId,
-  });
-  return apiError("Failed to fetch listings", HttpStatus.INTERNAL_SERVER_ERROR);
-});
+    const domainResult = result.data;
+    if (!domainResult.ok) {
+      const errorResponse = domainResultToErrorResponse(
+        domainResult,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(domainResult.error),
+        durationMs: now() - startedAt,
+        domainError: domainResult.error,
+        resourceType: "property",
+      });
+      return errorResponse!;
+    }
+
+    const response = apiSuccess(domainResult.data, HttpStatus.OK, correlationId);
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+    });
+    return response;
+  },
+);

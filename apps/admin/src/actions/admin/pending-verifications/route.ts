@@ -33,7 +33,6 @@ const logger = getClientLogger();
  * - sortOrder: asc | desc (default: desc)
  */
 export const GET = withAdminRole([
-  AdminRole.SYSTEM_ADMIN,
   AdminRole.SUPER_ADMIN,
 ])(async (req: NextRequest, context: AuthContext) => {
   const correlationId = initializeCorrelationId(req);

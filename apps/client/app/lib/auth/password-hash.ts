@@ -2,4 +2,4 @@ export {
   hashPasswordScrypt,
   scryptAsync,
   verifyScryptPassword,
-} from "@build/auth-server";
+} from "@build/auth-server/password-hash";

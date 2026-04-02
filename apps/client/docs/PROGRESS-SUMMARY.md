@@ -1,17 +1,43 @@
 # Progress Summary
 
-Last updated: 2026-03-20
+Last updated: 2026-04-02
 
 ## Snapshot
 
+- ADR-007 client-first rollout is now active in the client app boundary: middleware and onboarding resolution are status-aware (`ONBOARDING`, `PENDING_VERIFICATION`), the dedicated pending-verification route is live at `/professional-portal/pending-verification`, and internal user-status resolution now returns explicit status for redirect decisions.
+- Role-model normalization has started on client adapters: trust-boundary role normalization now collapses legacy `SUPPORT` claims into the canonical admin container role path, and secure-action plus API middleware actor handling aligns with `ADMIN + AdminRole` capability gating.
+- Database migration scaffolding for ADR-007 phase 1 is added (`packages/db/prisma/migrations/20260402120000_adr007_role_model_phase1/migration.sql`) to provision support-user admin profiles, normalize `SYSTEM_ADMIN` to `SUPER_ADMIN`, and contract enum surfaces in a phased sequence.
+- Focused verification passed for impacted client boundaries: middleware guards, middleware resolver behavior, and API middleware suites are green after this phase.
+
+- Tiered remediation implementation kickoff is now active for Tier 0 and Tier 1: a repository-level security drift report (`pnpm run client:report-security-drift`) was added via `apps/client/scripts/report-security-drift.mjs` and wired into CI to quantify unresolved env-boundary, log-safety, browser-persistence, and rendering-sink drift while closure work proceeds.
+- Tier 1 ASVS hardening is now materially implemented at the shared boundary level: `withAuth` and `secureAction` enforce trusted-origin mutation checks for authenticated writes, authenticated and callback responses default to `Cache-Control: no-store, private`, and the Clerk webhook path now couples replay protection with explicit callback-integrity outcomes instead of only implicit helper behavior.
+- Tier 1 log-safety coverage is wider than the first remediation sweep: the shared professional-portal helper plus user/profile/compliance route families (`profile`, `profile/complete/**`, `consent`, `export`, `deletion`, `rectification`, and `professional-portal/profile`) were cleaned of raw `userId` route-log metadata, and `check-log-safety` now scans those surfaces so new drift is caught in CI.
+- Production upload isolation is stronger in code, not just policy: `app/lib/infrastructure/storage.ts` now has a real S3-compatible remote provider, production still fails closed on unsafe local/same-origin CDN delivery, and the storage invariant suite now distinguishes missing bucket misconfiguration from valid remote-provider startup.
+
+- Staff-level implementation is now in place for ASVS drift items `DRIFT-001` through `DRIFT-006`: the first-pass auth, onboarding, uploads, storage, webhook, and CORS boundaries were hardened in code, not just documentation. That includes identity-safe log metadata in the remediated surfaces, typed env access for the guarded runtime modules, fail-closed production storage invariants, Redis-backed Clerk webhook replay suppression, and removal of the unused `OnboardingWizard` local draft persistence.
+- Machine enforcement for that security pass is now active: `check-log-safety`, `check-no-direct-env`, `check-browser-persistence`, and `check-cors-policy` were added under `apps/client/scripts/`, wired into client scripts and CI, and backed by scoped ESLint restrictions plus focused Vitest coverage for middleware, webhook replay behavior, storage invariants, and env-driven CORS behavior.
+- Env-governance follow-through from the same pass is now green: `scripts/check-env-contract.mjs` understands the typed env helper access pattern, `.env.example` was cleaned of stale Auth0 secret placeholders, `tmp-settings-actions.json` was normalized to remove BOM-based parser noise, and `app/actions/onboarding.ts` was cleaned up so the file no longer carries its prior local lint warning.
+- Staff-level ASVS architecture review follow-through is now documented in `docs/AUDIT-OWASP-ASVS-CLIENT-ARCHITECTURE.md`: the revised review corrects audit drift against the current repo, distinguishes documentation gaps from implementation drift, and reprioritizes security work around CORS/headers hardening, CSRF, anti-caching, webhook replay protection, idempotency storage policy, and logging/data-boundary cleanup.
+- Shared CORS enforcement is now tighter in `app/lib/api/cors.ts`: allowed origins are normalized from env-backed URLs, credentialed CORS headers are emitted only for explicitly trusted origins, preflight responses add the correct `Vary` controls, disallowed preflights fail with `403`, and preflight caching is reduced to one hour.
+
+- Dashboard-widget visual verification is now stable and evidence-backed for all three professional dashboard groups (service-provider, seller-store, seller-property): the route-based Cypress spec now uses canonical profession values and strict projects-contract-compliant mock payloads, eliminating prior false error-banner noise and producing deterministic desktop/mobile screenshot sets.
+
+- UI overhaul compliance pass has now been audited against the requested file list: 15 of 31 planned files shipped in this pass (`app/layout.tsx`, `app/page.tsx`, `app/globals.css`, layout nav/footer files, home Hero/Features/CTA files, shared `FormPrimitives`/`Display`, and dashboard `DashboardHeader`/`MetricsRow`). Confirmed outcomes include skip-link plus route-focus landing, semantic token migration, active-route semantics (`aria-current`), reduced-motion-safe animation guards, and locale-pinned dashboard metric formatting.
+- Coverage gap from this pass audit: 16 planned dashboard/widget files were not modified in the current diff (`ProfileCompletionBanner`, `ProfileCompletionWidget`, `MetricCard`, `ProfileStrengthWidget`, `WidgetEmptyState`, `AgendaWidget`, `InquiriesWidget`, `ListingsWidget`, `PipelineWidget`, `InventoryAlertsWidget`, `OrdersWidget`, `ProductsWidget`, `StoreOverviewWidget`, `LeadsWidget`, `PortfolioWidget`, `ProjectsWidget`) and remain queued for follow-up hardening.
+
 - Environment hardening pass completed for this branch: local auth-bypass guardrails tightened, env templates cleaned up for local/deployment usage, `.env.example` aligned to runtime-consumed keys, and env-contract drift checks now run in CI.
+- Upload observability join-key normalization is complete for adapter `operationName` fields in the uploads surfaces: `create_upload_asset`, `get_upload_asset_metadata`, `delete_upload_asset`, and `onboarding_upload` now replace legacy kebab-case names.
+- Shared API auth context minimization is complete: `userEmail` has been removed from `withAuth` context propagation, leaving `clerkId`, `dbUserId`, `userRole`, and optional `adminRole` as the canonical adapter context shape.
+- Uploads domain startup/testability hardening is complete: storage provider resolution is now lazy in `app/lib/domains/uploads/service.ts` with an explicit test override hook (`setUploadServiceStorageProviderForTests`) instead of module-load initialization.
+- Canonical env singleton test alignment is complete for middleware resolvers: internal-secret test coverage now overrides `env.services.internalApiSecret` directly instead of mutating runtime `process.env`.
 - Env governance follow-through expanded: Phase 5 central env-access guidance is now explicitly documented (canonical boundary, prioritized high-risk direct-read targets, and validation-group expansion), and the checker now enforces high-risk unused-key failures.
 - **Recently migrated vertical slices (lib/services cutover):** Reviews, Search, Documents, Licenses, Certificates, and Client Dashboard now have canonical domains under `app/lib/domains/`; routes and actions delegate through domain services. Upload refinement complete: `isLocalUpload` in `lib/utils/upload.ts`, `uploadFiles` and related types in `lib/upload-client.ts`; consumers repointed. Dead `lib/services/inventory.ts`, `orders.ts`, `products.ts` removed.
 - Seller-insights refinement is now complete beyond migration baseline: the domain owns inventory, orders, and products logic in `app/lib/domains/seller-insights/repository.ts`; the domain service no longer imports from `lib/services/*`; browser facades (`inventory-client`, `orders-client`, `products-client`) and dashboard consumers (`useDashboardData`, `InventoryAlertsWidget`) use explicit domain contracts.
 - Shared server-action hardening is established through `app/lib/actions/secure-action.ts` and `app/lib/errors/result.ts`.
 - User-profile refinement is now in progress beyond migration baseline: onboarding and profile-related browser boundaries removed a remaining client-side server-action import, onboarding submit responses now use explicit client DTO payloads, and the professional onboarding completion route now validates property payloads with typed Zod object schemas instead of `any`. **Onboarding UI:** Staff-level refinement complete per API-TO-FRONTEND-ARCHITECTURE.md: design tokens (including `--color-warning` for incomplete states), token migration complete across wizard (DetailsStep, DocumentsStep, ReviewStep, ProfessionStep), sessionStorage drafts with Zod restore, URL-encoded step/role, instrumentation context, ARIA hardening, accordion semantics, loading/error boundaries. OnboardingForm removed (legacy stub). Analytics provider swap complete: PostHog forwards onboarding events in production. **Staff-level onboarding fixes (2026-03-17):** GDPR consent records (one per type); Clerk metadata before idempotency; shared `updateClerkOnboardingMetadata`; skip flows use null/empty instead of synthetic data; document materialization outside transaction; completeOnboarding guard; Property enum validation; sync outside transaction; upload route Result pattern.
 - Idea-books refinement is now in progress beyond migration baseline: the domain service now returns explicit DTO contracts instead of `unknown`, browser facade attachment/collaborator contracts are aligned to list versus detail payload shapes, and both `app/idea-books` route segments now have `loading.tsx`/`error.tsx` boundaries.
-- Properties refinement is now in progress beyond migration baseline: the properties browser facade and hooks use explicit client DTO contracts instead of `any` payloads, properties route adapters pass actor objects through the domain boundary consistently, and the properties settings route now has route-local component extraction plus segment-level `loading.tsx`/`error.tsx` boundaries.
+- Properties refinement is now complete beyond migration baseline: legacy properties service and repository compatibility modules were removed, contracts now use explicit coordinates/error-detail DTOs, operations remain domain-pure, and properties routes plus actions emit structured ADR-005 observability outcomes through stable operation names.
+- Properties attachments/media follow-through is now materially tighter inside that refinement track: `PropertyForm` verification documents use direct uploaded assets instead of manual asset-ID entry, the form submit contract preserves uploaded image asset references as `imageAssets`, the properties settings create flow now refuses URL-only images rather than mapping URLs to fake `assetId` values, and blank optional number/URL fields no longer fail submission with `NaN` or empty-string validation noise.
 - Stores refinement is now in progress beyond migration baseline: the stores browser facade and hooks use explicit client DTO contracts instead of `any` payloads, the stores settings route has route-local component extraction plus segment-level `loading.tsx`/`error.tsx`, and stores route adapters now pass actor objects through the domain boundary consistently.
 - Calendar refinement is now in progress beyond the initial migration baseline: the domain service owns serialized list/detail DTO mapping, the browser facade no longer repairs server payloads, the heavy month-sidebar and edit-dialog UI moved behind route-local dynamic imports, and the calendar route tree now has App Router `loading.tsx` and `error.tsx` coverage.
 - Projects refinement is complete: explicit DTOs and mappers in `app/lib/domains/projects/`; service applies mappers for list/detail; API returns `{ items, pagination }` / `{ item }`; client DTO repair removed from portal and generic clients; `ClientDate` component for hydration-safe date display; staff audit in `docs/AUDIT-PROJECTS.md`.
@@ -42,38 +68,47 @@ Last updated: 2026-03-20
 
 ## Recently Migrated Slices (lib/services Cutover)
 
-
-| Slice            | Domain                              | Routes/Actions                                | Tests                |
-| ---------------- | ----------------------------------- | --------------------------------------------- | -------------------- |
-| Reviews          | `app/lib/domains/reviews/`          | `app/api/reviews/route.ts`                    | Domain + route tests |
+| Slice            | Domain                              | Routes/Actions                                                   | Tests                         |
+| ---------------- | ----------------------------------- | ---------------------------------------------------------------- | ----------------------------- |
+| Reviews          | `app/lib/domains/reviews/`          | `app/api/reviews/route.ts`                                       | Domain + route tests          |
 | Search           | `app/lib/domains/search/`           | `app/api/search/professionals/route.ts`, `app/actions/search.ts` | Domain + route + action tests |
-| Documents        | `app/lib/domains/documents/`        | `app/api/professional-portal/documents/`**    | Domain + route tests |
-| Licenses         | `app/lib/domains/licenses/`         | `app/api/professional-portal/licenses/**`     | Domain + route tests |
-| Certificates     | `app/lib/domains/certificates/`     | `app/api/professional-portal/certificates/**` | Domain + route tests |
-| Client Dashboard | `app/lib/domains/client-dashboard/` | `app/api/client/dashboard/route.ts`           | Domain + route tests |
-
+| Documents        | `app/lib/domains/documents/`        | `app/api/professional-portal/documents/`\*\*                     | Domain + route tests          |
+| Licenses         | `app/lib/domains/licenses/`         | `app/api/professional-portal/licenses/**`                        | Domain + route tests          |
+| Certificates     | `app/lib/domains/certificates/`     | `app/api/professional-portal/certificates/**`                    | Domain + route tests          |
+| Client Dashboard | `app/lib/domains/client-dashboard/` | `app/api/client/dashboard/route.ts`                              | Domain + route tests          |
 
 **Upload refinement:** `isLocalUpload` → `lib/utils/upload.ts`; `uploadFiles`, `UploadError`, `validateFiles`, `FILE_LIMITS` → `lib/upload-client.ts`. Consumers: `PropertyForm`, `StoreForm`, `DocumentUploader`, `useImageUploader`.
 
 ## Pending Refinement
 
+- **ADR-007 next phase (admin paths):** migrate remaining admin-gated route/action/UI checks to the consolidated admin capability model across admin surfaces, remove residual `SYSTEM_ADMIN` path dependencies, and extend policy-matrix coverage under `__tests__/policy/**` for admin capability constraints.
+
+ADR-007 admin-path migration checklist (staff-level):
+
+- [x] Phase 2 kickoff documented in summary docs.
+- [x] First-wave admin action role gates switched to `SUPER_ADMIN`-only for verification and user-mutation paths (`shared.ts`, `users.ts`, verification action routes).
+- [x] Admin API middleware super-role pass-through normalized to `SUPER_ADMIN`.
+- [x] Migrate remaining admin dashboard UI guards that still include `SYSTEM_ADMIN` in client-side allowlists.
+- [x] Update remaining admin API/action surfaces outside first wave (if any residual `SYSTEM_ADMIN` references remain after grep sweep). Sweep result: no remaining `SYSTEM_ADMIN` references across `apps/admin/src/**`, `apps/admin/__tests__/**`, or `apps/admin/scripts/**`.
+- [x] Add/refresh admin policy-matrix coverage for consolidated admin capability constraints (`apps/admin/src/lib/security/__tests__/authorization-policy.test.ts`).
+- [x] Run full `admin:check-types` and targeted admin action test sweep after residual cleanup. Latest result: `pnpm run admin:check-types` is green; targeted policy and action suites are green (`authorization-policy.test.ts`, `verification-actions.test.ts`, `users-actions.test.ts`, `stores-actions.test.ts`).
+
 - **Projects domain:** `project-operations.service` absorbed into `app/lib/domains/projects/operations.ts`; ownership verification, state machines, and optimistic locking now live in the projects domain.
 - **Stores domain:** `store-operations.service` and `store-event.service` absorbed into `app/lib/domains/stores/`; operations live in `operations.ts`, event sourcing in `events.ts`; `lib/services` re-exports for compatibility.
+- **UI overhaul carry-forward (dashboard widgets):** complete token, interaction-state, and a11y parity for the 16 planned-but-unchanged dashboard/widget files identified in the 2026-03-29 audit pass.
 
 ## Tests Implementation
 
-
-| Slice            | Domain Tests                | Route/Adapter Tests       | Status                            |
-| ---------------- | --------------------------- | ------------------------- | --------------------------------- |
-| Reviews          | `reviews.service.test.ts`   | `reviews/route.test.ts`    | Complete                          |
-| Search           | `search.service.test.ts`    | `search.test.ts` (action)  | Complete                          |
-| Documents        | `documents.service.test.ts` | `documents.route.test.ts` | Complete                          |
-| Licenses         | `licenses.service.test.ts`  | `licenses.route.test.ts`  | Complete                          |
-| Certificates     | `certificates.service.test.ts` | `certificates.route.test.ts` | Complete                          |
-| Client Dashboard | `client-dashboard.service.test.ts` | `dashboard.route.test.ts` | Complete                          |
-| Upload (browser) | —                           | —                         | `useImageUploader.test.ts` (mock hoisting fixed) |
-| Onboarding Upload Cleanup | `uploads/service.test.ts` | `jobs/onboarding-upload-cleanup.test.ts` | Complete |
-
+| Slice                     | Domain Tests                       | Route/Adapter Tests                      | Status                                           |
+| ------------------------- | ---------------------------------- | ---------------------------------------- | ------------------------------------------------ |
+| Reviews                   | `reviews.service.test.ts`          | `reviews/route.test.ts`                  | Complete                                         |
+| Search                    | `search.service.test.ts`           | `search.test.ts` (action)                | Complete                                         |
+| Documents                 | `documents.service.test.ts`        | `documents.route.test.ts`                | Complete                                         |
+| Licenses                  | `licenses.service.test.ts`         | `licenses.route.test.ts`                 | Complete                                         |
+| Certificates              | `certificates.service.test.ts`     | `certificates.route.test.ts`             | Complete                                         |
+| Client Dashboard          | `client-dashboard.service.test.ts` | `dashboard.route.test.ts`                | Complete                                         |
+| Upload (browser)          | —                                  | —                                        | `useImageUploader.test.ts` (mock hoisting fixed) |
+| Onboarding Upload Cleanup | `uploads/service.test.ts`          | `jobs/onboarding-upload-cleanup.test.ts` | Complete                                         |
 
 **Recommendation:** Add focused domain and/or route adapter tests for Reviews, Search, Documents, Licenses, Certificates, and Client Dashboard before removing `lib/services` compatibility layer.
 
@@ -82,7 +117,7 @@ Last updated: 2026-03-20
 - Calendar: canonical domain module active; professional calendar routes, server actions, browser facade, dashboard agenda consumer, and hooks are domain-backed with explicit DTO contracts; remaining legacy surface is low.
 - Messaging: canonical domain module complete; server actions and API routes are domain-backed; remaining legacy surface is low.
 - Projects: canonical domain module complete; shared and professional API routes plus actions are domain-backed, including optimistic mutations and actor-scoped queries; remaining legacy surface is low.
-- Properties: canonical domain module active; API routes, query actions, onboarding/settings/profile-complete flows, and document or attachment operations are domain-backed; remaining legacy surface is low.
+- Properties: canonical domain module complete; API routes and actions are domain-backed with explicit DTO boundaries, legacy compatibility modules removed, and ADR-005 structured observability aligned for both route and action adapters; remaining legacy surface is low.
 - Stores: canonical domain module active; API routes, actions, and onboarding/profile-complete store creation are domain-backed; remaining legacy surface is low.
 - Portfolio: canonical domain module active; core CRUD and image routes are domain-backed through `app/lib/domains/portfolio/service.ts`; remaining legacy surface is low.
 - CRM: canonical domains active; public leads/status, professional leads, inquiries, pipeline, and inquiry or lead actions are domain-backed with actor-aware service enforcement; remaining legacy surface is low.
@@ -99,12 +134,29 @@ Last updated: 2026-03-20
 
 ## Completed In This Pass
 
+- Hardened the route-based dashboard visual spec (`cypress/e2e/professional-dashboard-visual.cy.ts`) by aligning profession mocks with runtime grouping (`GENERAL_CONTRACTOR`, `HARDWARE`, `REAL_ESTATE_AGENT`) and adding required nested `client.id` fields on `/api/projects` mocked items to satisfy strict projects client schema parsing.
+- Re-ran the professional dashboard visual spec and validated distinct widget compositions for service-provider, seller-store, and seller-property on both target viewports (`1366x1024`, `390x844`) with no projects-shape error banner in the final inspected captures.
+
+- Completed the audited UI overhaul slice across shell, nav, homepage, shared primitives, and dashboard headers: `app/layout.tsx`, `app/page.tsx`, `app/globals.css`, `components/layout/{NavBar,Header,MobileNav,Footer}.tsx`, `components/home/{Hero,FeatureSection,FeatureCard,CTA}.tsx`, `components/shared/{FormPrimitives,Display}.tsx`, and `components/dashboard/{DashboardHeader,MetricsRow}.tsx`.
+- Delivered concrete Section 3 compliance outcomes in that slice: keyboard-first shell resilience (`Skip to main content`, route-focus landing on `#main-content`), semantic token usage (`background`, `foreground`, `border`, `focus-ring`, `primary`), explicit `aria-current` route semantics in navigation, and mobile touch-target hardening (`min-h-11` / `min-w-11`) for menu controls.
+- Applied motion and visual-system hardening for the same slice: `motion-safe:*` animation guards for skeletons and reveals, bold gradient-driven hero/CTA/feature refresh, and locale stabilization for dashboard number formatting (`toLocaleString("en-KE")` in `MetricsRow`).
+- Carried forward follow-up scope from this audit: dashboard/profile-completion widgets listed in the pass plan remain unchanged in the current diff and are tracked under Pending Refinement.
+
+- Completed properties closure against `API-TO-FRONTEND-ARCHITECTURE.md`: removed legacy compatibility modules (`app/lib/services/property-operations.service.ts`, `lib/services/property-operations.service.ts`, `lib/services/properties.ts`, `app/lib/repositories/property.repository.ts`, `lib/repositories/property.repository.ts`), tightened contracts (`PropertyCoordinates`, typed `PropertyErrorDetails`), and added shared secure-action observability support wired through all properties action entry points (`list`, `detail`, `similar`, `my-listings`, `create`, `batch-create`, `update`, `delete`, and document actions).
+
+- Started staff-level properties refinement implementation across domain/action/UI boundaries: removed transport-status coupling from properties domain errors (`app/lib/domains/properties/service.ts`), switched update action error status derivation to `ActionErrorCode` mapping (`app/actions/properties.ts`), added properties-form draft persistence plus submit-time first-invalid focus and validation-summary ARIA wiring (`components/forms/PropertyForm.tsx`), and added additive loading/success/error state support in shared primitives (`components/ui/button.tsx`, `components/ui/input.tsx`).
+- Completed the next properties refinement slice around attachments/media contracts: `components/forms/PropertyForm.tsx` now carries canonical `imageAssets` alongside display URLs, normalizes blank optional numeric/URL inputs correctly, and keeps verification documents on the upload-first asset workflow; `app/professional-portal/settings/properties/_components/properties-settings-page-client.tsx` now builds property images only from uploaded asset-backed media; `__tests__/components/forms/PropertyForm.test.tsx`, its snapshots, and `__tests__/lib/properties-validation.test.ts` were updated to match the current form structure and the real `generatePropertySlug()` behavior.
+
 - Completed Phase 2 (deployment/local env hygiene): updated `apps/client/.gitignore` to ignore `.env.vercel` while preserving `.env.vercel.example`; refreshed local template guidance in `apps/client/.env.local.example`; sanitized `apps/client/.env.vercel`; and added `apps/client/.env.vercel.example` as the committed deployment template.
 - Completed Phase 3 (auth bypass hardening): tightened `BYPASS_AUTH` handling in `app/lib/api/api-middleware.ts` to block unsafe bypass paths (CI and non-local contexts), and extended `__tests__/lib/api-middleware.test.ts` with coverage for allowed local bypass plus blocked bypass scenarios.
 - Completed Phase 4/6 (env contract and CI drift guard): aligned `apps/client/.env.example` to runtime-consumed env keys; added `apps/client/scripts/check-env-contract.mjs`; added scripts in `apps/client/package.json` and root `package.json`; and wired env contract validation into `.github/workflows/ci.yml`.
 - Completed strict checker enforcement refinement: `apps/client/scripts/check-env-contract.mjs` now fails on high-risk unused template keys, recognizes centralized env-definition keys (for example `name: "KEY"`) as valid usage to reduce false positives, and narrows NATS high-risk matching to credential-like keys only.
 - Completed high-risk template cleanup for strict mode: removed stale sensitive placeholders (`SMTP_PASSWORD`, `AFRICASTALKING_API_KEY`) from `apps/client/.env.example` so strict unused-key checks pass without exceptions.
 - Completed Phase 5 documentation update: `docs/ENV-FILES-REMEDIATION-WALKTHROUGH.md` now carries explicit centralization guidance for canonical env boundary usage, prioritized high-risk direct-read migration targets, and validation-group expansion in `app/lib/infrastructure/env.ts`.
+- Completed L-1 operationName normalization for upload adapters with coordinated observability rollout notes: legacy dashboard/log filters must migrate from `create-upload-asset`, `get-upload-asset-metadata`, `delete-upload-asset`, and `onboarding-upload` to snake_case keys during the same release window.
+- Completed L-2 AuthContext minimization by removing `userEmail` from shared middleware context and corresponding contract tests.
+- Completed L-3 upload-service dependency initialization hardening by replacing module-level storage singleton creation with lazy provider resolution and test override injection support.
+- Completed middleware resolver regression realignment to canonical env singleton semantics (`env.services.internalApiSecret` override instead of runtime `process.env` mutation).
 - **Staff-level onboarding and user-profile fixes (2026-03-17):** GDPR consent records now create one `ConsentRecord` per changed type in `service.ts`, `profile-complete.ts`, and `onboarding.ts`. Clerk metadata update runs before `IdempotencyService.complete()` in all onboarding routes. Replaced `ClerkMetadataClient` type cast in `actions/onboarding.ts` with shared `updateClerkOnboardingMetadata`. `skipClientOnboarding` uses null for county; `skipProfessionalOnboarding` uses `companyName: ""`. Document materialization moved before `prisma.$transaction`. `completeOnboarding` guards against already-onboarded users. Property fields use `z.nativeEnum(PropertyType|Category|Status)`; removed `as never` casts. `syncUserProfileCompletionStatus` runs after transaction. Upload route uses `isOk()` and correct Result handling. Added consent records test, conflict test, invalid-enum test, and transaction boundary comments.
 - Refined legal segment: added `loading.tsx` and `error.tsx` for `app/legal`; fixed footer year hydration via `suppressHydrationWarning`; extracted `Toggle`, `CookieCategoryCard`, and `CATEGORIES` into `cookie-settings/_components/`.
 - Refined properties domain: added `mappers.ts` with `toPropertyDocumentDto`, `toPropertyAttachmentDto`, `toPropertyCreateResultDto`; service now returns explicit DTOs for documents, attachments, create/update; tightened `lib/properties-client.ts` contracts; removed type assertion in properties-settings-page-client; staff audit in `docs/AUDIT-PROPERTIES.md`.
@@ -199,7 +251,7 @@ Last updated: 2026-03-20
 - Documented the shared domain-layer boundary in `app/lib/domains/README.md`, including explicit CRM guidance for service versus repository responsibilities and public-versus-authenticated semantics.
 - Extended `__tests__/hooks/useDashboardData.test.ts` to verify CRM consumer normalization for leads, property inquiries, and pipeline summaries in the service-provider and hybrid dashboard branches.
 - Extended `__tests__/lib/dashboard-browser-clients.test.ts` to cover the dashboard-facing CRM browser facades directly, including lead filter serialization and pipeline summary envelopes.
-- Added the canonical professionals public-read boundary under `app/lib/domains/professionals/`, then cut `app/api/professionals/`**, `app/actions/professionals.ts`, `lib/professionals-client.ts`, `hooks/useProfessionals.ts`, `lib/professionals-mappers.ts`, and the professional detail page type imports over to domain-owned DTOs instead of `lib/services/professionals`.
+- Added the canonical professionals public-read boundary under `app/lib/domains/professionals/`, then cut `app/api/professionals/`\*\*, `app/actions/professionals.ts`, `lib/professionals-client.ts`, `hooks/useProfessionals.ts`, `lib/professionals-mappers.ts`, and the professional detail page type imports over to domain-owned DTOs instead of `lib/services/professionals`.
 - Added focused professionals regression coverage in `__tests__/api/professionals/route.test.ts`, `__tests__/api/professionals/professional-id.route.test.ts`, and `__tests__/lib/domains/professionals.service.test.ts` for list filtering, detail `404` mapping, public DTO shaping, and location normalization.
 - Hardened the user-profile plus professional-settings refinement pass by adding shared user-profile serialization mappers in `app/lib/domains/user-profile/mappers.ts`, tightening profile-complete route helper typing and target-specific schema dispatch, and adding route-level `loading.tsx`/`error.tsx` boundaries for `app/profile` and `app/profile/complete`.
 - Tightened browser profile contracts by switching the profile status flow in `lib/user-profile-client.ts` and `hooks/useProfileStatus.ts` to an explicit discriminated result shape instead of loosely typed status parsing, and aligned non-dashboard browser client tests to the new contract.
@@ -211,6 +263,9 @@ Last updated: 2026-03-20
 
 ## Verification
 
+- UI overhaul audit gates (2026-03-29, rerun after focused normalization fixes): `pnpm run client:tsc-noemit` completed without diagnostics; `pnpm run client:test:dashboard-hook` passed (`7/7`); `pnpm run client:test:browser-hook-sweep` passed (`15/15`); `pnpm run client:test:dashboard-browser-clients` passed (`6/6`).
+- Dashboard visual e2e suite: `pnpm -C apps/client exec cypress run --spec "cypress/e2e/professional-dashboard-visual.cy.ts" --browser electron --reporter spec` produced `3/3` passing tests and `6` screenshots (`service-provider`, `seller-store`, `seller-property` x desktop/mobile).
+
 - Verified after this refinement pass: `pnpm run client:tsc-noemit` completed cleanly against the updated domain mappers, dynamic route components, and new segment boundaries.
 - `pnpm -C apps/client exec tsc --noEmit`
 - Focused calendar suites: `3/3` files, `6/6` tests passing for `__tests__/lib/domains/calendar.service.test.ts`, `__tests__/api/professional-portal/calendar.route.test.ts`, and `__tests__/api/professional-portal/calendar-item.route.test.ts`.
@@ -221,6 +276,7 @@ Last updated: 2026-03-20
 - Onboarding route suites: `4/4` files, `21/21` tests passing after the onboarding sibling-route extraction.
 - Professional settings/profile-complete suites: `2/2` files, `10/10` tests passing after the professional-portal route cutover.
 - Properties domain suite: `1/1` file, `7/7` tests passing for creation gating, batch-create success, attachment mappings, optimistic-lock mutation mappings, and document authorization coverage.
+- Focused properties form and validation suites: `2/2` files, `48/48` tests passing for `__tests__/components/forms/PropertyForm.test.tsx` and `__tests__/lib/properties-validation.test.ts`, covering the refreshed snapshots, canonical image-asset submit payloads, direct verification-document uploads, session-storage isolation, and slug expectation alignment.
 - Portfolio domain suite: `1/1` file, `6/6` tests passing for list/detail/update paths plus limit enforcement, asset ownership rejection, and main-image promotion on delete.
 - Projects facade gate suite: `1/1` file, `3/3` tests passing for read-disabled, read-only rollout, and fully enabled generic-projects facade behavior.
 - Focused projects hook consumer suite: `1/1` file, `4/4` tests passing for generic and portal list/detail consumers.
@@ -245,11 +301,15 @@ Reviews, Search, Documents, Licenses, Certificates, and Client Dashboard are now
 
 ### Ranked Queue (Refinement & Tests)
 
-1. **Reviews, Search, Documents, Licenses, Certificates, Client Dashboard** — add domain and/or route adapter tests; remove orphaned `lib/services/*` files after verification.
-2. **Idea Books Deep Follow-Through** — medium impact post-cutover hardening.
-  Why: the route family is now domain-backed and adapter-tested, but deep follow-through remains for browser-facade contract alignment and any residual repository-shape cleanup.
+1. **Properties Domain Hardening** - highest-priority refinement follow-through after the staff audit.
+   Why: the slice is domain-backed but still has material architecture drift in contracts, repository ownership, operations purity, observability, and compatibility-shim handling, so it currently reads as more complete than it is.
+   Action plan: move remaining Prisma reads and writes plus legacy `PropertyRepository` behavior into `app/lib/domains/properties/repository.ts`; replace Prisma-derived and route-shaped contracts with explicit DTO plus `Result<T, DomainError>` contracts; remove logging and `NextResponse` concerns from `operations.ts`; harden `app/api/properties/**` to the ADR-005 structured logging contract; and review temporary shims such as collection-level document deletion and body-version optimistic-lock fallback.
+
+2. **Reviews, Search, Documents, Licenses, Certificates, Client Dashboard** - add domain and/or route adapter tests; remove orphaned `lib/services/*` files after verification.
+3. **Idea Books Deep Follow-Through** - medium impact post-cutover hardening.
+   Why: the route family is now domain-backed and adapter-tested, but deep follow-through remains for browser-facade contract alignment and any residual repository-shape cleanup.
    Action plan: keep `app/lib/domains/idea-books/` as the canonical seam, complete browser-client contract normalization, and add any remaining domain-focused collaborator/privacy rule tests.
-3. ~~**lib/services removal**~~ — Completed: removed orphaned `reviews.ts`, `search.ts`, `documents.ts`, `licenses.ts`, `certificates.ts`, `client-dashboard.ts`, `upload.ts` from `lib/services/`.
+4. ~~**lib/services removal**~~ — Completed: removed orphaned `reviews.ts`, `search.ts`, `documents.ts`, `licenses.ts`, `certificates.ts`, `client-dashboard.ts`, `upload.ts` from `lib/services/`.
 
 ### Carry-Forward Rules For Every Remaining Slice
 
@@ -265,7 +325,6 @@ Reviews, Search, Documents, Licenses, Certificates, and Client Dashboard are now
 
 ### Phase 2 Acceptance Criteria
 
-1. Confirm homeowner/general route contract requirements and finalize response envelope guarantees for all `/api/projects/`** resources.
+1. Confirm homeowner/general route contract requirements and finalize response envelope guarantees for all `/api/projects/`\*\* resources.
 2. Monitor staging/production mutation-path health (idempotency conflicts, optimistic-lock conflicts, write error rates) during canary and broad rollout.
 3. Remove rollout flags after full generic projects cutover.
-

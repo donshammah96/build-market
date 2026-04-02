@@ -10,7 +10,7 @@ export const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "bg-white/5 border border-white/10 text-cream-50 rounded-none",
+      "bg-card border border-border text-card-foreground rounded-lg",
       className ?? "",
     )}
     {...props}
@@ -25,7 +25,7 @@ export const Badge = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "inline-flex items-center border px-3 py-1 text-[10px] font-medium transition-colors bg-[#E0C9A6]/10 text-[#E0C9A6] border-[#E0C9A6]/50 uppercase tracking-widest",
+      "inline-flex items-center border px-3 py-1 text-[10px] font-medium transition-colors bg-primary/10 text-primary border-primary/40 uppercase tracking-widest rounded-full",
       className ?? "",
     )}
     {...props}

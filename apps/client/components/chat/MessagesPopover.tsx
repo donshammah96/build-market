@@ -33,7 +33,11 @@ export function MessagesPopover() {
     queryFn: async () => {
       const result = await messagingClient.getConversations();
       if (result.success && result.data) {
-        return result.data;
+        // API returns { threads, pagination } — normalize to array
+        const data = result.data as
+          | Conversation[]
+          | { threads?: Conversation[]; pagination?: unknown };
+        return Array.isArray(data) ? data : data?.threads ?? [];
       }
       throw new Error("Failed to fetch conversations");
     },
@@ -43,7 +47,7 @@ export function MessagesPopover() {
   });
 
   const getUnreadCount = () => {
-    if (!conversations || !currentUserDbId) return 0;
+    if (!Array.isArray(conversations) || !currentUserDbId) return 0;
     return conversations.reduce((acc, conv) => {
       const count =
         (conv.unreadCount as Record<string, number>)?.[currentUserDbId] || 0;
@@ -103,14 +107,14 @@ export function MessagesPopover() {
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
               Loading...
             </div>
-          ) : conversations?.length === 0 ? (
+          ) : !Array.isArray(conversations) || conversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-zinc-500 text-sm px-4 text-center">
               <MessageSquare className="h-8 w-8 mb-2 opacity-20" />
               <p>No messages yet</p>
             </div>
           ) : (
             <div className="divide-y divide-zinc-100">
-              {conversations?.slice(0, 5).map((conv) => {
+              {(Array.isArray(conversations) ? conversations : []).slice(0, 5).map((conv) => {
                 const partner = getPartnerInfo(conv);
                 const isUnread =
                   ((conv.unreadCount as Record<string, number>)?.[

@@ -7,6 +7,11 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { consentClient } from "@/lib/consent-client";
+
+export const SECURITY_PERSISTENCE_ALLOWLIST = [
+  "cookie-consent-preferences",
+] as const;
 
 // =============================================================================
 // TYPES
@@ -134,11 +139,12 @@ export function CookieConsentProvider({
       if (!isSignedIn) return;
       setIsSyncing(true);
       try {
-        await fetch("/api/user/consent", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ consents: toApiPayload(newConsent) }),
+        const result = await consentClient.updateConsents({
+          consents: toApiPayload(newConsent),
         });
+        if (!result.success) {
+          throw new Error(result.error);
+        }
       } catch (err) {
         console.error("[CookieConsent] Failed to sync to backend:", err);
       } finally {

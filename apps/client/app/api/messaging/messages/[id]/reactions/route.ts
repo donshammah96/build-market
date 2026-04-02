@@ -12,17 +12,33 @@ import {
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
-import { ReactionSchema, messagingService } from "@build/messaging-server";
+import {
+  ReactionSchema,
+  type MessagingActor,
+  messagingService,
+} from "@/app/lib/domains/messaging";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
 type MessageParams = { id: string };
+
+function toMessagingActor(context: {
+  dbUserId: string;
+  userRole: unknown;
+}): MessagingActor {
+  return {
+    userId: context.dbUserId,
+    role: normalizeRole(String(context.userRole)) ?? null,
+  };
+}
 
 /**
  * POST /api/messaging/messages/[id]/reactions
  */
 export const POST = withAuth<MessageParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
     if (!params?.id || !isValidId(params.id))
       return apiError("Invalid message ID", HttpStatus.BAD_REQUEST);
     const messageId = params.id;
@@ -56,7 +72,7 @@ export const POST = withAuth<MessageParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => messagingService.addReaction(dbUserId, messageId, parsed.data),
+      () => messagingService.addReaction(actor, messageId, parsed.data),
       { operationName: "create_reaction" },
     );
 
@@ -86,8 +102,9 @@ export const POST = withAuth<MessageParams>(
  * DELETE /api/messaging/messages/[id]/reactions
  */
 export const DELETE = withAuth<MessageParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
     if (!params?.id || !isValidId(params.id))
       return apiError("Invalid message ID", HttpStatus.BAD_REQUEST);
     const messageId = params.id;
@@ -103,7 +120,7 @@ export const DELETE = withAuth<MessageParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => messagingService.removeReaction(dbUserId, messageId),
+      () => messagingService.removeReaction(actor, messageId),
       { operationName: "delete_reaction" },
     );
 

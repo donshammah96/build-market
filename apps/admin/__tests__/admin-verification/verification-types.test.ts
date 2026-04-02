@@ -8,7 +8,6 @@ import {
   mapActionToStatus,
   validateTransition,
   VALID_TRANSITIONS,
-  type VerificationAction,
 } from "@/lib/services/verification/types";
 import type { VerificationStatus } from "@prisma/client";
 
@@ -28,8 +27,8 @@ describe("Verification Types", () => {
   });
 
   describe("validateTransition", () => {
-    it("should allow UNVERIFIED → VERIFIED transition", () => {
-      const result = validateTransition("UNVERIFIED", "VERIFY");
+    it("should allow PENDING → VERIFIED transition", () => {
+      const result = validateTransition("PENDING", "VERIFY");
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
     });
@@ -100,18 +99,16 @@ describe("Verification Types", () => {
       expect(result.errors).toHaveLength(0);
     });
 
-    it("should reject invalid transition UNVERIFIED → PENDING via VERIFY", () => {
-      // VERIFY should go to VERIFIED, not PENDING
-      const result = validateTransition("UNVERIFIED", "VERIFY");
-      expect(result.isValid).toBe(true); // Valid, but goes to VERIFIED
-      expect(mapActionToStatus("VERIFY")).toBe("VERIFIED");
+    it("should reject invalid transition VERIFIED → VERIFIED via VERIFY", () => {
+      const result = validateTransition("VERIFIED", "VERIFY");
+      expect(result.isValid).toBe(false);
+      expect(result.errors[0]).toContain("Invalid transition");
     });
   });
 
   describe("VALID_TRANSITIONS", () => {
-    it("should have transitions for all statuses", () => {
+    it("should have transitions for all active FSM workflow statuses", () => {
       const statuses: VerificationStatus[] = [
-        "UNVERIFIED",
         "PENDING",
         "VERIFIED",
         "REJECTED",

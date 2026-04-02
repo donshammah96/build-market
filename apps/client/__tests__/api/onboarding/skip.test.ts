@@ -1,23 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest, NextResponse } from "next/server";
 import { POST } from "@/app/api/onboarding/skip/route";
-import { NextRequest } from "next/server";
-import { prisma } from "@build/db";
 
-// Mock dependencies
-vi.mock("@build/db", () => ({
-  prisma: {
-    $transaction: vi.fn(),
-    user: {
-      upsert: vi.fn(),
-      findUnique: vi.fn(),
-    },
-    clientProfile: {
-      upsert: vi.fn(),
-    },
-  },
-}));
+const mockSkipClientOnboarding = vi.hoisted(() => vi.fn());
 
-// Mock Clerk - the new implementation uses auth() and currentUser() directly
 vi.mock("@clerk/nextjs/server", () => ({
   auth: vi.fn().mockResolvedValue({ userId: "clerk_123" }),
   currentUser: vi.fn().mockResolvedValue({
@@ -26,6 +12,11 @@ vi.mock("@clerk/nextjs/server", () => ({
     firstName: "John",
     lastName: "Doe",
     phoneNumbers: [{ phoneNumber: "+1234567890" }],
+  }),
+  clerkClient: vi.fn().mockResolvedValue({
+    users: {
+      updateUserMetadata: vi.fn().mockResolvedValue({}),
+    },
   }),
 }));
 
@@ -38,25 +29,20 @@ vi.mock("@/app/lib/api/rate-limit", () => ({
 }));
 
 vi.mock("@/app/lib/api/resilient-api", () => ({
+  apiSuccess: vi
+    .fn()
+    .mockImplementation((data: unknown, status: number = 200) =>
+      NextResponse.json({ success: true, data }, { status }),
+    ),
   initializeCorrelationId: vi.fn().mockReturnValue("test-correlation-id"),
-  executeResilient: vi.fn().mockImplementation(async (fn, options) => {
-    const { NextResponse } = await import("next/server");
-    try {
-      const result = await fn();
-      return NextResponse.json(
-        { success: true, data: result },
-        { status: options.successStatus || 200 },
-      );
-    } catch (error) {
-      // Handle errors thrown inside the callback - this matches the actual executeResilient behavior
-      return NextResponse.json(
-        {
-          success: false,
-          error: error instanceof Error ? error.message : "Unknown error",
-        },
-        { status: 500 },
-      );
-    }
+  getResilientExecutor: vi.fn().mockReturnValue({
+    execute: vi.fn(async (fn: () => Promise<unknown>) => {
+      try {
+        return { success: true, data: await fn() };
+      } catch (error) {
+        return { success: false, error };
+      }
+    }),
   }),
   getClientLogger: vi.fn().mockReturnValue({
     info: vi.fn(),
@@ -69,143 +55,133 @@ vi.mock("@/app/lib/api/resilient-api", () => ({
 vi.mock("@/app/lib/api/api-response", () => ({
   apiError: vi
     .fn()
-    .mockImplementation((message: string, status: number, details?: any) => {
-      const { NextResponse } = require("next/server");
-      return NextResponse.json(
+    .mockImplementation((message: string, status: number, details?: unknown) =>
+      NextResponse.json(
         { success: false, error: message, details },
         { status },
-      );
-    }),
-  apiSuccess: vi.fn().mockImplementation((data: any, status: number = 200) => {
-    const { NextResponse } = require("next/server");
-    return NextResponse.json({ success: true, data }, { status });
-  }),
+      ),
+    ),
   HttpStatus: {
     OK: 200,
-    CREATED: 201,
     BAD_REQUEST: 400,
     UNAUTHORIZED: 401,
-    NOT_FOUND: 404,
+    CONFLICT: 409,
     TOO_MANY_REQUESTS: 429,
     INTERNAL_SERVER_ERROR: 500,
+  },
+}));
+
+vi.mock("@/app/lib/services/idempotency.service", () => ({
+  IdempotencyService: {
+    generateKey: vi.fn().mockReturnValue("idem-key"),
+    checkOrCreate: vi.fn().mockResolvedValue({ status: "new" }),
+    fail: vi.fn().mockResolvedValue(undefined),
+    complete: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
+vi.mock("@/app/lib/domains/user-profile", () => ({
+  userProfileOnboardingService: {
+    skipClientOnboarding: mockSkipClientOnboarding,
   },
 }));
 
 describe("POST /api/onboarding/skip", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSkipClientOnboarding.mockResolvedValue({
+      ok: true,
+      data: {
+        userId: "db_user_123",
+        role: "CLIENT",
+        isProfileComplete: false,
+        skipped: true,
+        redirectTo: "/dashboard",
+        message:
+          "Onboarding skipped. You can complete your profile from the dashboard.",
+      },
+    });
   });
 
-  it("should allow homeowner to skip onboarding (creates user if not exists)", async () => {
-    const mockUpdatedUser = {
-      id: "db_user_123",
-      role: "client",
-      isProfileComplete: false,
-    };
-
-    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
-      return callback({
-        user: {
-          findUnique: vi.fn().mockResolvedValue(null), // User doesn't exist yet
-          upsert: vi.fn().mockResolvedValue(mockUpdatedUser),
-        },
-        clientProfile: {
-          upsert: vi.fn().mockResolvedValue({}),
-        },
-      });
-    });
-
-    const request = new NextRequest(
-      "http://localhost:3500/api/onboarding/skip",
-      {
+  it("allows homeowners to skip onboarding through the domain boundary", async () => {
+    const response = await POST(
+      new NextRequest("http://localhost:3500/api/onboarding/skip", {
         method: "POST",
-      },
+      }),
     );
-
-    const response = await POST(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
-    expect(data.data.role).toBe("client");
-    expect(data.data.isProfileComplete).toBe(false);
-    expect(data.data.skipped).toBe(true);
+    expect(data.data.role).toBe("CLIENT");
     expect(data.data.redirectTo).toBe("/dashboard");
+    expect(mockSkipClientOnboarding).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: {
+          clerkId: "clerk_123",
+          correlationId: "test-correlation-id",
+          role: "client",
+        },
+      }),
+    );
   });
 
-  it("should reject skip for users with professional profile", async () => {
-    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
-      return callback({
-        user: {
-          findUnique: vi.fn().mockResolvedValue({
-            id: "db_user_123",
-            isProfileComplete: false,
-            professionalProfile: { userId: "db_user_123" }, // Has professional profile
-          }),
-        },
-      });
+  it("maps professional users to a 400 business-rule response", async () => {
+    mockSkipClientOnboarding.mockResolvedValueOnce({
+      ok: false,
+      error: "invalid_state",
+      message:
+        "Professionals cannot skip onboarding. Please complete the full form.",
+      status: 400,
     });
 
-    const request = new NextRequest(
-      "http://localhost:3500/api/onboarding/skip",
-      {
+    const response = await POST(
+      new NextRequest("http://localhost:3500/api/onboarding/skip", {
         method: "POST",
-      },
+      }),
     );
-
-    const response = await POST(request);
     const data = await response.json();
 
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(400);
     expect(data.success).toBe(false);
+    expect(data.error).toContain("Professionals cannot skip onboarding");
   });
 
-  it("should reject if user already completed onboarding", async () => {
-    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
-      return callback({
-        user: {
-          findUnique: vi.fn().mockResolvedValue({
-            id: "db_user_123",
-            isProfileComplete: true, // Already complete
-            professionalProfile: null,
-          }),
-        },
-      });
+  it("maps already-completed onboarding to 409", async () => {
+    mockSkipClientOnboarding.mockResolvedValueOnce({
+      ok: false,
+      error: "conflict",
+      message: "Onboarding already completed",
+      status: 409,
     });
 
-    const request = new NextRequest(
-      "http://localhost:3500/api/onboarding/skip",
-      {
+    const response = await POST(
+      new NextRequest("http://localhost:3500/api/onboarding/skip", {
         method: "POST",
-      },
+      }),
     );
-
-    const response = await POST(request);
     const data = await response.json();
 
-    expect(response.status).toBe(500);
-    expect(data.success).toBe(false);
+    expect(response.status).toBe(409);
+    expect(data.error).toBe("Onboarding already completed");
   });
 
-  it("should reject unauthenticated requests", async () => {
+  it("rejects unauthenticated requests", async () => {
     const { auth } = await import("@clerk/nextjs/server");
-    vi.mocked(auth).mockResolvedValueOnce({ userId: null } as any);
+    vi.mocked(auth).mockResolvedValueOnce({ userId: null } as never);
 
-    const request = new NextRequest(
-      "http://localhost:3500/api/onboarding/skip",
-      {
+    const response = await POST(
+      new NextRequest("http://localhost:3500/api/onboarding/skip", {
         method: "POST",
-      },
+      }),
     );
-
-    const response = await POST(request);
     const data = await response.json();
 
     expect(response.status).toBe(401);
     expect(data.error).toContain("Unauthorized");
   });
 
-  it("should respect rate limiting", async () => {
+  it("respects rate limiting", async () => {
     const { checkRateLimit } = await import("@/app/lib/api/rate-limit");
     vi.mocked(checkRateLimit).mockResolvedValueOnce({
       success: false,
@@ -214,32 +190,26 @@ describe("POST /api/onboarding/skip", () => {
       reset: Date.now() + 60000,
     });
 
-    const request = new NextRequest(
-      "http://localhost:3500/api/onboarding/skip",
-      {
+    const response = await POST(
+      new NextRequest("http://localhost:3500/api/onboarding/skip", {
         method: "POST",
-      },
+      }),
     );
-
-    const response = await POST(request);
     const data = await response.json();
 
     expect(response.status).toBe(429);
     expect(data.error).toContain("Too many requests");
   });
 
-  it("should handle Clerk currentUser failure gracefully", async () => {
+  it("handles Clerk currentUser failure gracefully", async () => {
     const { currentUser } = await import("@clerk/nextjs/server");
     vi.mocked(currentUser).mockResolvedValueOnce(null);
 
-    const request = new NextRequest(
-      "http://localhost:3500/api/onboarding/skip",
-      {
+    const response = await POST(
+      new NextRequest("http://localhost:3500/api/onboarding/skip", {
         method: "POST",
-      },
+      }),
     );
-
-    const response = await POST(request);
     const data = await response.json();
 
     expect(response.status).toBe(500);

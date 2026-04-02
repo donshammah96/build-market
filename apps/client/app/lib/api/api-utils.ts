@@ -181,7 +181,7 @@ export async function withRateLimitedExecution<T>(
 
   logger.info(`Starting ${operationName}`, {
     correlationId,
-    userId,
+    actorPresent: Boolean(userId),
   });
 
   return executeResilient(
@@ -189,7 +189,7 @@ export async function withRateLimitedExecution<T>(
       const result = await handler(correlationId);
       logger.info(`Completed ${operationName}`, {
         correlationId,
-        userId,
+        actorPresent: Boolean(userId),
       });
       return result;
     },

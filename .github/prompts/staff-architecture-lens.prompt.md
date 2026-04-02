@@ -37,6 +37,9 @@ Default to end-to-end ownership when implementation is requested: gather context
    - `[ADR-003-domain-structure-and-import-direction.md](../../apps/client/docs/adr/ADR-003-domain-structure-and-import-direction.md)`
    - `[ADR-004-cannonical-env-access-boundary.md](../../apps/client/docs/adr/ADR-004-cannonical-env-access-boundary.md)`
    - `[ADR-005-cannonical-observability-contract.md](../../apps/client/docs/adr/ADR-005-cannonical-observability-contract.md)`
+   - `[ADR-006-data-classification.md](../../apps/client/docs/adr/ADR-006-data-classification.md)`
+   - `[ADR-007-role-model-admin-sub-roles-and-actor-context-shape.md](../../apps/client/docs/adr/ADR-007-role-model-admin-sub-roles-and-actor-context-shape.md)`
+   - `[ADR-008-http-surface-security.md](../../apps/client/docs/adr/ADR-008-http-surface-security.md)`
 5. **`[apps/client/docs/CHANGELOG.md](../../apps/client/docs/CHANGELOG.md)`** — treat recent hardening work as binding precedent; do not accept proposals that reintroduce the same class of drift.
 
 **Default architectural assumptions** (these are summarized here for agent grounding; the authoritative definitions live in the documents above):
@@ -180,7 +183,7 @@ If the proposal crosses an ADR boundary, say that plainly.
 
 ## Architectural Alignment
 
-Explicitly state whether this aligns with, extends, or violates ADR-001, ADR-002, and ADR-003.
+Explicitly state whether this aligns with, extends, or violates ADR-001, ADR-002, ADR-003, and any directly impacted newer ADRs (ADR-004 through ADR-008).
 
 Call out cross-cutting implications: data model impact, API contracts, background jobs, events, security, privacy, observability, reliability, performance, migration cost, and operability.
 

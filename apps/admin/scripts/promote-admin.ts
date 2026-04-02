@@ -1,4 +1,4 @@
-import { PrismaClient } from "@build/db";
+import { PrismaClient, UserRole } from "@build/db";
 
 const prisma = new PrismaClient();
 
@@ -7,9 +7,9 @@ async function main() {
 
   for (const email of emails) {
     try {
-      const user = await prisma.user.update({
+      await prisma.user.update({
         where: { email },
-        data: { role: "admin" },
+        data: { role: UserRole.ADMIN },
       });
       console.log(`Successfully promoted ${email} to admin.`);
     } catch (error) {

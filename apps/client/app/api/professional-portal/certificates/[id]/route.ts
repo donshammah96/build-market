@@ -17,24 +17,82 @@ import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { UpdateCertificateSchema } from "@/app/lib/validation/certificate-validation";
 import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
-import {
-  getCertificateById,
-  updateCertificate,
-  deleteCertificate,
-} from "@/lib/services/certificates";
+import { certificatesService } from "@/app/lib/domains/certificates";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
+const ROUTE_PATTERN = "/api/professional-portal/certificates/[id]";
+
+type CertificateByIdAdapterOutcome =
+  | "started"
+  | "succeeded"
+  | "failed"
+  | "rate_limited"
+  | "bad_request"
+  | "forbidden"
+  | "conflict"
+  | "not_found";
+
+function createCertificateByIdOutcomeLogger(
+  req: NextRequest,
+  correlationId: string,
+  actorRole: string,
+  requestStartedAt: number,
+  operationName: string,
+) {
+  return (
+    outcome: CertificateByIdAdapterOutcome,
+    httpStatus: number,
+    additional: Record<string, unknown> = {},
+  ) => {
+    logger.info("Professional certificate by-id adapter outcome", {
+      correlationId,
+      operationName,
+      httpMethod: req.method,
+      routePattern: ROUTE_PATTERN,
+      actorRole,
+      outcome,
+      httpStatus,
+      durationMs: Date.now() - requestStartedAt,
+      additionalContext: additional,
+    });
+  };
+}
 
 /**
  * GET /api/professional-portal/certificates/[id]
  * Get a specific certificate by ID.
  */
 export const GET = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
-    initializeCorrelationId(req);
+  async (req: NextRequest, { dbUserId, userRole }, params) => {
+    const requestStartedAt = Date.now();
+    const correlationId = initializeCorrelationId(req);
+    const actorRole = normalizeRole(String(userRole));
+    if (!actorRole) {
+      logger.warn("role_normalization_failed", {
+        correlationId,
+        operationName: "get_professional_certificate",
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        outcome: "forbidden",
+        httpStatus: HttpStatus.FORBIDDEN,
+        durationMs: Date.now() - requestStartedAt,
+      });
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    }
+    const operationName = "get_professional_certificate";
+    const logOutcome = createCertificateByIdOutcomeLogger(
+      req,
+      correlationId,
+      actorRole,
+      requestStartedAt,
+      operationName,
+    );
+
     const { id } = params!;
 
     if (!isValidId(id)) {
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST, { certificateId: id });
       return apiError("Invalid certificate ID format", HttpStatus.BAD_REQUEST);
     }
 
@@ -45,20 +103,39 @@ export const GET = withAuth<{ id: string }>(
       RateLimits.READ.window,
     );
     if (!rateLimitResult.success) {
+      logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS, {
+        certificateId: id,
+      });
       return apiError(
         "Too many requests. Please try again later.",
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
 
+    logOutcome("started", HttpStatus.OK, { certificateId: id });
+
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      () => getCertificateById(dbUserId, id),
-      { operationName: "get_certificate" },
+      () =>
+        certificatesService.getCertificateById(
+          { userId: dbUserId, role: actorRole },
+          id,
+        ),
+      { operationName },
     );
 
-    if (!result.success) {
+    if (!result.success || !result.data) {
       logger.error("Failed to fetch certificate", result.error, {
+        correlationId,
+        operationName,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: Date.now() - requestStartedAt,
+      });
+      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
         certificateId: id,
       });
       return apiError(
@@ -68,14 +145,20 @@ export const GET = withAuth<{ id: string }>(
     }
 
     const data = result.data;
-    if (!data) {
-      return apiError("Certificate not found", HttpStatus.NOT_FOUND);
-    }
-    if (data.success === false) {
-      if (data.error === "not_found")
+    if (!data.ok) {
+      const err = data as { error: string };
+      if (err.error === "not_found") {
+        logOutcome("not_found", HttpStatus.NOT_FOUND, { certificateId: id });
         return apiError("Certificate not found", HttpStatus.NOT_FOUND);
+      }
+      logOutcome("forbidden", HttpStatus.FORBIDDEN, {
+        certificateId: id,
+        domainError: err.error,
+      });
       return apiError("Unauthorized", HttpStatus.FORBIDDEN);
     }
+
+    logOutcome("succeeded", HttpStatus.OK, { certificateId: id });
 
     return apiSuccess(data.data, HttpStatus.OK);
   },
@@ -86,26 +169,54 @@ export const GET = withAuth<{ id: string }>(
  * Update a specific certificate.
  */
 export const PATCH = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
+  async (req: NextRequest, { dbUserId, userRole }, params) => {
+    const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
+    const actorRole = normalizeRole(String(userRole));
+    if (!actorRole) {
+      logger.warn("role_normalization_failed", {
+        correlationId,
+        operationName: "update_professional_certificate",
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        outcome: "forbidden",
+        httpStatus: HttpStatus.FORBIDDEN,
+        durationMs: Date.now() - requestStartedAt,
+      });
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    }
+    const operationName = "update_professional_certificate";
+    const logOutcome = createCertificateByIdOutcomeLogger(
+      req,
+      correlationId,
+      actorRole, // now narrowed to string
+      requestStartedAt,
+      operationName,
+    );
     const { id } = params!;
 
     if (!isValidId(id)) {
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST, { certificateId: id });
       return apiError("Invalid certificate ID format", HttpStatus.BAD_REQUEST);
     }
 
     const sizeError = checkBodySize(req, DOCUMENT_CONFIG.MAX_BODY_SIZE);
-    if (sizeError) return sizeError;
+    if (sizeError) {
+      logOutcome("bad_request", sizeError.status, { certificateId: id });
+      return sizeError;
+    }
 
     let body: unknown;
     try {
       body = await req.json();
     } catch {
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST, { certificateId: id });
       return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
     }
 
     const validation = UpdateCertificateSchema.safeParse(body);
     if (!validation.success) {
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST, { certificateId: id });
       return apiError(
         "Invalid input",
         HttpStatus.BAD_REQUEST,
@@ -130,15 +241,26 @@ export const PATCH = withAuth<{ id: string }>(
       "PATCH",
     );
     if (!idempotencyCheck) {
+      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
+        certificateId: id,
+      });
       return apiError(
         "Failed to process idempotency key",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
     if (idempotencyCheck.status === "completed") {
+      logOutcome("succeeded", HttpStatus.OK, {
+        certificateId: id,
+        idempotency: "replay",
+      });
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
     }
     if (idempotencyCheck.status === "pending") {
+      logOutcome("conflict", HttpStatus.CONFLICT, {
+        certificateId: id,
+        idempotency: "pending",
+      });
       return apiError(
         "Request is being processed. Please wait.",
         HttpStatus.CONFLICT,
@@ -153,26 +275,46 @@ export const PATCH = withAuth<{ id: string }>(
     );
     if (!rateLimitResult.success) {
       await IdempotencyService.fail(idempotencyKey);
+      logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS, {
+        certificateId: id,
+      });
       return apiError(
         "Too many requests. Please try again later.",
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
 
-    logger.info("Updating certificate", {
-      correlationId,
+    logOutcome("started", HttpStatus.OK, {
       certificateId: id,
-      userId: dbUserId,
+      updatedFieldsCount: Object.keys(updateData).length,
     });
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      () => updateCertificate(dbUserId, id, updateData),
-      { operationName: "update_certificate" },
+      () =>
+        certificatesService.updateCertificate(
+          { userId: dbUserId, role: actorRole },
+          id,
+          updateData,
+        ),
+      { operationName },
     );
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
+      logger.error("Failed to update certificate", result.error, {
+        correlationId,
+        operationName,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: Date.now() - requestStartedAt,
+      });
+      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
+        certificateId: id,
+      });
       return apiError(
         "Failed to update certificate",
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -180,18 +322,40 @@ export const PATCH = withAuth<{ id: string }>(
     }
 
     const data = result.data;
-    if ("error" in data) {
+    if (!data.ok) {
       await IdempotencyService.fail(idempotencyKey);
-      if (data.error === "not_found")
+      const err = data as { error: string };
+      if (err.error === "not_found") {
+        logOutcome("not_found", HttpStatus.NOT_FOUND, {
+          certificateId: id,
+          domainError: err.error,
+        });
         return apiError("Certificate not found", HttpStatus.NOT_FOUND);
-      if (data.error === "forbidden")
+      }
+      if (err.error === "forbidden") {
+        logOutcome("forbidden", HttpStatus.FORBIDDEN, {
+          certificateId: id,
+          domainError: err.error,
+        });
         return apiError("Unauthorized", HttpStatus.FORBIDDEN);
-      if (data.error === "asset_not_found")
+      }
+      if (err.error === "asset_not_found") {
+        logOutcome("not_found", HttpStatus.NOT_FOUND, {
+          certificateId: id,
+          domainError: err.error,
+        });
         return apiError("Asset not found", HttpStatus.NOT_FOUND);
+      }
+
+      logOutcome("forbidden", HttpStatus.FORBIDDEN, {
+        certificateId: id,
+        domainError: err.error,
+      });
       return apiError("Unauthorized access to asset", HttpStatus.FORBIDDEN);
     }
 
     await IdempotencyService.complete(idempotencyKey, data.data);
+    logOutcome("succeeded", HttpStatus.OK, { certificateId: id });
     return apiSuccess(data.data, HttpStatus.OK);
   },
 );
@@ -201,11 +365,36 @@ export const PATCH = withAuth<{ id: string }>(
  * Soft-delete a specific certificate.
  */
 export const DELETE = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
+  async (req: NextRequest, { dbUserId, userRole }, params) => {
+    const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
+    const actorRole = normalizeRole(String(userRole));
+    if (!actorRole) {
+      logger.warn("role_normalization_failed", {
+        correlationId,
+        operationName: "delete_professional_certificate",
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        outcome: "forbidden",
+        httpStatus: HttpStatus.FORBIDDEN,
+        durationMs: Date.now() - requestStartedAt,
+      });
+      return apiError("Unauthorized", HttpStatus.FORBIDDEN);
+    }
+
+    const operationName = "delete_certificate";
+    const logOutcome = createCertificateByIdOutcomeLogger(
+      req,
+      correlationId,
+      actorRole,
+      requestStartedAt,
+      operationName,
+    );
+
     const { id } = params!;
 
     if (!isValidId(id)) {
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST, { certificateId: id });
       return apiError("Invalid certificate ID format", HttpStatus.BAD_REQUEST);
     }
 
@@ -216,25 +405,41 @@ export const DELETE = withAuth<{ id: string }>(
       RateLimits.WRITE.window,
     );
     if (!rateLimitResult.success) {
+      logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS, {
+        certificateId: id,
+      });
       return apiError(
         "Too many requests. Please try again later.",
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
 
-    logger.info("Deleting certificate", {
-      correlationId,
-      certificateId: id,
-      userId: dbUserId,
-    });
+    logOutcome("started", HttpStatus.OK, { certificateId: id });
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      () => deleteCertificate(dbUserId, id),
-      { operationName: "delete_certificate" },
+      () =>
+        certificatesService.deleteCertificate(
+          { userId: dbUserId, role: actorRole },
+          id,
+        ),
+      { operationName },
     );
 
     if (!result.success || !result.data) {
+      logger.error("Failed to delete certificate", result.error, {
+        correlationId,
+        operationName,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: Date.now() - requestStartedAt,
+      });
+      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
+        certificateId: id,
+      });
       return apiError(
         "Failed to delete certificate",
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -242,9 +447,19 @@ export const DELETE = withAuth<{ id: string }>(
     }
 
     const data = result.data;
-    if ("error" in data) {
-      if (data.error === "not_found")
+    if (!data.ok) {
+      const err = data as { error: string };
+      if (err.error === "not_found") {
+        logOutcome("not_found", HttpStatus.NOT_FOUND, {
+          certificateId: id,
+          domainError: err.error,
+        });
         return apiError("Certificate not found", HttpStatus.NOT_FOUND);
+      }
+      logOutcome("forbidden", HttpStatus.FORBIDDEN, {
+        certificateId: id,
+        domainError: err.error,
+      });
       return apiError("Unauthorized", HttpStatus.FORBIDDEN);
     }
 
@@ -254,7 +469,23 @@ export const DELETE = withAuth<{ id: string }>(
       "ProfessionalDocument",
       id,
       { category: data.data.category, action: "DELETE_CERTIFICATE" },
-    ).catch((err) => logger.error("Failed to create audit log", err));
+    ).catch((err) =>
+      logger.error("Failed to create audit log", err, {
+        correlationId,
+        operationName,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.OK,
+        durationMs: Date.now() - requestStartedAt,
+      }),
+    );
+
+    logOutcome("succeeded", HttpStatus.OK, {
+      certificateId: id,
+      category: data.data.category,
+    });
 
     return apiSuccess(
       { message: "Certificate deleted successfully" },

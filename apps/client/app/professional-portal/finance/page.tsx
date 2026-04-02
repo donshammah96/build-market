@@ -3,15 +3,13 @@
 import { useState } from "react";
 import { Download, Wallet, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useForm, Resolver } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
+import type { z } from "zod";
 import { toast } from "sonner";
-import Link from "next/link";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -38,15 +36,12 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useWithdraw, financeKeys } from "@/hooks/useWithdraw";
+import { financeClient, type FinanceTransaction } from "@/lib/finance-client";
+import { WithdrawSchema } from "@/lib/validation/finance-validation";
+import { FinanceCard } from "./_components/finance-card";
+import { TransactionRow } from "./_components/transaction-row";
 
-const withdrawSchema = z.object({
-  amount: z.coerce.number().min(1, "Amount must be at least 1"),
-  method: z.enum(["MPESA", "BANK_TRANSFER", "CARD", "WALLET", "CASH"], {
-    message: "Please select a withdrawal method",
-  }),
-});
-
-type WithdrawFormValues = z.infer<typeof withdrawSchema>;
+type WithdrawFormValues = z.infer<typeof WithdrawSchema>;
 
 export default function FinancePage() {
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
@@ -55,10 +50,11 @@ export default function FinancePage() {
   const { data: stats, isLoading: isLoadingStats } = useQuery({
     queryKey: financeKeys.stats(),
     queryFn: async () => {
-      const res = await fetch("/api/professional-portal/finance/stats");
-      if (!res.ok) throw new Error("Failed to fetch stats");
-      const json = await res.json();
-      return json.data ?? json;
+      const res = await financeClient.getStats();
+      if (!res.success || res.data === undefined) {
+        throw new Error(res.error || "Failed to fetch stats");
+      }
+      return res.data;
     },
   });
 
@@ -67,25 +63,20 @@ export default function FinancePage() {
     {
       queryKey: financeKeys.transactions(),
       queryFn: async () => {
-        const res = await fetch(
-          "/api/professional-portal/finance/transactions",
-        );
-        if (!res.ok) throw new Error("Failed to fetch transactions");
-        return res.json();
+        const res = await financeClient.getTransactions();
+        if (!res.success || res.data === undefined) {
+          throw new Error(res.error || "Failed to fetch transactions");
+        }
+        return res.data;
       },
     },
   );
 
-  const payload = transactionsData?.data;
-  const transactions = Array.isArray(payload)
-    ? payload
-    : payload && typeof payload === "object" && "data" in payload
-      ? ((payload as { data: unknown[] }).data ?? [])
-      : [];
+  const transactions: FinanceTransaction[] = transactionsData?.items ?? [];
 
-  // Withdraw Form
+  // Withdraw Form — uses domain WithdrawSchema, no local copy
   const form = useForm<WithdrawFormValues>({
-    resolver: zodResolver(withdrawSchema) as Resolver<WithdrawFormValues>,
+    resolver: zodResolver(WithdrawSchema) as Resolver<WithdrawFormValues>,
     defaultValues: {
       amount: 0,
       method: "MPESA",
@@ -110,6 +101,10 @@ export default function FinancePage() {
       method: data.method,
     });
   }
+
+  const availableBalance = stats
+    ? stats.totalEarnings - (stats.pendingPayouts || 0)
+    : null;
 
   return (
     <div className="space-y-8 max-w-[1600px] mx-auto">
@@ -188,10 +183,8 @@ export default function FinancePage() {
                   <div className="text-sm text-zinc-500">
                     <p>
                       Available Balance: KSh{" "}
-                      {stats?.totalEarnings
-                        ? (
-                            stats.totalEarnings - (stats.pendingPayouts || 0)
-                          ).toLocaleString()
+                      {availableBalance !== null
+                        ? availableBalance.toLocaleString("en-KE")
                         : "..."}
                     </p>
                   </div>
@@ -217,7 +210,7 @@ export default function FinancePage() {
           value={
             isLoadingStats
               ? "..."
-              : `KSh ${stats?.totalEarnings?.toLocaleString() || "0"}`
+              : `KSh ${(stats?.totalEarnings ?? 0).toLocaleString("en-KE")}`
           }
           sub="All time"
           active
@@ -227,7 +220,7 @@ export default function FinancePage() {
           value={
             isLoadingStats
               ? "..."
-              : `KSh ${stats?.pendingPayouts?.toLocaleString() || "0"}`
+              : `KSh ${(stats?.pendingPayouts ?? 0).toLocaleString("en-KE")}`
           }
           sub="Available for withdrawal"
         />
@@ -236,10 +229,10 @@ export default function FinancePage() {
           value={
             isLoadingStats
               ? "..."
-              : `KSh ${stats?.outstandingInvoices?.toLocaleString() || "0"}`
+              : `KSh ${(stats?.outstandingInvoices ?? 0).toLocaleString("en-KE")}`
           }
           sub="Total pending payments"
-          alert={stats?.outstandingInvoices > 0}
+          alert={(stats?.outstandingInvoices ?? 0) > 0}
         />
       </div>
 
@@ -272,7 +265,7 @@ export default function FinancePage() {
                     Loading transactions...
                   </td>
                 </tr>
-              ) : transactions?.length === 0 ? (
+              ) : transactions.length === 0 ? (
                 <tr>
                   <td
                     colSpan={5}
@@ -282,141 +275,14 @@ export default function FinancePage() {
                   </td>
                 </tr>
               ) : (
-                transactions?.map(
-                  (txn: {
-                    id: string;
-                    description: string;
-                    date: string | number | Date;
-                    amount: number;
-                    status: "PENDING" | "COMPLETED" | "FAILED" | "CANCELLED";
-                    type: "INCOME" | "WITHDRAWAL" | "EXPENSE";
-                  }) => (
-                    <TransactionRow
-                      key={txn.id}
-                      transactionId={txn.id}
-                      id={txn.id.substring(0, 8).toUpperCase()}
-                      desc={txn.description}
-                      date={new Date(txn.date).toLocaleDateString()}
-                      amount={`KSh ${Number(txn.amount).toLocaleString()}`}
-                      status={txn.status}
-                      type={txn.type}
-                    />
-                  ),
-                )
+                transactions.map((txn) => (
+                  <TransactionRow key={txn.id} transaction={txn} />
+                ))
               )}
             </tbody>
           </table>
         </div>
       </Card>
     </div>
-  );
-}
-
-interface FinanceCardProps {
-  title: string;
-  value: string;
-  sub: string;
-  active?: boolean;
-  alert?: boolean;
-}
-
-function FinanceCard({ title, value, sub, active, alert }: FinanceCardProps) {
-  return (
-    <Card
-      className={`border shadow-sm ${active ? "border-emerald-200 bg-emerald-50/30" : "border-zinc-200 bg-white"}`}
-    >
-      <CardContent className="p-6">
-        <p className="text-sm font-medium text-zinc-500 mb-1">{title}</p>
-        <h3
-          className={`text-2xl font-bold ${alert ? "text-amber-600" : "text-zinc-900"}`}
-        >
-          {value}
-        </h3>
-        <p className="text-xs text-zinc-400 mt-1">{sub}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-interface TransactionRowProps {
-  transactionId: string;
-  id: string;
-  desc: string;
-  date: string;
-  amount: string;
-  status: string;
-  type: string;
-}
-
-function TransactionRow({
-  transactionId,
-  id,
-  desc,
-  date,
-  amount,
-  status,
-  type,
-}: TransactionRowProps) {
-  const isIncome = type === "INCOME";
-  const isWithdrawal = type === "WITHDRAWAL";
-
-  return (
-    <tr className="hover:bg-zinc-50/50 transition-colors cursor-pointer">
-      <td className="px-6 py-4 font-mono text-xs text-zinc-500">
-        <Link
-          href={`/professional-portal/finance/${transactionId}`}
-          className="hover:text-zinc-900 hover:underline"
-        >
-          {id}
-        </Link>
-      </td>
-      <td className="px-6 py-4 font-medium text-zinc-900">
-        <Link
-          href={`/professional-portal/finance/${transactionId}`}
-          className="hover:underline"
-        >
-          {desc}
-        </Link>
-      </td>
-      <td className="px-6 py-4 text-zinc-500">
-        <Link
-          href={`/professional-portal/finance/${transactionId}`}
-          className="block"
-        >
-          {date}
-        </Link>
-      </td>
-      <td
-        className={`px-6 py-4 font-medium ${isIncome ? "text-emerald-600" : "text-zinc-900"}`}
-      >
-        <Link
-          href={`/professional-portal/finance/${transactionId}`}
-          className="block"
-        >
-          {isIncome ? "+" : isWithdrawal ? "-" : ""} {amount}
-        </Link>
-      </td>
-      <td className="px-6 py-4">
-        <Link
-          href={`/professional-portal/finance/${transactionId}`}
-          className="block"
-        >
-          <Badge
-            variant="outline"
-            className={
-              status === "COMPLETED"
-                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                : status === "PENDING"
-                  ? "bg-amber-50 text-amber-700 border-amber-200"
-                  : status === "FAILED"
-                    ? "bg-red-50 text-red-700 border-red-200"
-                    : "bg-zinc-100 text-zinc-500 border-zinc-200"
-            }
-          >
-            {status}
-          </Badge>
-        </Link>
-      </td>
-    </tr>
   );
 }

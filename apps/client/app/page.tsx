@@ -64,7 +64,7 @@ const ReviewsSection = dynamic(
 const CTA = dynamic(
   () => import("@/components/home/CTA").then((mod) => ({ default: mod.CTA })),
   {
-    loading: () => <SectionSkeleton height="300px" bg="bg-zinc-900" />,
+    loading: () => <SectionSkeleton height="300px" bg="bg-primary" />,
     ssr: true,
   },
 );
@@ -72,14 +72,14 @@ const CTA = dynamic(
 // Lightweight skeleton component for loading states
 function SectionSkeleton({
   height,
-  bg = "bg-zinc-50",
+  bg = "bg-muted",
 }: {
   height: string;
   bg?: string;
 }) {
   return (
     <div
-      className={`${bg} animate-pulse`}
+      className={`${bg} motion-safe:animate-pulse`}
       style={{ minHeight: height }}
       aria-hidden="true"
     />
@@ -88,7 +88,7 @@ function SectionSkeleton({
 
 export default function Home() {
   return (
-    <main className="overflow-hidden mx-auto max-w-screen-2xl bg-white">
+    <main className="overflow-hidden mx-auto max-w-screen-2xl bg-background">
       <Navbar />
       <Hero />
 
@@ -105,7 +105,7 @@ export default function Home() {
         <Property />
       </Suspense>
 
-      <Suspense fallback={<SectionSkeleton height="500px" bg="bg-white" />}>
+      <Suspense fallback={<SectionSkeleton height="500px" bg="bg-background" />}>
         <VendorsSection />
       </Suspense>
 
@@ -113,7 +113,7 @@ export default function Home() {
         <ReviewsSection />
       </Suspense>
 
-      <Suspense fallback={<SectionSkeleton height="300px" bg="bg-zinc-900" />}>
+      <Suspense fallback={<SectionSkeleton height="300px" bg="bg-primary" />}>
         <CTA />
       </Suspense>
 

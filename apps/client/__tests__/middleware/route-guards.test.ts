@@ -30,7 +30,8 @@ vi.mock("@/app/lib/security/middleware/onboarding-resolver", () => ({
 }));
 
 vi.mock("@/app/lib/security/middleware/system-settings-resolver", () => ({
-  resolveSystemSettings: (...args: unknown[]) => mockResolveSystemSettings(...args),
+  resolveSystemSettings: (...args: unknown[]) =>
+    mockResolveSystemSettings(...args),
 }));
 
 vi.mock("@/app/lib/security/middleware/decision-log", () => ({
@@ -69,7 +70,7 @@ describe("middleware route guards", () => {
     mockResolveOnboardingStatus.mockResolvedValue({
       state: "resolved",
       isOnboarded: false,
-      role: "client",
+      role: "CLIENT",
       source: "metadata",
       confidence: "high",
       reason: "metadata_present",
@@ -97,7 +98,7 @@ describe("middleware route guards", () => {
     mockResolveOnboardingStatus.mockResolvedValueOnce({
       state: "resolved",
       isOnboarded: true,
-      role: "professional",
+      role: "PROFESSIONAL",
       source: "metadata",
       confidence: "high",
       reason: "metadata_present",
@@ -120,7 +121,7 @@ describe("middleware route guards", () => {
     mockResolveOnboardingStatus.mockResolvedValueOnce({
       state: "resolved",
       isOnboarded: true,
-      role: "client",
+      role: "CLIENT",
       source: "metadata",
       confidence: "high",
       reason: "metadata_present",
@@ -162,7 +163,10 @@ describe("middleware route guards", () => {
       reason: "internal_api_resolved",
       cacheStrategy: "shared_service_or_metadata",
     });
-    mockAuth.mockResolvedValue({ userId: "u1", sessionClaims: { metadata: { role: "client" } } });
+    mockAuth.mockResolvedValue({
+      userId: "u1",
+      sessionClaims: { metadata: { role: "client" } },
+    });
     const req = new NextRequest("http://localhost:3500/dashboard");
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
@@ -185,11 +189,14 @@ describe("middleware route guards", () => {
       reason: "internal_api_resolved",
       cacheStrategy: "shared_service_or_metadata",
     });
-    mockAuth.mockResolvedValue({ userId: "admin1", sessionClaims: { metadata: { role: "admin" } } });
+    mockAuth.mockResolvedValue({
+      userId: "admin1",
+      sessionClaims: { metadata: { role: "admin" } },
+    });
     mockResolveOnboardingStatus.mockResolvedValueOnce({
       state: "resolved",
       isOnboarded: true,
-      role: "admin",
+      role: "ADMIN",
       source: "metadata",
       confidence: "high",
       reason: "metadata_present",
@@ -246,7 +253,10 @@ describe("middleware route guards", () => {
   });
 
   it("allows onboarding route when onboarding resolver is indeterminate", async () => {
-    mockAuth.mockResolvedValue({ userId: "u4", sessionClaims: { metadata: {} } });
+    mockAuth.mockResolvedValue({
+      userId: "u4",
+      sessionClaims: { metadata: {} },
+    });
     mockResolveOnboardingStatus.mockResolvedValueOnce({
       state: "indeterminate",
       isOnboarded: false,
@@ -263,7 +273,10 @@ describe("middleware route guards", () => {
   });
 
   it("redirects protected route to onboarding when resolver is indeterminate", async () => {
-    mockAuth.mockResolvedValue({ userId: "u5", sessionClaims: { metadata: {} } });
+    mockAuth.mockResolvedValue({
+      userId: "u5",
+      sessionClaims: { metadata: {} },
+    });
     mockResolveOnboardingStatus.mockResolvedValueOnce({
       state: "indeterminate",
       isOnboarded: false,
@@ -278,5 +291,56 @@ describe("middleware route guards", () => {
     assertResponse(res);
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toContain("/onboarding");
+  });
+
+  it("redirects professional users in pending verification to holding page", async () => {
+    mockAuth.mockResolvedValue({
+      userId: "pro_pending_1",
+      sessionClaims: {
+        metadata: { role: "PROFESSIONAL", isOnboarded: true },
+      },
+    });
+    mockResolveOnboardingStatus.mockResolvedValueOnce({
+      state: "resolved",
+      isOnboarded: true,
+      role: "PROFESSIONAL",
+      status: "PENDING_VERIFICATION",
+      source: "internal_api",
+      confidence: "medium",
+      reason: "internal_api_resolved",
+    });
+    const req = new NextRequest("http://localhost:3500/professional-portal/dashboard");
+
+    const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
+    assertResponse(res);
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain(
+      "/professional-portal/pending-verification",
+    );
+  });
+
+  it("allows professional users on pending-verification route without loop", async () => {
+    mockAuth.mockResolvedValue({
+      userId: "pro_pending_2",
+      sessionClaims: {
+        metadata: { role: "PROFESSIONAL", isOnboarded: true },
+      },
+    });
+    mockResolveOnboardingStatus.mockResolvedValueOnce({
+      state: "resolved",
+      isOnboarded: true,
+      role: "PROFESSIONAL",
+      status: "PENDING_VERIFICATION",
+      source: "internal_api",
+      confidence: "medium",
+      reason: "internal_api_resolved",
+    });
+    const req = new NextRequest(
+      "http://localhost:3500/professional-portal/pending-verification",
+    );
+
+    const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
+    assertResponse(res);
+    expect(res.status).toBe(200);
   });
 });

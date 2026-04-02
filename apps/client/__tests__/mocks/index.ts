@@ -220,9 +220,6 @@ export function mockPrismaSuccess() {
         update: prisma.user.update,
         findUnique: prisma.user.findUnique,
       },
-      professional: {
-        update: prisma.professional.update,
-      },
       professionalProfile: {
         update: prisma.professionalProfile.update,
         updateMany: prisma.professionalProfile.updateMany,

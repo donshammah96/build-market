@@ -18,10 +18,11 @@ enum UserRole {
   CLIENT
   PROFESSIONAL
   ADMIN
-  SUPPORT // Can only view tickets, no financial access
 }
 
 enum UserStatus {
+  ONBOARDING // User has not completed onboarding yet
+  PENDING_VERIFICATION // Professional onboarding completed, awaiting verification
   ACTIVE // Normal operation
   SUSPENDED // Temporary ban (reversible)
   BANNED // Permanent ban (keeps data for investigation)
@@ -43,7 +44,6 @@ enum AdminRole {
   SUPPORT_AGENT // Can view messages for dispute resolution
   FINANCE_MANAGER // Can process refunds, view transactions
   AUDITOR // Read-only access for KRA/compliance checks
-  SYSTEM_ADMIN // Full system access
 }
 
 enum AuditSeverity {

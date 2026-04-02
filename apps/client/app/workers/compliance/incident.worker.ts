@@ -10,6 +10,7 @@ import { prisma } from "@build/db";
 import { sendEmail } from "@build/mail-server";
 import { sendSMS } from "@/app/lib/infrastructure/sms";
 import { IncidentSeverity } from "@prisma/client";
+import { env } from "@/app/lib/infrastructure/env";
 
 export const incidentWorker = new Worker<IncidentJobData>(
   "security-incidents",
@@ -142,7 +143,7 @@ async function notifyODPC(incidentId: string, job: Job) {
   }
 
   // Format ODPC Notification (Legal Requirement: 72 hours)
-  const odpcEmail = process.env.ODPC_EMAIL || "dataprotection@odpc.go.ke";
+  const odpcEmail = env.gdpr.odpcEmail;
   const subject = `DATA BREACH NOTIFICATION - ${incident.classification} - ${incidentId}`;
 
   const body = `
@@ -236,7 +237,7 @@ async function escalateToDPO(
   metadata: any,
 ) {
   // Send urgent notification to internal DPO/Security team
-  const dpoEmail = process.env.DPO_EMAIL || "security@buildmarket.co.ke";
+  const dpoEmail = env.gdpr.dpoEmail;
 
   await sendEmail({
     to: dpoEmail,
@@ -350,7 +351,7 @@ For questions, contact our DPO at dpo@buildmarket.co.ke
 
 Reference: ${incident.id}
     `,
-    actionUrl: `${process.env.APP_URL}/security/reset-password?incident=${incident.id}`,
+    actionUrl: `${env.appUrl}/security/reset-password?incident=${incident.id}`,
   };
 }
 

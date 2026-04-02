@@ -1,6 +1,8 @@
 export interface RedisConfig {
   host: string;
   port: number;
+  family?: 4 | 6;
+  username?: string;
   password?: string;
   db?: number;
   keyPrefix?: string;

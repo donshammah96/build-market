@@ -3,165 +3,12 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Cookie, Shield, Lock } from "lucide-react";
+import { Cookie, Shield } from "lucide-react";
 import { useCookieConsent } from "@/hooks/useCookieConsent";
-import type { CookieConsent } from "@/components/providers/CookieConsentProvider";
-
-// =============================================================================
-// TOGGLE SWITCH
-// =============================================================================
-
-function Toggle({
-  checked,
-  onChange,
-  disabled = false,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={() => !disabled && onChange(!checked)}
-      className={`
-        relative inline-flex h-7 w-12 items-center rounded-full transition-colors
-        ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
-        ${checked ? "bg-emerald-500" : "bg-zinc-600"}
-      `}
-    >
-      <span
-        className={`inline-block h-5 w-5 rounded-full bg-white transition-transform shadow-sm ${
-          checked ? "translate-x-6" : "translate-x-1"
-        }`}
-      />
-    </button>
-  );
-}
-
-// =============================================================================
-// CATEGORY DEFINITIONS
-// =============================================================================
-
-interface CookieDetail {
-  name: string;
-  purpose: string;
-  expiry: string;
-}
-
-interface CategoryConfig {
-  key: "necessary" | keyof Omit<CookieConsent, "necessary">;
-  label: string;
-  description: string;
-  locked: boolean;
-  emoji: string;
-  borderColor: string;
-  cookies: CookieDetail[];
-}
-
-const CATEGORIES: CategoryConfig[] = [
-  {
-    key: "necessary",
-    label: "Strictly Necessary",
-    description:
-      "These cookies are essential for the website to function. They enable core features like authentication, security, and accessibility. You cannot disable them — and honestly, you wouldn't want to.",
-    locked: true,
-    emoji: "🔒",
-    borderColor: "border-zinc-500/30",
-    cookies: [
-      {
-        name: "__clerk_session",
-        purpose: "Authentication session management",
-        expiry: "Session",
-      },
-      {
-        name: "__clerk_db_jwt",
-        purpose: "Secure authentication token",
-        expiry: "7 days",
-      },
-      {
-        name: "bm_cookie_consent",
-        purpose: "Stores your cookie preferences",
-        expiry: "1 year",
-      },
-    ],
-  },
-  {
-    key: "analytics",
-    label: "Analytics & Performance",
-    description:
-      "These cookies help us understand how visitors interact with Build Market. They collect anonymous data so we can improve the user experience. No personal data is shared with third parties.",
-    locked: false,
-    emoji: "📊",
-    borderColor: "border-emerald-500/20",
-    cookies: [
-      {
-        name: "_ga / _ga_*",
-        purpose: "Google Analytics — page views and user journeys",
-        expiry: "2 years",
-      },
-      {
-        name: "_gid",
-        purpose: "Google Analytics — session tracking",
-        expiry: "24 hours",
-      },
-      {
-        name: "bm_ab_group",
-        purpose: "A/B testing group assignment",
-        expiry: "30 days",
-      },
-    ],
-  },
-  {
-    key: "marketing",
-    label: "Marketing & Advertising",
-    description:
-      "These cookies are used to deliver relevant ads and measure campaign performance. We don't sell your data — we just want to stop showing you ads for things you've already bought.",
-    locked: false,
-    emoji: "📣",
-    borderColor: "border-amber-500/20",
-    cookies: [
-      {
-        name: "_fbp",
-        purpose: "Facebook Pixel — ad targeting",
-        expiry: "3 months",
-      },
-      {
-        name: "_gcl_au",
-        purpose: "Google Ads — conversion tracking",
-        expiry: "3 months",
-      },
-    ],
-  },
-  {
-    key: "functional",
-    label: "Functional & Preferences",
-    description:
-      "These cookies remember your preferences so the site works better for you. Think of them as the site's short-term memory — without them, it's like meeting someone who forgot your name. Every. Single. Time.",
-    locked: false,
-    emoji: "⚙️",
-    borderColor: "border-cyan-500/20",
-    cookies: [
-      {
-        name: "bm_theme",
-        purpose: "Remembers dark/light mode preference",
-        expiry: "1 year",
-      },
-      {
-        name: "bm_locale",
-        purpose: "Language and region preference",
-        expiry: "1 year",
-      },
-    ],
-  },
-];
-
-// =============================================================================
-// PAGE COMPONENT
-// =============================================================================
+import {
+  CookieCategoryCard,
+  CATEGORIES,
+} from "./_components";
 
 export default function CookieSettingsPage() {
   const { consent, acceptAll, rejectAll, savePreferences, isSyncing } =
@@ -175,7 +22,6 @@ export default function CookieSettingsPage() {
 
   const [saved, setSaved] = useState(false);
 
-  // Sync local state when context changes
   useEffect(() => {
     setLocalPrefs({
       analytics: consent.analytics,
@@ -264,92 +110,24 @@ export default function CookieSettingsPage() {
       {/* Category Cards */}
       <div className="space-y-4">
         {CATEGORIES.map((cat, i) => (
-          <motion.div
+          <CookieCategoryCard
             key={cat.key}
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.08 }}
-            className={`bg-white/[0.03] backdrop-blur-sm border ${cat.borderColor} rounded-2xl overflow-hidden`}
-          >
-            {/* Category Header */}
-            <div className="p-5 md:p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2.5 mb-2">
-                    <span className="text-xl">{cat.emoji}</span>
-                    <h2 className="text-lg font-bold text-white">
-                      {cat.label}
-                    </h2>
-                    {cat.locked && (
-                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-zinc-700 text-zinc-400 uppercase tracking-wider font-semibold">
-                        <Lock className="w-2.5 h-2.5" /> Always On
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-zinc-400 leading-relaxed">
-                    {cat.description}
-                  </p>
-                </div>
-                <div className="flex-shrink-0 pt-1">
-                  <Toggle
-                    checked={
-                      cat.key === "necessary"
-                        ? true
-                        : localPrefs[cat.key as keyof typeof localPrefs]
-                    }
-                    onChange={(v) => {
-                      if (cat.key !== "necessary") {
-                        setLocalPrefs((prev) => ({
-                          ...prev,
-                          [cat.key]: v,
-                        }));
-                      }
-                    }}
-                    disabled={cat.locked}
-                  />
-                </div>
-              </div>
-
-              {/* Cookie Details Table */}
-              {cat.cookies.length > 0 && (
-                <div className="mt-4 bg-white/[0.02] rounded-lg border border-white/5 overflow-hidden">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-white/5">
-                        <th className="text-left py-2 px-3 text-zinc-500 font-medium">
-                          Cookie
-                        </th>
-                        <th className="text-left py-2 px-3 text-zinc-500 font-medium hidden sm:table-cell">
-                          Purpose
-                        </th>
-                        <th className="text-right py-2 px-3 text-zinc-500 font-medium">
-                          Expiry
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cat.cookies.map((cookie) => (
-                        <tr
-                          key={cookie.name}
-                          className="border-b border-white/[0.03] last:border-0"
-                        >
-                          <td className="py-2 px-3 text-emerald-400 font-mono">
-                            {cookie.name}
-                          </td>
-                          <td className="py-2 px-3 text-zinc-500 hidden sm:table-cell">
-                            {cookie.purpose}
-                          </td>
-                          <td className="py-2 px-3 text-zinc-500 text-right">
-                            {cookie.expiry}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </motion.div>
+            category={cat}
+            index={i}
+            checked={
+              cat.key === "necessary"
+                ? true
+                : localPrefs[cat.key as keyof typeof localPrefs]
+            }
+            onToggle={(v) => {
+              if (cat.key !== "necessary") {
+                setLocalPrefs((prev) => ({
+                  ...prev,
+                  [cat.key]: v,
+                }));
+              }
+            }}
+          />
         ))}
       </div>
 

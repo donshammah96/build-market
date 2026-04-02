@@ -29,7 +29,6 @@ const logger = getClientLogger();
  * - period: today | week | month | all (default: all)
  */
 export const GET = withAdminRole([
-  AdminRole.SYSTEM_ADMIN,
   AdminRole.SUPER_ADMIN,
 ])(async (req: NextRequest, context: AuthContext) => {
   const { dbUserId } = context;

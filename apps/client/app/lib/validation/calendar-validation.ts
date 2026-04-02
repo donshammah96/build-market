@@ -1,20 +1,15 @@
 import { z } from "zod";
-import { CalendarEventType, CalendarEventStatus } from "@prisma/client";
+import { CalendarEventTypeEnum, CalendarEventStatusEnum } from "@build/types";
 
 /**
  * Shared validation schemas for Calendar Event API routes.
- * Uses Prisma-generated enums for type safety.
  * Aligned with CalendarEvent model in schema.prisma.
  */
 
-// ─── Enum Schemas ────────────────────────────────────────────────────
+// ─── Enum Schemas (from @build/types to avoid @prisma/client in API routes) ───
 
-export const CalendarEventTypeSchema = z.nativeEnum(CalendarEventType);
-export const CalendarEventStatusSchema = z.nativeEnum(CalendarEventStatus);
-
-// ═══════════════════════════════════════════════════════════════════════
-// QUERY & MUTATION SCHEMAS
-// ═══════════════════════════════════════════════════════════════════════
+export const CalendarEventTypeSchema = CalendarEventTypeEnum;
+export const CalendarEventStatusSchema = CalendarEventStatusEnum;
 
 /** Query parameters for GET /api/professional-portal/calendar */
 export const CalendarQuerySchema = z.object({

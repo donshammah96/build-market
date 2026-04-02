@@ -11,7 +11,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Eye, CheckCircle, XCircle, Star, Trash2 } from "lucide-react";
+import {
+  MoreHorizontal,
+  Eye,
+  CheckCircle,
+  XCircle,
+  Star,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import type { StoreListItem } from "@/actions/admin/stores";
 
@@ -25,13 +32,15 @@ export const columns: ColumnDef<StoreData>[] = [
       const store = row.original;
       return (
         <div className="flex flex-col">
-          <Link 
+          <Link
             href={`/stores/${store.id}`}
             className="font-medium text-zinc-900 hover:text-blue-600 transition-colors"
           >
             {store.name}
           </Link>
-          <span className="text-xs text-zinc-500">{store.city}, {store.county}</span>
+          <span className="text-xs text-zinc-500">
+            {store.city}, {store.county}
+          </span>
         </div>
       );
     },
@@ -114,7 +123,9 @@ export const columns: ColumnDef<StoreData>[] = [
     accessorKey: "_count",
     header: "Products",
     cell: ({ row }) => (
-      <span className="text-sm font-medium">{row.original._count.products}</span>
+      <span className="text-sm font-medium">
+        {row.original._count.products}
+      </span>
     ),
   },
   {
@@ -160,7 +171,9 @@ export const columns: ColumnDef<StoreData>[] = [
                 Revoke Verification
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem className={store.featured ? "text-zinc-600" : "text-purple-600"}>
+            <DropdownMenuItem
+              className={store.featured ? "text-zinc-600" : "text-purple-600"}
+            >
               <Star className="mr-2 h-4 w-4" />
               {store.featured ? "Remove Featured" : "Mark Featured"}
             </DropdownMenuItem>

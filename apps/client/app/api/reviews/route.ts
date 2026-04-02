@@ -10,7 +10,7 @@ import {
   getClientLogger,
 } from "@/app/lib/api/resilient-api";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
-import { getReviews } from "@/lib/services/reviews";
+import { reviewsService } from "@/app/lib/domains/reviews";
 import { z } from "zod";
 
 const logger = getClientLogger();
@@ -69,14 +69,25 @@ export async function GET(request: NextRequest) {
   const filters = result.data;
 
   const executor = getResilientExecutor();
-  const execResult = await executor.execute(() => getReviews(filters), {
-    operationName: "fetch_reviews",
-  });
+  const execResult = await executor.execute(
+    () => reviewsService.getReviews({}, filters),
+    {
+      operationName: "fetch_reviews",
+    },
+  );
 
-  if (!execResult.success) {
+  if (!execResult.success || !execResult.data) {
     logger.error("Failed to fetch reviews", execResult.error);
     return apiError("Failed to load reviews", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
-  return apiSuccess(execResult.data, HttpStatus.OK);
+  const data = execResult.data;
+  if (!data.ok) {
+    return apiError(
+      (data as { message?: string }).message ?? "Forbidden",
+      HttpStatus.FORBIDDEN,
+    );
+  }
+
+  return apiSuccess(data.data, HttpStatus.OK);
 }

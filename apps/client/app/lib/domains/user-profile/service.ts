@@ -306,7 +306,12 @@ function buildProfileResponse(user: UserProfileRecord) {
       lastName: user.lastName,
       phone: user.phone,
       avatar: user.avatar,
-      role: user.role === "CLIENT" ? "client" : "professional",
+      role:
+        user.role === "CLIENT"
+          ? "client"
+          : user.role === "PROFESSIONAL"
+            ? "professional"
+            : "admin",
     },
     profile,
   );

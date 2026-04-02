@@ -11,9 +11,7 @@ export const exportWorker = new Worker<ExportJobData>(
   async (job: Job<ExportJobData>) => {
     const { exportId, userId } = job.data;
 
-    console.log(
-      `[ExportWorker] Starting export ${exportId} for user ${userId}`,
-    );
+    console.log(`[ExportWorker] Starting export ${exportId}`);
 
     try {
       await job.updateProgress(10);
@@ -76,7 +74,7 @@ export const exportWorker = new Worker<ExportJobData>(
       } catch (emailError) {
         // Don't fail the job if email fails - export is still successful
         console.error(
-          `[ExportWorker] Failed to send export ready email:`,
+          "[ExportWorker] Export-ready notification send failed",
           emailError,
         );
       }

@@ -33,9 +33,25 @@ const BANNED_LOG_KEYS = [
 ];
 const LOGGER_CALL_PATTERN =
   /\b(?:logger|console)\s*\.\s*(?:info|warn|error|debug|log)\s*\(/;
-const BANNED_KEY_PATTERN = new RegExp(`\\b(${BANNED_LOG_KEYS.join("|")})\\s*:`);
+const SPREAD_PROPERTY_PATTERN = /\.\.\.\s*[A-Za-z_$][\w$]*/;
+
+const BANNED_KEY_PATTERNS = BANNED_LOG_KEYS.map((key) => ({
+  key,
+  explicit: new RegExp(`(?:["'])?${key}(?:["'])?\\s*:`),
+  shorthand: new RegExp(`(?:\\{|,)\\s*${key}\\s*(?:,|\\})`),
+}));
+
+function findBannedLogKeyInSegment(segment) {
+  for (const candidate of BANNED_KEY_PATTERNS) {
+    if (candidate.explicit.test(segment) || candidate.shorthand.test(segment)) {
+      return candidate.key;
+    }
+  }
+  return null;
+}
 
 const offenders = [];
+const spreadReviewCandidates = [];
 
 for (const filePath of collectFiles(SCAN_PATHS)) {
   const lines = readLines(filePath);
@@ -56,15 +72,22 @@ for (const filePath of collectFiles(SCAN_PATHS)) {
     }
 
     const segment = windowLines.join("\n");
-    const keyMatch = segment.match(BANNED_KEY_PATTERN);
-    if (!keyMatch) {
+    if (SPREAD_PROPERTY_PATTERN.test(segment)) {
+      spreadReviewCandidates.push({
+        file: relativeToApp(filePath),
+        line: index + 1,
+      });
+    }
+
+    const bannedKey = findBannedLogKeyInSegment(segment);
+    if (!bannedKey) {
       continue;
     }
 
     offenders.push({
       file: relativeToApp(filePath),
       line: index + 1,
-      key: keyMatch[1],
+      key: bannedKey,
     });
   }
 }
@@ -77,6 +100,17 @@ if (offenders.length > 0) {
     );
   }
   process.exit(1);
+}
+
+if (spreadReviewCandidates.length > 0) {
+  console.warn(
+    `[security/log-safety] Manual review recommended: ${spreadReviewCandidates.length} logger call(s) include spread metadata, which cannot be fully key-scanned.`,
+  );
+  for (const candidate of spreadReviewCandidates) {
+    console.warn(
+      `  - ${candidate.file}:${candidate.line} uses spread metadata (review for banned identity keys)`,
+    );
+  }
 }
 
 console.log(

@@ -13,7 +13,7 @@ import type { ApiResponse } from "@build/types";
 import { PROJECTS_CLIENT_CONFIG } from "@/lib/config/project.config";
 import { isValidId } from "@/lib/utils/validators";
 import { API_ROUTES } from "@/lib/links";
-import { envConfig } from "@/lib/env";
+import { env } from "@/app/lib/infrastructure/env";
 import { z } from "zod";
 import {
   ProjectQuerySchema,
@@ -36,10 +36,10 @@ export * from "@/app/lib/domains/projects/client";
 
 const { BULKHEAD_CONCURRENCY } = PROJECTS_CLIENT_CONFIG;
 
-const isGenericProjectsReadEnabled = envConfig.features.genericProjectsApi;
+const isGenericProjectsReadEnabled = env.features.genericProjectsApi;
 const isGenericProjectsMutationEnabled =
   isGenericProjectsReadEnabled &&
-  envConfig.features.genericProjectsApiMutations;
+  env.features.genericProjectsApiMutations;
 
 function genericReadApiDisabled<T>(): ApiResponse<T> {
   return {

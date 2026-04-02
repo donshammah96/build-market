@@ -15,7 +15,7 @@ import {
   CreatePublicLeadSchema,
   LEAD_CONFIG,
 } from "@/app/lib/validation/leads-validation";
-import { createPublicLead } from "@/lib/services/public-leads";
+import { leadsService } from "@/app/lib/domains/leads";
 
 const logger = getClientLogger();
 
@@ -62,9 +62,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const data = validation.data;
 
   const executor = getResilientExecutor();
-  const result = await executor.execute(() => createPublicLead(data), {
-    operationName: "create_public_lead",
-  });
+  const result = await executor.execute(
+    () => leadsService.submitPublicLead(data),
+    {
+      operationName: "create_public_lead",
+    },
+  );
 
   if (!result.success || !result.data) {
     logger.error("Failed to create lead", result.error, { correlationId });
@@ -74,16 +77,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const serviceResult = result.data as
-    | { data: { message: string; lead: unknown } }
-    | { error: "professional_not_found" };
-  if ("error" in serviceResult) {
+  const serviceResult = result.data;
+  if (!serviceResult.ok) {
     return apiError("Professional not found", HttpStatus.NOT_FOUND);
   }
 
   logger.info("Public lead created", {
     correlationId,
-    leadId: (serviceResult.data.lead as { id: string })?.id,
+    leadId: serviceResult.data.lead.id,
     professionalId: data.professionalId,
   });
 

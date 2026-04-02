@@ -20,6 +20,13 @@ import {
   type CreateMilestoneClientInput,
   type UpdateMilestoneClientInput,
   type DeleteMilestoneClientInput,
+  type ApproveMilestoneClientInput,
+  type FundEscrowClientInput,
+  type ReleaseEscrowClientInput,
+  type ProjectDetailPayload,
+  type GenericMutationPayload,
+  type MilestoneMutationPayload,
+  type EscrowMutationPayload,
 } from "@/lib/projects-client";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -79,9 +86,7 @@ export function useMilestones(
 
 export function useCreateProject(
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<ReturnType<typeof projectsClient.createProject>>["data"]
-    >,
+    ProjectDetailPayload,
     Error,
     CreateProfessionalProjectClientInput
   >,
@@ -101,9 +106,7 @@ export function useCreateProject(
 
 export function useUpdateProject(
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<ReturnType<typeof projectsClient.updateProject>>["data"]
-    >,
+    ProjectDetailPayload,
     Error,
     UpdateProjectClientInput
   >,
@@ -126,9 +129,7 @@ export function useUpdateProject(
 
 export function useDeleteProject(
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<ReturnType<typeof projectsClient.deleteProject>>["data"]
-    >,
+    GenericMutationPayload,
     Error,
     DeleteProjectClientInput
   >,
@@ -152,9 +153,7 @@ export function useDeleteProject(
 export function useCreateMilestone(
   projectId: string,
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<ReturnType<typeof projectsClient.createMilestone>>["data"]
-    >,
+    MilestoneMutationPayload,
     Error,
     Omit<CreateMilestoneClientInput, "projectId">
   >,
@@ -182,9 +181,7 @@ export function useCreateMilestone(
 export function useUpdateMilestone(
   projectId: string,
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<ReturnType<typeof projectsClient.updateMilestone>>["data"]
-    >,
+    MilestoneMutationPayload,
     Error,
     Omit<UpdateMilestoneClientInput, "projectId">
   >,
@@ -212,9 +209,7 @@ export function useUpdateMilestone(
 export function useDeleteMilestone(
   projectId: string,
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<ReturnType<typeof projectsClient.deleteMilestone>>["data"]
-    >,
+    GenericMutationPayload,
     Error,
     Omit<DeleteMilestoneClientInput, "projectId">
   >,
@@ -275,7 +270,7 @@ export function usePortalProject(
 
 export function useUpdatePortalProject(
   options?: UseMutationOptions<
-    unknown,
+    ProjectDetailPayload,
     Error,
     { projectId: string; data: Record<string, unknown> }
   >,
@@ -298,7 +293,11 @@ export function useUpdatePortalProject(
 }
 
 export function useDeletePortalProject(
-  options?: UseMutationOptions<unknown, Error, { projectId: string }>,
+  options?: UseMutationOptions<
+    GenericMutationPayload,
+    Error,
+    { projectId: string }
+  >,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -310,6 +309,90 @@ export function useDeletePortalProject(
         queryKey: portalProjectKeys.detail(variables.projectId),
       });
       queryClient.invalidateQueries({ queryKey: portalProjectKeys.lists() });
+      options?.onSuccess?.(data, variables, context, mutation);
+    },
+  });
+}
+
+export function usePortalMilestones(
+  projectId: string | undefined | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: projectKeys.milestones(projectId ?? ""),
+    queryFn: async () =>
+      unwrapApiResponse(await projectsClient.getPortalMilestones(projectId!)),
+    enabled: !!projectId && enabled,
+    staleTime: 30_000,
+    retry: 2,
+  });
+}
+
+export function useApprovePortalMilestone(
+  options?: UseMutationOptions<
+    MilestoneMutationPayload,
+    Error,
+    ApproveMilestoneClientInput
+  >,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    ...options,
+    mutationFn: async (input) =>
+      unwrapApiResponse(await projectsClient.approvePortalMilestone(input)),
+    onSuccess: (data, variables, context, mutation) => {
+      queryClient.invalidateQueries({
+        queryKey: portalProjectKeys.detail(variables.projectId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: projectKeys.milestones(variables.projectId),
+      });
+      options?.onSuccess?.(data, variables, context, mutation);
+    },
+  });
+}
+
+export function useFundPortalEscrow(
+  options?: UseMutationOptions<
+    EscrowMutationPayload,
+    Error,
+    FundEscrowClientInput
+  >,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    ...options,
+    mutationFn: async (input) =>
+      unwrapApiResponse(await projectsClient.fundPortalEscrow(input)),
+    onSuccess: (data, variables, context, mutation) => {
+      queryClient.invalidateQueries({
+        queryKey: portalProjectKeys.detail(variables.projectId),
+      });
+      options?.onSuccess?.(data, variables, context, mutation);
+    },
+  });
+}
+
+export function useReleasePortalEscrow(
+  options?: UseMutationOptions<
+    EscrowMutationPayload,
+    Error,
+    ReleaseEscrowClientInput
+  >,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    ...options,
+    mutationFn: async (input) =>
+      unwrapApiResponse(await projectsClient.releasePortalEscrow(input)),
+    onSuccess: (data, variables, context, mutation) => {
+      queryClient.invalidateQueries({
+        queryKey: portalProjectKeys.detail(variables.projectId),
+      });
+      queryClient.invalidateQueries({ queryKey: ["finance"] });
       options?.onSuccess?.(data, variables, context, mutation);
     },
   });

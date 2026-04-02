@@ -4,19 +4,14 @@ import { redisConnection } from "@build/queue-server";
 import { prisma } from "@build/db";
 import { ExportProcessor } from "@/app/workers/export/processor";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
+import { env } from "@/app/lib/infrastructure/env";
 
 const logger = new StructuredLogger("export-cleanup-job");
 
 // Configuration from environment variables
-const CLEANUP_CRON_PATTERN = process.env.EXPORT_CLEANUP_CRON || "0 2 * * *"; // Default: 2 AM daily
-const CLEANUP_BATCH_SIZE = parseInt(
-  process.env.EXPORT_CLEANUP_BATCH_SIZE || "100",
-  10,
-);
-const CLEANUP_MAX_RETRIES = parseInt(
-  process.env.EXPORT_CLEANUP_MAX_RETRIES || "3",
-  10,
-);
+const CLEANUP_CRON_PATTERN = env.jobs.exportCleanupCron;
+const CLEANUP_BATCH_SIZE = env.jobs.exportCleanupBatchSize;
+const CLEANUP_MAX_RETRIES = env.jobs.exportCleanupMaxRetries;
 
 const cleanupQueue = new Queue("maintenance-jobs", {
   connection: redisConnection as ConnectionOptions,
@@ -143,7 +138,7 @@ export function createCleanupWorker() {
             logger.debug("Cleaning up export", {
               correlationId,
               exportId: exportRecord.id,
-              userId: exportRecord.userId,
+              ownerPresent: Boolean(exportRecord.userId),
               s3Key: exportRecord.s3Key,
             });
 
@@ -191,7 +186,7 @@ export function createCleanupWorker() {
             logger.info("Export cleaned up successfully", {
               correlationId,
               exportId: exportRecord.id,
-              userId: exportRecord.userId,
+              ownerPresent: Boolean(exportRecord.userId),
             });
           } catch (error) {
             metrics.failureCount++;
@@ -202,7 +197,7 @@ export function createCleanupWorker() {
               {
                 correlationId,
                 exportId: exportRecord.id,
-                userId: exportRecord.userId,
+                ownerPresent: Boolean(exportRecord.userId),
                 s3Key: exportRecord.s3Key,
               },
             );
@@ -253,7 +248,7 @@ export function createCleanupWorker() {
           correlationId,
           jobId: job.id,
           metrics: {
-            ...metrics,
+            summary: metrics,
             durationMs,
             durationSeconds: Math.round(durationMs / 1000),
             bytesFreedMB: Math.round(metrics.bytesFreed / 1024 / 1024),

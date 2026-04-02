@@ -7,6 +7,33 @@ import { Loader2 } from "lucide-react";
 import { profileClient } from "@/lib/profile-client";
 import { useRouter } from "next/navigation";
 import { ProfessionalProfileData } from "@/hooks/useProfileStatus";
+import type { ProfessionalWizardData } from "@/components/forms/professional-wizard";
+
+function isProfessionalProfileData(
+  profile: unknown,
+): profile is ProfessionalProfileData {
+  return (
+    typeof profile === "object" &&
+    profile !== null &&
+    "companyName" in profile &&
+    "profession" in profile
+  );
+}
+
+function buildInitialData(profile: unknown): Partial<ProfessionalWizardData> {
+  if (!isProfessionalProfileData(profile)) {
+    return {};
+  }
+
+  return {
+    profession: profile.profession || "",
+    companyName: profile.companyName || "",
+    licenseNumber: profile.licenseNumber || "",
+    yearsExperience: profile.yearsExperience || 0,
+    website: profile.website || "",
+    bio: profile.bio || "",
+  };
+}
 
 export default function CompleteProfilePage() {
   const { profile, isLoading } = useProfileStatus();
@@ -14,34 +41,10 @@ export default function CompleteProfilePage() {
 
   const handleSubmit = async (data: ProfessionalOnboardingData) => {
     try {
-      // Map ProfessionalOnboardingData to the shape expected by completeProfessionalProfileAction
-      // We need to cast or transform because existing types might mismatch slightly
-      const payload = {
-        profession: data.profession,
-        companyName: data.companyName || "",
-        licenseNumber: data.license?.licenseNumber,
-        yearsExperience: data.yearsExperience ?? undefined,
-        website: data.website,
-        bio: data.bio,
-        documents: data.documents
-          ?.filter((doc) => doc.uploadId != null)
-          .map((doc) => ({
-            ...doc,
-            uploadId: doc.uploadId as string,
-          })),
-        storeData: data.stores,
-        propertyData: data.properties,
-        boardRegistrationNumber: data.boardRegistrationNumber,
-        license: data.license,
-      };
-
-      const res = await profileClient.completeProfile(payload);
+      const res = await profileClient.completeProfile(data);
       if (!res.success) {
         throw new Error(res.error || "Failed to update profile");
       }
-
-      // Success is handled by the form component via onSuccess/return,
-      // but here we just need to resolve promise.
     } catch (error) {
       console.error("Failed to complete profile", error);
       throw error; // Re-throw so ProfessionalForm handles the error UI
@@ -56,22 +59,7 @@ export default function CompleteProfilePage() {
     );
   }
 
-  // Transform existing profile data to form initial data
-  // Note: ProfessionalForm expects `ProfessionalWizardData`
-  // mapping profile data to it.
-  const initialData = profile
-    ? {
-        profession: (profile as ProfessionalProfileData).profession || "",
-        companyName: (profile as ProfessionalProfileData).companyName || "",
-        licenseNumber: (profile as ProfessionalProfileData).licenseNumber || "",
-        yearsExperience:
-          (profile as ProfessionalProfileData).yearsExperience || 0,
-        website: (profile as ProfessionalProfileData).website || "",
-        bio: (profile as ProfessionalProfileData).bio || "",
-        // We can't pre-fill files, but we should pre-fill other fields if possible
-        // existing docs aren't easily mapped back to 'File[]' but logic in form handles completion mode.
-      }
-    : {};
+  const initialData = buildInitialData(profile);
 
   return (
     <div className="py-10 px-4">

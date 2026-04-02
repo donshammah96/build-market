@@ -1,14 +1,31 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@build/db";
+import { NextRequest } from "next/server";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { HttpStatus } from "@/app/lib/api/api-response";
 import {
   apiError,
+  apiSuccess,
   initializeCorrelationId,
   getClientLogger,
+  getResilientExecutor,
 } from "@/app/lib/api/resilient-api";
+import { getRequestMetadata } from "@/app/lib/api/request-utils";
+import {
+  completeClientProfile,
+  completeProfessionalProfile,
+  resolveProfileCompleteTarget,
+} from "@/app/lib/domains/user-profile";
+import {
+  ClientProfileCompleteSchema,
+  ProfessionalProfileCompleteSchema,
+} from "@/app/lib/domains/user-profile/profile-complete-contracts";
+import {
+  checkProfileCompleteRateLimit,
+  executeProfileCompleteOperation,
+  parseAndValidateProfileCompleteBody,
+} from "./shared";
 
 const logger = getClientLogger();
+const executor = getResilientExecutor();
 
 /**
  * PATCH /api/user/profile/complete
@@ -29,112 +46,140 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
   try {
     logger.info("Profile complete request received - routing by role", {
+      correlationId,
+      operationName: "route-profile-complete",
+    });
+
+    const rateLimitResult = await checkProfileCompleteRateLimit(req, dbUserId);
+    if (!rateLimitResult.success) {
+      return apiError(
+        `Rate limit exceeded. Try again in ${rateLimitResult.retryAfterSeconds} seconds`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const targetResult = await resolveProfileCompleteTarget({
       userId: dbUserId,
       correlationId,
     });
 
-    // Fetch user to determine role
-    const user = await prisma.user.findUnique({
-      where: { id: dbUserId },
-      select: {
-        id: true,
-        role: true,
-        status: true,
+    if (!targetResult.ok) {
+      logger.warn("Profile complete target resolution failed", {
+        correlationId,
+        error: targetResult.error,
+        operationName: "route-profile-complete",
+        outcome: "failed",
+      });
+      return apiError(
+        targetResult.message || "Failed to resolve profile completion target",
+        targetResult.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const { ipAddress, userAgent } = getRequestMetadata(req);
+    const target = targetResult.data.target;
+
+    if (target === "client") {
+      const validationResult = await parseAndValidateProfileCompleteBody(
+        req,
+        ClientProfileCompleteSchema,
+        {
+          logger,
+          correlationId,
+          target,
+        },
+      );
+
+      if (!validationResult.success) {
+        return validationResult.response;
+      }
+
+      const domainResult = await executeProfileCompleteOperation({
+        executor,
+        operationName: "update-client-profile-complete-routed",
+        operation: async () =>
+          completeClientProfile(
+            {
+              userId: dbUserId,
+              correlationId,
+            },
+            validationResult.data,
+          ),
+        logger,
+        correlationId,
+        target,
+        failureMessage: "Profile complete routed update failed",
+      });
+
+      if (!domainResult.success) {
+        return domainResult.response;
+      }
+
+      logger.info("Profile complete request routed successfully", {
+        target,
+        correlationId,
+        operationName: "route-profile-complete",
+        outcome: "succeeded",
+      });
+
+      return apiSuccess(domainResult.data);
+    }
+
+    const validationResult = await parseAndValidateProfileCompleteBody(
+      req,
+      ProfessionalProfileCompleteSchema,
+      {
+        logger,
+        correlationId,
+        target,
       },
-    });
+    );
 
-    if (!user) {
-      logger.warn("User not found for profile completion", {
-        userId: dbUserId,
-        correlationId,
-      });
-      return apiError("User not found", HttpStatus.NOT_FOUND);
+    if (!validationResult.success) {
+      return validationResult.response;
     }
 
-    // Security check
-    if (user.status === "SUSPENDED" || user.status === "BANNED") {
-      logger.warn("Profile update blocked for restricted account", {
-        userId: dbUserId,
-        status: user.status,
-        correlationId,
-      });
-      return apiError(
-        "Profile updates are not allowed for suspended or banned accounts",
-        HttpStatus.FORBIDDEN,
-      );
-    }
-
-    // Route to appropriate endpoint based on role
-    const baseUrl = new URL(req.url).origin;
-    const targetPath =
-      user.role === "CLIENT"
-        ? "/api/user/profile/complete/client"
-        : user.role === "PROFESSIONAL"
-          ? "/api/user/profile/complete/professional"
-          : null;
-
-    if (!targetPath) {
-      logger.warn("Invalid role for profile completion", {
-        userId: dbUserId,
-        role: user.role,
-        correlationId,
-      });
-      return apiError(
-        `Profile completion not supported for role: ${user.role}`,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    logger.info("Routing profile complete request", {
-      userId: dbUserId,
-      role: user.role,
-      targetEndpoint: targetPath,
+    const domainResult = await executeProfileCompleteOperation({
+      executor,
+      operationName: "update-professional-profile-complete-routed",
+      operation: async () =>
+        completeProfessionalProfile(
+          {
+            userId: dbUserId,
+            correlationId,
+          },
+          validationResult.data,
+          {
+            ipAddress,
+            userAgent,
+          },
+        ),
+      logger,
       correlationId,
+      target,
+      failureMessage: "Profile complete routed update failed",
     });
 
-    // Get the request body to forward
-    const body = await req.json();
-
-    // Create a new request to the role-specific endpoint
-    const targetUrl = `${baseUrl}${targetPath}`;
-    const response = await fetch(targetUrl, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        // Forward authentication headers
-        ...(req.headers.get("authorization") && {
-          authorization: req.headers.get("authorization")!,
-        }),
-        ...(req.headers.get("cookie") && {
-          cookie: req.headers.get("cookie")!,
-        }),
-        // Forward correlation ID for tracing
-        "x-correlation-id": correlationId,
-      },
-      body: JSON.stringify(body),
-    });
-
-    // Forward the response from the role-specific endpoint
-    const responseData = await response.json();
+    if (!domainResult.success) {
+      return domainResult.response;
+    }
 
     logger.info("Profile complete request routed successfully", {
-      userId: dbUserId,
-      role: user.role,
-      targetEndpoint: targetPath,
-      statusCode: response.status,
+      target,
       correlationId,
+      operationName: "route-profile-complete",
+      outcome: "succeeded",
     });
 
-    return NextResponse.json(responseData, {
-      status: response.status,
-    });
+    return apiSuccess(domainResult.data);
   } catch (err) {
     logger.error(
       "Profile complete routing error",
       err instanceof Error ? err : new Error(String(err)),
       {
-        userId: dbUserId,
         correlationId,
+        operationName: "route-profile-complete",
+        outcome: "failed",
       },
     );
 

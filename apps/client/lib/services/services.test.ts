@@ -2,7 +2,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createThread, sendMessage } from "./messaging";
 import { createProject, getUserProjects } from "./projects";
-import { searchProfessionals } from "./search";
 
 // Mock the prisma client
 const prismaMock = vi.hoisted(() => ({
@@ -145,36 +144,4 @@ describe("Project Service", () => {
   });
 });
 
-describe("Search Service", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("should search professionals", async () => {
-    const mockPros = [{ companyName: "Acme Plumbers" }];
-    prismaMock.professionalProfile.findMany.mockResolvedValue(mockPros);
-
-    const result = await searchProfessionals("Plumber");
-
-    expect(prismaMock.professionalProfile.findMany).toHaveBeenCalledWith({
-      where: {
-        OR: [
-          { companyName: { contains: "Plumber", mode: "insensitive" } },
-          { bio: { contains: "Plumber", mode: "insensitive" } },
-          { servicesOffered: { has: "Plumber" } },
-        ],
-        verified: true,
-      },
-      include: {
-        user: {
-          select: {
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-      },
-    });
-    expect(result).toEqual(mockPros);
-  });
-});
+// Search service migrated to app/lib/domains/search; see __tests__/lib/domains/search.service.test.ts

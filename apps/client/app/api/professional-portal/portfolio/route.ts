@@ -20,10 +20,7 @@ import {
   CreatePortfolioSchema,
 } from "@/app/lib/validation/portfolio-validation";
 import { PORTFOLIO_CONFIG } from "@/app/lib/config/portfolio.config";
-import {
-  getProfessionalPortfolios,
-  createProfessionalPortfolio,
-} from "@/lib/services/portfolio";
+import { portfolioService } from "@/app/lib/domains/portfolio";
 
 const logger = getClientLogger();
 
@@ -44,8 +41,16 @@ export const GET = createProfessionalPortalGet({
   rateLimitKey: "portfolio-read",
   querySchema: PortfolioQuerySchema,
   parseQuery: parsePortfolioQuery,
-  handler: async ({ dbUserId, query }) =>
-    getProfessionalPortfolios(dbUserId, query),
+  handler: async ({ dbUserId, query }) => {
+    const result = await portfolioService.listPortfolios({
+      userId: dbUserId,
+      query,
+    });
+    if (!result.ok) {
+      throw new Error(result.message ?? "Failed to fetch portfolio items");
+    }
+    return result.data;
+  },
   operationName: "get_portfolio_items",
   errorMessage: "Failed to fetch portfolio items",
 });
@@ -54,7 +59,7 @@ export const GET = createProfessionalPortalGet({
  * POST /api/professional-portal/portfolio
  * Create a new portfolio item.
  */
-export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
+export const POST = withAuth(async (req: NextRequest, { dbUserId, userRole }) => {
   const correlationId = initializeCorrelationId(req);
   const { ipAddress, userAgent } = getRequestMetadata(req);
 
@@ -124,14 +129,16 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
 
   logger.info("Creating portfolio item", {
     correlationId,
-    userId: dbUserId,
+    actorRole: userRole,
     title: portfolioData.title,
   });
 
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
     async () =>
-      createProfessionalPortfolio(dbUserId, portfolioData, {
+      portfolioService.createPortfolio({
+        userId: dbUserId,
+        data: portfolioData,
         ipAddress,
         userAgent,
       }),
@@ -147,7 +154,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
   }
 
   const data = result.data;
-  if (!data.success) {
+  if (!data.ok) {
     if (data.error === "limit_exceeded") {
       await IdempotencyService.fail(idempotencyKey);
       return apiError(

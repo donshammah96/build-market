@@ -5,8 +5,10 @@ import { DM_Sans } from "next/font/google";
 import { ToastContainer } from "react-toastify";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { CookieConsentProvider } from "@/components/providers/CookieConsentProvider";
+import { PostHogProvider } from "@/app/providers/PostHogProvider";
 import { CookieBanner } from "@/components/gdpr/CookieBanner";
 import { AccessibilityProvider } from "@/components/accessibility";
+import { RouteFocusManager } from "@/components/layout/RouteFocusManager";
 
 // Single, distinctive font with multiple weights for better performance
 // DM Sans is modern, geometric, and works well for both headings and body
@@ -93,9 +95,16 @@ export default async function RootLayout({
           <link rel="dns-prefetch" href="https://res.cloudinary.com" />
         </head>
         <body
-          className={`${dmSans.className} antialiased bg-white`}
+          className={`${dmSans.className} antialiased bg-background text-foreground`}
           suppressHydrationWarning
         >
+          <a
+            href="#main-content"
+            className="sr-only z-[100] focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:shadow-lg"
+          >
+            Skip to main content
+          </a>
+
           {/* SVG Filters for Color Blind Modes */}
           <svg
             aria-hidden="true"
@@ -140,22 +149,27 @@ export default async function RootLayout({
             </defs>
           </svg>
 
-          <QueryProvider>
-            <AccessibilityProvider>
-              <CookieConsentProvider isSignedIn={isSignedIn}>
-                <div id="main-content">{children}</div>
-                <CookieBanner />
-                <ToastContainer
-                  position="bottom-right"
-                  autoClose={4000}
-                  hideProgressBar={false}
-                  closeOnClick
-                  pauseOnHover
-                  limit={3}
-                />
-              </CookieConsentProvider>
-            </AccessibilityProvider>
-          </QueryProvider>
+          <PostHogProvider>
+            <QueryProvider>
+              <AccessibilityProvider>
+                <CookieConsentProvider isSignedIn={isSignedIn}>
+                  <RouteFocusManager />
+                  <div id="main-content" tabIndex={-1} className="outline-none">
+                    {children}
+                  </div>
+                  <CookieBanner />
+                  <ToastContainer
+                    position="bottom-right"
+                    autoClose={4000}
+                    hideProgressBar={false}
+                    closeOnClick
+                    pauseOnHover
+                    limit={3}
+                  />
+                </CookieConsentProvider>
+              </AccessibilityProvider>
+            </QueryProvider>
+          </PostHogProvider>
         </body>
       </html>
     </ClerkProvider>

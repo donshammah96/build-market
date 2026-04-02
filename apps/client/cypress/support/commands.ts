@@ -237,27 +237,55 @@ Cypress.Commands.add(
 Cypress.Commands.add("mockClerkAuth", (options: MockClerkOptions = {}) => {
   const { isSignedIn = true, userId = "user_test123" } = options;
 
-  // This is a simplified mock - in reality you'd need to set up
-  // proper Clerk test mode or bypass authentication
-  if (isSignedIn) {
-    cy.window().then((win) => {
-      // Mock Clerk's user object
-      (win as any).__clerk_frontend_api = "test";
-    });
-  }
+  const sessionId = "sess_test123";
+  const clientResponse = isSignedIn
+    ? {
+        response: {
+          client: {
+            id: "client_test123",
+            sessions: [
+              {
+                id: sessionId,
+                status: "active",
+                user: { id: userId },
+              },
+            ],
+            active_sessions: [
+              {
+                id: sessionId,
+                status: "active",
+                user: { id: userId },
+              },
+            ],
+            last_active_session_id: sessionId,
+          },
+        },
+      }
+    : {
+        response: {
+          client: {
+            id: "client_test123",
+            sessions: [],
+            active_sessions: [],
+            last_active_session_id: null,
+          },
+        },
+      };
 
   // Intercept Clerk API calls
+  cy.intercept("POST", "**/v1/dev_browser*", {
+    statusCode: 200,
+    body: { response: { id: "dev_browser_test" } },
+  });
+
+  cy.intercept("GET", "**/v1/environment*", {
+    statusCode: 200,
+    body: { response: { auth_config: {}, display_config: {} } },
+  });
+
   cy.intercept("GET", "**/v1/client*", {
     statusCode: 200,
-    body: isSignedIn
-      ? {
-          response: {
-            client: {
-              sessions: [{ user: { id: userId } }],
-            },
-          },
-        }
-      : { response: { client: { sessions: [] } } },
+    body: clientResponse,
   });
 });
 

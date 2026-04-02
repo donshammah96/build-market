@@ -168,7 +168,7 @@ export async function updateStoreWithOptimisticLock(
       if (store.professionalId !== userId) {
         logger.warn("Unauthorized store update attempt", {
           correlationId: context.correlationId,
-          userId,
+          actorPresent: Boolean(userId),
           storeId,
           ownerId: store.professionalId,
         });

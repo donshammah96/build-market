@@ -39,7 +39,7 @@ export type Participant = {
   professionalId: string | null;
   clientId: string;
   title: string;
-  role: "professional" | "client";
+  role: "PROFESSIONAL" | "CLIENT";
 };
 
 export const projectsRepository = {
@@ -133,11 +133,11 @@ export const projectsRepository = {
     }
 
     if (project.professionalId === userId) {
-      return { success: true, data: { ...project, role: "professional" } };
+      return { success: true, data: { ...project, role: "PROFESSIONAL" } };
     }
 
     if (project.clientId === userId) {
-      return { success: true, data: { ...project, role: "client" } };
+      return { success: true, data: { ...project, role: "CLIENT" } };
     }
 
     return {
@@ -227,8 +227,8 @@ export const projectsRepository = {
     };
   },
 
-  listUserProjects(input: { userId: string; role: "client" | "professional" }) {
-    if (input.role === "client") {
+  listUserProjects(input: { userId: string; role: "CLIENT" | "PROFESSIONAL" }) {
+    if (input.role === "CLIENT") {
       return prisma.project.findMany({
         where: { clientId: input.userId },
         orderBy: { updatedAt: "desc" },

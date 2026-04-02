@@ -49,7 +49,7 @@ describe("messagingService actor enforcement", () => {
     repositoryMocks.findParticipant.mockResolvedValue(null);
 
     const result = await messagingService.getConversation(
-      { userId: "user_1", role: "professional" },
+      { userId: "user_1", role: "PROFESSIONAL" },
       "thread_1",
     );
 
@@ -67,7 +67,7 @@ describe("messagingService actor enforcement", () => {
     repositoryMocks.findParticipant.mockResolvedValue(null);
 
     const result = await messagingService.getConversation(
-      { userId: "admin_1", role: "admin" },
+      { userId: "admin_1", role: "ADMIN" },
       "thread_1",
     );
 
@@ -86,7 +86,7 @@ describe("messagingService actor enforcement", () => {
     });
 
     const result = await messagingService.deleteMessage(
-      { userId: "user_1", role: "professional" },
+      { userId: "user_1", role: "PROFESSIONAL" },
       "message_1",
     );
 
@@ -106,7 +106,7 @@ describe("messagingService actor enforcement", () => {
     });
 
     const result = await messagingService.addParticipant(
-      { userId: "user_1", role: "professional" },
+      { userId: "user_1", role: "PROFESSIONAL" },
       "thread_1",
       {
         userId: "user_2",
@@ -126,7 +126,7 @@ describe("messagingService actor enforcement", () => {
     repositoryMocks.findThreadById.mockResolvedValue(null);
 
     const result = await messagingService.listConversationMessages(
-      { userId: "user_1", role: "professional" },
+      { userId: "user_1", role: "PROFESSIONAL" },
       "thread_404",
       { direction: "before", limit: 20 },
     );

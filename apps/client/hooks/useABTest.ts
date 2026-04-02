@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useUser } from "@clerk/nextjs";
+import { env } from "@/app/lib/infrastructure/env";
+
+// SECURITY_PERSISTENCE_ALLOWLIST: Stores non-sensitive A/B assignment and event telemetry in localStorage.
 
 // ============================================================================
 // TYPES
@@ -109,7 +112,7 @@ function trackABEvent(
   data?: Record<string, unknown>,
 ) {
   // Log to console in development
-  if (process.env.NODE_ENV === "development") {
+  if (env.isDev) {
     console.log("[A/B Test]", {
       experiment: experimentName,
       variant,

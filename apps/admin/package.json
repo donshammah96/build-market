@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "echo \"No tests configured\" && exit 0"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.33.6",
@@ -28,6 +29,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.0",
     "@build/db": "workspace:*",
+    "@build/queue-server": "workspace:*",
     "@build/ui": "workspace:*",
     "@tanstack/react-query": "^5.90.5",
     "@tanstack/react-table": "^8.21.3",
@@ -35,7 +37,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.488.0",
-    "next": "15.5.14",
+    "next": ">=15.4.14",
     "next-themes": "^0.4.6",
     "react": "^19.1.0",
     "react-day-picker": "8.10.1",

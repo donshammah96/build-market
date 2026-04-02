@@ -1,14 +1,16 @@
 {
-  "generatedAt": "2026-03-30T23:58:37.014Z",
+  "generatedAt": "2026-04-01T01:27:27.673Z",
   "summary": {
     "envBoundary": 0,
     "logSafety": 0,
+    "logSafetySpreadReview": 0,
     "browserPersistence": 0,
     "dangerousHtml": 0
   },
   "findings": {
     "envBoundary": [],
     "logSafety": [],
+    "logSafetySpreadReview": [],
     "browserPersistence": [],
     "dangerousHtml": []
   }

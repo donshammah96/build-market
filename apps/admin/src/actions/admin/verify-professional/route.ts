@@ -29,7 +29,6 @@ const verifySchema = z.object({
  * For development purposes, it checks for an admin role in Clerk metadata.
  */
 export const POST = withAdminRole([
-  AdminRole.SYSTEM_ADMIN,
   AdminRole.SUPER_ADMIN,
 ])(async (request: NextRequest, context: AuthContext) => {
   const { dbUserId } = context;
@@ -42,12 +41,7 @@ export const POST = withAdminRole([
       select: { role: true, isActive: true },
     });
 
-    if (
-      !user ||
-      (user.role !== AdminRole.SYSTEM_ADMIN &&
-        user.role !== AdminRole.SUPER_ADMIN) ||
-      !user.isActive
-    ) {
+    if (!user || user.role !== AdminRole.SUPER_ADMIN || !user.isActive) {
       return apiError(
         "Forbidden. Admin access required.",
         HttpStatus.FORBIDDEN,

@@ -1,8 +1,0 @@
-{
-  "PROJECT_SERVICE_URL": {
-    "value": "localhost:8000",
-    "type": "string",
-    "id": 0,
-    "isSecret": false
-  }
-}

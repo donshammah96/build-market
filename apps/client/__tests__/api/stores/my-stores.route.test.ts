@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { GET } from "@/app/api/stores/my-stores/route";
+import { GET } from "@/app/api/stores/me/route";
 import { NextRequest } from "next/server";
-import { prisma } from "@build/db";
 
 const mockLogger = vi.hoisted(() => ({
   info: vi.fn(),
@@ -11,7 +10,7 @@ const mockLogger = vi.hoisted(() => ({
 }));
 
 vi.mock("@/app/lib/api/api-middleware", () => ({
-  withAuth: (handler: any) => {
+  withAuth: (handler: (req: NextRequest, ctx: unknown) => Promise<unknown>) => {
     return async (req: NextRequest) =>
       handler(req, {
         clerkId: "clerk_123",
@@ -22,14 +21,9 @@ vi.mock("@/app/lib/api/api-middleware", () => ({
   },
 }));
 
-vi.mock("@build/db", () => ({
-  prisma: {
-    store: {
-      findMany: vi.fn(),
-    },
-    order: {
-      groupBy: vi.fn(),
-    },
+vi.mock("@/app/lib/domains/stores", () => ({
+  storesService: {
+    listMyStores: vi.fn(),
   },
 }));
 
@@ -50,26 +44,37 @@ vi.mock("@/app/lib/api/request-utils", () => ({
 
 vi.mock("@/app/lib/api/resilient-api", () => ({
   initializeCorrelationId: vi.fn().mockReturnValue("test-correlation-id"),
+  getResilientExecutor: vi.fn().mockReturnValue({
+    execute: vi.fn(async (fn: () => Promise<unknown>) => {
+      try {
+        const data = await fn();
+        return { success: true, data };
+      } catch (error) {
+        return { success: false, error };
+      }
+    }),
+  }),
   getClientLogger: vi.fn().mockReturnValue(mockLogger),
 }));
 
-describe("GET /api/stores/my-stores", () => {
+describe("GET /api/stores/me", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("returns empty list without aggregate queries", async () => {
-    vi.mocked(prisma.store.findMany).mockResolvedValue([] as any);
+  it("returns empty list from domain service", async () => {
+    const { storesService } = await import("@/app/lib/domains/stores");
+    vi.mocked(storesService.listMyStores).mockResolvedValue({
+      ok: true,
+      data: [],
+    } as unknown as Awaited<ReturnType<typeof storesService.listMyStores>>);
 
-    const request = new NextRequest(
-      "http://localhost:3500/api/stores/my-stores",
-    );
+    const request = new NextRequest("http://localhost:3500/api/stores/me");
     const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
     expect(data.data).toEqual([]);
-    expect(prisma.order.groupBy).not.toHaveBeenCalled();
   });
 });

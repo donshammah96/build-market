@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withAuth } from "@/app/lib/api/api-middleware";
 import { auth } from "@clerk/nextjs/server";
+import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
+import { checkBodySize, isValidId } from "@/app/lib/api/api-guards";
 import {
-  initializeCorrelationId,
   getResilientExecutor,
-  getClientLogger,
+  initializeCorrelationId,
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
@@ -13,95 +13,95 @@ import {
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
-import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
-import { UpdatePropertySchema } from "@/app/lib/validation/properties-validation";
 import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import {
-  buildPropertyConflictResponse,
+  propertiesService,
+  UpdatePropertySchema,
+} from "@/app/lib/domains/properties";
+import {
+  actorRoleLabel,
+  conflictResponse,
+  domainErrorCodeToStatus,
+  domainResultToErrorResponse,
+  extractExpectedVersion,
   isOptimisticRetryEnabled,
-} from "@/app/lib/services/property-operations.service";
-import { propertiesService } from "@/app/lib/domains/properties";
-
-const logger = getClientLogger();
+  logPropertiesRouteOutcome,
+  now,
+} from "@/app/api/properties/shared";
 
 type PropertyParams = {
   id: string;
 };
 
-// Rate Limiting Helper (thin wrapper, route-specific)
 async function checkPropertyRateLimit(
   req: NextRequest,
   operation: "read" | "write",
-): Promise<NextResponse | null> {
+) {
   const identifier = getRateLimitIdentifier(req);
   const config = RateLimits[operation.toUpperCase() as keyof typeof RateLimits];
-
-  const result = await checkRateLimit(
+  return checkRateLimit(
     `property-${operation}:${identifier}`,
     config.limit,
     config.window,
   );
-
-  if (!result.success) {
-    return apiError(
-      "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS,
-    );
-  }
-
-  return null;
 }
 
-/**
- * Helper to extract optimistic locking version from either header or body
- */
-function extractExpectedVersion(
-  req: NextRequest,
-  body: unknown,
-): number | null {
-  const ifMatch = req.headers.get("If-Match");
-  if (ifMatch) {
-    return parseInt(ifMatch.replace(/"/g, ""), 10);
-  }
-  if (body && typeof body === "object" && "version" in body) {
-    return parseInt(String((body as Record<string, unknown>).version), 10);
-  }
-  return null;
-}
-
-/**
- * GET /api/properties/[id]
- * Get detailed information about a specific property.
- * Public endpoint — no authentication required.
- */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<PropertyParams> },
 ) {
+  const startedAt = now();
   const correlationId = initializeCorrelationId(request);
+  const operationName = "get_property_detail";
   const { ipAddress, userAgent } = getRequestMetadata(request);
   const { id } = await params;
 
-  // Rate limiting
-  const rateLimitResult = await checkPropertyRateLimit(request, "read");
-
-  if (rateLimitResult) {
-    return rateLimitResult;
-  }
-
-  // Validate ID
   if (!isValidId(id)) {
-    return apiError("Invalid property ID", HttpStatus.BAD_REQUEST);
+    const response = apiError(
+      "Invalid property ID",
+      HttpStatus.BAD_REQUEST,
+      undefined,
+      correlationId,
+    );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: "anonymous",
+      outcome: "validation_error",
+      httpStatus: HttpStatus.BAD_REQUEST,
+      durationMs: now() - startedAt,
+      domainError: "invalid_input",
+      resourceType: "property",
+      resourceId: id,
+    });
+    return response;
   }
 
-  logger.info("Fetching property details", {
-    correlationId,
-    propertyId: id,
-  });
+  const rateLimitResult = await checkPropertyRateLimit(request, "read");
+  if (!rateLimitResult.success) {
+    const response = apiError(
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS,
+      undefined,
+      correlationId,
+    );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: "anonymous",
+      outcome: "rate_limited",
+      httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+      durationMs: now() - startedAt,
+      domainError: "limit_exceeded",
+      resourceType: "property",
+      resourceId: id,
+    });
+    return response;
+  }
 
-  const resilientExecutor = getResilientExecutor();
   const { userId: clerkId } = await auth().catch(() => ({ userId: null }));
+  const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
     () =>
       propertiesService.getPropertyDetail(id, {
@@ -109,401 +109,560 @@ export async function GET(
         ipAddress,
         userAgent,
       }),
-    { operationName: "get_property_detail" },
+    { operationName },
   );
 
   if (!result.success || !result.data) {
-    logger.error("Property fetch failed", result.error, {
-      correlationId,
-      propertyId: id,
-    });
-    return apiError(
+    const response = apiError(
       "Failed to fetch property",
       HttpStatus.INTERNAL_SERVER_ERROR,
       undefined,
       correlationId,
     );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: clerkId ? "authenticated" : "anonymous",
+      outcome: "internal_error",
+      httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+      resourceId: id,
+    });
+    return response;
   }
 
-  if (!result.data.ok) {
-    return apiError(
-      result.data.message,
-      result.data.status,
-      undefined,
+  const domainResult = result.data;
+  if (!domainResult.ok) {
+    const errorResponse = domainResultToErrorResponse(
+      domainResult,
       correlationId,
     );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: clerkId ? "authenticated" : "anonymous",
+      outcome: "domain_error",
+      httpStatus: domainErrorCodeToStatus(domainResult.error),
+      durationMs: now() - startedAt,
+      domainError: domainResult.error,
+      resourceType: "property",
+      resourceId: id,
+    });
+    return errorResponse!;
   }
 
-  const data = (result.data as { ok: true; data: Record<string, unknown> })
-    .data;
-  const property = data.property as { version: number; [key: string]: unknown };
-  const response = apiSuccess(
-    {
-      property,
-      similarProperties: data.similarProperties,
-    },
-    HttpStatus.OK,
+  const response = apiSuccess(domainResult.data, HttpStatus.OK, correlationId);
+  response.headers.set("ETag", `"${domainResult.data.property.version}"`);
+  logPropertiesRouteOutcome({
     correlationId,
-  );
-  response.headers.set("ETag", `"${property.version}"`);
+    operationName,
+    actorRole: clerkId ? "authenticated" : "anonymous",
+    outcome: "success",
+    httpStatus: HttpStatus.OK,
+    durationMs: now() - startedAt,
+    resourceType: "property",
+    resourceId: id,
+  });
   return response;
 }
 
-/**
- * PATCH /api/properties/[id]
- * Update a property with optimistic locking.
- * Authenticated endpoint — only the listing agent can update.
- * Requires If-Match header with current version.
- */
 export const PATCH = withAuth(
   async (
     req: NextRequest,
-    context: { dbUserId: string },
+    context: { dbUserId: string; userRole?: string },
     params?: { id: string },
   ): Promise<NextResponse> => {
+    const startedAt = now();
     const correlationId = initializeCorrelationId(req);
-    const { dbUserId } = context;
+    const operationName = "update_property";
+    const actorRole = actorRoleLabel(context.userRole);
     const { ipAddress, userAgent } = getRequestMetadata(req);
 
     if (!params?.id || !isValidId(params.id)) {
-      return apiError("Property ID is required", HttpStatus.BAD_REQUEST);
+      const response = apiError(
+        "Property ID is required",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: params?.id,
+      });
+      return response;
     }
-    const { id: propertyId } = params;
 
-    // Rate limiting
-    const identifier = getRateLimitIdentifier(req);
-    const rateLimitResult = await checkRateLimit(
-      `property-write:${identifier}`,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window,
-    );
+    const propertyId = params.id;
+    const rateLimitResult = await checkPropertyRateLimit(req, "write");
     if (!rateLimitResult.success) {
-      return apiError(
+      const response = apiError(
         "Too many requests. Please try again later.",
         HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
+        correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
     const sizeError = checkBodySize(req, PROPERTY_CONFIG.MAX_BODY_SIZE);
-    if (sizeError) return sizeError;
+    if (sizeError) {
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: sizeError.status,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return sizeError;
+    }
 
-    // Parse body
     let body: unknown;
     try {
       body = await req.json();
     } catch {
-      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+      const response = apiError(
+        "Invalid JSON body",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
     const expectedVersion = extractExpectedVersion(req, body);
-    if (expectedVersion === null || isNaN(expectedVersion)) {
-      return apiError(
-        "Missing or invalid version for optimistic locking. Provide 'If-Match' header or 'version' in body.",
+    if (expectedVersion === null) {
+      const response = apiError(
+        "Missing or invalid version for optimistic locking. Provide 'If-Match' header or legacy body 'version'.",
         HttpStatus.PRECONDITION_REQUIRED,
+        undefined,
+        correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: HttpStatus.PRECONDITION_REQUIRED,
+        durationMs: now() - startedAt,
+        domainError: "conflict",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
-    // Validate update data
     const validation = UpdatePropertySchema.safeParse(body);
     if (!validation.success) {
-      logger.warn("Property update validation failed", {
-        correlationId,
-        errors: validation.error.issues,
-      });
-      return apiError(
+      const response = apiError(
         "Invalid update data",
         HttpStatus.BAD_REQUEST,
         validation.error.issues,
+        correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
-    // Idempotency
     const idempotencyKey =
       req.headers.get("Idempotency-Key") ||
-      IdempotencyService.generateKey(dbUserId, `PATCH:${propertyId}`, body);
+      IdempotencyService.generateKey(
+        context.dbUserId,
+        `PATCH:${propertyId}`,
+        body,
+      );
 
     const idempotencyCheck = await IdempotencyService.checkOrCreate(
       idempotencyKey,
       "property",
-      dbUserId,
+      context.dbUserId,
       "PATCH",
       propertyId,
       PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
     );
 
     if (idempotencyCheck?.status === "completed") {
-      logger.info("Returning cached idempotent PATCH response", {
-        correlationId,
-        idempotencyKey,
-      });
-      return apiSuccess(
+      const response = apiSuccess(
         idempotencyCheck.response,
         HttpStatus.OK,
         correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "success",
+        httpStatus: HttpStatus.OK,
+        durationMs: now() - startedAt,
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
     if (idempotencyCheck?.status === "pending") {
-      return apiError(
+      const response = apiError(
         "A request with this idempotency key is already being processed",
         HttpStatus.CONFLICT,
+        undefined,
+        correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: HttpStatus.CONFLICT,
+        durationMs: now() - startedAt,
+        domainError: "conflict",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
     }
+
+    const shouldRetry = isOptimisticRetryEnabled(req);
+    const maxRetries = shouldRetry
+      ? PROPERTY_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES
+      : 1;
 
     const operationContext = {
       correlationId,
-      userId: dbUserId,
+      userId: context.dbUserId,
       propertyId,
       ipAddress,
       userAgent,
       idempotencyKey,
     };
 
-    try {
-      const shouldRetry = isOptimisticRetryEnabled(req);
-      const maxRetries = shouldRetry
-        ? PROPERTY_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES
-        : 1;
+    const latestResult = await propertiesService.updatePropertyWithRetry(
+      propertyId,
+      { userId: context.dbUserId, role: context.userRole ?? "unknown" },
+      validation.data,
+      operationContext,
+      expectedVersion,
+      {
+        maxRetries,
+        retryDelayMs: PROPERTY_CONFIG.OPTIMISTIC_LOCK_RETRY_DELAY_MS,
+      },
+    );
 
-      let result;
-      for (let attempt = 0; attempt < maxRetries; attempt++) {
-        result = await propertiesService.updateProperty(
-          propertyId,
-          dbUserId,
-          validation.data,
-          operationContext,
-          expectedVersion + attempt,
-        );
+    if (!latestResult.ok) {
+      await IdempotencyService.fail(idempotencyKey);
 
-        if (result.ok || result.status !== HttpStatus.CONFLICT) break;
-
-        if (attempt < maxRetries - 1) {
-          await new Promise((r) =>
-            setTimeout(
-              r,
-              PROPERTY_CONFIG.OPTIMISTIC_LOCK_RETRY_DELAY_MS * (attempt + 1),
-            ),
-          );
-        }
-      }
-
-      if (!result) {
-        await IdempotencyService.fail(idempotencyKey);
-        return apiError(
-          "Update failed after retries",
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
-
-      if (!result.ok) {
-        await IdempotencyService.fail(idempotencyKey);
-        if (result.status === HttpStatus.CONFLICT) {
-          return await buildPropertyConflictResponse(
-            result.message,
-            propertyId,
-          );
-        }
-        return apiError(
-          result.message,
-          result.status,
-          undefined,
+      if (latestResult.error === "conflict") {
+        const response = conflictResponse(
+          latestResult.message ??
+            "Property has been modified. Retry with the latest version.",
+          (latestResult.details as { currentVersion?: number } | undefined)
+            ?.currentVersion,
           correlationId,
         );
-      } else {
-        // Success Path
-        const optimisticResult = result.data as {
-          data: { property: Record<string, unknown>; newVersion: number };
-          newVersion: number;
-        };
-        const responseData = {
-          ...optimisticResult.data.property,
-          _meta: { version: optimisticResult.newVersion },
-        };
-
-        await IdempotencyService.complete(idempotencyKey, responseData);
-
-        logger.info("Property updated successfully", {
+        logPropertiesRouteOutcome({
           correlationId,
-          propertyId,
-          newVersion: optimisticResult.newVersion,
+          operationName,
+          actorRole,
+          outcome: "domain_error",
+          httpStatus: HttpStatus.CONFLICT,
+          durationMs: now() - startedAt,
+          domainError: latestResult.error,
+          resourceType: "property",
+          resourceId: propertyId,
         });
-
-        const response = apiSuccess(responseData, HttpStatus.OK, correlationId);
-        response.headers.set("ETag", `"${optimisticResult.newVersion}"`);
         return response;
       }
-    } catch (error) {
-      await IdempotencyService.fail(idempotencyKey);
-      logger.error(
-        "Property update error",
-        error instanceof Error ? error : new Error(String(error)),
-        { correlationId, propertyId },
-      );
-      return apiError(
-        "Failed to update property",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        undefined,
+
+      const errorResponse = domainResultToErrorResponse(
+        latestResult,
         correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(latestResult.error),
+        durationMs: now() - startedAt,
+        domainError: latestResult.error,
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return errorResponse!;
     }
+
+    await IdempotencyService.complete(idempotencyKey, latestResult.data);
+    const response = apiSuccess(
+      latestResult.data,
+      HttpStatus.OK,
+      correlationId,
+    );
+    response.headers.set("ETag", `"${latestResult.data.version}"`);
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+      resourceId: propertyId,
+    });
+    return response;
   },
 );
 
-/**
- * DELETE /api/properties/[id]
- * Soft-delete a property with optimistic locking.
- * Authenticated endpoint — only the listing agent can delete.
- * Requires If-Match header with current version.
- */
 export const DELETE = withAuth(
   async (
     req: NextRequest,
-    context: { dbUserId: string },
+    context: { dbUserId: string; userRole?: string },
     params?: { id: string },
   ): Promise<NextResponse> => {
+    const startedAt = now();
     const correlationId = initializeCorrelationId(req);
-    const { dbUserId } = context;
+    const operationName = "delete_property";
+    const actorRole = actorRoleLabel(context.userRole);
     const { ipAddress, userAgent } = getRequestMetadata(req);
 
     if (!params?.id || !isValidId(params.id)) {
-      return apiError("Property ID is required", HttpStatus.BAD_REQUEST);
+      const response = apiError(
+        "Property ID is required",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: params?.id,
+      });
+      return response;
     }
-    const { id: propertyId } = params;
 
-    // Rate limiting
-    const identifier = getRateLimitIdentifier(req);
-    const rateLimitResult = await checkRateLimit(
-      `property-write:${identifier}`,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window,
-    );
+    const propertyId = params.id;
+    const rateLimitResult = await checkPropertyRateLimit(req, "write");
     if (!rateLimitResult.success) {
-      return apiError(
+      const response = apiError(
         "Too many requests. Please try again later.",
         HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
+        correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
     let body: unknown = null;
     try {
-      body = await req.json().catch(() => null); // Body is optional for delete
+      body = await req.json().catch(() => null);
     } catch {
-      // ignore
+      body = null;
     }
 
     const expectedVersion = extractExpectedVersion(req, body);
-    if (expectedVersion === null || isNaN(expectedVersion)) {
-      return apiError(
-        "Missing or invalid version for optimistic locking. Provide 'If-Match' header or 'version' in body.",
+    if (expectedVersion === null) {
+      const response = apiError(
+        "Missing or invalid version for optimistic locking. Provide 'If-Match' header or legacy body 'version'.",
         HttpStatus.PRECONDITION_REQUIRED,
+        undefined,
+        correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: HttpStatus.PRECONDITION_REQUIRED,
+        durationMs: now() - startedAt,
+        domainError: "conflict",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
-    // Idempotency
     const idempotencyKey =
       req.headers.get("Idempotency-Key") ||
-      IdempotencyService.generateKey(dbUserId, `DELETE:${propertyId}`, {});
+      IdempotencyService.generateKey(
+        context.dbUserId,
+        `DELETE:${propertyId}`,
+        {},
+      );
 
     const idempotencyCheck = await IdempotencyService.checkOrCreate(
       idempotencyKey,
       "property",
-      dbUserId,
+      context.dbUserId,
       "DELETE",
       propertyId,
       PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
     );
 
     if (idempotencyCheck?.status === "completed") {
-      logger.info("Returning cached idempotent DELETE response", {
-        correlationId,
-        idempotencyKey,
-      });
-      return apiSuccess(
+      const response = apiSuccess(
         idempotencyCheck.response,
         HttpStatus.OK,
         correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "success",
+        httpStatus: HttpStatus.OK,
+        durationMs: now() - startedAt,
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
     if (idempotencyCheck?.status === "pending") {
-      return apiError(
+      const response = apiError(
         "A request with this idempotency key is already being processed",
         HttpStatus.CONFLICT,
-      );
-    }
-
-    const operationContext = {
-      correlationId,
-      userId: dbUserId,
-      propertyId,
-      ipAddress,
-      userAgent,
-      idempotencyKey,
-    };
-
-    try {
-      const result = await propertiesService.deleteProperty(
-        propertyId,
-        dbUserId,
-        operationContext,
-        expectedVersion,
-      );
-
-      if (!result.ok) {
-        await IdempotencyService.fail(idempotencyKey);
-        if (result.status === HttpStatus.CONFLICT) {
-          return await buildPropertyConflictResponse(
-            result.message,
-            propertyId,
-          );
-        }
-        return apiError(
-          result.message,
-          result.status,
-          undefined,
-          correlationId,
-        );
-      } else {
-        // Success Path
-        const optimisticResult = result.data as {
-          data: {
-            propertyId: string;
-            propertyTitle: string;
-            newVersion: number;
-          };
-          newVersion: number;
-        };
-        const responseData = {
-          message: "Property deleted successfully",
-          propertyId: optimisticResult.data.propertyId,
-          propertyTitle: optimisticResult.data.propertyTitle,
-          _meta: {
-            version: optimisticResult.newVersion,
-            deletedAt: new Date().toISOString(),
-          },
-        };
-
-        logger.info("Property soft-deleted", {
-          correlationId,
-          propertyId,
-          newVersion: optimisticResult.newVersion,
-        });
-        await IdempotencyService.complete(idempotencyKey, responseData);
-        return apiSuccess(responseData, HttpStatus.OK, correlationId);
-      }
-    } catch (error) {
-      await IdempotencyService.fail(idempotencyKey);
-      logger.error(
-        "Property delete error",
-        error instanceof Error ? error : new Error(String(error)),
-        { correlationId, propertyId },
-      );
-      return apiError(
-        "Failed to delete property",
-        HttpStatus.INTERNAL_SERVER_ERROR,
         undefined,
         correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: HttpStatus.CONFLICT,
+        durationMs: now() - startedAt,
+        domainError: "conflict",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
     }
+
+    const result = await propertiesService.deleteProperty(
+      propertyId,
+      { userId: context.dbUserId, role: context.userRole ?? "unknown" },
+      {
+        correlationId,
+        userId: context.dbUserId,
+        propertyId,
+        ipAddress,
+        userAgent,
+        idempotencyKey,
+      },
+      expectedVersion,
+    );
+
+    if (!result.ok) {
+      await IdempotencyService.fail(idempotencyKey);
+
+      if (result.error === "conflict") {
+        const response = conflictResponse(
+          result.message ??
+            "Property has been modified. Retry with the latest version.",
+          (result.details as { currentVersion?: number } | undefined)
+            ?.currentVersion,
+          correlationId,
+        );
+        logPropertiesRouteOutcome({
+          correlationId,
+          operationName,
+          actorRole,
+          outcome: "domain_error",
+          httpStatus: HttpStatus.CONFLICT,
+          durationMs: now() - startedAt,
+          domainError: result.error,
+          resourceType: "property",
+          resourceId: propertyId,
+        });
+        return response;
+      }
+
+      const errorResponse = domainResultToErrorResponse(result, correlationId);
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(result.error),
+        durationMs: now() - startedAt,
+        domainError: result.error,
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return errorResponse!;
+    }
+
+    await IdempotencyService.complete(idempotencyKey, result.data);
+    const response = apiSuccess(result.data, HttpStatus.OK, correlationId);
+    response.headers.set("ETag", `"${result.data.version}"`);
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+      resourceId: propertyId,
+    });
+    return response;
   },
 );

@@ -1,66 +1,121 @@
 "use server";
 
+import { z } from "zod";
 import {
-  getProfessionalInquiries,
-  getProfessionalInquiryById,
-  updateProfessionalInquiry,
-  deleteProfessionalInquiry,
-} from "@/lib/services/inquiries";
-import type {
+  inquiriesService,
   InquiriesQueryInput,
   UpdateInquiryInput,
-} from "@/lib/services/inquiries";
+} from "@/app/lib/domains/inquiries";
 import {
   InquiriesQuerySchema,
   UpdateInquirySchema,
 } from "@/app/lib/validation/inquiries-validation";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { INQUIRY_CONFIG } from "@/app/lib/config/inquiry.config";
-import { isValidId } from "@/app/lib/utils/validators";
-import { auth } from "@clerk/nextjs/server";
-import { prisma } from "@build/db";
+import {
+  createActionFailure,
+  secureAction,
+  SecureActionError,
+  throwActionFailure,
+  unwrapResultOrThrow,
+  type ActionResult,
+} from "@/app/lib/actions/secure-action";
 import { revalidatePath } from "next/cache";
 
-async function resolveDbUserId(): Promise<string> {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) throw new Error("Unauthorized");
+const InquiryIdActionSchema = z.object({
+  inquiryId: z.string().uuid("Invalid inquiry ID"),
+});
 
-  const user = await prisma.user.findUnique({
-    where: { clerkId },
-    select: { id: true },
-  });
-  if (!user) throw new Error("User not found");
+const UpdateInquiryActionSchema = z.object({
+  inquiryId: z.string().uuid("Invalid inquiry ID"),
+  data: UpdateInquirySchema.refine(
+    (value) => Object.keys(value).length > 0,
+    "No fields to update",
+  ),
+  idempotencyKey: z.string().optional(),
+});
 
-  return user.id;
+const DeleteInquiryActionSchema = z.object({
+  inquiryId: z.string().uuid("Invalid inquiry ID"),
+  idempotencyKey: z.string().optional(),
+});
+
+function createInquiryActionErrorMapper(message: string) {
+  return (error: unknown) => {
+    if (error instanceof SecureActionError) {
+      return undefined;
+    }
+
+    if (error instanceof z.ZodError) {
+      return createActionFailure(
+        "validation_error",
+        error.issues[0]?.message ?? "Validation failed",
+        400,
+        error.issues,
+      );
+    }
+
+    return createActionFailure("internal", message, 500);
+  };
+}
+
+function ensureProfessionalInquiryActor(role: string | null | undefined) {
+  if (role !== "professional" && role !== "admin") {
+    return createActionFailure("forbidden", "Forbidden", 403);
+  }
+
+  return true;
 }
 
 export async function getProfessionalInquiriesAction(
   filters?: Partial<InquiriesQueryInput>,
-) {
-  const dbUserId = await resolveDbUserId();
-  const merged = {
-    limit: String(filters?.limit ?? INQUIRY_CONFIG.DEFAULT_LIMIT),
-    page: String(filters?.page ?? 1),
-    status: filters?.status,
-  };
-  const parsed = InquiriesQuerySchema.safeParse(merged);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid query parameters");
-  }
-  return getProfessionalInquiries(dbUserId, parsed.data);
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input: filters,
+    schema: InquiriesQuerySchema.partial().optional(),
+    policy: ({ actor }) => ensureProfessionalInquiryActor(actor?.role),
+    handler: async ({ actor, input }) => {
+      const parsed = InquiriesQuerySchema.parse({
+        limit: String(input?.limit ?? INQUIRY_CONFIG.DEFAULT_LIMIT),
+        page: String(input?.page ?? 1),
+        status: input?.status,
+      });
+
+      return unwrapResultOrThrow(
+        await inquiriesService.listProfessionalInquiries(
+          {
+            userId: actor!.dbUserId,
+            role: actor!.role,
+          },
+          parsed,
+        ),
+        "Failed to fetch inquiries",
+      );
+    },
+    mapError: createInquiryActionErrorMapper("Failed to fetch inquiries"),
+  });
 }
 
-export async function getProfessionalInquiryByIdAction(inquiryId: string) {
-  const dbUserId = await resolveDbUserId();
-  if (!isValidId(inquiryId)) throw new Error("Invalid inquiry ID");
-
-  const result = await getProfessionalInquiryById(dbUserId, inquiryId);
-  if (result.success === false) {
-    if (result.error === "not_found") throw new Error("Inquiry not found");
-    throw new Error("Forbidden");
-  }
-  return result.data;
+export async function getProfessionalInquiryByIdAction(
+  inquiryId: string,
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input: { inquiryId },
+    schema: InquiryIdActionSchema,
+    policy: ({ actor }) => ensureProfessionalInquiryActor(actor?.role),
+    handler: async ({ actor, input }) =>
+      unwrapResultOrThrow(
+        await inquiriesService.getProfessionalInquiryById(
+          {
+            userId: actor!.dbUserId,
+            role: actor!.role,
+          },
+          input.inquiryId,
+        ),
+        "Failed to fetch inquiry",
+      ),
+    mapError: createInquiryActionErrorMapper("Failed to fetch inquiry"),
+  });
 }
 
 export type UpdateInquiryActionInput = {
@@ -71,64 +126,74 @@ export type UpdateInquiryActionInput = {
 
 export async function updateProfessionalInquiryAction(
   input: UpdateInquiryActionInput,
-) {
-  const dbUserId = await resolveDbUserId();
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input,
+    schema: UpdateInquiryActionSchema,
+    policy: ({ actor }) => ensureProfessionalInquiryActor(actor?.role),
+    handler: async ({ actor, input: validatedInput }) => {
+      const idempotencyKey =
+        validatedInput.idempotencyKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "PATCH", {
+          inquiryId: validatedInput.inquiryId,
+          ...validatedInput.data,
+        });
 
-  if (!isValidId(input.inquiryId)) throw new Error("Invalid inquiry ID");
-  const parsed = UpdateInquirySchema.safeParse(input.data);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid update data");
-  }
-  if (Object.keys(parsed.data).length === 0) {
-    throw new Error("No fields to update");
-  }
+      const idempotencyCheck = await IdempotencyService.checkOrCreate(
+        idempotencyKey,
+        "property_inquiry",
+        actor!.dbUserId,
+        "PATCH",
+        validatedInput.inquiryId,
+        INQUIRY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      );
 
-  const idempotencyKey =
-    input.idempotencyKey ??
-    IdempotencyService.generateKey(dbUserId, "PATCH", {
-      inquiryId: input.inquiryId,
-      ...input.data,
-    });
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
+        revalidatePath("/professional-portal/inquiries");
+        revalidatePath(
+          `/professional-portal/inquiries/${validatedInput.inquiryId}`,
+        );
+        return idempotencyCheck.response;
+      }
 
-  const idempotencyCheck = await IdempotencyService.checkOrCreate(
-    idempotencyKey,
-    "property_inquiry",
-    dbUserId,
-    "PATCH",
-    input.inquiryId,
-    INQUIRY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
+          ),
+        );
+      }
 
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath("/professional-portal/inquiries");
-    revalidatePath(`/professional-portal/inquiries/${input.inquiryId}`);
-    return idempotencyCheck.response;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  try {
-    const result = await updateProfessionalInquiry(
-      dbUserId,
-      input.inquiryId,
-      parsed.data,
-    );
-    if (result.success === false) {
-      await IdempotencyService.fail(idempotencyKey);
-      if (result.error === "not_found") throw new Error("Inquiry not found");
-      throw new Error("Forbidden");
-    }
-    await IdempotencyService.complete(idempotencyKey, result.data);
-    revalidatePath("/professional-portal/inquiries");
-    revalidatePath(`/professional-portal/inquiries/${input.inquiryId}`);
-    return result.data;
-  } catch (err) {
-    await IdempotencyService.fail(idempotencyKey);
-    throw err;
-  }
+      try {
+        const inquiry = unwrapResultOrThrow(
+          await inquiriesService.updateProfessionalInquiry(
+            {
+              userId: actor!.dbUserId,
+              role: actor!.role,
+            },
+            validatedInput.inquiryId,
+            validatedInput.data,
+          ),
+          "Failed to update inquiry",
+        );
+        await IdempotencyService.complete(idempotencyKey, inquiry);
+        revalidatePath("/professional-portal/inquiries");
+        revalidatePath(
+          `/professional-portal/inquiries/${validatedInput.inquiryId}`,
+        );
+        return inquiry;
+      } catch (error) {
+        await IdempotencyService.fail(idempotencyKey);
+        throw error;
+      }
+    },
+    mapError: createInquiryActionErrorMapper("Failed to update inquiry"),
+  });
 }
 
 export type DeleteInquiryActionInput = {
@@ -138,47 +203,64 @@ export type DeleteInquiryActionInput = {
 
 export async function deleteProfessionalInquiryAction(
   input: DeleteInquiryActionInput,
-) {
-  const dbUserId = await resolveDbUserId();
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input,
+    schema: DeleteInquiryActionSchema,
+    policy: ({ actor }) => ensureProfessionalInquiryActor(actor?.role),
+    handler: async ({ actor, input: validatedInput }) => {
+      const idempotencyKey =
+        validatedInput.idempotencyKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "DELETE", {
+          inquiryId: validatedInput.inquiryId,
+        });
 
-  if (!isValidId(input.inquiryId)) throw new Error("Invalid inquiry ID");
+      const idempotencyCheck = await IdempotencyService.checkOrCreate(
+        idempotencyKey,
+        "property_inquiry",
+        actor!.dbUserId,
+        "DELETE",
+        validatedInput.inquiryId,
+        INQUIRY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      );
 
-  const idempotencyKey =
-    input.idempotencyKey ??
-    IdempotencyService.generateKey(dbUserId, "DELETE", {
-      inquiryId: input.inquiryId,
-    });
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
+        revalidatePath("/professional-portal/inquiries");
+        return idempotencyCheck.response;
+      }
 
-  const idempotencyCheck = await IdempotencyService.checkOrCreate(
-    idempotencyKey,
-    "property_inquiry",
-    dbUserId,
-    "DELETE",
-    input.inquiryId,
-    INQUIRY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
+          ),
+        );
+      }
 
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath("/professional-portal/inquiries");
-    return idempotencyCheck.response;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  try {
-    const result = await deleteProfessionalInquiry(dbUserId, input.inquiryId);
-    if (result.success === false) {
-      await IdempotencyService.fail(idempotencyKey);
-      if (result.error === "not_found") throw new Error("Inquiry not found");
-      throw new Error("Forbidden");
-    }
-    await IdempotencyService.complete(idempotencyKey, { deleted: true });
-    revalidatePath("/professional-portal/inquiries");
-    return { message: "Inquiry deleted successfully" };
-  } catch (err) {
-    await IdempotencyService.fail(idempotencyKey);
-    throw err;
-  }
+      try {
+        const deleted = unwrapResultOrThrow(
+          await inquiriesService.deleteProfessionalInquiry(
+            {
+              userId: actor!.dbUserId,
+              role: actor!.role,
+            },
+            validatedInput.inquiryId,
+          ),
+          "Failed to delete inquiry",
+        );
+        await IdempotencyService.complete(idempotencyKey, deleted);
+        revalidatePath("/professional-portal/inquiries");
+        return deleted;
+      } catch (error) {
+        await IdempotencyService.fail(idempotencyKey);
+        throw error;
+      }
+    },
+    mapError: createInquiryActionErrorMapper("Failed to delete inquiry"),
+  });
 }

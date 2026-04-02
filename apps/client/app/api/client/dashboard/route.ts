@@ -11,7 +11,7 @@ import {
   getRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
-import { getClientDashboardData } from "@/lib/services/client-dashboard";
+import { clientDashboardService } from "@/app/lib/domains/client-dashboard";
 
 const logger = getClientLogger();
 
@@ -31,62 +31,77 @@ const logger = getClientLogger();
  * - Resilient execution with circuit breaker and timeout
  * - Correlation ID propagation
  */
-export const GET = withAuth(async (request: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(request);
+export const GET = withAuth(
+  async (request: NextRequest, { dbUserId, userRole }) => {
+    const correlationId = initializeCorrelationId(request);
 
-  // ── Rate limiting ────────────────────────────────────────────────────
-  const identifier = getRateLimitIdentifier(request);
-  const rateLimitResult = await checkRateLimit(
-    `client-dashboard:${identifier}`,
-    RateLimits.READ.limit,
-    RateLimits.READ.window,
-  );
+    // ── Rate limiting ────────────────────────────────────────────────────
+    const identifier = getRateLimitIdentifier(request);
+    const rateLimitResult = await checkRateLimit(
+      `client-dashboard:${identifier}`,
+      RateLimits.READ.limit,
+      RateLimits.READ.window,
+    );
 
-  if (!rateLimitResult.success) {
-    return apiError(
-      "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS,
-      undefined,
+    if (!rateLimitResult.success) {
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
+        correlationId,
+      );
+    }
+
+    logger.info("Fetching client dashboard", {
       correlationId,
+      actorRole: userRole,
+    });
+
+    // ── Resilient execution ──────────────────────────────────────────────
+    const result = await getResilientExecutor().execute(
+      () =>
+        clientDashboardService.getDashboardData({
+          userId: dbUserId,
+        }),
+      {
+        operationName: "client:get_dashboard",
+        timeout: 10000,
+        retry: false,
+      },
     );
-  }
 
-  logger.info("Fetching client dashboard", {
-    correlationId,
-    userId: dbUserId,
-  });
+    if (!result.success || !result.data) {
+      logger.error(
+        "Failed to fetch client dashboard",
+        result.error ?? new Error("Unknown error"),
+        { correlationId, actorRole: userRole },
+      );
+      return apiError(
+        "Failed to load dashboard data",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        undefined,
+        correlationId,
+      );
+    }
 
-  // ── Resilient execution ──────────────────────────────────────────────
-  const result = await getResilientExecutor().execute(
-    () => getClientDashboardData(dbUserId),
-    {
-      operationName: "client:get_dashboard",
-      timeout: 10000,
-      retry: false,
-    },
-  );
+    const data = result.data;
+    if (!data.ok) {
+      return apiError(
+        (data as { message?: string }).message ?? "Forbidden",
+        HttpStatus.FORBIDDEN,
+        undefined,
+        correlationId,
+      );
+    }
 
-  if (!result.success || !result.data) {
-    logger.error(
-      "Failed to fetch client dashboard",
-      result.error ?? new Error("Unknown error"),
-      { correlationId, userId: dbUserId },
-    );
-    return apiError(
-      "Failed to load dashboard data",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-      undefined,
+    logger.info("Client dashboard fetched successfully", {
       correlationId,
-    );
-  }
+      actorRole: userRole,
+      totalProjects: data.data.stats.totalProjects,
+      activeProjects: data.data.stats.activeProjects,
+      ideaBookCount: data.data.ideaBooks.length,
+    });
 
-  logger.info("Client dashboard fetched successfully", {
-    correlationId,
-    userId: dbUserId,
-    totalProjects: result.data.stats.totalProjects,
-    activeProjects: result.data.stats.activeProjects,
-    ideaBookCount: result.data.ideaBooks.length,
-  });
-
-  return apiSuccess(result.data, HttpStatus.OK, correlationId);
-});
+    return apiSuccess(data.data, HttpStatus.OK, correlationId);
+  },
+);

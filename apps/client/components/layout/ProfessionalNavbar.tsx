@@ -17,22 +17,26 @@ export function ProfessionalNavbar() {
   const showCompletionPrompt = !isLoading && !isComplete && percentage < 100;
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-white border-b border-zinc-200 h-16">
+    <header className="sticky top-0 z-40 w-full bg-background border-b border-border h-16">
       <div className="h-full px-4 md:px-8 flex items-center justify-between">
         {/* Mobile Toggle (Hidden on LG) */}
         <div className="flex items-center gap-4 lg:hidden">
-          <Button variant="ghost" size="icon" className="-ml-2 text-zinc-500">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="-ml-2 text-muted-foreground"
+          >
             <Menu className="h-6 w-6" />
           </Button>
-          <span className="font-semibold text-zinc-900">BuildMarket Pro</span>
+          <span className="font-semibold text-foreground">BuildMarket Pro</span>
         </div>
 
         {/* Search Bar */}
         <div className="hidden lg:flex flex-1 max-w-xl relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search projects, clients, or invoices..."
-            className="pl-9 bg-zinc-50 border-zinc-200 focus:bg-white transition-all w-full"
+            className="pl-9 bg-muted/70 border-border focus:bg-background transition-all w-full"
           />
         </div>
 
@@ -47,8 +51,8 @@ export function ProfessionalNavbar() {
                 className={cn(
                   "hidden sm:flex items-center gap-2",
                   percentage < 50
-                    ? "text-orange-600 border-orange-200 bg-orange-50 hover:bg-orange-100 hover:border-orange-300"
-                    : "text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100 hover:border-amber-300",
+                    ? "text-warning border-warning/40 bg-warning/10 hover:bg-warning/20 hover:border-warning/50"
+                    : "text-warning border-warning/40 bg-warning/10 hover:bg-warning/20 hover:border-warning/50",
                 )}
               >
                 <UserCircle className="h-4 w-4" />
@@ -57,8 +61,8 @@ export function ProfessionalNavbar() {
                   className={cn(
                     "text-[10px] font-bold px-1.5 py-0.5 rounded-md",
                     percentage < 50
-                      ? "bg-orange-200 text-orange-700"
-                      : "bg-amber-200 text-amber-700",
+                      ? "bg-warning/30 text-warning"
+                      : "bg-warning/30 text-warning",
                   )}
                 >
                   {percentage}%
@@ -71,13 +75,13 @@ export function ProfessionalNavbar() {
           {!showCompletionPrompt && (
             <Button
               variant="outline"
-              className="hidden sm:flex text-emerald-600 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 hover:border-emerald-300"
+              className="hidden sm:flex text-primary border-primary/40 bg-primary/10 hover:bg-primary/15 hover:border-primary/50"
             >
               Premium Plan
             </Button>
           )}
 
-          <div className="h-6 w-px bg-zinc-200 hidden sm:block" />
+          <div className="h-6 w-px bg-border hidden sm:block" />
 
           <NotificationsPopover />
 

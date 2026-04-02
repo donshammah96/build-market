@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@build/db";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -15,10 +14,9 @@ import {
 import { checkBodySize, isValidId } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import {
+  financeService,
   UpdateTransactionSchema,
-  transactionDetailSelect,
-  serializeTransactionDecimals,
-} from "@/app/lib/validation/finance-validation";
+} from "@/app/lib/domains/finance";
 
 const logger = getClientLogger();
 
@@ -29,7 +27,11 @@ const MAX_BODY_SIZE = 1024 * 1024; // 1MB
  * Get a specific transaction by ID.
  */
 export const GET = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     initializeCorrelationId(req);
     const { id } = params!;
 
@@ -50,14 +52,14 @@ export const GET = withAuth<{ id: string }>(
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      async () => {
-        const transaction = await prisma.professionalTransaction.findUnique({
-          where: { id, professionalId: dbUserId },
-          select: transactionDetailSelect,
-        });
-
-        return transaction;
-      },
+      async () =>
+        financeService.getTransactionDetail(
+          {
+            userId: dbUserId,
+            role: userRole,
+          },
+          id,
+        ),
       { operationName: "get_transaction" },
     );
 
@@ -72,10 +74,20 @@ export const GET = withAuth<{ id: string }>(
     }
 
     if (!result.data) {
-      return apiError("Transaction not found", HttpStatus.NOT_FOUND);
+      return apiError(
+        "Failed to fetch transaction",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
-    return apiSuccess(serializeTransactionDecimals(result.data), HttpStatus.OK);
+    if (!result.data.ok) {
+      return apiError(
+        result.data.message || "Transaction not found",
+        result.data.status || HttpStatus.NOT_FOUND,
+      );
+    }
+
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );
 
@@ -84,7 +96,11 @@ export const GET = withAuth<{ id: string }>(
  * Update a transaction's description (professional-editable field).
  */
 export const PATCH = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
     const { id } = params!;
 
@@ -162,28 +178,20 @@ export const PATCH = withAuth<{ id: string }>(
     logger.info("Updating transaction", {
       correlationId,
       transactionId: id,
-      userId: dbUserId,
+      actorRole: userRole,
     });
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      async () => {
-        // Verify ownership
-        const existing = await prisma.professionalTransaction.findUnique({
-          where: { id, professionalId: dbUserId },
-          select: { id: true },
-        });
-
-        if (!existing) return { error: "not_found" as const };
-
-        const updated = await prisma.professionalTransaction.update({
-          where: { id },
-          data: updateData,
-          select: transactionDetailSelect,
-        });
-
-        return { data: updated };
-      },
+      async () =>
+        financeService.updateTransaction(
+          {
+            userId: dbUserId,
+            role: userRole,
+          },
+          id,
+          updateData,
+        ),
       { operationName: "update_transaction" },
     );
 
@@ -195,14 +203,21 @@ export const PATCH = withAuth<{ id: string }>(
       );
     }
 
-    if (result.data.error === "not_found") {
+    if (!result.data.ok && result.data.error === "not_found") {
       await IdempotencyService.fail(idempotencyKey);
       return apiError("Transaction not found", HttpStatus.NOT_FOUND);
     }
 
-    const serialized = serializeTransactionDecimals(result.data.data!);
-    await IdempotencyService.complete(idempotencyKey, serialized);
-    return apiSuccess(serialized, HttpStatus.OK);
+    if (!result.data.ok) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        result.data.message || "Failed to update transaction",
+        result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    await IdempotencyService.complete(idempotencyKey, result.data.data);
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );
 
@@ -211,7 +226,11 @@ export const PATCH = withAuth<{ id: string }>(
  * Delete a transaction (only PENDING or CANCELLED allowed).
  */
 export const DELETE = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
     const { id } = params!;
 
@@ -232,28 +251,19 @@ export const DELETE = withAuth<{ id: string }>(
     logger.info("Deleting transaction", {
       correlationId,
       transactionId: id,
-      userId: dbUserId,
+      actorRole: userRole,
     });
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      async () => {
-        const existing = await prisma.professionalTransaction.findUnique({
-          where: { id, professionalId: dbUserId },
-          select: { id: true, status: true },
-        });
-
-        if (!existing) return { error: "not_found" as const };
-
-        // Only allow deletion of PENDING or CANCELLED transactions
-        if (!["PENDING", "CANCELLED"].includes(existing.status)) {
-          return { error: "not_deletable" as const };
-        }
-
-        await prisma.professionalTransaction.delete({ where: { id } });
-
-        return { deleted: true };
-      },
+      async () =>
+        financeService.deleteTransaction(
+          {
+            userId: dbUserId,
+            role: userRole,
+          },
+          id,
+        ),
       { operationName: "delete_transaction" },
     );
 
@@ -264,19 +274,23 @@ export const DELETE = withAuth<{ id: string }>(
       );
     }
 
-    if (result.data.error === "not_found") {
+    if (!result.data.ok && result.data.error === "not_found") {
       return apiError("Transaction not found", HttpStatus.NOT_FOUND);
     }
-    if (result.data.error === "not_deletable") {
+    if (!result.data.ok && result.data.error === "not_deletable") {
       return apiError(
         "Only PENDING or CANCELLED transactions can be deleted",
         HttpStatus.BAD_REQUEST,
       );
     }
 
-    return apiSuccess(
-      { message: "Transaction deleted successfully" },
-      HttpStatus.OK,
-    );
+    if (!result.data.ok) {
+      return apiError(
+        result.data.message || "Failed to delete transaction",
+        result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );

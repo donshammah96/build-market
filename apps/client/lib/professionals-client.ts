@@ -11,6 +11,10 @@
  * - Safe for browser and client-side bundlers (No Server Actions)
  */
 import type { ApiResponse } from "@build/types";
+import type {
+  ProfessionalDetailResult,
+  ProfessionalListResult,
+} from "@/app/lib/domains/professionals";
 import { PROFESSIONALS_CLIENT_CONFIG } from "@/lib/config/professional.config";
 import { isValidId } from "@/lib/utils/validators";
 import type { z } from "zod";
@@ -93,7 +97,7 @@ class ProfessionalsClient {
 
   async getProfessionals(
     filters?: Partial<ProfessionalQueryInput>,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<ProfessionalListResult>> {
     return this.bulkhead.run(() => {
       const searchParams = new URLSearchParams();
       if (filters) {
@@ -101,16 +105,20 @@ class ProfessionalsClient {
           if (value !== undefined) searchParams.append(key, String(value));
         });
       }
-      return apiFetch<any>(`/api/professionals?${searchParams.toString()}`);
+      return apiFetch<ProfessionalListResult>(
+        `/api/professionals?${searchParams.toString()}`,
+      );
     });
   }
 
-  async getProfessional(userId: string): Promise<ApiResponse<any>> {
+  async getProfessional(
+    userId: string,
+  ): Promise<ApiResponse<ProfessionalDetailResult>> {
     if (!isValidId(userId)) {
       return { success: false, error: "Invalid professional ID" };
     }
     return this.bulkhead.run(() =>
-      apiFetch<any>(`/api/professionals/${userId}`),
+      apiFetch<ProfessionalDetailResult>(`/api/professionals/${userId}`),
     );
   }
 }

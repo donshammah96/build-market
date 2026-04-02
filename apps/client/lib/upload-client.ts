@@ -62,6 +62,10 @@ export interface UploadOptions {
   signal?: AbortSignal;
   /** Upload endpoint (default: /api/uploads) */
   endpoint?: string;
+  /** Polling interval for pending uploads in ms (default: 1000) */
+  pollIntervalMs?: number;
+  /** Max polling attempts for pending uploads (default: 30) */
+  maxPollingAttempts?: number;
 }
 
 export interface UploadResult {
@@ -77,8 +81,12 @@ export interface UploadResult {
 interface UploadedItem {
   fieldName?: string;
   assetId?: string;
+  uploadId?: string;
+  status?: "pending" | "processing" | "ready" | "failed";
+  statusUrl?: string;
   url?: string;
   cdnUrl?: string;
+  error?: string;
 }
 
 /** Expected API response structure (flat array or legacy keyed format) */
@@ -88,6 +96,22 @@ interface ApiUploadResponse {
   };
   /** Some APIs return uploaded at root */
   uploaded?: UploadedItem[] | Record<string, UploadedItem[]>;
+  error?: string;
+  message?: string;
+}
+
+interface UploadStatusResponse {
+  success?: boolean;
+  data?: {
+    status?: "pending" | "processing" | "ready" | "failed";
+    uploadId?: string;
+    error?: string;
+    asset?: {
+      assetId?: string;
+      url?: string;
+      cdnUrl?: string;
+    };
+  };
   error?: string;
   message?: string;
 }
@@ -103,6 +127,8 @@ const DEFAULT_OPTIONS: Required<
   retryDelay: 1000,
   backoffMultiplier: 2,
   endpoint: "/api/uploads",
+  pollIntervalMs: 1000,
+  maxPollingAttempts: 30,
 };
 
 /** File size limits (in bytes) */
@@ -179,10 +205,92 @@ export const validateFiles = (
   }
 };
 
-function parseUploadResponse(
+async function pollPendingUpload(
+  item: UploadedItem,
+  options: Required<Omit<UploadOptions, "authToken" | "headers" | "signal">>,
+  headers: Record<string, string>,
+  signal?: AbortSignal,
+): Promise<{ url: string; assetId: string }> {
+  const statusUrl =
+    item.statusUrl ||
+    (item.uploadId ? `/api/uploads/${item.uploadId}` : undefined);
+
+  if (!statusUrl) {
+    throw new UploadError(
+      "Pending upload is missing a status URL",
+      UploadErrorCode.INVALID_RESPONSE,
+      undefined,
+      item,
+    );
+  }
+
+  for (let attempt = 0; attempt < options.maxPollingAttempts; attempt++) {
+    if (signal?.aborted) {
+      throw new UploadError("Upload aborted", UploadErrorCode.ABORTED);
+    }
+
+    const response = await fetch(statusUrl, {
+      method: "GET",
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+      signal,
+    });
+
+    const payload: UploadStatusResponse = await response
+      .json()
+      .catch(() => ({}));
+
+    if (!response.ok) {
+      throw new UploadError(
+        payload.error ||
+          payload.message ||
+          `Upload status check failed with status ${response.status}`,
+        UploadErrorCode.SERVER_ERROR,
+        response.status,
+        payload,
+      );
+    }
+
+    const status = payload.data?.status;
+    if (status === "failed") {
+      throw new UploadError(
+        payload.data?.error || "Image processing failed",
+        UploadErrorCode.SERVER_ERROR,
+        response.status,
+        payload,
+      );
+    }
+
+    if (status === "ready") {
+      const url = payload.data?.asset?.url || payload.data?.asset?.cdnUrl;
+      const assetId = payload.data?.asset?.assetId;
+      if (typeof url === "string" && typeof assetId === "string") {
+        return { url, assetId };
+      }
+
+      throw new UploadError(
+        "Upload finished but missing asset URL",
+        UploadErrorCode.INVALID_RESPONSE,
+        response.status,
+        payload,
+      );
+    }
+
+    await sleep(options.pollIntervalMs);
+  }
+
+  throw new UploadError(
+    "Timed out while waiting for image processing",
+    UploadErrorCode.MAX_RETRIES_EXCEEDED,
+  );
+}
+
+async function parseUploadResponse(
   json: ApiUploadResponse,
   fieldName: string,
-): { urls: string[]; assetIds: string[] } {
+  options: Required<Omit<UploadOptions, "authToken" | "headers" | "signal">>,
+  headers: Record<string, string>,
+  signal?: AbortSignal,
+): Promise<{ urls: string[]; assetIds: string[] }> {
   if (json.error || json.message) {
     throw new UploadError(
       json.error || json.message || "Upload failed",
@@ -205,13 +313,36 @@ function parseUploadResponse(
     items = rawUploaded[fieldName] as UploadedItem[];
   }
 
-  const urls = items
-    .map((item) => item?.url ?? item?.cdnUrl)
-    .filter((url): url is string => typeof url === "string" && url.length > 0);
+  const urls: string[] = [];
+  const assetIds: string[] = [];
 
-  const assetIds = items
-    .map((item) => item?.assetId)
-    .filter((id): id is string => typeof id === "string" && id.length > 0);
+  for (const item of items) {
+    const immediateUrl = item?.url ?? item?.cdnUrl;
+    if (
+      typeof immediateUrl === "string" &&
+      immediateUrl.length > 0 &&
+      typeof item?.assetId === "string" &&
+      item.assetId.length > 0
+    ) {
+      urls.push(immediateUrl);
+      assetIds.push(item.assetId);
+      continue;
+    }
+
+    if (item?.status === "pending" || item?.status === "processing") {
+      const ready = await pollPendingUpload(item, options, headers, signal);
+      urls.push(ready.url);
+      assetIds.push(ready.assetId);
+      continue;
+    }
+
+    if (item?.status === "failed") {
+      throw new UploadError(
+        item.error || "Image upload failed",
+        UploadErrorCode.SERVER_ERROR,
+      );
+    }
+  }
 
   if (urls.length === 0) {
     throw new UploadError(
@@ -269,7 +400,13 @@ export async function uploadFiles(
       }
 
       const json: ApiUploadResponse = await response.json();
-      const { urls, assetIds } = parseUploadResponse(json, fieldName);
+      const { urls, assetIds } = await parseUploadResponse(
+        json,
+        fieldName,
+        config,
+        headers,
+        config.signal,
+      );
 
       return { urls, assetIds, raw: json };
     } catch (error) {

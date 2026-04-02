@@ -36,7 +36,6 @@ const verificationSchema = z.object({
  * POST handler for unified verification
  */
 export const POST = withAdminRole([
-  AdminRole.SYSTEM_ADMIN,
   AdminRole.SUPER_ADMIN,
 ])(async (req: NextRequest, context: AuthContext) => {
   const { dbUserId } = context;

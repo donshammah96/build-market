@@ -25,6 +25,8 @@ export interface ConnectionStatus {
   db: number;
   metrics: ConnectionMetrics;
   config: {
+    family?: 4 | 6;
+    username?: string;
     keyPrefix?: string;
     tls: boolean;
     environment: string;
@@ -91,10 +93,18 @@ function getDefaultConfig(): RedisConfig {
   const env = process.env.NODE_ENV || "development";
   const isDev = env === "development";
   const isProd = env === "production";
+  const configuredFamily = Number.parseInt(process.env.REDIS_FAMILY || "", 10);
+
+  const family =
+    configuredFamily === 4 || configuredFamily === 6
+      ? (configuredFamily as 4 | 6)
+      : undefined;
 
   return {
     host: process.env.REDIS_HOST || "localhost",
     port: parseInt(process.env.REDIS_PORT || "6379", 10),
+    family,
+    username: process.env.REDIS_USERNAME || undefined,
     password: process.env.REDIS_PASSWORD || undefined,
     db: parseInt(process.env.REDIS_DB || "0", 10),
     keyPrefix: process.env.REDIS_KEY_PREFIX || undefined,
@@ -180,6 +190,7 @@ export function getRedisClient(
     `Creating Redis client for ${finalConfig.host}:${finalConfig.port}`,
     {
       db: finalConfig.db,
+      family: finalConfig.family,
       environment: process.env.NODE_ENV,
     },
   );
@@ -190,6 +201,8 @@ export function getRedisClient(
   client = new Redis({
     host: finalConfig.host,
     port: finalConfig.port,
+    family: finalConfig.family,
+    username: finalConfig.username,
     password: finalConfig.password,
     db: finalConfig.db,
     maxRetriesPerRequest: finalConfig.maxRetriesPerRequest,
@@ -312,6 +325,8 @@ export function getConnectionStatus(): ConnectionStatus {
     db: defaultConfig.db || 0,
     metrics: { ...connectionMetrics },
     config: {
+      family: defaultConfig.family,
+      username: defaultConfig.username,
       keyPrefix: defaultConfig.keyPrefix,
       tls: defaultConfig.tls || false,
       environment: process.env.NODE_ENV || "development",

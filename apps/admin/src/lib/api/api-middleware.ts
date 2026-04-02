@@ -220,14 +220,13 @@ export function withRole(allowedRoles: UserRole[]) {
  * Composes on top of withAuth — first verifies userRole is ADMIN,
  * then checks the granular AdminRole from AdminProfile.
  *
- * SUPER_ADMIN and SYSTEM_ADMIN always pass (full system access).
+ * SUPER_ADMIN always passes (full system access).
  *
  * Usage:
  *   export const POST = withAdminRole(["CONTENT_MODERATOR", "FINANCE_MANAGER"])(handler);
  */
 const ADMIN_SUPER_ROLES: AdminRole[] = [
   AdminRole.SUPER_ADMIN,
-  AdminRole.SYSTEM_ADMIN,
 ];
 
 export function withAdminRole(allowedAdminRoles: AdminRole[]) {
@@ -262,7 +261,7 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
         );
       }
 
-      // SUPER_ADMIN and SYSTEM_ADMIN always pass
+      // SUPER_ADMIN always passes
       const hasAccess =
         ADMIN_SUPER_ROLES.includes(context.adminRole) ||
         allowedAdminRoles.includes(context.adminRole);

@@ -17,7 +17,7 @@ import {
 import { OnboardingData } from "@build/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { API_ROUTES } from "@/lib/links";
+import { onboardingClient } from "@/lib/onboarding-client";
 
 export default function Onboarding() {
   const { user } = useUser();
@@ -36,13 +36,14 @@ export default function Onboarding() {
   const handleHomeownerSubmit = async (data: OnboardingData) => {
     setSubmitting(true);
     try {
-      const response = await fetch(API_ROUTES.onboarding, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clerkId: user?.id, ...data }),
+      const response = await onboardingClient.submit({
+        clerkId: user?.id,
+        ...data,
       });
 
-      if (!response.ok) throw new Error("Failed to complete onboarding");
+      if (!response.success) {
+        throw new Error(response.error || "Failed to complete onboarding");
+      }
 
       toast.success("Welcome home! Profile created.");
       router.push("/dashboard");
@@ -56,14 +57,16 @@ export default function Onboarding() {
   const handleProfessionalSubmit = async (data: OnboardingData) => {
     setSubmitting(true);
     try {
-      const response = await fetch(API_ROUTES.onboarding, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clerkId: user?.id, ...data }),
+      const response = await onboardingClient.submit({
+        clerkId: user?.id,
+        ...data,
       });
 
-      if (!response.ok)
-        throw new Error("Failed to create professional profile");
+      if (!response.success) {
+        throw new Error(
+          response.error || "Failed to create professional profile",
+        );
+      }
 
       // If store data was collected, create the store
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

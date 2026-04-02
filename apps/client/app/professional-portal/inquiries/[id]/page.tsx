@@ -149,7 +149,7 @@ export default function InquiryDetailPage() {
     inquiry.status !== "NEW"
   ) {
     form.reset({
-      status: inquiry.status,
+      status: inquiry.status as UpdateInquiryInput["status"],
       notes: inquiry.notes || "",
       preferredViewingDate: inquiry.preferredViewingDate
         ? new Date(inquiry.preferredViewingDate).toISOString().slice(0, 16)
@@ -186,27 +186,6 @@ export default function InquiryDetailPage() {
       minimumFractionDigits: 0,
     }).format(price);
   }, [inquiry?.property?.price, inquiry?.property?.currency]);
-
-  // Get client name
-  const clientName = useMemo(() => {
-    if (inquiry?.user) {
-      return (
-        `${inquiry.user.firstName || ""} ${inquiry.user.lastName || ""}`.trim() ||
-        inquiry.clientName
-      );
-    }
-    return inquiry?.clientName || "Unknown";
-  }, [inquiry]);
-
-  // Get client email
-  const clientEmail = useMemo(() => {
-    return inquiry?.user?.email || inquiry?.clientEmail || null;
-  }, [inquiry]);
-
-  // Get client phone
-  const clientPhone = useMemo(() => {
-    return inquiry?.user?.phone || inquiry?.clientPhone || null;
-  }, [inquiry]);
 
   if (isLoading) {
     return (
@@ -333,35 +312,37 @@ export default function InquiryDetailPage() {
                 <label className="text-sm font-medium text-zinc-500 mb-2 block">
                   Client Name
                 </label>
-                <p className="text-zinc-900 font-medium">{clientName}</p>
+                <p className="text-zinc-900 font-medium">
+                  {inquiry.clientName}
+                </p>
               </div>
               <Separator />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {clientEmail && (
+                {inquiry.clientEmail && (
                   <div>
                     <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
                       <Mail className="h-3 w-3" />
                       Email
                     </label>
                     <a
-                      href={`mailto:${clientEmail}`}
+                      href={`mailto:${inquiry.clientEmail}`}
                       className="text-blue-600 hover:underline"
                     >
-                      {clientEmail}
+                      {inquiry.clientEmail}
                     </a>
                   </div>
                 )}
-                {clientPhone && (
+                {inquiry.clientPhone && (
                   <div>
                     <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
                       <Phone className="h-3 w-3" />
                       Phone
                     </label>
                     <a
-                      href={`tel:${clientPhone}`}
+                      href={`tel:${inquiry.clientPhone}`}
                       className="text-blue-600 hover:underline"
                     >
-                      {clientPhone}
+                      {inquiry.clientPhone}
                     </a>
                   </div>
                 )}
@@ -597,7 +578,11 @@ export default function InquiryDetailPage() {
                   <FormItem>
                     <FormLabel>Preferred Viewing Date (Optional)</FormLabel>
                     <FormControl>
-                      <Input type="datetime-local" {...field} />
+                      <Input
+                        type="datetime-local"
+                        {...field}
+                        value={field.value ?? ""}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

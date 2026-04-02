@@ -42,12 +42,12 @@ export function WidgetEmptyState({
         className,
       )}
     >
-      <div className="p-4 rounded-full bg-zinc-100 mb-4">
-        <Icon className="h-10 w-10 text-zinc-400" />
+      <div className="p-4 rounded-full bg-muted mb-4">
+        <Icon className="h-10 w-10 text-muted-foreground" />
       </div>
-      <p className="text-sm font-medium text-zinc-500 mb-1">{title}</p>
+      <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
       {description && (
-        <p className="text-xs text-zinc-400 mt-1 max-w-[200px]">
+        <p className="text-xs text-muted-foreground mt-1 max-w-[200px]">
           {description}
         </p>
       )}

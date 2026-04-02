@@ -7,7 +7,7 @@ import type {
   OrderData,
   PropertyInquiryData,
 } from "@/lib/dashboard";
-import { envConfig } from "@/lib/env";
+import { env } from "@/app/lib/infrastructure/env";
 import type { DashboardData } from "@/hooks/useDashboardData";
 import {
   ProfileStrengthWidget,
@@ -124,7 +124,7 @@ export interface WidgetRendererProps {
 function WidgetRendererComponent({ widgetId, data }: WidgetRendererProps) {
   const render = WIDGET_REGISTRY[widgetId];
   if (!render) {
-    if (envConfig.isDev) {
+    if (env.isDev) {
       console.warn(`[Dashboard] Unknown widget ID: ${widgetId}`);
     }
     return null;

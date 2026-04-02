@@ -10,7 +10,7 @@ import {
   VERIFICATION_STATUSES,
   AVAILABILITY_STATUSES,
   STORE_CATEGORIES,
-  STORE_CATEGORY_LABELS,
+  STORE_TYPES,
   STORE_TYPE_LABELS,
   DELIVERY_OPTIONS,
   PROPERTY_TYPES,
@@ -230,17 +230,10 @@ export type ProfessionalProfile = z.infer<typeof ProfessionalProfileSchema>;
 export const StoreCategoryEnum = z.enum(STORE_CATEGORIES);
 
 // Store Type enum matching Prisma schema
-export const StoreTypeEnum = z.enum(STORE_TYPE_LABELS);
+export const StoreTypeEnum = z.enum(STORE_TYPES);
 
 // Delivery Option enum matching Prisma schema
 export const DeliveryOptionEnum = z.enum(DELIVERY_OPTIONS);
-
-// Convert STORE_CATEGORY_OPTIONS to array format for dropdown
-
-const STORE_CATEGORY_OPTIONS_ARRAY = STORE_CATEGORIES.map((value) => ({
-  value,
-  label: STORE_CATEGORY_LABELS[value as keyof typeof STORE_CATEGORY_LABELS],
-}));
 
 export const StoreDocumentTypeEnum = z.enum(STORE_DOCUMENT_TYPES);
 // Store document schema for onboarding (Verification)
@@ -253,7 +246,7 @@ export const StoreDocumentSchema = z.object({
 const MAX_CATEGORIES = 10;
 
 // Store Type options - using types from store.ts
-const STORE_TYPES: Array<{ value: StoreType; label: string }> = [
+const STORE_TYPE_OPTIONS: Array<{ value: StoreType; label: string }> = [
   { value: "RETAIL", label: `Retail - ${STORE_TYPE_LABELS.RETAIL}` },
   { value: "WHOLESALE", label: `Wholesale - ${STORE_TYPE_LABELS.WHOLESALE}` },
   {
@@ -270,8 +263,9 @@ const STORE_TYPES: Array<{ value: StoreType; label: string }> = [
   },
 ];
 
-export const StoreOnboardingSchema = z.object({
-  role: z.literal("professional"),
+void STORE_TYPE_OPTIONS;
+
+const StoreOnboardingPayloadSchema = z.object({
   // Required fields matching Store model
   name: z.string().min(1, "Store name is required").max(100),
   slug: z
@@ -281,7 +275,7 @@ export const StoreOnboardingSchema = z.object({
     .regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
   storeType: StoreTypeEnum,
   categories: z
-    .array(z.enum(STORE_CATEGORY_LABELS))
+    .array(StoreCategoryEnum)
     .min(1, "Select at least one category")
     .max(MAX_CATEGORIES, `Maximum ${MAX_CATEGORIES} categories allowed`),
   // Location
@@ -325,6 +319,11 @@ export const StoreOnboardingSchema = z.object({
   // Payment methods
   acceptsCard: z.boolean().default(false),
   acceptsCash: z.boolean().default(true),
+});
+
+export const StoreOnboardingSchema = z.object({
+  role: z.literal("professional"),
+  ...StoreOnboardingPayloadSchema.shape,
 });
 
 export const ClientOnboardingSchema = z.object({
@@ -378,8 +377,7 @@ export const PropertyDocumentSchema = z.object({
   type: PropertyDocumentTypeEnum,
 });
 
-export const PropertyOnboardingSchema = z.object({
-  role: z.literal("professional"),
+const PropertyOnboardingPayloadSchema = z.object({
   // Required fields matching Property model
   title: z.string().min(1, "Property title is required").max(200),
   price: z.number().positive("Price must be a positive number"),
@@ -434,6 +432,11 @@ export const PropertyOnboardingSchema = z.object({
   documents: z.array(PropertyDocumentSchema).optional(),
 });
 
+export const PropertyOnboardingSchema = z.object({
+  role: z.literal("professional"),
+  ...PropertyOnboardingPayloadSchema.shape,
+});
+
 export const ProfessionalOnboardingSchema = z.object({
   role: z.literal("professional"),
   profession: z.enum(PROFESSIONS),
@@ -461,10 +464,10 @@ export const ProfessionalOnboardingSchema = z.object({
   licensePending: z.boolean().optional(),
 
   // Store data for suppliers
-  stores: z.array(StoreOnboardingSchema).optional(),
+  stores: z.array(StoreOnboardingPayloadSchema).optional(),
 
   // Property data for realtors
-  properties: z.array(PropertyOnboardingSchema).optional(),
+  properties: z.array(PropertyOnboardingPayloadSchema).optional(),
 });
 
 export type ProfessionalOnboardingData = z.infer<
@@ -473,17 +476,17 @@ export type ProfessionalOnboardingData = z.infer<
 
 export type ClientOnboardingData = z.infer<typeof ClientOnboardingSchema>;
 
-export type StoreOnboardingData = z.infer<typeof StoreOnboardingSchema>;
+export type StoreOnboardingData = z.infer<typeof StoreOnboardingPayloadSchema>;
 
 export type PropertyDocumentData = z.infer<typeof PropertyDocumentSchema>;
 
-export type PropertyOnboardingData = z.infer<typeof PropertyOnboardingSchema>;
+export type PropertyOnboardingData = z.infer<
+  typeof PropertyOnboardingPayloadSchema
+>;
 
 export const OnboardingSchema = z.discriminatedUnion("role", [
   ClientOnboardingSchema,
   ProfessionalOnboardingSchema,
-  StoreOnboardingSchema,
-  PropertyOnboardingSchema,
 ]);
 
 export type OnboardingData = z.infer<typeof OnboardingSchema>;

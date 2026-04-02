@@ -60,7 +60,7 @@ export const FeaturesSection = memo(function FeaturesSection({
 
   return (
     <section
-      className="py-20 bg-zinc-50"
+      className="py-24 bg-gradient-to-b from-muted/60 via-background to-background"
       ref={ref as React.RefObject<HTMLElement>}
       aria-labelledby="features-heading"
     >
@@ -69,17 +69,17 @@ export const FeaturesSection = memo(function FeaturesSection({
         <div
           className={cn(
             "mb-12 max-w-2xl",
-            isInView && shouldAnimate && "animate-fade-in-up",
+            isInView && shouldAnimate && "motion-safe:animate-fade-in-up",
           )}
         >
           <h2
             id="features-heading"
-            className="text-3xl sm:text-4xl md:text-5xl font-bold text-zinc-900 mb-4 tracking-tight"
+            className="text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mb-4 tracking-tight"
           >
             Everything you need to{" "}
-            <span className="text-emerald-600">build better.</span>
+            <span className="text-primary">build better.</span>
           </h2>
-          <p className="text-zinc-500 text-lg">
+          <p className="text-muted-foreground text-lg">
             Navigate your construction project with tools designed for the
             Kenyan market.
           </p>
@@ -90,7 +90,9 @@ export const FeaturesSection = memo(function FeaturesSection({
           {filteredFeatures.map((feature, index) => (
             <div
               key={feature.title}
-              className={cn(isInView && shouldAnimate && "animate-fade-in-up")}
+              className={cn(
+                isInView && shouldAnimate && "motion-safe:animate-fade-in-up",
+              )}
               style={{
                 animationDelay:
                   isInView && shouldAnimate ? `${index * 100}ms` : "0ms",

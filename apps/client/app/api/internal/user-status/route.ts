@@ -25,7 +25,7 @@ const logger = getClientLogger();
  *
  * Security: Protected by `INTERNAL_API_SECRET` header validation.
  *
- * Returns: `{ isOnboarded: boolean, role: string | null }`
+ * Returns: `{ isOnboarded: boolean, role: string | null, status: string | null }`
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const correlationId = initializeCorrelationId(req);
@@ -65,6 +65,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       select: {
         id: true,
         role: true,
+        status: true,
+        isProfileComplete: true,
         professionalProfile: {
           select: { userId: true },
         },
@@ -75,27 +77,36 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({
         isOnboarded: false,
         role: null,
+        status: null,
       });
     }
 
-    // Check for professional users without a profile (edge case)
-    if (user.role === UserRole.PROFESSIONAL && !user.professionalProfile) {
+    const userStatus = (user as { status?: string }).status ?? null;
+    const professionalMissingProfile =
+      user.role === UserRole.PROFESSIONAL && !user.professionalProfile;
+    const isOnboarding = userStatus === "ONBOARDING";
+
+    // Professional users must have a profile before they are considered onboarded.
+    if (professionalMissingProfile) {
       logger.warn("Professional user exists but has no professional profile", {
         correlationId,
-        clerkId,
-        userId: user.id,
+        actorRole: user.role,
+        hasProfessionalProfile: Boolean(user.professionalProfile),
       });
     }
 
+    const isOnboarded = !isOnboarding && !professionalMissingProfile;
+
     return NextResponse.json({
-      isOnboarded: true,
+      isOnboarded,
       role: user.role,
+      status: userStatus,
     });
   } catch (error) {
     logger.error(
       "Internal user-status check failed",
       error instanceof Error ? error : new Error(String(error)),
-      { correlationId, clerkId },
+      { correlationId, hasClerkId: Boolean(clerkId) },
     );
 
     // Return "not onboarded" so middleware handles gracefully.
@@ -103,6 +114,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       {
         isOnboarded: false,
         role: null,
+        status: null,
         error: "Database check failed",
       },
       { status: 500 },

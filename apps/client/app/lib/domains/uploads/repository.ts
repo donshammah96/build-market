@@ -259,7 +259,9 @@ export const uploadRepository = {
   },
 
   /**
-   * Mark staged uploads as EXPIRED by IDs. Call after storage cleanup.
+   * Mark staged uploads as EXPIRED by IDs.
+   * Call after storage cleanup in uploadService.cleanupExpiredStagedUploads().
+   * This is the authoritative status-update step for expired staged upload cleanup.
    */
   async markStagedUploadsExpiredByIds(
     ids: string[],
@@ -268,23 +270,6 @@ export const uploadRepository = {
     if (ids.length === 0) return { count: 0 };
     const result = await client.onboardingUpload.updateMany({
       where: { id: { in: ids } },
-      data: { status: "EXPIRED" },
-    });
-    return { count: result.count };
-  },
-
-  /**
-   * Mark expired staged uploads as EXPIRED. Call from a scheduled job (e.g. daily).
-   * Does not delete storage blobs; use cleanupExpiredStagedUploads in upload service for full cleanup.
-   */
-  async markExpiredStagedUploads(
-    client: UploadClient = prisma,
-  ): Promise<{ count: number }> {
-    const result = await client.onboardingUpload.updateMany({
-      where: {
-        status: "STAGED",
-        expiresAt: { lt: new Date() },
-      },
       data: { status: "EXPIRED" },
     });
     return { count: result.count };

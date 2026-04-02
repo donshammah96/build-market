@@ -1,4 +1,5 @@
 import { normalizeRole, type AppRole } from "@/app/lib/security/roles";
+import { env } from "@/app/lib/infrastructure/env";
 
 export type OnboardingResolutionMode = "strict" | "lenient";
 
@@ -6,6 +7,7 @@ export type OnboardingStatus = {
   state: "resolved" | "indeterminate";
   isOnboarded: boolean;
   role?: AppRole;
+  status?: string;
   source: "metadata" | "internal_api" | "fallback";
   confidence: "high" | "medium" | "low";
   reason:
@@ -18,28 +20,36 @@ export type OnboardingStatus = {
 
 export async function resolveOnboardingStatus(
   clerkId: string,
-  metadata: { isOnboarded?: boolean; role?: string } | undefined,
+  metadata:
+    | { isOnboarded?: boolean; role?: string; status?: string }
+    | undefined,
   baseUrl: string,
   mode: OnboardingResolutionMode = "strict",
 ): Promise<OnboardingStatus> {
   const metadataRole = normalizeRole(metadata?.role);
+  const metadataStatus =
+    typeof metadata?.status === "string"
+      ? metadata.status.toUpperCase()
+      : undefined;
   if (typeof metadata?.isOnboarded === "boolean") {
     return {
       state: "resolved",
       isOnboarded: metadata.isOnboarded,
       role: metadataRole,
+      status: metadataStatus,
       source: "metadata",
       confidence: "high",
       reason: "metadata_present",
     };
   }
 
-  const internalSecret = process.env.INTERNAL_API_SECRET;
+  const internalSecret = env.services.internalApiSecret;
   if (!internalSecret) {
     return {
       state: mode === "strict" ? "resolved" : "indeterminate",
       isOnboarded: false,
       role: metadataRole,
+      status: metadataStatus,
       source: "fallback",
       confidence: "low",
       reason: "internal_secret_missing",
@@ -60,6 +70,7 @@ export async function resolveOnboardingStatus(
         state: mode === "strict" ? "resolved" : "indeterminate",
         isOnboarded: false,
         role: metadataRole,
+        status: metadataStatus,
         source: "fallback",
         confidence: "low",
         reason: "internal_api_non_ok",
@@ -71,6 +82,10 @@ export async function resolveOnboardingStatus(
       state: "resolved",
       isOnboarded: data.isOnboarded ?? false,
       role: normalizeRole(data.role) ?? metadataRole,
+      status:
+        typeof data.status === "string"
+          ? data.status.toUpperCase()
+          : metadataStatus,
       source: "internal_api",
       confidence: "medium",
       reason: "internal_api_resolved",
@@ -80,6 +95,7 @@ export async function resolveOnboardingStatus(
       state: mode === "strict" ? "resolved" : "indeterminate",
       isOnboarded: false,
       role: metadataRole,
+      status: metadataStatus,
       source: "fallback",
       confidence: "low",
       reason: "internal_api_error",

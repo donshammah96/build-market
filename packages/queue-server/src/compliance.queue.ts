@@ -1,6 +1,6 @@
 import { Queue } from "bullmq";
 import { redisConnection } from "./redis-connection";
-import { AuditAction, IncidentSeverity } from "@prisma/client";
+import { AuditAction, IncidentSeverity } from "@build/db";
 
 export const incidentQueue = new Queue<IncidentJobData>("security-incidents", {
   connection: redisConnection as any,

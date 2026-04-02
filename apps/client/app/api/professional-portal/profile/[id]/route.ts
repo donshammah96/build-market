@@ -13,6 +13,7 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { isValidId } from "@/app/lib/api/api-guards";
 import { PROFESSIONAL_CONFIG } from "@/app/lib/config/professional.config";
+import { normalizePublicProfessionalProfile } from "@/lib/profile-contracts";
 
 const logger = getClientLogger();
 
@@ -180,10 +181,10 @@ export async function GET(
           : null;
 
       return {
-        data: {
-          ...professional,
-          avgRating: avgRating ? Math.round(avgRating * 10) / 10 : null,
-        },
+        data: normalizePublicProfessionalProfile(
+          professional,
+          avgRating ? Math.round(avgRating * 10) / 10 : null,
+        ),
         success: true,
       };
     },

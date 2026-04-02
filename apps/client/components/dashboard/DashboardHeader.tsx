@@ -43,17 +43,17 @@ export function DashboardHeader({
     return (
       <div
         className={cn(
-          "flex flex-col sm:flex-row sm:items-end justify-between gap-6 pb-6 border-b border-zinc-100",
+          "flex flex-col sm:flex-row sm:items-end justify-between gap-6 pb-6 border-b border-border",
           className,
         )}
       >
-        <div className="space-y-2 animate-pulse">
-          <div className="h-8 w-32 bg-zinc-200 rounded" />
-          <div className="h-4 w-64 bg-zinc-200 rounded" />
+        <div className="space-y-2 motion-safe:animate-pulse">
+          <div className="h-8 w-32 bg-muted rounded" />
+          <div className="h-4 w-64 bg-muted rounded" />
         </div>
-        <div className="flex gap-3 animate-pulse">
-          <div className="h-10 w-28 bg-zinc-200 rounded" />
-          <div className="h-10 w-36 bg-zinc-200 rounded" />
+        <div className="flex gap-3 motion-safe:animate-pulse">
+          <div className="h-10 w-28 bg-muted rounded" />
+          <div className="h-10 w-36 bg-muted rounded" />
         </div>
       </div>
     );
@@ -62,21 +62,21 @@ export function DashboardHeader({
   return (
     <div
       className={cn(
-        "flex flex-col sm:flex-row sm:items-end justify-between gap-6 pb-6 border-b border-zinc-100",
+        "flex flex-col sm:flex-row sm:items-end justify-between gap-6 pb-6 border-b border-border",
         className,
       )}
     >
       <div>
-        <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">
+        <h1 className="text-3xl font-bold text-foreground tracking-tight">
           Overview
         </h1>
-        <p className="text-zinc-500 mt-2 text-sm max-w-md leading-relaxed">
+        <p className="text-muted-foreground mt-2 text-sm max-w-md leading-relaxed">
           {welcomeMessage}
         </p>
       </div>
       <div className="flex gap-3">
         {/* Render quick actions from config */}
-        {config.quickActions.map((action, index) => {
+        {config.quickActions.map((action) => {
           const Icon = action.icon;
           return (
             <Button
@@ -84,24 +84,14 @@ export function DashboardHeader({
               variant={action.variant === "primary" ? "default" : "outline"}
               className={cn(
                 action.variant === "primary"
-                  ? "bg-zinc-900 hover:bg-zinc-800 text-white shadow-md transition-all hover:shadow-lg"
-                  : "border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 bg-white shadow-sm",
+                  ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all hover:shadow-lg"
+                  : "border-border text-muted-foreground hover:text-foreground hover:bg-accent bg-card shadow-sm",
               )}
               asChild
             >
               <Link href={action.href}>
-                {index === config.quickActions.length - 1 &&
-                action.variant === "primary" ? (
-                  <>
-                    <Icon className="mr-2 h-4 w-4" />
-                    {action.label}
-                  </>
-                ) : (
-                  <>
-                    <Icon className="mr-2 h-4 w-4" />
-                    {action.label}
-                  </>
-                )}
+                <Icon className="mr-2 h-4 w-4" />
+                {action.label}
               </Link>
             </Button>
           );
