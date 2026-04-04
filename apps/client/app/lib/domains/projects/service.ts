@@ -58,6 +58,7 @@ import type {
   ProjectImagesCreateResultDto,
   ProjectListResultDto,
 } from "@/app/lib/domains/projects/contracts";
+import { enforceClientMutationPolicy } from "@/app/lib/domains/user-profile";
 
 type ApproveInput = {
   projectId: string;
@@ -204,6 +205,14 @@ export const projectsService = {
     const actor = resolveProjectActor(input);
     if (actor.role !== "PROFESSIONAL" && actor.role !== "ADMIN") {
       return fail("forbidden", "Only professionals can create projects");
+    }
+
+    const projectCreationPolicy = await enforceClientMutationPolicy({
+      clientUserId: input.data.clientId,
+      policy: "projectCreationPolicy",
+    });
+    if (!projectCreationPolicy.ok) {
+      return fail("forbidden", projectCreationPolicy.message);
     }
 
     const project = await projectsRepository.createProfessionalProject(
@@ -1171,6 +1180,18 @@ export const projectsService = {
         ok: false,
         error: participant.error,
         message: participant.message,
+      };
+    }
+
+    const paymentInitiationPolicy = await enforceClientMutationPolicy({
+      clientUserId: participant.data.clientId,
+      policy: "paymentInitiationPolicy",
+    });
+    if (!paymentInitiationPolicy.ok) {
+      return {
+        ok: false,
+        error: "forbidden",
+        message: paymentInitiationPolicy.message,
       };
     }
 

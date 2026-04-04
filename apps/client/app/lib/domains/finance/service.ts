@@ -7,6 +7,7 @@ import {
   transactionDetailSelect,
   transactionListSelect,
 } from "@/app/lib/validation/finance-validation";
+import { enforceClientMutationPolicy } from "@/app/lib/domains/user-profile";
 import type {
   FinanceActor,
   FinanceDeleteResult,
@@ -20,7 +21,7 @@ import type {
   WithdrawInput,
 } from "@/app/lib/domains/finance/contracts";
 
-const FINANCE_ALLOWED_ROLES = new Set(["professional", "admin"]);
+const FINANCE_ALLOWED_ROLES = new Set(["PROFESSIONAL", "ADMIN"]);
 
 function requireFinanceActor(
   actor: FinanceActor,
@@ -309,6 +310,18 @@ export const financeService = {
     const actorResult = requireFinanceActor(actor);
     if (!actorResult.ok) {
       return actorResult;
+    }
+
+    const paymentInitiationPolicy = await enforceClientMutationPolicy({
+      clientUserId: actorResult.data.userId,
+      policy: "paymentInitiationPolicy",
+    });
+    if (!paymentInitiationPolicy.ok) {
+      return err({
+        error: "forbidden",
+        message: paymentInitiationPolicy.message,
+        status: 403,
+      });
     }
 
     const { amount, method, description } = input;

@@ -5,4 +5,5 @@ export * from "./profile-complete";
 export * from "./profile-complete-contracts";
 export * from "./onboarding";
 export * from "./client-type-compliance";
+export * from "./client-type-policy";
 export * from "./mappers";
