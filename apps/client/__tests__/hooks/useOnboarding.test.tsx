@@ -131,7 +131,6 @@ describe("useOnboarding", () => {
     });
 
     expect(mockSubmit).toHaveBeenCalledWith({
-      clerkId: "clerk_123",
       role: "professional",
       profession: "ARCHITECT",
       companyName: "Build Market Studio",

@@ -1,8 +1,7 @@
-// @ts-nocheck
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, prisma } from "@build/db";
+import { Prisma, prisma, County } from "@build/db";
 import { safeAction, safeVerificationAction, logAdminAction } from "./shared";
 import { UpdateProfileSchema } from "./types";
 
@@ -17,14 +16,48 @@ export type ProfessionalWithUser = Prisma.ProfessionalProfileGetPayload<{
 export type ProfessionalDetails = Prisma.ProfessionalProfileGetPayload<{
   include: {
     user: true;
-    certificates: true;
+    documents: {
+      select: {
+        id: true;
+        title: true;
+        fileUrl: true;
+        issuer: true;
+        expiryDate: true;
+      };
+    };
     portfolios: true;
     reviews: true;
-    orders: {
-      include: { payments: true };
+    offeredServices: {
+      select: {
+        service: {
+          select: {
+            id: true;
+            name: true;
+            slug: true;
+            icon: true;
+          };
+        };
+      };
+    };
+    projects: {
+      include: { client: true };
     };
   };
-}>;
+}> & {
+  services: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    icon: string | null;
+  }>;
+  certificates: Array<{
+    id: string;
+    name: string;
+    fileUrl: string;
+    issuer: string | null;
+    expiryDate: Date | null;
+  }>;
+};
 
 // ============================================================================
 // List & Details Actions
@@ -95,15 +128,27 @@ export async function getProfessionalDetails(userId: string) {
       where: { userId },
       include: {
         user: true,
-        certificates: true,
-        portfolios: true,
-        reviews: true,
-        services: {
+        documents: {
           select: {
             id: true,
-            name: true,
-            slug: true,
-            icon: true,
+            title: true,
+            fileUrl: true,
+            issuer: true,
+            expiryDate: true,
+          },
+        },
+        portfolios: true,
+        reviews: true,
+        offeredServices: {
+          select: {
+            service: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                icon: true,
+              },
+            },
           },
         },
         projects: {
@@ -115,7 +160,20 @@ export async function getProfessionalDetails(userId: string) {
     });
 
     if (!professional) throw new Error("Professional profile not found");
-    return professional;
+
+    const details: ProfessionalDetails = {
+      ...professional,
+      services: professional.offeredServices.map((item) => item.service),
+      certificates: professional.documents.map((document) => ({
+        id: document.id,
+        name: document.title,
+        fileUrl: document.fileUrl || "",
+        issuer: document.issuer,
+        expiryDate: document.expiryDate,
+      })),
+    };
+
+    return details;
   });
 }
 
@@ -228,17 +286,34 @@ export async function updateProfessionalProfile(
   return safeAction("updateProfessionalProfile", async () => {
     const data = UpdateProfileSchema.parse(formData);
 
+    const normalizedCounty =
+      data.county && Object.values(County).includes(data.county as County)
+        ? (data.county as County)
+        : undefined;
+
+    const updateData: Prisma.ProfessionalProfileUpdateInput = {
+      ...(data.companyName !== undefined ? { companyName: data.companyName } : {}),
+      ...(data.yearsExperience !== undefined
+        ? { yearsExperience: data.yearsExperience }
+        : {}),
+      ...(data.bio !== undefined ? { bio: data.bio } : {}),
+      ...(data.website !== undefined
+        ? { website: data.website || null }
+        : {}),
+      ...(data.city !== undefined ? { city: data.city } : {}),
+      ...(normalizedCounty !== undefined ? { county: normalizedCounty } : {}),
+      ...(data.country !== undefined ? { country: data.country } : {}),
+    };
+
     const professional = await prisma.professionalProfile.update({
       where: { userId },
-      data,
+      data: updateData,
       select: {
         userId: true,
         companyName: true,
-        licenseNumber: true,
         yearsExperience: true,
         bio: true,
         website: true,
-        services: true,
         city: true,
         county: true,
         country: true,
@@ -262,11 +337,11 @@ export async function updateProfessionalProfile(
  */
 export async function deleteCertificate(certificateId: string) {
   return safeAction("deleteCertificate", async () => {
-    const certificate = await prisma.certificate.delete({
+    const certificate = await prisma.professionalDocument.delete({
       where: { id: certificateId },
       select: {
         id: true,
-        name: true,
+        title: true,
         professionalId: true,
       },
     });
@@ -277,7 +352,7 @@ export async function deleteCertificate(certificateId: string) {
     return {
       deleted: true,
       certificateId: certificate.id,
-      certificateName: certificate.name,
+      certificateName: certificate.title,
     };
   });
 }

@@ -3,8 +3,23 @@ import { env } from "@/app/lib/infrastructure/env";
 import { resolveOnboardingStatus } from "@/app/lib/security/middleware/onboarding-resolver";
 import { resolveSystemSettings } from "@/app/lib/security/middleware/system-settings-resolver";
 
+const mockLoggerInfo = vi.hoisted(() => vi.fn());
+const mockLoggerWarn = vi.hoisted(() => vi.fn());
+const mockLoggerError = vi.hoisted(() => vi.fn());
+const mockLoggerDebug = vi.hoisted(() => vi.fn());
+
+vi.mock("@/app/lib/api/resilient-api", () => ({
+  getClientLogger: vi.fn().mockReturnValue({
+    info: mockLoggerInfo,
+    warn: mockLoggerWarn,
+    error: mockLoggerError,
+    debug: mockLoggerDebug,
+  }),
+}));
+
 describe("middleware resolvers", () => {
   afterEach(() => {
+    vi.clearAllMocks();
     vi.restoreAllMocks();
   });
 
@@ -34,6 +49,18 @@ describe("middleware resolvers", () => {
     expect(result.state).toBe("indeterminate");
     expect(result.reason).toBe("internal_secret_missing");
     expect(result.isOnboarded).toBe(false);
+
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      "Onboarding resolver outcome",
+      expect.objectContaining({
+        operationName: "resolve_onboarding_status",
+        outcome: "fallback",
+        reason: "internal_secret_missing",
+        source: "fallback",
+        mode: "lenient",
+        durationMs: expect.any(Number),
+      }),
+    );
   });
 
   it("returns strict fallback onboarding status when secret is missing", async () => {
@@ -47,6 +74,84 @@ describe("middleware resolvers", () => {
     expect(result.state).toBe("resolved");
     expect(result.reason).toBe("internal_secret_missing");
     expect(result.isOnboarded).toBe(false);
+  });
+
+  it("logs warn instrumentation when internal onboarding status API returns non-ok", async () => {
+    const services = env.services as { internalApiSecret?: string };
+    const originalSecret = services.internalApiSecret;
+    services.internalApiSecret = "secret";
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+    } as Response);
+
+    try {
+      const result = await resolveOnboardingStatus(
+        "clerk_4",
+        undefined,
+        "http://localhost:3500",
+        "strict",
+      );
+
+      expect(result.reason).toBe("internal_api_non_ok");
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        "Onboarding resolver outcome",
+        expect.objectContaining({
+          operationName: "resolve_onboarding_status",
+          outcome: "fallback",
+          reason: "internal_api_non_ok",
+          source: "fallback",
+          mode: "strict",
+          httpStatus: 503,
+          durationMs: expect.any(Number),
+        }),
+      );
+    } finally {
+      services.internalApiSecret = originalSecret;
+    }
+  });
+
+  it("logs info instrumentation when internal onboarding status API resolves successfully", async () => {
+    const services = env.services as { internalApiSecret?: string };
+    const originalSecret = services.internalApiSecret;
+    services.internalApiSecret = "secret";
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        isOnboarded: true,
+        role: "PROFESSIONAL",
+        status: "pending_verification",
+      }),
+    } as Response);
+
+    try {
+      const result = await resolveOnboardingStatus(
+        "clerk_5",
+        undefined,
+        "http://localhost:3500",
+        "strict",
+      );
+
+      expect(result.reason).toBe("internal_api_resolved");
+      expect(result.source).toBe("internal_api");
+      expect(mockLoggerInfo).toHaveBeenCalledWith(
+        "Onboarding resolver outcome",
+        expect.objectContaining({
+          operationName: "resolve_onboarding_status",
+          outcome: "resolved",
+          reason: "internal_api_resolved",
+          source: "internal_api",
+          mode: "strict",
+          httpStatus: 200,
+          durationMs: expect.any(Number),
+        }),
+      );
+    } finally {
+      services.internalApiSecret = originalSecret;
+    }
   });
 
   it("returns fallback system settings when secret is missing", async () => {

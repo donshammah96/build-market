@@ -21,7 +21,7 @@ const OTHER_PROFESSIONAL = {
 };
 const ADMIN_ACTOR = { userId: "admin-1", role: "admin" as const };
 const CLIENT_ACTOR = { userId: "client-1", role: "client" as const };
-const SUPPORT_ACTOR = { userId: "support-1", role: "support" as const };
+const SUPPORT_AGENT_ACTOR = { userId: "support-1", role: "admin" as const };
 
 const baseMutationState = {
   id: "property-1",
@@ -196,18 +196,18 @@ describe("Properties authorization policy", () => {
       expect(result).toMatchObject({ ok: false, error: "forbidden" });
     });
 
-    it("denies support role", async () => {
+    it("denies support-agent admin when not owner", async () => {
       mockRepository.findPropertyMutationState.mockResolvedValue(
         baseMutationState,
       );
 
       const result = await propertiesService.updateProperty(
         "property-1",
-        SUPPORT_ACTOR,
+        SUPPORT_AGENT_ACTOR,
         { title: "Attempt" },
         {
           correlationId: "corr-update-support",
-          userId: SUPPORT_ACTOR.userId,
+          userId: SUPPORT_AGENT_ACTOR.userId,
           propertyId: "property-1",
           ipAddress: "127.0.0.1",
           userAgent: "vitest",
@@ -325,17 +325,17 @@ describe("Properties authorization policy", () => {
       expect(result).toMatchObject({ ok: false, error: "forbidden" });
     });
 
-    it("denies support role", async () => {
+    it("denies support-agent admin when not owner", async () => {
       mockRepository.findPropertyMutationState.mockResolvedValue(
         baseMutationState,
       );
 
       const result = await propertiesService.deleteProperty(
         "property-1",
-        SUPPORT_ACTOR,
+        SUPPORT_AGENT_ACTOR,
         {
           correlationId: "corr-delete-support",
-          userId: SUPPORT_ACTOR.userId,
+          userId: SUPPORT_AGENT_ACTOR.userId,
           propertyId: "property-1",
           ipAddress: "127.0.0.1",
           userAgent: "vitest",

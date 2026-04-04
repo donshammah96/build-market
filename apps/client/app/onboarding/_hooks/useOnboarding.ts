@@ -6,6 +6,7 @@ import { OnboardingData } from "@build/types";
 import { onboardingClient } from "@/lib/onboarding-client";
 import { ROUTES } from "@/lib/links";
 import { useOnboardingAnalytics } from "@/lib/analytics/OnboardingAnalyticsContext";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 /** Clear all onboarding draft keys from sessionStorage (call on logout) */
 export function clearOnboardingDrafts(): void {
@@ -27,7 +28,7 @@ export function clearOnboardingDrafts(): void {
 /** Clerk public metadata structure for onboarded users */
 interface ClerkPublicMetadata {
   isOnboarded?: boolean;
-  role?: "client" | "professional";
+  role?: unknown;
   profileId?: string;
 }
 
@@ -35,9 +36,19 @@ export type UserRole = "client" | "professional";
 
 const MAX_METADATA_RETRIES = 5;
 const METADATA_RETRY_DELAY = 300;
+const MIN_ONBOARDING_STEP = 1;
+const MAX_ONBOARDING_STEP = 2;
 
 const ONBOARDING_STEP_PARAM = "step";
 const ONBOARDING_ROLE_PARAM = "role";
+
+function isStepWithinBounds(step: number): boolean {
+  return (
+    Number.isInteger(step) &&
+    step >= MIN_ONBOARDING_STEP &&
+    step <= MAX_ONBOARDING_STEP
+  );
+}
 
 export function useOnboarding() {
   const { user, isLoaded: userLoaded } = useUser();
@@ -57,7 +68,7 @@ export function useOnboarding() {
     const roleParam = searchParams.get(ONBOARDING_ROLE_PARAM);
     if (stepParam) {
       const s = parseInt(stepParam, 10);
-      if (s >= 1 && s <= 2) setStep(s);
+      if (isStepWithinBounds(s)) setStep(s);
     }
     if (roleParam === "client" || roleParam === "professional") {
       setRole(roleParam);
@@ -91,11 +102,11 @@ export function useOnboarding() {
   useEffect(() => {
     if (!userLoaded || !user) return;
     const metadata = user.publicMetadata as ClerkPublicMetadata;
+    const normalizedRole = normalizeRole(metadata?.role);
 
     if (metadata?.isOnboarded) {
       const dashboardPath =
-        user.publicMetadata.role === "PROFESSIONAL" ||
-        user.publicMetadata.role === "professional"
+        normalizedRole === "PROFESSIONAL"
           ? ROUTES.professionalDashboard
           : ROUTES.userDashboard;
       router.replace(dashboardPath);
@@ -117,11 +128,18 @@ export function useOnboarding() {
           );
         }
       } catch (error) {
-        console.error("Error reloading user:", error);
+        void error;
+        analytics.trackAsyncValidationFailure("metadata_reload");
+
+        if (attempt < MAX_METADATA_RETRIES - 1) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, METADATA_RETRY_DELAY * Math.pow(1.5, attempt)),
+          );
+        }
       }
     }
     return false;
-  }, [user]);
+  }, [analytics, user]);
 
   const navigateToDashboard = useCallback(
     async (targetRole: UserRole) => {
@@ -185,10 +203,7 @@ export function useOnboarding() {
     setSubmitting(true);
     try {
       // Store creation is now handled within submit POST route
-      const result = await onboardingClient.submit({
-        clerkId: user?.id,
-        ...data,
-      });
+      const result = await onboardingClient.submit(data);
 
       if (!result.success) {
         throw new Error(result.error || "Failed to complete onboarding");
@@ -206,7 +221,7 @@ export function useOnboarding() {
   };
 
   const jumpToStep = useCallback((index: number) => {
-    if (index >= 1 && index <= 2) setStep(index);
+    if (isStepWithinBounds(index)) setStep(index);
   }, []);
 
   return {

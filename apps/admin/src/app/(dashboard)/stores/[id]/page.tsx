@@ -4,7 +4,6 @@ import Image from "next/image";
 import {
   getStoreDetails,
   verifyStore,
-  rejectStore,
   toggleStoreFeatured,
 } from "@/actions/admin";
 import { getAdminPermissions } from "@/actions/admin/shared";
@@ -12,23 +11,6 @@ import { createAdminIdempotencyKey } from "@/lib/security/idempotency-key";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import Image from "next/image";
-import {
-  getStoreDetails,
-  verifyStore,
-  rejectStore,
-  toggleStoreFeatured,
-} from "@/actions/admin";
-import { getAdminPermissions } from "@/actions/admin/shared";
-import { createAdminIdempotencyKey } from "@/lib/security/idempotency-key";
-import {
-  Card,
-  CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";

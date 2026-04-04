@@ -39,7 +39,7 @@ export type UserProfileActor = {
   correlationId?: string;
 };
 
-export type UserProfileErrorCode = "not_found" | "forbidden";
+export type UserProfileErrorCode = "not_found" | "forbidden" | "internal";
 
 export type UserProfileDomainResult<T> = Result<
   T,
@@ -683,7 +683,19 @@ export const userProfileService = {
       return user;
     });
 
-    await syncUserProfileCompletionStatus(input.actor.userId);
+    const completionSyncResult = await syncUserProfileCompletionStatus(
+      input.actor.userId,
+    );
+    if (!completionSyncResult.ok) {
+      return err({
+        error:
+          completionSyncResult.error === "not_found"
+            ? "not_found"
+            : "internal",
+        message: completionSyncResult.message,
+        status: completionSyncResult.status,
+      });
+    }
 
     return ok(
       mapUserProfileUpdateResponse({

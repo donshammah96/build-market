@@ -23,7 +23,13 @@ import {
   getMissingFieldLabels,
 } from "@/app/lib/utils/profile-completion";
 import { isSupplierProfession } from "@/lib/constants/professionOptions";
-import type { AppRole } from "@/app/lib/security/roles";
+import { normalizeRole, type AppRole } from "@/app/lib/security/roles";
+import {
+  buildClientOnboardingPreferences,
+  buildClientTypeComplianceRouting,
+  resolveClientType,
+  type ClientTypeComplianceRouting,
+} from "./client-type-compliance";
 
 export type ClerkUserProfile = {
   emailAddresses?: Array<{ emailAddress?: string | null }>;
@@ -69,6 +75,7 @@ export type UserProfileOnboardingData = {
   userId: string;
   role: string;
   isProfileComplete: boolean;
+  clientTypeCompliance?: ClientTypeComplianceRouting;
 };
 
 export type SkipOnboardingData = UserProfileOnboardingData & {
@@ -185,7 +192,36 @@ export const userProfileOnboardingService = {
     data: OnboardingInput;
   }): Promise<UserProfileOnboardingResult<UserProfileOnboardingData>> {
     const { actor, clerkUser, data } = params;
-    const userRole = data.role.toUpperCase() as "CLIENT" | "PROFESSIONAL";
+    const userRole = normalizeRole(data.role);
+    let clientTypeCompliance: ClientTypeComplianceRouting | undefined;
+
+    if (!userRole || (userRole !== "CLIENT" && userRole !== "PROFESSIONAL")) {
+      return err({
+        error: "invalid_input",
+        message: "Invalid onboarding role",
+        status: 400,
+      });
+    }
+
+    if (data.role === "client") {
+      const clientData = data as Extract<OnboardingInput, { role: "client" }>;
+      const clientType = resolveClientType(clientData.type);
+
+      if (!clientType) {
+        return err({
+          error: "invalid_input",
+          message: "Invalid client type",
+          status: 400,
+        });
+      }
+
+      clientTypeCompliance = buildClientTypeComplianceRouting({
+        clientType,
+        companyName: clientData.companyName,
+        companyRegistration: clientData.companyRegistration,
+        kraPin: clientData.kraPin,
+      });
+    }
 
     // Guard: prevent re-onboarding an already-complete user.
     // skipClientOnboarding already does this; completeOnboarding must too.
@@ -204,8 +240,11 @@ export const userProfileOnboardingService = {
         });
       }
     } catch {
-      // If the guard check fails (e.g. DB transient error), proceed cautiously
-      // rather than blocking; the upsert below is idempotent.
+      return err({
+        error: "internal",
+        message: "Failed to verify onboarding state",
+        status: 500,
+      });
     }
 
     try {
@@ -227,18 +266,14 @@ export const userProfileOnboardingService = {
           { role: "professional" }
         >;
         if ("documents" in proData && Array.isArray(proData.documents)) {
+          const existingForMaterialization = await prisma.user.findUnique({
+            where: { clerkId: actor.clerkId },
+            select: { id: true },
+          });
+
           const docs = proData.documents as ProfessionalDocumentInput[];
           for (const docData of docs) {
             if (!docData?.uploadId) continue;
-
-            // We need a userId to pass to materializeOnboardingUpload, but the
-            // DB user may not exist yet. Use clerkId-based lookup via a quick
-            // read before the full upsert — this is safe because the materialization
-            // only reads/moves staged files and does not require the full user record.
-            const existingForMaterialization = await prisma.user.findUnique({
-              where: { clerkId: actor.clerkId },
-              select: { id: true },
-            });
 
             const materialized =
               await uploadService.materializeOnboardingUpload({
@@ -289,16 +324,16 @@ export const userProfileOnboardingService = {
               phone: clerkUser.phoneNumbers?.[0]?.phoneNumber || null,
               role: userRole,
               status:
-                (userRole === "PROFESSIONAL"
+                userRole === "PROFESSIONAL"
                   ? USER_STATUS_PENDING_VERIFICATION
-                  : USER_STATUS_ACTIVE) as any,
+                  : USER_STATUS_ACTIVE,
             },
             update: {
               role: userRole,
               status:
-                (userRole === "PROFESSIONAL"
+                userRole === "PROFESSIONAL"
                   ? USER_STATUS_PENDING_VERIFICATION
-                  : USER_STATUS_ACTIVE) as any,
+                  : USER_STATUS_ACTIVE,
             },
             select: {
               id: true,
@@ -312,6 +347,21 @@ export const userProfileOnboardingService = {
               OnboardingInput,
               { role: "client" }
             >;
+            if (!clientTypeCompliance) {
+              throw new Error("CLIENT_TYPE_ROUTING_MISSING");
+            }
+
+            const existingClientProfile = await tx.clientProfile.findUnique({
+              where: { userId: dbUser.id },
+              select: {
+                preferences: true,
+              },
+            });
+
+            const preferences = buildClientOnboardingPreferences({
+              existingPreferences: existingClientProfile?.preferences,
+              routing: clientTypeCompliance,
+            });
 
             await tx.clientProfile.upsert({
               where: { userId: dbUser.id },
@@ -320,15 +370,14 @@ export const userProfileOnboardingService = {
                 city: clientData.city || null,
                 address: clientData.address || null,
                 zipCode: clientData.zipCode || null,
+                companyName: clientData.companyName || null,
+                companyRegistration: clientData.companyRegistration || null,
+                kraPin: clientData.kraPin || null,
                 budgetRangeMin: clientData.budgetRangeMin ?? null,
                 budgetRangeMax: clientData.budgetRangeMax ?? null,
                 interests: clientData.interests || [],
-                type:
-                  (clientData.type as
-                    | "HOMEOWNER"
-                    | "CORPORATE_DEVELOPER"
-                    | "INTERIOR_DESIGN_FIRM"
-                    | "GOVERNMENT_ENTITY") || "HOMEOWNER",
+                type: clientTypeCompliance.clientType,
+                preferences,
               },
               create: {
                 userId: dbUser.id,
@@ -336,15 +385,14 @@ export const userProfileOnboardingService = {
                 city: clientData.city || null,
                 address: clientData.address || null,
                 zipCode: clientData.zipCode || null,
+                companyName: clientData.companyName || null,
+                companyRegistration: clientData.companyRegistration || null,
+                kraPin: clientData.kraPin || null,
                 budgetRangeMin: clientData.budgetRangeMin ?? null,
                 budgetRangeMax: clientData.budgetRangeMax ?? null,
                 interests: clientData.interests || [],
-                type:
-                  (clientData.type as
-                    | "HOMEOWNER"
-                    | "CORPORATE_DEVELOPER"
-                    | "INTERIOR_DESIGN_FIRM"
-                    | "GOVERNMENT_ENTITY") || "HOMEOWNER",
+                type: clientTypeCompliance.clientType,
+                preferences,
               },
             });
           } else if (data.role === "professional") {
@@ -485,12 +533,20 @@ export const userProfileOnboardingService = {
         { maxWait: 10000, timeout: 30000 },
       );
 
-      const completion = await syncUserProfileCompletionStatus(user.id);
+      const completionResult = await syncUserProfileCompletionStatus(user.id);
+      if (!completionResult.ok) {
+        return err({
+          error: completionResult.error,
+          message: completionResult.message,
+          status: completionResult.status,
+        });
+      }
 
       return ok({
         userId: user.id,
         role: user.role,
-        isProfileComplete: completion.isProfileComplete,
+        isProfileComplete: completionResult.data.isProfileComplete,
+        ...(clientTypeCompliance ? { clientTypeCompliance } : {}),
       });
     } catch (error) {
       if (
@@ -517,6 +573,14 @@ export const userProfileOnboardingService = {
     clerkUser: ClerkUserProfile;
   }): Promise<UserProfileOnboardingResult<SkipOnboardingData>> {
     const { actor, clerkUser } = params;
+
+    if (actor.role && actor.role !== "CLIENT" && actor.role !== "ADMIN") {
+      return err({
+        error: "forbidden",
+        message: "This endpoint is only for client users",
+        status: 403,
+      });
+    }
 
     try {
       const existingUser = await prisma.user.findUnique({
@@ -557,37 +621,67 @@ export const userProfileOnboardingService = {
               phone: clerkUser.phoneNumbers?.[0]?.phoneNumber || null,
               role: "CLIENT",
               isProfileComplete: false,
-              status: USER_STATUS_ACTIVE as any,
+              status: USER_STATUS_ACTIVE,
             },
             update: {
               role: "CLIENT",
-              isProfileComplete: false,
-              status: USER_STATUS_ACTIVE as any,
+              status: USER_STATUS_ACTIVE,
             },
             select: { id: true, role: true, isProfileComplete: true },
           });
 
-          await tx.clientProfile.upsert({
+          const existingClientProfile = await tx.clientProfile.findUnique({
             where: { userId: dbUser.id },
-            update: {},
-            create: {
-              userId: dbUser.id,
-              // Do NOT set a synthetic county — null is honest and
-              // will be surfaced correctly in the profile completion check.
-              // Previously hardcoded "NAIROBI" was wrong for all non-Nairobi users.
-              preferences: {},
+            select: {
+              type: true,
+              companyName: true,
+              companyRegistration: true,
+              kraPin: true,
+              preferences: true,
             },
           });
 
-          return dbUser;
+          const clientTypeCompliance = buildClientTypeComplianceRouting({
+            clientType: existingClientProfile?.type,
+            companyName: existingClientProfile?.companyName,
+            companyRegistration: existingClientProfile?.companyRegistration,
+            kraPin: existingClientProfile?.kraPin,
+          });
+
+          const preferences = buildClientOnboardingPreferences({
+            existingPreferences: existingClientProfile?.preferences,
+            routing: clientTypeCompliance,
+          });
+
+          await tx.clientProfile.upsert({
+            where: { userId: dbUser.id },
+            update: {
+              type: clientTypeCompliance.clientType,
+              preferences,
+            },
+            create: {
+              userId: dbUser.id,
+              type: clientTypeCompliance.clientType,
+              // Do NOT set a synthetic county — null is honest and
+              // will be surfaced correctly in the profile completion check.
+              // Previously hardcoded "NAIROBI" was wrong for all non-Nairobi users.
+              preferences,
+            },
+          });
+
+          return {
+            user: dbUser,
+            clientTypeCompliance,
+          };
         },
         { maxWait: 10000, timeout: 30000 },
       );
 
       return ok({
-        userId: user.id,
-        role: user.role,
-        isProfileComplete: user.isProfileComplete,
+        userId: user.user.id,
+        role: user.user.role,
+        isProfileComplete: user.user.isProfileComplete,
+        clientTypeCompliance: user.clientTypeCompliance,
         skipped: true,
         redirectTo: "/dashboard",
         message:
@@ -607,6 +701,18 @@ export const userProfileOnboardingService = {
     clerkUser: ClerkUserProfile;
   }): Promise<UserProfileOnboardingResult<SkipOnboardingData>> {
     const { actor, clerkUser } = params;
+
+    if (
+      actor.role &&
+      actor.role !== "PROFESSIONAL" &&
+      actor.role !== "ADMIN"
+    ) {
+      return err({
+        error: "forbidden",
+        message: "This endpoint is only for professional users",
+        status: 403,
+      });
+    }
 
     try {
       const existingUser = await prisma.user.findUnique({
@@ -638,12 +744,12 @@ export const userProfileOnboardingService = {
               phone: clerkUser.phoneNumbers?.[0]?.phoneNumber || null,
               role: "PROFESSIONAL",
               isProfileComplete: false,
-              status: USER_STATUS_PENDING_VERIFICATION as any,
+              status: USER_STATUS_PENDING_VERIFICATION,
             },
             update: {
               role: "PROFESSIONAL",
               isProfileComplete: false,
-              status: USER_STATUS_PENDING_VERIFICATION as any,
+              status: USER_STATUS_PENDING_VERIFICATION,
             },
             select: { id: true, role: true, isProfileComplete: true },
           });
@@ -966,7 +1072,7 @@ export const userProfileOnboardingService = {
             data: {
               isProfileComplete: true,
               ...(currentStatus === USER_STATUS_ONBOARDING && {
-                status: USER_STATUS_PENDING_VERIFICATION as any,
+                status: USER_STATUS_PENDING_VERIFICATION,
               }),
               ...(data.emailMarketingConsent !== undefined && {
                 emailMarketingConsent: data.emailMarketingConsent,

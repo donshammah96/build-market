@@ -198,46 +198,58 @@ export const documentsStepSchema = z.object({
 });
 
 /** Schema for validating restored draft from sessionStorage (excludes File fields) */
-export const professionalDraftSchema = z
-  .object({
-    profession: z.string().optional(),
-    companyName: z.string().optional(),
-    licenseNumber: z.string().optional(),
-    yearsExperience: z.number().optional(),
-    website: z.string().optional(),
-    bio: z.string().optional(),
-    county: z.string().optional(),
-    boardRegistrationNumber: z.string().optional(),
-    stores: z.array(z.record(z.string(), z.unknown())).optional(),
-    properties: z.array(z.record(z.string(), z.unknown())).optional(),
-  })
-  .passthrough();
-
-export const reviewStepSchema = z.object({
-  profession: z
-    .string()
-    .min(1, "Please select your profession")
-    .refine((val) => PROFESSION_OPTIONS.some((opt) => opt.value === val), {
-      message:
-        "Invalid profession selected. Please choose from the provided list.",
-    }),
-  companyName: z.string().min(1, "Company name is required"),
+export const professionalDraftSchema = z.object({
+  profession: z.string().optional(),
+  companyName: z.string().optional(),
   licenseNumber: z.string().optional(),
-  yearsExperience: z.coerce
-    .number()
-    .min(0, "Cannot be negative")
-    .max(100, "Invalid experience limit")
-    .optional(),
-  website: z
-    .string()
-    .url("Please enter a valid URL")
-    .optional()
-    .or(z.literal("")),
-  bio: z.string().max(1000, "Bio must be less than 1000 characters").optional(),
-  boardRegistrationNumber: z
-    .string()
-    .min(1, "Board registration number is required"),
+  yearsExperience: z.number().optional(),
+  website: z.string().optional(),
+  bio: z.string().optional(),
+  county: z.string().optional(),
+  boardRegistrationNumber: z.string().optional(),
+  stores: z.array(z.record(z.string(), z.unknown())).optional(),
+  properties: z.array(z.record(z.string(), z.unknown())).optional(),
 });
+
+export const reviewStepSchema = z
+  .object({
+    profession: z
+      .string()
+      .min(1, "Please select your profession")
+      .refine((val) => PROFESSION_OPTIONS.some((opt) => opt.value === val), {
+        message:
+          "Invalid profession selected. Please choose from the provided list.",
+      }),
+    companyName: z.string().min(1, "Company name is required"),
+    licenseNumber: z.string().optional(),
+    yearsExperience: z.coerce
+      .number()
+      .min(0, "Cannot be negative")
+      .max(100, "Invalid experience limit")
+      .optional(),
+    website: z
+      .string()
+      .url("Please enter a valid URL")
+      .optional()
+      .or(z.literal("")),
+    bio: z
+      .string()
+      .max(1000, "Bio must be less than 1000 characters")
+      .optional(),
+    boardRegistrationNumber: z.string().optional(),
+  })
+  .superRefine((data, context) => {
+    if (
+      getRegulatoryAuthorityCode(data.profession) !== null &&
+      !data.boardRegistrationNumber?.trim()
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["boardRegistrationNumber"],
+        message: "Board registration number is required",
+      });
+    }
+  });
 
 // ============================================================================
 // STYLE CONSTANTS

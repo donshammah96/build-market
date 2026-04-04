@@ -44,14 +44,47 @@ import {
   userProfileOnboardingService,
 } from "@/app/lib/domains/user-profile";
 import { updateClerkOnboardingMetadata } from "@/app/lib/domains/user-profile/clerk-metadata";
+import { normalizeRole, type AppRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
+const ROUTE_PATTERN = "/api/onboarding/skip";
+const OPERATION_NAME = "skip_onboarding";
+
+function mapOutcomeFromStatus(status: number): string {
+  if (status === HttpStatus.BAD_REQUEST) return "bad_request";
+  if (status === HttpStatus.UNAUTHORIZED) return "unauthorized";
+  if (status === HttpStatus.FORBIDDEN) return "forbidden";
+  if (status === HttpStatus.CONFLICT) return "conflict";
+  if (status === HttpStatus.TOO_MANY_REQUESTS) return "rate_limited";
+  return "failed";
+}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const startedAt = Date.now();
   const correlationId = initializeCorrelationId(req);
+  let actorRole: "unknown" | AppRole = "unknown";
+
+  const logOutcome = (
+    outcome: string,
+    httpStatus: number,
+    additionalContext?: Record<string, unknown>,
+  ) => {
+    logger.info("Onboarding adapter outcome", {
+      correlationId,
+      operationName: OPERATION_NAME,
+      httpMethod: req.method,
+      routePattern: ROUTE_PATTERN,
+      actorRole,
+      outcome,
+      httpStatus,
+      durationMs: Date.now() - startedAt,
+      ...(additionalContext ? { additionalContext } : {}),
+    });
+  };
 
   const { userId: clerkId } = await auth();
   if (!clerkId) {
+    logOutcome("unauthorized", HttpStatus.UNAUTHORIZED);
     return apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED);
   }
 
@@ -62,6 +95,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     RateLimits.AUTH.window,
   );
   if (!rateLimitResult.success) {
+    logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
     return apiError(
       "Too many requests. Please try again later.",
       HttpStatus.TOO_MANY_REQUESTS,
@@ -81,59 +115,100 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     "POST",
   );
   if (!idempotencyCheck) {
+    logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
+      reason: "idempotency_check_failed",
+    });
     return apiError(
       "Failed to process idempotency key",
       HttpStatus.INTERNAL_SERVER_ERROR,
     );
   }
   if (idempotencyCheck.status === "completed") {
+    logOutcome("succeeded", HttpStatus.OK, {
+      source: "idempotency_cache",
+    });
     return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
   }
   if (idempotencyCheck.status === "pending") {
+    logOutcome("conflict", HttpStatus.CONFLICT, {
+      reason: "idempotency_pending",
+    });
     return apiError(
       "Request is being processed. Please wait.",
       HttpStatus.CONFLICT,
     );
   }
 
-  logger.info("Processing skip onboarding request", {
-    correlationId,
-    actorRole: "authenticated",
-  });
-
   const clerkUserData = (await currentUser()) as ClerkUserProfile | null;
   if (!clerkUserData) {
     await IdempotencyService.fail(idempotencyKey);
+    logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
+      reason: "clerk_user_unavailable",
+    });
     return apiError(
       "Could not retrieve user data from Clerk",
       HttpStatus.INTERNAL_SERVER_ERROR,
     );
   }
 
+  const metadataRole = normalizeRole(
+    (clerkUserData as { publicMetadata?: { role?: unknown } }).publicMetadata
+      ?.role,
+  );
+  const resolvedActorRole = metadataRole ?? "CLIENT";
+  actorRole = resolvedActorRole;
+
+  if (resolvedActorRole !== "CLIENT" && resolvedActorRole !== "ADMIN") {
+    logOutcome("forbidden", HttpStatus.FORBIDDEN, {
+      reason: "invalid_actor_role",
+    });
+    return apiError("Forbidden", HttpStatus.FORBIDDEN);
+  }
+
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
     async () =>
       userProfileOnboardingService.skipClientOnboarding({
-        actor: { clerkId, correlationId, role: "CLIENT" },
+        actor: { clerkId, correlationId, role: resolvedActorRole },
         clerkUser: clerkUserData,
       }),
-    { operationName: "skip_onboarding" },
+    { operationName: OPERATION_NAME },
   );
 
   if (!result.success || !result.data) {
     await IdempotencyService.fail(idempotencyKey);
-    logger.error("Skip onboarding failed", result.error, {
-      correlationId,
-      actorRole: "authenticated",
-    });
+    logger.error(
+      "Onboarding adapter outcome",
+      result.error instanceof Error
+        ? result.error
+        : new Error("Skip onboarding execution failed"),
+      {
+        correlationId,
+        operationName: OPERATION_NAME,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: Date.now() - startedAt,
+        additionalContext: {
+          reason: "executor_failure",
+        },
+      },
+    );
     return apiError("Skip onboarding failed", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
   if (!result.data.ok) {
     await IdempotencyService.fail(idempotencyKey);
+    const status = result.data.status || HttpStatus.INTERNAL_SERVER_ERROR;
+    logOutcome(mapOutcomeFromStatus(status), status, {
+      reason: "domain_error",
+      domainError: result.data.error,
+    });
     return apiError(
       result.data.message || "Skip onboarding failed",
-      result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      status,
     );
   }
 
@@ -143,16 +218,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   await updateClerkOnboardingMetadata(
     clerkId,
     { role: "CLIENT", isOnboarded: true, status: "ACTIVE" },
-    { correlationId, operation: "skip_onboarding" },
+    { correlationId, operation: OPERATION_NAME },
   );
 
-  logger.info("Skip onboarding completed successfully", {
-    correlationId,
-    actorRole: "authenticated",
-    role: "CLIENT",
+  await IdempotencyService.complete(idempotencyKey, responseData);
+
+  logOutcome("succeeded", HttpStatus.OK, {
+    role: resolvedActorRole,
     skipped: true,
   });
 
-  await IdempotencyService.complete(idempotencyKey, responseData);
   return apiSuccess(responseData, HttpStatus.OK);
 }

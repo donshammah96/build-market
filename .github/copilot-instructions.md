@@ -40,6 +40,7 @@ Deconstructed instruction map:
 - `apps-client-hooks-react-query.instructions.md` for `apps/client/hooks/**`
 - `apps-client-env-boundary.instructions.md` for `apps/client/**`
 - `apps-client-testing-risk.instructions.md` for `apps/client/__tests__/**`
+- `apps-client-adr-authoring.instructions.md` for `apps/client/docs/adr/**`
 - `apps-admin-action-boundaries.instructions.md` for `apps/admin/src/actions/admin/**`
 
 Governance:

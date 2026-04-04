@@ -1,5 +1,9 @@
 import { normalizeRole, type AppRole } from "@/app/lib/security/roles";
 import { env } from "@/app/lib/infrastructure/env";
+import { getClientLogger } from "@/app/lib/api/resilient-api";
+
+const logger = getClientLogger();
+const OPERATION_NAME = "resolve_onboarding_status";
 
 export type OnboardingResolutionMode = "strict" | "lenient";
 
@@ -26,6 +30,7 @@ export async function resolveOnboardingStatus(
   baseUrl: string,
   mode: OnboardingResolutionMode = "strict",
 ): Promise<OnboardingStatus> {
+  const startedAt = Date.now();
   const metadataRole = normalizeRole(metadata?.role);
   const metadataStatus =
     typeof metadata?.status === "string"
@@ -45,7 +50,7 @@ export async function resolveOnboardingStatus(
 
   const internalSecret = env.services.internalApiSecret;
   if (!internalSecret) {
-    return {
+    const fallbackResult: OnboardingStatus = {
       state: mode === "strict" ? "resolved" : "indeterminate",
       isOnboarded: false,
       role: metadataRole,
@@ -54,6 +59,19 @@ export async function resolveOnboardingStatus(
       confidence: "low",
       reason: "internal_secret_missing",
     };
+
+    logger.warn("Onboarding resolver outcome", {
+      operationName: OPERATION_NAME,
+      outcome: "fallback",
+      reason: fallbackResult.reason,
+      source: fallbackResult.source,
+      state: fallbackResult.state,
+      confidence: fallbackResult.confidence,
+      mode,
+      durationMs: Date.now() - startedAt,
+    });
+
+    return fallbackResult;
   }
 
   try {
@@ -66,7 +84,7 @@ export async function resolveOnboardingStatus(
       cache: "no-store",
     });
     if (!response.ok) {
-      return {
+      const fallbackResult: OnboardingStatus = {
         state: mode === "strict" ? "resolved" : "indeterminate",
         isOnboarded: false,
         role: metadataRole,
@@ -75,10 +93,24 @@ export async function resolveOnboardingStatus(
         confidence: "low",
         reason: "internal_api_non_ok",
       };
+
+      logger.warn("Onboarding resolver outcome", {
+        operationName: OPERATION_NAME,
+        outcome: "fallback",
+        reason: fallbackResult.reason,
+        source: fallbackResult.source,
+        state: fallbackResult.state,
+        confidence: fallbackResult.confidence,
+        mode,
+        httpStatus: response.status,
+        durationMs: Date.now() - startedAt,
+      });
+
+      return fallbackResult;
     }
 
     const data = await response.json();
-    return {
+    const resolvedResult: OnboardingStatus = {
       state: "resolved",
       isOnboarded: data.isOnboarded ?? false,
       role: normalizeRole(data.role) ?? metadataRole,
@@ -90,8 +122,22 @@ export async function resolveOnboardingStatus(
       confidence: "medium",
       reason: "internal_api_resolved",
     };
+
+    logger.info("Onboarding resolver outcome", {
+      operationName: OPERATION_NAME,
+      outcome: "resolved",
+      reason: resolvedResult.reason,
+      source: resolvedResult.source,
+      state: resolvedResult.state,
+      confidence: resolvedResult.confidence,
+      mode,
+      httpStatus: response.status,
+      durationMs: Date.now() - startedAt,
+    });
+
+    return resolvedResult;
   } catch {
-    return {
+    const fallbackResult: OnboardingStatus = {
       state: mode === "strict" ? "resolved" : "indeterminate",
       isOnboarded: false,
       role: metadataRole,
@@ -100,5 +146,18 @@ export async function resolveOnboardingStatus(
       confidence: "low",
       reason: "internal_api_error",
     };
+
+    logger.warn("Onboarding resolver outcome", {
+      operationName: OPERATION_NAME,
+      outcome: "fallback",
+      reason: fallbackResult.reason,
+      source: fallbackResult.source,
+      state: fallbackResult.state,
+      confidence: fallbackResult.confidence,
+      mode,
+      durationMs: Date.now() - startedAt,
+    });
+
+    return fallbackResult;
   }
 }

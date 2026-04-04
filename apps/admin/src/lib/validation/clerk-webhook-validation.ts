@@ -134,7 +134,6 @@ const VALID_ROLES: Record<string, UserRole> = {
   CLIENT: UserRole.CLIENT,
   PROFESSIONAL: UserRole.PROFESSIONAL,
   ADMIN: UserRole.ADMIN,
-  SUPPORT: UserRole.SUPPORT,
 };
 
 /**
@@ -143,7 +142,9 @@ const VALID_ROLES: Record<string, UserRole> = {
  */
 export function resolveUserRole(roleStr?: string): UserRole | undefined {
   if (!roleStr) return undefined;
-  return VALID_ROLES[roleStr.toUpperCase()];
+  const normalized = roleStr.trim().toUpperCase();
+  const canonicalRole = normalized === "SUPPORT" ? "ADMIN" : normalized;
+  return VALID_ROLES[canonicalRole];
 }
 
 // ─── Display Name ────────────────────────────────────────────────────────────

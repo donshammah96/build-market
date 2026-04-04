@@ -3,6 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { PATCH } from "@/app/api/onboarding/professional/complete/route";
 
 const mockCompleteProfessionalOnboarding = vi.hoisted(() => vi.fn());
+const mockLoggerInfo = vi.hoisted(() => vi.fn());
+const mockLoggerWarn = vi.hoisted(() => vi.fn());
+const mockLoggerError = vi.hoisted(() => vi.fn());
+const mockLoggerDebug = vi.hoisted(() => vi.fn());
+const mockWithAuthRole = vi.hoisted(() => ({ value: "PROFESSIONAL" }));
 
 vi.mock("@/app/lib/api/api-middleware", () => ({
   withAuth:
@@ -12,7 +17,7 @@ vi.mock("@/app/lib/api/api-middleware", () => ({
         clerkId: "clerk_123",
         dbUserId: "db_user_123",
         userEmail: "pro@example.com",
-        userRole: "PROFESSIONAL",
+        userRole: mockWithAuthRole.value,
       }),
 }));
 
@@ -58,10 +63,10 @@ vi.mock("@/app/lib/api/resilient-api", () => ({
     }),
   }),
   getClientLogger: vi.fn().mockReturnValue({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
+    info: mockLoggerInfo,
+    warn: mockLoggerWarn,
+    error: mockLoggerError,
+    debug: mockLoggerDebug,
   }),
   apiError: vi
     .fn()
@@ -80,7 +85,9 @@ vi.mock("@/app/lib/api/resilient-api", () => ({
 
 vi.mock("@/app/lib/api/api-response", () => ({
   HttpStatus: {
+    OK: 200,
     BAD_REQUEST: 400,
+    UNAUTHORIZED: 401,
     FORBIDDEN: 403,
     CONFLICT: 409,
     TOO_MANY_REQUESTS: 429,
@@ -106,6 +113,7 @@ vi.mock("@/app/lib/domains/user-profile", () => ({
 describe("PATCH /api/onboarding/professional/complete", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockWithAuthRole.value = "PROFESSIONAL";
     mockCompleteProfessionalOnboarding.mockResolvedValue({
       ok: true,
       data: {
@@ -161,7 +169,7 @@ describe("PATCH /api/onboarding/professional/complete", () => {
         userId: "db_user_123",
         clerkId: "clerk_123",
         correlationId: "test-correlation-id",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       data: {
         profession: "ARCHITECT",
@@ -172,6 +180,26 @@ describe("PATCH /api/onboarding/professional/complete", () => {
         userAgent: "vitest",
       },
     });
+
+    const terminalOutcomeCall = mockLoggerInfo.mock.calls.find(
+      ([message, payload]) =>
+        message === "Onboarding adapter outcome" &&
+        (payload as { outcome?: string }).outcome === "succeeded",
+    );
+
+    expect(terminalOutcomeCall).toBeDefined();
+    expect(terminalOutcomeCall?.[1]).toEqual(
+      expect.objectContaining({
+        correlationId: "test-correlation-id",
+        operationName: "complete-professional-onboarding",
+        httpMethod: "PATCH",
+        routePattern: "/api/onboarding/professional/complete",
+        actorRole: "PROFESSIONAL",
+        outcome: "succeeded",
+        httpStatus: 200,
+        durationMs: expect.any(Number),
+      }),
+    );
   });
 
   it("maps forbidden business-rule failures to 403", async () => {
@@ -201,6 +229,28 @@ describe("PATCH /api/onboarding/professional/complete", () => {
     expect(data.error).toContain("suspended or banned accounts");
   });
 
+  it("rejects requests when authenticated role cannot be normalized", async () => {
+    mockWithAuthRole.value = "invalid-role";
+
+    const response = await PATCH(
+      new NextRequest(
+        "http://localhost:3500/api/onboarding/professional/complete",
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            profession: "ARCHITECT",
+            companyName: "Build Co",
+          }),
+        },
+      ),
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(data.error).toContain("Forbidden");
+    expect(mockCompleteProfessionalOnboarding).not.toHaveBeenCalled();
+  });
+
   it("rejects invalid JSON before dispatch", async () => {
     const response = await PATCH(
       new NextRequest(
@@ -216,6 +266,25 @@ describe("PATCH /api/onboarding/professional/complete", () => {
     expect(response.status).toBe(400);
     expect(data.error).toContain("Invalid JSON");
     expect(mockCompleteProfessionalOnboarding).not.toHaveBeenCalled();
+
+    const badRequestOutcomeCall = mockLoggerInfo.mock.calls.find(
+      ([message, payload]) =>
+        message === "Onboarding adapter outcome" &&
+        (payload as { outcome?: string }).outcome === "bad_request",
+    );
+
+    expect(badRequestOutcomeCall).toBeDefined();
+    expect(badRequestOutcomeCall?.[1]).toEqual(
+      expect.objectContaining({
+        operationName: "complete-professional-onboarding",
+        httpMethod: "PATCH",
+        routePattern: "/api/onboarding/professional/complete",
+        actorRole: "PROFESSIONAL",
+        outcome: "bad_request",
+        httpStatus: 400,
+        durationMs: expect.any(Number),
+      }),
+    );
   });
 
   it("rejects schema-invalid requests before domain dispatch", async () => {
@@ -235,6 +304,34 @@ describe("PATCH /api/onboarding/professional/complete", () => {
     expect(response.status).toBe(400);
     expect(data.error).toContain("Validation failed");
     expect(mockCompleteProfessionalOnboarding).not.toHaveBeenCalled();
+  });
+
+  it("logs validation errors as field paths only", async () => {
+    const response = await PATCH(
+      new NextRequest(
+        "http://localhost:3500/api/onboarding/professional/complete",
+        {
+          method: "PATCH",
+          body: JSON.stringify({ profession: "ARCHITECT" }),
+        },
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      "Onboarding completion validation failed",
+      expect.objectContaining({
+        errors: expect.arrayContaining(["companyName"]),
+      }),
+    );
+
+    const warnCall = mockLoggerWarn.mock.calls.at(-1);
+    const loggedErrors = (warnCall?.[1] as { errors?: unknown[] } | undefined)
+      ?.errors;
+    expect(Array.isArray(loggedErrors)).toBe(true);
+    expect(
+      (loggedErrors ?? []).every((error) => typeof error === "string"),
+    ).toBe(true);
   });
 
   it("rejects invalid property enum values (type, category, status)", async () => {

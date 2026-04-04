@@ -63,12 +63,44 @@ import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
+const ROUTE_PATTERN = "/api/onboarding";
+const OPERATION_NAME = "complete_onboarding";
+
+function mapOutcomeFromStatus(status: number): string {
+  if (status === HttpStatus.BAD_REQUEST) return "bad_request";
+  if (status === HttpStatus.UNAUTHORIZED) return "unauthorized";
+  if (status === HttpStatus.FORBIDDEN) return "forbidden";
+  if (status === HttpStatus.CONFLICT) return "conflict";
+  if (status === HttpStatus.TOO_MANY_REQUESTS) return "rate_limited";
+  return "failed";
+}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const startedAt = Date.now();
   const correlationId = initializeCorrelationId(req);
+  let actorRole: "unknown" | "CLIENT" | "PROFESSIONAL" = "unknown";
+
+  const logOutcome = (
+    outcome: string,
+    httpStatus: number,
+    additionalContext?: Record<string, unknown>,
+  ) => {
+    logger.info("Onboarding adapter outcome", {
+      correlationId,
+      operationName: OPERATION_NAME,
+      httpMethod: req.method,
+      routePattern: ROUTE_PATTERN,
+      actorRole,
+      outcome,
+      httpStatus,
+      durationMs: Date.now() - startedAt,
+      ...(additionalContext ? { additionalContext } : {}),
+    });
+  };
 
   const { userId: clerkId } = await auth();
   if (!clerkId) {
+    logOutcome("unauthorized", HttpStatus.UNAUTHORIZED);
     return apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED);
   }
 
@@ -79,6 +111,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     RateLimits.AUTH.window,
   );
   if (!rateLimitResult.success) {
+    logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
     return apiError(
       "Too many requests. Please try again later.",
       HttpStatus.TOO_MANY_REQUESTS,
@@ -86,42 +119,65 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const sizeError = checkBodySize(req, MAX_BODY_SIZE);
-  if (sizeError) return sizeError;
+  if (sizeError) {
+    logOutcome("bad_request", 413, {
+      reason: "body_too_large",
+    });
+    return sizeError;
+  }
 
   let body: unknown;
   try {
     body = await req.json();
   } catch {
+    logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
+      reason: "invalid_json",
+    });
     return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
   }
 
   const validation = OnboardingSchema.safeParse(body);
   if (!validation.success) {
+    const validationErrorFields = validation.error.issues.map((issue) =>
+      issue.path.join("."),
+    );
+
     logger.warn("Onboarding validation failed", {
       correlationId,
-      actorRole: "authenticated",
-      errors: validation.error.issues,
+      actorRole: "unknown",
+      errors: validationErrorFields,
+    });
+    logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
+      reason: "validation_failed",
+      errors: validationErrorFields,
     });
     return apiError(
       "Validation failed",
       HttpStatus.BAD_REQUEST,
-      validation.error.issues,
+      validationErrorFields,
     );
   }
 
   const validatedData = validation.data;
   const { role } = validatedData;
-  const actorRole = normalizeRole(role);
+  const resolvedActorRole = normalizeRole(role);
 
-  if (!actorRole) {
+  if (
+    !resolvedActorRole ||
+    (resolvedActorRole !== "CLIENT" && resolvedActorRole !== "PROFESSIONAL")
+  ) {
+    logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
+      reason: "invalid_role",
+    });
     return apiError("Invalid onboarding role", HttpStatus.BAD_REQUEST);
   }
+  actorRole = resolvedActorRole;
 
   const idempotencyKey =
     req.headers.get("Idempotency-Key") ||
     IdempotencyService.generateKey(clerkId, "POST", {
       domain: "onboarding",
-      role: role.toUpperCase(),
+      role: resolvedActorRole,
     });
 
   const idempotencyCheck = await IdempotencyService.checkOrCreate(
@@ -131,30 +187,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     "POST",
   );
   if (!idempotencyCheck) {
+    logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
+      reason: "idempotency_check_failed",
+    });
     return apiError(
       "Failed to process idempotency key",
       HttpStatus.INTERNAL_SERVER_ERROR,
     );
   }
   if (idempotencyCheck.status === "completed") {
+    logOutcome("succeeded", HttpStatus.OK, {
+      source: "idempotency_cache",
+    });
     return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
   }
   if (idempotencyCheck.status === "pending") {
+    logOutcome("conflict", HttpStatus.CONFLICT, {
+      reason: "idempotency_pending",
+    });
     return apiError(
       "Onboarding is being processed. Please wait.",
       HttpStatus.CONFLICT,
     );
   }
 
-  logger.info("Processing onboarding", {
-    correlationId,
-    actorRole: "authenticated",
-    role,
-  });
-
   const clerkUserData = (await currentUser()) as ClerkUserProfile | null;
   if (!clerkUserData) {
     await IdempotencyService.fail(idempotencyKey);
+    logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
+      reason: "clerk_user_unavailable",
+    });
     return apiError(
       "Could not retrieve user data from Clerk",
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -165,28 +227,47 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const result = await resilientExecutor.execute(
     async () =>
       userProfileOnboardingService.completeOnboarding({
-        actor: { clerkId, correlationId, role: actorRole },
+        actor: { clerkId, correlationId, role: resolvedActorRole },
         clerkUser: clerkUserData,
         data: validatedData,
       }),
-    { operationName: "complete_onboarding" },
+    { operationName: OPERATION_NAME },
   );
 
   if (!result.success || !result.data) {
     await IdempotencyService.fail(idempotencyKey);
-    logger.error("Onboarding failed", result.error, {
-      correlationId,
-      actorRole: "authenticated",
-      role,
-    });
+    logger.error(
+      "Onboarding adapter outcome",
+      result.error instanceof Error
+        ? result.error
+        : new Error("Onboarding execution failed"),
+      {
+        correlationId,
+        operationName: OPERATION_NAME,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: Date.now() - startedAt,
+        additionalContext: {
+          reason: "executor_failure",
+        },
+      },
+    );
     return apiError("Onboarding failed", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
   if (!result.data.ok) {
     await IdempotencyService.fail(idempotencyKey);
+    const status = result.data.status || HttpStatus.INTERNAL_SERVER_ERROR;
+    logOutcome(mapOutcomeFromStatus(status), status, {
+      reason: "domain_error",
+      domainError: result.data.error,
+    });
     return apiError(
       result.data.message || "Onboarding failed",
-      result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      status,
     );
   }
 
@@ -203,15 +284,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       isOnboarded: true,
       status: clerkRole === "PROFESSIONAL" ? "PENDING_VERIFICATION" : "ACTIVE",
     },
-    { correlationId, operation: "complete_onboarding" },
+    { correlationId, operation: OPERATION_NAME },
   );
 
-  logger.info("Onboarding completed successfully", {
-    correlationId,
-    actorRole: "authenticated",
-    role: responseData.role,
+  await IdempotencyService.complete(idempotencyKey, responseData);
+
+  logOutcome("succeeded", HttpStatus.OK, {
+    completedRole: responseData.role,
   });
 
-  await IdempotencyService.complete(idempotencyKey, responseData);
   return apiSuccess(responseData, HttpStatus.OK);
 }

@@ -46,11 +46,26 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { userProfileOnboardingService } from "@/app/lib/domains/user-profile";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
-import { normalizeRole } from "@/app/lib/security/roles";
+import {
+  requireRole,
+  RoleNormalizationError,
+  type AppRole,
+} from "@/app/lib/security/roles";
 import { updateClerkOnboardingMetadata } from "@/app/lib/domains/user-profile/clerk-metadata";
 
 const logger = getClientLogger();
 const MAX_BODY_SIZE = 2 * 1024 * 1024;
+const ROUTE_PATTERN = "/api/onboarding/professional/complete";
+const OPERATION_NAME = "complete-professional-onboarding";
+
+function mapOutcomeFromStatus(status: number): string {
+  if (status === HttpStatus.BAD_REQUEST) return "bad_request";
+  if (status === HttpStatus.UNAUTHORIZED) return "unauthorized";
+  if (status === HttpStatus.FORBIDDEN) return "forbidden";
+  if (status === HttpStatus.CONFLICT) return "conflict";
+  if (status === HttpStatus.TOO_MANY_REQUESTS) return "rate_limited";
+  return "failed";
+}
 
 const OnboardingCompleteSchema = z.object({
   profession: z.nativeEnum(Profession),
@@ -116,9 +131,41 @@ const OnboardingCompleteSchema = z.object({
 
 export const PATCH = withAuth(
   async (req: NextRequest, { dbUserId, clerkId, userRole }) => {
+    const startedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
-    const normalizedRole = normalizeRole(String(userRole)) ?? null;
-    const actorRole = normalizedRole ?? "unknown";
+    let actorRole: "unknown" | AppRole = "unknown";
+
+    const logOutcome = (
+      outcome: string,
+      httpStatus: number,
+      additionalContext?: Record<string, unknown>,
+    ) => {
+      logger.info("Onboarding adapter outcome", {
+        correlationId,
+        operationName: OPERATION_NAME,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome,
+        httpStatus,
+        durationMs: Date.now() - startedAt,
+        ...(additionalContext ? { additionalContext } : {}),
+      });
+    };
+
+    let normalizedRole: AppRole;
+    try {
+      normalizedRole = requireRole(userRole);
+      actorRole = normalizedRole;
+    } catch (error) {
+      if (error instanceof RoleNormalizationError) {
+        logOutcome("forbidden", HttpStatus.FORBIDDEN, {
+          reason: "role_normalization_failed",
+        });
+        return apiError("Forbidden", HttpStatus.FORBIDDEN);
+      }
+      throw error;
+    }
 
     const rateLimitResult = await checkRateLimit(
       `onboarding-complete:${getRateLimitIdentifier(req)}:${dbUserId}`,
@@ -126,6 +173,7 @@ export const PATCH = withAuth(
       RateLimits.WRITE.window,
     );
     if (!rateLimitResult.success) {
+      logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
       return apiError(
         `Rate limit exceeded. Try again in ${Math.ceil((rateLimitResult.reset - Date.now()) / 1000)} seconds`,
         HttpStatus.TOO_MANY_REQUESTS,
@@ -133,35 +181,44 @@ export const PATCH = withAuth(
     }
 
     const sizeError = checkBodySize(req, MAX_BODY_SIZE);
-    if (sizeError) return sizeError;
+    if (sizeError) {
+      logOutcome("bad_request", 413, {
+        reason: "body_too_large",
+      });
+      return sizeError;
+    }
 
     let body: unknown;
     try {
       body = await req.json();
     } catch {
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
+        reason: "invalid_json",
+      });
       return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
     }
 
     const { ipAddress, userAgent } = getRequestMetadata(req);
 
-    logger.info("Professional onboarding completion request received", {
-      actorRole,
-      correlationId,
-      fieldsReceived: body && typeof body === "object" ? Object.keys(body) : [],
-      ipAddress,
-    });
-
     const validationResult = OnboardingCompleteSchema.safeParse(body);
     if (!validationResult.success) {
+      const validationErrorFields = validationResult.error.issues.map((issue) =>
+        issue.path.join("."),
+      );
+
       logger.warn("Onboarding completion validation failed", {
         actorRole,
         correlationId,
-        errors: validationResult.error.issues,
+        errors: validationErrorFields,
+      });
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
+        reason: "validation_failed",
+        errors: validationErrorFields,
       });
       return apiError(
         "Validation failed",
         HttpStatus.BAD_REQUEST,
-        validationResult.error.issues,
+        validationErrorFields,
       );
     }
 
@@ -181,15 +238,24 @@ export const PATCH = withAuth(
       "PATCH",
     );
     if (!idempotencyCheck) {
+      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
+        reason: "idempotency_check_failed",
+      });
       return apiError(
         "Failed to process idempotency key",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
     if (idempotencyCheck.status === "completed") {
+      logOutcome("succeeded", HttpStatus.OK, {
+        source: "idempotency_cache",
+      });
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
     }
     if (idempotencyCheck.status === "pending") {
+      logOutcome("conflict", HttpStatus.CONFLICT, {
+        reason: "idempotency_pending",
+      });
       return apiError(
         "Request is being processed. Please wait.",
         HttpStatus.CONFLICT,
@@ -209,15 +275,29 @@ export const PATCH = withAuth(
           data,
           requestMetadata: { ipAddress, userAgent },
         }),
-      { operationName: "complete-professional-onboarding" },
+      { operationName: OPERATION_NAME },
     );
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
       logger.error(
-        "Professional onboarding completion failed",
-        result.error || new Error("Unknown error"),
-        { actorRole, correlationId },
+        "Onboarding adapter outcome",
+        result.error instanceof Error
+          ? result.error
+          : new Error("Professional onboarding execution failed"),
+        {
+          correlationId,
+          operationName: OPERATION_NAME,
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          actorRole,
+          outcome: "failed",
+          httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+          durationMs: Date.now() - startedAt,
+          additionalContext: {
+            reason: "executor_failure",
+          },
+        },
       );
       return apiError(
         "Failed to complete onboarding",
@@ -227,9 +307,14 @@ export const PATCH = withAuth(
 
     if (!result.data.ok) {
       await IdempotencyService.fail(idempotencyKey);
+      const status = result.data.status || HttpStatus.INTERNAL_SERVER_ERROR;
+      logOutcome(mapOutcomeFromStatus(status), status, {
+        reason: "domain_error",
+        domainError: result.data.error,
+      });
       return apiError(
         result.data.message || "Failed to complete onboarding",
-        result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        status,
       );
     }
 
@@ -246,17 +331,16 @@ export const PATCH = withAuth(
         status: "PENDING_VERIFICATION",
         isProfileComplete: true,
       },
-      { correlationId, operation: "complete-professional-onboarding" },
+      { correlationId, operation: OPERATION_NAME },
     );
 
-    logger.info("Professional onboarding completed successfully", {
-      actorRole,
-      correlationId,
+    await IdempotencyService.complete(idempotencyKey, responseData);
+
+    logOutcome("succeeded", HttpStatus.OK, {
       profession: data.profession,
       hasStore: Array.isArray(data.stores) && data.stores.length > 0,
     });
 
-    await IdempotencyService.complete(idempotencyKey, responseData);
     return apiSuccess(responseData);
   },
 );

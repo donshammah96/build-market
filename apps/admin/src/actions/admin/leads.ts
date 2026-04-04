@@ -1,8 +1,7 @@
-// @ts-nocheck
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, prisma } from "@build/db";
+import { LeadSource, LeadStatus, Prisma, ProjectType, prisma } from "@build/db";
 import { safeAction, logAdminAction } from "./shared";
 import { z } from "zod";
 
@@ -69,9 +68,9 @@ const LeadFilterSchema = z.object({
   page: z.number().min(1).default(1),
   limit: z.number().min(1).max(100).default(10),
   search: z.string().optional(),
-  status: z.enum(["NEW", "CONTACTED", "PROPOSAL", "WON", "LOST"]).optional(),
-  source: z.string().optional(),
-  projectType: z.string().optional(),
+  status: z.nativeEnum(LeadStatus).optional(),
+  source: z.nativeEnum(LeadSource).optional(),
+  projectType: z.nativeEnum(ProjectType).optional(),
   professionalId: z.string().uuid().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
@@ -115,12 +114,6 @@ export async function getLeads(filters: Partial<LeadFilterInput> = {}) {
         },
         {
           clientEmail: {
-            contains: validatedFilters.search,
-            mode: "insensitive",
-          },
-        },
-        {
-          projectType: {
             contains: validatedFilters.search,
             mode: "insensitive",
           },
@@ -190,6 +183,7 @@ export async function getLeads(filters: Partial<LeadFilterInput> = {}) {
     // Transform to flatten professional info
     const formattedLeads: LeadListItem[] = leads.map((lead) => ({
       ...lead,
+      budget: lead.budget ? lead.budget.toString() : null,
       professional: {
         userId: lead.professional.userId,
         companyName: lead.professional.companyName,
@@ -248,7 +242,7 @@ export async function getLeadDetails(leadId: string) {
       status: lead.status,
       source: lead.source,
       location: lead.location,
-      budget: lead.budget,
+      budget: lead.budget ? lead.budget.toString() : null,
       notes: lead.notes,
       followUpDate: lead.followUpDate,
       createdAt: lead.createdAt,
@@ -509,7 +503,7 @@ export async function exportLeads(filters: Partial<LeadFilterInput> = {}) {
       status: lead.status,
       source: lead.source || "",
       location: lead.location || "",
-      budget: lead.budget || "",
+      budget: lead.budget ? lead.budget.toString() : "",
       notes: lead.notes || "",
       professionalCompany: lead.professional.companyName,
       professionalEmail: lead.professional.user.email,

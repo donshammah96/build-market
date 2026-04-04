@@ -13,10 +13,7 @@ import {
   throwActionFailure,
   type ActionResult,
 } from "@/app/lib/actions/secure-action";
-import {
-  getClientLogger,
-  getResilientExecutor,
-} from "@/app/lib/api/resilient-api";
+import { getResilientExecutor } from "@/app/lib/api/resilient-api";
 import {
   userProfileOnboardingService,
   type ClerkUserProfile,
@@ -28,8 +25,7 @@ import {
 } from "@/app/lib/domains/properties";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { updateClerkOnboardingMetadata } from "@/app/lib/domains/user-profile/clerk-metadata";
-
-const logger = getClientLogger();
+import { normalizeRole } from "@/app/lib/security/roles";
 
 function toCreateStoreInput(store: StoreOnboardingData): CreateStoreInput {
   return {
@@ -140,9 +136,17 @@ export async function submitOnboarding(
     schema: OnboardingSchema,
     handler: async ({ input }) => {
       const { clerkId, clerkUser } = await getRequiredClerkContext();
+
+      const normalizedInputRole = normalizeRole(input.role);
+      if (!normalizedInputRole) {
+        throwActionFailure(
+          createActionFailure("invalid_input", "Invalid onboarding role", 400),
+        );
+      }
+
       const idempotencyKey = IdempotencyService.generateKey(clerkId, "POST", {
         domain: "onboarding",
-        role: input.role.toUpperCase(),
+        role: normalizedInputRole,
       });
 
       const check = await IdempotencyService.checkOrCreate(
@@ -209,7 +213,7 @@ export async function submitOnboarding(
       if (input.role === "professional") {
         for (const store of input.stores ?? []) {
           const storeResult = await storesService.createStore(
-            { userId: result.data.data.userId, role: "professional" },
+            { userId: result.data.data.userId, role: "PROFESSIONAL" },
             toCreateStoreInput(store),
           );
           if (!storeResult.ok) {
@@ -221,7 +225,7 @@ export async function submitOnboarding(
 
         for (const property of input.properties ?? []) {
           const propertyResult = await propertiesService.createProperty(
-            { userId: result.data.data.userId, role: "professional" },
+            { userId: result.data.data.userId, role: "PROFESSIONAL" },
             toCreatePropertyInput(property),
           );
           if (!propertyResult.ok) {

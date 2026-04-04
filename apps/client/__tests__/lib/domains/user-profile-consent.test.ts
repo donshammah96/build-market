@@ -65,14 +65,17 @@ describe("completeClientProfile — GDPR consent records", () => {
     mockClientProfileUpsert.mockResolvedValue({ userId: "user_123" });
     mockConsentRecordCreate.mockResolvedValue({});
     mockSyncUserProfileCompletionStatus.mockResolvedValue({
-      isProfileComplete: true,
-      completion: {
-        isComplete: true,
-        percentage: 100,
-        missingRequired: [],
-        missingRequiredLabels: [],
-        missingOptional: [],
-        filledFields: [],
+      ok: true,
+      data: {
+        isProfileComplete: true,
+        completion: {
+          isComplete: true,
+          percentage: 100,
+          missingRequired: [],
+          missingRequiredLabels: [],
+          missingOptional: [],
+          filledFields: [],
+        },
       },
     });
   });

@@ -1,6 +1,6 @@
-// @ts-nocheck
-// @ts-nocheck
-import { getProfessionalDetails } from "@/actions/admin";
+import {
+  getProfessionalDetails,
+} from "@/actions/admin";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,17 +25,49 @@ import { ProfessionalProfileEditor } from "@/components/admin/professional-profi
 import { CertificateManager } from "@/components/admin/certificate-manager";
 import { getAdminPermissions } from "@/actions/admin/shared";
 
+type ProfessionalDetailView = {
+  userId: string;
+  companyName: string;
+  verified: boolean;
+  user: {
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+    avatar: string | null;
+  };
+  licenseNumber?: string | null;
+  yearsExperience?: number | null;
+  bio?: string | null;
+  website?: string | null;
+  city?: string | null;
+  county?: string | null;
+  country?: string | null;
+  services: Array<{
+    id: string;
+    name: string;
+  }>;
+  certificates: Array<{
+    id: string;
+    name: string;
+    fileUrl: string;
+    issuer: string | null;
+    expiryDate: string | Date | null;
+  }>;
+  createdAt: string | Date;
+  reviews: Array<unknown>;
+};
 export default async function ProfessionalDetailsPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { success, data: pro } = await getProfessionalDetails(id);
-  const { granularRole } = await getAdminPermissions();
+  const response = await getProfessionalDetails(id);
   const { granularRole } = await getAdminPermissions();
 
-  if (!success || !pro) return notFound();
+  if (!response.success || !response.data) return notFound();
+
+  const pro = response.data as unknown as ProfessionalDetailView;
 
   // Role Checks
   const canEditProfile = [

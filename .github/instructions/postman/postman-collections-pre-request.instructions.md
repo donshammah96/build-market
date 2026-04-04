@@ -3,7 +3,7 @@ description: "Use for Postman collection-level pre-request script generation fil
 applyTo: "**/*-pre-c-pm-*"
 ---
 
-Last aligned with canonical on: 2026-03-30.
+Last aligned with canonical on: 2026-04-04.
 
 ## Instructions
 

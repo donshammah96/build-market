@@ -450,21 +450,12 @@ export function withRole(allowedRoles: UserRole[]) {
  * Composes on top of withAuth — first verifies userRole is ADMIN,
  * then checks the granular AdminRole from AdminProfile.
  *
- * SUPER_ADMIN always passes. SYSTEM_ADMIN is treated as a legacy alias when
- * still present in older generated enums during rollout.
+ * SUPER_ADMIN always passes.
  *
  * Usage:
  *   export const POST = withAdminRole(["CONTENT_MODERATOR", "FINANCE_MANAGER"])(handler);
  */
-const ADMIN_SUPER_ROLES = (() => {
-  const roles = new Set<AdminRole>([AdminRole.SUPER_ADMIN]);
-  const legacySystemAdmin = (AdminRole as Record<string, AdminRole>)
-    .SYSTEM_ADMIN;
-  if (legacySystemAdmin) {
-    roles.add(legacySystemAdmin);
-  }
-  return roles;
-})();
+const ADMIN_SUPER_ROLES = new Set<AdminRole>([AdminRole.SUPER_ADMIN]);
 
 export function withAdminRole(allowedAdminRoles: AdminRole[]) {
   return (handler: AuthenticatedHandler) => {
@@ -499,7 +490,7 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
         );
       }
 
-      // SUPER_ADMIN always passes (plus SYSTEM_ADMIN alias during rollout).
+      // SUPER_ADMIN always passes.
       const hasAccess =
         ADMIN_SUPER_ROLES.has(context.adminRole) ||
         allowedAdminRoles.includes(context.adminRole);

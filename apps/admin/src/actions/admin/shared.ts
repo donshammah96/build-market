@@ -1,21 +1,18 @@
-// @ts-nocheck
-// @ts-nocheck
 "use server";
 
 import { prisma } from "@build/db";
 import { auth } from "@clerk/nextjs/server";
 import { syncUserRole } from "../../lib/auth-sync";
-import { getAdminActionPolicy } from "@/lib/security/authorization-policy";
+import {
+  getAdminActionPolicy,
+  type AdminAccessRole,
+} from "@/lib/security/authorization-policy";
 import {
   normalizeAdminAccessRole,
   parseSessionMetadata,
 } from "@/lib/security/claims";
-// @ts-nocheck
-import { type BaseResult } from "@/types/admin";
+import type { ActionResponse } from "./types";
 
-// Re-export types from the non-server types file
-// NOTE: Zod schemas (PaginationSchema, UpdateProfileSchema, SystemSettingsSchema)
-// cannot be re-exported from "use server" files. Import them directly from "./types".
 export type {
   ActionResponse,
   PaginationMeta,
@@ -23,27 +20,35 @@ export type {
   UpdateProfileInput,
 } from "./types";
 
-// ============================================================================
-// Constants
-// ============================================================================
-
-// Client app base URL for API calls
 const CLIENT_API_BASE_URL =
   process.env.CLIENT_APP_URL || "http://localhost:3500";
 
-// Allowed roles for verification actions
 const VERIFICATION_ALLOWED_ROLES = ["admin", "verification_admin"] as const;
 const ADMIN_SUPER_ROLES = ["SUPER_ADMIN"] as const;
+
 type ActionActorRole = (typeof VERIFICATION_ALLOWED_ROLES)[number];
 
-// ============================================================================
-// Middleware
-// ============================================================================
+export type AdminPermissions = {
+  role: AdminAccessRole | undefined;
+  granularRole: string | null;
+  canAccess: boolean;
+  dbUserId?: string;
+  clerkId?: string;
+};
 
-/**
- * Validates that the current user has verification privileges.
- * Allows both admin and verification_admin roles.
- */
+function toAdminAccessRole(value: unknown): AdminAccessRole | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = normalizeAdminAccessRole(value);
+  if (!normalized) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
 export async function assertVerificationAdmin(): Promise<{
   clerkId: string;
   dbUserId: string;
@@ -51,11 +56,13 @@ export async function assertVerificationAdmin(): Promise<{
 }> {
   const { userId: clerkId, sessionClaims } = await auth();
 
-  // 1. Check Auth
-  if (!clerkId) throw new Error("Unauthorized: User not authenticated");
+  if (!clerkId) {
+    throw new Error("Unauthorized: User not authenticated");
+  }
 
-  // 2. Sync Role (Fail-safe)
-  await syncUserRole().catch((err) => console.error("Role sync warning:", err));
+  await syncUserRole().catch((error) => {
+    console.warn("Role sync warning", error);
+  });
 
   const user = await prisma.user.findUnique({
     where: { clerkId },
@@ -66,88 +73,133 @@ export async function assertVerificationAdmin(): Promise<{
     throw new Error("Unauthorized: User not found in database");
   }
 
-  // 3. Fast Role Check (from Clerk session claims)
   const metadata = parseSessionMetadata(sessionClaims);
-  const sessionRole = normalizeAdminAccessRole(metadata?.role);
+  const sessionRole = toAdminAccessRole(metadata?.role);
+  const dbRole = toAdminAccessRole(String(user.role));
+  const resolvedRole = sessionRole ?? dbRole;
 
-  if (
-    sessionRole &&
-    VERIFICATION_ALLOWED_ROLES.includes(
-      sessionRole as (typeof VERIFICATION_ALLOWED_ROLES)[number],
-    )
-  ) {
-    return { clerkId, dbUserId: user.id, role: sessionRole };
-  }
-
-  const dbRole = normalizeAdminAccessRole(String(user.role));
-  if (!dbRole || !VERIFICATION_ALLOWED_ROLES.includes(dbRole)) {
+  if (!resolvedRole || !VERIFICATION_ALLOWED_ROLES.includes(resolvedRole)) {
     throw new Error("Forbidden: Verification admin privileges required");
   }
 
-  return { clerkId, dbUserId: user.id, role: dbRole };
+  return {
+    clerkId,
+    dbUserId: user.id,
+    role: resolvedRole,
+  };
 }
 
-/**
- * Validates that the current user has admin privileges.
- * Uses a multi-layer check: Clerk session -> DB fallback
- */
 export async function assertAdmin(): Promise<{
   clerkId: string;
   dbUserId: string;
   role: "admin";
 }> {
+  const context = await assertVerificationAdmin();
+
+  if (context.role !== "admin") {
+    throw new Error("Forbidden: Admin privileges required");
+  }
+
+  return {
+    clerkId: context.clerkId,
+    dbUserId: context.dbUserId,
+    role: "admin",
+  };
+}
+
+export async function getAdminPermissions(): Promise<AdminPermissions> {
   const { userId: clerkId, sessionClaims } = await auth();
 
-  // 1. Check Auth
-  if (!clerkId) throw new Error("Unauthorized: User not authenticated");
-
-  // 2. Sync Role (Fail-safe)
-  await syncUserRole().catch((err) => console.error("Role sync warning:", err));
+  if (!clerkId) {
+    return {
+      role: undefined,
+      granularRole: null,
+      canAccess: false,
+    };
+  }
 
   const user = await prisma.user.findUnique({
     where: { clerkId },
-    select: { id: true, role: true },
+    select: {
+      id: true,
+      role: true,
+      adminProfile: {
+        select: {
+          role: true,
+          isActive: true,
+        },
+      },
+    },
   });
 
   if (!user) {
-    throw new Error("Unauthorized: User not found in database");
+    return {
+      role: undefined,
+      granularRole: null,
+      canAccess: false,
+      clerkId,
+    };
   }
 
-  // 3. Fast Role Check (from Clerk session claims)
-  const metadata = sessionClaims?.metadata as { role?: string } | undefined;
-  const clerkRole = metadata?.role;
+  const metadata = parseSessionMetadata(sessionClaims);
+  const sessionRole = toAdminAccessRole(metadata?.role);
+  const dbRole = toAdminAccessRole(String(user.role));
+  const role = sessionRole ?? dbRole;
+  const granularRole = user.adminProfile?.role
+    ? String(user.adminProfile.role)
+    : null;
+  const canAccess = Boolean(
+    role &&
+      VERIFICATION_ALLOWED_ROLES.includes(role) &&
+      (user.adminProfile ? user.adminProfile.isActive : true),
+  );
 
-  if (
-    clerkRole &&
-    VERIFICATION_ALLOWED_ROLES.includes(
-      clerkRole as (typeof VERIFICATION_ALLOWED_ROLES)[number],
-    )
-  ) {
-    return { userId, role: clerkRole };
-  }
-
-  // 4. Deep DB Check (Fallback)
-  const user = await prisma.user.findUnique({
-    where: { clerkId: userId },
-    select: { role: true },
-  });
-
-  if (
-    !user?.role ||
-    !VERIFICATION_ALLOWED_ROLES.includes(
-      user.role as (typeof VERIFICATION_ALLOWED_ROLES)[number],
-    )
-  ) {
-    throw new Error("Forbidden: Verification admin privileges required");
-  }
-
-  return { userId, role: user.role };
+  return {
+    role,
+    granularRole,
+    canAccess,
+    dbUserId: user.id,
+    clerkId,
+  };
 }
 
-/**
- * Wrapper for admin actions that standardizes error handling and auth checks.
- * Returns a consistent ActionResponse<T> shape for all actions.
- */
+export async function requireAdminGranularRole(
+  allowedRoles: readonly string[],
+  adminUserId: string,
+): Promise<string> {
+  const profile = await prisma.adminProfile.findUnique({
+    where: { userId: adminUserId },
+    select: {
+      role: true,
+      isActive: true,
+    },
+  });
+
+  if (!profile) {
+    throw new Error("Forbidden: Admin profile is not configured");
+  }
+
+  if (!profile.isActive) {
+    throw new Error("Forbidden: Admin profile is inactive");
+  }
+
+  const granularRole = String(profile.role);
+
+  if (
+    ADMIN_SUPER_ROLES.includes(
+      granularRole as (typeof ADMIN_SUPER_ROLES)[number],
+    )
+  ) {
+    return granularRole;
+  }
+
+  if (!allowedRoles.includes(granularRole)) {
+    throw new Error("Forbidden: Missing required admin permission");
+  }
+
+  return granularRole;
+}
+
 export async function safeAction<T>(
   actionName: string,
   fn: (context: { adminUserId: string; adminRole: "admin" }) => Promise<T>,
@@ -155,27 +207,30 @@ export async function safeAction<T>(
   try {
     const { dbUserId, role } = await assertAdmin();
     const policy = getAdminActionPolicy(actionName);
+
     if (!policy.allowedRoles.includes(role)) {
       throw new Error("Forbidden: Action policy denied");
     }
+
     const data = await fn({ adminUserId: dbUserId, adminRole: role });
+
     return {
       success: true,
       data,
       timestamp: new Date().toISOString(),
     };
   } catch (error) {
-    console.error(`[AdminAction: ${actionName}] Error:`, error);
     const message =
       error instanceof Error ? error.message : "An unexpected error occurred";
-    return { success: false, error: message };
+
+    return {
+      success: false,
+      error: message,
+      timestamp: new Date().toISOString(),
+    };
   }
 }
 
-/**
- * Wrapper for verification actions that allows both admin and verification_admin roles.
- * Returns a consistent ActionResponse<T> shape and includes admin context.
- */
 export async function safeVerificationAction<T>(
   actionName: string,
   fn: (context: {
@@ -186,26 +241,30 @@ export async function safeVerificationAction<T>(
   try {
     const { dbUserId, role } = await assertVerificationAdmin();
     const policy = getAdminActionPolicy(actionName);
+
     if (!policy.allowedRoles.includes(role)) {
       throw new Error("Forbidden: Action policy denied");
     }
+
     const data = await fn({ adminUserId: dbUserId, adminRole: role });
+
     return {
       success: true,
       data,
       timestamp: new Date().toISOString(),
     };
   } catch (error) {
-    console.error(`[VerificationAction: ${actionName}] Error:`, error);
     const message =
       error instanceof Error ? error.message : "An unexpected error occurred";
-    return { success: false, error: message };
+
+    return {
+      success: false,
+      error: message,
+      timestamp: new Date().toISOString(),
+    };
   }
 }
 
-/**
- * Helper to log an admin action into the database.
- */
 export async function logAdminAction(data: {
   userId: string;
   action: string;
@@ -214,6 +273,26 @@ export async function logAdminAction(data: {
   details?: unknown;
   reason?: string;
 }) {
+  const user = await prisma.user.findUnique({
+    where: { id: data.userId },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      adminProfile: {
+        select: {
+          role: true,
+        },
+      },
+    },
+  });
+
+  if (!user) {
+    return;
+  }
+
   const immutableDetails = {
     ...(typeof data.details === "object" && data.details
       ? (data.details as Record<string, unknown>)
@@ -225,19 +304,6 @@ export async function logAdminAction(data: {
     },
   };
 
-  const user = await prisma.user.findUnique({
-    where: { id: data.userId },
-    select: {
-      id: true,
-      email: true,
-      firstName: true,
-      lastName: true,
-      role: true,
-    },
-  });
-
-  if (!user) return; // Silently fail if admin not found
-
   await prisma.adminAuditLog.create({
     data: {
       adminId: user.id,
@@ -245,7 +311,9 @@ export async function logAdminAction(data: {
         [user.firstName, user.lastName].filter(Boolean).join(" ") ||
         "System Admin",
       adminEmail: user.email,
-      adminRole: user.role,
+      adminRole: user.adminProfile?.role
+        ? String(user.adminProfile.role)
+        : String(user.role),
       action: data.action,
       targetType: data.targetType,
       targetId: data.targetId,
@@ -255,10 +323,6 @@ export async function logAdminAction(data: {
   });
 }
 
-// ============================================================================
-// Client API Helpers
-// ============================================================================
-
 interface ClientApiOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: Record<string, unknown>;
@@ -266,10 +330,6 @@ interface ClientApiOptions {
   timeout?: number;
 }
 
-/**
- * Makes authenticated requests to the client app API.
- * Includes proper error handling and timeout support.
- */
 export async function callClientApi<T>(
   endpoint: string,
   options: ClientApiOptions = {},
@@ -298,15 +358,17 @@ export async function callClientApi<T>(
     const response = await fetch(url, fetchOptions);
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await response
+        .json()
+        .catch(() => ({ error: undefined, message: undefined }));
       throw new Error(
-        errorData.error ||
-          errorData.message ||
+        (errorData as { error?: string; message?: string }).error ||
+          (errorData as { error?: string; message?: string }).message ||
           `API request failed with status ${response.status}`,
       );
     }
 
-    return await response.json();
+    return (await response.json()) as T;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(`Request to ${endpoint} timed out after ${timeout}ms`);

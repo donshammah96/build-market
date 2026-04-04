@@ -5,7 +5,7 @@ applyTo: "apps/client/app/api/**"
 
 # Client API Adapter Boundary
 
-Last aligned with canonical on: 2026-03-30.
+Last aligned with canonical on: 2026-04-04.
 
 ## Scope
 

@@ -4,7 +4,7 @@ applyTo: "apps/client/app/lib/domains/**"
 ---
 
 # Client Domain Layer Rules
-Last aligned with canonical on: 2026-03-30.
+Last aligned with canonical on: 2026-04-04.
 
 ## Scope
 

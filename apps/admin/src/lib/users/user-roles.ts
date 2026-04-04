@@ -4,7 +4,6 @@ export const ASSIGNABLE_USER_ROLES = [
   "CLIENT",
   "PROFESSIONAL",
   "ADMIN",
-  "SUPPORT",
 ] as const satisfies readonly UserRole[];
 
 export type AssignableUserRole = (typeof ASSIGNABLE_USER_ROLES)[number];

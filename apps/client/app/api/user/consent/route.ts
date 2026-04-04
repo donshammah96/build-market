@@ -444,16 +444,18 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     logger.info("Bulk consent update completed", {
       totalCount: consents.length,
-      successCount: result.data.data.results.filter((item) => item.success)
-        .length,
-      allSuccessful: result.data.data.success,
+      successCount: result.data.data.results.length,
+      allSuccessful: true,
       correlationId,
       operationName: "bulk-update-user-consents",
-      outcome: result.data.data.success ? "succeeded" : "partial_success",
+      outcome: "succeeded",
     });
 
     if (!result.data.data.success) {
-      return apiSuccess(result.data.data, HttpStatus.MULTI_STATUS || 207);
+      return apiError(
+        "Failed to update consent preferences atomically. Please try again.",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
     return apiSuccess(result.data.data, HttpStatus.OK);

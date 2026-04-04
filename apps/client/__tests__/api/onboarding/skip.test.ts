@@ -3,16 +3,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { POST } from "@/app/api/onboarding/skip/route";
 
 const mockSkipClientOnboarding = vi.hoisted(() => vi.fn());
+const mockLoggerInfo = vi.hoisted(() => vi.fn());
+const mockLoggerWarn = vi.hoisted(() => vi.fn());
+const mockLoggerError = vi.hoisted(() => vi.fn());
+const mockLoggerDebug = vi.hoisted(() => vi.fn());
+const mockCurrentUserRole = vi.hoisted(() => ({
+  value: undefined as "CLIENT" | "PROFESSIONAL" | "ADMIN" | undefined,
+}));
 
 vi.mock("@clerk/nextjs/server", () => ({
   auth: vi.fn().mockResolvedValue({ userId: "clerk_123" }),
-  currentUser: vi.fn().mockResolvedValue({
+  currentUser: vi.fn().mockImplementation(async () => ({
     id: "clerk_123",
     emailAddresses: [{ emailAddress: "test@example.com" }],
     firstName: "John",
     lastName: "Doe",
     phoneNumbers: [{ phoneNumber: "+1234567890" }],
-  }),
+    publicMetadata: mockCurrentUserRole.value
+      ? { role: mockCurrentUserRole.value }
+      : {},
+  })),
   clerkClient: vi.fn().mockResolvedValue({
     users: {
       updateUserMetadata: vi.fn().mockResolvedValue({}),
@@ -45,10 +55,10 @@ vi.mock("@/app/lib/api/resilient-api", () => ({
     }),
   }),
   getClientLogger: vi.fn().mockReturnValue({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
+    info: mockLoggerInfo,
+    warn: mockLoggerWarn,
+    error: mockLoggerError,
+    debug: mockLoggerDebug,
   }),
 }));
 
@@ -65,6 +75,7 @@ vi.mock("@/app/lib/api/api-response", () => ({
     OK: 200,
     BAD_REQUEST: 400,
     UNAUTHORIZED: 401,
+    FORBIDDEN: 403,
     CONFLICT: 409,
     TOO_MANY_REQUESTS: 429,
     INTERNAL_SERVER_ERROR: 500,
@@ -89,6 +100,7 @@ vi.mock("@/app/lib/domains/user-profile", () => ({
 describe("POST /api/onboarding/skip", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCurrentUserRole.value = undefined;
     mockSkipClientOnboarding.mockResolvedValue({
       ok: true,
       data: {
@@ -120,8 +132,28 @@ describe("POST /api/onboarding/skip", () => {
         actor: {
           clerkId: "clerk_123",
           correlationId: "test-correlation-id",
-          role: "client",
+          role: "CLIENT",
         },
+      }),
+    );
+
+    const terminalOutcomeCall = mockLoggerInfo.mock.calls.find(
+      ([message, payload]) =>
+        message === "Onboarding adapter outcome" &&
+        (payload as { outcome?: string }).outcome === "succeeded",
+    );
+
+    expect(terminalOutcomeCall).toBeDefined();
+    expect(terminalOutcomeCall?.[1]).toEqual(
+      expect.objectContaining({
+        correlationId: "test-correlation-id",
+        operationName: "skip_onboarding",
+        httpMethod: "POST",
+        routePattern: "/api/onboarding/skip",
+        actorRole: "CLIENT",
+        outcome: "succeeded",
+        httpStatus: 200,
+        durationMs: expect.any(Number),
       }),
     );
   });
@@ -179,6 +211,59 @@ describe("POST /api/onboarding/skip", () => {
 
     expect(response.status).toBe(401);
     expect(data.error).toContain("Unauthorized");
+
+    const unauthorizedOutcomeCall = mockLoggerInfo.mock.calls.find(
+      ([message, payload]) =>
+        message === "Onboarding adapter outcome" &&
+        (payload as { outcome?: string }).outcome === "unauthorized",
+    );
+
+    expect(unauthorizedOutcomeCall).toBeDefined();
+    expect(unauthorizedOutcomeCall?.[1]).toEqual(
+      expect.objectContaining({
+        operationName: "skip_onboarding",
+        httpMethod: "POST",
+        routePattern: "/api/onboarding/skip",
+        actorRole: "unknown",
+        outcome: "unauthorized",
+        httpStatus: 401,
+        durationMs: expect.any(Number),
+      }),
+    );
+  });
+
+  it("rejects metadata role mismatch for client skip route", async () => {
+    mockCurrentUserRole.value = "PROFESSIONAL";
+
+    const response = await POST(
+      new NextRequest("http://localhost:3500/api/onboarding/skip", {
+        method: "POST",
+      }),
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(data.error).toContain("Forbidden");
+    expect(mockSkipClientOnboarding).not.toHaveBeenCalled();
+
+    const forbiddenOutcomeCall = mockLoggerInfo.mock.calls.find(
+      ([message, payload]) =>
+        message === "Onboarding adapter outcome" &&
+        (payload as { outcome?: string }).outcome === "forbidden",
+    );
+
+    expect(forbiddenOutcomeCall).toBeDefined();
+    expect(forbiddenOutcomeCall?.[1]).toEqual(
+      expect.objectContaining({
+        operationName: "skip_onboarding",
+        httpMethod: "POST",
+        routePattern: "/api/onboarding/skip",
+        actorRole: "PROFESSIONAL",
+        outcome: "forbidden",
+        httpStatus: 403,
+        durationMs: expect.any(Number),
+      }),
+    );
   });
 
   it("respects rate limiting", async () => {

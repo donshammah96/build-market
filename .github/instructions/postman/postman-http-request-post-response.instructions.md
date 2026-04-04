@@ -3,7 +3,7 @@ description: "Use for Postman HTTP-request-level post-response test script gener
 applyTo: "**/*-post-r-pm-*"
 ---
 
-Last aligned with canonical on: 2026-03-30.
+Last aligned with canonical on: 2026-04-04.
 
 ## Instructions
 

@@ -33,7 +33,8 @@ export type ProfileCompleteTarget = "client" | "professional";
 export type ProfileCompleteErrorCode =
   | "not_found"
   | "forbidden"
-  | "unsupported_role";
+  | "unsupported_role"
+  | "internal";
 
 export type ProfileCompleteDomainResult<T> = Result<
   T,
@@ -308,7 +309,16 @@ export async function completeClientProfile(
 
   // Sync runs after commit; failure must not roll back the profile update.
   // syncUserProfileCompletionStatus is a derived read-model concern.
-  const completion = await syncUserProfileCompletionStatus(actor.userId);
+  const completionResult = await syncUserProfileCompletionStatus(actor.userId);
+  if (!completionResult.ok) {
+    return err({
+      error:
+        completionResult.error === "not_found" ? "not_found" : "internal",
+      message: completionResult.message,
+      status: completionResult.status,
+    });
+  }
+  const completion = completionResult.data;
 
   return ok(
     mapProfileCompleteResponse({
@@ -664,7 +674,16 @@ export async function completeProfessionalProfile(
 
   // Sync runs after commit; failure must not roll back the profile update.
   // The completion percentage is a derived read-model concern.
-  const completion = await syncUserProfileCompletionStatus(actor.userId);
+  const completionResult = await syncUserProfileCompletionStatus(actor.userId);
+  if (!completionResult.ok) {
+    return err({
+      error:
+        completionResult.error === "not_found" ? "not_found" : "internal",
+      message: completionResult.message,
+      status: completionResult.status,
+    });
+  }
+  const completion = completionResult.data;
 
   return ok(
     mapProfileCompleteResponse({

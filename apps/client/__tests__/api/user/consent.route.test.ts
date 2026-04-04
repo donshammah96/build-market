@@ -181,7 +181,7 @@ describe("/api/user/consent route", () => {
     expect(payload.data.total).toBe(2);
   });
 
-  it("returns multi-status for partial bulk consent updates", async () => {
+  it("returns internal error when bulk consent update is not fully successful", async () => {
     mockBulkUpdateConsents.mockResolvedValue({
       ok: true,
       data: {
@@ -206,7 +206,7 @@ describe("/api/user/consent route", () => {
     );
     const payload = await response.json();
 
-    expect(response.status).toBe(207);
+    expect(response.status).toBe(500);
     expect(mockBulkUpdateConsents).toHaveBeenCalledWith({
       actor: { userId: "db_user_123", correlationId: "test-correlation-id" },
       consents: [
@@ -215,7 +215,7 @@ describe("/api/user/consent route", () => {
       ],
       ipAddress: "10.0.0.5",
     });
-    expect(payload.data.success).toBe(false);
+    expect(payload.error).toContain("atomically");
   });
 
   it("maps rate-limit rejections before executing consent mutations", async () => {

@@ -10,7 +10,7 @@ import type { ApiResponse, OnboardingData } from "@build/types";
 
 export type OnboardingSubmitPayload = {
   userId: string;
-  role: string;
+  role: "CLIENT" | "PROFESSIONAL";
   isProfileComplete: boolean;
 };
 
@@ -19,9 +19,7 @@ export const onboardingClient = {
    * Complete the user onboarding process
    * Equivalent to `submitOnboarding`
    */
-  async submit(
-    data: OnboardingData & { clerkId?: string },
-  ): Promise<ApiResponse<OnboardingSubmitPayload>> {
+  async submit(data: OnboardingData): Promise<ApiResponse<OnboardingSubmitPayload>> {
     return apiFetch<OnboardingSubmitPayload>(API_ROUTES.onboarding, {
       method: "POST",
       body: JSON.stringify(data),
@@ -92,14 +90,14 @@ export const onboardingClient = {
   async skipClient(): Promise<
     ApiResponse<{
       userId: string;
-      role: string;
+      role: "CLIENT" | "PROFESSIONAL";
       isProfileComplete: boolean;
       redirectTo: string;
     }>
   > {
     return apiFetch<{
       userId: string;
-      role: string;
+      role: "CLIENT" | "PROFESSIONAL";
       isProfileComplete: boolean;
       redirectTo: string;
     }>(API_ROUTES.onboardingSkip, { method: "POST" });
@@ -112,14 +110,14 @@ export const onboardingClient = {
   async skipProfessional(): Promise<
     ApiResponse<{
       userId: string;
-      role: string;
+      role: "CLIENT" | "PROFESSIONAL";
       isProfileComplete: boolean;
       redirectTo: string;
     }>
   > {
     return apiFetch<{
       userId: string;
-      role: string;
+      role: "CLIENT" | "PROFESSIONAL";
       isProfileComplete: boolean;
       redirectTo: string;
     }>(API_ROUTES.onboardingSkipProfessional, { method: "POST" });

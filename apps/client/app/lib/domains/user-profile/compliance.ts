@@ -136,45 +136,150 @@ export const userProfileComplianceService = {
       }>;
     }>
   > {
-    const results: Array<{
-      type: ConsentType;
-      granted: boolean;
-      success: boolean;
-    }> = [];
+    try {
+      const results = await prisma.$transaction(
+        async (tx) => {
+          const actor = await tx.user.findUnique({
+            where: { id: input.actor.userId },
+            select: {
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
+          });
 
-    for (const consent of input.consents) {
-      try {
-        await ConsentService.updateConsent(
-          input.actor.userId,
-          consent.type,
-          consent.granted,
-          input.ipAddress,
-          consent.documentVersion,
-        );
-        results.push({
-          type: consent.type,
-          granted: consent.granted,
-          success: true,
-        });
-      } catch {
-        results.push({
-          type: consent.type,
-          granted: consent.granted,
-          success: false,
-        });
+          if (!actor) {
+            throw new Error("USER_NOT_FOUND");
+          }
+
+          const transactionResults: Array<{
+            type: ConsentType;
+            granted: boolean;
+            success: boolean;
+          }> = [];
+
+          for (const consent of input.consents) {
+            try {
+              const consentRecord = await tx.consentRecord.upsert({
+                where: {
+                  userId_type: {
+                    userId: input.actor.userId,
+                    type: consent.type,
+                  },
+                },
+                update: {
+                  granted: consent.granted,
+                  withdrawnAt: consent.granted ? null : new Date(),
+                  grantedAt: consent.granted ? new Date() : undefined,
+                  ipAddress: input.ipAddress,
+                  documentVersion: consent.documentVersion ?? "v1.0",
+                },
+                create: {
+                  userId: input.actor.userId,
+                  type: consent.type,
+                  granted: consent.granted,
+                  grantedAt: new Date(),
+                  withdrawnAt: consent.granted ? null : new Date(),
+                  ipAddress: input.ipAddress,
+                  documentVersion: consent.documentVersion ?? "v1.0",
+                },
+              });
+
+              const userUpdates: Prisma.UserUpdateInput = {};
+              if (consent.type === "MARKETING_EMAIL") {
+                userUpdates.emailMarketingConsent = consent.granted;
+                userUpdates.marketingConsent = consent.granted;
+              }
+              if (consent.type === "MARKETING_SMS") {
+                userUpdates.smsMarketingConsent = consent.granted;
+              }
+              if (consent.type === "ANALYTICS_COOKIES") {
+                userUpdates.analyticsConsent = consent.granted;
+              }
+
+              if (Object.keys(userUpdates).length > 0) {
+                if (
+                  !consent.granted &&
+                  (consent.type === "MARKETING_EMAIL" ||
+                    consent.type === "MARKETING_SMS")
+                ) {
+                  userUpdates.marketingConsentWithdrawnAt = new Date();
+                }
+
+                await tx.user.update({
+                  where: { id: input.actor.userId },
+                  data: userUpdates,
+                });
+              }
+
+              await tx.auditLog.create({
+                data: {
+                  actorId: input.actor.userId,
+                  actorType: "USER",
+                  actorEmail: actor.email,
+                  actorFirstName: actor.firstName,
+                  actorLastName: actor.lastName,
+                  action: consent.granted
+                    ? "CONSENT_GRANTED"
+                    : "CONSENT_WITHDRAWN",
+                  entityType: "ConsentRecord",
+                  entityId: consentRecord.id,
+                  legalBasis: "CONSENT",
+                  consentId: consentRecord.id,
+                  metadata: {
+                    type: consent.type,
+                    ipAddress: input.ipAddress,
+                    documentVersion: consent.documentVersion ?? "v1.0",
+                    correlationId: input.actor.correlationId,
+                    source: "bulk_update_consents",
+                  },
+                },
+              });
+
+              transactionResults.push({
+                type: consent.type,
+                granted: consent.granted,
+                success: true,
+              });
+            } catch {
+              throw new Error(`CONSENT_UPDATE_FAILED:${consent.type}`);
+            }
+          }
+
+          return transactionResults;
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      );
+
+      return ok({
+        success: true,
+        message: `All ${results.length} consent preferences have been saved`,
+        results,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+
+      if (message === "USER_NOT_FOUND") {
+        return domainError("not_found", "User not found", 404);
       }
+
+      if (message.startsWith("CONSENT_UPDATE_FAILED:")) {
+        const failedType = message.split(":")[1] ?? "UNKNOWN";
+        return domainError(
+          "internal",
+          `Failed to update consent preferences atomically (failed at ${failedType})`,
+          500,
+        );
+      }
+
+      return domainError(
+        "internal",
+        "Failed to update consent preferences atomically",
+        500,
+      );
     }
-
-    const successCount = results.filter((item) => item.success).length;
-    const allSuccessful = successCount === results.length;
-
-    return ok({
-      success: allSuccessful,
-      message: allSuccessful
-        ? `All ${results.length} consent preferences have been saved`
-        : `Partially updated: ${successCount}/${results.length} consents saved`,
-      results,
-    });
   },
 
   async requestExport(input: {

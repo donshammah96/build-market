@@ -1,8 +1,13 @@
 # Progress Summary
 
-Last updated: 2026-04-02
+Last updated: 2026-04-04
 
 ## Snapshot
+
+- ADR-007 section-5 (`ClientType` handling) is now implemented in the onboarding domain surface: client onboarding and client skip flows derive canonical client-type routing, persist profile-level `ClientType`, and store dedicated compliance-routing metadata for `GOVERNMENT_ENTITY` project-creation and payment-initiation policy checks.
+- Onboarding high-risk tranche is now closed for this pass: compliance consent updates and completion synchronization now follow explicit transaction-safe and `Result<T, DomainError>` semantics across onboarding and profile-complete callers.
+- Onboarding observability contracts are now explicit and test-enforced at both adapter and middleware boundaries: terminal onboarding route logs and onboarding-resolver fallback or resolution logs emit stable structured fields for operations monitoring.
+- Onboarding trust boundaries are tighter at the browser edge: submit payloads no longer carry client-provided `clerkId`, and validation failure logging is restricted to safe field-path arrays.
 
 - ADR-007 client-first rollout is now active in the client app boundary: middleware and onboarding resolution are status-aware (`ONBOARDING`, `PENDING_VERIFICATION`), the dedicated pending-verification route is live at `/professional-portal/pending-verification`, and internal user-status resolution now returns explicit status for redirect decisions.
 - Role-model normalization has started on client adapters: trust-boundary role normalization now collapses legacy `SUPPORT` claims into the canonical admin container role path, and secure-action plus API middleware actor handling aligns with `ADMIN + AdminRole` capability gating.
@@ -134,6 +139,16 @@ ADR-007 admin-path migration checklist (staff-level):
 
 ## Completed In This Pass
 
+- Added `app/lib/domains/user-profile/client-type-compliance.ts` as a dedicated domain helper for ClientType normalization, onboarding branch selection, and procurement-compliance routing policy derivation.
+- Updated `app/lib/domains/user-profile/onboarding.ts` client flow to persist canonical `ClientProfile.type`, carry corporate/government registration fields, and write structured compliance-routing metadata into client profile preferences (`standard_client` vs `government_entity` with project/payment routing policy keys).
+- Updated client skip onboarding to seed deterministic default client-type and compliance-routing metadata rather than empty preference payloads.
+- Added focused domain coverage in `__tests__/lib/domains/user-profile-client-type-compliance.test.ts` for normalization, government-entity missing-field detection, readiness status, and preferences merge behavior.
+- Closed the onboarding compliance and completion semantics tranche by aligning consent and completion orchestration to explicit transaction-safe domain-result behavior, and by preserving explicit caller mapping through the onboarding and profile-complete surfaces.
+- Added structured onboarding resolver instrumentation in `app/lib/security/middleware/onboarding-resolver.ts` for fallback and resolved outcomes (including `operationName`, `outcome`, `reason`, `source`, `state`, `confidence`, `mode`, `httpStatus` when available, and `durationMs`).
+- Expanded observability contract tests for every onboarding terminal path: `__tests__/api/onboarding/route.test.ts`, `__tests__/api/onboarding/professional-complete.route.test.ts`, `__tests__/api/onboarding/skip.test.ts`, and `__tests__/api/onboarding/skip-professional.test.ts` now assert structured terminal outcome fields for success and unauthorized or bad-request outcomes.
+- Added resolver-focused instrumentation assertions in `__tests__/lib/middleware-resolvers.test.ts` for missing-secret fallback, non-OK internal API fallback, and successful internal API resolution.
+- Fixed the professional-complete adapter test status mock contract by including missing `HttpStatus.OK` and `HttpStatus.UNAUTHORIZED` in `__tests__/api/onboarding/professional-complete.route.test.ts`, preventing undefined logged status in success assertions.
+
 - Hardened the route-based dashboard visual spec (`cypress/e2e/professional-dashboard-visual.cy.ts`) by aligning profession mocks with runtime grouping (`GENERAL_CONTRACTOR`, `HARDWARE`, `REAL_ESTATE_AGENT`) and adding required nested `client.id` fields on `/api/projects` mocked items to satisfy strict projects client schema parsing.
 - Re-ran the professional dashboard visual spec and validated distinct widget compositions for service-provider, seller-store, and seller-property on both target viewports (`1366x1024`, `390x844`) with no projects-shape error banner in the final inspected captures.
 
@@ -262,6 +277,11 @@ ADR-007 admin-path migration checklist (staff-level):
 - Added focused adapter regression coverage in `__tests__/api/notifications/route.test.ts`, `__tests__/api/notifications/notification-id.route.test.ts`, and `__tests__/api/professional-portal/seller-insights-adapters.route.test.ts` for domain delegation and HTTP error mapping.
 
 ## Verification
+
+- ADR-007 section-5 focused domain suite: `pnpm -C apps/client exec vitest run __tests__/lib/domains/user-profile-client-type-compliance.test.ts --reporter=verbose` passed (`1/1` file, `5/5` tests).
+- Onboarding adapter regression run after ClientType routing update: `pnpm -C apps/client exec vitest run __tests__/api/onboarding/route.test.ts __tests__/api/onboarding/skip.test.ts __tests__/api/onboarding/skip-professional.test.ts __tests__/api/onboarding/professional-complete.route.test.ts` passed (`4/4` files, `28/28` tests).
+- Onboarding observability and resolver regression run: `pnpm -C apps/client exec vitest run __tests__/api/onboarding/route.test.ts __tests__/api/onboarding/professional-complete.route.test.ts __tests__/api/onboarding/skip.test.ts __tests__/api/onboarding/skip-professional.test.ts __tests__/lib/middleware-resolvers.test.ts` passed (`5/5` files, `32/32` tests).
+- Client type baseline remains green after this pass: `pnpm -C apps/client exec tsc --noEmit` completed with exit code `0`.
 
 - UI overhaul audit gates (2026-03-29, rerun after focused normalization fixes): `pnpm run client:tsc-noemit` completed without diagnostics; `pnpm run client:test:dashboard-hook` passed (`7/7`); `pnpm run client:test:browser-hook-sweep` passed (`15/15`); `pnpm run client:test:dashboard-browser-clients` passed (`6/6`).
 - Dashboard visual e2e suite: `pnpm -C apps/client exec cypress run --spec "cypress/e2e/professional-dashboard-visual.cy.ts" --browser electron --reporter spec` produced `3/3` passing tests and `6` screenshots (`service-provider`, `seller-store`, `seller-property` x desktop/mobile).

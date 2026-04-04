@@ -1,11 +1,9 @@
 import { Suspense } from "react";
 import { getPendingVerifications, getVerificationStats } from "@/actions/admin";
 import { getAdminPermissions } from "@/actions/admin/shared";
-import { getAdminPermissions } from "@/actions/admin/shared";
 import type { VerificationStatus } from "@/actions/admin/types";
 import { VerificationStatsCards } from "@/components/admin/verification/VerificationStatsCards";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ActionErrorState } from "@/components/ui/action-error-state";
 import { ActionErrorState } from "@/components/ui/action-error-state";
 import { VerificationQueueWrapper } from "@/app/(dashboard)/verifications/VerificationQueueWrapper";
 
@@ -61,7 +59,6 @@ export default async function VerificationsPage({
       page,
       limit: 20,
     }),
-    getAdminPermissions(),
     getAdminPermissions(),
   ]);
 

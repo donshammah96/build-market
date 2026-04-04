@@ -88,13 +88,6 @@ export default clerkMiddleware(async (auth, req: Request) => {
             reason: settingsResult.reason,
           },
         );
-        logMiddlewareDecision(
-          nextReq,
-          "mw_redirect_professional_signup_closed",
-          {
-            reason: settingsResult.reason,
-          },
-        );
         return redirectToProfessionalSignupClosed(nextReq);
       }
     }

@@ -5,7 +5,7 @@ applyTo: "apps/client/__tests__/**"
 
 # Client Test Risk Coverage
 
-Last aligned with canonical on: 2026-03-30.
+Last aligned with canonical on: 2026-04-04.
 
 ## Scope
 

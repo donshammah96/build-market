@@ -33,9 +33,10 @@ vi.mock("@build/db", () => ({
     CLIENT: "CLIENT",
     PROFESSIONAL: "PROFESSIONAL",
     ADMIN: "ADMIN",
-    SUPPORT: "SUPPORT",
   },
   UserStatus: {
+    ONBOARDING: "ONBOARDING",
+    PENDING_VERIFICATION: "PENDING_VERIFICATION",
     ACTIVE: "ACTIVE",
     SUSPENDED: "SUSPENDED",
     BANNED: "BANNED",
@@ -48,7 +49,6 @@ vi.mock("@build/db", () => ({
     SUPPORT_AGENT: "SUPPORT_AGENT",
     FINANCE_MANAGER: "FINANCE_MANAGER",
     AUDITOR: "AUDITOR",
-    SYSTEM_ADMIN: "SYSTEM_ADMIN",
   },
 }));
 
@@ -635,7 +635,9 @@ describe("API Middleware", () => {
         .fn()
         .mockResolvedValue(NextResponse.json({ success: true }));
 
-      const wrappedHandler = withRole(["ADMIN", "SUPPORT"] as any)(mockHandler);
+      const wrappedHandler = withRole(["ADMIN", "PROFESSIONAL"] as any)(
+        mockHandler,
+      );
       const request = new NextRequest("http://localhost:3500/test");
 
       const response = await wrappedHandler(request);
@@ -684,20 +686,6 @@ describe("API Middleware", () => {
       const wrappedHandler = withAdminRole(["FINANCE_MANAGER"] as any)(
         mockHandler,
       );
-      const request = new NextRequest("http://localhost:3500/test");
-
-      const response = await wrappedHandler(request);
-      expect(response.status).toBe(200);
-      expect(mockHandler).toHaveBeenCalled();
-    });
-
-    it("should allow SYSTEM_ADMIN to bypass any admin role check", async () => {
-      await setupAdmin("SYSTEM_ADMIN");
-
-      const mockHandler = vi
-        .fn()
-        .mockResolvedValue(NextResponse.json({ success: true }));
-      const wrappedHandler = withAdminRole(["AUDITOR"] as any)(mockHandler);
       const request = new NextRequest("http://localhost:3500/test");
 
       const response = await wrappedHandler(request);

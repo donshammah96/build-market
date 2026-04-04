@@ -3,7 +3,7 @@ description: "Use for Postman folder-level pre-request script generation files."
 applyTo: "**/*-pre-f-pm-*"
 ---
 
-Last aligned with canonical on: 2026-03-30.
+Last aligned with canonical on: 2026-04-04.
 
 ## Instructions
 

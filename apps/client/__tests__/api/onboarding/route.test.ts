@@ -3,6 +3,10 @@ import { POST } from "@/app/api/onboarding/route";
 import { NextRequest, NextResponse } from "next/server";
 
 const mockCompleteOnboarding = vi.hoisted(() => vi.fn());
+const mockLoggerInfo = vi.hoisted(() => vi.fn());
+const mockLoggerWarn = vi.hoisted(() => vi.fn());
+const mockLoggerError = vi.hoisted(() => vi.fn());
+const mockLoggerDebug = vi.hoisted(() => vi.fn());
 
 // Mock Clerk - the new implementation uses auth() and currentUser() directly
 vi.mock("@clerk/nextjs/server", () => ({
@@ -41,10 +45,10 @@ vi.mock("@/app/lib/api/resilient-api", () => ({
     }),
   }),
   getClientLogger: vi.fn().mockReturnValue({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
+    info: mockLoggerInfo,
+    warn: mockLoggerWarn,
+    error: mockLoggerError,
+    debug: mockLoggerDebug,
   }),
 }));
 
@@ -130,9 +134,29 @@ describe("POST /api/onboarding", () => {
         actor: {
           clerkId: "clerk_123",
           correlationId: "test-correlation-id",
-          role: "client",
+          role: "CLIENT",
         },
         data: expect.objectContaining({ role: "client" }),
+      }),
+    );
+
+    const terminalOutcomeCall = mockLoggerInfo.mock.calls.find(
+      ([message, payload]) =>
+        message === "Onboarding adapter outcome" &&
+        (payload as { outcome?: string }).outcome === "succeeded",
+    );
+
+    expect(terminalOutcomeCall).toBeDefined();
+    expect(terminalOutcomeCall?.[1]).toEqual(
+      expect.objectContaining({
+        correlationId: "test-correlation-id",
+        operationName: "complete_onboarding",
+        httpMethod: "POST",
+        routePattern: "/api/onboarding",
+        actorRole: "CLIENT",
+        outcome: "succeeded",
+        httpStatus: 200,
+        durationMs: expect.any(Number),
       }),
     );
   });
@@ -187,6 +211,31 @@ describe("POST /api/onboarding", () => {
     expect(data.error).toContain("Validation failed");
   });
 
+  it("logs validation errors as field paths only", async () => {
+    const request = new NextRequest("http://localhost:3500/api/onboarding", {
+      method: "POST",
+      body: JSON.stringify({ role: "client" }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(400);
+
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      "Onboarding validation failed",
+      expect.objectContaining({
+        errors: expect.arrayContaining(["county"]),
+      }),
+    );
+
+    const warnCall = mockLoggerWarn.mock.calls.at(-1);
+    const loggedErrors = (warnCall?.[1] as { errors?: unknown[] } | undefined)
+      ?.errors;
+    expect(Array.isArray(loggedErrors)).toBe(true);
+    expect(
+      (loggedErrors ?? []).every((error) => typeof error === "string"),
+    ).toBe(true);
+  });
+
   it("should reject unauthenticated requests", async () => {
     const { auth } = await import("@clerk/nextjs/server");
     vi.mocked(auth).mockResolvedValueOnce({ userId: null } as Awaited<
@@ -203,6 +252,25 @@ describe("POST /api/onboarding", () => {
 
     expect(response.status).toBe(401);
     expect(data.error).toContain("Unauthorized");
+
+    const unauthorizedOutcomeCall = mockLoggerInfo.mock.calls.find(
+      ([message, payload]) =>
+        message === "Onboarding adapter outcome" &&
+        (payload as { outcome?: string }).outcome === "unauthorized",
+    );
+
+    expect(unauthorizedOutcomeCall).toBeDefined();
+    expect(unauthorizedOutcomeCall?.[1]).toEqual(
+      expect.objectContaining({
+        operationName: "complete_onboarding",
+        httpMethod: "POST",
+        routePattern: "/api/onboarding",
+        actorRole: "unknown",
+        outcome: "unauthorized",
+        httpStatus: 401,
+        durationMs: expect.any(Number),
+      }),
+    );
   });
 
   it("should respect rate limiting", async () => {
