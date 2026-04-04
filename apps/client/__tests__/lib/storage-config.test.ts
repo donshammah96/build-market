@@ -1,12 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { mockEnv } = vi.hoisted(() => ({
+  mockEnv: {
+    isProd: false,
+    appUrl: "https://app.buildmarket.test",
+    apiUrl: "https://api.buildmarket.test",
+    storage: {
+      provider: "local" as const,
+      localPath: "./tmp/storage-config-test",
+      bucket: undefined,
+      assetBucket: undefined,
+      region: "af-south-1",
+      cdnUrl: "/uploads",
+      accessKeyId: undefined,
+      secretAccessKey: undefined,
+    },
+  },
+}));
+
+vi.mock("@/app/lib/infrastructure/env", () => ({
+  env: mockEnv,
+}));
+
 import { createStorageProvider } from "@/app/lib/infrastructure/storage";
 
 describe("storage configuration invariants", () => {
   beforeEach(() => {
-    vi.unstubAllEnvs();
-    vi.stubEnv("NODE_ENV", "test");
-    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://app.buildmarket.test");
-    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.buildmarket.test");
+    mockEnv.isProd = false;
+    mockEnv.appUrl = "https://app.buildmarket.test";
+    mockEnv.apiUrl = "https://api.buildmarket.test";
   });
 
   it("allows local storage in non-production environments", () => {
@@ -20,7 +42,7 @@ describe("storage configuration invariants", () => {
   });
 
   it("blocks the local storage provider in production", () => {
-    vi.stubEnv("NODE_ENV", "production");
+    mockEnv.isProd = true;
 
     expect(() =>
       createStorageProvider({
@@ -31,7 +53,7 @@ describe("storage configuration invariants", () => {
   });
 
   it("blocks relative upload origins in production", () => {
-    vi.stubEnv("NODE_ENV", "production");
+    mockEnv.isProd = true;
 
     expect(() =>
       createStorageProvider({
@@ -43,7 +65,7 @@ describe("storage configuration invariants", () => {
   });
 
   it("blocks same-origin upload delivery in production", () => {
-    vi.stubEnv("NODE_ENV", "production");
+    mockEnv.isProd = true;
 
     expect(() =>
       createStorageProvider({
@@ -55,7 +77,7 @@ describe("storage configuration invariants", () => {
   });
 
   it("requires a bucket for remote storage providers", () => {
-    vi.stubEnv("NODE_ENV", "production");
+    mockEnv.isProd = true;
 
     expect(() =>
       createStorageProvider({
@@ -67,7 +89,7 @@ describe("storage configuration invariants", () => {
   });
 
   it("allows a fully configured S3 provider in production", () => {
-    vi.stubEnv("NODE_ENV", "production");
+    mockEnv.isProd = true;
 
     const provider = createStorageProvider({
       provider: "s3",

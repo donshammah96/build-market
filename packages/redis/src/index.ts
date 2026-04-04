@@ -1,3 +1,3 @@
-export * from "./client";
-export * from "./cache";
-export * from "./types";
+export * from "./client.js";
+export * from "./cache.js";
+export * from "./types.js";

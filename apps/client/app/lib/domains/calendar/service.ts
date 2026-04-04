@@ -49,7 +49,7 @@ export type CalendarListResult = CalendarEventClientSummary[];
 
 export type CalendarDetailResult = CalendarEventClientDetail;
 
-const PROFESSIONAL_CALENDAR_ROLES = new Set(["professional", "admin"]);
+const PROFESSIONAL_CALENDAR_ROLES = new Set(["PROFESSIONAL", "ADMIN"]);
 
 function mapCalendarSummary(
   event: CalendarListRow,

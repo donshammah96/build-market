@@ -188,8 +188,17 @@ describe("PropertyForm", () => {
         currency: "KES",
         type: "SALE" as const,
         category: "RESIDENTIAL" as const,
+        tenure: "FREEHOLD" as const,
         county: "NAIROBI" as const,
         location: "Westlands",
+        latitude: -1.2921,
+        longitude: 36.8219,
+        bedrooms: 3,
+        bathrooms: 2,
+        buildingSize: 1200,
+        plotSize: 2400,
+        floorPlan: "",
+        videoUrl: "",
         images: ["https://example.com/image.jpg"],
       };
 
@@ -214,8 +223,17 @@ describe("PropertyForm", () => {
         currency: "KES",
         type: "SALE" as const,
         category: "RESIDENTIAL" as const,
+        tenure: "FREEHOLD" as const,
         county: "NAIROBI" as const,
         location: "Kilimani",
+        latitude: -1.3005,
+        longitude: 36.7821,
+        bedrooms: 4,
+        bathrooms: 3,
+        buildingSize: 1800,
+        plotSize: 3200,
+        floorPlan: "",
+        videoUrl: "",
         images: ["https://example.com/image.jpg"],
         imageAssets: [
           {
@@ -278,7 +296,9 @@ describe("PropertyForm", () => {
       fireEvent.click(screen.getByRole("button", { name: /add document/i }));
 
       await waitFor(() => {
-        expect(screen.getByRole("button", { name: /choose file/i })).toBeInTheDocument();
+        expect(
+          screen.getByRole("button", { name: /choose file/i }),
+        ).toBeInTheDocument();
       });
 
       expect(screen.queryByLabelText(/asset id/i)).not.toBeInTheDocument();
@@ -296,10 +316,7 @@ describe("PropertyForm", () => {
       fireEvent.change(fileInput!, { target: { files: [file] } });
 
       await waitFor(() => {
-        expect(mockUploadForCredential).toHaveBeenCalledWith(
-          file,
-          "documents",
-        );
+        expect(mockUploadForCredential).toHaveBeenCalledWith(file, "documents");
       });
 
       await waitFor(() => {

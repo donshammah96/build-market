@@ -4,7 +4,7 @@ import {
   getConnectionStatus,
   getServerInfo,
   isRedisHealthy,
-} from "./index";
+} from "./index.js";
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();

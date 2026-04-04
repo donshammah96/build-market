@@ -63,7 +63,9 @@ describe("portfolioService", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data).toEqual({
-        portfolios: [{ id: "portfolio-2", title: "Urban Build" }],
+        portfolios: [
+          expect.objectContaining({ id: "portfolio-2", title: "Urban Build" }),
+        ],
         pagination: {
           page: 2,
           limit: 5,

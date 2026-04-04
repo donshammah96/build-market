@@ -4,6 +4,11 @@ import { professionalsService } from "@/app/lib/domains/professionals";
 import type { ProfessionalQueryInput } from "@/app/lib/validation/professionals-validation";
 import { ProfessionalQuerySchema } from "@/app/lib/validation/professionals-validation";
 import { isValidId } from "@/app/lib/utils/validators";
+import {
+  createActionFailure,
+  throwActionFailure,
+  unwrapResultOrThrow,
+} from "@/app/lib/actions/secure-action";
 import type {
   ProfessionalListResult,
   ProfessionalDetailResult,
@@ -18,15 +23,20 @@ export async function getProfessionalsAction(
   const parsed = ProfessionalQuerySchema.safeParse(filters ?? {});
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid query parameters");
+    throwActionFailure(
+      createActionFailure(
+        "validation_error",
+        first?.message ?? "Invalid query parameters",
+        400,
+        parsed.error.issues,
+      ),
+    );
   }
 
-  const result = await professionalsService.listProfessionals(parsed.data);
-  if (!result.ok) {
-    throw new Error(result.message ?? "Failed to fetch professionals");
-  }
-
-  return result.data;
+  return unwrapResultOrThrow(
+    await professionalsService.listProfessionals(parsed.data),
+    "Failed to fetch professionals",
+  );
 }
 
 /**
@@ -35,7 +45,11 @@ export async function getProfessionalsAction(
 export async function getProfessionalByIdAction(
   userId: string,
 ): Promise<ProfessionalDetailResult | null> {
-  if (!isValidId(userId)) throw new Error("Invalid professional ID");
+  if (!isValidId(userId)) {
+    throwActionFailure(
+      createActionFailure("validation_error", "Invalid professional ID", 400),
+    );
+  }
 
   const result = await professionalsService.getProfessionalById(userId);
   if (!result.ok) {
@@ -43,7 +57,14 @@ export async function getProfessionalByIdAction(
       return null;
     }
 
-    throw new Error(result.message ?? "Failed to fetch professional");
+    throwActionFailure(
+      createActionFailure(
+        "internal",
+        result.message ?? "Failed to fetch professional",
+        result.status ?? 500,
+        result.details,
+      ),
+    );
   }
 
   return result.data;

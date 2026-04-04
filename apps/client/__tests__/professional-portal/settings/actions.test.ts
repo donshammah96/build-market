@@ -20,6 +20,10 @@ const {
   revalidatePathMock: vi.fn(),
 }));
 
+const mockValidateTrustedMutationOriginForServerAction = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ ok: true }),
+);
+
 vi.mock("@clerk/nextjs/server", () => ({
   auth: authMock,
 }));
@@ -37,6 +41,12 @@ vi.mock("@build/db", () => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: revalidatePathMock,
+}));
+
+vi.mock("@/app/lib/api/http-security", () => ({
+  validateTrustedMutationOriginForServerAction:
+    mockValidateTrustedMutationOriginForServerAction,
+  mutationOriginFailureMessage: vi.fn().mockReturnValue("Forbidden"),
 }));
 
 vi.mock("@/app/lib/domains/professional-settings", () => ({
@@ -93,7 +103,7 @@ describe("professional settings actions", () => {
       {
         userId: "db_user_123",
         clerkId: "clerk_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       {
         firstName: "Jane",
@@ -120,7 +130,7 @@ describe("professional settings actions", () => {
       {
         userId: "db_user_123",
         clerkId: "clerk_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       { companyName: "Build Market Ltd" },
     );

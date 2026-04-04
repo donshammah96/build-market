@@ -1,5 +1,7 @@
-import Redis, { type Redis as RedisClient } from "ioredis";
-import type { RedisConfig } from "./types";
+import { Redis } from "ioredis";
+import type { RedisConfig } from "./types.js";
+
+type RedisClient = Redis;
 
 /**
  * Connection health metrics
@@ -173,9 +175,10 @@ export function getRedisClient(
 
   if (!redisEnabled) {
     log("info", "Redis disabled by env; returning noop client");
-    client = createNoopClient();
+    const noopClient = createNoopClient();
+    client = noopClient;
     isClientReady = false;
-    return client;
+    return noopClient;
   }
 
   // Set verbose logging
@@ -198,7 +201,7 @@ export function getRedisClient(
   const maxRetries = process.env.NODE_ENV === "production" ? 10 : 5;
   const retryDelay = process.env.NODE_ENV === "production" ? 2000 : 1000;
 
-  client = new Redis({
+  const redisClient = new Redis({
     host: finalConfig.host,
     port: finalConfig.port,
     family: finalConfig.family,
@@ -212,7 +215,7 @@ export function getRedisClient(
     enableOfflineQueue: true,
     keyPrefix: finalConfig.keyPrefix,
     tls: finalConfig.tls ? {} : undefined,
-    retryStrategy: (times) => {
+    retryStrategy: (times: number) => {
       if (times > maxRetries) {
         log(
           "error",
@@ -226,29 +229,31 @@ export function getRedisClient(
     },
   });
 
+  client = redisClient;
+
   // Connection event handlers
-  client.on("connect", () => {
+  redisClient.on("connect", () => {
     log("info", `Connected to ${finalConfig.host}:${finalConfig.port}`);
   });
 
-  client.on("ready", () => {
+  redisClient.on("ready", () => {
     isClientReady = true;
     connectionMetrics.connectedAt = new Date();
     log("info", "Redis client ready");
   });
 
-  client.on("error", (error) => {
+  redisClient.on("error", (error) => {
     connectionMetrics.lastErrorAt = new Date();
     connectionMetrics.totalErrors++;
     log("error", `Connection error: ${error.message}`, error);
   });
 
-  client.on("close", () => {
+  redisClient.on("close", () => {
     isClientReady = false;
     log("warn", "Connection closed");
   });
 
-  client.on("reconnecting", (delay: number) => {
+  redisClient.on("reconnecting", (delay: number) => {
     connectionMetrics.reconnectAttempts++;
     connectionMetrics.lastReconnectAt = new Date();
     log("info", `Reconnecting in ${delay}ms...`, {
@@ -256,14 +261,14 @@ export function getRedisClient(
     });
   });
 
-  client.on("end", () => {
+  redisClient.on("end", () => {
     isClientReady = false;
     log("info", "Connection ended");
   });
 
   // Track commands executed
-  const originalSendCommand = client.sendCommand;
-  client.sendCommand = function (...args) {
+  const originalSendCommand = redisClient.sendCommand;
+  redisClient.sendCommand = function (...args) {
     connectionMetrics.commandsExecuted++;
     return originalSendCommand.apply(this, args);
   };
@@ -271,7 +276,7 @@ export function getRedisClient(
   // Register graceful shutdown handlers
   registerShutdownHandlers();
 
-  return client;
+  return redisClient;
 }
 
 /**

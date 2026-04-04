@@ -185,7 +185,9 @@ describe("useImageUploader", () => {
       });
 
       expect(mockAppendImage).not.toHaveBeenCalled();
-      expect(mockToast.error).toHaveBeenCalledWith("Invalid URL format");
+      expect(mockToast.error).toHaveBeenCalledWith(
+        "Image URL must start with https:// or be a local path",
+      );
     });
 
     it("rejects non-HTTPS URL", () => {
@@ -351,6 +353,7 @@ describe("useImageUploader", () => {
       await waitFor(() => {
         expect(mockAppendImage).toHaveBeenCalled();
         expect(mockUpdateImage).toHaveBeenCalledWith(0, {
+          assetId: "00000000-0000-0000-0000-000000000001",
           value: "https://example.com/new.jpg",
         });
         expect(mockToast.success).toHaveBeenCalledWith("Added 1 image(s)");

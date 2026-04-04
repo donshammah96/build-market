@@ -13,7 +13,7 @@ import type {
   LicenseDeleteResult,
 } from "./contracts";
 
-const PROFESSIONAL_LICENSE_ROLES = new Set(["professional", "admin"]);
+const PROFESSIONAL_LICENSE_ROLES = new Set(["PROFESSIONAL", "ADMIN"]);
 
 function forbidden(message = "Forbidden"): LicenseResult<never> {
   return err({ error: "forbidden", message, status: 403 });

@@ -1,26 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const originalReadFlag = process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API;
-const originalMutationFlag =
-  process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API_MUTATIONS;
+const { mockEnv } = vi.hoisted(() => ({
+  mockEnv: {
+    features: {
+      genericProjectsApi: false,
+      genericProjectsApiMutations: false,
+    },
+  },
+}));
+
+vi.mock("@/app/lib/infrastructure/env", () => ({
+  env: mockEnv,
+}));
 
 describe("projects client facade rollout gate", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
+    mockEnv.features.genericProjectsApi = false;
+    mockEnv.features.genericProjectsApiMutations = false;
   });
 
   afterEach(() => {
-    process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API = originalReadFlag;
-    process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API_MUTATIONS =
-      originalMutationFlag;
     vi.restoreAllMocks();
     vi.resetModules();
   });
 
   it("blocks generic reads through the public facade when the rollout gate is disabled", async () => {
-    process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API = "false";
-    process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API_MUTATIONS = "false";
+    mockEnv.features.genericProjectsApi = false;
+    mockEnv.features.genericProjectsApiMutations = false;
 
     const fetchMock = vi.spyOn(globalThis, "fetch");
     const { projectsClient } = await import("@/lib/projects-client");
@@ -36,14 +44,22 @@ describe("projects client facade rollout gate", () => {
   });
 
   it("keeps generic reads enabled but blocks generic mutations during read-only rollout", async () => {
-    process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API = "true";
-    process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API_MUTATIONS = "false";
+    mockEnv.features.genericProjectsApi = true;
+    mockEnv.features.genericProjectsApiMutations = false;
 
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ data: { projects: [] } }), {
+      new Response(
+        JSON.stringify({
+          data: {
+            items: [],
+            pagination: { page: 1, limit: 10, total: 0, totalPages: 0 },
+          },
+        }),
+        {
         status: 200,
         headers: { "Content-Type": "application/json" },
-      }),
+        },
+      ),
     );
 
     const { projectsClient } = await import("@/lib/projects-client");
@@ -67,14 +83,14 @@ describe("projects client facade rollout gate", () => {
   });
 
   it("allows generic mutations through the public facade when both rollout gates are enabled", async () => {
-    process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API = "true";
-    process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API_MUTATIONS = "true";
+    mockEnv.features.genericProjectsApi = true;
+    mockEnv.features.genericProjectsApiMutations = true;
 
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
           data: {
-            project: {
+            item: {
               id: "11111111-1111-4111-8111-111111111111",
               title: "Enabled mutation",
             },

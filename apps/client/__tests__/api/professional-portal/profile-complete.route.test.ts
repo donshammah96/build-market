@@ -117,7 +117,7 @@ describe("POST /api/professional-portal/profile/complete", () => {
       {
         userId: "db_user_123",
         clerkId: "clerk_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       payload,
     );

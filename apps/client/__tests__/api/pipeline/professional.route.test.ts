@@ -103,7 +103,7 @@ describe("professional pipeline route", () => {
     expect(response.status).toBe(200);
     expect(mockPipelineService.getProfessionalPipeline).toHaveBeenCalledWith({
       userId: "db_user_123",
-      role: "professional",
+      role: "PROFESSIONAL",
     });
     expect(body.data.totalValue).toBe(5000000);
   });

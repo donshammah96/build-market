@@ -22,6 +22,7 @@ import {
   unwrapResultOrThrow,
   type ActionResult,
 } from "@/app/lib/actions/secure-action";
+import { normalizeRole } from "@/app/lib/security/roles";
 import { revalidatePath } from "next/cache";
 
 const LeadIdActionSchema = z.object({
@@ -63,7 +64,8 @@ function createLeadsActionErrorMapper(message: string) {
 }
 
 function ensureProfessionalLeadActor(role: string | null | undefined) {
-  if (role !== "professional" && role !== "admin") {
+  const normalizedRole = normalizeRole(role);
+  if (normalizedRole !== "PROFESSIONAL" && normalizedRole !== "ADMIN") {
     return createActionFailure("forbidden", "Forbidden", 403);
   }
 
@@ -78,11 +80,24 @@ export async function getProfessionalLeadsAction(
     schema: LeadQuerySchema.partial().optional(),
     policy: ({ actor }) => ensureProfessionalLeadActor(actor?.role),
     handler: async ({ actor, input }) => {
-      const parsed = LeadQuerySchema.parse({
+      const parsedResult = LeadQuerySchema.safeParse({
         page: 1,
         limit: LEAD_CONFIG.DEFAULT_LIMIT,
         ...input,
       });
+
+      if (!parsedResult.success) {
+        throwActionFailure(
+          createActionFailure(
+            "validation_error",
+            parsedResult.error.issues[0]?.message ?? "Invalid query parameters",
+            400,
+            parsedResult.error.issues,
+          ),
+        );
+      }
+
+      const parsed = parsedResult.data;
 
       return unwrapResultOrThrow(
         await leadsService.listProfessionalLeads(

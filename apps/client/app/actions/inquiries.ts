@@ -20,6 +20,7 @@ import {
   unwrapResultOrThrow,
   type ActionResult,
 } from "@/app/lib/actions/secure-action";
+import { normalizeRole } from "@/app/lib/security/roles";
 import { revalidatePath } from "next/cache";
 
 const InquiryIdActionSchema = z.object({
@@ -60,7 +61,8 @@ function createInquiryActionErrorMapper(message: string) {
 }
 
 function ensureProfessionalInquiryActor(role: string | null | undefined) {
-  if (role !== "professional" && role !== "admin") {
+  const normalizedRole = normalizeRole(role);
+  if (normalizedRole !== "PROFESSIONAL" && normalizedRole !== "ADMIN") {
     return createActionFailure("forbidden", "Forbidden", 403);
   }
 
@@ -75,11 +77,24 @@ export async function getProfessionalInquiriesAction(
     schema: InquiriesQuerySchema.partial().optional(),
     policy: ({ actor }) => ensureProfessionalInquiryActor(actor?.role),
     handler: async ({ actor, input }) => {
-      const parsed = InquiriesQuerySchema.parse({
+      const parsedResult = InquiriesQuerySchema.safeParse({
         limit: String(input?.limit ?? INQUIRY_CONFIG.DEFAULT_LIMIT),
         page: String(input?.page ?? 1),
         status: input?.status,
       });
+
+      if (!parsedResult.success) {
+        throwActionFailure(
+          createActionFailure(
+            "validation_error",
+            parsedResult.error.issues[0]?.message ?? "Invalid query parameters",
+            400,
+            parsedResult.error.issues,
+          ),
+        );
+      }
+
+      const parsed = parsedResult.data;
 
       return unwrapResultOrThrow(
         await inquiriesService.listProfessionalInquiries(

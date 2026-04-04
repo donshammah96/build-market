@@ -8,6 +8,11 @@ import { ROUTES } from "@/lib/links";
 import { useOnboardingAnalytics } from "@/lib/analytics/OnboardingAnalyticsContext";
 import { normalizeRole } from "@/app/lib/security/roles";
 
+export const SECURITY_PERSISTENCE_ALLOWLIST = [
+  "onboarding_* draft keys",
+  "professional_*draft* keys",
+];
+
 /** Clear all onboarding draft keys from sessionStorage (call on logout) */
 export function clearOnboardingDrafts(): void {
   if (typeof window === "undefined") return;

@@ -12,7 +12,7 @@ import type {
   UpdateInquiryInput,
 } from "@/app/lib/domains/inquiries/contracts";
 
-const PROFESSIONAL_INQUIRY_ROLES = new Set(["professional", "admin"]);
+const PROFESSIONAL_INQUIRY_ROLES = new Set(["PROFESSIONAL", "ADMIN"]);
 
 function forbidden(message = "Forbidden"): InquiryResult<never> {
   return err({ error: "forbidden", message, status: 403 });

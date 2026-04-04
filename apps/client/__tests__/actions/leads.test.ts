@@ -20,6 +20,10 @@ const {
   revalidatePathMock: vi.fn(),
 }));
 
+const mockValidateTrustedMutationOriginForServerAction = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ ok: true }),
+);
+
 vi.mock("@clerk/nextjs/server", () => ({
   auth: authMock,
 }));
@@ -37,6 +41,12 @@ vi.mock("@build/db", () => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: revalidatePathMock,
+}));
+
+vi.mock("@/app/lib/api/http-security", () => ({
+  validateTrustedMutationOriginForServerAction:
+    mockValidateTrustedMutationOriginForServerAction,
+  mutationOriginFailureMessage: vi.fn().mockReturnValue("Forbidden"),
 }));
 
 vi.mock("@/app/lib/domains/leads", () => ({
@@ -187,7 +197,7 @@ describe("leads actions", () => {
     expect(leadsService.createProfessionalLead).toHaveBeenCalledWith(
       {
         userId: "db_user_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       expect.objectContaining({
         clientName: "Jane Doe",
@@ -242,7 +252,7 @@ describe("leads actions", () => {
     expect(leadsService.deleteProfessionalLead).toHaveBeenCalledWith(
       {
         userId: "db_user_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       "550e8400-e29b-41d4-a716-446655440001",
     );

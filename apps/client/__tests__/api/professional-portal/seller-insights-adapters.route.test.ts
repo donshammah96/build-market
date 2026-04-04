@@ -106,7 +106,7 @@ describe("seller insights route adapters", () => {
     });
     expect(sellerInsightsService.getInventoryAlerts).toHaveBeenCalledWith({
       userId: "db_user_123",
-      role: "professional",
+      role: "PROFESSIONAL",
     });
   });
 
@@ -144,7 +144,7 @@ describe("seller insights route adapters", () => {
 
     expect(response.status).toBe(200);
     expect(sellerInsightsService.getOrders).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "professional" },
+      { userId: "db_user_123", role: "PROFESSIONAL" },
       expect.objectContaining({ page: 2, limit: 50, status: "PENDING" }),
     );
   });
@@ -183,7 +183,7 @@ describe("seller insights route adapters", () => {
       },
     ]);
     expect(sellerInsightsService.getTopProducts).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "professional" },
+      { userId: "db_user_123", role: "PROFESSIONAL" },
       { limit: 3 },
     );
   });

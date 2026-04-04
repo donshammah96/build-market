@@ -23,7 +23,7 @@ import {
   type UpdateLeadInput,
 } from "@/app/lib/domains/leads/contracts";
 
-const PROFESSIONAL_LEAD_ROLES = new Set(["professional", "admin"]);
+const PROFESSIONAL_LEAD_ROLES = new Set(["PROFESSIONAL", "ADMIN"]);
 
 function forbidden(message = "Forbidden"): LeadResult<never> {
   return err({ error: "forbidden", message, status: 403 });

@@ -164,7 +164,7 @@ describe("professional leads routes", () => {
     expect(mockLeadsService.listProfessionalLeads).toHaveBeenCalledWith(
       {
         userId: "db_user_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       expect.objectContaining({
         page: 1,
@@ -203,7 +203,7 @@ describe("professional leads routes", () => {
     expect(mockLeadsService.createProfessionalLead).toHaveBeenCalledWith(
       {
         userId: "db_user_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       expect.objectContaining({
         clientName: "Jane Doe",
@@ -240,7 +240,7 @@ describe("professional leads routes", () => {
     expect(mockLeadsService.getProfessionalLeadById).toHaveBeenCalledWith(
       {
         userId: "db_user_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       validLeadId,
     );
@@ -293,7 +293,7 @@ describe("professional leads routes", () => {
     expect(mockLeadsService.deleteProfessionalLead).toHaveBeenCalledWith(
       {
         userId: "db_user_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       validLeadId,
     );

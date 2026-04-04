@@ -14,7 +14,7 @@ import type {
   DocumentDeleteResult,
 } from "./contracts";
 
-const PROFESSIONAL_DOCUMENT_ROLES = new Set(["professional", "admin"]);
+const PROFESSIONAL_DOCUMENT_ROLES = new Set(["PROFESSIONAL", "ADMIN"]);
 
 function forbidden(message = "Forbidden"): DocumentResult<never> {
   return err({ error: "forbidden", message, status: 403 });

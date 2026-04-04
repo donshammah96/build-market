@@ -4,6 +4,8 @@ Last updated: 2026-04-04
 
 ## Snapshot
 
+- ADD-009 enforcement is now stronger in the server-action adapter layer: search, professionals, and stores actions no longer rely on raw validation throws after `safeParse()`, and instead map validation and domain outcomes through canonical structured action failures.
+- ADD-007 idempotency replay policy hardening is complete: replay payloads are now sanitized and JSON-normalized before persistence and replay use, and expired idempotency records are rotated during `checkOrCreate` so stale keys do not block fresh mutation attempts.
 - ADR-007 section-5 compliance routing now extends beyond onboarding into mutation-time domain enforcement: project creation, escrow funding, and finance withdrawal mutations are gated through a shared user-profile policy check so `GOVERNMENT_ENTITY` flows with pending procurement requirements are blocked at the domain boundary.
 - ADR-007 admin-path migration baseline is now compile-clean in this branch after the second-pass stabilization sweep: the remaining admin leads action suppression was removed and replaced with enum-safe filter typing plus explicit Decimal-to-string DTO mapping, and `apps/admin` diagnostics are currently clear.
 - ADR-007 section-5 (`ClientType` handling) is now implemented in the onboarding domain surface: client onboarding and client skip flows derive canonical client-type routing, persist profile-level `ClientType`, and store dedicated compliance-routing metadata for `GOVERNMENT_ENTITY` project-creation and payment-initiation policy checks.
@@ -141,6 +143,9 @@ ADR-007 admin-path migration checklist (staff-level):
 
 ## Completed In This Pass
 
+- Completed ADD-009 structured validation remediations in `app/actions/search.ts`, `app/actions/professionals.ts`, and `app/actions/stores.ts`, replacing remaining raw-throw validation branches with canonical `throwActionFailure(createActionFailure(...))` and `unwrapResultOrThrow(...)` mappings.
+- Completed ADD-007 idempotency replay data-class hardening in `app/lib/services/idempotency.service.ts` by introducing recursive sensitive-key redaction plus JSON-safe value normalization for replay snapshots, and by rotating expired idempotency records in `checkOrCreate` to preserve safe retry semantics.
+- Added focused ADD-007 regression coverage in `__tests__/lib/idempotency.service.test.ts` for replay redaction, replay normalization behavior, serialized replay payload shape expectations, and expired-record rollover paths.
 - Added `app/lib/domains/user-profile/client-type-policy.ts` as the owning-domain compliance policy guard, then wired `projectsService.createProject`, `projectsService.fundEscrow`, and `financeService.createWithdrawal` to enforce `projectCreationPolicy` and `paymentInitiationPolicy` mutation-time checks for `GOVERNMENT_ENTITY` clients.
 - Completed ADR-007 admin baseline closure pass for type hygiene: removed the final `@ts-nocheck` suppression in `apps/admin/src/actions/admin/leads.ts`, replaced string-based lead filter validation with `z.nativeEnum` contracts for `LeadStatus`, `LeadSource`, and `ProjectType`, and normalized lead budget `Decimal` values into explicit string DTO fields in list/detail/export outputs.
 - Added `app/lib/domains/user-profile/client-type-compliance.ts` as a dedicated domain helper for ClientType normalization, onboarding branch selection, and procurement-compliance routing policy derivation.
@@ -282,6 +287,9 @@ ADR-007 admin-path migration checklist (staff-level):
 
 ## Verification
 
+- ADD-009 and ADD-007 security drift posture validation: `pnpm run client:report-security-drift:strict` and `pnpm run client:check-security-drift` passed with no unresolved high-severity findings.
+- Focused idempotency replay regression suite: `pnpm -C apps/client exec vitest run __tests__/lib/idempotency.service.test.ts --reporter=verbose` passed (`1/1` file, `4/4` tests).
+- Post-remediation client baseline check: `pnpm -C apps/client exec tsc --noEmit` completed with exit code `0` after the ADD-009 and ADD-007 changes.
 - Mutation-time compliance enforcement suites: `pnpm -C apps/client exec vitest run __tests__/lib/domains/user-profile-client-type-policy.test.ts __tests__/lib/domains/projects.service.test.ts __tests__/lib/domains/finance.service.test.ts --reporter=verbose` passed (`3/3` files, `10/10` tests).
 - Admin baseline verification: `pnpm run admin:check-types` completed with exit code `0` after the second-pass leads typing cleanup, and workspace diagnostics for `apps/admin` reported no remaining errors.
 - ADR-007 section-5 focused domain suite: `pnpm -C apps/client exec vitest run __tests__/lib/domains/user-profile-client-type-compliance.test.ts --reporter=verbose` passed (`1/1` file, `5/5` tests).

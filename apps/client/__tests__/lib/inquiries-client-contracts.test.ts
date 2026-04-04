@@ -66,9 +66,9 @@ describe("inquiries client contracts", () => {
         JSON.stringify({
           data: {
             id: "550e8400-e29b-41d4-a716-446655440001",
-            name: "Jane Doe",
-            email: "jane@example.com",
-            phone: "+254700000000",
+            clientName: "Jane Doe",
+            clientEmail: "jane@example.com",
+            clientPhone: "+254700000000",
             message: "Interested in a viewing",
             status: "CONTACTED",
             notes: "Client prefers weekend slots",

@@ -1,5 +1,5 @@
-import { getRedisClient } from "./client";
-import type { CacheOptions, Serializer } from "./types";
+import { getRedisClient } from "./client.js";
+import type { CacheOptions, Serializer } from "./types.js";
 
 // Default JSON serializer
 const jsonSerializer: Serializer<unknown> = {

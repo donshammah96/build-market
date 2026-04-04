@@ -67,7 +67,7 @@ type PortfolioListRaw = {
   isVerified: boolean;
   createdAt: Date;
   updatedAt: Date;
-  images: Array<{
+  images?: Array<{
     id: string;
     caption: string | null;
     category: string | null;
@@ -86,6 +86,8 @@ type PortfolioListRaw = {
 export function toPortfolioListItemDto(
   raw: PortfolioListRaw,
 ): PortfolioListItemDto {
+  const images = Array.isArray(raw.images) ? raw.images : [];
+
   return {
     id: raw.id,
     title: raw.title,
@@ -104,7 +106,7 @@ export function toPortfolioListItemDto(
     clientName: raw.clientName,
     createdAt: toIsoString(raw.createdAt) ?? "",
     updatedAt: toIsoString(raw.updatedAt) ?? "",
-    images: raw.images.map((img) => mapImage(img)),
+    images: images.map((img) => mapImage(img)),
     _count: raw._count,
   };
 }

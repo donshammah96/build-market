@@ -1,17 +1,31 @@
 {
-  "generatedAt": "2026-04-01T01:27:27.673Z",
+  "generatedAt": "2026-04-04T05:20:15.812Z",
   "summary": {
     "envBoundary": 0,
     "logSafety": 0,
     "logSafetySpreadReview": 0,
     "browserPersistence": 0,
-    "dangerousHtml": 0
+    "dangerousHtml": 0,
+    "uploadProductionRisk": 0,
+    "serverActionValidationPolicy": 0,
+    "highValueServerActionGuards": 0,
+    "criticalTransitionStepSequencing": 0,
+    "mutationPassthrough": 0,
+    "unsafeApiError": 0,
+    "getJsonInGetHandler": 0
   },
   "findings": {
     "envBoundary": [],
     "logSafety": [],
     "logSafetySpreadReview": [],
     "browserPersistence": [],
-    "dangerousHtml": []
+    "dangerousHtml": [],
+    "uploadProductionRisk": [],
+    "serverActionValidationPolicy": [],
+    "highValueServerActionGuards": [],
+    "criticalTransitionStepSequencing": [],
+    "mutationPassthrough": [],
+    "unsafeApiError": [],
+    "getJsonInGetHandler": []
   }
 }

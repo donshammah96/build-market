@@ -215,7 +215,11 @@ describe("/api/user/profile/complete route cluster", () => {
       const payload = await response.json();
 
       expect(response.status).toBe(400);
-      expect(mockResolveProfileCompleteTarget).not.toHaveBeenCalled();
+      expect(mockResolveProfileCompleteTarget).toHaveBeenCalledWith({
+        userId: "db_user_123",
+        correlationId: "test-correlation-id",
+      });
+      expect(mockCompleteClientProfile).not.toHaveBeenCalled();
       expect(payload.error).toContain("Invalid JSON");
     });
 

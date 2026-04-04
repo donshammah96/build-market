@@ -5,11 +5,14 @@ import { randomUUID } from "crypto";
 import { normalizeRole, type AppRole } from "@/app/lib/security/roles";
 import type { Result } from "@/app/lib/errors/result";
 import { getClientLogger } from "@/app/lib/api/resilient-api";
+import { checkRateLimit } from "@/app/lib/api/rate-limit";
 import {
   type CsrfExemption,
   mutationOriginFailureMessage,
   validateTrustedMutationOriginForServerAction,
 } from "@/app/lib/api/http-security";
+
+const DEFAULT_RECENT_AUTH_MAX_AGE_SECONDS = 300;
 
 export type ActionErrorCode =
   | "unauthorized"
@@ -45,11 +48,34 @@ export type ActionActor = {
 
 type PolicyResult = void | boolean | ActionFailure;
 
+type RecentAuthValidationResult =
+  | { ok: true }
+  | { ok: false; reason: "missing_claim" | "stale_claim" };
+
+type ActionRateLimitConfig<TParsed> = {
+  key:
+    | string
+    | ((params: {
+        actor: ActionActor | null;
+        input: TParsed;
+        authUserId: string | null;
+      }) => string);
+  limit: number;
+  windowMs: number;
+  code?: ActionErrorCode;
+  message?: string;
+  status?: number;
+};
+
 type SecureActionOptions<TInput, TParsed, TOutput> = {
   operationName?: string;
   input?: TInput;
   schema?: z.ZodType<TParsed>;
   requireActor?: boolean;
+  recentAuth?: {
+    maxAgeSeconds?: number;
+  };
+  rateLimit?: ActionRateLimitConfig<TParsed>;
   csrf?: {
     exempt?: CsrfExemption;
     extraTrustedOrigins?: string[];
@@ -111,8 +137,12 @@ export function statusForActionError(code: string): number {
   }
 }
 
-export async function resolveRequiredActionActor(): Promise<ActionActor> {
-  const { userId: clerkId } = await auth();
+type ClerkAuthResult = Awaited<ReturnType<typeof auth>>;
+
+export async function resolveRequiredActionActor(
+  authResult?: ClerkAuthResult,
+): Promise<ActionActor> {
+  const { userId: clerkId } = authResult ?? (await auth());
 
   if (!clerkId) {
     throwActionFailure(
@@ -163,11 +193,46 @@ export async function secureAction<TInput, TParsed = TInput, TOutput = void>(
   const startedAt = Date.now();
   const correlationId = randomUUID();
   let actor: ActionActor | null = null;
+  let authResult: ClerkAuthResult | null = null;
 
   try {
     const input = parseInput(options.schema, options.input) as TParsed;
     if (options.requireActor === false) {
       actor = null;
+
+      if (options.recentAuth || options.rateLimit) {
+        authResult = await auth();
+      }
+
+      if (options.recentAuth) {
+        if (!authResult?.userId) {
+          throwActionFailure(
+            createActionFailure("unauthorized", "Unauthorized", 401),
+          );
+        }
+
+        const maxAgeSeconds =
+          options.recentAuth.maxAgeSeconds ??
+          DEFAULT_RECENT_AUTH_MAX_AGE_SECONDS;
+        const freshness = validateRecentAuth(
+          authResult.sessionClaims,
+          maxAgeSeconds,
+        );
+
+        if (!freshness.ok) {
+          throwActionFailure(
+            createActionFailure(
+              "unauthorized",
+              recentAuthFailureMessage(),
+              401,
+              {
+                reason: freshness.reason,
+                maxAgeSeconds,
+              },
+            ),
+          );
+        }
+      }
     } else {
       const csrfCheck = await validateTrustedMutationOriginForServerAction(
         options.csrf,
@@ -183,7 +248,33 @@ export async function secureAction<TInput, TParsed = TInput, TOutput = void>(
         );
       }
 
-      actor = await resolveRequiredActionActor();
+      authResult = await auth();
+
+      if (options.recentAuth && authResult.userId) {
+        const maxAgeSeconds =
+          options.recentAuth.maxAgeSeconds ??
+          DEFAULT_RECENT_AUTH_MAX_AGE_SECONDS;
+        const freshness = validateRecentAuth(
+          authResult.sessionClaims,
+          maxAgeSeconds,
+        );
+
+        if (!freshness.ok) {
+          throwActionFailure(
+            createActionFailure(
+              "unauthorized",
+              recentAuthFailureMessage(),
+              401,
+              {
+                reason: freshness.reason,
+                maxAgeSeconds,
+              },
+            ),
+          );
+        }
+      }
+
+      actor = await resolveRequiredActionActor(authResult);
     }
 
     if (options.policy) {
@@ -197,6 +288,55 @@ export async function secureAction<TInput, TParsed = TInput, TOutput = void>(
         "code" in policyResult
       ) {
         throwActionFailure(policyResult);
+      }
+    }
+
+    if (options.rateLimit) {
+      const rateLimitIdentifier =
+        typeof options.rateLimit.key === "function"
+          ? options.rateLimit.key({
+              actor,
+              input,
+              authUserId: authResult?.userId ?? null,
+            })
+          : options.rateLimit.key;
+
+      if (!rateLimitIdentifier.trim()) {
+        throwActionFailure(
+          createActionFailure(
+            "internal",
+            "Rate limit key resolution failed",
+            500,
+          ),
+        );
+      }
+
+      const rateLimitResult = await checkRateLimit(
+        rateLimitIdentifier,
+        options.rateLimit.limit,
+        options.rateLimit.windowMs,
+      );
+
+      if (!rateLimitResult.success) {
+        const retryAfterSeconds = Math.max(
+          0,
+          Math.ceil((rateLimitResult.reset - Date.now()) / 1000),
+        );
+
+        throwActionFailure(
+          createActionFailure(
+            options.rateLimit.code ?? "limit_exceeded",
+            options.rateLimit.message ??
+              "Too many requests. Please try again later.",
+            options.rateLimit.status ?? 429,
+            {
+              limit: rateLimitResult.limit,
+              remaining: rateLimitResult.remaining,
+              resetAtEpochMs: rateLimitResult.reset,
+              retryAfterSeconds,
+            },
+          ),
+        );
       }
     }
 
@@ -381,4 +521,48 @@ function normalizeActionErrorCode(code?: string): ActionErrorCode {
     default:
       return "internal";
   }
+}
+
+function parseNumericClaim(claim: unknown): number | null {
+  if (typeof claim === "number" && Number.isFinite(claim)) {
+    return claim;
+  }
+
+  if (typeof claim === "string") {
+    const parsed = Number.parseInt(claim, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function validateRecentAuth(
+  sessionClaims: unknown,
+  maxAgeSeconds: number,
+): RecentAuthValidationResult {
+  if (!sessionClaims || typeof sessionClaims !== "object") {
+    return { ok: false, reason: "missing_claim" };
+  }
+
+  const claims = sessionClaims as Record<string, unknown>;
+  const authTime = parseNumericClaim(claims.auth_time);
+  const issuedAt = parseNumericClaim(claims.iat);
+  const authEpochSeconds = authTime ?? issuedAt;
+
+  if (authEpochSeconds === null) {
+    return { ok: false, reason: "missing_claim" };
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const ageSeconds = Math.max(0, nowSeconds - authEpochSeconds);
+
+  if (ageSeconds > maxAgeSeconds) {
+    return { ok: false, reason: "stale_claim" };
+  }
+
+  return { ok: true };
+}
+
+function recentAuthFailureMessage(): string {
+  return "Recent authentication required. Please sign in again and retry.";
 }

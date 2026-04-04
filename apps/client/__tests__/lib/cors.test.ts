@@ -1,4 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { mockEnvConfig, getEnvConfigMock } = vi.hoisted(() => {
+  const config = {
+    appUrl: "https://app.buildmarket.test",
+    apiUrl: "https://api.buildmarket.test",
+    isDev: true,
+    cors: {
+      allowedOrigins: ["https://partner.example"],
+      devAllowedOrigins: ["http://localhost:5173"],
+    },
+  };
+
+  return {
+    mockEnvConfig: config,
+    getEnvConfigMock: vi.fn(() => config),
+  };
+});
+
+vi.mock("@/app/lib/infrastructure/env", () => ({
+  getEnvConfig: getEnvConfigMock,
+}));
+
 import {
   corsHeaders,
   createCorsPreflightHandler,
@@ -8,12 +30,12 @@ import {
 
 describe("CORS helper", () => {
   beforeEach(() => {
-    vi.unstubAllEnvs();
-    vi.stubEnv("NODE_ENV", "development");
-    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://app.buildmarket.test");
-    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.buildmarket.test");
-    vi.stubEnv("CORS_ALLOWED_ORIGINS", "https://partner.example");
-    vi.stubEnv("CORS_DEV_ALLOWED_ORIGINS", "http://localhost:5173");
+    mockEnvConfig.appUrl = "https://app.buildmarket.test";
+    mockEnvConfig.apiUrl = "https://api.buildmarket.test";
+    mockEnvConfig.isDev = true;
+    mockEnvConfig.cors.allowedOrigins = ["https://partner.example"];
+    mockEnvConfig.cors.devAllowedOrigins = ["http://localhost:5173"];
+    getEnvConfigMock.mockImplementation(() => mockEnvConfig);
   });
 
   it("allows credentialed CORS only for explicitly trusted origins", () => {
@@ -36,7 +58,7 @@ describe("CORS helper", () => {
   it("includes env-driven dev origins only in development", () => {
     expect(isCorsOriginAllowed("http://localhost:5173")).toBe(true);
 
-    vi.stubEnv("NODE_ENV", "production");
+    mockEnvConfig.isDev = false;
 
     expect(isCorsOriginAllowed("http://localhost:5173")).toBe(false);
   });

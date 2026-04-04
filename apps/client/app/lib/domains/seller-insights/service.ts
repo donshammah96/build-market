@@ -11,7 +11,7 @@ import type {
   SellerTopProductsQuery,
 } from "./contracts";
 
-const SELLER_INSIGHTS_ROLES = new Set(["professional", "admin"]);
+const SELLER_INSIGHTS_ROLES = new Set(["PROFESSIONAL", "ADMIN"]);
 
 function requireProfessionalActor(
   actor: SellerInsightsActor,

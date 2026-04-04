@@ -160,7 +160,7 @@ describe("professional inquiries routes", () => {
     expect(mockInquiriesService.listProfessionalInquiries).toHaveBeenCalledWith(
       {
         userId: "db_user_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       expect.objectContaining({ page: 1, limit: 10, status: "NEW" }),
     );
@@ -224,7 +224,7 @@ describe("professional inquiries routes", () => {
     ).toHaveBeenCalledWith(
       {
         userId: "db_user_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       validInquiryId,
     );
@@ -273,7 +273,7 @@ describe("professional inquiries routes", () => {
     expect(mockInquiriesService.deleteProfessionalInquiry).toHaveBeenCalledWith(
       {
         userId: "db_user_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       validInquiryId,
     );

@@ -162,7 +162,7 @@ describe("professional documents routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockDocumentsService.getDocuments).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "professional" },
+      { userId: "db_user_123", role: "PROFESSIONAL" },
       expect.objectContaining({ category: "ID_OR_PASSPORT" }),
     );
     expect(body.data).toHaveLength(1);
@@ -206,7 +206,7 @@ describe("professional documents routes", () => {
         operationName: "get_professional_documents",
         httpMethod: "GET",
         routePattern: "/api/professional-portal/documents",
-        actorRole: "professional",
+        actorRole: "PROFESSIONAL",
         outcome: "succeeded",
         httpStatus: 200,
         durationMs: expect.any(Number),
@@ -231,7 +231,7 @@ describe("professional documents routes", () => {
         operationName: "get_professional_documents",
         httpMethod: "GET",
         routePattern: "/api/professional-portal/documents",
-        actorRole: "professional",
+        actorRole: "PROFESSIONAL",
         outcome: "failed",
         httpStatus: 500,
         durationMs: expect.any(Number),
@@ -268,7 +268,7 @@ describe("professional documents routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockDocumentsService.getDocumentById).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "professional" },
+      { userId: "db_user_123", role: "PROFESSIONAL" },
       validDocumentId,
     );
   });
@@ -332,7 +332,7 @@ describe("professional documents routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockDocumentsService.deleteDocument).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "professional" },
+      { userId: "db_user_123", role: "PROFESSIONAL" },
       validDocumentId,
     );
     expect(IdempotencyService.complete).toHaveBeenCalledWith("idem-key", {

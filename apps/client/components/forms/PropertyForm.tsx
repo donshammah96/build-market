@@ -398,9 +398,10 @@ const optionalUrlInput = (
   schema: z.ZodString,
   emptyValue: string | undefined = "",
 ) =>
-  z
-    .preprocess((value) => (value === emptyValue ? undefined : value), schema)
-    .optional();
+  z.preprocess(
+    (value) => (value === emptyValue ? undefined : value),
+    schema.optional(),
+  );
 
 const propertySchema = z
   .object({
@@ -582,26 +583,15 @@ const FormSection: React.FC<{
   children: React.ReactNode;
   className?: string;
 }> = ({ title, description, icon, children, className }) => (
-  <div
-    className={cn(
-      THEME.section,
-      className,
-    )}
-  >
+  <div className={cn(THEME.section, className)}>
     <div className="flex items-start gap-3 mb-6 border-b border-border pb-4">
       {icon && (
-        <div className="p-2 bg-primary/10 text-primary rounded-lg">
-          {icon}
-        </div>
+        <div className="p-2 bg-primary/10 text-primary rounded-lg">{icon}</div>
       )}
       <div>
-        <h3 className="text-base font-semibold text-foreground">
-          {title}
-        </h3>
+        <h3 className="text-base font-semibold text-foreground">{title}</h3>
         {description && (
-          <p className="text-sm text-muted-foreground">
-            {description}
-          </p>
+          <p className="text-sm text-muted-foreground">{description}</p>
         )}
       </div>
     </div>

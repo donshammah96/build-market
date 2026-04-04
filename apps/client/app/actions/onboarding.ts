@@ -27,6 +27,12 @@ import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { updateClerkOnboardingMetadata } from "@/app/lib/domains/user-profile/clerk-metadata";
 import { normalizeRole } from "@/app/lib/security/roles";
 
+const ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS = 300;
+const ONBOARDING_TRANSITION_RATE_LIMIT = {
+  limit: 8,
+  windowMs: 15 * 60 * 1000,
+} as const;
+
 function toCreateStoreInput(store: StoreOnboardingData): CreateStoreInput {
   return {
     name: store.name,
@@ -131,9 +137,22 @@ export async function submitOnboarding(
   data: unknown,
 ): Promise<ActionResult<unknown>> {
   return secureAction({
+    operationName: "submit_onboarding_server_action",
     requireActor: false,
     input: data,
     schema: OnboardingSchema,
+    recentAuth: {
+      maxAgeSeconds: ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS,
+    },
+    rateLimit: {
+      key: ({ authUserId }) =>
+        `high-value-onboarding-transition:submit:${authUserId ?? "anonymous"}`,
+      limit: ONBOARDING_TRANSITION_RATE_LIMIT.limit,
+      windowMs: ONBOARDING_TRANSITION_RATE_LIMIT.windowMs,
+      message:
+        "Too many onboarding transition attempts. Please try again shortly.",
+      status: 429,
+    },
     handler: async ({ input }) => {
       const { clerkId, clerkUser } = await getRequiredClerkContext();
 
@@ -261,7 +280,20 @@ export async function submitOnboarding(
 
 export async function skipOnboarding(): Promise<ActionResult<unknown>> {
   return secureAction({
+    operationName: "skip_client_onboarding_server_action",
     requireActor: false,
+    recentAuth: {
+      maxAgeSeconds: ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS,
+    },
+    rateLimit: {
+      key: ({ authUserId }) =>
+        `high-value-onboarding-transition:skip-client:${authUserId ?? "anonymous"}`,
+      limit: ONBOARDING_TRANSITION_RATE_LIMIT.limit,
+      windowMs: ONBOARDING_TRANSITION_RATE_LIMIT.windowMs,
+      message:
+        "Too many onboarding transition attempts. Please try again shortly.",
+      status: 429,
+    },
     handler: async () => {
       const { clerkId, clerkUser } = await getRequiredClerkContext();
       const executor = getResilientExecutor();
@@ -313,7 +345,20 @@ export async function skipProfessionalOnboarding(): Promise<
   ActionResult<unknown>
 > {
   return secureAction({
+    operationName: "skip_professional_onboarding_server_action",
     requireActor: false,
+    recentAuth: {
+      maxAgeSeconds: ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS,
+    },
+    rateLimit: {
+      key: ({ authUserId }) =>
+        `high-value-onboarding-transition:skip-professional:${authUserId ?? "anonymous"}`,
+      limit: ONBOARDING_TRANSITION_RATE_LIMIT.limit,
+      windowMs: ONBOARDING_TRANSITION_RATE_LIMIT.windowMs,
+      message:
+        "Too many onboarding transition attempts. Please try again shortly.",
+      status: 429,
+    },
     handler: async () => {
       const { clerkId, clerkUser } = await getRequiredClerkContext();
       const executor = getResilientExecutor();

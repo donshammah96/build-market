@@ -145,7 +145,7 @@ describe("professional certificates routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockCertificatesService.getCertificates).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "professional" },
+      { userId: "db_user_123", role: "PROFESSIONAL" },
       {},
     );
   });
@@ -187,7 +187,7 @@ describe("professional certificates routes", () => {
         operationName: "get_certificates",
         httpMethod: "GET",
         routePattern: "/api/professional-portal/certificates",
-        actorRole: "professional",
+        actorRole: "PROFESSIONAL",
         outcome: "succeeded",
         httpStatus: 200,
         durationMs: expect.any(Number),
@@ -214,7 +214,7 @@ describe("professional certificates routes", () => {
         operationName: "get_certificates",
         httpMethod: "GET",
         routePattern: "/api/professional-portal/certificates",
-        actorRole: "professional",
+        actorRole: "PROFESSIONAL",
         outcome: "failed",
         httpStatus: 500,
         durationMs: expect.any(Number),
@@ -242,7 +242,7 @@ describe("professional certificates routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockCertificatesService.getCertificateById).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "professional" },
+      { userId: "db_user_123", role: "PROFESSIONAL" },
       validCertId,
     );
   });
@@ -303,7 +303,7 @@ describe("professional certificates routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockCertificatesService.deleteCertificate).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "professional" },
+      { userId: "db_user_123", role: "PROFESSIONAL" },
       validCertId,
     );
   });

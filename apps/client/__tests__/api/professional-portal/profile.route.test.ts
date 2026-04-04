@@ -136,7 +136,7 @@ describe("/api/professional-portal/profile route", () => {
     expect(mockGetProfile).toHaveBeenCalledWith({
       userId: "db_user_123",
       clerkId: "clerk_123",
-      role: "professional",
+      role: "PROFESSIONAL",
     });
     expect(payload.data.userId).toBe("db_user_123");
     expect(payload.data.companyName).toBe("Build Market Ltd");
@@ -182,7 +182,7 @@ describe("/api/professional-portal/profile route", () => {
       {
         userId: "db_user_123",
         clerkId: "clerk_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       { firstName: "Jane", companyName: "Updated Co" },
     );

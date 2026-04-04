@@ -8,6 +8,7 @@ import {
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   headers: vi.fn(),
+  checkRateLimit: vi.fn(),
   userFindUnique: vi.fn(),
   adminProfileFindUnique: vi.fn(),
   loggerInfo: vi.fn(),
@@ -42,6 +43,10 @@ vi.mock("@/app/lib/api/resilient-api", () => ({
   }),
 }));
 
+vi.mock("@/app/lib/api/rate-limit", () => ({
+  checkRateLimit: mocks.checkRateLimit,
+}));
+
 describe("secureAction", () => {
   beforeEach(() => {
     mocks.auth.mockReset();
@@ -49,6 +54,13 @@ describe("secureAction", () => {
     mocks.userFindUnique.mockReset();
     mocks.adminProfileFindUnique.mockReset();
     mocks.adminProfileFindUnique.mockResolvedValue(null);
+    mocks.checkRateLimit.mockReset();
+    mocks.checkRateLimit.mockResolvedValue({
+      success: true,
+      limit: 10,
+      remaining: 9,
+      reset: Date.now() + 60_000,
+    });
     mocks.loggerInfo.mockReset();
     mocks.loggerWarn.mockReset();
     mocks.loggerError.mockReset();
@@ -118,7 +130,7 @@ describe("secureAction", () => {
       success: true,
       data: {
         actorId: "db_user_123",
-        role: "professional",
+        role: "PROFESSIONAL",
         name: "Build Market",
       },
     });
@@ -159,7 +171,7 @@ describe("secureAction", () => {
       "Secure action outcome",
       expect.objectContaining({
         operationName: "test_operation",
-        actorRole: "professional",
+        actorRole: "PROFESSIONAL",
         outcome: "success",
         httpStatus: 200,
       }),
@@ -208,5 +220,114 @@ describe("secureAction", () => {
       "Cross-site authenticated mutation blocked",
     );
     expect(mocks.auth).not.toHaveBeenCalled();
+  });
+
+  it("requires recent authentication when configured", async () => {
+    mocks.auth.mockResolvedValue({
+      userId: "clerk_123",
+      sessionClaims: {},
+    });
+
+    const result = await secureAction({
+      recentAuth: { maxAgeSeconds: 300 },
+      handler: async () => "ok",
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      throw new Error("Expected unauthorized result");
+    }
+
+    expect(result.error.code).toBe("unauthorized");
+    expect(result.error.status).toBe(401);
+    expect(result.error.message).toContain("Recent authentication required");
+    expect(mocks.userFindUnique).not.toHaveBeenCalled();
+  });
+
+  it("returns limit_exceeded when the secure action rate limit is exceeded", async () => {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    mocks.auth.mockResolvedValue({
+      userId: "clerk_123",
+      sessionClaims: { auth_time: nowSeconds },
+    });
+    mocks.userFindUnique.mockResolvedValue({
+      id: "db_user_123",
+      email: "test@example.com",
+      role: "PROFESSIONAL",
+    });
+    mocks.checkRateLimit.mockResolvedValue({
+      success: false,
+      limit: 2,
+      remaining: 0,
+      reset: Date.now() + 30_000,
+    });
+
+    const result = await secureAction({
+      input: { actionId: "high-value" },
+      schema: z.object({ actionId: z.string() }),
+      recentAuth: { maxAgeSeconds: 300 },
+      rateLimit: {
+        key: ({ actor }) => `test:${actor?.dbUserId ?? "anonymous"}`,
+        limit: 2,
+        windowMs: 60_000,
+      },
+      handler: async () => "ok",
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      throw new Error("Expected rate-limit failure");
+    }
+
+    expect(result.error.code).toBe("limit_exceeded");
+    expect(result.error.status).toBe(429);
+    expect(result.error.message).toContain("Too many requests");
+    expect(result.error.details).toEqual(
+      expect.objectContaining({
+        limit: 2,
+        remaining: 0,
+      }),
+    );
+  });
+
+  it("enforces guards for actorless actions using auth-derived rate-limit keys", async () => {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    mocks.auth.mockResolvedValue({
+      userId: "clerk_123",
+      sessionClaims: { auth_time: nowSeconds },
+    });
+    mocks.checkRateLimit.mockResolvedValue({
+      success: false,
+      limit: 3,
+      remaining: 0,
+      reset: Date.now() + 15_000,
+    });
+
+    const result = await secureAction({
+      requireActor: false,
+      input: { transition: "skip" },
+      schema: z.object({ transition: z.string() }),
+      recentAuth: { maxAgeSeconds: 300 },
+      rateLimit: {
+        key: ({ authUserId }) => `transition:${authUserId ?? "anonymous"}`,
+        limit: 3,
+        windowMs: 60_000,
+      },
+      handler: async () => "ok",
+    });
+
+    expect(mocks.userFindUnique).not.toHaveBeenCalled();
+    expect(mocks.checkRateLimit).toHaveBeenCalledWith(
+      "transition:clerk_123",
+      3,
+      60_000,
+    );
+    expect(result.success).toBe(false);
+    if (result.success) {
+      throw new Error("Expected rate-limit failure");
+    }
+
+    expect(result.error.code).toBe("limit_exceeded");
+    expect(result.error.status).toBe(429);
   });
 });

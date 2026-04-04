@@ -94,7 +94,7 @@ describe("leadsService", () => {
           id: "lead_1",
           projectType: "RESIDENTIAL",
           status: "NEW",
-          createdAt: new Date("2026-03-11T09:00:00.000Z"),
+          createdAt: "2026-03-11T09:00:00.000Z",
         },
       },
     });
@@ -137,8 +137,8 @@ describe("leadsService", () => {
         status: "CONTACTED",
         statusLabel: LEAD_STATUS_LABELS.CONTACTED,
         professionalName: "Acme Builds",
-        submittedAt: new Date("2026-03-11T09:00:00.000Z"),
-        lastUpdated: new Date("2026-03-11T10:00:00.000Z"),
+        submittedAt: "2026-03-11T09:00:00.000Z",
+        lastUpdated: "2026-03-11T10:00:00.000Z",
       },
     });
   });

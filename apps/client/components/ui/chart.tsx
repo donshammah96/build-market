@@ -80,6 +80,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 
   return (
     <style
+      // SECURITY_XSS_ALLOWLIST: Injects framework-generated chart CSS variables, not user-provided HTML.
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)
           .map(

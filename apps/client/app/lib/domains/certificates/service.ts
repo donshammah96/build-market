@@ -14,7 +14,7 @@ import type {
   CertificateDeleteResult,
 } from "./contracts";
 
-const CERTIFICATE_ROLES = new Set(["professional", "admin"]);
+const CERTIFICATE_ROLES = new Set(["PROFESSIONAL", "ADMIN"]);
 
 function forbidden(message = "Forbidden"): CertificateResult<never> {
   return err({ error: "forbidden", message, status: 403 });

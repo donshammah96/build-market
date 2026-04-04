@@ -53,13 +53,19 @@ export async function getStoresAction(
   const parsed = StoreQuerySchema.safeParse(defaultFilters);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid query parameters");
+    throwActionFailure(
+      createActionFailure(
+        "validation_error",
+        first?.message ?? "Invalid query parameters",
+        400,
+        parsed.error.issues,
+      ),
+    );
   }
-  const result = await storesService.listStores(parsed.data);
-  if (!result.ok) {
-    throw new Error(result.message ?? "Failed to fetch stores");
-  }
-  return result.data;
+  return unwrapResultOrThrow(
+    await storesService.listStores(parsed.data),
+    "Failed to fetch stores",
+  );
 }
 
 export async function getStoreAction(id: string): Promise<unknown> {
@@ -438,14 +444,18 @@ export async function deleteStoreAction(input: DeleteStoreActionInput) {
 
 export async function getStoreDocumentsAction(storeId: string) {
   const dbUserId = await resolveRequiredActionActor();
-  if (!isValidId(storeId)) throw new Error("Invalid store ID");
-  const result = await storesService.listStoreDocuments(storeId, {
-    userId: dbUserId.dbUserId,
-    role: dbUserId.role,
-  });
-  if (!result.ok)
-    throw new Error(result.message ?? "Failed to fetch documents");
-  return result.data.documents;
+  if (!isValidId(storeId)) {
+    throwActionFailure(
+      createActionFailure("validation_error", "Invalid store ID", 400),
+    );
+  }
+  return unwrapResultOrThrow(
+    await storesService.listStoreDocuments(storeId, {
+      userId: dbUserId.dbUserId,
+      role: dbUserId.role,
+    }),
+    "Failed to fetch documents",
+  ).documents;
 }
 
 export type AddStoreDocumentActionInput = {
@@ -456,19 +466,38 @@ export async function addStoreDocumentAction(
   input: AddStoreDocumentActionInput,
 ) {
   const actor = await resolveRequiredActionActor();
-  if (!isValidId(input.storeId)) throw new Error("Invalid store ID");
-  const documentInput = createStoreDocumentSchema.parse({
+  if (!isValidId(input.storeId)) {
+    throwActionFailure(
+      createActionFailure("validation_error", "Invalid store ID", 400),
+    );
+  }
+
+  const documentInputResult = createStoreDocumentSchema.safeParse({
     type: input.type,
     assetId: input.assetId,
     notes: input.notes,
   });
+
+  if (!documentInputResult.success) {
+    throwActionFailure(
+      createActionFailure(
+        "validation_error",
+        documentInputResult.error.issues[0]?.message ??
+          "Invalid store document payload",
+        400,
+        documentInputResult.error.issues,
+      ),
+    );
+  }
+
+  const documentInput = documentInputResult.data;
+
   const result = await storesService.addStoreDocument(
     input.storeId,
     { userId: actor.dbUserId, role: actor.role },
     documentInput,
   );
-  if (!result.ok) throw new Error(result.message ?? "Failed to add document");
-  return result.data;
+  return unwrapResultOrThrow(result, "Failed to add document");
 }
 
 export type RemoveStoreDocumentActionInput = {
@@ -481,14 +510,14 @@ export async function removeStoreDocumentAction(
 ) {
   const actor = await resolveRequiredActionActor();
   if (!isValidId(input.storeId) || !isValidId(input.documentId)) {
-    throw new Error("Invalid IDs");
+    throwActionFailure(
+      createActionFailure("validation_error", "Invalid IDs", 400),
+    );
   }
   const result = await storesService.removeStoreDocument(
     input.storeId,
     input.documentId,
     { userId: actor.dbUserId, role: actor.role },
   );
-  if (!result.ok)
-    throw new Error(result.message ?? "Failed to remove document");
-  return result.data;
+  return unwrapResultOrThrow(result, "Failed to remove document");
 }

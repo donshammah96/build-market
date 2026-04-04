@@ -8,7 +8,7 @@ import type {
   PipelineSummary,
 } from "@/app/lib/domains/pipeline/contracts";
 
-const PROFESSIONAL_PIPELINE_ROLES = new Set(["professional", "admin"]);
+const PROFESSIONAL_PIPELINE_ROLES = new Set(["PROFESSIONAL", "ADMIN"]);
 
 const EMPTY_PIPELINE: PipelineStage[] = [
   { id: "viewing", label: "Viewings Scheduled", count: 0, value: 0 },

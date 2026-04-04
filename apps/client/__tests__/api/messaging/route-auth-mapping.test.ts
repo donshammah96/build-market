@@ -122,7 +122,7 @@ describe("Messaging route auth mapping", () => {
     expect(response.status).toBe(403);
     expect(payload.error).toBe("Not authorized to access this conversation");
     expect(mockGetConversation).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "professional" },
+      { userId: "db_user_123", role: "PROFESSIONAL" },
       threadId,
     );
   });

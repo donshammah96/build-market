@@ -10,38 +10,26 @@ import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import {
   createActionFailure,
   secureAction,
-  SecureActionError,
   throwActionFailure,
   type ActionFailure,
   type ActionResult,
 } from "@/app/lib/actions/secure-action";
+import { normalizeRole } from "@/app/lib/security/roles";
 import { revalidatePath } from "next/cache";
 
 const RequestWithdrawalActionSchema = WithdrawSchema.extend({
   idempotencyKey: z.string().optional(),
 });
 
-function createFinanceActionErrorMapper(message: string) {
-  return (error: unknown) => {
-    if (error instanceof SecureActionError) {
-      return undefined;
-    }
-
-    if (error instanceof z.ZodError) {
-      return createActionFailure(
-        "validation_error",
-        error.issues[0]?.message ?? "Validation failed",
-        400,
-        error.issues,
-      );
-    }
-
-    return createActionFailure("internal", message, 500);
-  };
-}
+const WITHDRAWAL_RECENT_AUTH_MAX_AGE_SECONDS = 300;
+const WITHDRAWAL_RATE_LIMIT = {
+  limit: 5,
+  windowMs: 15 * 60 * 1000,
+} as const;
 
 function ensureProfessionalFinanceActor(role: string | null | undefined) {
-  if (role !== "professional" && role !== "admin") {
+  const normalizedRole = normalizeRole(role);
+  if (normalizedRole !== "PROFESSIONAL" && normalizedRole !== "ADMIN") {
     return createActionFailure("forbidden", "Forbidden", 403);
   }
 
@@ -95,8 +83,19 @@ export async function requestWithdrawalAction(
   data: RequestWithdrawalActionInput,
 ): Promise<ActionResult<unknown>> {
   return secureAction({
+    operationName: "request_withdrawal_action",
     input: data,
     schema: RequestWithdrawalActionSchema,
+    recentAuth: {
+      maxAgeSeconds: WITHDRAWAL_RECENT_AUTH_MAX_AGE_SECONDS,
+    },
+    rateLimit: {
+      key: ({ actor }) => `high-value-withdrawal:${actor?.dbUserId ?? "anonymous"}`,
+      limit: WITHDRAWAL_RATE_LIMIT.limit,
+      windowMs: WITHDRAWAL_RATE_LIMIT.windowMs,
+      message: "Too many withdrawal requests. Please try again shortly.",
+      status: 429,
+    },
     policy: ({ actor }) => ensureProfessionalFinanceActor(actor?.role),
     handler: async ({ actor, input }) => {
       const { idempotencyKey: clientKey, ...payload } = input;
@@ -154,6 +153,5 @@ export async function requestWithdrawalAction(
         throw error;
       }
     },
-    mapError: createFinanceActionErrorMapper("Failed to create withdrawal"),
   });
 }

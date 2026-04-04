@@ -14,7 +14,9 @@ import {
 } from "@/app/lib/validation/calendar-validation";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import {
+  createActionFailure,
   resolveRequiredActionActor,
+  throwActionFailure,
   unwrapResultOrThrow,
 } from "@/app/lib/actions/secure-action";
 import { revalidatePath } from "next/cache";
@@ -35,7 +37,14 @@ export async function getCalendarEventsAction(
   const parsed = CalendarQuerySchema.safeParse(filters ?? {});
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid query parameters");
+    throwActionFailure(
+      createActionFailure(
+        "validation_error",
+        first?.message ?? "Invalid query parameters",
+        400,
+        parsed.error.issues,
+      ),
+    );
   }
 
   return unwrapResultOrThrow(
@@ -46,7 +55,11 @@ export async function getCalendarEventsAction(
 
 export async function getCalendarEventByIdAction(eventId: string) {
   const actor = await resolveCalendarActor();
-  if (!isValidId(eventId)) throw new Error("Invalid event ID");
+  if (!isValidId(eventId)) {
+    throwActionFailure(
+      createActionFailure("validation_error", "Invalid event ID", 400),
+    );
+  }
 
   return unwrapResultOrThrow(
     await calendarService.getEventById(actor, eventId),
@@ -67,11 +80,24 @@ export async function createCalendarEventAction(
   const parsed = CreateCalendarEventSchema.safeParse(rest);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid event data");
+    throwActionFailure(
+      createActionFailure(
+        "validation_error",
+        first?.message ?? "Invalid event data",
+        400,
+        parsed.error.issues,
+      ),
+    );
   }
 
   if (new Date(parsed.data.endDate) <= new Date(parsed.data.startDate)) {
-    throw new Error("End date must be after start date");
+    throwActionFailure(
+      createActionFailure(
+        "validation_error",
+        "End date must be after start date",
+        400,
+      ),
+    );
   }
 
   const idempotencyKey =
@@ -95,7 +121,13 @@ export async function createCalendarEventAction(
   }
 
   if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
+    throwActionFailure(
+      createActionFailure(
+        "conflict",
+        "Request is being processed. Please wait.",
+        409,
+      ),
+    );
   }
 
   const result = await calendarService.createEvent(actor, parsed.data);
@@ -121,17 +153,34 @@ export async function updateCalendarEventAction(
   const actor = await resolveCalendarActor();
   const { eventId, idempotencyKey: clientKey, ...rest } = data;
 
-  if (!isValidId(eventId)) throw new Error("Invalid event ID");
+  if (!isValidId(eventId)) {
+    throwActionFailure(
+      createActionFailure("validation_error", "Invalid event ID", 400),
+    );
+  }
 
   const parsed = UpdateCalendarEventSchema.safeParse(rest);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid update data");
+    throwActionFailure(
+      createActionFailure(
+        "validation_error",
+        first?.message ?? "Invalid update data",
+        400,
+        parsed.error.issues,
+      ),
+    );
   }
 
   if (parsed.data.startDate && parsed.data.endDate) {
     if (new Date(parsed.data.endDate) <= new Date(parsed.data.startDate)) {
-      throw new Error("End date must be after start date");
+      throwActionFailure(
+        createActionFailure(
+          "validation_error",
+          "End date must be after start date",
+          400,
+        ),
+      );
     }
   }
 
@@ -157,7 +206,13 @@ export async function updateCalendarEventAction(
   }
 
   if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
+    throwActionFailure(
+      createActionFailure(
+        "conflict",
+        "Request is being processed. Please wait.",
+        409,
+      ),
+    );
   }
 
   const result = await calendarService.updateEvent(actor, eventId, parsed.data);
@@ -183,7 +238,11 @@ export async function deleteCalendarEventAction(
   const actor = await resolveCalendarActor();
   const { eventId } = data;
 
-  if (!isValidId(eventId)) throw new Error("Invalid event ID");
+  if (!isValidId(eventId)) {
+    throwActionFailure(
+      createActionFailure("validation_error", "Invalid event ID", 400),
+    );
+  }
 
   unwrapResultOrThrow(
     await calendarService.deleteEvent(actor, eventId),

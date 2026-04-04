@@ -19,6 +19,10 @@ const {
   revalidatePathMock: vi.fn(),
 }));
 
+const mockValidateTrustedMutationOriginForServerAction = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ ok: true }),
+);
+
 vi.mock("@clerk/nextjs/server", () => ({
   auth: authMock,
 }));
@@ -36,6 +40,12 @@ vi.mock("@build/db", () => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: revalidatePathMock,
+}));
+
+vi.mock("@/app/lib/api/http-security", () => ({
+  validateTrustedMutationOriginForServerAction:
+    mockValidateTrustedMutationOriginForServerAction,
+  mutationOriginFailureMessage: vi.fn().mockReturnValue("Forbidden"),
 }));
 
 vi.mock("@/app/lib/domains/inquiries", () => ({
@@ -155,7 +165,7 @@ describe("inquiries actions", () => {
     expect(inquiriesService.listProfessionalInquiries).toHaveBeenCalledWith(
       {
         userId: "db_user_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       expect.objectContaining({ status: "NEW", page: 1, limit: 10 }),
     );
@@ -175,7 +185,7 @@ describe("inquiries actions", () => {
     expect(inquiriesService.deleteProfessionalInquiry).toHaveBeenCalledWith(
       {
         userId: "db_user_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       "550e8400-e29b-41d4-a716-446655440001",
     );

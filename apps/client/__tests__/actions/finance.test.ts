@@ -10,8 +10,26 @@ const { authMock, userFindUniqueMock, revalidatePathMock } = vi.hoisted(() => ({
   revalidatePathMock: vi.fn(),
 }));
 
+const { checkRateLimitMock } = vi.hoisted(() => ({
+  checkRateLimitMock: vi.fn(),
+}));
+
+const { headersMock } = vi.hoisted(() => ({
+  headersMock: vi.fn(),
+}));
+
+const { loggerInfoMock, loggerWarnMock, loggerErrorMock } = vi.hoisted(() => ({
+  loggerInfoMock: vi.fn(),
+  loggerWarnMock: vi.fn(),
+  loggerErrorMock: vi.fn(),
+}));
+
 vi.mock("@clerk/nextjs/server", () => ({
   auth: authMock,
+}));
+
+vi.mock("next/headers", () => ({
+  headers: headersMock,
 }));
 
 vi.mock("@build/db", () => ({
@@ -24,6 +42,18 @@ vi.mock("@build/db", () => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: revalidatePathMock,
+}));
+
+vi.mock("@/app/lib/api/resilient-api", () => ({
+  getClientLogger: () => ({
+    info: loggerInfoMock,
+    warn: loggerWarnMock,
+    error: loggerErrorMock,
+  }),
+}));
+
+vi.mock("@/app/lib/api/rate-limit", () => ({
+  checkRateLimit: checkRateLimitMock,
 }));
 
 vi.mock("@/app/lib/domains/finance", () => ({
@@ -44,11 +74,28 @@ vi.mock("@/app/lib/services/idempotency.service", () => ({
 describe("finance actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    authMock.mockResolvedValue({ userId: "clerk_123" });
+    authMock.mockResolvedValue({
+      userId: "clerk_123",
+      sessionClaims: {
+        auth_time: Math.floor(Date.now() / 1000),
+      },
+    });
+    headersMock.mockResolvedValue(
+      new Headers({
+        origin: "http://localhost:3500",
+        cookie: "__session=test",
+      }),
+    );
     userFindUniqueMock.mockResolvedValue({
       id: "db_user_123",
       email: "pro@example.com",
       role: "PROFESSIONAL",
+    });
+    checkRateLimitMock.mockResolvedValue({
+      success: true,
+      limit: 5,
+      remaining: 4,
+      reset: Date.now() + 60_000,
     });
     vi.mocked(IdempotencyService.checkOrCreate).mockResolvedValue({
       status: "new",
@@ -121,6 +168,63 @@ describe("finance actions", () => {
     expect(financeService.createWithdrawal).not.toHaveBeenCalled();
   });
 
+  it("returns a structured unauthorized failure when recent-auth claims are stale", async () => {
+    authMock.mockResolvedValueOnce({
+      userId: "clerk_123",
+      sessionClaims: {
+        auth_time: Math.floor(Date.now() / 1000) - 3_600,
+      },
+    });
+
+    const result = await requestWithdrawalAction({
+      amount: 5000,
+      method: "MPESA",
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: "unauthorized",
+        message:
+          "Recent authentication required. Please sign in again and retry.",
+        status: 401,
+        details: expect.objectContaining({
+          reason: "stale_claim",
+          maxAgeSeconds: 300,
+        }),
+      },
+    });
+    expect(financeService.createWithdrawal).not.toHaveBeenCalled();
+  });
+
+  it("returns a structured limit_exceeded failure when withdrawal rate limit is exceeded", async () => {
+    checkRateLimitMock.mockResolvedValueOnce({
+      success: false,
+      limit: 5,
+      remaining: 0,
+      reset: Date.now() + 45_000,
+    });
+
+    const result = await requestWithdrawalAction({
+      amount: 5000,
+      method: "MPESA",
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: "limit_exceeded",
+        message: "Too many withdrawal requests. Please try again shortly.",
+        status: 429,
+        details: expect.objectContaining({
+          limit: 5,
+          remaining: 0,
+        }),
+      },
+    });
+    expect(financeService.createWithdrawal).not.toHaveBeenCalled();
+  });
+
   it("returns the stored response for completed idempotent requests", async () => {
     const storedResponse = buildWithdrawalDetail();
 
@@ -161,7 +265,7 @@ describe("finance actions", () => {
     expect(financeService.createWithdrawal).toHaveBeenCalledWith(
       {
         userId: "db_user_123",
-        role: "professional",
+        role: "PROFESSIONAL",
       },
       {
         amount: 5000,

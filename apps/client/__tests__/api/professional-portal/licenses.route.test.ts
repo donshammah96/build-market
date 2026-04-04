@@ -158,7 +158,7 @@ describe("professional licenses routes", () => {
     expect(response.status).toBe(200);
     expect(mockLicensesService.getLicenses).toHaveBeenCalledWith({
       userId: "db_user_123",
-      role: "professional",
+      role: "PROFESSIONAL",
     });
     expect(body.data).toHaveLength(1);
     expect(body.data[0].id).toBe(validLicenseId);
@@ -197,7 +197,7 @@ describe("professional licenses routes", () => {
         operationName: "get_professional_licenses",
         httpMethod: "GET",
         routePattern: "/api/professional-portal/licenses",
-        actorRole: "professional",
+        actorRole: "PROFESSIONAL",
         outcome: "succeeded",
         httpStatus: 200,
         durationMs: expect.any(Number),
@@ -220,7 +220,7 @@ describe("professional licenses routes", () => {
         operationName: "get_professional_licenses",
         httpMethod: "GET",
         routePattern: "/api/professional-portal/licenses",
-        actorRole: "professional",
+        actorRole: "PROFESSIONAL",
         outcome: "failed",
         httpStatus: 500,
         durationMs: expect.any(Number),
@@ -250,7 +250,7 @@ describe("professional licenses routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockLicensesService.getLicenseById).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "professional" },
+      { userId: "db_user_123", role: "PROFESSIONAL" },
       validLicenseId,
     );
   });
@@ -315,7 +315,7 @@ describe("professional licenses routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockLicensesService.deleteLicense).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "professional" },
+      { userId: "db_user_123", role: "PROFESSIONAL" },
       validLicenseId,
     );
     expect(IdempotencyService.complete).toHaveBeenCalledWith("idem-key", {

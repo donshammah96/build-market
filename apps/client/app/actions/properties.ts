@@ -96,13 +96,26 @@ export async function getPropertiesAction(
     requireActor: false,
     schema: PropertyQuerySchema.partial().optional(),
     handler: async ({ input }) => {
-      const parsed = PropertyQuerySchema.parse({
+      const parsedResult = PropertyQuerySchema.safeParse({
         page: "1",
         limit: "20",
         sortBy: "createdAt",
         sortOrder: "desc",
         ...input,
       });
+
+      if (!parsedResult.success) {
+        throwActionFailure(
+          createActionFailure(
+            "validation_error",
+            parsedResult.error.issues[0]?.message ?? "Invalid query parameters",
+            400,
+            parsedResult.error.issues,
+          ),
+        );
+      }
+
+      const parsed = parsedResult.data;
 
       return unwrapResultOrThrow(
         await propertiesService.listProperties(parsed),
@@ -551,11 +564,25 @@ export async function addPropertyDocumentAction(
       notes: createDocumentSchema.shape.notes,
     }),
     handler: async ({ actor, input }) => {
-      const documentInput = createDocumentSchema.parse({
+      const documentInputResult = createDocumentSchema.safeParse({
         type: input.type,
         assetId: input.assetId,
         notes: input.notes,
       });
+
+      if (!documentInputResult.success) {
+        throwActionFailure(
+          createActionFailure(
+            "validation_error",
+            documentInputResult.error.issues[0]?.message ??
+              "Invalid document payload",
+            400,
+            documentInputResult.error.issues,
+          ),
+        );
+      }
+
+      const documentInput = documentInputResult.data;
 
       return unwrapResultOrThrow(
         await propertiesService.addPropertyDocument(
@@ -629,11 +656,25 @@ export async function replacePropertyDocumentAction(
       notes: createDocumentSchema.shape.notes,
     }),
     handler: async ({ actor, input }) => {
-      const documentInput = createDocumentSchema.parse({
+      const documentInputResult = createDocumentSchema.safeParse({
         type: input.type,
         assetId: input.assetId,
         notes: input.notes,
       });
+
+      if (!documentInputResult.success) {
+        throwActionFailure(
+          createActionFailure(
+            "validation_error",
+            documentInputResult.error.issues[0]?.message ??
+              "Invalid document payload",
+            400,
+            documentInputResult.error.issues,
+          ),
+        );
+      }
+
+      const documentInput = documentInputResult.data;
 
       const context = {
         correlationId: randomUUID(),
