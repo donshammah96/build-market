@@ -153,6 +153,8 @@ Common auth helpers: `withAuth(handler)` for authenticated API routes; `withRole
 
 `withAuth` must fail closed. Any failure to resolve Clerk identity (timeout, upstream 5xx, malformed or expired token, or session parsing failure) returns `401` and must not execute the wrapped handler.
 
+Fail-open auth fallbacks are prohibited. Adapters must not continue execution as anonymous or best-effort authenticated when Clerk resolution fails.
+
 Actor context shape: pass `{ userId, clerkId, role }`, where `clerkId` may be absent in service-to-service calls without a Clerk session.
 
 For admin-capability-gated operations, adapters must construct and pass an admin actor with non-null `adminRole` resolved from the DB user record (not from Clerk claims), following ADR-007.
@@ -177,7 +179,7 @@ Hard requirements:
 
 1. Route handlers and server actions must emit structured, machine-readable log events (not ad-hoc `console.log` output).
 2. Structured events should include at least: `correlationId`, `operationName`, `httpMethod`, `routePattern`, `actorRole`, `outcome`, `httpStatus`, and `durationMs`.
-3. Do not log PII: never log `userId`, `clerkId`, `userEmail`, raw request bodies, or response payload bodies.
+3. Do not log PII: never log `userId`, `clerkId`, `userEmail`, `phone`, `nationalId`, `idNumber`, raw request bodies, or response payload bodies.
 4. Domain services and repositories must not own logging concerns. Domain returns structured `Result<T, DomainError>`; adapter layers log final outcomes.
 5. Treat `operationName` as a stable observability join key. Renaming it is a breaking observability change and requires coordinated dashboard updates.
 6. `durationMs` timing starts at the first adapter statement (before auth, parse, and validation) and ends at response mapping.
