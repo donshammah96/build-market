@@ -12,6 +12,28 @@ import { prisma } from "@build/db";
 import { Prisma, IdempotencyStatus } from "@prisma/client";
 import { STORE_CONFIG } from "@/app/lib/config/store.config";
 
+const IDEMPOTENCY_REPLAY_REDACTED_VALUE = "[REDACTED]";
+const IDEMPOTENCY_REPLAY_MAX_DEPTH = 10;
+const IDEMPOTENCY_REPLAY_SENSITIVE_KEY_FRAGMENTS = [
+  "email",
+  "phone",
+  "nationalid",
+  "idnumber",
+  "password",
+  "secret",
+  "token",
+  "authorization",
+  "cookie",
+  "session",
+  "clerkid",
+  "accountnumber",
+  "iban",
+  "cvv",
+  "otp",
+  "pin",
+  "mpesa",
+];
+
 export type IdempotencyCheckResult<T = unknown> = {
   status: "new" | "pending" | "completed";
   response?: T;
@@ -51,9 +73,19 @@ export class IdempotencyService {
     entityId?: string,
     ttlHours: number = STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
   ): Promise<IdempotencyCheckResult<T> | null> {
-    const existing = await prisma.idempotencyKey.findUnique({
+    let existing = await prisma.idempotencyKey.findUnique({
       where: { key },
     });
+
+    const existingExpiresAtEpochMs =
+      existing?.expiresAt instanceof Date
+        ? existing.expiresAt.getTime()
+        : Number.POSITIVE_INFINITY;
+
+    if (existing && existingExpiresAtEpochMs <= Date.now()) {
+      await prisma.idempotencyKey.delete({ where: { key } });
+      existing = null;
+    }
 
     if (existing) {
       if (
@@ -94,13 +126,87 @@ export class IdempotencyService {
    * Mark an idempotency key as completed with its cached response.
    */
   static async complete(key: string, response: unknown): Promise<void> {
+    const sanitizedResponse =
+      IdempotencyService.sanitizeReplayResponse(response);
+    const responseForPersistence =
+      sanitizedResponse === null
+        ? Prisma.JsonNull
+        : (sanitizedResponse as Prisma.InputJsonValue);
+
     await prisma.idempotencyKey.update({
       where: { key },
       data: {
         status: IdempotencyStatus.COMPLETED,
-        response: response as Prisma.InputJsonValue,
+        response: responseForPersistence,
       },
     });
+  }
+
+  private static sanitizeReplayResponse(response: unknown): Prisma.JsonValue {
+    return IdempotencyService.sanitizeReplayValue(response, 0);
+  }
+
+  private static sanitizeReplayValue(
+    value: unknown,
+    depth: number,
+  ): Prisma.JsonValue {
+    if (depth > IDEMPOTENCY_REPLAY_MAX_DEPTH) {
+      return null;
+    }
+
+    if (value === null) {
+      return null;
+    }
+
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      return value;
+    }
+
+    if (typeof value === "bigint") {
+      return value.toString();
+    }
+
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((entry) =>
+        IdempotencyService.sanitizeReplayValue(entry, depth + 1),
+      );
+    }
+
+    if (typeof value === "object") {
+      const recordValue = value as Record<string, unknown>;
+      const sanitized: Prisma.JsonObject = {};
+
+      for (const [key, nestedValue] of Object.entries(recordValue)) {
+        if (IdempotencyService.isSensitiveReplayKey(key)) {
+          sanitized[key] = IDEMPOTENCY_REPLAY_REDACTED_VALUE;
+          continue;
+        }
+
+        sanitized[key] = IdempotencyService.sanitizeReplayValue(
+          nestedValue,
+          depth + 1,
+        );
+      }
+
+      return sanitized;
+    }
+
+    return null;
+  }
+
+  private static isSensitiveReplayKey(key: string): boolean {
+    const normalizedKey = key.replace(/[^a-z0-9]/gi, "").toLowerCase();
+    return IDEMPOTENCY_REPLAY_SENSITIVE_KEY_FRAGMENTS.some((fragment) =>
+      normalizedKey.includes(fragment),
+    );
   }
 
   /**
