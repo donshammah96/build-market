@@ -97,6 +97,23 @@ function assignVariant(
   return bucket < splitPercentage ? "B" : "A";
 }
 
+function generateAnonymousId(): string {
+  if (typeof window !== "undefined" && typeof window.crypto !== "undefined") {
+    if (typeof window.crypto.randomUUID === "function") {
+      return `anon_${window.crypto.randomUUID()}`;
+    }
+
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    const token = Array.from(bytes, (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    return `anon_${token}`;
+  }
+
+  return "anon_fallback";
+}
+
 // ============================================================================
 // ANALYTICS INTEGRATION
 // ============================================================================
@@ -206,8 +223,8 @@ export function useABTest({
       assignedVariant = assignVariant(user.id, name, splitPercentage);
       storeTest(name, assignedVariant);
     } else if (allowAnonymous) {
-      // Anonymous user: generate random ID
-      const anonymousId = `anon_${Math.random().toString(36).slice(2)}`;
+      // Anonymous user: generate cryptographically secure ID
+      const anonymousId = generateAnonymousId();
       assignedVariant = assignVariant(anonymousId, name, splitPercentage);
       storeTest(name, assignedVariant);
     }

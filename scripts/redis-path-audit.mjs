@@ -1,51 +1,85 @@
-function parseIntOrDefault(value, fallback) {
-  const parsed = Number.parseInt(value || "", 10);
-  return Number.isNaN(parsed) ? fallback : parsed;
-}
+function buildAuditInput(rawEnv) {
+  const redisUrl = rawEnv.REDIS_URL;
+  const normalizedNodeEnv =
+    rawEnv.NODE_ENV === "production" ||
+    rawEnv.NODE_ENV === "test" ||
+    rawEnv.NODE_ENV === "development"
+      ? rawEnv.NODE_ENV
+      : "custom";
 
-function getBullMQSummary(env) {
-  const redisUrl = env.REDIS_URL;
+  let hasRedisUrlUsername = false;
+  let hasRedisUrlPassword = false;
+  let redisUrlUsesTls = false;
 
   if (redisUrl) {
-    const parsed = new URL(redisUrl);
+    try {
+      const parsed = new URL(redisUrl);
+      hasRedisUrlUsername = Boolean(parsed.username);
+      hasRedisUrlPassword = Boolean(parsed.password);
+      redisUrlUsesTls = parsed.protocol === "rediss:";
+    } catch {
+      // Ignore malformed REDIS_URL and rely on discrete flags.
+    }
+  }
+
+  return {
+    nodeEnv: normalizedNodeEnv,
+    queueProviderIsRedis: rawEnv.QUEUE_PROVIDER === "REDIS",
+    redisEnabled: rawEnv.REDIS_ENABLED === "true",
+    cacheRedisEnabled: rawEnv.CACHE_REDIS_ENABLED === "true",
+    redisUrlConfigured: Boolean(redisUrl),
+    redisHostConfigured: Boolean(rawEnv.REDIS_HOST),
+    redisPortConfigured: Boolean(rawEnv.REDIS_PORT),
+    redisUsernameConfigured: Boolean(rawEnv.REDIS_USERNAME),
+    redisPasswordConfigured: Boolean(rawEnv.REDIS_PASSWORD),
+    redisTlsEnabled: rawEnv.REDIS_TLS === "true",
+    hasRedisUrlUsername,
+    hasRedisUrlPassword,
+    redisUrlUsesTls,
+    upstashUrlConfigured: Boolean(rawEnv.UPSTASH_REDIS_REST_URL),
+    upstashTokenConfigured: Boolean(rawEnv.UPSTASH_REDIS_REST_TOKEN),
+  };
+}
+
+function getBullMQSummary(auditInput) {
+  if (auditInput.redisUrlConfigured) {
+    const credentialsConfigured =
+      auditInput.hasRedisUrlUsername ||
+      auditInput.hasRedisUrlPassword ||
+      auditInput.redisUsernameConfigured ||
+      auditInput.redisPasswordConfigured;
 
     return {
       enabled: true,
       source: "REDIS_URL",
-      host: parsed.hostname || "localhost",
-      port: parseIntOrDefault(parsed.port, 6379),
-      username: parsed.username || env.REDIS_USERNAME || undefined,
-      db: parseIntOrDefault(parsed.pathname.replace(/^\//, ""), 0),
-      tls: parsed.protocol === "rediss:" || env.REDIS_TLS === "true",
-      hasPassword: Boolean(parsed.password || env.REDIS_PASSWORD),
+      tlsEnabled: auditInput.redisUrlUsesTls || auditInput.redisTlsEnabled,
+      credentialsConfigured,
     };
   }
 
-  const hasDiscreteConfig = Boolean(env.REDIS_HOST || env.REDIS_PORT);
+  const hasDiscreteConfig =
+    auditInput.redisHostConfigured || auditInput.redisPortConfigured;
 
   return {
     enabled: hasDiscreteConfig,
     source: hasDiscreteConfig ? "DISCRETE_VARS" : "DEFAULTS_ONLY",
-    host: env.REDIS_HOST || "localhost",
-    port: parseIntOrDefault(env.REDIS_PORT, 6379),
-    username: env.REDIS_USERNAME || undefined,
-    db: parseIntOrDefault(env.REDIS_DB, 0),
-    tls: env.REDIS_TLS === "true",
-    hasPassword: Boolean(env.REDIS_PASSWORD),
+    tlsEnabled: auditInput.redisTlsEnabled,
+    credentialsConfigured:
+      auditInput.redisUsernameConfigured || auditInput.redisPasswordConfigured,
   };
 }
 
-function buildAudit(env) {
-  const bullmq = getBullMQSummary(env);
-  const queueProvider = env.QUEUE_PROVIDER || "MEMORY";
+function buildAudit(auditInput) {
+  const bullmq = getBullMQSummary(auditInput);
+  const queueProviderIsRedis = auditInput.queueProviderIsRedis;
   const sharedRedisEnabled =
-    env.REDIS_ENABLED === "true" || env.CACHE_REDIS_ENABLED === "true";
+    auditInput.redisEnabled || auditInput.cacheRedisEnabled;
   const upstashEnabled = Boolean(
-    env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN,
+    auditInput.upstashUrlConfigured && auditInput.upstashTokenConfigured,
   );
 
   return {
-    environment: env.NODE_ENV || "development",
+    environment: auditInput.nodeEnv,
     bullmq,
     paths: [
       {
@@ -57,11 +91,10 @@ function buildAudit(env) {
       },
       {
         id: "resilience-l2-cache",
-        enabled: env.CACHE_REDIS_ENABLED === "true",
-        reason:
-          env.CACHE_REDIS_ENABLED === "true"
-            ? "CACHE_REDIS_ENABLED is true"
-            : "Resilience Redis cache is off unless CACHE_REDIS_ENABLED is true",
+        enabled: auditInput.cacheRedisEnabled,
+        reason: auditInput.cacheRedisEnabled
+          ? "CACHE_REDIS_ENABLED is true"
+          : "Resilience Redis cache is off unless CACHE_REDIS_ENABLED is true",
       },
       {
         id: "client-gdpr-export-bullmq",
@@ -86,14 +119,13 @@ function buildAudit(env) {
       },
       {
         id: "admin-verification-retry-queue",
-        enabled: queueProvider === "REDIS" && bullmq.enabled,
-        provider: queueProvider,
-        reason:
-          queueProvider === "REDIS"
-            ? bullmq.enabled
-              ? "QUEUE_PROVIDER=REDIS and BullMQ Redis config is available"
-              : "QUEUE_PROVIDER=REDIS but no BullMQ Redis config is available"
-            : `QUEUE_PROVIDER=${queueProvider}, so verification retries do not use Redis`,
+        enabled: queueProviderIsRedis && bullmq.enabled,
+        provider: queueProviderIsRedis ? "REDIS" : "NON_REDIS",
+        reason: queueProviderIsRedis
+          ? bullmq.enabled
+            ? "QUEUE_PROVIDER=REDIS and BullMQ Redis config is available"
+            : "QUEUE_PROVIDER=REDIS but no BullMQ Redis config is available"
+          : "QUEUE_PROVIDER is not REDIS, so verification retries do not use Redis",
       },
       {
         id: "client-password-reset-rate-limit",
@@ -106,6 +138,6 @@ function buildAudit(env) {
   };
 }
 
-const report = buildAudit(process.env);
+const report = buildAudit(buildAuditInput(process.env));
 
 console.log(JSON.stringify(report, null, 2));

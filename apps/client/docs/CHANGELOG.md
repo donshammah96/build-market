@@ -132,6 +132,9 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Security
 
+- **A/B test anonymous assignment randomness hardening (2026-04-08):** replaced `Math.random()`-based anonymous ID generation in `hooks/useABTest.ts` with Web Crypto (`crypto.randomUUID()` with `crypto.getRandomValues()` fallback) to remove insecure randomness in a security-sensitive flow.
+- **Redis audit output redaction hardening (2026-04-08):** refactored `scripts/redis-path-audit.mjs` to build and log only sanitized configuration flags, removing clear-text output of environment-derived Redis connection details and password-presence fields.
+- **Admin client API timeout exhaustion guard (2026-04-08):** hardened `apps/admin/src/actions/admin/shared.ts` by normalizing and bounding `callClientApi` timeout values before `setTimeout` usage (default `30_000`, min `1_000`, max `60_000`) to prevent timer creation with uncontrolled durations.
 - **ADD-009 structured server-action validation hardening (2026-04-04):** completed the next enforcement sweep in `app/actions/search.ts`, `app/actions/professionals.ts`, and `app/actions/stores.ts` by removing remaining `safeParse()` plus raw-throw validation branches and standardizing on structured failure mapping (`throwActionFailure(createActionFailure(...))` and `unwrapResultOrThrow(...)`) so adapters now return canonical validation and domain outcomes without opaque runtime throws.
 - **ADD-007 idempotency replay data-class policy hardening (2026-04-04):** strengthened `app/lib/services/idempotency.service.ts` to sanitize replay payloads before persistence and replay (sensitive-key redaction and JSON-safe normalization), and added expired-record rollover on `checkOrCreate` so stale keys are rotated to fresh processing records; added focused regression coverage in `__tests__/lib/idempotency.service.test.ts` for redaction, normalization, replay shape safety, and expired-key recovery behavior.
 - **ASVS rendering and browser-storage lint enforcement (2026-04-04):** expanded `scripts/check-security-lint.mjs` and `scripts/security-lint-checks.mjs` with blocking checks for `SEC-LINT-003` (`dangerouslySetInnerHTML` requires sanitizer/review annotation or explicit allowlisting) and `SEC-LINT-007` (sensitive-flow `localStorage`/`sessionStorage` writes require `SECURITY_PERSISTENCE_ALLOWLIST`), and annotated the safe chart style injection path in `components/ui/chart.tsx` with `SECURITY_XSS_ALLOWLIST`.
@@ -147,6 +150,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Fixed
 
+- **PropertyForm snapshot normalization no-op fix (2026-04-08):** fixed `__tests__/components/forms/PropertyForm.test.tsx` snapshot markup normalization by replacing dynamic `radix-*` IDs with `radix-__ID__` instead of a self-replacement no-op.
 - **Onboarding compliance and completion semantics (2026-04-04):** aligned user-profile consent and completion flows to transaction-safe and explicit `Result<T, DomainError>` semantics so onboarding/profile-complete callers no longer depend on partial-success branching or implicit completion fallback behavior.
 - **Canonical env-boundary test alignment:** updated middleware resolver regression coverage to override `env.services.internalApiSecret` directly instead of mutating `process.env.INTERNAL_API_SECRET` at runtime, matching the canonical env singleton behavior in resolver modules.
 
@@ -154,6 +158,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Changed
 
+- **CI action/runtime alignment (2026-04-08):** updated `.github/workflows/ci.yml` to use `actions/github-script@v8` (Node 24 runtime) and removed redundant pnpm version pinning from `pnpm/action-setup`, relying on root `packageManager` (`pnpm@10.29.2`) as the single pnpm version source.
 - **ADR-007 admin-path migration (phase 2 baseline closure):** completed the final type-baseline cleanup pass in admin actions by replacing string-based lead filter typing with canonical enum-safe contracts and removing suppression-based compilation masking from the leads action surface.
 - **ADR-007 ClientType onboarding compliance routing (2026-04-04):** domain onboarding now treats `ClientType` as a profile classification (not identity), derives a dedicated `government_entity` onboarding branch for `GOVERNMENT_ENTITY` clients, and persists explicit routing metadata for downstream project-creation and payment-initiation compliance checks in profile preferences.
 - **Onboarding observability contract completion (2026-04-04):** middleware onboarding resolver now emits structured outcomes for internal-secret-missing fallback, non-OK internal API fallback, internal API errors, and successful internal API resolution; onboarding route suites now assert the terminal structured logging contract for success and unauthorized or bad-request terminal outcomes across all onboarding endpoint families.

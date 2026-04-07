@@ -40,7 +40,7 @@ vi.mock("@/lib/upload-client", () => ({
 const normalizeSnapshotMarkup = (markup: string) =>
   markup
     .replace(/_r_[a-z0-9_:-]+/gi, "__ID__")
-    .replace(/radix-__ID__/g, "radix-__ID__");
+    .replace(/radix-[a-z0-9_:-]+/gi, "radix-__ID__");
 
 // Mock next/image
 vi.mock("next/image", () => ({

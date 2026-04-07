@@ -330,14 +330,37 @@ interface ClientApiOptions {
   timeout?: number;
 }
 
+const DEFAULT_CLIENT_API_TIMEOUT_MS = 30_000;
+const MIN_CLIENT_API_TIMEOUT_MS = 1_000;
+const MAX_CLIENT_API_TIMEOUT_MS = 60_000;
+
+function normalizeClientApiTimeout(timeout: number | undefined): number {
+  if (typeof timeout !== "number" || !Number.isFinite(timeout)) {
+    return DEFAULT_CLIENT_API_TIMEOUT_MS;
+  }
+
+  const normalizedTimeout = Math.trunc(timeout);
+
+  if (normalizedTimeout < MIN_CLIENT_API_TIMEOUT_MS) {
+    return MIN_CLIENT_API_TIMEOUT_MS;
+  }
+
+  if (normalizedTimeout > MAX_CLIENT_API_TIMEOUT_MS) {
+    return MAX_CLIENT_API_TIMEOUT_MS;
+  }
+
+  return normalizedTimeout;
+}
+
 export async function callClientApi<T>(
   endpoint: string,
   options: ClientApiOptions = {},
 ): Promise<T> {
-  const { method = "GET", body, headers = {}, timeout = 30000 } = options;
+  const { method = "GET", body, headers = {} } = options;
+  const requestTimeoutMs = normalizeClientApiTimeout(options.timeout);
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
 
   try {
     const url = `${CLIENT_API_BASE_URL}${endpoint}`;
@@ -371,7 +394,9 @@ export async function callClientApi<T>(
     return (await response.json()) as T;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`Request to ${endpoint} timed out after ${timeout}ms`);
+      throw new Error(
+        `Request to ${endpoint} timed out after ${requestTimeoutMs}ms`,
+      );
     }
     throw error;
   } finally {
