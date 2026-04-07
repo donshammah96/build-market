@@ -8,14 +8,12 @@ function buildAuditInput(rawEnv) {
       : "custom";
 
   let hasRedisUrlUsername = false;
-  let hasRedisUrlPassword = false;
   let redisUrlUsesTls = false;
 
   if (redisUrl) {
     try {
       const parsed = new URL(redisUrl);
       hasRedisUrlUsername = Boolean(parsed.username);
-      hasRedisUrlPassword = Boolean(parsed.password);
       redisUrlUsesTls = parsed.protocol === "rediss:";
     } catch {
       // Ignore malformed REDIS_URL and rely on discrete flags.
@@ -31,23 +29,17 @@ function buildAuditInput(rawEnv) {
     redisHostConfigured: Boolean(rawEnv.REDIS_HOST),
     redisPortConfigured: Boolean(rawEnv.REDIS_PORT),
     redisUsernameConfigured: Boolean(rawEnv.REDIS_USERNAME),
-    redisPasswordConfigured: Boolean(rawEnv.REDIS_PASSWORD),
     redisTlsEnabled: rawEnv.REDIS_TLS === "true",
     hasRedisUrlUsername,
-    hasRedisUrlPassword,
     redisUrlUsesTls,
     upstashUrlConfigured: Boolean(rawEnv.UPSTASH_REDIS_REST_URL),
-    upstashTokenConfigured: Boolean(rawEnv.UPSTASH_REDIS_REST_TOKEN),
   };
 }
 
 function getBullMQSummary(auditInput) {
   if (auditInput.redisUrlConfigured) {
     const credentialsConfigured =
-      auditInput.hasRedisUrlUsername ||
-      auditInput.hasRedisUrlPassword ||
-      auditInput.redisUsernameConfigured ||
-      auditInput.redisPasswordConfigured;
+      auditInput.hasRedisUrlUsername || auditInput.redisUsernameConfigured;
 
     return {
       enabled: true,
@@ -64,8 +56,7 @@ function getBullMQSummary(auditInput) {
     enabled: hasDiscreteConfig,
     source: hasDiscreteConfig ? "DISCRETE_VARS" : "DEFAULTS_ONLY",
     tlsEnabled: auditInput.redisTlsEnabled,
-    credentialsConfigured:
-      auditInput.redisUsernameConfigured || auditInput.redisPasswordConfigured,
+    credentialsConfigured: auditInput.redisUsernameConfigured,
   };
 }
 
@@ -74,9 +65,7 @@ function buildAudit(auditInput) {
   const queueProviderIsRedis = auditInput.queueProviderIsRedis;
   const sharedRedisEnabled =
     auditInput.redisEnabled || auditInput.cacheRedisEnabled;
-  const upstashEnabled = Boolean(
-    auditInput.upstashUrlConfigured && auditInput.upstashTokenConfigured,
-  );
+  const upstashEnabled = auditInput.upstashUrlConfigured;
 
   return {
     environment: auditInput.nodeEnv,
@@ -131,8 +120,8 @@ function buildAudit(auditInput) {
         id: "client-password-reset-rate-limit",
         enabled: upstashEnabled,
         reason: upstashEnabled
-          ? "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are both set"
-          : "Upstash Redis credentials are incomplete or missing",
+          ? "UPSTASH_REDIS_REST_URL is set"
+          : "Upstash Redis URL is missing",
       },
     ],
   };
