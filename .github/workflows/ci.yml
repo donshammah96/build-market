@@ -81,6 +81,14 @@ jobs:
         run: pnpm run format:check
 
       - name: Lint
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
+          CLERK_SECRET_KEY: sk_test_ci_placeholder
+          CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/build_market_ci
+          NEXT_PUBLIC_APP_URL: http://localhost:3500
+          NEXT_PUBLIC_API_URL: http://localhost:3500/api
+          ENCRYPTION_KEY_V1: 0000000000000000000000000000000000000000000000000000000000000000
         run: pnpm run lint
 
       - name: Env contract check
