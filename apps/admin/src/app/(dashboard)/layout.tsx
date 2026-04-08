@@ -170,7 +170,6 @@ export default async function DashboardLayout({
         <div className="p-4 border-t border-zinc-800 bg-zinc-950">
           <div className="flex items-center gap-3 px-2 py-1">
             <UserButton
-              afterSignOutUrl="/sign-in"
               appearance={{
                 elements: {
                   avatarBox: "h-8 w-8 ring-2 ring-zinc-700",
@@ -197,7 +196,7 @@ export default async function DashboardLayout({
             <ShieldCheck className="h-6 w-6 text-emerald-600" />
             <span className="font-bold text-lg text-zinc-900">AdminPanel</span>
           </div>
-          <UserButton afterSignOutUrl="/sign-in" />
+          <UserButton />
         </header>
 
         {/* Scrollable Content Area */}
