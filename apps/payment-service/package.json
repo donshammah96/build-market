@@ -10,10 +10,10 @@
     "test": "echo \"No tests configured\" && exit 0"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.33.6",
-    "@hono/clerk-auth": "^3.1.0",
-    "@hono/node-server": "^1.19.10",
-    "hono": "^4.12.7"
+    "@clerk/backend": "^3.2.7",
+    "@clerk/nextjs": "^7.0.11",
+    "@hono/node-server": "^1.19.13",
+    "hono": "^4.12.12"
   },
   "devDependencies": {
     "@build/typescript-config": "workspace:*",

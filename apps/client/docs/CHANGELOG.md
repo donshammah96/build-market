@@ -158,6 +158,9 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Changed
 
+- **Dependency and peer-alignment cleanup (2026-04-08):** upgraded `react-day-picker` to `^9.14.0` in admin and client to remove React/date-fns peer-range mismatches under React 19 and current `date-fns`.
+- **Cypress component test dependency cleanup (2026-04-08):** removed deprecated `@cypress/react18` from `apps/client` and kept `@cypress/react` as the active component-testing adapter.
+- **Clerk middleware modernization (2026-04-08):** upgraded `@clerk/nextjs` (admin and payment-service) and `@clerk/express` (project-service), then replaced `@hono/clerk-auth` in payment-service with a local Clerk backend adapter (`src/lib/clerkAuth.ts`) built on `@clerk/backend` to eliminate deprecated Clerk transitive dependency paths.
 - **CI action/runtime alignment (2026-04-08):** updated `.github/workflows/ci.yml` to use `actions/github-script@v8` (Node 24 runtime) and removed redundant pnpm version pinning from `pnpm/action-setup`, relying on root `packageManager` (`pnpm@10.29.2`) as the single pnpm version source.
 - **ADR-007 admin-path migration (phase 2 baseline closure):** completed the final type-baseline cleanup pass in admin actions by replacing string-based lead filter typing with canonical enum-safe contracts and removing suppression-based compilation masking from the leads action surface.
 - **ADR-007 ClientType onboarding compliance routing (2026-04-04):** domain onboarding now treats `ClientType` as a profile classification (not identity), derives a dedicated `government_entity` onboarding branch for `GOVERNMENT_ENTITY` clients, and persists explicit routing metadata for downstream project-creation and payment-initiation compliance checks in profile preferences.
