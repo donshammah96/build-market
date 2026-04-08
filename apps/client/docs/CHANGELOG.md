@@ -150,6 +150,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Fixed
 
+- **Tailwind warning cleanup in chat and professional forms (2026-04-08):** resolved Tailwind lint and utility-class warnings in `components/chat/ConversationsList.tsx`, `components/forms/MultiPropertyForm.tsx`, `components/forms/MultiStoreForm.tsx`, and `components/forms/ProfessionalForm.tsx` without changing runtime behavior.
 - **Static-analysis remediation sweep (2026-04-08):** resolved analyzer-reported null-safety, constant-condition, and identical-branch issues across client and companion admin surfaces touched by this pass, including professional/profile pages, leads adapters, chart and form utilities, multi-form themes, chat conversation rendering, and Clerk verification-flag typing; this pass also tightened type narrowing and removed redundant guard branches without changing runtime behavior.
 - **PropertyForm snapshot normalization no-op fix (2026-04-08):** fixed `__tests__/components/forms/PropertyForm.test.tsx` snapshot markup normalization by replacing dynamic `radix-*` IDs with `radix-__ID__` instead of a self-replacement no-op.
 - **Onboarding compliance and completion semantics (2026-04-04):** aligned user-profile consent and completion flows to transaction-safe and explicit `Result<T, DomainError>` semantics so onboarding/profile-complete callers no longer depend on partial-success branching or implicit completion fallback behavior.

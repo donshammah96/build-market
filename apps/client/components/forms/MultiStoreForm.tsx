@@ -519,7 +519,7 @@ export function MultiStoreForm({
             onClick={handleSubmit}
             disabled={isSubmitting || !allValid}
             className={cn(
-              "min-w-[140px] transition-all",
+              "min-w-35 transition-all",
               allValid ? theme.submitButtonValid : theme.submitButtonInvalid,
             )}
           >

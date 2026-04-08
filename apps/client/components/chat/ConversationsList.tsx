@@ -95,8 +95,8 @@ export function ConversationsList({
             <div key={i} className="flex items-center gap-3 p-3">
               <Skeleton className="w-12 h-12 rounded-full" />
               <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-[150px]" />
-                <Skeleton className="h-3 w-[200px]" />
+                <Skeleton className="h-4 w-37.5" />
+                <Skeleton className="h-3 w-50" />
               </div>
             </div>
           ))}
@@ -196,7 +196,7 @@ export function ConversationsList({
   }
 
   return (
-    <Card className="h-[600px] flex flex-col">
+    <Card className="h-150 flex flex-col">
       <CardHeader className="border-b">
         <div className="flex items-center justify-between mb-4">
           <CardTitle className="text-xl flex items-center gap-2">

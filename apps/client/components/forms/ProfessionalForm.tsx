@@ -138,11 +138,11 @@ const SuccessCard: React.FC<SuccessCardProps> = ({
       animate={{ opacity: 1, scale: 1 }}
       className={
         isDark
-          ? "bg-[var(--color-onboarding-surface)]/82 backdrop-blur-md border border-[var(--color-onboarding-primary)]/28 p-8 max-w-md mx-auto text-center rounded-xl"
+          ? "bg-onboarding-surface/82 backdrop-blur-md border border-onboarding-primary/28 p-8 max-w-md mx-auto text-center rounded-xl"
           : "bg-white border border-border shadow-lg p-8 max-w-md mx-auto text-center rounded-xl"
       }
     >
-      <div className="mb-4 text-[var(--color-onboarding-primary)]">
+      <div className="mb-4 text-onboarding-primary">
         <Award
           className={`w-12 h-12 inline-block ${isDark ? "drop-shadow-[0_0_15px_rgba(245,158,11,0.5)]" : "drop-shadow-md"}`}
         />
@@ -158,9 +158,7 @@ const SuccessCard: React.FC<SuccessCardProps> = ({
       </h3>
       <p
         className={
-          isDark
-            ? "text-[var(--color-onboarding-ink)]/62 mb-6"
-            : "text-muted-foreground mb-6"
+          isDark ? "text-onboarding-ink/62 mb-6" : "text-muted-foreground mb-6"
         }
       >
         {isCompletion
@@ -173,7 +171,7 @@ const SuccessCard: React.FC<SuccessCardProps> = ({
           disabled={isNavigating}
           className={
             isDark
-              ? "text-sm border-b border-[var(--color-onboarding-primary)]/50 pb-1 text-[var(--color-onboarding-primary)] hover:opacity-90 transition-colors disabled:opacity-50 flex items-center gap-2"
+              ? "text-sm border-b border-onboarding-primary/50 pb-1 text-onboarding-primary hover:opacity-90 transition-colors disabled:opacity-50 flex items-center gap-2"
               : "text-sm border-b border-success/50 pb-1 text-success hover:opacity-90 transition-colors disabled:opacity-50 flex items-center gap-2"
           }
         >
@@ -185,7 +183,7 @@ const SuccessCard: React.FC<SuccessCardProps> = ({
           disabled={isNavigating}
           className={
             isDark
-              ? "text-sm text-[var(--color-onboarding-ink)]/58 hover:text-[var(--color-onboarding-ink)] transition-colors disabled:opacity-50"
+              ? "text-sm text-onboarding-ink/58 hover:text-onboarding-ink transition-colors disabled:opacity-50"
               : "text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
           }
         >
