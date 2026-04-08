@@ -105,7 +105,9 @@ export default function Home() {
         <Property />
       </Suspense>
 
-      <Suspense fallback={<SectionSkeleton height="500px" bg="bg-background" />}>
+      <Suspense
+        fallback={<SectionSkeleton height="500px" bg="bg-background" />}
+      >
         <VendorsSection />
       </Suspense>
 

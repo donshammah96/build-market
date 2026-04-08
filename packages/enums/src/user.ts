@@ -11,11 +11,7 @@
 // UserRole
 // -------------------------------------------------------------------------
 
-export const USER_ROLES = [
-  "CLIENT",
-  "PROFESSIONAL",
-  "ADMIN",
-] as const;
+export const USER_ROLES = ["CLIENT", "PROFESSIONAL", "ADMIN"] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
 

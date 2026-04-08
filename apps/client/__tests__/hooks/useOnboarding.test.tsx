@@ -3,7 +3,10 @@ import { renderHook, waitFor, act } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "react-toastify";
 import { useOnboarding } from "@/app/onboarding/_hooks/useOnboarding";
-import { OnboardingAnalyticsProvider, NullAnalytics } from "@/lib/analytics/OnboardingAnalyticsContext";
+import {
+  OnboardingAnalyticsProvider,
+  NullAnalytics,
+} from "@/lib/analytics/OnboardingAnalyticsContext";
 
 const mockReplace = vi.hoisted(() => vi.fn());
 const mockPush = vi.hoisted(() => vi.fn());

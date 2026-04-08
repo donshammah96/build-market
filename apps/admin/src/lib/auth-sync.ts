@@ -27,7 +27,6 @@ export async function syncUserRole() {
     await prisma.user.update({
       where: { clerkId: userId },
       data: {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         role: clerkRole as any,
       },
     });

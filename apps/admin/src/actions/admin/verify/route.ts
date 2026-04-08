@@ -35,9 +35,10 @@ const verificationSchema = z.object({
 /**
  * POST handler for unified verification
  */
-export const POST = withAdminRole([
-  AdminRole.SUPER_ADMIN,
-])(async (req: NextRequest, context: AuthContext) => {
+export const POST = withAdminRole([AdminRole.SUPER_ADMIN])(async (
+  req: NextRequest,
+  context: AuthContext,
+) => {
   const { dbUserId } = context;
   const correlationId = initializeCorrelationId(req);
 

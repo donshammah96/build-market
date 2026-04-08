@@ -46,11 +46,7 @@ export function PropertyDocumentsSection({
                 onDelete={async (documentId) => {
                   await onDelete(documentId);
                 }}
-                allowedTypes={[
-                  "application/pdf",
-                  "image/jpeg",
-                  "image/png",
-                ]}
+                allowedTypes={["application/pdf", "image/jpeg", "image/png"]}
                 maxSizeMB={10}
               />
             </div>

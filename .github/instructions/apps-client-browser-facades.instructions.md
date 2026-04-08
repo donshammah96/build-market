@@ -4,6 +4,7 @@ applyTo: "apps/client/lib/*-client.ts"
 ---
 
 # Client Browser Facade Contract
+
 Last aligned with canonical on: 2026-04-04.
 
 ## Scope

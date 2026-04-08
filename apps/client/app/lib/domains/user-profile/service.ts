@@ -689,9 +689,7 @@ export const userProfileService = {
     if (!completionSyncResult.ok) {
       return err({
         error:
-          completionSyncResult.error === "not_found"
-            ? "not_found"
-            : "internal",
+          completionSyncResult.error === "not_found" ? "not_found" : "internal",
         message: completionSyncResult.message,
         status: completionSyncResult.status,
       });

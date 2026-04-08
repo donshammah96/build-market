@@ -265,10 +265,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       reason: "domain_error",
       domainError: result.data.error,
     });
-    return apiError(
-      result.data.message || "Onboarding failed",
-      status,
-    );
+    return apiError(result.data.message || "Onboarding failed", status);
   }
 
   const responseData = result.data.data;

@@ -109,7 +109,9 @@ const createMultiPropertyTheme = (variant: PropertyFormVariant) => {
 
     // Property name
     propertyName: isDark ? "text-foreground" : "text-foreground",
-    propertyNameEmpty: isDark ? "text-muted-foreground italic" : "text-muted-foreground italic",
+    propertyNameEmpty: isDark
+      ? "text-muted-foreground italic"
+      : "text-muted-foreground italic",
 
     // Status text
     statusValid: "text-[var(--color-success)] font-medium",

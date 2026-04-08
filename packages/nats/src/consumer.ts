@@ -1,6 +1,5 @@
 import {
   StringCodec,
-  JetStreamClient,
   JsMsg,
   ConsumerConfig,
   DeliverPolicy,
@@ -13,11 +12,19 @@ import type {
   NatsClient,
   NatsConfig,
   TopicConfig,
-  ConsumerOptions,
   MessagePayload,
 } from "./types";
 
 const sc = StringCodec();
+
+function isTimeoutError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const maybeError = error as { code?: string; message?: string };
+  return maybeError.code === "408" || maybeError.message === "TIMEOUT";
+}
 
 /**
  * JetStream Consumer for subscribing to messages
@@ -239,9 +246,9 @@ export class JetStreamConsumer {
         for await (const msg of messages) {
           await this.processMessage(msg, handler, subject);
         }
-      } catch (error: any) {
+      } catch (error) {
         // Ignore timeout errors (normal when no messages)
-        if (error?.code !== "408" && error?.message !== "TIMEOUT") {
+        if (!isTimeoutError(error)) {
           console.error(`[NATS Consumer] Error consuming ${subject}:`, error);
         }
       }

@@ -5,10 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Cookie, Shield } from "lucide-react";
 import { useCookieConsent } from "@/hooks/useCookieConsent";
-import {
-  CookieCategoryCard,
-  CATEGORIES,
-} from "./_components";
+import { CookieCategoryCard, CATEGORIES } from "./_components";
 
 export default function CookieSettingsPage() {
   const { consent, acceptAll, rejectAll, savePreferences, isSyncing } =

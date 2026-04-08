@@ -39,9 +39,7 @@ function loadEncryptionKeys(): void {
   for (const version of keyVersions) {
     const envVar = `ENCRYPTION_KEY_${version.toUpperCase()}`;
     const keyHex =
-      env.encryption.keys[
-        version as keyof typeof env.encryption.keys
-      ];
+      env.encryption.keys[version as keyof typeof env.encryption.keys];
 
     if (keyHex) {
       if (keyHex.length !== 64) {

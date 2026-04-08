@@ -38,8 +38,7 @@ const { BULKHEAD_CONCURRENCY } = PROJECTS_CLIENT_CONFIG;
 
 const isGenericProjectsReadEnabled = env.features.genericProjectsApi;
 const isGenericProjectsMutationEnabled =
-  isGenericProjectsReadEnabled &&
-  env.features.genericProjectsApiMutations;
+  isGenericProjectsReadEnabled && env.features.genericProjectsApiMutations;
 
 function genericReadApiDisabled<T>(): ApiResponse<T> {
   return {

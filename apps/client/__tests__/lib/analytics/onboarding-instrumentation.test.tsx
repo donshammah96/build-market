@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { OnboardingAnalyticsProvider, useOnboardingAnalytics } from "@/lib/analytics/OnboardingAnalyticsContext";
+import {
+  OnboardingAnalyticsProvider,
+  useOnboardingAnalytics,
+} from "@/lib/analytics/OnboardingAnalyticsContext";
 
 const mockTrackStepCompleted = vi.fn();
 const mockTrackDraftRestoreFailed = vi.fn();
@@ -19,7 +22,9 @@ function TestConsumer() {
   return (
     <div>
       <button
-        onClick={() => analytics.trackStepCompleted("role_selection", "professional")}
+        onClick={() =>
+          analytics.trackStepCompleted("role_selection", "professional")
+        }
       >
         Track Role
       </button>

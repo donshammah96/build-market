@@ -32,9 +32,10 @@ const logger = getClientLogger();
  * - sortBy: submittedAt | createdAt (default: submittedAt)
  * - sortOrder: asc | desc (default: desc)
  */
-export const GET = withAdminRole([
-  AdminRole.SUPER_ADMIN,
-])(async (req: NextRequest, context: AuthContext) => {
+export const GET = withAdminRole([AdminRole.SUPER_ADMIN])(async (
+  req: NextRequest,
+  context: AuthContext,
+) => {
   const correlationId = initializeCorrelationId(req);
   const { dbUserId } = context;
   const identifier = getRateLimitIdentifier(req);

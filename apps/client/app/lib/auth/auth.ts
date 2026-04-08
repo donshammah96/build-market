@@ -125,9 +125,6 @@ const nextAuth = NextAuth({
 });
 
 export const handlers = nextAuth.handlers;
-// eslint-disable-next-line /typescript-eslint/no-explicit-any
 export const auth = nextAuth.auth as unknown as (...args: any[]) => any;
-// eslint-disable-next-line /typescript-eslint/no-explicit-any
 export const signIn = nextAuth.signIn as unknown as (...args: any[]) => any;
-// eslint-disable-next-line /typescript-eslint/no-explicit-any
 export const signOut = nextAuth.signOut as unknown as (...args: any[]) => any;

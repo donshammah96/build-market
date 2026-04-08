@@ -106,7 +106,9 @@ const createMultiStoreTheme = (variant: StoreFormVariant) => {
 
     // Store name
     storeName: isDark ? "text-foreground" : "text-foreground",
-    storeNameEmpty: isDark ? "text-muted-foreground italic" : "text-muted-foreground italic",
+    storeNameEmpty: isDark
+      ? "text-muted-foreground italic"
+      : "text-muted-foreground italic",
 
     // Status text
     statusValid: "text-[var(--color-success)] font-medium",

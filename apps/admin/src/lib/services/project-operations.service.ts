@@ -320,7 +320,6 @@ export async function transitionEscrowStatus(
   }
 
   // Build update data based on the target status
-  // eslint-disable-next-line /typescript-eslint/no-explicit-any
   const updateData: Record<string, any> = { status: newStatus };
 
   if (newStatus === EscrowStatus.FUNDS_HELD) {

@@ -28,9 +28,10 @@ const verifySchema = z.object({
  * IMPORTANT: In production, this endpoint should be protected with proper admin authentication.
  * For development purposes, it checks for an admin role in Clerk metadata.
  */
-export const POST = withAdminRole([
-  AdminRole.SUPER_ADMIN,
-])(async (request: NextRequest, context: AuthContext) => {
+export const POST = withAdminRole([AdminRole.SUPER_ADMIN])(async (
+  request: NextRequest,
+  context: AuthContext,
+) => {
   const { dbUserId } = context;
   const correlationId = initializeCorrelationId(request);
 

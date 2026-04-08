@@ -111,7 +111,6 @@ export interface AuthContext {
 /**
  * Handler function with authentication context
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AuthenticatedHandler<T = any> = (
   req: NextRequest,
   context: AuthContext,
@@ -136,7 +135,6 @@ export interface WithAuthOptions {
  * Rejects blocked users (SUSPENDED, BANNED, DEACTIVATED, ARCHIVED)
  * and soft-deleted users.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function withAuth<T = any>(
   handler: AuthenticatedHandler<T>,
   options: WithAuthOptions = {},
@@ -149,7 +147,6 @@ export function withAuth<T = any>(
   // Using rest parameters to handle both static and dynamic routes
   const routeHandler = async (
     req: NextRequest,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...args: any[]
   ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);

@@ -1,6 +1,4 @@
-import {
-  getProfessionalDetails,
-} from "@/actions/admin";
+import { getProfessionalDetails } from "@/actions/admin";
 import { Button } from "@/components/ui/button";
 import {
   Card,

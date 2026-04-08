@@ -90,16 +90,16 @@ export interface UseImageUploaderReturn {
   handleFileSelect: (
     files: FileList | null,
     imageFields: ImageField[],
-      appendImage: (
-        data: { value: string; assetId?: string },
-        options?: { shouldFocus?: boolean },
-      ) => void,
-      updateImage: (
-        index: number,
-        data: { value: string; assetId?: string },
-      ) => void,
-      removeImage: (index: number) => void,
-    ) => Promise<void>;
+    appendImage: (
+      data: { value: string; assetId?: string },
+      options?: { shouldFocus?: boolean },
+    ) => void,
+    updateImage: (
+      index: number,
+      data: { value: string; assetId?: string },
+    ) => void,
+    removeImage: (index: number) => void,
+  ) => Promise<void>;
   /** Handle drag over event */
   handleDragOver: (e: React.DragEvent) => void;
   /** Handle drag leave event */

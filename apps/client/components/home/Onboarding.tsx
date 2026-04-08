@@ -61,7 +61,6 @@ export default function Onboarding() {
       }
 
       // If store data was collected, create the store
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const storeData = (data as any).storeData;
       if (storeData) {
         try {

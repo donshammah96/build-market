@@ -15,9 +15,8 @@ vi.mock("@build/db", () => ({
   prisma: mockPrisma,
 }));
 
-const { propertyRepository } = await import(
-  "@/app/lib/domains/properties/repository"
-);
+const { propertyRepository } =
+  await import("@/app/lib/domains/properties/repository");
 
 describe("Properties repository input contracts", () => {
   beforeEach(() => {
@@ -41,7 +40,9 @@ describe("Properties repository input contracts", () => {
 
   it("updatePropertyWithVersion enforces optimistic-lock where clause and increments version", async () => {
     vi.mocked(mockPrisma.property.updateMany).mockResolvedValue({ count: 1 });
-    vi.mocked(mockPrisma.property.findFirst).mockResolvedValue({ id: "property-123" });
+    vi.mocked(mockPrisma.property.findFirst).mockResolvedValue({
+      id: "property-123",
+    });
 
     await propertyRepository.updatePropertyWithVersion("property-123", 7, {
       title: "Updated title",

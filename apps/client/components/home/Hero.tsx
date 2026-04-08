@@ -90,7 +90,7 @@ export const Hero: FC = memo(function Hero() {
               style={{ animationDelay: shouldAnimate ? "100ms" : "0ms" }}
             >
               Build with <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-chart-2">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-chart-2">
                 Confidence.
               </span>
             </h1>

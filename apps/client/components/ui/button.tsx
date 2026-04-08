@@ -64,9 +64,9 @@ function Button({
     React.isValidElement(children) &&
     children.type !== React.Fragment;
   const slotChildElement = shouldUseSlot
-    ? (React.Children.only(
-        children,
-      ) as React.ReactElement<{ children?: React.ReactNode }>)
+    ? (React.Children.only(children) as React.ReactElement<{
+        children?: React.ReactNode;
+      }>)
     : null;
   const contentSource = slotChildElement?.props.children ?? children;
   const Comp = shouldUseSlot ? Slot : "button";
@@ -88,11 +88,7 @@ function Button({
   );
 
   const slotChild = slotChildElement
-    ? React.cloneElement(
-        slotChildElement,
-        undefined,
-        content,
-      )
+    ? React.cloneElement(slotChildElement, undefined, content)
     : null;
 
   return (

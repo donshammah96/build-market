@@ -132,7 +132,11 @@ export const GET = withAuth<{ id: string }>(
       return errorResponse!;
     }
 
-    const response = apiSuccess(domainResult.data, HttpStatus.OK, correlationId);
+    const response = apiSuccess(
+      domainResult.data,
+      HttpStatus.OK,
+      correlationId,
+    );
     logPropertiesRouteOutcome({
       correlationId,
       operationName,

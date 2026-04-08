@@ -90,7 +90,8 @@ export async function requestWithdrawalAction(
       maxAgeSeconds: WITHDRAWAL_RECENT_AUTH_MAX_AGE_SECONDS,
     },
     rateLimit: {
-      key: ({ actor }) => `high-value-withdrawal:${actor?.dbUserId ?? "anonymous"}`,
+      key: ({ actor }) =>
+        `high-value-withdrawal:${actor?.dbUserId ?? "anonymous"}`,
       limit: WITHDRAWAL_RATE_LIMIT.limit,
       windowMs: WITHDRAWAL_RATE_LIMIT.windowMs,
       message: "Too many withdrawal requests. Please try again shortly.",

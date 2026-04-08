@@ -112,7 +112,10 @@ export async function GET(
 
   const domainResult = result.data;
   if (!domainResult.ok) {
-    const errorResponse = domainResultToErrorResponse(domainResult, correlationId);
+    const errorResponse = domainResultToErrorResponse(
+      domainResult,
+      correlationId,
+    );
     logPropertiesRouteOutcome({
       correlationId,
       operationName,

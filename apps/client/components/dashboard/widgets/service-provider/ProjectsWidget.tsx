@@ -139,7 +139,8 @@ export function ProjectsWidget({
   className,
 }: ProjectsWidgetProps) {
   const router = useRouter();
-  const [isCreateProjectPending, startCreateProjectTransition] = useTransition();
+  const [isCreateProjectPending, startCreateProjectTransition] =
+    useTransition();
 
   if (isLoading) {
     return <ProjectsWidgetSkeleton />;

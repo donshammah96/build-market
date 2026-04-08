@@ -175,7 +175,8 @@ export function ListingsWidget({
   className,
 }: ListingsWidgetProps) {
   const router = useRouter();
-  const [isCreateListingPending, startCreateListingTransition] = useTransition();
+  const [isCreateListingPending, startCreateListingTransition] =
+    useTransition();
 
   const handleCreateListing = () => {
     startCreateListingTransition(() => {

@@ -56,8 +56,8 @@ describe("projects client facade rollout gate", () => {
           },
         }),
         {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
+          status: 200,
+          headers: { "Content-Type": "application/json" },
         },
       ),
     );

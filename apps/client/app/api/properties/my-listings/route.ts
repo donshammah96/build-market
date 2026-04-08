@@ -94,7 +94,10 @@ export const GET = withAuth(
         propertiesService.getMyListings(
           { userId: dbUserId, role: userRole },
           {
-            limit: Math.min(Number.parseInt(queryValidation.data.limit, 10), 50),
+            limit: Math.min(
+              Number.parseInt(queryValidation.data.limit, 10),
+              50,
+            ),
             status: queryValidation.data.status,
           },
         ),
@@ -139,7 +142,11 @@ export const GET = withAuth(
       return errorResponse!;
     }
 
-    const response = apiSuccess(domainResult.data, HttpStatus.OK, correlationId);
+    const response = apiSuccess(
+      domainResult.data,
+      HttpStatus.OK,
+      correlationId,
+    );
     logPropertiesRouteOutcome({
       correlationId,
       operationName,

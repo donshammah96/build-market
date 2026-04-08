@@ -150,8 +150,8 @@ export async function getAdminPermissions(): Promise<AdminPermissions> {
     : null;
   const canAccess = Boolean(
     role &&
-      VERIFICATION_ALLOWED_ROLES.includes(role) &&
-      (user.adminProfile ? user.adminProfile.isActive : true),
+    VERIFICATION_ALLOWED_ROLES.includes(role) &&
+    (user.adminProfile ? user.adminProfile.isActive : true),
   );
 
   return {

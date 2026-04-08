@@ -28,9 +28,10 @@ const logger = getClientLogger();
  * Query params:
  * - period: today | week | month | all (default: all)
  */
-export const GET = withAdminRole([
-  AdminRole.SUPER_ADMIN,
-])(async (req: NextRequest, context: AuthContext) => {
+export const GET = withAdminRole([AdminRole.SUPER_ADMIN])(async (
+  req: NextRequest,
+  context: AuthContext,
+) => {
   const { dbUserId } = context;
   const correlationId = initializeCorrelationId(req);
 

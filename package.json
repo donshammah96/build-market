@@ -18,6 +18,8 @@
     "check:instructions": "pnpm run sync:instructions-aligned-date && node ./scripts/check-instructions-frontmatter.mjs",
     "test": "turbo run test",
     "validate": "pnpm run format:check && pnpm run lint && pnpm run check-types && pnpm run test",
+    "ci:local": "pnpm run deps:audit && pnpm run format:check && pnpm run lint && pnpm run client:check-env-contract && pnpm run client:check-security-drift && pnpm run client:report-security-drift:strict && pnpm run check-types && pnpm run test",
+    "ci:local:full": "pnpm install --frozen-lockfile && pnpm run ci:local",
     "clean": "turbo run clean && rimraf node_modules",
     "clean:cache": "turbo daemon clean && rimraf .turbo",
     "deps:outdated": "pnpm outdated -r",

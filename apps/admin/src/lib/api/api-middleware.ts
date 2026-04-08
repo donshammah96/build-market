@@ -225,9 +225,7 @@ export function withRole(allowedRoles: UserRole[]) {
  * Usage:
  *   export const POST = withAdminRole(["CONTENT_MODERATOR", "FINANCE_MANAGER"])(handler);
  */
-const ADMIN_SUPER_ROLES: AdminRole[] = [
-  AdminRole.SUPER_ADMIN,
-];
+const ADMIN_SUPER_ROLES: AdminRole[] = [AdminRole.SUPER_ADMIN];
 
 export function withAdminRole(allowedAdminRoles: AdminRole[]) {
   return (handler: AuthenticatedHandler) => {

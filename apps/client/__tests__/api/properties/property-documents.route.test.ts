@@ -167,13 +167,11 @@ describe("GET /api/properties/[id]/documents", () => {
   it("returns 500 when the resilient executor fails", async () => {
     const { getResilientExecutor } =
       await import("@/app/lib/api/resilient-api");
-    vi.mocked(getResilientExecutor).mockReturnValueOnce(
-      {
-        execute: vi
-          .fn()
-          .mockResolvedValue({ success: false, error: new Error("db down") }),
-      } as unknown as ReturnType<typeof getResilientExecutor>,
-    );
+    vi.mocked(getResilientExecutor).mockReturnValueOnce({
+      execute: vi
+        .fn()
+        .mockResolvedValue({ success: false, error: new Error("db down") }),
+    } as unknown as ReturnType<typeof getResilientExecutor>);
 
     const request = new NextRequest(
       "http://localhost:3500/api/properties/prop_1/documents",

@@ -30,9 +30,11 @@ const logger = getClientLogger();
  * Query params:
  * - entityType: professional | store | property (required)
  */
-export const GET = withAdminRole([
-  AdminRole.SUPER_ADMIN,
-])(async (req: NextRequest, context: AuthContext, params: unknown) => {
+export const GET = withAdminRole([AdminRole.SUPER_ADMIN])(async (
+  req: NextRequest,
+  context: AuthContext,
+  params: unknown,
+) => {
   const correlationId = initializeCorrelationId(req);
 
   const identifier = getRateLimitIdentifier(req);

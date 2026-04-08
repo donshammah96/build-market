@@ -19,7 +19,9 @@ export const onboardingClient = {
    * Complete the user onboarding process
    * Equivalent to `submitOnboarding`
    */
-  async submit(data: OnboardingData): Promise<ApiResponse<OnboardingSubmitPayload>> {
+  async submit(
+    data: OnboardingData,
+  ): Promise<ApiResponse<OnboardingSubmitPayload>> {
     return apiFetch<OnboardingSubmitPayload>(API_ROUTES.onboarding, {
       method: "POST",
       body: JSON.stringify(data),

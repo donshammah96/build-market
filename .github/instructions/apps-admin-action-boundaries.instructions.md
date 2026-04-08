@@ -4,6 +4,7 @@ applyTo: "apps/admin/src/actions/admin/**"
 ---
 
 # Admin Action Boundary
+
 Last aligned with canonical on: 2026-04-04.
 
 ## Scope

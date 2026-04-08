@@ -48,9 +48,12 @@ export function useAsyncFieldValidation({
         }
       } catch {
         if (abortRef.current) return;
-        setError(fieldName as never, {
-          message: "Couldn't verify — please try again.",
-        } as never);
+        setError(
+          fieldName as never,
+          {
+            message: "Couldn't verify — please try again.",
+          } as never,
+        );
       } finally {
         if (!abortRef.current) setIsValidating(false);
       }

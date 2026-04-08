@@ -39,7 +39,8 @@ function LeadItem({ lead }: LeadItemProps) {
   const [isReplyPending, startReplyTransition] = useTransition();
   const isClosedLead = lead.status === "won" || lead.status === "lost";
   const isLeadAtRisk = lead.status === "lost";
-  const isLeadHealthy = lead.status === "proposal" || lead.status === "contacted";
+  const isLeadHealthy =
+    lead.status === "proposal" || lead.status === "contacted";
 
   const handleReply = () => {
     startReplyTransition(() => {

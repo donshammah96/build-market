@@ -309,7 +309,9 @@ describe("middleware route guards", () => {
       confidence: "medium",
       reason: "internal_api_resolved",
     });
-    const req = new NextRequest("http://localhost:3500/professional-portal/dashboard");
+    const req = new NextRequest(
+      "http://localhost:3500/professional-portal/dashboard",
+    );
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);

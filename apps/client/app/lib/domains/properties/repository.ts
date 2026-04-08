@@ -29,7 +29,9 @@ function dbOf(tx?: Prisma.TransactionClient): PropertyDbClient {
 }
 
 function getDefaultAttachmentTitle(type: string): string {
-  return ATTACHMENT_TYPE_LABELS[type as keyof typeof ATTACHMENT_TYPE_LABELS] ?? type;
+  return (
+    ATTACHMENT_TYPE_LABELS[type as keyof typeof ATTACHMENT_TYPE_LABELS] ?? type
+  );
 }
 
 function toPropertyCreateData(

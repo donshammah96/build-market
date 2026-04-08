@@ -6,8 +6,9 @@ const mockWorkerClose = vi.hoisted(() => vi.fn());
 const mockWorkerOn = vi.hoisted(() => vi.fn());
 const mockCleanupExpiredStagedUploads = vi.hoisted(() => vi.fn());
 
-let capturedProcessor: ((job: { name: string; id: string }) => Promise<unknown>) | null =
-  null;
+let capturedProcessor:
+  | ((job: { name: string; id: string }) => Promise<unknown>)
+  | null = null;
 
 vi.mock("@build/queue-server", () => ({
   redisConnection: { host: "localhost", port: 6379 },
@@ -65,9 +66,8 @@ describe("onboarding-upload-cleanup job", () => {
     it("schedules job with correct name and cron pattern", async () => {
       mockQueueAdd.mockResolvedValue({ id: "scheduled-job-1" });
 
-      const { scheduleOnboardingUploadCleanup } = await import(
-        "@/app/jobs/onboarding-upload-cleanup"
-      );
+      const { scheduleOnboardingUploadCleanup } =
+        await import("@/app/jobs/onboarding-upload-cleanup");
 
       await scheduleOnboardingUploadCleanup();
 
@@ -92,9 +92,8 @@ describe("onboarding-upload-cleanup job", () => {
         failedDeletions: [],
       });
 
-      const { createOnboardingUploadCleanupWorker } = await import(
-        "@/app/jobs/onboarding-upload-cleanup"
-      );
+      const { createOnboardingUploadCleanupWorker } =
+        await import("@/app/jobs/onboarding-upload-cleanup");
 
       createOnboardingUploadCleanupWorker();
 
@@ -117,9 +116,8 @@ describe("onboarding-upload-cleanup job", () => {
     });
 
     it("skips unexpected job types", async () => {
-      const { createOnboardingUploadCleanupWorker } = await import(
-        "@/app/jobs/onboarding-upload-cleanup"
-      );
+      const { createOnboardingUploadCleanupWorker } =
+        await import("@/app/jobs/onboarding-upload-cleanup");
 
       createOnboardingUploadCleanupWorker();
 
@@ -138,9 +136,8 @@ describe("onboarding-upload-cleanup job", () => {
         new Error("Database connection failed"),
       );
 
-      const { createOnboardingUploadCleanupWorker } = await import(
-        "@/app/jobs/onboarding-upload-cleanup"
-      );
+      const { createOnboardingUploadCleanupWorker } =
+        await import("@/app/jobs/onboarding-upload-cleanup");
 
       createOnboardingUploadCleanupWorker();
 

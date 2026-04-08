@@ -277,13 +277,22 @@ export async function completeClientProfile(
       };
       const consentRows: ConsentRow[] = [];
       if (data.emailMarketingConsent !== undefined) {
-        consentRows.push({ type: "MARKETING_EMAIL", granted: data.emailMarketingConsent });
+        consentRows.push({
+          type: "MARKETING_EMAIL",
+          granted: data.emailMarketingConsent,
+        });
       }
       if (data.smsMarketingConsent !== undefined) {
-        consentRows.push({ type: "MARKETING_SMS", granted: data.smsMarketingConsent });
+        consentRows.push({
+          type: "MARKETING_SMS",
+          granted: data.smsMarketingConsent,
+        });
       }
       if (data.analyticsConsent !== undefined) {
-        consentRows.push({ type: "ANALYTICS_COOKIES", granted: data.analyticsConsent });
+        consentRows.push({
+          type: "ANALYTICS_COOKIES",
+          granted: data.analyticsConsent,
+        });
       }
       await Promise.all(
         consentRows.map((row) =>
@@ -312,8 +321,7 @@ export async function completeClientProfile(
   const completionResult = await syncUserProfileCompletionStatus(actor.userId);
   if (!completionResult.ok) {
     return err({
-      error:
-        completionResult.error === "not_found" ? "not_found" : "internal",
+      error: completionResult.error === "not_found" ? "not_found" : "internal",
       message: completionResult.message,
       status: completionResult.status,
     });
@@ -544,13 +552,22 @@ export async function completeProfessionalProfile(
       };
       const consentRows: ConsentRow[] = [];
       if (data.emailMarketingConsent !== undefined) {
-        consentRows.push({ type: "MARKETING_EMAIL", granted: data.emailMarketingConsent });
+        consentRows.push({
+          type: "MARKETING_EMAIL",
+          granted: data.emailMarketingConsent,
+        });
       }
       if (data.smsMarketingConsent !== undefined) {
-        consentRows.push({ type: "MARKETING_SMS", granted: data.smsMarketingConsent });
+        consentRows.push({
+          type: "MARKETING_SMS",
+          granted: data.smsMarketingConsent,
+        });
       }
       if (data.analyticsConsent !== undefined) {
-        consentRows.push({ type: "ANALYTICS_COOKIES", granted: data.analyticsConsent });
+        consentRows.push({
+          type: "ANALYTICS_COOKIES",
+          granted: data.analyticsConsent,
+        });
       }
       await Promise.all(
         consentRows.map((row) =>
@@ -677,8 +694,7 @@ export async function completeProfessionalProfile(
   const completionResult = await syncUserProfileCompletionStatus(actor.userId);
   if (!completionResult.ok) {
     return err({
-      error:
-        completionResult.error === "not_found" ? "not_found" : "internal",
+      error: completionResult.error === "not_found" ? "not_found" : "internal",
       message: completionResult.message,
       status: completionResult.status,
     });

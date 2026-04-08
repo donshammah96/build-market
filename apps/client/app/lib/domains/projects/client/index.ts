@@ -13,8 +13,7 @@ const portalProjectsClient = new PortalProjectsClient(sharedLimiter);
 
 const isGenericProjectsReadEnabled = env.features.genericProjectsApi;
 const isGenericProjectsMutationEnabled =
-  isGenericProjectsReadEnabled &&
-  env.features.genericProjectsApiMutations;
+  isGenericProjectsReadEnabled && env.features.genericProjectsApiMutations;
 
 function genericReadApiDisabled(): Promise<never> {
   return Promise.reject(

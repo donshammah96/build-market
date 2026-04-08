@@ -25,8 +25,7 @@ export function getSocket(token?: string): Socket | null {
   }
 
   // Create new connection
-  const MESSAGING_SERVICE_URL =
-    env.services.messagingPublic;
+  const MESSAGING_SERVICE_URL = env.services.messagingPublic;
 
   socket = io(MESSAGING_SERVICE_URL, {
     auth: {

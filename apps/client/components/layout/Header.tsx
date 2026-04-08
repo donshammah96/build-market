@@ -33,22 +33,13 @@ export const Header = () => {
               role="navigation"
               aria-label="Main navigation"
             >
-              <Link
-                href={ROUTES.ideaBooks}
-                className={navLinkClass}
-              >
+              <Link href={ROUTES.ideaBooks} className={navLinkClass}>
                 Idea Books
               </Link>
-              <Link
-                href={ROUTES.findProfessional}
-                className={navLinkClass}
-              >
+              <Link href={ROUTES.findProfessional} className={navLinkClass}>
                 Find Professionals
               </Link>
-              <Link
-                href={ROUTES.speakWithAdvisor}
-                className={navLinkClass}
-              >
+              <Link href={ROUTES.speakWithAdvisor} className={navLinkClass}>
                 Guidance
               </Link>
               <div className="flex items-center gap-6">

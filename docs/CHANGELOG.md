@@ -34,6 +34,10 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **CI/Workflow**: Added local pipeline scripts (`ci:local`, `ci:local:full`) to separate fast no-install verification from full install-driven validation and keep local CI parity repeatable.
+- **CI/GitHub Actions**: Removed duplicate pnpm version-source configuration in `.github/workflows/ci.yml` and upgraded `actions/github-script` from `v7` to `v8` for Node 24 runtime compatibility.
+- **Tooling/Lint**: Hardened workspace lint surfaces by adding package-local flat ESLint configuration for `packages/nats`, cleaning NATS lint warnings, and declaring required `NATS_*` variables under `turbo.json` lint task env configuration.
+- **Formatting/Consistency**: Applied a strict formatting and lint-alignment sweep across the currently touched admin and client workspace files to keep the branch consistent with strict local CI expectations.
 - **Dependencies/Security (Audit Remediation)**: Updated root pnpm overrides to enforce patched transitive versions (`lodash >=4.18.0`, `defu >=6.1.5`) and refreshed `pnpm-lock.yaml` to resolve to non-vulnerable versions (`lodash@4.18.1`, `defu@6.1.7`), restoring `pnpm run deps:audit` to a clean result.
 - **Properties Domain**: Added explicit DTOs and mappers for documents, attachments, and mutation results; replaced `Record<string, unknown>` returns with typed `PropertyDocumentDto`, `PropertyAttachmentDto`, `PropertyCreateResultDto`; tightened browser client contracts in `lib/properties-client.ts`; staff audit in `apps/client/docs/AUDIT-PROPERTIES.md`.
 - **Messaging Boundary Hardening**: Refactored the client messaging slice onto the shared actor-aware domain boundary. `app/lib/domains/messaging/service.ts` now owns participant, sender, and owner/admin authorization checks for reads and mutations; messaging server actions use `secureAction` directly; and messaging route adapters pass role-bearing actor context into the service instead of only raw user IDs.
@@ -82,6 +86,9 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Security/Resource Exhaustion**: Hardened `apps/admin/src/actions/admin/shared.ts` by normalizing and clamping client API timeout input before `setTimeout`, preventing unbounded timer allocation from caller-controlled values.
+- **Security/Randomness**: Replaced `Math.random()`-based anonymous experiment IDs in `apps/client/hooks/useABTest.ts` with Web Crypto generation (`crypto.randomUUID` with `getRandomValues` fallback).
+- **Tests/Determinism**: Fixed no-op snapshot normalization in `PropertyForm` tests by replacing self-replacement regex behavior with actual dynamic `radix-*` attribute normalization.
 - **Security/Logging (Redis Audit)**: Hardened `scripts/redis-path-audit.mjs` output by removing password/token-derived booleans and related derived signals from emitted JSON; audit reporting now logs only non-sensitive configuration indicators.
 - **Architecture/Frontend**: Removed `@prisma/client` from the client-facing `ProfessionalForm.tsx` component, replacing it with the central `@build/enums` package to prevent leaking server bundles into the client context.
 - **API (Onboarding & Settings)**: Fixed a bug in the `PATCH /api/onboarding/professional/complete` route where `documents` mapping was skipping the Asset creation phase. Implemented the correct two-phase Asset materialization loop across that route, `POST /api/onboarding/professional/complete`, and `settings/actions.ts`, successfully transforming staged `uploadId`s into permanent `Asset` records linked to the new `ProfessionalDocument` schema.

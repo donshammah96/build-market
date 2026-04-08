@@ -1,9 +1,7 @@
 {
   "ui": "tui",
   "globalDependencies": [".env*"],
-  "globalEnv": [
-    "NODE_ENV"
-  ],
+  "globalEnv": ["NODE_ENV"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -37,7 +35,17 @@
     },
     "lint": {
       "dependsOn": ["^lint"],
-      "cache": true
+      "cache": true,
+      "env": [
+        "NATS_URL",
+        "NATS_CLIENT_NAME",
+        "NATS_MAX_RECONNECT_ATTEMPTS",
+        "NATS_RECONNECT_TIME_WAIT",
+        "NATS_TIMEOUT",
+        "NATS_TOKEN",
+        "NATS_USER",
+        "NATS_PASS"
+      ]
     },
     "check-types": {
       "dependsOn": ["^check-types"],
@@ -50,7 +58,12 @@
     },
     "test": {
       "cache": true,
-      "inputs": ["src/**/*.ts", "src/**/*.tsx", "**/*.test.ts", "**/*.test.tsx"],
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "**/*.test.ts",
+        "**/*.test.tsx"
+      ],
       "env": [
         "DATABASE_URL",
         "POSTGRES_URL",

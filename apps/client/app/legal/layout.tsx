@@ -61,9 +61,7 @@ export default function LegalLayout({
         <div className="max-w-4xl mx-auto px-6 py-8 text-center text-sm text-zinc-500">
           <p>
             &copy;{" "}
-            <span suppressHydrationWarning>
-              {new Date().getFullYear()}
-            </span>{" "}
+            <span suppressHydrationWarning>{new Date().getFullYear()}</span>{" "}
             Build Market. All rights reserved.
           </p>
           <p className="mt-1">

@@ -23,13 +23,11 @@ export default async function StoresDirectoryPage({
 }) {
   const params = await searchParams;
   // Convert searchParams roughly to what getStores expects
-  const page =
-    typeof params.page === "string" ? parseInt(params.page, 10) : 1;
+  const page = typeof params.page === "string" ? parseInt(params.page, 10) : 1;
   const category =
     typeof params.category === "string" ? params.category : undefined;
   const city = typeof params.city === "string" ? params.city : undefined;
-  const search =
-    typeof params.search === "string" ? params.search : undefined;
+  const search = typeof params.search === "string" ? params.search : undefined;
 
   const response = await storesClient.getStores({
     page: String(page),

@@ -23,7 +23,8 @@ vi.mock("@build/db/system-settings", () => ({
 }));
 
 vi.mock("@/app/lib/domains/user-profile", () => ({
-  enforceClientMutationPolicy: userProfileDomainMock.enforceClientMutationPolicy,
+  enforceClientMutationPolicy:
+    userProfileDomainMock.enforceClientMutationPolicy,
 }));
 
 describe("financeService", () => {
@@ -60,12 +61,12 @@ describe("financeService", () => {
       { amount: 500, method: "MPESA" },
     );
 
-    expect(userProfileDomainMock.enforceClientMutationPolicy).toHaveBeenCalledWith(
-      {
-        clientUserId: "pro-1",
-        policy: "paymentInitiationPolicy",
-      },
-    );
+    expect(
+      userProfileDomainMock.enforceClientMutationPolicy,
+    ).toHaveBeenCalledWith({
+      clientUserId: "pro-1",
+      policy: "paymentInitiationPolicy",
+    });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toBe("forbidden");

@@ -182,22 +182,14 @@ export const Footer = memo(function Footer() {
                 href="mailto:hello@buildmarket.co.ke"
                 className="flex items-center gap-3 text-sm text-muted-foreground hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
               >
-                <Mail
-                  size={16}
-                  className="text-primary"
-                  aria-hidden="true"
-                />
+                <Mail size={16} className="text-primary" aria-hidden="true" />
                 <span>hello@buildmarket.co.ke</span>
               </a>
               <a
                 href="tel:+254791938881"
                 className="flex items-center gap-3 text-sm text-muted-foreground hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
               >
-                <Phone
-                  size={16}
-                  className="text-primary"
-                  aria-hidden="true"
-                />
+                <Phone size={16} className="text-primary" aria-hidden="true" />
                 <span>+254 791 938 881</span>
               </a>
             </div>

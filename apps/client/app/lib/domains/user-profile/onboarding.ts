@@ -702,11 +702,7 @@ export const userProfileOnboardingService = {
   }): Promise<UserProfileOnboardingResult<SkipOnboardingData>> {
     const { actor, clerkUser } = params;
 
-    if (
-      actor.role &&
-      actor.role !== "PROFESSIONAL" &&
-      actor.role !== "ADMIN"
-    ) {
+    if (actor.role && actor.role !== "PROFESSIONAL" && actor.role !== "ADMIN") {
       return err({
         error: "forbidden",
         message: "This endpoint is only for professional users",

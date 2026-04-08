@@ -127,9 +127,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
       enableIdeaBooks === undefined,
   );
   const textColorClass = useScrolledStyles ? "text-foreground" : "text-white";
-  const hoverClass = useScrolledStyles
-    ? "hover:bg-muted"
-    : "hover:bg-white/10";
+  const hoverClass = useScrolledStyles ? "hover:bg-muted" : "hover:bg-white/10";
 
   const toggleMobileMenu = useCallback(() => {
     setIsMobileMenuOpen((prev) => !prev);

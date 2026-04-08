@@ -206,10 +206,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       reason: "domain_error",
       domainError: result.data.error,
     });
-    return apiError(
-      result.data.message || "Skip onboarding failed",
-      status,
-    );
+    return apiError(result.data.message || "Skip onboarding failed", status);
   }
 
   const responseData = result.data.data;

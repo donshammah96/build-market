@@ -1,6 +1,14 @@
 "use client";
 
-import { Edit, Eye, Trash2, Home, MapPin, DollarSign, Calendar } from "lucide-react";
+import {
+  Edit,
+  Eye,
+  Trash2,
+  Home,
+  MapPin,
+  DollarSign,
+  Calendar,
+} from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -86,11 +94,7 @@ export function PropertyListCard({
             View
           </Link>
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onEdit(property)}
-        >
+        <Button variant="outline" size="sm" onClick={() => onEdit(property)}>
           <Edit className="mr-2 h-4 w-4" />
           Edit
         </Button>

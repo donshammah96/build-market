@@ -292,14 +292,14 @@ export async function updateProfessionalProfile(
         : undefined;
 
     const updateData: Prisma.ProfessionalProfileUpdateInput = {
-      ...(data.companyName !== undefined ? { companyName: data.companyName } : {}),
+      ...(data.companyName !== undefined
+        ? { companyName: data.companyName }
+        : {}),
       ...(data.yearsExperience !== undefined
         ? { yearsExperience: data.yearsExperience }
         : {}),
       ...(data.bio !== undefined ? { bio: data.bio } : {}),
-      ...(data.website !== undefined
-        ? { website: data.website || null }
-        : {}),
+      ...(data.website !== undefined ? { website: data.website || null } : {}),
       ...(data.city !== undefined ? { city: data.city } : {}),
       ...(normalizedCounty !== undefined ? { county: normalizedCounty } : {}),
       ...(data.country !== undefined ? { country: data.country } : {}),

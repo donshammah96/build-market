@@ -307,7 +307,7 @@ export const POST = withAuth(
                         correlationId,
                         uploadId,
                         fieldName,
-                          operationName: OPERATION_NAME,
+                        operationName: OPERATION_NAME,
                         outcome: "failed",
                       },
                     );

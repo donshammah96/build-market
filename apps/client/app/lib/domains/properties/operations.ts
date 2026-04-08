@@ -14,7 +14,9 @@ export type UpdatePropertyData = UpdatePropertyInput;
 export type { PropertyOperationContext };
 
 function getDefaultAttachmentTitle(type: string): string {
-  return ATTACHMENT_TYPE_LABELS[type as keyof typeof ATTACHMENT_TYPE_LABELS] ?? type;
+  return (
+    ATTACHMENT_TYPE_LABELS[type as keyof typeof ATTACHMENT_TYPE_LABELS] ?? type
+  );
 }
 
 export function buildPropertyUpdatePayload(

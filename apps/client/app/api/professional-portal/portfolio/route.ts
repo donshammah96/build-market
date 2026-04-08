@@ -59,121 +59,123 @@ export const GET = createProfessionalPortalGet({
  * POST /api/professional-portal/portfolio
  * Create a new portfolio item.
  */
-export const POST = withAuth(async (req: NextRequest, { dbUserId, userRole }) => {
-  const correlationId = initializeCorrelationId(req);
-  const { ipAddress, userAgent } = getRequestMetadata(req);
+export const POST = withAuth(
+  async (req: NextRequest, { dbUserId, userRole }) => {
+    const correlationId = initializeCorrelationId(req);
+    const { ipAddress, userAgent } = getRequestMetadata(req);
 
-  const sizeError = checkBodySize(req, PORTFOLIO_CONFIG.MAX_BODY_SIZE);
-  if (sizeError) return sizeError;
+    const sizeError = checkBodySize(req, PORTFOLIO_CONFIG.MAX_BODY_SIZE);
+    if (sizeError) return sizeError;
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
-  }
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+    }
 
-  const validation = CreatePortfolioSchema.safeParse(body);
-  if (!validation.success) {
-    return apiError(
-      "Invalid input",
-      HttpStatus.BAD_REQUEST,
-      validation.error.issues,
+    const validation = CreatePortfolioSchema.safeParse(body);
+    if (!validation.success) {
+      return apiError(
+        "Invalid input",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+      );
+    }
+
+    const portfolioData = validation.data;
+
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      IdempotencyService.generateKey(dbUserId, "POST", {
+        domain: "portfolio",
+        title: portfolioData.title,
+      });
+
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
+      idempotencyKey,
+      "portfolio",
+      dbUserId,
+      "POST",
     );
-  }
+    if (!idempotencyCheck) {
+      return apiError(
+        "Failed to process idempotency key",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    if (idempotencyCheck.status === "completed") {
+      return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+    }
+    if (idempotencyCheck.status === "pending") {
+      return apiError(
+        "Request is being processed. Please wait.",
+        HttpStatus.CONFLICT,
+      );
+    }
 
-  const portfolioData = validation.data;
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `portfolio-write:${identifier}`,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
+    );
+    if (!rateLimitResult.success) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
 
-  const idempotencyKey =
-    req.headers.get("Idempotency-Key") ||
-    IdempotencyService.generateKey(dbUserId, "POST", {
-      domain: "portfolio",
+    logger.info("Creating portfolio item", {
+      correlationId,
+      actorRole: userRole,
       title: portfolioData.title,
     });
 
-  const idempotencyCheck = await IdempotencyService.checkOrCreate(
-    idempotencyKey,
-    "portfolio",
-    dbUserId,
-    "POST",
-  );
-  if (!idempotencyCheck) {
-    return apiError(
-      "Failed to process idempotency key",
-      HttpStatus.INTERNAL_SERVER_ERROR,
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      async () =>
+        portfolioService.createPortfolio({
+          userId: dbUserId,
+          data: portfolioData,
+          ipAddress,
+          userAgent,
+        }),
+      { operationName: "create_portfolio_item" },
     );
-  }
-  if (idempotencyCheck.status === "completed") {
-    return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
-  }
-  if (idempotencyCheck.status === "pending") {
-    return apiError(
-      "Request is being processed. Please wait.",
-      HttpStatus.CONFLICT,
-    );
-  }
 
-  const identifier = getRateLimitIdentifier(req);
-  const rateLimitResult = await checkRateLimit(
-    `portfolio-write:${identifier}`,
-    RateLimits.WRITE.limit,
-    RateLimits.WRITE.window,
-  );
-  if (!rateLimitResult.success) {
-    await IdempotencyService.fail(idempotencyKey);
-    return apiError(
-      "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS,
-    );
-  }
-
-  logger.info("Creating portfolio item", {
-    correlationId,
-    actorRole: userRole,
-    title: portfolioData.title,
-  });
-
-  const resilientExecutor = getResilientExecutor();
-  const result = await resilientExecutor.execute(
-    async () =>
-      portfolioService.createPortfolio({
-        userId: dbUserId,
-        data: portfolioData,
-        ipAddress,
-        userAgent,
-      }),
-    { operationName: "create_portfolio_item" },
-  );
-
-  if (!result.success || !result.data) {
-    await IdempotencyService.fail(idempotencyKey);
-    return apiError(
-      "Failed to create portfolio item",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
-  }
-
-  const data = result.data;
-  if (!data.ok) {
-    if (data.error === "limit_exceeded") {
+    if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
       return apiError(
-        `Maximum ${PORTFOLIO_CONFIG.MAX_PORTFOLIOS_PER_PROFESSIONAL} portfolios per professional`,
-        HttpStatus.BAD_REQUEST,
+        "Failed to create portfolio item",
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-    if (data.error === "project_not_found") {
-      await IdempotencyService.fail(idempotencyKey);
-      return apiError("Linked project not found", HttpStatus.NOT_FOUND);
-    }
-    // Fallback for unexpected errors
-    await IdempotencyService.fail(idempotencyKey);
-    return apiError(
-      "Failed to create portfolio item",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
-  }
 
-  await IdempotencyService.complete(idempotencyKey, data.data);
-  return apiSuccess(data.data, HttpStatus.CREATED);
-});
+    const data = result.data;
+    if (!data.ok) {
+      if (data.error === "limit_exceeded") {
+        await IdempotencyService.fail(idempotencyKey);
+        return apiError(
+          `Maximum ${PORTFOLIO_CONFIG.MAX_PORTFOLIOS_PER_PROFESSIONAL} portfolios per professional`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (data.error === "project_not_found") {
+        await IdempotencyService.fail(idempotencyKey);
+        return apiError("Linked project not found", HttpStatus.NOT_FOUND);
+      }
+      // Fallback for unexpected errors
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        "Failed to create portfolio item",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    await IdempotencyService.complete(idempotencyKey, data.data);
+    return apiSuccess(data.data, HttpStatus.CREATED);
+  },
+);
