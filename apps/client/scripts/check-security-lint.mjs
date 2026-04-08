@@ -35,7 +35,7 @@ if (
 
   if (unsafeApiError.length > 0) {
     console.error(
-      "[security/lint][SEC-LINT-004] Unsafe apiError(error.message|error.stack) usage detected:",
+      "[security/lint][SEC-LINT-004] Unsafe client-facing error.message/error.stack pass-through detected:",
     );
     for (const offender of unsafeApiError) {
       console.error(

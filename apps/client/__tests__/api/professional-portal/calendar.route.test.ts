@@ -110,7 +110,7 @@ describe("professional calendar collection routes", () => {
     mockListEvents.mockResolvedValue({
       ok: false,
       error: "forbidden",
-      message: "Forbidden",
+      message: "Internal policy check denied the request",
       status: 403,
     });
 
@@ -125,11 +125,11 @@ describe("professional calendar collection routes", () => {
     expect(payload.error).toBe("Forbidden");
   });
 
-  it("maps create project ownership failures to 404 and fails idempotency", async () => {
+  it("does not leak internal project lookup messages on create failures", async () => {
     mockCreateEvent.mockResolvedValue({
       ok: false,
       error: "project_not_found",
-      message: "Project not found",
+      message: "Project 43b33e2c-bca6-45aa-8ef9-6ecdb86b632f missing upstream",
       status: 404,
     });
 

@@ -2,11 +2,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "@/app/api/onboarding/route";
 import { NextRequest, NextResponse } from "next/server";
 
+vi.mock("server-only", () => ({}));
+
 const mockCompleteOnboarding = vi.hoisted(() => vi.fn());
 const mockLoggerInfo = vi.hoisted(() => vi.fn());
 const mockLoggerWarn = vi.hoisted(() => vi.fn());
 const mockLoggerError = vi.hoisted(() => vi.fn());
 const mockLoggerDebug = vi.hoisted(() => vi.fn());
+const mockClerkUpdateUserMetadata = vi.hoisted(() => vi.fn());
 
 // Mock Clerk - the new implementation uses auth() and currentUser() directly
 vi.mock("@clerk/nextjs/server", () => ({
@@ -20,7 +23,7 @@ vi.mock("@clerk/nextjs/server", () => ({
   }),
   clerkClient: vi.fn().mockResolvedValue({
     users: {
-      updateUserMetadata: vi.fn().mockResolvedValue({}),
+      updateUserMetadata: mockClerkUpdateUserMetadata,
     },
   }),
 }));
@@ -79,6 +82,7 @@ vi.mock("@/app/lib/api/api-response", () => ({
     UNAUTHORIZED: 401,
     NOT_FOUND: 404,
     TOO_MANY_REQUESTS: 429,
+    SERVICE_UNAVAILABLE: 503,
     INTERNAL_SERVER_ERROR: 500,
   },
 }));
@@ -95,6 +99,7 @@ vi.mock("@/app/lib/services/idempotency.service", () => ({
 describe("POST /api/onboarding", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockClerkUpdateUserMetadata.mockResolvedValue({});
     mockCompleteOnboarding.mockResolvedValue({
       ok: true,
       data: {
@@ -368,5 +373,37 @@ describe("POST /api/onboarding", () => {
 
     expect(response.status).toBe(400);
     expect(data.error).toContain("Invalid or expired document uploads");
+  });
+
+  it("returns 503 and keeps onboarding retryable when Clerk finalization fails", async () => {
+    mockClerkUpdateUserMetadata.mockRejectedValueOnce(
+      new Error("clerk unavailable"),
+    );
+
+    const request = new NextRequest("http://localhost:3500/api/onboarding", {
+      method: "POST",
+      body: JSON.stringify({
+        role: "client",
+        county: "NAIROBI",
+        city: "Nairobi",
+        type: "HOMEOWNER",
+        projectType: "new_construction",
+        projectLocation: "Nairobi",
+        estimatedBudget: "1000000-5000000",
+        description: "Building a new home",
+      }),
+    });
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(data.error).toBe("Unable to finalize account state. Please retry.");
+
+    const { IdempotencyService } =
+      await import("@/app/lib/services/idempotency.service");
+
+    expect(IdempotencyService.fail).toHaveBeenCalledWith("idem-key");
+    expect(IdempotencyService.complete).not.toHaveBeenCalled();
   });
 });

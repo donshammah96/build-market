@@ -1,41 +1,39 @@
+import "server-only";
+
 /**
  * clerk-metadata.ts
  *
- * Shared helper for updating Clerk publicMetadata during onboarding flows.
+ * Shared transition finalizer for updating Clerk publicMetadata during
+ * onboarding flows.
  *
  * WHY THIS EXISTS
  * ---------------
- * All five onboarding route handlers previously duplicated:
- *   (await clerkClient()) as unknown as ClerkMetadataClient
- * and the update call. The double `as unknown as` cast bypasses TypeScript
- * completely. Centralising here means the cast is audited in one place
- * and the calling convention is consistent.
+ * All onboarding transition adapters need one audited place that:
+ * - performs the Clerk metadata write
+ * - preserves the critical ordering invariant
+ * - fails closed when Clerk cannot confirm the role transition
  *
  * ORDERING INVARIANT — READ THIS BEFORE USING
- * --------------------------------------------
- * This function MUST be called BEFORE IdempotencyService.complete().
- *
- * Reason: if the Clerk update fails silently (which it can), and the
- * idempotency record has already been marked "completed", any retry will
- * return the cached success response without re-attempting the Clerk update.
- * The user ends up with DB isOnboarded=true but stale Clerk metadata,
- * breaking every middleware auth check.
+ * ------------------------------------------
+ * Clerk metadata finalization MUST happen BEFORE IdempotencyService.complete().
  *
  * Correct sequence:
  *   1. Execute domain logic
- *   2. updateClerkOnboardingMetadata()   ← this file
+ *   2. finalizeClerkOnboardingTransition()   ← this file
  *   3. IdempotencyService.complete()
- *   4. return apiSuccess()
+ *   4. return success response
  *
- * Failure handling: Clerk metadata is NOT source of truth for auth — the DB
- * is. A failure here is logged but does NOT fail the request. The user can
- * still access the app; the Clerk token will be refreshed on next sign-in.
+ * If the Clerk write fails after the DB transition but before the response is
+ * finalized, the adapter must fail closed and keep the mutation retryable.
  */
 
 import { clerkClient } from "@clerk/nextjs/server";
 import { getClientLogger } from "@/app/lib/api/resilient-api";
 
 const logger = getClientLogger();
+
+export const CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE =
+  "Unable to finalize account state. Please retry.";
 
 export type ClerkOnboardingMetadata = {
   role: string;
@@ -46,8 +44,8 @@ export type ClerkOnboardingMetadata = {
 
 /**
  * Updates Clerk publicMetadata for the given clerkId.
- * Never throws — failures are logged and swallowed intentionally.
- * DB is source of truth; Clerk metadata is a cache for middleware performance.
+ * This is a fail-closed write for role/onboarding transitions and will throw
+ * if Clerk cannot confirm the mutation.
  *
  * @param clerkId   The Clerk user ID to update.
  * @param metadata  The metadata to set. `isOnboarded` is always true here.
@@ -71,8 +69,6 @@ export async function updateClerkOnboardingMetadata(
       publicMetadata: metadata,
     });
   } catch (error) {
-    // Log but never rethrow — DB is source of truth.
-    // The user's Clerk token will reflect the updated role on next sign-in.
     logger.error(
       `Failed to update Clerk metadata during ${context.operation}`,
       error instanceof Error ? error : new Error(String(error)),
@@ -81,5 +77,41 @@ export async function updateClerkOnboardingMetadata(
         hasClerkId: Boolean(clerkId),
       },
     );
+
+    throw error instanceof Error ? error : new Error(String(error));
+  }
+}
+
+export async function finalizeClerkOnboardingTransition(params: {
+  clerkId: string;
+  metadata: ClerkOnboardingMetadata;
+  context: { correlationId?: string; operation: string };
+  onFailure?: () => Promise<void> | void;
+}): Promise<void> {
+  try {
+    await updateClerkOnboardingMetadata(
+      params.clerkId,
+      params.metadata,
+      params.context,
+    );
+  } catch (error) {
+    if (params.onFailure) {
+      try {
+        await params.onFailure();
+      } catch (failureError) {
+        logger.error(
+          `Failed to mark onboarding transition retryable during ${params.context.operation}`,
+          failureError instanceof Error
+            ? failureError
+            : new Error(String(failureError)),
+          {
+            correlationId: params.context.correlationId,
+            hasClerkId: Boolean(params.clerkId),
+          },
+        );
+      }
+    }
+
+    throw error;
   }
 }

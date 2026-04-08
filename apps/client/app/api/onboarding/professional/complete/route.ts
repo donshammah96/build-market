@@ -51,7 +51,10 @@ import {
   RoleNormalizationError,
   type AppRole,
 } from "@/app/lib/security/roles";
-import { updateClerkOnboardingMetadata } from "@/app/lib/domains/user-profile/clerk-metadata";
+import {
+  CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
+  finalizeClerkOnboardingTransition,
+} from "@/app/lib/domains/user-profile/clerk-metadata";
 
 const logger = getClientLogger();
 const MAX_BODY_SIZE = 2 * 1024 * 1024;
@@ -323,16 +326,27 @@ export const PATCH = withAuth(
     // ORDERING INVARIANT: Clerk update BEFORE IdempotencyService.complete().
     // If Clerk ran after and failed, any retry returns cached success and
     // permanently skips the Clerk update.
-    await updateClerkOnboardingMetadata(
-      clerkId,
-      {
-        role: "PROFESSIONAL",
-        isOnboarded: true,
-        status: "PENDING_VERIFICATION",
-        isProfileComplete: true,
-      },
-      { correlationId, operation: OPERATION_NAME },
-    );
+    try {
+      await finalizeClerkOnboardingTransition({
+        clerkId,
+        metadata: {
+          role: "PROFESSIONAL",
+          isOnboarded: true,
+          status: "PENDING_VERIFICATION",
+          isProfileComplete: true,
+        },
+        context: { correlationId, operation: OPERATION_NAME },
+        onFailure: () => IdempotencyService.fail(idempotencyKey),
+      });
+    } catch {
+      logOutcome("failed", HttpStatus.SERVICE_UNAVAILABLE, {
+        reason: "clerk_metadata_sync_failed",
+      });
+      return apiError(
+        CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
 
     await IdempotencyService.complete(idempotencyKey, responseData);
 

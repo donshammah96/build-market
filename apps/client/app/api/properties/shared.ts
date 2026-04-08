@@ -124,12 +124,38 @@ export function domainErrorToResponse(
 ): NextResponse {
   const status = domainErrorCodeToStatus(error.error);
   const safeDetails = sanitizeDomainErrorDetails(error.details);
-  return apiError(
-    error.message ?? "Request failed",
-    status,
-    safeDetails,
-    correlationId,
-  );
+  const safeMessage = propertyDomainErrorToClientMessage(error.error);
+  return apiError(safeMessage, status, safeDetails, correlationId);
+}
+
+function propertyDomainErrorToClientMessage(
+  code: PropertyDomainErrorCode,
+): string {
+  switch (code) {
+    case "not_found":
+      return "Property not found";
+    case "asset_not_found":
+      return "Asset not found";
+    case "document_not_found":
+      return "Document not found";
+    case "attachment_not_found":
+      return "Attachment not found";
+    case "forbidden":
+    case "suspended_account":
+    case "not_professional":
+    case "asset_unauthorized":
+      return "Forbidden";
+    case "conflict":
+    case "slug_conflict":
+      return "Request conflict";
+    case "invalid_input":
+    case "attachment_mismatch":
+      return "Invalid request";
+    case "duplicate":
+    case "internal_error":
+    default:
+      return "Request failed";
+  }
 }
 
 const SAFE_DOMAIN_DETAIL_KEYS = new Set([

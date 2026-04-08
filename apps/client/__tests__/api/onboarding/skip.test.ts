@@ -2,11 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { POST } from "@/app/api/onboarding/skip/route";
 
+vi.mock("server-only", () => ({}));
+
 const mockSkipClientOnboarding = vi.hoisted(() => vi.fn());
 const mockLoggerInfo = vi.hoisted(() => vi.fn());
 const mockLoggerWarn = vi.hoisted(() => vi.fn());
 const mockLoggerError = vi.hoisted(() => vi.fn());
 const mockLoggerDebug = vi.hoisted(() => vi.fn());
+const mockClerkUpdateUserMetadata = vi.hoisted(() => vi.fn());
 const mockCurrentUserRole = vi.hoisted(() => ({
   value: undefined as "CLIENT" | "PROFESSIONAL" | "ADMIN" | undefined,
 }));
@@ -25,7 +28,7 @@ vi.mock("@clerk/nextjs/server", () => ({
   })),
   clerkClient: vi.fn().mockResolvedValue({
     users: {
-      updateUserMetadata: vi.fn().mockResolvedValue({}),
+      updateUserMetadata: mockClerkUpdateUserMetadata,
     },
   }),
 }));
@@ -78,6 +81,7 @@ vi.mock("@/app/lib/api/api-response", () => ({
     FORBIDDEN: 403,
     CONFLICT: 409,
     TOO_MANY_REQUESTS: 429,
+    SERVICE_UNAVAILABLE: 503,
     INTERNAL_SERVER_ERROR: 500,
   },
 }));
@@ -100,6 +104,7 @@ vi.mock("@/app/lib/domains/user-profile", () => ({
 describe("POST /api/onboarding/skip", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockClerkUpdateUserMetadata.mockResolvedValue({});
     mockCurrentUserRole.value = undefined;
     mockSkipClientOnboarding.mockResolvedValue({
       ok: true,
@@ -299,5 +304,27 @@ describe("POST /api/onboarding/skip", () => {
 
     expect(response.status).toBe(500);
     expect(data.error).toContain("Could not retrieve user data");
+  });
+
+  it("returns 503 when Clerk metadata finalization fails", async () => {
+    mockClerkUpdateUserMetadata.mockRejectedValueOnce(
+      new Error("clerk unavailable"),
+    );
+
+    const response = await POST(
+      new NextRequest("http://localhost:3500/api/onboarding/skip", {
+        method: "POST",
+      }),
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(data.error).toBe("Unable to finalize account state. Please retry.");
+
+    const { IdempotencyService } =
+      await import("@/app/lib/services/idempotency.service");
+
+    expect(IdempotencyService.fail).toHaveBeenCalledWith("idem-key");
+    expect(IdempotencyService.complete).not.toHaveBeenCalled();
   });
 });

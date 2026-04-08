@@ -18,8 +18,18 @@ const DANGEROUS_HTML_SCAN_PATHS = ["app", "components", "hooks", "lib"];
 const PERSISTENCE_SCAN_PATHS = ["app", "components", "hooks", "lib"];
 
 const ZOD_PASSTHROUGH_PATTERN = /\.passthrough\(\)/g;
-const API_ERROR_UNSAFE_PATTERN =
-  /\bapiError\s*\(\s*error\.(message|stack)\s*(?:,|\))/g;
+const UNSAFE_CLIENT_MESSAGE_PATTERNS = [
+  {
+    pattern:
+      /\bapiError\s*\(\s*error\.(message|stack)\s*(?:(?:\|\||\?\?)\s*[^,)]*)?(?:,|\))/g,
+    kind: "apiError",
+  },
+  {
+    pattern:
+      /\bcreateActionFailure\s*\(\s*[^,\n]+,\s*error\.(message|stack)\s*(?:(?:\|\||\?\?)\s*[^,)]*)?(?:,|\))/g,
+    kind: "createActionFailure",
+  },
+];
 const EXPORTED_GET_PATTERN =
   /export\s+(?:const\s+GET\s*=\s*|async\s+function\s+GET\s*\(|function\s+GET\s*\()/g;
 const REQ_JSON_PATTERN = /\b(?:req|request)\s*\.\s*json\s*\(/g;
@@ -127,25 +137,30 @@ export function collectUnsafeApiErrorDrift() {
 
   for (const filePath of collectFiles(API_ERROR_SCAN_PATHS)) {
     const content = readFile(filePath);
-    if (!content.includes("apiError")) {
+    if (
+      !content.includes("apiError") &&
+      !content.includes("createActionFailure")
+    ) {
       continue;
     }
 
     const lines = content.split(/\r?\n/);
     const relativePath = relativeToApp(filePath);
 
-    for (const match of content.matchAll(API_ERROR_UNSAFE_PATTERN)) {
-      if (match.index === undefined) {
-        continue;
-      }
+    for (const { pattern, kind } of UNSAFE_CLIENT_MESSAGE_PATTERNS) {
+      for (const match of content.matchAll(pattern)) {
+        if (match.index === undefined) {
+          continue;
+        }
 
-      const line = findLineNumber(content, match.index);
-      offenders.push({
-        file: relativePath,
-        line,
-        sample: lines[line - 1]?.trim() ?? "",
-        source: `error.${match[1]}`,
-      });
+        const line = findLineNumber(content, match.index);
+        offenders.push({
+          file: relativePath,
+          line,
+          sample: lines[line - 1]?.trim() ?? "",
+          source: `${kind}: error.${match[1]}`,
+        });
+      }
     }
   }
 
@@ -242,7 +257,10 @@ export function collectSensitiveStorageWriteDrift() {
 
   for (const filePath of collectFiles(PERSISTENCE_SCAN_PATHS)) {
     const content = readFile(filePath);
-    if (!content.includes("localStorage") && !content.includes("sessionStorage")) {
+    if (
+      !content.includes("localStorage") &&
+      !content.includes("sessionStorage")
+    ) {
       continue;
     }
 

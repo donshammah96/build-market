@@ -26,15 +26,12 @@ function mapIdeaBooksError(error: {
 }) {
   switch (error.error) {
     case "not_found":
-      return apiError(
-        error.message || "Idea book not found",
-        HttpStatus.NOT_FOUND,
-      );
+      return apiError("Idea book not found", HttpStatus.NOT_FOUND);
     case "forbidden":
-      return apiError(error.message || "Forbidden", HttpStatus.FORBIDDEN);
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
     default:
       return apiError(
-        error.message || "Idea book operation failed",
+        "Idea book operation failed",
         error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
   }

@@ -1,12 +1,18 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useUser, useClerk } from "@clerk/nextjs";
+import { useAuth, useUser, useClerk } from "@clerk/nextjs";
 import { toast } from "react-toastify";
 import { OnboardingData } from "@build/types";
 import { onboardingClient } from "@/lib/onboarding-client";
 import { ROUTES } from "@/lib/links";
 import { useOnboardingAnalytics } from "@/lib/analytics/OnboardingAnalyticsContext";
 import { normalizeRole } from "@/app/lib/security/roles";
+import {
+  CLERK_CLAIM_REFRESH_FAILURE_MESSAGE,
+  hasExpectedOnboardingClaims,
+  type ClerkPublicMetadataLike,
+  waitForClerkClaimRefresh,
+} from "@/app/lib/auth/clerk-claim-refresh";
 
 export const SECURITY_PERSISTENCE_ALLOWLIST = [
   "onboarding_* draft keys",
@@ -30,17 +36,7 @@ export function clearOnboardingDrafts(): void {
   keysToRemove.forEach((k) => sessionStorage.removeItem(k));
 }
 
-/** Clerk public metadata structure for onboarded users */
-interface ClerkPublicMetadata {
-  isOnboarded?: boolean;
-  role?: unknown;
-  profileId?: string;
-}
-
 export type UserRole = "client" | "professional";
-
-const MAX_METADATA_RETRIES = 5;
-const METADATA_RETRY_DELAY = 300;
 const MIN_ONBOARDING_STEP = 1;
 const MAX_ONBOARDING_STEP = 2;
 
@@ -57,6 +53,7 @@ function isStepWithinBounds(step: number): boolean {
 
 export function useOnboarding() {
   const { user, isLoaded: userLoaded } = useUser();
+  const { getToken } = useAuth();
   const { signOut } = useClerk();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -106,7 +103,7 @@ export function useOnboarding() {
   // Redirect if user is already onboarded
   useEffect(() => {
     if (!userLoaded || !user) return;
-    const metadata = user.publicMetadata as ClerkPublicMetadata;
+    const metadata = user.publicMetadata as ClerkPublicMetadataLike;
     const normalizedRole = normalizeRole(metadata?.role);
 
     if (metadata?.isOnboarded) {
@@ -118,33 +115,22 @@ export function useOnboarding() {
     }
   }, [userLoaded, user, router]);
 
-  const waitForMetadataPropagation = useCallback(async (): Promise<boolean> => {
-    if (!user) return false;
+  const waitForMetadataPropagation = useCallback(
+    async (targetRole: UserRole): Promise<boolean> => {
+      const result = await waitForClerkClaimRefresh({
+        user,
+        getToken,
+        isReady: (metadata) =>
+          hasExpectedOnboardingClaims(metadata, targetRole),
+        onTransientFailure: () => {
+          analytics.trackAsyncValidationFailure("metadata_reload");
+        },
+      });
 
-    for (let attempt = 0; attempt < MAX_METADATA_RETRIES; attempt++) {
-      try {
-        await user.reload();
-        const metadata = user.publicMetadata as ClerkPublicMetadata;
-        if (metadata?.isOnboarded) return true;
-
-        if (attempt < MAX_METADATA_RETRIES - 1) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, METADATA_RETRY_DELAY * Math.pow(1.5, attempt)),
-          );
-        }
-      } catch (error) {
-        void error;
-        analytics.trackAsyncValidationFailure("metadata_reload");
-
-        if (attempt < MAX_METADATA_RETRIES - 1) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, METADATA_RETRY_DELAY * Math.pow(1.5, attempt)),
-          );
-        }
-      }
-    }
-    return false;
-  }, [analytics, user]);
+      return result.ok;
+    },
+    [analytics, getToken, user],
+  );
 
   const navigateToDashboard = useCallback(
     async (targetRole: UserRole) => {
@@ -153,13 +139,15 @@ export function useOnboarding() {
           ? ROUTES.professionalDashboard
           : ROUTES.userDashboard;
 
-      const metadataReady = await waitForMetadataPropagation();
+      const metadataReady = await waitForMetadataPropagation(targetRole);
 
       if (metadataReady) {
         router.push(dashboardPath);
       } else {
-        router.refresh();
-        router.push(dashboardPath);
+        toast.error(CLERK_CLAIM_REFRESH_FAILURE_MESSAGE);
+        router.replace(
+          `${ROUTES.authCallback}?transition=onboarding&expectedRole=${targetRole}`,
+        );
       }
     },
     [router, waitForMetadataPropagation],

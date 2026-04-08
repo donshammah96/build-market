@@ -29,20 +29,14 @@ function mapNotificationError(error: {
 }) {
   switch (error.error) {
     case "not_found":
-      return apiError(
-        error.message || "Notification not found",
-        HttpStatus.NOT_FOUND,
-      );
+      return apiError("Notification not found", HttpStatus.NOT_FOUND);
     case "forbidden":
-      return apiError(error.message || "Forbidden", HttpStatus.FORBIDDEN);
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
     case "no_update":
-      return apiError(
-        error.message || "No fields to update",
-        HttpStatus.BAD_REQUEST,
-      );
+      return apiError("No fields to update", HttpStatus.BAD_REQUEST);
     default:
       return apiError(
-        error.message || "Notification operation failed",
+        "Notification operation failed",
         error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
   }

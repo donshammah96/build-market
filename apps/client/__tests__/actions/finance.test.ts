@@ -286,11 +286,11 @@ describe("finance actions", () => {
     });
   });
 
-  it("fails the idempotency record and returns a structured domain failure", async () => {
+  it("fails the idempotency record and returns a safe structured domain failure", async () => {
     vi.mocked(financeService.createWithdrawal).mockResolvedValue({
       ok: false,
       error: "below_minimum",
-      message: "Withdrawal amount is below the minimum of 100 KES",
+      message: "Provider threshold 100 KES blocked withdrawal candidate",
       min: 100,
       status: 400,
     });
@@ -304,7 +304,7 @@ describe("finance actions", () => {
       success: false,
       error: {
         code: "invalid_input",
-        message: "Withdrawal amount is below the minimum of 100 KES",
+        message: "Withdrawal amount is below the allowed minimum.",
         status: 400,
         details: { min: 100 },
       },

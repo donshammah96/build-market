@@ -108,7 +108,7 @@ const CRITICAL_TRANSITION_STEP_SEQUENCE_RULES = [
     actionName: "submitOnboarding",
     orderedSnippets: [
       "userProfileOnboardingService.completeOnboarding(",
-      "updateClerkOnboardingMetadata(",
+      "finalizeClerkOnboardingTransition(",
       "IdempotencyService.complete(",
     ],
   },
@@ -117,7 +117,7 @@ const CRITICAL_TRANSITION_STEP_SEQUENCE_RULES = [
     actionName: "skipOnboarding",
     orderedSnippets: [
       "userProfileOnboardingService.skipClientOnboarding(",
-      "updateClerkOnboardingMetadata(",
+      "finalizeClerkOnboardingTransition(",
     ],
   },
   {
@@ -125,7 +125,7 @@ const CRITICAL_TRANSITION_STEP_SEQUENCE_RULES = [
     actionName: "skipProfessionalOnboarding",
     orderedSnippets: [
       "userProfileOnboardingService.skipProfessionalOnboarding(",
-      "updateClerkOnboardingMetadata(",
+      "finalizeClerkOnboardingTransition(",
     ],
   },
 ];
@@ -607,7 +607,10 @@ function extractWithAuthExportHandlerBlock(source, exportName) {
     return null;
   }
 
-  const arrowIndex = source.indexOf("=>", exportMatch.index + exportMatch[0].length);
+  const arrowIndex = source.indexOf(
+    "=>",
+    exportMatch.index + exportMatch[0].length,
+  );
   if (arrowIndex < 0) {
     return null;
   }
@@ -782,7 +785,10 @@ function collectCriticalTransitionStepSequencingDrift() {
       continue;
     }
 
-    const extracted = extractExportedAsyncFunctionBlock(source, rule.actionName);
+    const extracted = extractExportedAsyncFunctionBlock(
+      source,
+      rule.actionName,
+    );
     if (!extracted) {
       offenders.push({
         file: rule.file,
@@ -832,7 +838,10 @@ function collectCriticalTransitionStepSequencingDrift() {
       continue;
     }
 
-    const extracted = extractWithAuthExportHandlerBlock(source, rule.exportName);
+    const extracted = extractWithAuthExportHandlerBlock(
+      source,
+      rule.exportName,
+    );
     if (!extracted) {
       offenders.push({
         file: rule.file,

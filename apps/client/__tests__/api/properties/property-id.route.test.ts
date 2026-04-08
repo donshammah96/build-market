@@ -208,7 +208,7 @@ describe("GET /api/properties/[id]", () => {
       ok: false,
       error: "not_found",
       status: 404,
-      message: "Property not found",
+      message: "Property lookup failed for internal cache shard 2",
     });
 
     const request = new NextRequest(
@@ -219,6 +219,8 @@ describe("GET /api/properties/[id]", () => {
     });
 
     expect(response.status).toBe(404);
+    const payload = await response.json();
+    expect(payload.error).toBe("Property not found");
   });
 
   it("returns 400 for an invalid ID", async () => {

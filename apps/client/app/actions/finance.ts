@@ -69,10 +69,29 @@ function mapFinanceDomainFailure(error: {
 
   return createActionFailure(
     code,
-    error.message ?? "Failed to create withdrawal",
+    financeDomainErrorToClientMessage(error.error),
     error.status,
     details,
   );
+}
+
+function financeDomainErrorToClientMessage(code: string): string {
+  switch (code) {
+    case "forbidden":
+      return "Forbidden";
+    case "not_found":
+      return "Unable to create withdrawal request.";
+    case "insufficient_funds":
+      return "Insufficient available balance for this withdrawal.";
+    case "below_minimum":
+      return "Withdrawal amount is below the allowed minimum.";
+    case "above_maximum":
+      return "Withdrawal amount exceeds the allowed maximum.";
+    case "not_deletable":
+      return "Withdrawal request cannot be processed in its current state.";
+    default:
+      return "Failed to create withdrawal";
+  }
 }
 
 export type RequestWithdrawalActionInput = WithdrawInput & {

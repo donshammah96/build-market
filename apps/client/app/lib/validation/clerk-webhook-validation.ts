@@ -120,6 +120,9 @@ export const ClerkUserPayloadSchema = z.object({
       isVerified: z.boolean().optional(),
       status: z.string().optional(),
     })
+    // SECURITY_ZOD_PASSTHROUGH_ALLOWLIST: Clerk webhook payloads are signed
+    // provider envelopes and public_metadata may legitimately include
+    // additional provider-owned keys outside our mutation-body schemas.
     .passthrough()
     .optional(),
   last_sign_in_at: z.number().nullish(),

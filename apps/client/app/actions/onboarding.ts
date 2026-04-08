@@ -13,6 +13,7 @@ import {
   throwActionFailure,
   type ActionResult,
 } from "@/app/lib/actions/secure-action";
+import { HttpStatus } from "@/app/lib/api/api-response";
 import { getResilientExecutor } from "@/app/lib/api/resilient-api";
 import {
   userProfileOnboardingService,
@@ -24,7 +25,10 @@ import {
   type CreatePropertyInput,
 } from "@/app/lib/domains/properties";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
-import { updateClerkOnboardingMetadata } from "@/app/lib/domains/user-profile/clerk-metadata";
+import {
+  CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
+  finalizeClerkOnboardingTransition,
+} from "@/app/lib/domains/user-profile/clerk-metadata";
 import { normalizeRole } from "@/app/lib/security/roles";
 
 const ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS = 300;
@@ -131,6 +135,16 @@ async function getRequiredClerkContext() {
   }
 
   return { clerkId, clerkUser };
+}
+
+function throwClerkFinalizationFailure(): never {
+  throwActionFailure(
+    createActionFailure(
+      "internal",
+      CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
+      HttpStatus.SERVICE_UNAVAILABLE,
+    ),
+  );
 }
 
 export async function submitOnboarding(
@@ -255,18 +269,23 @@ export async function submitOnboarding(
         }
       }
 
-      await updateClerkOnboardingMetadata(
-        clerkId,
-        {
-          role: result.data.data.role,
-          isOnboarded: true,
-          status:
-            result.data.data.role === "PROFESSIONAL"
-              ? "PENDING_VERIFICATION"
-              : "ACTIVE",
-        },
-        { operation: "submit_onboarding" },
-      );
+      try {
+        await finalizeClerkOnboardingTransition({
+          clerkId,
+          metadata: {
+            role: result.data.data.role,
+            isOnboarded: true,
+            status:
+              result.data.data.role === "PROFESSIONAL"
+                ? "PENDING_VERIFICATION"
+                : "ACTIVE",
+          },
+          context: { operation: "submit_onboarding" },
+          onFailure: () => IdempotencyService.fail(idempotencyKey),
+        });
+      } catch {
+        throwClerkFinalizationFailure();
+      }
 
       const response = {
         ...result.data.data,
@@ -330,11 +349,15 @@ export async function skipOnboarding(): Promise<ActionResult<unknown>> {
         );
       }
 
-      await updateClerkOnboardingMetadata(
-        clerkId,
-        { role: "CLIENT", isOnboarded: true, status: "ACTIVE" },
-        { operation: "skip_client_onboarding" },
-      );
+      try {
+        await finalizeClerkOnboardingTransition({
+          clerkId,
+          metadata: { role: "CLIENT", isOnboarded: true, status: "ACTIVE" },
+          context: { operation: "skip_client_onboarding" },
+        });
+      } catch {
+        throwClerkFinalizationFailure();
+      }
 
       return result.data.data;
     },
@@ -395,15 +418,19 @@ export async function skipProfessionalOnboarding(): Promise<
         );
       }
 
-      await updateClerkOnboardingMetadata(
-        clerkId,
-        {
-          role: "PROFESSIONAL",
-          isOnboarded: true,
-          status: "PENDING_VERIFICATION",
-        },
-        { operation: "skip_professional_onboarding" },
-      );
+      try {
+        await finalizeClerkOnboardingTransition({
+          clerkId,
+          metadata: {
+            role: "PROFESSIONAL",
+            isOnboarded: true,
+            status: "PENDING_VERIFICATION",
+          },
+          context: { operation: "skip_professional_onboarding" },
+        });
+      } catch {
+        throwClerkFinalizationFailure();
+      }
 
       return result.data.data;
     },

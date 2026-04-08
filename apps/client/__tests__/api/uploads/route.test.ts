@@ -11,8 +11,15 @@ const mockPrepareUploadedAssetPersistence = vi.hoisted(() => vi.fn());
 const mockPersistPreparedUploadedAsset = vi.hoisted(() => vi.fn());
 const mockCleanupPreparedUploadedAssetArtifacts = vi.hoisted(() => vi.fn());
 const mockCreatePendingUploadStatus = vi.hoisted(() => vi.fn());
+const mockMarkUploadFailed = vi.hoisted(() => vi.fn());
 const mockEnqueueImageUploadProcessingJob = vi.hoisted(() => vi.fn());
 const mockProcessImageUploadJob = vi.hoisted(() => vi.fn());
+const mockEnv = vi.hoisted(() => ({
+  isProd: false,
+  jobs: {
+    uploadProcessInline: false,
+  },
+}));
 
 vi.mock("@/app/lib/api/api-middleware", () => ({
   withAuth:
@@ -78,6 +85,7 @@ vi.mock("@/app/lib/api/api-response", () => ({
     ACCEPTED: 202,
     BAD_REQUEST: 400,
     TOO_MANY_REQUESTS: 429,
+    SERVICE_UNAVAILABLE: 503,
   },
 }));
 
@@ -99,7 +107,7 @@ vi.mock("@/app/lib/domains/uploads", () => ({
 
 vi.mock("@/app/lib/infrastructure/upload-processing-status", () => ({
   createPendingUploadStatus: mockCreatePendingUploadStatus,
-  markUploadFailed: vi.fn(),
+  markUploadFailed: mockMarkUploadFailed,
 }));
 
 vi.mock("@/app/lib/queues/upload-processing.queue", () => ({
@@ -111,16 +119,14 @@ vi.mock("@/app/workers/uploads/processor", () => ({
 }));
 
 vi.mock("@/app/lib/infrastructure/env", () => ({
-  env: {
-    jobs: {
-      uploadProcessInline: false,
-    },
-  },
+  env: mockEnv,
 }));
 
 describe("POST /api/uploads", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockEnv.isProd = false;
+    mockEnv.jobs.uploadProcessInline = false;
 
     mockCheckRateLimit.mockResolvedValue({ success: true });
     mockValidateFile.mockReturnValue({ valid: true });
@@ -173,6 +179,7 @@ describe("POST /api/uploads", () => {
     });
 
     mockCleanupPreparedUploadedAssetArtifacts.mockResolvedValue(undefined);
+    mockMarkUploadFailed.mockResolvedValue(undefined);
   });
 
   it("returns 202 Accepted and pending upload metadata for image files", async () => {
@@ -243,5 +250,66 @@ describe("POST /api/uploads", () => {
     expect(mockPersistPreparedUploadedAsset).toHaveBeenCalledTimes(1);
     expect(mockCleanupPreparedUploadedAssetArtifacts).not.toHaveBeenCalled();
     expect(mockCreatePendingUploadStatus).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 in production when image queue enqueue fails", async () => {
+    mockEnv.isProd = true;
+    mockIsImageFile.mockReturnValue(true);
+    mockEnqueueImageUploadProcessingJob.mockRejectedValueOnce(
+      new Error("queue unavailable"),
+    );
+
+    const formData = new FormData();
+    formData.append(
+      "images",
+      new File([new Uint8Array([0xff, 0xd8, 0xff])], "avatar.jpg", {
+        type: "image/jpeg",
+      }),
+    );
+
+    const response = await POST(
+      new NextRequest("http://localhost:3500/api/uploads", {
+        method: "POST",
+        body: formData,
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error).toBe(
+      "Upload processing is temporarily unavailable. Please retry.",
+    );
+    expect(mockMarkUploadFailed).toHaveBeenCalledWith(
+      expect.any(String),
+      "Upload processing is temporarily unavailable. Please retry.",
+    );
+    expect(mockProcessImageUploadJob).not.toHaveBeenCalled();
+  });
+
+  it("uses inline image processing only when explicitly enabled outside production", async () => {
+    mockEnv.jobs.uploadProcessInline = true;
+    mockIsImageFile.mockReturnValue(true);
+    mockProcessImageUploadJob.mockResolvedValue(undefined);
+
+    const formData = new FormData();
+    formData.append(
+      "images",
+      new File([new Uint8Array([0xff, 0xd8, 0xff])], "avatar.jpg", {
+        type: "image/jpeg",
+      }),
+    );
+
+    const response = await POST(
+      new NextRequest("http://localhost:3500/api/uploads", {
+        method: "POST",
+        body: formData,
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(202);
+    expect(body.success).toBe(true);
+    expect(mockProcessImageUploadJob).toHaveBeenCalledTimes(1);
+    expect(mockEnqueueImageUploadProcessingJob).not.toHaveBeenCalled();
   });
 });

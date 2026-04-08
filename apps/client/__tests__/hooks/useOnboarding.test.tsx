@@ -3,6 +3,7 @@ import { renderHook, waitFor, act } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "react-toastify";
 import { useOnboarding } from "@/app/onboarding/_hooks/useOnboarding";
+import { CLERK_CLAIM_REFRESH_FAILURE_MESSAGE } from "@/app/lib/auth/clerk-claim-refresh";
 import {
   OnboardingAnalyticsProvider,
   NullAnalytics,
@@ -16,6 +17,7 @@ const mockSkipClient = vi.hoisted(() => vi.fn());
 const mockSkipProfessional = vi.hoisted(() => vi.fn());
 const mockSubmit = vi.hoisted(() => vi.fn());
 const mockReload = vi.hoisted(() => vi.fn());
+const mockGetToken = vi.hoisted(() => vi.fn());
 
 let mockUserState: {
   user: {
@@ -42,6 +44,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@clerk/nextjs", () => ({
   useUser: () => mockUserState,
   useClerk: () => ({ signOut: mockSignOut }),
+  useAuth: () => ({ getToken: mockGetToken }),
 }));
 
 vi.mock("react-toastify", () => ({
@@ -72,6 +75,7 @@ describe("useOnboarding", () => {
       isLoaded: true,
     };
     mockReload.mockResolvedValue(undefined);
+    mockGetToken.mockResolvedValue("fresh-token");
     mockSkipClient.mockResolvedValue({ success: true });
     mockSkipProfessional.mockResolvedValue({ success: true });
     mockSubmit.mockResolvedValue({ success: true });
@@ -144,6 +148,40 @@ describe("useOnboarding", () => {
     );
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith("/professional-portal/dashboard");
+    });
+  });
+
+  it("routes through auth-callback when refreshed onboarding claims cannot be confirmed", async () => {
+    const { result } = renderHook(() => useOnboarding(), {
+      wrapper: ({ children }) => (
+        <OnboardingAnalyticsProvider value={NullAnalytics}>
+          {children}
+        </OnboardingAnalyticsProvider>
+      ),
+    });
+
+    act(() => {
+      result.current.handleRoleSelect("professional");
+    });
+
+    await act(async () => {
+      await result.current.handleSubmit({
+        role: "professional",
+        profession: "ARCHITECT",
+        companyName: "Build Market Studio",
+        county: "NAIROBI",
+      } as never);
+    });
+
+    expect(mockGetToken).toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalledWith("/professional-portal/dashboard");
+    expect(toast.error).toHaveBeenCalledWith(
+      CLERK_CLAIM_REFRESH_FAILURE_MESSAGE,
+    );
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith(
+        "/auth-callback?transition=onboarding&expectedRole=professional",
+      );
     });
   });
 

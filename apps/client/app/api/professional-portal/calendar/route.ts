@@ -39,25 +39,19 @@ function mapCalendarError(error: {
 }) {
   switch (error.error) {
     case "forbidden":
-      return apiError(error.message ?? "Forbidden", HttpStatus.FORBIDDEN);
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
     case "client_not_found":
-      return apiError(
-        error.message ?? "Client not found",
-        HttpStatus.NOT_FOUND,
-      );
+      return apiError("Client not found", HttpStatus.NOT_FOUND);
     case "project_not_found":
-      return apiError(
-        error.message ?? "Project not found",
-        HttpStatus.NOT_FOUND,
-      );
+      return apiError("Project not found", HttpStatus.NOT_FOUND);
     case "invalid_date_range":
       return apiError(
-        error.message ?? "End date must be after start date",
+        "End date must be after start date",
         HttpStatus.BAD_REQUEST,
       );
     default:
       return apiError(
-        error.message ?? "Calendar request failed",
+        "Calendar request failed",
         error.status ?? HttpStatus.BAD_REQUEST,
       );
   }

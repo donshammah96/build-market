@@ -43,7 +43,10 @@ import {
   type ClerkUserProfile,
   userProfileOnboardingService,
 } from "@/app/lib/domains/user-profile";
-import { updateClerkOnboardingMetadata } from "@/app/lib/domains/user-profile/clerk-metadata";
+import {
+  CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
+  finalizeClerkOnboardingTransition,
+} from "@/app/lib/domains/user-profile/clerk-metadata";
 import { normalizeRole, type AppRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
@@ -212,15 +215,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const responseData = result.data.data;
 
   // ORDERING INVARIANT: Clerk update BEFORE IdempotencyService.complete().
-  await updateClerkOnboardingMetadata(
-    clerkId,
-    {
-      role: "PROFESSIONAL",
-      isOnboarded: true,
-      status: "PENDING_VERIFICATION",
-    },
-    { correlationId, operation: OPERATION_NAME },
-  );
+  try {
+    await finalizeClerkOnboardingTransition({
+      clerkId,
+      metadata: {
+        role: "PROFESSIONAL",
+        isOnboarded: true,
+        status: "PENDING_VERIFICATION",
+      },
+      context: { correlationId, operation: OPERATION_NAME },
+      onFailure: () => IdempotencyService.fail(idempotencyKey),
+    });
+  } catch {
+    logOutcome("failed", HttpStatus.SERVICE_UNAVAILABLE, {
+      reason: "clerk_metadata_sync_failed",
+    });
+    return apiError(
+      CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+  }
 
   await IdempotencyService.complete(idempotencyKey, responseData);
 

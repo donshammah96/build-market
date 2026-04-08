@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assertUploadProcessingModeInvariant } from "@/app/lib/infrastructure/upload-processing-mode";
 
 const { mockEnv } = vi.hoisted(() => ({
   mockEnv: {
@@ -99,5 +100,14 @@ describe("storage configuration invariants", () => {
     });
 
     expect(provider).toBeDefined();
+  });
+
+  it("blocks inline upload processing in production", () => {
+    expect(() =>
+      assertUploadProcessingModeInvariant({
+        isProd: true,
+        uploadProcessInline: true,
+      }),
+    ).toThrow(/UPLOAD_PROCESS_INLINE cannot be enabled in production/i);
   });
 });

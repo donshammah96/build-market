@@ -19,9 +19,12 @@ import {
   isImageFile,
   getValidationConfig,
 } from "@/app/lib/validation/file-validation";
-import { processImage } from "@/app/lib/media/image-processing";
 import { uploadService } from "@/app/lib/domains/uploads";
 import { env } from "@/app/lib/infrastructure/env";
+import {
+  shouldProcessUploadsInline,
+  UPLOAD_PROCESSING_UNAVAILABLE_MESSAGE,
+} from "@/app/lib/infrastructure/upload-processing-mode";
 import {
   createPendingUploadStatus,
   markUploadFailed,
@@ -103,6 +106,10 @@ export const POST = withAuth(
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const { ipAddress, userAgent } = getRequestMetadata(req);
+    const inlineProcessingEnabled = shouldProcessUploadsInline({
+      isProd: env.isProd,
+      uploadProcessInline: env.jobs.uploadProcessInline,
+    });
 
     const logOutcome = (
       outcome:
@@ -126,6 +133,59 @@ export const POST = withAuth(
         durationMs: Date.now() - requestStartedAt,
         additionalContext: additional,
       });
+    };
+
+    const failPendingUploadForUnavailableProcessing = async (params: {
+      uploadId: string;
+      fieldName: string;
+      queueError: unknown;
+    }) => {
+      try {
+        await markUploadFailed(
+          params.uploadId,
+          UPLOAD_PROCESSING_UNAVAILABLE_MESSAGE,
+        );
+      } catch (statusError) {
+        logger.error(
+          "Failed to mark pending upload as failed",
+          statusError instanceof Error
+            ? statusError
+            : new Error(String(statusError)),
+          {
+            correlationId,
+            uploadId: params.uploadId,
+            fieldName: params.fieldName,
+            operationName: OPERATION_NAME,
+          },
+        );
+      }
+
+      logger.error(
+        env.isProd
+          ? "Image upload queue unavailable in production"
+          : "Image upload queue unavailable and inline processing disabled",
+        params.queueError instanceof Error
+          ? params.queueError
+          : new Error(String(params.queueError)),
+        {
+          correlationId,
+          uploadId: params.uploadId,
+          fieldName: params.fieldName,
+          actorRole: userRole,
+          operationName: OPERATION_NAME,
+        },
+      );
+
+      logOutcome("failed", HttpStatus.SERVICE_UNAVAILABLE, {
+        reason: "upload_processing_unavailable",
+        uploadId: params.uploadId,
+        fieldName: params.fieldName,
+      });
+
+      return apiError(
+        UPLOAD_PROCESSING_UNAVAILABLE_MESSAGE,
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
     };
 
     // Rate limiting for uploads
@@ -272,23 +332,10 @@ export const POST = withAuth(
                 },
               };
 
-              let enqueued = false;
-              try {
-                await enqueueImageUploadProcessingJob(imageJobData);
-                enqueued = true;
-              } catch (queueError) {
-                logger.warn("Failed to enqueue image upload job", {
-                  correlationId,
-                  uploadId,
-                  fieldName,
-                  error:
-                    queueError instanceof Error
-                      ? queueError.message
-                      : String(queueError),
-                });
-              }
+              let processingMode: "inline" | "queued" = "queued";
 
-              if (!enqueued || env.jobs.uploadProcessInline) {
+              if (inlineProcessingEnabled) {
+                processingMode = "inline";
                 void processImageUploadJob(imageJobData).catch(
                   async (jobError) => {
                     const message =
@@ -313,6 +360,16 @@ export const POST = withAuth(
                     );
                   },
                 );
+              } else {
+                try {
+                  await enqueueImageUploadProcessingJob(imageJobData);
+                } catch (queueError) {
+                  return failPendingUploadForUnavailableProcessing({
+                    uploadId,
+                    fieldName,
+                    queueError,
+                  });
+                }
               }
 
               pendingCount++;
@@ -332,7 +389,7 @@ export const POST = withAuth(
                 correlationId,
                 fieldName,
                 uploadId,
-                enqueued,
+                processingMode,
                 operationName: OPERATION_NAME,
                 outcome: "accepted",
               });

@@ -6,20 +6,21 @@ User onboarding endpoints for Build Market. Handles initial account setup for bo
 
 All onboarding endpoints use **Clerk authentication directly** (not `withAuth` middleware) because the database user may not exist yet at the time of the request. The endpoints create the user record if needed via `upsert`.
 
-After successful onboarding, Clerk `publicMetadata` is updated with `role` and `isOnboarded` so that middleware can make routing decisions without a database round-trip. The database remains the source of truth — Clerk metadata failures are logged but do not fail the request.
+After successful onboarding, Clerk `publicMetadata` is finalized with `role` and `isOnboarded` before the response is completed so middleware can make routing decisions without a database round-trip. If that Clerk finalization cannot be confirmed, the request now fails closed with a retryable `503` and the idempotency record stays retryable. After a successful transition, the client forces a Clerk claim refresh before redirecting to a role-gated dashboard; `/api/internal/user-status` remains a middleware compatibility fallback only.
 
 ### Cross-Cutting Concerns
 
-| Concern         | Implementation                                                         |
-| --------------- | ---------------------------------------------------------------------- |
-| Authentication  | Clerk `auth()` / `withAuth` (complete endpoint only)                   |
-| Rate Limiting   | `checkRateLimit` with `RateLimits.AUTH` or `RateLimits.WRITE`          |
-| Idempotency     | `IdempotencyService` (SHA-256 key dedup) on all mutation endpoints     |
-| Resilience      | `getResilientExecutor().execute()` with circuit breaker                |
-| Body Size       | `checkBodySize` guard (1-2 MB for JSON, 10 MB per file for uploads)    |
-| Validation      | Zod schemas (`OnboardingSchema`, `OnboardingCompleteSchema`)           |
-| Response Format | `apiSuccess()` / `apiError()` with correlation IDs                     |
-| GDPR            | Individual `ConsentRecord` per consent type change (complete endpoint) |
+| Concern           | Implementation                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| Authentication    | Clerk `auth()` / `withAuth` (complete endpoint only)                                        |
+| Rate Limiting     | `checkRateLimit` with `RateLimits.AUTH` or `RateLimits.WRITE`                               |
+| Idempotency       | `IdempotencyService` (SHA-256 key dedup) on all mutation endpoints                          |
+| Resilience        | `getResilientExecutor().execute()` with circuit breaker                                     |
+| Body Size         | `checkBodySize` guard (1-2 MB for JSON, 10 MB per file for uploads)                         |
+| Validation        | Zod schemas (`OnboardingSchema`, `OnboardingCompleteSchema`)                                |
+| Session Freshness | Clerk metadata finalizer before response completion, plus client-side claim refresh barrier |
+| Response Format   | `apiSuccess()` / `apiError()` with correlation IDs                                          |
+| GDPR              | Individual `ConsentRecord` per consent type change (complete endpoint)                      |
 
 ## Endpoints
 
@@ -321,6 +322,7 @@ All endpoints return errors in the standard format:
 | `409`  | Onboarding already completed, or request is being processed (idempotency) |
 | `413`  | Request body too large                                                    |
 | `429`  | Rate limit exceeded                                                       |
+| `503`  | Clerk transition finalization could not be confirmed; retry the mutation  |
 | `500`  | Internal server error                                                     |
 
 ## Database Models

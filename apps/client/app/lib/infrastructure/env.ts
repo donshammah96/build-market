@@ -12,6 +12,8 @@
  *   validateEnv(['database', 'auth']);
  */
 
+import { assertUploadProcessingModeInvariant } from "@/app/lib/infrastructure/upload-processing-mode";
+
 type EnvVar = {
   name: string;
   required: boolean;
@@ -414,6 +416,15 @@ function buildEnvConfig() {
   const isDev = nodeEnv === "development";
   const isProd = nodeEnv === "production";
   const isTest = nodeEnv === "test";
+  const uploadProcessInline = getBooleanEnv(
+    "UPLOAD_PROCESS_INLINE",
+    isDev || isTest,
+  );
+
+  assertUploadProcessingModeInvariant({
+    isProd,
+    uploadProcessInline,
+  });
 
   return {
     // Environment
@@ -623,10 +634,7 @@ function buildEnvConfig() {
         "ONBOARDING_UPLOAD_CLEANUP_CRON",
         "0 3 * * *",
       ),
-      uploadProcessInline: getBooleanEnv(
-        "UPLOAD_PROCESS_INLINE",
-        isDev || isTest,
-      ),
+      uploadProcessInline,
       uploadStatusTtlSeconds: getNumberEnv("UPLOAD_STATUS_TTL_SECONDS", 1800),
       exportCleanupBatchSize: getNumberEnv("EXPORT_CLEANUP_BATCH_SIZE", 100),
       exportCleanupMaxRetries: getNumberEnv("EXPORT_CLEANUP_MAX_RETRIES", 3),

@@ -110,11 +110,11 @@ describe("professional calendar item routes", () => {
     mockCheckOrCreate.mockResolvedValue({ status: "new" });
   });
 
-  it("maps invalid date range domain responses to 400 on PATCH", async () => {
+  it("does not leak internal date-validation messages on PATCH", async () => {
     mockUpdateEvent.mockResolvedValue({
       ok: false,
       error: "invalid_date_range",
-      message: "End date must be after start date",
+      message: "Temporal validator rejected event range for calendar_event_1",
       status: 400,
     });
 

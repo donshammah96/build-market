@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { PATCH } from "@/app/api/onboarding/professional/complete/route";
 
+vi.mock("server-only", () => ({}));
+
 const mockCompleteProfessionalOnboarding = vi.hoisted(() => vi.fn());
 const mockLoggerInfo = vi.hoisted(() => vi.fn());
 const mockLoggerWarn = vi.hoisted(() => vi.fn());
