@@ -114,9 +114,12 @@ export class JetStreamConsumer {
    */
   private buildConsumerConfig(topic: TopicConfig): Partial<ConsumerConfig> {
     const opts = topic.consumerOptions || {};
+    const sanitizedSubject = topic.subject
+      .split("")
+      .map((char) => (char === "." || char === ">" || char === "*" ? "-" : char))
+      .join("");
     const durableName =
-      opts.durableName ||
-      `${this.groupName}-${topic.subject.replace(/[.>*]/g, "-")}`;
+      opts.durableName || `${this.groupName}-${sanitizedSubject}`;
 
     const config: Partial<ConsumerConfig> = {
       durable_name: durableName,
@@ -216,10 +219,16 @@ export class JetStreamConsumer {
 
     // Pattern contains * (single token wildcard)
     if (pattern.includes("*")) {
-      const regex = new RegExp(
-        "^" + pattern.replace(/\./g, "\\.").replace(/\*/g, "[^.]+") + "$",
+      const subjectTokens = subject.split(".");
+      const patternTokens = pattern.split(".");
+
+      if (subjectTokens.length !== patternTokens.length) {
+        return false;
+      }
+
+      return patternTokens.every(
+        (token, index) => token === "*" || token === subjectTokens[index],
       );
-      return regex.test(subject);
     }
 
     return false;
