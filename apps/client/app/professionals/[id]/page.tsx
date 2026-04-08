@@ -308,7 +308,7 @@ const PortfolioCard = memo(function PortfolioCard({
       <Card className="overflow-hidden hover-lift h-full">
         <div className="aspect-video overflow-hidden bg-slate-200">
           <ImageWithFallback
-            src={portfolio?.images?.[0]?.url ?? ""}
+            src={portfolio.images?.[0]?.url ?? ""}
             alt={portfolio.title}
             className="w-full h-full object-cover img-zoom transition-transform duration-300"
           />

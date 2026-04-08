@@ -101,7 +101,7 @@ export function MessagesPopover() {
             </Badge>
           )}
         </div>
-        <ScrollArea className="h-[300px]">
+        <ScrollArea className="h-75">
           {isLoading ? (
             <div className="flex items-center justify-center h-20 text-zinc-500">
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -114,66 +114,61 @@ export function MessagesPopover() {
             </div>
           ) : (
             <div className="divide-y divide-zinc-100">
-              {(Array.isArray(conversations) ? conversations : [])
-                .slice(0, 5)
-                .map((conv) => {
-                  const partner = getPartnerInfo(conv);
-                  const isUnread =
-                    ((conv.unreadCount as Record<string, number>)?.[
-                      currentUserDbId
-                    ] || 0) > 0;
+              {conversations.slice(0, 5).map((conv) => {
+                const partner = getPartnerInfo(conv);
+                const isUnread =
+                  ((conv.unreadCount as Record<string, number>)?.[
+                    currentUserDbId
+                  ] || 0) > 0;
 
-                  return (
-                    <button
-                      key={conv.id}
-                      className={cn(
-                        "w-full text-left px-4 py-3 hover:bg-zinc-50 transition-colors flex gap-3",
-                        isUnread && "bg-emerald-50/30",
-                      )}
-                      onClick={() => handleConversationClick(conv.id)}
-                    >
-                      <Avatar className="h-9 w-9 border border-zinc-100">
-                        <AvatarImage src={undefined} />
-                        <AvatarFallback className="text-xs bg-zinc-100 text-zinc-600">
-                          {partner.initials}
-                        </AvatarFallback>
-                      </Avatar>
+                return (
+                  <button
+                    key={conv.id}
+                    className={cn(
+                      "w-full text-left px-4 py-3 hover:bg-zinc-50 transition-colors flex gap-3",
+                      isUnread && "bg-emerald-50/30",
+                    )}
+                    onClick={() => handleConversationClick(conv.id)}
+                  >
+                    <Avatar className="h-9 w-9 border border-zinc-100">
+                      <AvatarImage src={undefined} />
+                      <AvatarFallback className="text-xs bg-zinc-100 text-zinc-600">
+                        {partner.initials}
+                      </AvatarFallback>
+                    </Avatar>
 
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span
-                            className={cn(
-                              "text-sm font-medium truncate",
-                              isUnread ? "text-zinc-900" : "text-zinc-700",
-                            )}
-                          >
-                            {partner.name}
-                          </span>
-                          {conv.lastMessageAt && (
-                            <span className="text-[10px] text-zinc-400">
-                              {formatDistanceToNow(
-                                new Date(conv.lastMessageAt),
-                                {
-                                  addSuffix: false,
-                                },
-                              )}
-                            </span>
-                          )}
-                        </div>
-                        <p
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span
                           className={cn(
-                            "text-xs line-clamp-1",
-                            isUnread
-                              ? "text-zinc-800 font-medium"
-                              : "text-zinc-500",
+                            "text-sm font-medium truncate",
+                            isUnread ? "text-zinc-900" : "text-zinc-700",
                           )}
                         >
-                          {conv.lastMessage || "No messages"}
-                        </p>
+                          {partner.name}
+                        </span>
+                        {conv.lastMessageAt && (
+                          <span className="text-[10px] text-zinc-400">
+                            {formatDistanceToNow(new Date(conv.lastMessageAt), {
+                              addSuffix: false,
+                            })}
+                          </span>
+                        )}
                       </div>
-                    </button>
-                  );
-                })}
+                      <p
+                        className={cn(
+                          "text-xs line-clamp-1",
+                          isUnread
+                            ? "text-zinc-800 font-medium"
+                            : "text-zinc-500",
+                        )}
+                      >
+                        {conv.lastMessage || "No messages"}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </ScrollArea>

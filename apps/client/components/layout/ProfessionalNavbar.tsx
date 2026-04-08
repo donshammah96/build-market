@@ -8,7 +8,6 @@ import { UserButton } from "@clerk/nextjs";
 import { NotificationsPopover } from "@/components/notifications/NotificationsPopover";
 import { MessagesPopover } from "@/components/chat/MessagesPopover";
 import { useProfileCompletion } from "@/hooks/useProfileStatus";
-import { cn } from "@/lib/utils";
 
 export function ProfessionalNavbar() {
   const { percentage, isComplete, isLoading } = useProfileCompletion();
@@ -48,23 +47,11 @@ export function ProfessionalNavbar() {
               <Button
                 variant="outline"
                 size="sm"
-                className={cn(
-                  "hidden sm:flex items-center gap-2",
-                  percentage < 50
-                    ? "text-warning border-warning/40 bg-warning/10 hover:bg-warning/20 hover:border-warning/50"
-                    : "text-warning border-warning/40 bg-warning/10 hover:bg-warning/20 hover:border-warning/50",
-                )}
+                className="hidden sm:flex items-center gap-2 text-warning border-warning/40 bg-warning/10 hover:bg-warning/20 hover:border-warning/50"
               >
                 <UserCircle className="h-4 w-4" />
                 <span>Complete Profile</span>
-                <span
-                  className={cn(
-                    "text-[10px] font-bold px-1.5 py-0.5 rounded-md",
-                    percentage < 50
-                      ? "bg-warning/30 text-warning"
-                      : "bg-warning/30 text-warning",
-                  )}
-                >
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-warning/30 text-warning">
                   {percentage}%
                 </span>
                 <ChevronRight className="h-3 w-3 opacity-50" />

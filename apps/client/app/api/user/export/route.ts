@@ -293,7 +293,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         );
       }
 
-      if (!listResult.success || !listResult.data) {
+      if (!listResult.data) {
         return apiError(
           "Failed to fetch export history",
           HttpStatus.INTERNAL_SERVER_ERROR,

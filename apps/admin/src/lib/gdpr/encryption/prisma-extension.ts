@@ -94,7 +94,7 @@ function encryptWhere(model: string, where: any) {
  * Traverse result and decrypt fields
  */
 function decryptResult(model: string, data: any) {
-  if (!data || typeof data !== "object" || data === null) return;
+  if (!data || typeof data !== "object") return;
 
   const fields = ENCRYPTED_FIELDS[model];
 

@@ -66,7 +66,7 @@ export default async function LeadDetailPage({ params }: LeadDetailPageProps) {
   const response = await getLeadDetails(id);
 
   if (!response.success || !response.data) {
-    notFound();
+    return notFound();
   }
 
   const lead = response.data;

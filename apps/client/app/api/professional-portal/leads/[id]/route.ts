@@ -193,13 +193,6 @@ export const PATCH = withAuth<LeadParams>(
     }
 
     const data = result.data;
-    if (!data) {
-      await IdempotencyService.fail(idempotencyKey);
-      return apiError(
-        "Failed to update lead",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (!data.ok) {
       await IdempotencyService.fail(idempotencyKey);
       if (data.error === "not_found")
@@ -298,13 +291,6 @@ export const DELETE = withAuth<LeadParams>(
     }
 
     const data = result.data;
-    if (!data) {
-      await IdempotencyService.fail(idempotencyKey);
-      return apiError(
-        "Failed to delete lead",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (!data.ok) {
       await IdempotencyService.fail(idempotencyKey);
       if (data.error === "not_found")

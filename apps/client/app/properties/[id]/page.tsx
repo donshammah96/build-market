@@ -79,7 +79,9 @@ export default async function PropertyDetailPage({
   const { id } = await params;
   const data = await getPropertyData(id);
 
-  if (!data) notFound();
+  if (!data) {
+    return notFound();
+  }
 
   const property = data.property;
   const similarProperties = data.similarProperties ?? [];

@@ -86,8 +86,16 @@ export const GET = withAuth<MilestoneParams>(
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
 
-    const { item } = result.data?.data as { item: { version?: number } };
-    const response = apiSuccess(result.data!.data, HttpStatus.OK);
+    const payload = result.data?.data;
+    if (!payload) {
+      return apiError(
+        "Failed to fetch milestone",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const { item } = payload as { item?: { version?: number } };
+    const response = apiSuccess(payload, HttpStatus.OK);
     const version = item?.version ?? 0;
     response.headers.set("ETag", `"${version}"`);
     return response;

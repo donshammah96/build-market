@@ -52,7 +52,7 @@ export default async function PropertyDetailPage({
   const { granularRole } = await getAdminPermissions();
 
   if (!response.success || !response.data) {
-    notFound();
+    return notFound();
   }
 
   const property = response.data;

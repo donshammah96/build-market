@@ -62,13 +62,11 @@ const StorePayloadSchema = StoreOnboardingSchema.omit({ role: true });
 const PropertyPayloadSchema = PropertyOnboardingSchema.omit({ role: true });
 
 // Theme-aware styles
-const createTheme = (variant: ProfessionalFormVariant) => {
-  const isDark = variant === "dark";
+const createTheme = (_variant: ProfessionalFormVariant) => {
   return {
-    container: isDark ? "max-w-2xl mx-auto" : "max-w-2xl mx-auto",
-    loadingOverlay: isDark
-      ? "fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center"
-      : "fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center",
+    container: "max-w-2xl mx-auto",
+    loadingOverlay:
+      "fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center",
     loadingSpinner: "text-[var(--color-onboarding-primary)]",
     loadingText:
       "text-[var(--color-onboarding-primary)] font-medium animate-pulse",

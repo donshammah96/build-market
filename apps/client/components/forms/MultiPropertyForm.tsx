@@ -62,12 +62,8 @@ const createMultiPropertyTheme = (variant: PropertyFormVariant) => {
     headerBorder: isDark
       ? "border-b border-white/10 pb-6"
       : "border-b border-border pb-6",
-    headerTitle: isDark
-      ? "text-2xl font-bold text-foreground tracking-tight"
-      : "text-2xl font-bold text-foreground tracking-tight",
-    headerDescription: isDark
-      ? "text-muted-foreground mt-1 max-w-xl"
-      : "text-muted-foreground mt-1 max-w-xl",
+    headerTitle: "text-2xl font-bold text-foreground tracking-tight",
+    headerDescription: "text-muted-foreground mt-1 max-w-xl",
 
     // Add button
     addButton: isDark
@@ -108,21 +104,18 @@ const createMultiPropertyTheme = (variant: PropertyFormVariant) => {
       : "bg-muted border-muted text-muted-foreground group-hover:bg-muted",
 
     // Property name
-    propertyName: isDark ? "text-foreground" : "text-foreground",
-    propertyNameEmpty: isDark
-      ? "text-muted-foreground italic"
-      : "text-muted-foreground italic",
+    propertyName: "text-foreground",
+    propertyNameEmpty: "text-muted-foreground italic",
 
     // Status text
     statusValid: "text-[var(--color-success)] font-medium",
     statusInvalid: "text-[var(--color-error)]",
     statusMeta: "text-muted-foreground",
-    statusDot: isDark ? "bg-muted-foreground" : "bg-muted-foreground",
+    statusDot: "bg-muted-foreground",
 
     // Remove button
-    removeButton: isDark
-      ? "text-muted-foreground hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors"
-      : "text-muted-foreground hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors",
+    removeButton:
+      "text-muted-foreground hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors",
 
     // Chevron
     chevron: "text-muted-foreground",
@@ -149,7 +142,7 @@ const createMultiPropertyTheme = (variant: PropertyFormVariant) => {
       ? "sticky bottom-0 z-10 bg-zinc-900/80 backdrop-blur-md border-t border-white/10 p-4 -mx-4 md:mx-0 md:rounded-xl md:border md:shadow-lg flex items-center justify-between mt-8"
       : "sticky bottom-0 z-10 bg-white/80 backdrop-blur-md border-t border-zinc-200 p-4 -mx-4 md:mx-0 md:rounded-xl md:border md:shadow-lg flex items-center justify-between mt-8",
 
-    footerMeta: isDark ? "text-sm text-zinc-500" : "text-sm text-zinc-500",
+    footerMeta: "text-sm text-zinc-500",
 
     // Footer buttons
     skipButton: isDark

@@ -347,8 +347,7 @@ export default function PortfolioDetailPage() {
               <div className="p-6 border-b border-zinc-100">
                 <h2 className="text-lg font-semibold text-zinc-900 flex items-center gap-2">
                   <ImageIcon className="h-5 w-5" />
-                  Gallery ({images.length}{" "}
-                  {images.length === 1 ? "image" : "images"})
+                  Gallery ({images.length} images)
                 </h2>
               </div>
               <div className="p-6">

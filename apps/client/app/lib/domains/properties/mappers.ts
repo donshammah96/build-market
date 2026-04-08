@@ -514,10 +514,7 @@ export function toMyPropertyListingDto(raw: {
     county: raw.county ?? null,
     type: raw.type,
     category: raw.category,
-    status:
-      typeof raw.status === "string"
-        ? raw.status.toLowerCase()
-        : raw.status.toLowerCase(),
+    status: raw.status.toLowerCase(),
     verificationStatus: raw.verificationStatus ?? null,
     rejectionReason: raw.rejectionReason ?? null,
     views: raw.viewCount,

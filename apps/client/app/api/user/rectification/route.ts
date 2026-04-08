@@ -308,7 +308,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       );
     }
 
-    if (!result.success || !result.data) {
+    if (!result.data) {
       logger.error(
         "Failed to fetch rectification history",
         result.error || new Error("Unknown error"),

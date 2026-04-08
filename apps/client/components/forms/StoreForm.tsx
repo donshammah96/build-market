@@ -69,7 +69,7 @@ const createTheme = (variant: StoreFormVariant) => {
 
   return {
     // Container styles
-    container: isDark ? "space-y-6" : "space-y-6",
+    container: "space-y-6",
 
     // Section card
     section: isDark
@@ -136,7 +136,7 @@ const createTheme = (variant: StoreFormVariant) => {
       ? "border-2 border-dashed border-zinc-700 rounded-xl p-8 text-center bg-white/5"
       : "border-2 border-dashed border-zinc-200 rounded-xl p-8 text-center bg-zinc-50/30",
 
-    emptyStateText: isDark ? "text-sm text-zinc-500" : "text-sm text-zinc-500",
+    emptyStateText: "text-sm text-zinc-500",
 
     // Icon container
     iconContainer: isDark
@@ -800,7 +800,7 @@ export default function StoreForm({
   const safeMessage = (msg: unknown): string => {
     if (typeof msg === "string") return msg;
     if (msg === null || msg === undefined) return "Unknown error";
-    return msg?.toString?.() ?? String(msg ?? "Unknown error");
+    return String(msg);
   };
 
   const FIELD_LABELS: Record<string, { label: string; section: string }> = {
@@ -939,7 +939,7 @@ export default function StoreForm({
       {externalError && (
         <div className={theme.errorBanner}>
           <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+            <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
             <p className={theme.errorBannerText}>{externalError}</p>
           </div>
         </div>
@@ -949,7 +949,7 @@ export default function StoreForm({
       {hasErrors && (
         <div className={theme.errorBanner}>
           <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+            <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
             <div className="flex-1">
               <h3 className={theme.errorBannerTitle}>
                 Please fix the following errors ({allErrors.length}):

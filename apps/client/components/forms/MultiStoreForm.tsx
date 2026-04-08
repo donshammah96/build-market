@@ -50,20 +50,14 @@ const createMultiStoreTheme = (variant: StoreFormVariant) => {
 
   return {
     // Container
-    container: isDark
-      ? "max-w-4xl mx-auto space-y-8 pb-10"
-      : "max-w-4xl mx-auto space-y-8 pb-10",
+    container: "max-w-4xl mx-auto space-y-8 pb-10",
 
     // Header
     headerBorder: isDark
       ? "border-b border-white/10 pb-6"
       : "border-b border-border pb-6",
-    headerTitle: isDark
-      ? "text-2xl font-bold text-foreground tracking-tight"
-      : "text-2xl font-bold text-foreground tracking-tight",
-    headerDescription: isDark
-      ? "text-muted-foreground mt-1 max-w-xl"
-      : "text-muted-foreground mt-1 max-w-xl",
+    headerTitle: "text-2xl font-bold text-foreground tracking-tight",
+    headerDescription: "text-muted-foreground mt-1 max-w-xl",
 
     // Add button
     addButton: isDark
@@ -105,21 +99,18 @@ const createMultiStoreTheme = (variant: StoreFormVariant) => {
       : "bg-muted border-muted text-muted-foreground group-hover:bg-muted",
 
     // Store name
-    storeName: isDark ? "text-foreground" : "text-foreground",
-    storeNameEmpty: isDark
-      ? "text-muted-foreground italic"
-      : "text-muted-foreground italic",
+    storeName: "text-foreground",
+    storeNameEmpty: "text-muted-foreground italic",
 
     // Status text
     statusValid: "text-[var(--color-success)] font-medium",
     statusInvalid: "text-[var(--color-error)]",
     statusMeta: "text-muted-foreground",
-    statusDot: isDark ? "bg-muted-foreground" : "bg-muted-foreground",
+    statusDot: "bg-muted-foreground",
 
     // Remove button
-    removeButton: isDark
-      ? "text-muted-foreground hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors"
-      : "text-muted-foreground hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors",
+    removeButton:
+      "text-muted-foreground hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors",
 
     // Chevron
     chevron: "text-muted-foreground",

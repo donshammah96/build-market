@@ -37,11 +37,7 @@ export const AccessibilityProvider = memo(function AccessibilityProvider({
     if (reduceMotion === "on") {
       html.classList.add("reduce-motion");
       html.style.setProperty("--animation-duration", "0.01ms");
-    } else if (reduceMotion === "off") {
-      html.classList.remove("reduce-motion");
-      html.style.removeProperty("--animation-duration");
     } else {
-      // System preference
       html.classList.remove("reduce-motion");
       html.style.removeProperty("--animation-duration");
     }

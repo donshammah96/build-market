@@ -150,14 +150,7 @@ export function ProfessionalSidebar({
                   <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
                 </div>
                 <span className="flex-1">Complete Profile</span>
-                <span
-                  className={cn(
-                    "text-[10px] font-bold px-1.5 py-0.5 rounded-md",
-                    percentage < 50
-                      ? "bg-warning/20 text-warning"
-                      : "bg-warning/20 text-warning",
-                  )}
-                >
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-warning/20 text-warning">
                   {percentage}%
                 </span>
               </div>

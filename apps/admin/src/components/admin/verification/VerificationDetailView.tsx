@@ -358,7 +358,7 @@ export function VerificationDetailView({
                       ))}
                   </dl>
 
-                  {details.entity.bio && (
+                  {(details.entity.bio || details.entity.description) && (
                     <>
                       <Separator className="my-4" />
                       <div className="space-y-1">

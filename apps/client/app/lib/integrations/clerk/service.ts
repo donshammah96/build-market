@@ -241,18 +241,26 @@ export const clerkIntegrationService = {
 
       const primaryEmail = email_addresses?.[0];
       const email = primaryEmail?.email_address;
-      const isEmailVerified = primaryEmail?.verification?.status === "verified";
+      const emailVerificationStatus = primaryEmail?.verification?.status;
+      const isEmailVerified =
+        typeof emailVerificationStatus === "string"
+          ? emailVerificationStatus === "verified"
+          : undefined;
       const primaryPhone = phone_numbers?.[0];
       const phone = primaryPhone?.phone_number;
-      const isPhoneVerified = primaryPhone?.verification?.status === "verified";
+      const phoneVerificationStatus = primaryPhone?.verification?.status;
+      const isPhoneVerified =
+        typeof phoneVerificationStatus === "string"
+          ? phoneVerificationStatus === "verified"
+          : undefined;
       const effectiveFirstName =
         first_name !== undefined ? first_name : existingUser.firstName;
       const effectiveLastName =
         last_name !== undefined ? last_name : existingUser.lastName;
       const emailJustVerified =
-        !!isEmailVerified && !existingUser.isEmailVerified;
+        isEmailVerified === true && !existingUser.isEmailVerified;
       const phoneJustVerified =
-        !!isPhoneVerified && !existingUser.isPhoneVerified;
+        isPhoneVerified === true && !existingUser.isPhoneVerified;
 
       const user = await clerkIntegrationRepository.updateUser(clerkId, {
         ...(email !== undefined ? { email } : {}),

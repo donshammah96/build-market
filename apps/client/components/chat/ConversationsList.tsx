@@ -87,7 +87,7 @@ export function ConversationsList({
   };
 
   const listContent = (
-    <ScrollArea className={embedded ? "h-full" : "h-full"}>
+    <ScrollArea className="h-full">
       {isLoading ? (
         // Loading skeleton
         <div className="p-2 space-y-2">
