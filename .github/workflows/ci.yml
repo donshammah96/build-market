@@ -88,7 +88,7 @@ jobs:
           DATABASE_URL: postgresql://ci:ci@localhost:5432/build_market_ci
           NEXT_PUBLIC_APP_URL: http://localhost:3500
           NEXT_PUBLIC_API_URL: http://localhost:3500/api
-          ENCRYPTION_KEY_V1: 0000000000000000000000000000000000000000000000000000000000000000
+          ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         run: pnpm run lint
 
       - name: Env contract check
