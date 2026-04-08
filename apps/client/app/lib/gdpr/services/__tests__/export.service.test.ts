@@ -87,27 +87,34 @@ describe("Export Service - Path Traversal Prevention", () => {
 
   describe("Path Containment", () => {
     it("should prevent path traversal attempts", () => {
-      const baseDir = "/app/exports";
-      const traversalAttempts = [
+      const posixBaseDir = "/app/exports";
+      const posixTraversalAttempts = [
         "../../../etc/passwd",
-        "..\\..\\windows\\system32",
         "valid-name/../../../etc/passwd",
         "/etc/passwd",
+      ];
+
+      for (const attempt of posixTraversalAttempts) {
+        const resolvedPath = path.posix.resolve(posixBaseDir, attempt);
+        const isContained = resolvedPath.startsWith(
+          path.posix.resolve(posixBaseDir),
+        );
+        expect(isContained).toBe(false);
+      }
+
+      const windowsBaseDir = "C:\\app\\exports";
+      const windowsTraversalAttempts = [
+        "..\\..\\windows\\system32",
+        "valid-name\\..\\..\\..\\windows\\system32",
         "C:\\Windows\\System32",
       ];
 
-      for (const attempt of traversalAttempts) {
-        const resolvedPath = path.resolve(baseDir, attempt);
-        const isContained = resolvedPath.startsWith(path.resolve(baseDir));
-
-        // All traversal attempts should fail containment check
-        if (
-          attempt.includes("..") ||
-          attempt.startsWith("/") ||
-          attempt.includes(":")
-        ) {
-          expect(isContained).toBe(false);
-        }
+      for (const attempt of windowsTraversalAttempts) {
+        const resolvedPath = path.win32.resolve(windowsBaseDir, attempt);
+        const isContained = resolvedPath.startsWith(
+          path.win32.resolve(windowsBaseDir),
+        );
+        expect(isContained).toBe(false);
       }
     });
 
