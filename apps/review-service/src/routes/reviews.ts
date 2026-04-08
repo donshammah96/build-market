@@ -81,60 +81,60 @@ router.get(
   "/:entityType/:entityId",
   reviewReadLimiter,
   async (req: Request, res: Response) => {
-  try {
-    const paramsResult = reviewListParamsSchema.safeParse(req.params);
-    if (!paramsResult.success) {
-      return res.status(400).json({
-        success: false,
-        error: getValidationMessage(paramsResult.error),
+    try {
+      const paramsResult = reviewListParamsSchema.safeParse(req.params);
+      if (!paramsResult.success) {
+        return res.status(400).json({
+          success: false,
+          error: getValidationMessage(paramsResult.error),
+        });
+      }
+
+      const queryResult = reviewListQuerySchema.safeParse(req.query);
+      if (!queryResult.success) {
+        return res.status(400).json({
+          success: false,
+          error: getValidationMessage(queryResult.error),
+        });
+      }
+
+      const { entityType, entityId } = paramsResult.data;
+      const { page, limit } = queryResult.data;
+      const skip = (page - 1) * limit;
+
+      const reviews = await Review.find({
+        entityType,
+        entityId,
+        moderationStatus: "approved",
+      })
+        .sort({ helpful: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+
+      const total = await Review.countDocuments({
+        entityType,
+        entityId,
+        moderationStatus: "approved",
       });
-    }
 
-    const queryResult = reviewListQuerySchema.safeParse(req.query);
-    if (!queryResult.success) {
-      return res.status(400).json({
-        success: false,
-        error: getValidationMessage(queryResult.error),
-      });
-    }
-
-    const { entityType, entityId } = paramsResult.data;
-    const { page, limit } = queryResult.data;
-    const skip = (page - 1) * limit;
-
-    const reviews = await Review.find({
-      entityType,
-      entityId,
-      moderationStatus: "approved",
-    })
-      .sort({ helpful: -1, createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Review.countDocuments({
-      entityType,
-      entityId,
-      moderationStatus: "approved",
-    });
-
-    res.json({
-      success: true,
-      data: {
-        reviews,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
+      res.json({
+        success: true,
+        data: {
+          reviews,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+          },
         },
-      },
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: "Failed to fetch reviews",
-    });
-  }
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: "Failed to fetch reviews",
+      });
+    }
   },
 );
 
@@ -210,143 +210,147 @@ router.post(
   "/:id/helpful",
   reviewMutationLimiter,
   async (req: Request, res: Response) => {
-  try {
-    const paramsResult = reviewIdParamsSchema.safeParse(req.params);
-    if (!paramsResult.success) {
-      return res.status(400).json({
+    try {
+      const paramsResult = reviewIdParamsSchema.safeParse(req.params);
+      if (!paramsResult.success) {
+        return res.status(400).json({
+          success: false,
+          error: getValidationMessage(paramsResult.error),
+        });
+      }
+
+      const bodyResult = helpfulBodySchema.safeParse(req.body);
+      if (!bodyResult.success) {
+        return res.status(400).json({
+          success: false,
+          error: getValidationMessage(bodyResult.error),
+        });
+      }
+
+      const { id } = paramsResult.data;
+      const { userId } = bodyResult.data;
+      const review = await Review.findById(id);
+
+      if (!review) {
+        return res.status(404).json({
+          success: false,
+          error: "Review not found",
+        });
+      }
+
+      if (review.helpfulBy.includes(userId)) {
+        return res.status(400).json({
+          success: false,
+          error: "Already marked as helpful",
+        });
+      }
+
+      review.helpful += 1;
+      review.helpfulBy.push(userId);
+      await review.save();
+
+      res.json({
+        success: true,
+        data: review,
+      });
+    } catch (error) {
+      res.status(500).json({
         success: false,
-        error: getValidationMessage(paramsResult.error),
+        error: "Failed to mark review as helpful",
       });
     }
-
-    const bodyResult = helpfulBodySchema.safeParse(req.body);
-    if (!bodyResult.success) {
-      return res.status(400).json({
-        success: false,
-        error: getValidationMessage(bodyResult.error),
-      });
-    }
-
-    const { id } = paramsResult.data;
-    const { userId } = bodyResult.data;
-    const review = await Review.findById(id);
-
-    if (!review) {
-      return res.status(404).json({
-        success: false,
-        error: "Review not found",
-      });
-    }
-
-    if (review.helpfulBy.includes(userId)) {
-      return res.status(400).json({
-        success: false,
-        error: "Already marked as helpful",
-      });
-    }
-
-    review.helpful += 1;
-    review.helpfulBy.push(userId);
-    await review.save();
-
-    res.json({
-      success: true,
-      data: review,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: "Failed to mark review as helpful",
-    });
-  }
   },
 );
 
 // Flag review
-router.post("/:id/flag", reviewMutationLimiter, async (req: Request, res: Response) => {
-  try {
-    const paramsResult = reviewIdParamsSchema.safeParse(req.params);
-    if (!paramsResult.success) {
-      return res.status(400).json({
+router.post(
+  "/:id/flag",
+  reviewMutationLimiter,
+  async (req: Request, res: Response) => {
+    try {
+      const paramsResult = reviewIdParamsSchema.safeParse(req.params);
+      if (!paramsResult.success) {
+        return res.status(400).json({
+          success: false,
+          error: getValidationMessage(paramsResult.error),
+        });
+      }
+
+      const { id } = paramsResult.data;
+      const review = await Review.findByIdAndUpdate(
+        id,
+        { flagged: true },
+        { new: true },
+      );
+
+      if (!review) {
+        return res.status(404).json({
+          success: false,
+          error: "Review not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        data: review,
+      });
+    } catch (error) {
+      res.status(500).json({
         success: false,
-        error: getValidationMessage(paramsResult.error),
+        error: "Failed to flag review",
       });
     }
-
-    const { id } = paramsResult.data;
-    const review = await Review.findByIdAndUpdate(
-      id,
-      { flagged: true },
-      { new: true },
-    );
-
-    if (!review) {
-      return res.status(404).json({
-        success: false,
-        error: "Review not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: review,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: "Failed to flag review",
-    });
-  }
-});
+  },
+);
 
 // Moderate review (admin)
 router.patch(
   "/:id/moderate",
   reviewMutationLimiter,
   async (req: Request, res: Response) => {
-  try {
-    const paramsResult = reviewIdParamsSchema.safeParse(req.params);
-    if (!paramsResult.success) {
-      return res.status(400).json({
+    try {
+      const paramsResult = reviewIdParamsSchema.safeParse(req.params);
+      if (!paramsResult.success) {
+        return res.status(400).json({
+          success: false,
+          error: getValidationMessage(paramsResult.error),
+        });
+      }
+
+      const bodyResult = moderateBodySchema.safeParse(req.body);
+      if (!bodyResult.success) {
+        return res.status(400).json({
+          success: false,
+          error: getValidationMessage(bodyResult.error),
+        });
+      }
+
+      const { id } = paramsResult.data;
+      const { moderationStatus } = bodyResult.data;
+
+      const review = await Review.findByIdAndUpdate(
+        id,
+        { moderationStatus },
+        { new: true },
+      );
+
+      if (!review) {
+        return res.status(404).json({
+          success: false,
+          error: "Review not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        data: review,
+      });
+    } catch (error) {
+      res.status(500).json({
         success: false,
-        error: getValidationMessage(paramsResult.error),
+        error: "Failed to moderate review",
       });
     }
-
-    const bodyResult = moderateBodySchema.safeParse(req.body);
-    if (!bodyResult.success) {
-      return res.status(400).json({
-        success: false,
-        error: getValidationMessage(bodyResult.error),
-      });
-    }
-
-    const { id } = paramsResult.data;
-    const { moderationStatus } = bodyResult.data;
-
-    const review = await Review.findByIdAndUpdate(
-      id,
-      { moderationStatus },
-      { new: true },
-    );
-
-    if (!review) {
-      return res.status(404).json({
-        success: false,
-        error: "Review not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: review,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: "Failed to moderate review",
-    });
-  }
   },
 );
 

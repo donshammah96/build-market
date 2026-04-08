@@ -116,7 +116,9 @@ export class JetStreamConsumer {
     const opts = topic.consumerOptions || {};
     const sanitizedSubject = topic.subject
       .split("")
-      .map((char) => (char === "." || char === ">" || char === "*" ? "-" : char))
+      .map((char) =>
+        char === "." || char === ">" || char === "*" ? "-" : char,
+      )
       .join("");
     const durableName =
       opts.durableName || `${this.groupName}-${sanitizedSubject}`;
