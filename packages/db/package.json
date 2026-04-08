@@ -31,7 +31,6 @@
     "@prisma/config": "^7.6.0",
     "@types/node": "^24.8.1",
     "@types/pg": "^8.16.0",
-    "ts-node": "^10.9.2",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   }

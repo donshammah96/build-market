@@ -150,6 +150,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Fixed
 
+- **Tailwind utility warning cleanup in shared chart UI (2026-04-08):** normalized the tooltip minimum-width class in `apps/admin/src/components/ui/chart.tsx` from `min-w-[8rem]` to `min-w-32` to remove arbitrary-value utility warnings without changing rendered layout.
 - **Tailwind warning cleanup in chat and professional forms (2026-04-08):** resolved Tailwind lint and utility-class warnings in `components/chat/ConversationsList.tsx`, `components/forms/MultiPropertyForm.tsx`, `components/forms/MultiStoreForm.tsx`, and `components/forms/ProfessionalForm.tsx` without changing runtime behavior.
 - **Static-analysis remediation sweep (2026-04-08):** resolved analyzer-reported null-safety, constant-condition, and identical-branch issues across client and companion admin surfaces touched by this pass, including professional/profile pages, leads adapters, chart and form utilities, multi-form themes, chat conversation rendering, and Clerk verification-flag typing; this pass also tightened type narrowing and removed redundant guard branches without changing runtime behavior.
 - **PropertyForm snapshot normalization no-op fix (2026-04-08):** fixed `__tests__/components/forms/PropertyForm.test.tsx` snapshot markup normalization by replacing dynamic `radix-*` IDs with `radix-__ID__` instead of a self-replacement no-op.
@@ -160,6 +161,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Changed
 
+- **Turbo workspace alignment and install-warning cleanup (2026-04-08):** aligned `turbo` to `^2.9.5` across root and client package manifests, and removed unused direct `ts-node` dependencies from `apps/client` and `packages/db` to eliminate recurring pnpm Windows bin-link ENOENT warnings during install.
 - **Dependency and peer-alignment cleanup (2026-04-08):** upgraded `react-day-picker` to `^9.14.0` in admin and client to remove React/date-fns peer-range mismatches under React 19 and current `date-fns`.
 - **Cypress component test dependency cleanup (2026-04-08):** removed deprecated `@cypress/react18` from `apps/client` and kept `@cypress/react` as the active component-testing adapter.
 - **Clerk middleware modernization (2026-04-08):** upgraded `@clerk/nextjs` (admin and payment-service) and `@clerk/express` (project-service), then replaced `@hono/clerk-auth` in payment-service with a local Clerk backend adapter (`src/lib/clerkAuth.ts`) built on `@clerk/backend` to eliminate deprecated Clerk transitive dependency paths.
