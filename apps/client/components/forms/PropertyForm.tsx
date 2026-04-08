@@ -329,7 +329,7 @@ const FIELD_LABELS: Record<string, { label: string; section: string }> = {
 const safeMessage = (msg: unknown): string => {
   if (typeof msg === "string") return msg;
   if (msg === null || msg === undefined) return "Unknown error";
-  return msg?.toString?.() ?? String(msg ?? "Unknown error");
+  return String(msg);
 };
 
 // Zod enums — derived from @build/enums as-const arrays (single source of truth)
@@ -740,7 +740,7 @@ const FeaturesInput = memo<{
           value={newFeature}
           onChange={(e) => setNewFeature(e.target.value)}
           placeholder="e.g. Swimming Pool, Gym, Borehole"
-          className="flex-1 h-11 bg-(--color-input-background) border-(--color-input) focus:bg-background"
+          className="flex-1 h-11 bg-(--color-input-background) border-input focus:bg-background"
           onKeyDown={(e) =>
             e.key === "Enter" && (e.preventDefault(), handleAddFeature())
           }

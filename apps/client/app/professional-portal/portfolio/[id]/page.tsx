@@ -216,7 +216,7 @@ export default function PortfolioDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6 max-w-[1600px] mx-auto">
+      <div className="space-y-6 max-w-400 mx-auto">
         <div className="flex items-center gap-4">
           <div className="h-10 w-10 bg-zinc-200 animate-pulse rounded" />
           <div className="space-y-2">
@@ -236,7 +236,7 @@ export default function PortfolioDetailPage() {
 
   if (error || !portfolio) {
     return (
-      <div className="space-y-6 max-w-[1600px] mx-auto">
+      <div className="space-y-6 max-w-400 mx-auto">
         <Button variant="ghost" asChild>
           <Link href="/professional-portal/portfolio">
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Portfolio
@@ -265,7 +265,7 @@ export default function PortfolioDetailPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto">
+    <div className="space-y-6 max-w-400 mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between gap-4 items-start border-b border-zinc-100 pb-6">
         <div className="flex items-center gap-4">
@@ -480,7 +480,7 @@ export default function PortfolioDetailPage() {
 
           {/* Client Testimonial */}
           {portfolio.clientTestimonial && (
-            <Card className="border border-zinc-200 shadow-sm bg-white bg-emerald-50/30 border-emerald-200">
+            <Card className="border border-emerald-200 shadow-sm bg-emerald-50/30">
               <div className="p-6 border-b border-emerald-100">
                 <h2 className="text-lg font-semibold text-zinc-900">
                   Client Testimonial
@@ -518,7 +518,7 @@ export default function PortfolioDetailPage() {
                 <>
                   <Separator />
                   <div>
-                    <label className="text-sm font-medium text-zinc-500 mb-1 block flex items-center gap-1">
+                    <label className="text-sm font-medium text-zinc-500 mb-1 flex items-center gap-1">
                       <Clock className="h-3 w-3" />
                       Completed Date
                     </label>
@@ -537,7 +537,7 @@ export default function PortfolioDetailPage() {
               )}
               <Separator />
               <div>
-                <label className="text-sm font-medium text-zinc-500 mb-1 block flex items-center gap-1">
+                <label className="text-sm font-medium text-zinc-500 mb-1 flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
                   Created
                 </label>
@@ -551,7 +551,7 @@ export default function PortfolioDetailPage() {
               </div>
               <Separator />
               <div>
-                <label className="text-sm font-medium text-zinc-500 mb-1 block flex items-center gap-1">
+                <label className="text-sm font-medium text-zinc-500 mb-1 flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
                   Last Updated
                 </label>
@@ -655,7 +655,7 @@ export default function PortfolioDetailPage() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-150 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Portfolio</DialogTitle>
             <DialogDescription>
@@ -774,7 +774,7 @@ export default function PortfolioDetailPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-106.25">
           <DialogHeader>
             <DialogTitle>Delete Portfolio</DialogTitle>
             <DialogDescription>

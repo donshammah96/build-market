@@ -42,7 +42,7 @@ export default async function StoreDetailPage({
   const response = await getStoreDetails(id);
 
   if (!response.success || !response.data) {
-    notFound();
+    return notFound();
   }
 
   const store = response.data;

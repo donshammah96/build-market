@@ -70,11 +70,11 @@ export default async function LeadDetailPage({ params }: LeadDetailPageProps) {
   }
 
   const lead = response.data;
-  const status = statusConfig[lead.status] || statusConfig.NEW;
-
-  if (!status) {
-    notFound();
-  }
+  const status = statusConfig[lead.status] ?? {
+    color: "bg-blue-100 text-blue-700 border-blue-200",
+    icon: <AlertCircle className="h-4 w-4" />,
+    label: "New Lead",
+  };
 
   const { granularRole } = await getAdminPermissions();
   const canManageLeads = ["SUPER_ADMIN", "SALES_MANAGER"].includes(

@@ -67,14 +67,11 @@ export const GET = withAuth<LeadParams>(
       { operationName: "get_lead_detail" },
     );
 
-    if (!result.success) {
+    if (!result.success || !result.data) {
       return apiError("Failed to fetch lead", HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     const data = result.data;
-    if (!data) {
-      return apiError("Failed to fetch lead", HttpStatus.INTERNAL_SERVER_ERROR);
-    }
     if (!data.ok) {
       if (data.error === "not_found")
         return apiError("Lead not found", HttpStatus.NOT_FOUND);

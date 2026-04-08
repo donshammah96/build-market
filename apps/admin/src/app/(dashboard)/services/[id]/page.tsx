@@ -1,5 +1,4 @@
 // @ts-nocheck
-// @ts-nocheck
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getServiceCategoryDetails } from "@/actions/admin";
@@ -37,7 +36,7 @@ export default async function ServiceDetailPage({
   const response = await getServiceCategoryDetails(id);
 
   if (!response.success || !response.data) {
-    notFound();
+    return notFound();
   }
 
   const service = response.data;
