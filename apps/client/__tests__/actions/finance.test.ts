@@ -226,7 +226,11 @@ describe("finance actions", () => {
   });
 
   it("returns the stored response for completed idempotent requests", async () => {
-    const storedResponse = buildWithdrawalDetail();
+    const storedResponse = buildWithdrawalDetail({
+      providerMetadata: {
+        payerPhone: "+254700000000",
+      },
+    });
 
     vi.mocked(IdempotencyService.checkOrCreate).mockResolvedValueOnce({
       status: "completed",

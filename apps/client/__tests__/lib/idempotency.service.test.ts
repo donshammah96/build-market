@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IdempotencyStatus } from "@prisma/client";
-import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import {
+  IDEMPOTENCY_REPLAY_SCOPE_POLICIES,
+  IdempotencyService,
+} from "@/app/lib/services/idempotency.service";
 
 const mocks = vi.hoisted(() => ({
   findUnique: vi.fn(),
@@ -29,15 +32,47 @@ describe("IdempotencyService replay data policy", () => {
     mocks.update.mockResolvedValue({});
   });
 
-  it("redacts sensitive fields before persisting replay payloads", async () => {
+  it("registers an explicit replay policy for every live idempotency scope", () => {
+    expect(Object.keys(IDEMPOTENCY_REPLAY_SCOPE_POLICIES).sort()).toEqual([
+      "calendar_event",
+      "certificate",
+      "complete-profile",
+      "escrow",
+      "idea-books",
+      "lead",
+      "messaging",
+      "onboarding",
+      "portfolio",
+      "professional_document",
+      "professional_license",
+      "profile",
+      "project",
+      "project_milestone",
+      "property",
+      "property_inquiry",
+      "service",
+      "store",
+      "transaction",
+      "withdrawal",
+    ]);
+  });
+
+  it("preserves reviewed Class B fields for registered business DTO scopes", async () => {
+    await IdempotencyService.checkOrCreate(
+      "key-1",
+      "store",
+      "user-1",
+      "POST",
+      "store-1",
+      1,
+    );
+
     await IdempotencyService.complete("key-1", {
-      email: "person@example.com",
-      profile: {
-        phoneNumber: "+254700000000",
-        displayName: "Jane Doe",
-      },
-      accessToken: "token-value",
-      safeValue: "kept",
+      id: "store-1",
+      email: "shop@example.com",
+      address: "Nairobi",
+      mpesaTillNumber: "12345",
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
     });
 
     expect(mocks.update).toHaveBeenCalledWith(
@@ -46,32 +81,88 @@ describe("IdempotencyService replay data policy", () => {
         data: expect.objectContaining({
           status: IdempotencyStatus.COMPLETED,
           response: {
-            email: "[REDACTED]",
-            profile: {
-              phoneNumber: "[REDACTED]",
-              displayName: "Jane Doe",
-            },
-            accessToken: "[REDACTED]",
-            safeValue: "kept",
+            id: "store-1",
+            email: "shop@example.com",
+            address: "Nairobi",
+            mpesaTillNumber: "12345",
+            createdAt: "2026-01-01T00:00:00.000Z",
           },
         }),
       }),
     );
   });
 
-  it("normalizes non-JSON replay values before persistence", async () => {
-    await IdempotencyService.complete("key-2", {
-      issuedAt: new Date("2026-01-01T00:00:00.000Z"),
-      sequence: BigInt(12),
-      optional: undefined,
+  it("rejects Class B fields for scopes that are limited to Class C and Class D", async () => {
+    await IdempotencyService.checkOrCreate(
+      "key-2",
+      "onboarding",
+      "user-1",
+      "POST",
+      undefined,
+      1,
+    );
+
+    await expect(
+      IdempotencyService.complete("key-2", {
+        completed: true,
+        email: "person@example.com",
+      }),
+    ).rejects.toThrow(/Class B/);
+
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects Class A fields even when the scope allows reviewed Class B fields", async () => {
+    await IdempotencyService.checkOrCreate(
+      "key-3",
+      "store",
+      "user-1",
+      "POST",
+      "store-1",
+      1,
+    );
+
+    await expect(
+      IdempotencyService.complete("key-3", {
+        id: "store-1",
+        accessToken: "secret-token",
+      }),
+    ).rejects.toThrow(/Class A/);
+
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when an unregistered scope tries to persist replay data", async () => {
+    mocks.findUnique.mockResolvedValueOnce({
+      scope: "unsupported_scope",
     });
 
-    const updateCall = mocks.update.mock.calls[0]?.[0];
-    expect(updateCall.data.response).toEqual({
-      issuedAt: "2026-01-01T00:00:00.000Z",
-      sequence: "12",
-      optional: null,
+    await expect(
+      IdempotencyService.complete("key-4", { ok: true }),
+    ).rejects.toThrow(/No idempotency replay policy/);
+
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects reusing one idempotency key across different registered scopes", async () => {
+    mocks.findUnique.mockResolvedValueOnce({
+      scope: "store",
+      status: IdempotencyStatus.PENDING,
+      expiresAt: new Date(Date.now() + 60_000),
     });
+
+    await expect(
+      IdempotencyService.checkOrCreate(
+        "key-4b",
+        "property",
+        "user-1",
+        "POST",
+        "property-1",
+        1,
+      ),
+    ).rejects.toThrow(/already bound to scope "store"/);
+
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 
   it("replays completed payloads only when the idempotency record is still valid", async () => {
@@ -82,7 +173,7 @@ describe("IdempotencyService replay data policy", () => {
     });
 
     const replay = await IdempotencyService.checkOrCreate(
-      "key-3",
+      "key-5",
       "store",
       "user-1",
       "POST",
@@ -103,7 +194,7 @@ describe("IdempotencyService replay data policy", () => {
     });
 
     const result = await IdempotencyService.checkOrCreate(
-      "key-4",
+      "key-6",
       "store",
       "user-1",
       "POST",
@@ -111,7 +202,7 @@ describe("IdempotencyService replay data policy", () => {
       1,
     );
 
-    expect(mocks.delete).toHaveBeenCalledWith({ where: { key: "key-4" } });
+    expect(mocks.delete).toHaveBeenCalledWith({ where: { key: "key-6" } });
     expect(mocks.create).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ status: "new" });
   });

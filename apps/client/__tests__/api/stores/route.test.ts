@@ -143,7 +143,17 @@ describe("Stores API routes", () => {
   it("POST returns cached response when idempotency is completed", async () => {
     vi.mocked(prisma.idempotencyKey.findUnique).mockResolvedValue({
       status: IdempotencyStatus.COMPLETED,
-      response: { stores: [], count: 0 },
+      response: {
+        stores: [
+          {
+            id: "store_1",
+            name: "Replay Store",
+            email: "sales@example.com",
+            address: "Nairobi",
+          },
+        ],
+        count: 1,
+      },
     } as any);
 
     const request = new NextRequest("http://localhost:3500/api/stores", {
@@ -156,7 +166,17 @@ describe("Stores API routes", () => {
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
-    expect(data.data).toEqual({ stores: [], count: 0 });
+    expect(data.data).toEqual({
+      stores: [
+        {
+          id: "store_1",
+          name: "Replay Store",
+          email: "sales@example.com",
+          address: "Nairobi",
+        },
+      ],
+      count: 1,
+    });
   });
 
   it("POST returns conflict when idempotency is pending", async () => {

@@ -169,6 +169,13 @@ Sensitive mutations must enforce recent-auth or freshness assertions in the adap
 
 Use shared helpers: `app/lib/api-guards.ts`, `app/lib/services/idempotency.service.ts`, `app/lib/services/*-operations.service.ts` for optimistic-lock flows, and `app/lib/config/<domain>.config.ts` for shared constants.
 
+Idempotent replay storage is a governed persistence boundary:
+
+1. New idempotent route or action scopes must register an explicit replay policy in `app/lib/services/idempotency.service.ts` before `IdempotencyService.complete()` may persist their success payload.
+2. Replay payloads must be the public DTO or response envelope already exposed to clients, never raw provider payloads, raw Prisma records, or ad-hoc internal objects.
+3. Default replay policy allows only ADR-006 Class C and Class D fields. Any scope that must retain minimum-necessary Class B fields to preserve an existing public contract must opt in explicitly in the registry and remain reviewable there.
+4. Class A data is never allowed in replay persistence.
+
 For versioned entities: GET and successful mutation responses return `ETag`; PATCH and DELETE require `If-Match`; route adapters map conflict outcomes to `409`.
 
 ## Observability and Operational Readiness
