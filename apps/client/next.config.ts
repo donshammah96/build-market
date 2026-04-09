@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
-import { env } from "@/app/lib/infrastructure/env";
+import { readNextConfigEnv } from "./next-config-env";
+
+const configEnv = readNextConfigEnv();
 
 const toOrigin = (value?: string): string | null => {
   if (!value) {
@@ -13,10 +15,10 @@ const toOrigin = (value?: string): string | null => {
   }
 };
 
-const appOrigin = toOrigin(env.appUrl) ?? "http://localhost:3500";
-const apiOrigin = toOrigin(env.apiUrl) ?? `${appOrigin}/api`;
-const clerkFrontendApiOrigin = toOrigin(env.clerk.frontendApi);
-const analyticsOrigin = toOrigin(env.analytics.posthogHost);
+const appOrigin = toOrigin(configEnv.appUrl) ?? "http://localhost:3500";
+const apiOrigin = toOrigin(configEnv.apiUrl) ?? `${appOrigin}/api`;
+const clerkFrontendApiOrigin = toOrigin(configEnv.clerkFrontendApi);
+const analyticsOrigin = toOrigin(configEnv.analyticsPosthogHost);
 
 const selfAndFirstParty = Array.from(new Set(["'self'", appOrigin, apiOrigin]));
 
@@ -29,7 +31,9 @@ const connectOrigins = Array.from(
       // Third-party (analytics): PostHog ingestion/query endpoint.
       analyticsOrigin,
       // Dev-only HMR websocket endpoint; no wildcard host.
-      env.nodeEnv === "development" ? appOrigin.replace(/^http/, "ws") : null,
+      configEnv.nodeEnv === "development"
+        ? appOrigin.replace(/^http/, "ws")
+        : null,
     ].filter((origin): origin is string => Boolean(origin)),
   ),
 );
@@ -189,7 +193,7 @@ const nextConfig: NextConfig = {
   compiler: {
     // Remove console.log in production (except errors)
     removeConsole:
-      env.nodeEnv === "production"
+      configEnv.nodeEnv === "production"
         ? {
             exclude: ["error", "warn"],
           }
