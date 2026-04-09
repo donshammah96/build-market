@@ -12,7 +12,7 @@
  *   validateEnv(['database', 'auth']);
  */
 
-import { assertUploadProcessingModeInvariant } from "@/app/lib/infrastructure/upload-processing-mode";
+import { assertUploadProcessingModeInvariant } from "./upload-processing-mode";
 
 type EnvVar = {
   name: string;
