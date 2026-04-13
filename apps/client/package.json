@@ -20,6 +20,7 @@
     "check-no-direct-env": "node scripts/check-no-direct-env.mjs",
     "check-browser-persistence": "node scripts/check-browser-persistence.mjs",
     "check-cors-policy": "node scripts/check-cors-policy.mjs",
+    "report:projects-mutation-health": "node scripts/summarize-project-mutation-health.mjs",
     "check-security-lint": "node scripts/check-security-lint.mjs",
     "build:high-risk-registry": "node scripts/build-high-risk-registry.mjs",
     "report-security-drift": "pnpm run build:high-risk-registry && node scripts/report-security-drift.mjs",

@@ -28,6 +28,18 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+### [CHECKPOINT] Non-Autopsy 7 - Projects Mutation Monitoring Evidence Tooling (Criterion 2 Enablement) - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Added projects mutation monitoring tooling and runbook support for Phase 2 Criterion 2 evidence capture across canary and broad rollout windows.
+- Actual files changed: `apps/client/scripts/summarize-project-mutation-health.mjs`; `apps/client/package.json`; `apps/client/docs/PROJECTS-GENERIC-API-ROLLOUT.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results: `node apps/client/scripts/summarize-project-mutation-health.mjs --help` (pass, usage output); `node apps/client/scripts/summarize-project-mutation-health.mjs --input apps/client/tmp/coverage-trio/coverage-summary.json` (pass, safe summary output).
+- Guardrail outcomes delivered:
+  1. Introduced deterministic mutation health summarization for `/api/projects/**` write-path logs.
+  2. Added threshold-based failure options for write error, idempotency conflict, and optimistic-lock conflict rates.
+  3. Added evidence-capture template and interpretation guidance to support auditable rollout signoff.
+- Deferred items: staging/production log export ingestion remains required to mark Criterion 2 fully complete.
+
 ### [CHECKPOINT] Non-Autopsy 6 - Generic Projects Rollout Flag Retirement + Client Surface GA Cutover - Completed
 
 - Date: 2026-04-13

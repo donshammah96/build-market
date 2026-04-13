@@ -4,6 +4,18 @@ Last updated: 2026-04-13
 
 ## Snapshot
 
+### [CHECKPOINT] Non-Autopsy 7 - Projects Mutation Monitoring Evidence Tooling (Criterion 2 Enablement) - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Implemented rollout-monitoring evidence tooling for Phase 2 Acceptance Criterion 2 by adding a reusable projects mutation health summarizer, documenting evidence-capture windows, and wiring a script entry for repeatable analysis of staging/production log exports.
+- Actual files changed: `apps/client/scripts/summarize-project-mutation-health.mjs`; `apps/client/package.json`; `apps/client/docs/PROJECTS-GENERIC-API-ROLLOUT.md`.
+- Verification commands run and results: `node apps/client/scripts/summarize-project-mutation-health.mjs --help` passed (usage output rendered); `node apps/client/scripts/summarize-project-mutation-health.mjs --input apps/client/tmp/coverage-trio/coverage-summary.json` passed (safe zero-signal summary on non-matching input).
+- Security outcomes:
+  1. Added deterministic write-path health metrics extraction for `/api/projects/**` mutation operations (write 5xx rate, idempotency conflict rate, optimistic-lock conflict rate).
+  2. Added optional threshold-gate mode in monitoring script to fail CI/manual checks when mutation-path rates exceed configured bounds.
+  3. Added explicit evidence table and capture process so canary/broad-rollout monitoring is auditable and repeatable.
+- Deferred items: production/staging telemetry exports still need to be ingested and recorded to close Criterion 2.
+
 ### [CHECKPOINT] Non-Autopsy 6 - Generic Projects Rollout Flag Retirement + Client Surface GA Cutover - Completed
 
 - Date: 2026-04-13
@@ -884,10 +896,10 @@ Reviews, Search, Documents, Licenses, Certificates, and Client Dashboard are now
 
 ## Remaining Follow-Through
 
-- No additional code-side guardrail work remains in this pass; the remaining item below is rollout monitoring signoff evidence.
+- No additional code-side guardrail work remains in this pass; monitoring tooling is now in place and the remaining item below is external rollout evidence capture.
 
 ### Phase 2 Acceptance Criteria
 
 1. [Completed 2026-04-13] Confirm homeowner/general route contract requirements and finalize response envelope guarantees for all `/api/projects/`\*\* resources.
-2. [Pending] Monitor staging/production mutation-path health (idempotency conflicts, optimistic-lock conflicts, write error rates) during canary and broad rollout.
+2. [Pending - tooling landed 2026-04-13] Monitor staging/production mutation-path health (idempotency conflicts, optimistic-lock conflicts, write error rates) during canary and broad rollout.
 3. [Completed 2026-04-13] Remove rollout flags after full generic projects cutover.
