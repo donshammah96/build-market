@@ -1584,6 +1584,7 @@ export default function PropertyForm({
           return;
         }
 
+        // SECURITY_PERSISTENCE_ALLOWLIST: Persists non-sensitive property draft form state.
         window.sessionStorage.setItem(draftStorageKey, JSON.stringify(values));
       }, 300);
     });
@@ -1599,6 +1600,7 @@ export default function PropertyForm({
   React.useEffect(() => {
     if (typeof window === "undefined") return;
 
+    // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive property draft form state.
     const serializedDraft = window.sessionStorage.getItem(draftStorageKey);
     if (!serializedDraft) {
       hasHydratedDraftRef.current = true;
@@ -1617,6 +1619,7 @@ export default function PropertyForm({
         });
       });
     } catch {
+      // SECURITY_PERSISTENCE_ALLOWLIST: Clears malformed non-sensitive property draft form state.
       window.sessionStorage.removeItem(draftStorageKey);
     } finally {
       hasHydratedDraftRef.current = true;
@@ -2027,6 +2030,7 @@ export default function PropertyForm({
       await Promise.resolve(onSubmit(submitData));
 
       if (typeof window !== "undefined") {
+        // SECURITY_PERSISTENCE_ALLOWLIST: Clears non-sensitive property draft form state after successful submit.
         window.sessionStorage.removeItem(draftStorageKey);
       }
 

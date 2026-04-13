@@ -32,6 +32,9 @@
  * GET /api/user/export?id={exportId} - Check export status and download
  */
 
+// ADR-006 classification: Class A/B - export payloads may include identity, contact, and regulated profile fields.
+// Reviewed: 2026-04-09 by @copilot
+
 import { NextRequest } from "next/server";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { HttpStatus } from "@/app/lib/api/api-response";
@@ -44,6 +47,7 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   RateLimits,
+  getActorRateLimitIdentifier,
   getRateLimitIdentifier,
   checkRateLimit,
 } from "@/app/lib/api/rate-limit";
@@ -86,16 +90,16 @@ export const POST = withAuth(
     const correlationId = initializeCorrelationId(req);
 
     try {
-      const identifier = getRateLimitIdentifier(req);
+      const rateLimitKey = getActorRateLimitIdentifier(dbUserId, "user-export");
       const { success } = await checkRateLimit(
-        identifier,
+        rateLimitKey,
         RateLimits.EXPORT.limit,
         RateLimits.EXPORT.window,
       );
 
       if (!success) {
         logger.warn("Rate limit exceeded for export request", {
-          identifier,
+          rateLimitKey,
           correlationId,
           operationName: "request-data-export",
         });

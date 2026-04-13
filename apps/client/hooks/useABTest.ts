@@ -48,6 +48,7 @@ interface StoredABTests {
 function getStoredTests(): StoredABTests {
   if (typeof window === "undefined") return {};
   try {
+    // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive anonymous A/B assignment state.
     const stored = localStorage.getItem(AB_TEST_STORAGE_KEY);
     return stored ? JSON.parse(stored) : {};
   } catch {
@@ -60,6 +61,7 @@ function storeTest(name: string, variant: ABTestVariant): void {
   try {
     const tests = getStoredTests();
     tests[name] = { variant, assignedAt: Date.now() };
+    // SECURITY_PERSISTENCE_ALLOWLIST: Persists non-sensitive anonymous A/B assignment state.
     localStorage.setItem(AB_TEST_STORAGE_KEY, JSON.stringify(tests));
   } catch {
     // Ignore storage errors
@@ -160,6 +162,7 @@ function trackABEvent(
   if (typeof window !== "undefined") {
     try {
       const eventsKey = `ab_events_${experimentName}`;
+      // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive A/B telemetry event history.
       const events = JSON.parse(localStorage.getItem(eventsKey) || "[]");
       events.push({
         variant,
@@ -168,6 +171,7 @@ function trackABEvent(
         timestamp: Date.now(),
       });
       // Keep last 100 events per experiment
+      // SECURITY_PERSISTENCE_ALLOWLIST: Persists non-sensitive A/B telemetry event history.
       localStorage.setItem(eventsKey, JSON.stringify(events.slice(-100)));
     } catch {
       // Ignore storage errors
@@ -294,6 +298,7 @@ export function getABTestEvents(experimentName: string): Array<{
   if (typeof window === "undefined") return [];
   try {
     const eventsKey = `ab_events_${experimentName}`;
+    // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive A/B telemetry event history.
     return JSON.parse(localStorage.getItem(eventsKey) || "[]");
   } catch {
     return [];

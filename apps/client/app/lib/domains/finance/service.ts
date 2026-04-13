@@ -14,6 +14,7 @@ import type {
   ProjectFinanceStats,
   FinanceResult,
   FinanceStats,
+  FinanceTransactionListItem,
   FinanceTransactionDetail,
   FinanceTransactionsResult,
   TransactionQueryInput,
@@ -22,6 +23,58 @@ import type {
 } from "@/app/lib/domains/finance/contracts";
 
 const FINANCE_ALLOWED_ROLES = new Set(["PROFESSIONAL", "ADMIN"]);
+
+function toIsoDateString(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function toIsoDateStringNullable(value: Date | string | null): string | null {
+  if (value === null) {
+    return null;
+  }
+
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function normalizeListTransactionDates<
+  T extends {
+    date: Date | string;
+    createdAt: Date | string;
+    completedAt: Date | string | null;
+  },
+>(
+  transaction: T,
+): Omit<T, "date" | "createdAt" | "completedAt"> & {
+  date: string;
+  createdAt: string;
+  completedAt: string | null;
+} {
+  return {
+    ...transaction,
+    date: toIsoDateString(transaction.date),
+    createdAt: toIsoDateString(transaction.createdAt),
+    completedAt: toIsoDateStringNullable(transaction.completedAt),
+  };
+}
+
+function normalizeDetailTransactionDates(
+  transaction: Omit<
+    FinanceTransactionDetail,
+    "date" | "createdAt" | "completedAt" | "updatedAt"
+  > & {
+    date: Date | string;
+    createdAt: Date | string;
+    completedAt: Date | string | null;
+    updatedAt: Date | string;
+  },
+): FinanceTransactionDetail {
+  const { updatedAt, ...listTransaction } = transaction;
+
+  return {
+    ...normalizeListTransactionDates(listTransaction),
+    updatedAt: toIsoDateString(updatedAt),
+  };
+}
 
 function requireFinanceActor(
   actor: FinanceActor,
@@ -59,7 +112,9 @@ async function getOwnedTransaction(
     });
   }
 
-  return ok(serializeTransactionDecimals(transaction));
+  return ok(
+    normalizeDetailTransactionDates(serializeTransactionDecimals(transaction)),
+  );
 }
 
 async function getOwnedProject(
@@ -187,7 +242,11 @@ export const financeService = {
     ]);
 
     return ok({
-      data: transactions.map(serializeTransactionDecimals),
+      data: transactions.map((transaction) =>
+        normalizeListTransactionDates(
+          serializeTransactionDecimals(transaction),
+        ),
+      ),
       pagination: {
         page,
         limit,
@@ -276,7 +335,9 @@ export const financeService = {
       select: transactionDetailSelect,
     });
 
-    return ok(serializeTransactionDecimals(updated));
+    return ok(
+      normalizeDetailTransactionDates(serializeTransactionDecimals(updated)),
+    );
   },
 
   async deleteTransaction(
@@ -393,6 +454,10 @@ export const financeService = {
       select: transactionDetailSelect,
     });
 
-    return ok(serializeTransactionDecimals(transaction));
+    return ok(
+      normalizeDetailTransactionDates(
+        serializeTransactionDecimals(transaction),
+      ),
+    );
   },
 };

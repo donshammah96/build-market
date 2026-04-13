@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { UserRole } from "@build/db";
+import type { AuthContext } from "@/app/lib/api/api-middleware";
 
 const mockLogger = vi.hoisted(() => ({
   info: vi.fn(),
@@ -8,16 +10,17 @@ const mockLogger = vi.hoisted(() => ({
   debug: vi.fn(),
 }));
 
+const mockAuthContext: AuthContext = {
+  clerkId: "clerk_123",
+  dbUserId: "db_user_123",
+  userRole: UserRole.PROFESSIONAL,
+};
+
 vi.mock("@/app/lib/api/api-middleware", () => ({
   withAuth: (
     handler: (
       req: NextRequest,
-      actor: {
-        clerkId: string;
-        dbUserId: string;
-        userEmail: string;
-        userRole: string;
-      },
+      actor: AuthContext,
       params: Record<string, unknown>,
     ) => Promise<unknown>,
   ) => {
@@ -25,17 +28,7 @@ vi.mock("@/app/lib/api/api-middleware", () => ({
       req: NextRequest,
       _ctx: unknown,
       params: Record<string, unknown>,
-    ) =>
-      handler(
-        req,
-        {
-          clerkId: "clerk_123",
-          dbUserId: "db_user_123",
-          userEmail: "test@example.com",
-          userRole: "professional",
-        },
-        params,
-      );
+    ) => handler(req, mockAuthContext, params);
   },
 }));
 
@@ -97,8 +90,12 @@ vi.mock("@/app/lib/domains/properties/contracts", () => ({
   },
 }));
 
-const { GET, POST, DELETE } =
+const documentsCollectionRoute =
   await import("@/app/api/properties/[id]/documents/route");
+const documentsItemRoute =
+  await import("@/app/api/properties/[id]/documents/[documentId]/route");
+const { GET, POST } = documentsCollectionRoute;
+const { DELETE: DELETE_ITEM } = documentsItemRoute;
 const { propertiesService } = await import("@/app/lib/domains/properties");
 
 describe("GET /api/properties/[id]/documents", () => {
@@ -249,32 +246,36 @@ describe("POST /api/properties/[id]/documents", () => {
   });
 });
 
-describe("DELETE /api/properties/[id]/documents (collection shim)", () => {
+describe("DELETE /api/properties/[id]/documents/[documentId]", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("returns 200 and sets Deprecation header on successful delete", async () => {
+  it("returns 200 when the owner deletes a document", async () => {
     vi.mocked(propertiesService.removePropertyDocument).mockResolvedValue({
       ok: true,
       data: { success: true },
     });
 
     const request = new NextRequest(
-      "http://localhost:3500/api/properties/prop_1/documents?documentId=doc_1",
+      "http://localhost:3500/api/properties/prop_1/documents/doc_1",
     );
-    const response = await DELETE(request, {}, { id: "prop_1" });
+    const response = await DELETE_ITEM(
+      request,
+      {},
+      {
+        id: "prop_1",
+        documentId: "doc_1",
+      },
+    );
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("Deprecation")).toBe("true");
-  });
-
-  it("returns 400 when documentId query param is missing", async () => {
-    const request = new NextRequest(
-      "http://localhost:3500/api/properties/prop_1/documents",
+    expect(propertiesService.removePropertyDocument).toHaveBeenCalledWith(
+      "prop_1",
+      "doc_1",
+      {
+        userId: "db_user_123",
+        role: UserRole.PROFESSIONAL,
+      },
     );
-    const response = await DELETE(request, {}, { id: "prop_1" });
-
-    expect(response.status).toBe(400);
-    expect(propertiesService.removePropertyDocument).not.toHaveBeenCalled();
   });
 
   it("returns 403 for non-owner", async () => {
@@ -286,9 +287,16 @@ describe("DELETE /api/properties/[id]/documents (collection shim)", () => {
     });
 
     const request = new NextRequest(
-      "http://localhost:3500/api/properties/prop_1/documents?documentId=doc_1",
+      "http://localhost:3500/api/properties/prop_1/documents/doc_1",
     );
-    const response = await DELETE(request, {}, { id: "prop_1" });
+    const response = await DELETE_ITEM(
+      request,
+      {},
+      {
+        id: "prop_1",
+        documentId: "doc_1",
+      },
+    );
 
     expect(response.status).toBe(403);
   });
@@ -302,10 +310,25 @@ describe("DELETE /api/properties/[id]/documents (collection shim)", () => {
     });
 
     const request = new NextRequest(
-      "http://localhost:3500/api/properties/prop_1/documents?documentId=missing",
+      "http://localhost:3500/api/properties/prop_1/documents/missing",
     );
-    const response = await DELETE(request, {}, { id: "prop_1" });
+    const response = await DELETE_ITEM(
+      request,
+      {},
+      {
+        id: "prop_1",
+        documentId: "missing",
+      },
+    );
 
     expect(response.status).toBe(404);
+  });
+});
+
+describe("collection route surface", () => {
+  it("does not expose legacy collection delete handler", () => {
+    expect(
+      (documentsCollectionRoute as { DELETE?: unknown }).DELETE,
+    ).toBeUndefined();
   });
 });

@@ -1,31 +1,24 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import {
+  CRITICAL_TRANSITION_STEP_SEQUENCE_RULES,
+  CRITICAL_VERIFICATION_ADAPTER_STEP_SEQUENCE_RULES,
+  type GuardNumericConstantRule,
+  HIGH_VALUE_ROUTE_GUARD_RULES,
+  HIGH_VALUE_SERVER_ACTION_GUARD_RULES,
+  type CriticalTransitionStepSequenceRule,
+  type CriticalVerificationAdapterStepSequenceRule,
+  type HighValueRouteGuardRule,
+  type HighValueServerActionGuardRule,
+} from "@/app/lib/security/high-risk-registry";
 
-type HighValueServerActionRule = {
-  file: string;
-  actionName: string;
-  requiredOptions: string[];
-};
-
-type HighValueRouteRule = {
-  file: string;
-  exportName: string;
-  requiredAuthOptions: string[];
-  requiredSnippets: string[];
-};
-
-type CriticalTransitionRule = {
-  file: string;
-  actionName: string;
-  orderedSnippets: string[];
-};
-
-type CriticalVerificationAdapterRule = {
-  file: string;
-  exportName: string;
-  orderedSnippets: string[];
-};
+type HighValueServerActionRule = HighValueServerActionGuardRule;
+type HighValueRouteRule = HighValueRouteGuardRule;
+type CriticalTransitionRule = CriticalTransitionStepSequenceRule;
+type CriticalVerificationAdapterRule =
+  CriticalVerificationAdapterStepSequenceRule;
+type NumericConstantRule = GuardNumericConstantRule;
 
 type PolicyViolation = {
   file: string;
@@ -35,6 +28,8 @@ type PolicyViolation = {
     | "missing-action"
     | "missing-secure-action"
     | "unparsable-secure-action-options"
+    | "missing-numeric-constant"
+    | "invalid-numeric-constant"
     | `missing-${string}`
     | "missing-withauth-export"
     | "missing-route-export"
@@ -46,132 +41,187 @@ type PolicyViolation = {
   missingStep?: string;
 };
 
-const HIGH_VALUE_SERVER_ACTION_GUARD_RULES: HighValueServerActionRule[] = [
-  {
-    file: "app/actions/finance.ts",
-    actionName: "requestWithdrawalAction",
-    requiredOptions: ["recentAuth", "rateLimit"],
-  },
-  {
-    file: "app/actions/onboarding.ts",
-    actionName: "submitOnboarding",
-    requiredOptions: ["recentAuth", "rateLimit"],
-  },
-  {
-    file: "app/actions/onboarding.ts",
-    actionName: "skipOnboarding",
-    requiredOptions: ["recentAuth", "rateLimit"],
-  },
-  {
-    file: "app/actions/onboarding.ts",
-    actionName: "skipProfessionalOnboarding",
-    requiredOptions: ["recentAuth", "rateLimit"],
-  },
-];
-
-const HIGH_VALUE_ROUTE_GUARD_RULES: HighValueRouteRule[] = [
-  {
-    file: "app/api/projects/[id]/escrow/[escrowId]/fund/route.ts",
-    exportName: "POST",
-    requiredAuthOptions: ["recentAuth"],
-    requiredSnippets: ["checkRateLimit(", "escrow-write:"],
-  },
-  {
-    file: "app/api/projects/[id]/escrow/[escrowId]/release/route.ts",
-    exportName: "POST",
-    requiredAuthOptions: ["recentAuth"],
-    requiredSnippets: ["checkRateLimit(", "escrow-write:"],
-  },
-  {
-    file: "app/api/projects/[id]/escrow/[escrowId]/dispute/route.ts",
-    exportName: "POST",
-    requiredAuthOptions: ["recentAuth"],
-    requiredSnippets: ["checkRateLimit(", "escrow-write:"],
-  },
-];
-
-const CRITICAL_TRANSITION_STEP_SEQUENCE_RULES: CriticalTransitionRule[] = [
-  {
-    file: "app/actions/onboarding.ts",
-    actionName: "submitOnboarding",
-    orderedSnippets: [
-      "userProfileOnboardingService.completeOnboarding(",
-      "updateClerkOnboardingMetadata(",
-      "IdempotencyService.complete(",
-    ],
-  },
-  {
-    file: "app/actions/onboarding.ts",
-    actionName: "skipOnboarding",
-    orderedSnippets: [
-      "userProfileOnboardingService.skipClientOnboarding(",
-      "updateClerkOnboardingMetadata(",
-    ],
-  },
-  {
-    file: "app/actions/onboarding.ts",
-    actionName: "skipProfessionalOnboarding",
-    orderedSnippets: [
-      "userProfileOnboardingService.skipProfessionalOnboarding(",
-      "updateClerkOnboardingMetadata(",
-    ],
-  },
-];
-
-const CRITICAL_VERIFICATION_ADAPTER_STEP_SEQUENCE_RULES: CriticalVerificationAdapterRule[] =
-  [
-    {
-      file: "app/api/professional-portal/documents/route.ts",
-      exportName: "POST",
-      orderedSnippets: [
-        "documentsService.createDocument(",
-        "IdempotencyService.complete(",
-      ],
-    },
-    {
-      file: "app/api/professional-portal/documents/[id]/route.ts",
-      exportName: "PATCH",
-      orderedSnippets: [
-        "documentsService.updateDocument(",
-        "IdempotencyService.complete(",
-      ],
-    },
-    {
-      file: "app/api/professional-portal/licenses/[id]/route.ts",
-      exportName: "PATCH",
-      orderedSnippets: [
-        "licensesService.updateLicense(",
-        "IdempotencyService.complete(",
-      ],
-    },
-  ];
-
 function findLineNumber(source: string, index: number): number {
   return source.slice(0, index).split(/\r?\n/).length;
+}
+
+function findNumericConstantAssignment(
+  source: string,
+  rule: NumericConstantRule,
+): { line: number; value: number } | null {
+  const constantPattern = new RegExp(
+    `\\bconst\\s+${rule.symbol}\\s*=\\s*(\\d+)\\s*;`,
+  );
+  const constantMatch = constantPattern.exec(source);
+  if (!constantMatch || constantMatch.index === undefined) {
+    return null;
+  }
+
+  const numericToken = constantMatch[1];
+  if (!numericToken) {
+    return null;
+  }
+
+  return {
+    line: findLineNumber(source, constantMatch.index),
+    value: Number.parseInt(numericToken, 10),
+  };
+}
+
+function extractBalancedDelimiterBlock(
+  source: string,
+  openIndex: number,
+  openDelimiter: string,
+  closeDelimiter: string,
+): string | null {
+  if (openIndex < 0 || openIndex >= source.length) {
+    return null;
+  }
+
+  if (source[openIndex] !== openDelimiter) {
+    return null;
+  }
+
+  let depth = 0;
+  for (let index = openIndex; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === openDelimiter) {
+      depth += 1;
+      continue;
+    }
+
+    if (char === closeDelimiter) {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(openIndex, index + 1);
+      }
+    }
+  }
+
+  return null;
 }
 
 function extractBalancedBraceBlock(
   source: string,
   openBraceIndex: number,
 ): string | null {
-  if (openBraceIndex < 0 || openBraceIndex >= source.length) {
-    return null;
-  }
+  return extractBalancedDelimiterBlock(source, openBraceIndex, "{", "}");
+}
 
-  let depth = 0;
-  for (let index = openBraceIndex; index < source.length; index += 1) {
+function extractBalancedParenthesisBlock(
+  source: string,
+  openParenIndex: number,
+): string | null {
+  return extractBalancedDelimiterBlock(source, openParenIndex, "(", ")");
+}
+
+function splitTopLevelArguments(source: string): string[] {
+  const args: string[] = [];
+  let start = 0;
+  let parenDepth = 0;
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inTemplateString = false;
+  let escaped = false;
+
+  for (let index = 0; index < source.length; index += 1) {
     const char = source[index];
-    if (char === "{") {
-      depth += 1;
-    } else if (char === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        return source.slice(openBraceIndex, index + 1);
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (inSingleQuote) {
+      if (char === "'") {
+        inSingleQuote = false;
       }
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      if (char === '"') {
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+
+    if (inTemplateString) {
+      if (char === "`") {
+        inTemplateString = false;
+      }
+      continue;
+    }
+
+    if (char === "'") {
+      inSingleQuote = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true;
+      continue;
+    }
+
+    if (char === "`") {
+      inTemplateString = true;
+      continue;
+    }
+
+    if (char === "(") {
+      parenDepth += 1;
+      continue;
+    }
+
+    if (char === ")") {
+      parenDepth = Math.max(parenDepth - 1, 0);
+      continue;
+    }
+
+    if (char === "{") {
+      braceDepth += 1;
+      continue;
+    }
+
+    if (char === "}") {
+      braceDepth = Math.max(braceDepth - 1, 0);
+      continue;
+    }
+
+    if (char === "[") {
+      bracketDepth += 1;
+      continue;
+    }
+
+    if (char === "]") {
+      bracketDepth = Math.max(bracketDepth - 1, 0);
+      continue;
+    }
+
+    if (
+      char === "," &&
+      parenDepth === 0 &&
+      braceDepth === 0 &&
+      bracketDepth === 0
+    ) {
+      args.push(source.slice(start, index).trim());
+      start = index + 1;
     }
   }
 
-  return null;
+  const tail = source.slice(start).trim();
+  if (tail.length > 0) {
+    args.push(tail);
+  }
+
+  return args;
 }
 
 function extractExportedAsyncFunctionBlock(
@@ -226,6 +276,56 @@ function extractWithAuthExportHandlerBlock(
 
   return {
     block,
+    actionIndex: exportMatch.index,
+  };
+}
+
+function extractWithAuthExportOptionsBlock(
+  source: string,
+  exportName: string,
+): { optionsBlock: string | null; actionIndex: number } | null {
+  const exportPattern = new RegExp(
+    `export\\s+const\\s+${exportName}\\s*=\\s*withAuth(?:<[^>]+>)?\\s*\\(`,
+  );
+  const exportMatch = exportPattern.exec(source);
+  if (!exportMatch || exportMatch.index === undefined) {
+    return null;
+  }
+
+  const callOpenParenIndex = source.indexOf(
+    "(",
+    exportMatch.index + exportMatch[0].length - 1,
+  );
+  const callBlock = extractBalancedParenthesisBlock(source, callOpenParenIndex);
+  if (!callBlock) {
+    return {
+      optionsBlock: null,
+      actionIndex: exportMatch.index,
+    };
+  }
+
+  const args = splitTopLevelArguments(callBlock.slice(1, -1));
+  if (args.length < 2) {
+    return {
+      optionsBlock: null,
+      actionIndex: exportMatch.index,
+    };
+  }
+
+  const optionsCandidate = args.slice(1).join(",").trim();
+  const optionsStartIndex = optionsCandidate.indexOf("{");
+  if (optionsStartIndex < 0) {
+    return {
+      optionsBlock: null,
+      actionIndex: exportMatch.index,
+    };
+  }
+
+  return {
+    optionsBlock: extractBalancedBraceBlock(
+      optionsCandidate,
+      optionsStartIndex,
+    ),
     actionIndex: exportMatch.index,
   };
 }
@@ -290,6 +390,70 @@ function collectServerActionGuardViolationsFromSource(
     });
   }
 
+  for (const requiredRecentAuthSnippet of rule.requiredRecentAuthSnippets ??
+    []) {
+    if (optionsBlock.includes(requiredRecentAuthSnippet)) {
+      continue;
+    }
+
+    offenders.push({
+      file: rule.file,
+      actionName: rule.actionName,
+      line: findLineNumber(source, secureActionIndex),
+      check: "missing-recent-auth-window",
+      message:
+        "High-value action must enforce the configured recent-auth window.",
+    });
+    break;
+  }
+
+  for (const requiredRateLimitSnippet of rule.requiredRateLimitSnippets ?? []) {
+    if (optionsBlock.includes(requiredRateLimitSnippet)) {
+      continue;
+    }
+
+    offenders.push({
+      file: rule.file,
+      actionName: rule.actionName,
+      line: findLineNumber(source, secureActionIndex),
+      check: "missing-rate-limit-key-snippet",
+      message:
+        "High-value action rate-limit configuration must match the canonical key pattern.",
+    });
+    break;
+  }
+
+  for (const requiredNumericConstant of rule.requiredNumericConstants ?? []) {
+    const assignment = findNumericConstantAssignment(
+      source,
+      requiredNumericConstant,
+    );
+    if (!assignment) {
+      offenders.push({
+        file: rule.file,
+        actionName: rule.actionName,
+        line: findLineNumber(source, secureActionIndex),
+        check: "missing-numeric-constant",
+        message:
+          "High-value action guard constants must declare explicit numeric assignments.",
+      });
+      continue;
+    }
+
+    if (assignment.value === requiredNumericConstant.expectedValue) {
+      continue;
+    }
+
+    offenders.push({
+      file: rule.file,
+      actionName: rule.actionName,
+      line: assignment.line,
+      check: "invalid-numeric-constant",
+      message:
+        "High-value action guard constants must match the canonical numeric policy value.",
+    });
+  }
+
   return offenders;
 }
 
@@ -298,10 +462,11 @@ function collectRouteGuardViolationsFromSource(
   rule: HighValueRouteRule,
 ): PolicyViolation[] {
   const offenders: PolicyViolation[] = [];
-  const exportSignature = `export const ${rule.exportName} = withAuth`;
-  const exportIndex = source.indexOf(exportSignature);
-
-  if (exportIndex < 0) {
+  const extractedHandler = extractWithAuthExportHandlerBlock(
+    source,
+    rule.exportName,
+  );
+  if (!extractedHandler) {
     offenders.push({
       file: rule.file,
       actionName: rule.exportName,
@@ -312,30 +477,54 @@ function collectRouteGuardViolationsFromSource(
     return offenders;
   }
 
+  const extractedOptions = extractWithAuthExportOptionsBlock(
+    source,
+    rule.exportName,
+  );
+  const optionsBlock = extractedOptions?.optionsBlock ?? "";
+  const actionLine = findLineNumber(source, extractedHandler.actionIndex);
+
   for (const requiredAuthOption of rule.requiredAuthOptions) {
     const optionPattern = new RegExp(`\\b${requiredAuthOption}\\s*:`);
-    if (optionPattern.test(source)) {
+    if (optionPattern.test(optionsBlock)) {
       continue;
     }
 
     offenders.push({
       file: rule.file,
       actionName: rule.exportName,
-      line: findLineNumber(source, exportIndex),
+      line: actionLine,
       check: `missing-${requiredAuthOption}`,
       message: `High-value route mutation must define withAuth.${requiredAuthOption}.`,
     });
   }
 
-  for (const requiredSnippet of rule.requiredSnippets) {
-    if (source.includes(requiredSnippet)) {
+  for (const requiredRecentAuthSnippet of rule.requiredRecentAuthSnippets ??
+    []) {
+    if (optionsBlock.includes(requiredRecentAuthSnippet)) {
       continue;
     }
 
     offenders.push({
       file: rule.file,
       actionName: rule.exportName,
-      line: findLineNumber(source, exportIndex),
+      line: actionLine,
+      check: "missing-recent-auth-window",
+      message:
+        "High-value route mutation must enforce the configured recent-auth window.",
+    });
+    break;
+  }
+
+  for (const requiredSnippet of rule.requiredRateLimitSnippets ?? []) {
+    if (extractedHandler.block.includes(requiredSnippet)) {
+      continue;
+    }
+
+    offenders.push({
+      file: rule.file,
+      actionName: rule.exportName,
+      line: actionLine,
       check: "missing-rate-limit-enforcement",
       message:
         "High-value route mutation must enforce anti-automation rate limiting.",
@@ -548,6 +737,47 @@ describe("Tier-3 high-value guard policy", () => {
     ]);
   });
 
+  it("flags mismatched numeric guard constants on high-value server actions", () => {
+    const source = [
+      "const WITHDRAWAL_RECENT_AUTH_MAX_AGE_SECONDS = 300;",
+      "export async function requestWithdrawalAction(data: unknown) {",
+      "  return secureAction({",
+      "    recentAuth: { maxAgeSeconds: WITHDRAWAL_RECENT_AUTH_MAX_AGE_SECONDS },",
+      '    rateLimit: { key: "high-value-withdrawal:db_user_123", limit: 1, windowMs: 60000 },',
+      "    schema: null,",
+      "    handler: async () => ({ ok: true }),",
+      "  });",
+      "}",
+    ].join("\n");
+
+    const offenders = collectServerActionGuardViolationsFromSource(source, {
+      file: "sample/actions/finance.ts",
+      actionName: "requestWithdrawalAction",
+      requiredOptions: ["recentAuth", "rateLimit"],
+      requiredRecentAuthSnippets: [
+        "maxAgeSeconds: WITHDRAWAL_RECENT_AUTH_MAX_AGE_SECONDS",
+      ],
+      requiredRateLimitSnippets: ["high-value-withdrawal:"],
+      requiredNumericConstants: [
+        {
+          symbol: "WITHDRAWAL_RECENT_AUTH_MAX_AGE_SECONDS",
+          expectedValue: 180,
+        },
+      ],
+    });
+
+    expect(offenders).toEqual([
+      {
+        file: "sample/actions/finance.ts",
+        actionName: "requestWithdrawalAction",
+        line: 1,
+        check: "invalid-numeric-constant",
+        message:
+          "High-value action guard constants must match the canonical numeric policy value.",
+      },
+    ]);
+  });
+
   it("flags missing route anti-automation guard snippets", () => {
     const source = [
       "export const POST = withAuth(async () => {",
@@ -559,7 +789,68 @@ describe("Tier-3 high-value guard policy", () => {
       file: "sample/api/escrow/route.ts",
       exportName: "POST",
       requiredAuthOptions: ["recentAuth"],
-      requiredSnippets: ["checkRateLimit(", "escrow-write:"],
+      requiredRateLimitSnippets: ["checkRateLimit(", "escrow-write:"],
+    });
+
+    expect(offenders).toEqual([
+      {
+        file: "sample/api/escrow/route.ts",
+        actionName: "POST",
+        line: 1,
+        check: "missing-rate-limit-enforcement",
+        message:
+          "High-value route mutation must enforce anti-automation rate limiting.",
+      },
+    ]);
+  });
+
+  it("scopes recentAuth checks to the matched withAuth export", () => {
+    const source = [
+      "export const GET = withAuth(async () => {",
+      "  return apiSuccess({ ok: true });",
+      "}, { recentAuth: { maxAgeSeconds: 300 } });",
+      "",
+      "export const POST = withAuth(async () => {",
+      "  await checkRateLimit('escrow-write:user', 5, 60000);",
+      "  return apiSuccess({ ok: true });",
+      "});",
+    ].join("\n");
+
+    const offenders = collectRouteGuardViolationsFromSource(source, {
+      file: "sample/api/escrow/route.ts",
+      exportName: "POST",
+      requiredAuthOptions: ["recentAuth"],
+      requiredRateLimitSnippets: ["checkRateLimit(", "escrow-write:"],
+    });
+
+    expect(offenders).toEqual([
+      {
+        file: "sample/api/escrow/route.ts",
+        actionName: "POST",
+        line: 5,
+        check: "missing-recentAuth",
+        message: "High-value route mutation must define withAuth.recentAuth.",
+      },
+    ]);
+  });
+
+  it("scopes rate-limit snippet checks to the matched withAuth handler", () => {
+    const source = [
+      "export const POST = withAuth(async () => {",
+      "  return apiSuccess({ ok: true });",
+      "}, { recentAuth: { maxAgeSeconds: 300 } });",
+      "",
+      "export const PATCH = withAuth(async () => {",
+      "  await checkRateLimit('escrow-write:user', 5, 60000);",
+      "  return apiSuccess({ ok: true });",
+      "}, { recentAuth: { maxAgeSeconds: 300 } });",
+    ].join("\n");
+
+    const offenders = collectRouteGuardViolationsFromSource(source, {
+      file: "sample/api/escrow/route.ts",
+      exportName: "POST",
+      requiredAuthOptions: ["recentAuth"],
+      requiredRateLimitSnippets: ["checkRateLimit(", "escrow-write:"],
     });
 
     expect(offenders).toEqual([
@@ -584,7 +875,7 @@ describe("Tier-3 critical transition sequencing policy", () => {
   it("flags out-of-order onboarding transition steps", () => {
     const source = [
       "export async function submitOnboarding() {",
-      "  await updateClerkOnboardingMetadata('clerk_123', { status: 'ACTIVE' });",
+      "  await finalizeClerkOnboardingTransition('clerk_123', { status: 'ACTIVE' });",
       "  await userProfileOnboardingService.completeOnboarding({ actor: { clerkId: 'clerk_123' } });",
       "  await IdempotencyService.complete('idem-key', {});",
       "}",
@@ -595,7 +886,7 @@ describe("Tier-3 critical transition sequencing policy", () => {
       actionName: "submitOnboarding",
       orderedSnippets: [
         "userProfileOnboardingService.completeOnboarding(",
-        "updateClerkOnboardingMetadata(",
+        "finalizeClerkOnboardingTransition(",
         "IdempotencyService.complete(",
       ],
     });
@@ -606,7 +897,7 @@ describe("Tier-3 critical transition sequencing policy", () => {
         actionName: "submitOnboarding",
         line: 1,
         check: "out-of-order-step",
-        missingStep: "updateClerkOnboardingMetadata(",
+        missingStep: "finalizeClerkOnboardingTransition(",
         message: "Critical transition steps must execute in canonical order.",
       },
     ]);

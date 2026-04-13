@@ -25,10 +25,12 @@ import { normalizeRole } from "@/app/lib/security/roles";
 const logger = getClientLogger();
 
 function toMessagingActor(context: {
+  clerkId: string;
   dbUserId: string;
   userRole: unknown;
 }): MessagingActor {
   return {
+    clerkId: context.clerkId,
     userId: context.dbUserId,
     role: normalizeRole(String(context.userRole)) ?? null,
   };
@@ -91,7 +93,7 @@ export const GET = withAuth(
       const serviceResult = result.data;
       if (!serviceResult || !serviceResult.ok) {
         return apiError(
-          serviceResult?.message || "Invalid request",
+          "Invalid request",
           serviceResult?.status || HttpStatus.BAD_REQUEST,
         );
       }
@@ -188,7 +190,7 @@ export const POST = withAuth(
       if (!serviceResult || !serviceResult.ok) {
         await IdempotencyService.fail(idempotencyKey).catch(() => {});
         return apiError(
-          serviceResult?.message ?? "Invalid request",
+          "Invalid request",
           serviceResult?.status ?? HttpStatus.BAD_REQUEST,
         );
       }

@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { GET as listDocumentsRoute } from "@/app/api/professional-portal/documents/route";
+import { UserRole } from "@build/db";
+import type { AuthContext } from "@/app/lib/api/api-middleware";
+import {
+  GET as listDocumentsRoute,
+  POST as createDocumentRoute,
+} from "@/app/api/professional-portal/documents/route";
 import {
   GET as getDocumentRoute,
   PATCH as updateDocumentRoute,
@@ -17,6 +22,12 @@ const mockLogger = vi.hoisted(() => ({
   debug: vi.fn(),
 }));
 
+const mockAuthContext: AuthContext = {
+  clerkId: "clerk_123",
+  dbUserId: "db_user_123",
+  userRole: UserRole.PROFESSIONAL,
+};
+
 const mockDocumentsService = vi.hoisted(() => ({
   getDocuments: vi.fn(),
   getDocumentById: vi.fn(),
@@ -30,26 +41,22 @@ vi.mock("@/app/lib/api/api-middleware", () => ({
     (
       handler: (
         req: NextRequest,
-        context: unknown,
+        context: AuthContext,
         params?: { id: string },
       ) => Promise<unknown>,
     ) =>
     async (req: NextRequest, params?: { id: string }) =>
-      handler(
-        req,
-        {
-          clerkId: "clerk_123",
-          dbUserId: "db_user_123",
-          userEmail: "pro@example.com",
-          userRole: "PROFESSIONAL",
-        },
-        params ?? { id: validDocumentId },
-      ),
+      handler(req, mockAuthContext, params ?? { id: validDocumentId }),
 }));
 
 vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
   getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
+  getActorRateLimitIdentifier: vi
+    .fn()
+    .mockImplementation(
+      (userId: string, namespace: string) => `${namespace}:${userId}`,
+    ),
   RateLimits: {
     READ: { limit: 100, window: 60000 },
     WRITE: { limit: 10, window: 60000 },
@@ -162,7 +169,11 @@ describe("professional documents routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockDocumentsService.getDocuments).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "PROFESSIONAL" },
+      {
+        clerkId: "clerk_123",
+        userId: "db_user_123",
+        role: "PROFESSIONAL",
+      },
       expect.objectContaining({ category: "ID_OR_PASSPORT" }),
     );
     expect(body.data).toHaveLength(1);
@@ -173,7 +184,7 @@ describe("professional documents routes", () => {
     mockDocumentsService.getDocuments.mockResolvedValue({
       ok: false,
       error: "forbidden",
-      message: "Forbidden",
+      message: "internal policy detail",
       status: 403,
     });
 
@@ -182,8 +193,62 @@ describe("professional documents routes", () => {
         "http://localhost:3500/api/professional-portal/documents",
       ),
     );
+    const body = await response.json();
 
     expect(response.status).toBe(403);
+    expect(body.error).toBe("Forbidden");
+  });
+
+  it("generates document POST idempotency key from summary projection", async () => {
+    mockDocumentsService.createDocument.mockResolvedValue({
+      ok: true,
+      data: {
+        id: validDocumentId,
+        category: "ID_OR_PASSPORT",
+        title: "Passport",
+        status: "PENDING",
+        createdAt: "2026-03-10T12:00:00.000Z",
+        updatedAt: "2026-03-10T12:00:00.000Z",
+        asset: {
+          id: "a1",
+          cdnUrl: "/url",
+          originalName: "p.pdf",
+          mimeType: "application/pdf",
+          size: 1024,
+        },
+      },
+    });
+
+    const response = await createDocumentRoute(
+      new NextRequest(
+        "http://localhost:3500/api/professional-portal/documents",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            title: "Passport",
+            category: "ID_OR_PASSPORT",
+            assetId: validDocumentId,
+            issuer: "Gov",
+            issueDate: "2026-03-10T12:00:00.000Z",
+          }),
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    expect(response.status).toBe(201);
+    expect(IdempotencyService.generateKey).toHaveBeenCalledWith(
+      "db_user_123",
+      "POST",
+      {
+        domain: "professional_document",
+        assetId: validDocumentId,
+        titleLength: "Passport".length,
+        issuerLength: "Gov".length,
+        hasIssueDate: true,
+        hasExpiryDate: false,
+      },
+    );
   });
 
   it("emits required observability keys for documents list success", async () => {
@@ -268,7 +333,11 @@ describe("professional documents routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockDocumentsService.getDocumentById).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "PROFESSIONAL" },
+      {
+        clerkId: "clerk_123",
+        userId: "db_user_123",
+        role: "PROFESSIONAL",
+      },
       validDocumentId,
     );
   });
@@ -332,7 +401,11 @@ describe("professional documents routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockDocumentsService.deleteDocument).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "PROFESSIONAL" },
+      {
+        clerkId: "clerk_123",
+        userId: "db_user_123",
+        role: "PROFESSIONAL",
+      },
       validDocumentId,
     );
     expect(IdempotencyService.complete).toHaveBeenCalledWith("idem-key", {
@@ -341,5 +414,32 @@ describe("professional documents routes", () => {
       category: "ID_OR_PASSPORT",
     });
     expect(body.data.message).toBe("Document deleted successfully");
+  });
+
+  it("returns delete success when idempotency completion fails", async () => {
+    mockDocumentsService.deleteDocument.mockResolvedValue({
+      ok: true,
+      data: {
+        message: "Document deleted successfully",
+        documentId: validDocumentId,
+        category: "ID_OR_PASSPORT",
+      },
+    });
+    vi.mocked(IdempotencyService.complete).mockRejectedValueOnce(
+      new Error("serialize failure"),
+    );
+
+    const response = await deleteDocumentRoute(
+      new NextRequest(
+        `http://localhost:3500/api/professional-portal/documents/${validDocumentId}`,
+        { method: "DELETE" },
+      ),
+      { id: validDocumentId },
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(IdempotencyService.fail).toHaveBeenCalledWith("idem-key");
+    expect(body.success).toBe(true);
   });
 });

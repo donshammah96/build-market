@@ -46,6 +46,7 @@ export type AddParticipantInput = z.infer<typeof AddParticipantSchema>;
 export type UpdateParticipantInput = z.infer<typeof UpdateParticipantSchema>;
 
 export type MessagingActor = {
+  clerkId?: string;
   userId: string;
   role: AppRole | null;
 };

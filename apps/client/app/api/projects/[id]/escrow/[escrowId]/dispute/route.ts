@@ -8,7 +8,7 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
@@ -89,9 +89,9 @@ export const POST = withAuth<DisputeParams>(
       );
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(dbUserId, "escrow-write");
     const rateLimitResult = await checkRateLimit(
-      `escrow-write:${identifier}`,
+      rateLimitKey,
       RateLimits.WRITE.limit,
       RateLimits.WRITE.window,
     );
@@ -156,7 +156,8 @@ export const POST = withAuth<DisputeParams>(
   },
   {
     recentAuth: {
-      maxAgeSeconds: 300,
+      maxAgeSeconds: 180,
     },
+    csrf: {},
   },
 );

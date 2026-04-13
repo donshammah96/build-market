@@ -18,17 +18,22 @@ import {
   type MessagingActor,
   messagingService,
 } from "@/app/lib/domains/messaging";
-import { extractExpectedVersion } from "@/app/lib/api/request-utils";
+import {
+  extractExpectedVersion,
+  extractExpectedVersionFromIfMatch,
+} from "@/app/lib/api/request-utils";
 import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
 type MessageParams = { id: string };
 
 function toMessagingActor(context: {
+  clerkId: string;
   dbUserId: string;
   userRole: unknown;
 }): MessagingActor {
   return {
+    clerkId: context.clerkId,
     userId: context.dbUserId,
     role: normalizeRole(String(context.userRole)) ?? null,
   };
@@ -69,7 +74,7 @@ export const GET = withAuth<MessageParams>(
       const serviceResult = result.data;
       if (!serviceResult || !serviceResult.ok) {
         return apiError(
-          serviceResult?.message ?? "Invalid request",
+          "Invalid request",
           serviceResult?.status ?? HttpStatus.BAD_REQUEST,
         );
       }
@@ -137,7 +142,7 @@ export const PATCH = withAuth<MessageParams>(
       const serviceResult = result.data;
       if (!serviceResult || !serviceResult.ok) {
         return apiError(
-          serviceResult?.message ?? "Invalid request",
+          "Invalid request",
           serviceResult?.status ?? HttpStatus.BAD_REQUEST,
         );
       }
@@ -158,15 +163,21 @@ export const DELETE = withAuth<MessageParams>(
       return apiError("Invalid message ID", HttpStatus.BAD_REQUEST);
     const messageId = params.id;
 
-    // Safe parse body
-    let body: unknown = null;
-    try {
-      body = await req.json().catch(() => null);
-    } catch {
-      // Ignore JSON parse errors and treat as no body
+    const ifMatch = req.headers.get("If-Match");
+    if (!ifMatch) {
+      return apiError(
+        "Missing If-Match header. Provide entity version in If-Match.",
+        HttpStatus.PRECONDITION_REQUIRED,
+      );
     }
 
-    const expectedVersion = extractExpectedVersion(req, body);
+    const expectedVersion = extractExpectedVersionFromIfMatch(req);
+    if (expectedVersion === null) {
+      return apiError(
+        "Invalid If-Match header. Provide a numeric version.",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     const identifier = getRateLimitIdentifier(req);
     const rateLimitResult = await checkRateLimit(
@@ -196,7 +207,7 @@ export const DELETE = withAuth<MessageParams>(
       const serviceResult = result.data;
       if (!serviceResult || !serviceResult.ok) {
         return apiError(
-          serviceResult?.message ?? "Invalid request",
+          "Invalid request",
           serviceResult?.status ?? HttpStatus.BAD_REQUEST,
         );
       }

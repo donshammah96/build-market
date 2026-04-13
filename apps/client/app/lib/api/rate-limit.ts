@@ -1,34 +1,10 @@
 import { NextRequest } from "next/server";
+import { envConfig } from "@/app/lib/infrastructure/env";
+import { checkRateLimitInMemory } from "./rate-limit.dev";
+import { checkRateLimitWithRedis } from "./rate-limit.redis";
 
-/**
- * Simple in-memory rate limiter (for development)
- * For production, use Redis-based rate limiting with /upstash/ratelimit
- */
-
-interface RateLimitStore {
-  [key: string]: {
-    count: number;
-    resetTime: number;
-  };
-}
-
-const store: RateLimitStore = {};
-
-// Clean up old entries every 5 minutes
-if (typeof setInterval !== "undefined") {
-  setInterval(
-    () => {
-      const now = Date.now();
-      Object.keys(store).forEach((key) => {
-        const entry = store[key];
-        if (entry && entry.resetTime < now) {
-          delete store[key];
-        }
-      });
-    },
-    5 * 60 * 1000,
-  );
-}
+type ConfiguredRateLimitBackend = "auto" | "memory" | "redis";
+type ResolvedRateLimitBackend = "memory" | "redis";
 
 export interface RateLimitResult {
   success: boolean;
@@ -37,40 +13,82 @@ export interface RateLimitResult {
   reset: number;
 }
 
+function resolveRateLimitBackend(): ResolvedRateLimitBackend {
+  const configuredBackend = envConfig.redis
+    .rateLimitBackend as ConfiguredRateLimitBackend;
+
+  if (configuredBackend === "memory") {
+    return "memory";
+  }
+
+  if (configuredBackend === "redis") {
+    if (!envConfig.redis.enabled && envConfig.isProd) {
+      throw new Error(
+        "RATE_LIMIT_BACKEND=redis requires REDIS_ENABLED=true in production.",
+      );
+    }
+
+    return envConfig.redis.enabled ? "redis" : "memory";
+  }
+
+  if (envConfig.isTest) {
+    return "memory";
+  }
+
+  if (envConfig.isProd) {
+    return "redis";
+  }
+
+  return envConfig.redis.enabled ? "redis" : "memory";
+}
+
 /**
- * Check rate limit for an identifier
- * /param identifier - Unique identifier (IP, user ID, etc.)
- * /param limit - Maximum requests allowed
- * /param window - Time window in milliseconds
+ * Check rate limit for an identifier.
+ *
+ * Authenticated actor-scoped key format:
+ *   {resourceType}-{operation}:{dbUserId}
+ *   e.g. "prof-certificates-write:a1b2c3d4-uuid"
+ *
+ * Public fallback key format:
+ *   {resourceType}-{operation}:ip:{hashedIp}
  */
 export async function checkRateLimit(
   identifier: string,
   limit: number = 10,
   window: number = 10000, // 10 seconds
 ): Promise<RateLimitResult> {
-  const now = Date.now();
-  const key = identifier;
+  const backend = resolveRateLimitBackend();
 
-  // Initialize or reset if window expired
-  if (!store[key] || store[key].resetTime < now) {
-    store[key] = {
-      count: 0,
-      resetTime: now + window,
-    };
+  if (backend === "redis") {
+    try {
+      return await checkRateLimitWithRedis(identifier, limit, window);
+    } catch {
+      // Production must fail closed if the configured limiter backend fails.
+      if (envConfig.isProd) {
+        return {
+          success: false,
+          limit,
+          remaining: 0,
+          reset: Date.now() + window,
+        };
+      }
+
+      return checkRateLimitInMemory(identifier, limit, window);
+    }
   }
 
-  // Increment count
-  store[key].count++;
+  return checkRateLimitInMemory(identifier, limit, window);
+}
 
-  const remaining = Math.max(0, limit - store[key].count);
-  const success = store[key].count <= limit;
-
-  return {
-    success,
-    limit,
-    remaining,
-    reset: store[key].resetTime,
-  };
+/**
+ * Returns an actor-scoped rate-limit identifier for authenticated routes.
+ * Use IP-based identifiers only for anonymous/public endpoints.
+ */
+export function getActorRateLimitIdentifier(
+  dbUserId: string,
+  routeNamespace: string,
+): string {
+  return `${routeNamespace}:${dbUserId}`;
 }
 
 /**
@@ -108,18 +126,3 @@ export const RateLimits = {
   // Very strict for webhooks
   WEBHOOK: { limit: 100, window: 60000 }, // 100 requests per minute
 } as const;
-
-/**
- * NOTE: For production, replace this with Redis-based rate limiting:
- *
- * ```typescript
- * import { Ratelimit } from '@upstash/ratelimit';
- * import { Redis } from '@upstash/redis';
- *
- * export const ratelimit = new Ratelimit({
- *   redis: Redis.fromEnv(),
- *   limiter: Ratelimit.slidingWindow(10, '10 s'),
- *   analytics: true,
- * });
- * ```
- */

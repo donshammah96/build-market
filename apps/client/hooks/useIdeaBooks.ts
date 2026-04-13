@@ -12,6 +12,8 @@ import type {
   IdeaBookListItem,
   IdeaBookDetail,
   IdeaBookAttachment,
+  IdeaBookDeleteResult,
+  IdeaBookAttachmentDeleteResult,
   IdeaBookQueryInput,
   AttachmentQueryInput,
   CreateIdeaBookInput,
@@ -108,16 +110,7 @@ export function useUpdateIdeaBook(
 }
 
 export function useDeleteIdeaBook(
-  options?: UseMutationOptions<
-    {
-      message: string;
-      id: string;
-      deletedStorageKeys?: string[];
-      attachmentsDeleted?: number;
-    },
-    Error,
-    string
-  >,
+  options?: UseMutationOptions<IdeaBookDeleteResult, Error, string>,
 ) {
   const queryClient = useQueryClient();
 
@@ -223,7 +216,7 @@ export function useUpdateIdeaBookAttachment(
 
 export function useDeleteIdeaBookAttachment(
   options?: UseMutationOptions<
-    { message: string; id: string; deletedKey?: string | null },
+    IdeaBookAttachmentDeleteResult,
     Error,
     { bookId: string; attachmentId: string }
   >,

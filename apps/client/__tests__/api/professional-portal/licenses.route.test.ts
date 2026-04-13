@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
+import { UserRole } from "@build/db";
+import type { AuthContext } from "@/app/lib/api/api-middleware";
 import { GET as listLicensesRoute } from "@/app/api/professional-portal/licenses/route";
 import {
   GET as getLicenseRoute,
@@ -17,6 +19,12 @@ const mockLogger = vi.hoisted(() => ({
   debug: vi.fn(),
 }));
 
+const mockAuthContext: AuthContext = {
+  clerkId: "clerk_123",
+  dbUserId: "db_user_123",
+  userRole: UserRole.PROFESSIONAL,
+};
+
 const mockLicensesService = vi.hoisted(() => ({
   getLicenses: vi.fn(),
   getLicenseById: vi.fn(),
@@ -30,26 +38,22 @@ vi.mock("@/app/lib/api/api-middleware", () => ({
     (
       handler: (
         req: NextRequest,
-        context: unknown,
+        context: AuthContext,
         params?: { id: string },
       ) => Promise<unknown>,
     ) =>
     async (req: NextRequest, params?: { id: string }) =>
-      handler(
-        req,
-        {
-          clerkId: "clerk_123",
-          dbUserId: "db_user_123",
-          userEmail: "pro@example.com",
-          userRole: "PROFESSIONAL",
-        },
-        params ?? { id: validLicenseId },
-      ),
+      handler(req, mockAuthContext, params ?? { id: validLicenseId }),
 }));
 
 vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
   getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
+  getActorRateLimitIdentifier: vi
+    .fn()
+    .mockImplementation(
+      (userId: string, namespace: string) => `${namespace}:${userId}`,
+    ),
   RateLimits: {
     READ: { limit: 100, window: 60000 },
     WRITE: { limit: 10, window: 60000 },
@@ -157,6 +161,7 @@ describe("professional licenses routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockLicensesService.getLicenses).toHaveBeenCalledWith({
+      clerkId: "clerk_123",
       userId: "db_user_123",
       role: "PROFESSIONAL",
     });
@@ -168,15 +173,17 @@ describe("professional licenses routes", () => {
     mockLicensesService.getLicenses.mockResolvedValue({
       ok: false,
       error: "forbidden",
-      message: "Forbidden",
+      message: "sensitive detail",
       status: 403,
     });
 
     const response = await listLicensesRoute(
       new NextRequest("http://localhost:3500/api/professional-portal/licenses"),
     );
+    const body = await response.json();
 
     expect(response.status).toBe(403);
+    expect(body.error).toBe("Forbidden");
   });
 
   it("emits required observability keys for licenses list success", async () => {
@@ -250,7 +257,11 @@ describe("professional licenses routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockLicensesService.getLicenseById).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "PROFESSIONAL" },
+      {
+        clerkId: "clerk_123",
+        userId: "db_user_123",
+        role: "PROFESSIONAL",
+      },
       validLicenseId,
     );
   });
@@ -315,7 +326,11 @@ describe("professional licenses routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockLicensesService.deleteLicense).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "PROFESSIONAL" },
+      {
+        clerkId: "clerk_123",
+        userId: "db_user_123",
+        role: "PROFESSIONAL",
+      },
       validLicenseId,
     );
     expect(IdempotencyService.complete).toHaveBeenCalledWith("idem-key", {
@@ -323,5 +338,33 @@ describe("professional licenses routes", () => {
       licenseId: validLicenseId,
     });
     expect(body.data.message).toBe("License deleted successfully");
+  });
+
+  it("returns delete success when idempotency completion fails", async () => {
+    mockLicensesService.deleteLicense.mockResolvedValue({
+      ok: true,
+      data: {
+        message: "License deleted successfully",
+        licenseId: validLicenseId,
+        authority: "NCA",
+        licenseNumber: "NCA-001",
+      },
+    });
+    vi.mocked(IdempotencyService.complete).mockRejectedValueOnce(
+      new Error("serialize failure"),
+    );
+
+    const response = await deleteLicenseRoute(
+      new NextRequest(
+        `http://localhost:3500/api/professional-portal/licenses/${validLicenseId}`,
+        { method: "DELETE" },
+      ),
+      { id: validLicenseId },
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(IdempotencyService.fail).toHaveBeenCalledWith("idem-key");
+    expect(body.success).toBe(true);
   });
 });

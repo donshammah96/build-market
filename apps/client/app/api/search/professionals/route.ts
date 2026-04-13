@@ -70,10 +70,7 @@ export async function GET(request: NextRequest) {
 
   const data = execResult.data;
   if (!data.ok) {
-    return apiError(
-      (data as { message?: string }).message ?? "Forbidden",
-      HttpStatus.FORBIDDEN,
-    );
+    return apiError("Forbidden", HttpStatus.FORBIDDEN);
   }
 
   return apiSuccess(data.data, HttpStatus.OK);

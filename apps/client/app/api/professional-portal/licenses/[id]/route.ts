@@ -9,7 +9,7 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
@@ -19,6 +19,9 @@ import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
 import { licensesService } from "@/app/lib/domains/licenses";
 import { normalizeRole } from "@/app/lib/security/roles";
+
+// ADR-006 classification: Class B - license detail and renewal/compliance attributes cross this boundary.
+// Reviewed: 2026-04-09 by @copilot
 
 const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/professional-portal/licenses/[id]";
@@ -33,6 +36,13 @@ type LicenseByIdAdapterOutcome =
   | "conflict"
   | "not_found";
 
+type LicenseByIdOutcomeLogFields = {
+  licenseId?: string;
+  updatedFieldsCount?: number;
+  idempotency?: "replay" | "pending";
+  domainError?: string;
+};
+
 function createLicenseByIdOutcomeLogger(
   req: NextRequest,
   correlationId: string,
@@ -43,7 +53,7 @@ function createLicenseByIdOutcomeLogger(
   return (
     outcome: LicenseByIdAdapterOutcome,
     httpStatus: number,
-    additional: Record<string, unknown> = {},
+    details: LicenseByIdOutcomeLogFields = {},
   ) => {
     logger.info("Professional license by-id adapter outcome", {
       correlationId,
@@ -54,9 +64,18 @@ function createLicenseByIdOutcomeLogger(
       outcome,
       httpStatus,
       durationMs: Date.now() - requestStartedAt,
-      additionalContext: additional,
+      ...(details.licenseId ? { licenseId: details.licenseId } : {}),
+      ...(typeof details.updatedFieldsCount === "number"
+        ? { updatedFieldsCount: details.updatedFieldsCount }
+        : {}),
+      ...(details.idempotency ? { idempotency: details.idempotency } : {}),
+      ...(details.domainError ? { domainError: details.domainError } : {}),
     });
   };
+}
+
+function normalizeCaughtError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 type LicenseParams = { id: string };
@@ -66,7 +85,7 @@ type LicenseParams = { id: string };
  * Get a specific license by ID (owner only).
  */
 export const GET = withAuth<LicenseParams>(
-  async (req: NextRequest, { dbUserId, userRole }, params) => {
+  async (req: NextRequest, { clerkId, dbUserId, userRole }, params) => {
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
@@ -99,9 +118,12 @@ export const GET = withAuth<LicenseParams>(
     }
     const licenseId = params.id;
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "prof-licenses-read",
+    );
     const rateLimitResult = await checkRateLimit(
-      `prof-licenses-read:${identifier}`,
+      rateLimitKey,
       RateLimits.READ.limit,
       RateLimits.READ.window,
     );
@@ -116,7 +138,7 @@ export const GET = withAuth<LicenseParams>(
     const result = await resilientExecutor.execute(
       () =>
         licensesService.getLicenseById(
-          { userId: dbUserId, role: actorRole },
+          { clerkId, userId: dbUserId, role: actorRole },
           licenseId,
         ),
       { operationName },
@@ -166,7 +188,7 @@ export const GET = withAuth<LicenseParams>(
  * Resets verification status when the asset is replaced.
  */
 export const PATCH = withAuth<LicenseParams>(
-  async (req: NextRequest, { dbUserId, userRole }, params) => {
+  async (req: NextRequest, { clerkId, dbUserId, userRole }, params) => {
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
@@ -261,9 +283,12 @@ export const PATCH = withAuth<LicenseParams>(
       return apiError("Request is being processed", HttpStatus.CONFLICT);
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "prof-licenses-write",
+    );
     const rateLimitResult = await checkRateLimit(
-      `prof-licenses-write:${identifier}`,
+      rateLimitKey,
       RateLimits.WRITE.limit,
       RateLimits.WRITE.window,
     );
@@ -282,7 +307,7 @@ export const PATCH = withAuth<LicenseParams>(
     const result = await resilientExecutor.execute(
       () =>
         licensesService.updateLicense(
-          { userId: dbUserId, role: actorRole },
+          { clerkId, userId: dbUserId, role: actorRole },
           licenseId,
           updateData,
         ),
@@ -331,22 +356,44 @@ export const PATCH = withAuth<LicenseParams>(
           licenseId,
           domainError: err.error,
         });
-        return apiError(err.message ?? "Asset not found", HttpStatus.NOT_FOUND);
+        return apiError("Asset not found", HttpStatus.NOT_FOUND);
       }
 
       logOutcome("forbidden", HttpStatus.FORBIDDEN, {
         licenseId,
         domainError: err.error,
       });
-      return apiError(
-        err.message ?? "Unauthorized access to asset",
-        HttpStatus.FORBIDDEN,
+      return apiError("Unauthorized access to asset", HttpStatus.FORBIDDEN);
+    }
+
+    try {
+      await IdempotencyService.complete(idempotencyKey, data.data);
+    } catch (error) {
+      await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+      logger.error(
+        "Failed to complete license idempotency replay",
+        normalizeCaughtError(error),
+        {
+          correlationId,
+          operationName,
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          actorRole,
+          outcome: "idempotency_complete_failed",
+          httpStatus: HttpStatus.OK,
+          durationMs: Date.now() - requestStartedAt,
+        },
       );
     }
 
-    await IdempotencyService.complete(idempotencyKey, data.data);
     logOutcome("succeeded", HttpStatus.OK, { licenseId });
     return apiSuccess(data.data, HttpStatus.OK);
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+    csrf: {},
   },
 );
 
@@ -355,7 +402,7 @@ export const PATCH = withAuth<LicenseParams>(
  * Delete a license (owner only). Hard delete since no deletedAt column.
  */
 export const DELETE = withAuth<LicenseParams>(
-  async (req: NextRequest, { dbUserId, userRole }, params) => {
+  async (req: NextRequest, { clerkId, dbUserId, userRole }, params) => {
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
@@ -414,9 +461,12 @@ export const DELETE = withAuth<LicenseParams>(
       return apiError("Request already in progress", HttpStatus.CONFLICT);
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "prof-licenses-write",
+    );
     const rateLimitResult = await checkRateLimit(
-      `prof-licenses-write:${identifier}`,
+      rateLimitKey,
       RateLimits.WRITE.limit,
       RateLimits.WRITE.window,
     );
@@ -432,7 +482,7 @@ export const DELETE = withAuth<LicenseParams>(
     const result = await resilientExecutor.execute(
       () =>
         licensesService.deleteLicense(
-          { userId: dbUserId, role: actorRole },
+          { clerkId, userId: dbUserId, role: actorRole },
           licenseId,
         ),
       { operationName },
@@ -501,8 +551,33 @@ export const DELETE = withAuth<LicenseParams>(
     );
 
     const response = { message, licenseId: deletedId };
-    await IdempotencyService.complete(idempotencyKey, response);
+    try {
+      await IdempotencyService.complete(idempotencyKey, response);
+    } catch (error) {
+      await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+      logger.error(
+        "Failed to complete license idempotency replay",
+        normalizeCaughtError(error),
+        {
+          correlationId,
+          operationName,
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          actorRole,
+          outcome: "idempotency_complete_failed",
+          httpStatus: HttpStatus.OK,
+          durationMs: Date.now() - requestStartedAt,
+        },
+      );
+    }
+
     logOutcome("succeeded", HttpStatus.OK, { licenseId });
     return apiSuccess(response, HttpStatus.OK);
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+    csrf: {},
   },
 );

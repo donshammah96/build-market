@@ -23,10 +23,12 @@ const logger = getClientLogger();
 type MessageParams = { id: string };
 
 function toMessagingActor(context: {
+  clerkId: string;
   dbUserId: string;
   userRole: unknown;
 }): MessagingActor {
   return {
+    clerkId: context.clerkId,
     userId: context.dbUserId,
     role: normalizeRole(String(context.userRole)) ?? null,
   };
@@ -77,7 +79,7 @@ export const POST = withAuth<MessageParams>(
     const serviceResult = result.data;
     if (!serviceResult || !serviceResult.ok) {
       return apiError(
-        serviceResult?.message ?? "Invalid request",
+        "Invalid request",
         serviceResult?.status ?? HttpStatus.BAD_REQUEST,
       );
     }

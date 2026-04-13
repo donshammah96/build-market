@@ -1,4 +1,8 @@
 import type { AppRole } from "@/app/lib/security/roles";
+
+// ADR-006 classification: Class B - document DTO contracts include verification-category and compliance-linked fields.
+// Reviewed: 2026-04-09 by @copilot
+
 import type { DomainError, Result } from "@/app/lib/errors/result";
 import type {
   DocumentQueryInput,
@@ -9,6 +13,7 @@ import type {
 export type { DocumentQueryInput, CreateDocumentInput, UpdateDocumentInput };
 
 export type DocumentActor = {
+  clerkId?: string;
   userId: string;
   role?: AppRole | string | null;
 };

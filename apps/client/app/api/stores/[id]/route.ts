@@ -15,6 +15,7 @@ import {
 import {
   getRequestMetadata,
   extractExpectedVersion,
+  extractExpectedVersionFromIfMatch,
 } from "@/app/lib/api/request-utils";
 import { STORE_CONFIG } from "@/app/lib/config/store.config";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
@@ -306,19 +307,17 @@ export const DELETE = withAuth<StoreParams>(
     const rateLimitError = await checkStoreRateLimit(req, "write");
     if (rateLimitError) return rateLimitError;
 
-    let body: unknown = null;
-    try {
-      body = await req.json().catch(() => null);
-    } catch {
-      body = null;
-    }
-
-    const expectedVersion = extractExpectedVersion(req, body);
-    if (expectedVersion === null) {
+    const ifMatch = req.headers.get("If-Match");
+    if (!ifMatch) {
       return apiError(
-        "Missing or invalid version for optimistic locking. Provide 'If-Match' header or 'version' in body.",
+        'Missing If-Match header. Include the store version as: If-Match: "N"',
         HttpStatus.PRECONDITION_REQUIRED,
       );
+    }
+
+    const expectedVersion = extractExpectedVersionFromIfMatch(req);
+    if (expectedVersion === null) {
+      return apiError("Invalid If-Match header value", HttpStatus.BAD_REQUEST);
     }
 
     const idempotencyKey =

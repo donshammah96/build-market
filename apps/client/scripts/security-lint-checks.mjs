@@ -16,6 +16,10 @@ const API_ERROR_SCAN_PATHS = ["app/api", "app/actions", "app/lib/api"];
 const GET_HANDLER_SCAN_PATHS = ["app/api"];
 const DANGEROUS_HTML_SCAN_PATHS = ["app", "components", "hooks", "lib"];
 const PERSISTENCE_SCAN_PATHS = ["app", "components", "hooks", "lib"];
+const VERIFICATION_ADAPTER_PATH_PATTERN =
+  /app\/api\/professional-portal\/(?:documents|certificates|licenses)\//;
+const ADAPTER_MESSAGE_PASSTHROUGH_PATH_PATTERN =
+  /app\/api\/(?:professional-portal\/(?:documents|certificates|licenses)|messaging)\//;
 
 const ZOD_PASSTHROUGH_PATTERN = /\.passthrough\(\)/g;
 const UNSAFE_CLIENT_MESSAGE_PATTERNS = [
@@ -36,6 +40,9 @@ const REQ_JSON_PATTERN = /\b(?:req|request)\s*\.\s*json\s*\(/g;
 const DANGEROUS_HTML_PATTERN = /\bdangerouslySetInnerHTML\b/g;
 const STORAGE_WRITE_PATTERN =
   /\b(?:window\.)?(?:localStorage|sessionStorage)\.(?:setItem|removeItem|clear)\b/g;
+const OPAQUE_LOG_CONTEXT_PATTERN = /\badditionalContext\s*:/g;
+const DOMAIN_MESSAGE_API_ERROR_PATTERN =
+  /\bapiError\s*\(\s*(?:result(?:\s*\?\.)?\s*\.\s*data(?:\s*\?\.)?\s*\.\s*message|data(?:\s*\?\.)?\s*\.\s*message|serviceResult(?:\s*\?\.)?\s*\.\s*message|(?:err|error)(?:\s*\?\.)?\s*\.\s*message)/g;
 
 const PASSTHROUGH_ALLOWLIST_MARKER = "SECURITY_ZOD_PASSTHROUGH_ALLOWLIST";
 const GET_JSON_ALLOWLIST_MARKER = "SECURITY_GET_JSON_ALLOWLIST";
@@ -101,6 +108,10 @@ function findBalancedBlockRange(source, searchStartIndex) {
   return null;
 }
 
+function shouldScanPath(relativePath, includePattern) {
+  return includePattern ? includePattern.test(relativePath) : true;
+}
+
 export function collectMutationPassthroughDrift() {
   const offenders = [];
 
@@ -161,6 +172,40 @@ export function collectUnsafeApiErrorDrift() {
           source: `${kind}: error.${match[1]}`,
         });
       }
+    }
+  }
+
+  return offenders;
+}
+
+export function collectDomainMessageApiErrorDrift(
+  includePattern = ADAPTER_MESSAGE_PASSTHROUGH_PATH_PATTERN,
+) {
+  const offenders = [];
+
+  for (const filePath of collectFiles(API_ERROR_SCAN_PATHS)) {
+    const relativePath = relativeToApp(filePath);
+    if (!shouldScanPath(relativePath, includePattern)) {
+      continue;
+    }
+
+    const content = readFile(filePath);
+    if (!content.includes("apiError")) {
+      continue;
+    }
+
+    const lines = content.split(/\r?\n/);
+    for (const match of content.matchAll(DOMAIN_MESSAGE_API_ERROR_PATTERN)) {
+      if (match.index === undefined) {
+        continue;
+      }
+
+      const line = findLineNumber(content, match.index);
+      offenders.push({
+        file: relativePath,
+        line,
+        sample: lines[line - 1]?.trim() ?? "",
+      });
     }
   }
 
@@ -269,13 +314,49 @@ export function collectSensitiveStorageWriteDrift() {
       continue;
     }
 
-    if (content.includes(PERSISTENCE_ALLOWLIST_MARKER)) {
+    const lines = content.split(/\r?\n/);
+
+    for (const match of content.matchAll(STORAGE_WRITE_PATTERN)) {
+      if (match.index === undefined) {
+        continue;
+      }
+
+      const line = findLineNumber(content, match.index);
+      if (
+        hasAllowlistMarkerNearLine(lines, line, PERSISTENCE_ALLOWLIST_MARKER)
+      ) {
+        continue;
+      }
+
+      offenders.push({
+        file: relativePath,
+        line,
+        sample: lines[line - 1]?.trim() ?? "",
+      });
+    }
+  }
+
+  return offenders;
+}
+
+export function collectOpaqueLogContextDrift(
+  includePattern = VERIFICATION_ADAPTER_PATH_PATTERN,
+) {
+  const offenders = [];
+
+  for (const filePath of collectFiles(API_ERROR_SCAN_PATHS)) {
+    const relativePath = relativeToApp(filePath);
+    if (!shouldScanPath(relativePath, includePattern)) {
+      continue;
+    }
+
+    const content = readFile(filePath);
+    if (!content.includes("additionalContext")) {
       continue;
     }
 
     const lines = content.split(/\r?\n/);
-
-    for (const match of content.matchAll(STORAGE_WRITE_PATTERN)) {
+    for (const match of content.matchAll(OPAQUE_LOG_CONTEXT_PATTERN)) {
       if (match.index === undefined) {
         continue;
       }

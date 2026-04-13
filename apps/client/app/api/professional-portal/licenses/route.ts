@@ -7,7 +7,7 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
@@ -20,6 +20,9 @@ import { AuditAction } from "@prisma/client";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { licensesService } from "@/app/lib/domains/licenses";
 import { normalizeRole } from "@/app/lib/security/roles";
+
+// ADR-006 classification: Class B - professional license identifiers and authority data cross this boundary.
+// Reviewed: 2026-04-09 by @copilot
 
 const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/professional-portal/licenses";
@@ -34,6 +37,12 @@ type LicensesAdapterOutcome =
   | "conflict"
   | "not_found";
 
+type LicensesOutcomeLogFields = {
+  licenseId?: string;
+  idempotency?: "replay" | "pending";
+  domainError?: string;
+};
+
 function createLicensesOutcomeLogger(
   req: NextRequest,
   correlationId: string,
@@ -44,7 +53,7 @@ function createLicensesOutcomeLogger(
   return (
     outcome: LicensesAdapterOutcome,
     httpStatus: number,
-    additional: Record<string, unknown> = {},
+    details: LicensesOutcomeLogFields = {},
   ) => {
     logger.info("Professional licenses adapter outcome", {
       correlationId,
@@ -55,9 +64,15 @@ function createLicensesOutcomeLogger(
       outcome,
       httpStatus,
       durationMs: Date.now() - requestStartedAt,
-      additionalContext: additional,
+      ...(details.licenseId ? { licenseId: details.licenseId } : {}),
+      ...(details.idempotency ? { idempotency: details.idempotency } : {}),
+      ...(details.domainError ? { domainError: details.domainError } : {}),
     });
   };
+}
+
+function normalizeCaughtError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 /**
@@ -65,7 +80,7 @@ function createLicensesOutcomeLogger(
  * List all licenses for the authenticated professional.
  */
 export const GET = withAuth(
-  async (req: NextRequest, { dbUserId, userRole }) => {
+  async (req: NextRequest, { clerkId, dbUserId, userRole }) => {
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
@@ -90,9 +105,12 @@ export const GET = withAuth(
       operationName,
     );
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "prof-licenses-read",
+    );
     const rateLimitResult = await checkRateLimit(
-      `prof-licenses-read:${identifier}`,
+      rateLimitKey,
       RateLimits.READ.limit,
       RateLimits.READ.window,
     );
@@ -110,6 +128,7 @@ export const GET = withAuth(
     const result = await resilientExecutor.execute(
       () =>
         licensesService.getLicenses({
+          clerkId,
           userId: dbUserId,
           role: actorRole,
         }),
@@ -142,10 +161,11 @@ export const GET = withAuth(
         mappedStatus,
         { domainError: (result.data as { error?: string }).error },
       );
-      return apiError(
-        (result.data as { message?: string }).message ?? "Forbidden",
-        mappedStatus,
-      );
+      const clientErrorMessage =
+        mappedStatus === HttpStatus.FORBIDDEN
+          ? "Forbidden"
+          : "Failed to fetch licenses";
+      return apiError(clientErrorMessage, mappedStatus);
     }
 
     logOutcome("succeeded", HttpStatus.OK);
@@ -159,7 +179,7 @@ export const GET = withAuth(
  * Create a new license.
  */
 export const POST = withAuth(
-  async (req: NextRequest, { dbUserId, userRole }) => {
+  async (req: NextRequest, { clerkId, dbUserId, userRole }) => {
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
@@ -244,9 +264,12 @@ export const POST = withAuth(
       );
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "prof-licenses-write",
+    );
     const rateLimitResult = await checkRateLimit(
-      `prof-licenses-write:${identifier}`,
+      rateLimitKey,
       RateLimits.WRITE.limit,
       RateLimits.WRITE.window,
     );
@@ -259,15 +282,13 @@ export const POST = withAuth(
       );
     }
 
-    logOutcome("started", HttpStatus.OK, {
-      authority: licenseData.authority,
-    });
+    logOutcome("started", HttpStatus.OK);
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
       () =>
         licensesService.createLicense(
-          { userId: dbUserId, role: actorRole },
+          { clerkId, userId: dbUserId, role: actorRole },
           licenseData,
           { ipAddress, userAgent },
         ),
@@ -301,16 +322,13 @@ export const POST = withAuth(
         logOutcome("not_found", HttpStatus.NOT_FOUND, {
           domainError: err.error,
         });
-        return apiError(err.message ?? "Asset not found", HttpStatus.NOT_FOUND);
+        return apiError("Asset not found", HttpStatus.NOT_FOUND);
       }
       if (err.error === "asset_forbidden") {
         logOutcome("forbidden", HttpStatus.FORBIDDEN, {
           domainError: err.error,
         });
-        return apiError(
-          err.message ?? "Unauthorized access to asset",
-          HttpStatus.FORBIDDEN,
-        );
+        return apiError("Unauthorized access to asset", HttpStatus.FORBIDDEN);
       }
       if (err.error === "limit_exceeded") {
         logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
@@ -324,8 +342,7 @@ export const POST = withAuth(
 
       logOutcome("conflict", HttpStatus.CONFLICT, { domainError: err.error });
       return apiError(
-        err.message ??
-          "A license with this authority and number already exists",
+        "A license with this authority and number already exists",
         HttpStatus.CONFLICT,
       );
     }
@@ -349,10 +366,35 @@ export const POST = withAuth(
       }),
     );
 
-    await IdempotencyService.complete(idempotencyKey, data.data);
+    try {
+      await IdempotencyService.complete(idempotencyKey, data.data);
+    } catch (error) {
+      await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+      logger.error(
+        "Failed to complete license idempotency replay",
+        normalizeCaughtError(error),
+        {
+          correlationId,
+          operationName,
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          actorRole,
+          outcome: "idempotency_complete_failed",
+          httpStatus: HttpStatus.CREATED,
+          durationMs: Date.now() - requestStartedAt,
+        },
+      );
+    }
+
     logOutcome("succeeded", HttpStatus.CREATED, {
-      authority: licenseData.authority,
+      licenseId: data.data.id,
     });
     return apiSuccess(data.data, HttpStatus.CREATED);
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+    csrf: {},
   },
 );

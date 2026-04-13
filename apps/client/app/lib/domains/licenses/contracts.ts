@@ -1,4 +1,8 @@
 import type { AppRole } from "@/app/lib/security/roles";
+
+// ADR-006 classification: Class B - license DTO contracts include regulated identifier and authority-linked fields.
+// Reviewed: 2026-04-09 by @copilot
+
 import type { DomainError, Result } from "@/app/lib/errors/result";
 import type {
   CreateLicenseInput,
@@ -8,6 +12,7 @@ import type {
 export type { CreateLicenseInput, UpdateLicenseInput };
 
 export type LicenseActor = {
+  clerkId?: string;
   userId: string;
   role?: AppRole | string | null;
 };

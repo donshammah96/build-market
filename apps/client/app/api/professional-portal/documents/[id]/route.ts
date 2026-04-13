@@ -9,7 +9,7 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
@@ -19,6 +19,9 @@ import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
 import { documentsService } from "@/app/lib/domains/documents";
 import { normalizeRole } from "@/app/lib/security/roles";
+
+// ADR-006 classification: Class B - verification document detail fields and status transitions cross this boundary.
+// Reviewed: 2026-04-09 by @copilot
 
 const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/professional-portal/documents/[id]";
@@ -40,6 +43,13 @@ type DocumentByIdAdapterOutcome =
   | "conflict"
   | "not_found";
 
+type DocumentByIdOutcomeLogFields = {
+  documentId?: string;
+  updatedFieldsCount?: number;
+  idempotency?: "replay" | "pending";
+  domainError?: string;
+};
+
 function createDocumentByIdOutcomeLogger(
   req: NextRequest,
   correlationId: string,
@@ -50,7 +60,7 @@ function createDocumentByIdOutcomeLogger(
   return (
     outcome: DocumentByIdAdapterOutcome,
     httpStatus: number,
-    additional: Record<string, unknown> = {},
+    details: DocumentByIdOutcomeLogFields = {},
   ) => {
     logger.info("Professional document by-id adapter outcome", {
       correlationId,
@@ -61,9 +71,18 @@ function createDocumentByIdOutcomeLogger(
       outcome,
       httpStatus,
       durationMs: Date.now() - requestStartedAt,
-      additionalContext: additional,
+      ...(details.documentId ? { documentId: details.documentId } : {}),
+      ...(typeof details.updatedFieldsCount === "number"
+        ? { updatedFieldsCount: details.updatedFieldsCount }
+        : {}),
+      ...(details.idempotency ? { idempotency: details.idempotency } : {}),
+      ...(details.domainError ? { domainError: details.domainError } : {}),
     });
   };
+}
+
+function normalizeCaughtError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 /**
@@ -72,7 +91,7 @@ function createDocumentByIdOutcomeLogger(
  * GDPR: Logs access to sensitive document categories.
  */
 export const GET = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId, userRole }, params) => {
+  async (req: NextRequest, { clerkId, dbUserId, userRole }, params) => {
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
@@ -104,9 +123,12 @@ export const GET = withAuth<{ id: string }>(
       return apiError("Invalid document ID", HttpStatus.BAD_REQUEST);
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "prof-docs-read",
+    );
     const rateLimitResult = await checkRateLimit(
-      `prof-docs-read:${identifier}`,
+      rateLimitKey,
       RateLimits.READ.limit,
       RateLimits.READ.window,
     );
@@ -126,7 +148,7 @@ export const GET = withAuth<{ id: string }>(
     const result = await resilientExecutor.execute(
       () =>
         documentsService.getDocumentById(
-          { userId: dbUserId, role: actorRole },
+          { clerkId, userId: dbUserId, role: actorRole },
           id,
         ),
       { operationName },
@@ -194,7 +216,6 @@ export const GET = withAuth<{ id: string }>(
 
     logOutcome("succeeded", HttpStatus.OK, {
       documentId: id,
-      category: document.category,
     });
 
     return apiSuccess(data.data, HttpStatus.OK);
@@ -207,7 +228,7 @@ export const GET = withAuth<{ id: string }>(
  * Resets verification status when the document asset is replaced.
  */
 export const PATCH = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId, userRole }, params) => {
+  async (req: NextRequest, { clerkId, dbUserId, userRole }, params) => {
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
@@ -305,9 +326,12 @@ export const PATCH = withAuth<{ id: string }>(
       );
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "prof-docs-write",
+    );
     const rateLimitResult = await checkRateLimit(
-      `prof-docs-write:${identifier}`,
+      rateLimitKey,
       RateLimits.WRITE.limit,
       RateLimits.WRITE.window,
     );
@@ -331,7 +355,7 @@ export const PATCH = withAuth<{ id: string }>(
     const result = await resilientExecutor.execute(
       () =>
         documentsService.updateDocument(
-          { userId: dbUserId, role: actorRole },
+          { clerkId, userId: dbUserId, role: actorRole },
           id,
           updateData,
         ),
@@ -382,22 +406,44 @@ export const PATCH = withAuth<{ id: string }>(
           documentId: id,
           domainError: err.error,
         });
-        return apiError(err.message ?? "Asset not found", HttpStatus.NOT_FOUND);
+        return apiError("Asset not found", HttpStatus.NOT_FOUND);
       }
 
       logOutcome("forbidden", HttpStatus.FORBIDDEN, {
         documentId: id,
         domainError: err.error,
       });
-      return apiError(
-        err.message ?? "Unauthorized access to asset",
-        HttpStatus.FORBIDDEN,
+      return apiError("Unauthorized access to asset", HttpStatus.FORBIDDEN);
+    }
+
+    try {
+      await IdempotencyService.complete(idempotencyKey, data.data);
+    } catch (error) {
+      await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+      logger.error(
+        "Failed to complete document idempotency replay",
+        normalizeCaughtError(error),
+        {
+          correlationId,
+          operationName,
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          actorRole,
+          outcome: "idempotency_complete_failed",
+          httpStatus: HttpStatus.OK,
+          durationMs: Date.now() - requestStartedAt,
+        },
       );
     }
 
-    await IdempotencyService.complete(idempotencyKey, data.data);
     logOutcome("succeeded", HttpStatus.OK, { documentId: id });
     return apiSuccess(data.data, HttpStatus.OK);
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+    csrf: {},
   },
 );
 
@@ -406,7 +452,7 @@ export const PATCH = withAuth<{ id: string }>(
  * Soft-delete a document (owner only).
  */
 export const DELETE = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId, userRole }, params) => {
+  async (req: NextRequest, { clerkId, dbUserId, userRole }, params) => {
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
@@ -466,9 +512,12 @@ export const DELETE = withAuth<{ id: string }>(
       );
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "prof-docs-write",
+    );
     const rateLimitResult = await checkRateLimit(
-      `prof-docs-write:${identifier}`,
+      rateLimitKey,
       RateLimits.WRITE.limit,
       RateLimits.WRITE.window,
     );
@@ -489,7 +538,7 @@ export const DELETE = withAuth<{ id: string }>(
     const result = await resilientExecutor.execute(
       () =>
         documentsService.deleteDocument(
-          { userId: dbUserId, role: actorRole },
+          { clerkId, userId: dbUserId, role: actorRole },
           id,
         ),
       { operationName },
@@ -553,14 +602,38 @@ export const DELETE = withAuth<{ id: string }>(
       }),
     );
 
-    await IdempotencyService.complete(idempotencyKey, data.data);
+    try {
+      await IdempotencyService.complete(idempotencyKey, data.data);
+    } catch (error) {
+      await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+      logger.error(
+        "Failed to complete document idempotency replay",
+        normalizeCaughtError(error),
+        {
+          correlationId,
+          operationName,
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          actorRole,
+          outcome: "idempotency_complete_failed",
+          httpStatus: HttpStatus.OK,
+          durationMs: Date.now() - requestStartedAt,
+        },
+      );
+    }
+
     logOutcome("succeeded", HttpStatus.OK, {
       documentId: id,
-      category: data.data.category,
     });
     return apiSuccess(
       { message: data.data.message, documentId: id },
       HttpStatus.OK,
     );
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+    csrf: {},
   },
 );

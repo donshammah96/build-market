@@ -1,0 +1,76 @@
+{
+  "exceptions": [
+    {
+      "prefix": "app/api/professional-portal/calendar/",
+      "reason": "Calendar route family currently does not expose Class A/B identity fields at the adapter boundary.",
+      "reviewedOn": "2026-04-09",
+      "reviewer": "@copilot"
+    },
+    {
+      "prefix": "app/api/professional-portal/dashboard/",
+      "reason": "Dashboard route family currently does not expose Class A/B identity fields at the adapter boundary.",
+      "reviewedOn": "2026-04-09",
+      "reviewer": "@copilot"
+    },
+    {
+      "prefix": "app/api/professional-portal/finance/",
+      "reason": "Finance route family currently does not expose Class A/B identity fields at the adapter boundary.",
+      "reviewedOn": "2026-04-09",
+      "reviewer": "@copilot"
+    },
+    {
+      "prefix": "app/api/professional-portal/inquiries/",
+      "reason": "Inquiries route family currently does not expose Class A/B identity fields at the adapter boundary.",
+      "reviewedOn": "2026-04-09",
+      "reviewer": "@copilot"
+    },
+    {
+      "prefix": "app/api/professional-portal/inventory/",
+      "reason": "Inventory route family currently does not expose Class A/B identity fields at the adapter boundary.",
+      "reviewedOn": "2026-04-09",
+      "reviewer": "@copilot"
+    },
+    {
+      "prefix": "app/api/professional-portal/leads/",
+      "reason": "Leads route family currently does not expose Class A/B identity fields at the adapter boundary.",
+      "reviewedOn": "2026-04-09",
+      "reviewer": "@copilot"
+    },
+    {
+      "prefix": "app/api/professional-portal/orders/",
+      "reason": "Orders route family currently does not expose Class A/B identity fields at the adapter boundary.",
+      "reviewedOn": "2026-04-09",
+      "reviewer": "@copilot"
+    },
+    {
+      "prefix": "app/api/professional-portal/pipeline/",
+      "reason": "Pipeline route family currently does not expose Class A/B identity fields at the adapter boundary.",
+      "reviewedOn": "2026-04-09",
+      "reviewer": "@copilot"
+    },
+    {
+      "prefix": "app/api/professional-portal/portfolio/",
+      "reason": "Portfolio route family currently does not expose Class A/B identity fields at the adapter boundary.",
+      "reviewedOn": "2026-04-09",
+      "reviewer": "@copilot"
+    },
+    {
+      "prefix": "app/api/professional-portal/products/",
+      "reason": "Products route family currently does not expose Class A/B identity fields at the adapter boundary.",
+      "reviewedOn": "2026-04-09",
+      "reviewer": "@copilot"
+    },
+    {
+      "prefix": "app/api/professional-portal/profile/",
+      "reason": "Profile route family currently does not expose Class A/B identity fields at the adapter boundary.",
+      "reviewedOn": "2026-04-09",
+      "reviewer": "@copilot"
+    },
+    {
+      "prefix": "app/api/professional-portal/projects/",
+      "reason": "Projects route family currently does not expose Class A/B identity fields at the adapter boundary.",
+      "reviewedOn": "2026-04-09",
+      "reviewer": "@copilot"
+    }
+  ]
+}

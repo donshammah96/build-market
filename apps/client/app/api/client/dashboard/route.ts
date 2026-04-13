@@ -87,7 +87,7 @@ export const GET = withAuth(
     const data = result.data;
     if (!data.ok) {
       return apiError(
-        (data as { message?: string }).message ?? "Forbidden",
+        "Forbidden",
         HttpStatus.FORBIDDEN,
         undefined,
         correlationId,

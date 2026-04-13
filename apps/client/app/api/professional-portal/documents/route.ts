@@ -7,7 +7,7 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
@@ -23,6 +23,9 @@ import { AuditAction } from "@prisma/client";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { documentsService } from "@/app/lib/domains/documents";
 import { normalizeRole } from "@/app/lib/security/roles";
+
+// ADR-006 classification: Class B - verification document categories and metadata cross this adapter boundary.
+// Reviewed: 2026-04-09 by @copilot
 
 const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/professional-portal/documents";
@@ -44,6 +47,12 @@ type DocumentsAdapterOutcome =
   | "conflict"
   | "not_found";
 
+type DocumentsOutcomeLogFields = {
+  documentId?: string;
+  idempotency?: "replay" | "pending";
+  domainError?: string;
+};
+
 function createDocumentsOutcomeLogger(
   req: NextRequest,
   correlationId: string,
@@ -54,7 +63,7 @@ function createDocumentsOutcomeLogger(
   return (
     outcome: DocumentsAdapterOutcome,
     httpStatus: number,
-    additional: Record<string, unknown> = {},
+    details: DocumentsOutcomeLogFields = {},
   ) => {
     logger.info("Professional documents adapter outcome", {
       correlationId,
@@ -65,7 +74,9 @@ function createDocumentsOutcomeLogger(
       outcome,
       httpStatus,
       durationMs: Date.now() - requestStartedAt,
-      additionalContext: additional,
+      ...(details.documentId ? { documentId: details.documentId } : {}),
+      ...(details.idempotency ? { idempotency: details.idempotency } : {}),
+      ...(details.domainError ? { domainError: details.domainError } : {}),
     });
   };
 }
@@ -78,12 +89,33 @@ function parseDocumentQuery(req: NextRequest) {
   };
 }
 
+function normalizeCaughtError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function buildCreateDocumentIdempotencySummary(input: {
+  assetId: string;
+  title: string;
+  issuer?: string;
+  issueDate?: string;
+  expiryDate?: string;
+}) {
+  return {
+    domain: "professional_document",
+    assetId: input.assetId,
+    titleLength: input.title.trim().length,
+    issuerLength: input.issuer?.trim().length ?? 0,
+    hasIssueDate: Boolean(input.issueDate),
+    hasExpiryDate: Boolean(input.expiryDate),
+  };
+}
+
 /**
  * GET /api/professional-portal/documents
  * List all documents for the authenticated professional.
  */
 export const GET = withAuth(
-  async (req: NextRequest, { dbUserId, userRole }) => {
+  async (req: NextRequest, { clerkId, dbUserId, userRole }) => {
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
@@ -119,9 +151,12 @@ export const GET = withAuth(
       );
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "prof-docs-read",
+    );
     const rateLimitResult = await checkRateLimit(
-      `prof-docs-read:${identifier}`,
+      rateLimitKey,
       RateLimits.READ.limit,
       RateLimits.READ.window,
     );
@@ -139,7 +174,7 @@ export const GET = withAuth(
     const result = await resilientExecutor.execute(
       () =>
         documentsService.getDocuments(
-          { userId: dbUserId, role: actorRole },
+          { clerkId, userId: dbUserId, role: actorRole },
           validation.data,
         ),
       { operationName },
@@ -171,7 +206,11 @@ export const GET = withAuth(
         mappedStatus,
         { domainError: (result.data as { error?: string }).error },
       );
-      return apiError(result.data.message ?? "Forbidden", mappedStatus);
+      const clientErrorMessage =
+        mappedStatus === HttpStatus.FORBIDDEN
+          ? "Forbidden"
+          : "Failed to fetch documents";
+      return apiError(clientErrorMessage, mappedStatus);
     }
 
     logOutcome("succeeded", HttpStatus.OK);
@@ -186,7 +225,7 @@ export const GET = withAuth(
  * Sets professional verificationStatus to PENDING on submission.
  */
 export const POST = withAuth(
-  async (req: NextRequest, { dbUserId, userRole }) => {
+  async (req: NextRequest, { clerkId, dbUserId, userRole }) => {
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
@@ -240,10 +279,11 @@ export const POST = withAuth(
 
     const idempotencyKey =
       req.headers.get("Idempotency-Key") ||
-      IdempotencyService.generateKey(dbUserId, "POST", {
-        domain: "professional_document",
-        ...docData,
-      });
+      IdempotencyService.generateKey(
+        dbUserId,
+        "POST",
+        buildCreateDocumentIdempotencySummary(docData),
+      );
 
     const idempotencyCheck = await IdempotencyService.checkOrCreate(
       idempotencyKey,
@@ -270,9 +310,12 @@ export const POST = withAuth(
       );
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "prof-docs-write",
+    );
     const rateLimitResult = await checkRateLimit(
-      `prof-docs-write:${identifier}`,
+      rateLimitKey,
       RateLimits.WRITE.limit,
       RateLimits.WRITE.window,
     );
@@ -285,13 +328,13 @@ export const POST = withAuth(
       );
     }
 
-    logOutcome("started", HttpStatus.OK, { category: docData.category });
+    logOutcome("started", HttpStatus.OK);
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
       () =>
         documentsService.createDocument(
-          { userId: dbUserId, role: actorRole },
+          { clerkId, userId: dbUserId, role: actorRole },
           docData,
           { ipAddress, userAgent },
         ),
@@ -325,16 +368,13 @@ export const POST = withAuth(
         logOutcome("not_found", HttpStatus.NOT_FOUND, {
           domainError: err.error,
         });
-        return apiError(err.message ?? "Asset not found", HttpStatus.NOT_FOUND);
+        return apiError("Asset not found", HttpStatus.NOT_FOUND);
       }
       if (err.error === "asset_forbidden") {
         logOutcome("forbidden", HttpStatus.FORBIDDEN, {
           domainError: err.error,
         });
-        return apiError(
-          err.message ?? "Unauthorized access to asset",
-          HttpStatus.FORBIDDEN,
-        );
+        return apiError("Unauthorized access to asset", HttpStatus.FORBIDDEN);
       }
 
       logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
@@ -371,8 +411,33 @@ export const POST = withAuth(
       );
     }
 
-    await IdempotencyService.complete(idempotencyKey, data.data);
-    logOutcome("succeeded", HttpStatus.CREATED, { category: docData.category });
+    try {
+      await IdempotencyService.complete(idempotencyKey, data.data);
+    } catch (error) {
+      await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+      logger.error(
+        "Failed to complete document idempotency replay",
+        normalizeCaughtError(error),
+        {
+          correlationId,
+          operationName,
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          actorRole,
+          outcome: "idempotency_complete_failed",
+          httpStatus: HttpStatus.CREATED,
+          durationMs: Date.now() - requestStartedAt,
+        },
+      );
+    }
+
+    logOutcome("succeeded", HttpStatus.CREATED, { documentId: data.data.id });
     return apiSuccess(data.data, HttpStatus.CREATED);
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+    csrf: {},
   },
 );

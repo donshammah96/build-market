@@ -9,7 +9,7 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
@@ -19,6 +19,9 @@ import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
 import { certificatesService } from "@/app/lib/domains/certificates";
 import { normalizeRole } from "@/app/lib/security/roles";
+
+// ADR-006 classification: Class B - certificate detail, review status, and lifecycle fields cross this boundary.
+// Reviewed: 2026-04-09 by @copilot
 
 const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/professional-portal/certificates/[id]";
@@ -33,6 +36,13 @@ type CertificateByIdAdapterOutcome =
   | "conflict"
   | "not_found";
 
+type CertificateByIdOutcomeLogFields = {
+  certificateId?: string;
+  updatedFieldsCount?: number;
+  idempotency?: "replay" | "pending";
+  domainError?: string;
+};
+
 function createCertificateByIdOutcomeLogger(
   req: NextRequest,
   correlationId: string,
@@ -43,7 +53,7 @@ function createCertificateByIdOutcomeLogger(
   return (
     outcome: CertificateByIdAdapterOutcome,
     httpStatus: number,
-    additional: Record<string, unknown> = {},
+    details: CertificateByIdOutcomeLogFields = {},
   ) => {
     logger.info("Professional certificate by-id adapter outcome", {
       correlationId,
@@ -54,9 +64,20 @@ function createCertificateByIdOutcomeLogger(
       outcome,
       httpStatus,
       durationMs: Date.now() - requestStartedAt,
-      additionalContext: additional,
+      ...(details.certificateId
+        ? { certificateId: details.certificateId }
+        : {}),
+      ...(typeof details.updatedFieldsCount === "number"
+        ? { updatedFieldsCount: details.updatedFieldsCount }
+        : {}),
+      ...(details.idempotency ? { idempotency: details.idempotency } : {}),
+      ...(details.domainError ? { domainError: details.domainError } : {}),
     });
   };
+}
+
+function normalizeCaughtError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 /**
@@ -64,7 +85,7 @@ function createCertificateByIdOutcomeLogger(
  * Get a specific certificate by ID.
  */
 export const GET = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId, userRole }, params) => {
+  async (req: NextRequest, { clerkId, dbUserId, userRole }, params) => {
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
@@ -96,9 +117,12 @@ export const GET = withAuth<{ id: string }>(
       return apiError("Invalid certificate ID format", HttpStatus.BAD_REQUEST);
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "prof-certificates-read",
+    );
     const rateLimitResult = await checkRateLimit(
-      `certificate-read:${identifier}`,
+      rateLimitKey,
       RateLimits.READ.limit,
       RateLimits.READ.window,
     );
@@ -118,7 +142,7 @@ export const GET = withAuth<{ id: string }>(
     const result = await resilientExecutor.execute(
       () =>
         certificatesService.getCertificateById(
-          { userId: dbUserId, role: actorRole },
+          { clerkId, userId: dbUserId, role: actorRole },
           id,
         ),
       { operationName },
@@ -169,7 +193,7 @@ export const GET = withAuth<{ id: string }>(
  * Update a specific certificate.
  */
 export const PATCH = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId, userRole }, params) => {
+  async (req: NextRequest, { clerkId, dbUserId, userRole }, params) => {
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
@@ -267,9 +291,12 @@ export const PATCH = withAuth<{ id: string }>(
       );
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "prof-certificates-write",
+    );
     const rateLimitResult = await checkRateLimit(
-      `certificate-write:${identifier}`,
+      rateLimitKey,
       RateLimits.WRITE.limit,
       RateLimits.WRITE.window,
     );
@@ -293,7 +320,7 @@ export const PATCH = withAuth<{ id: string }>(
     const result = await resilientExecutor.execute(
       () =>
         certificatesService.updateCertificate(
-          { userId: dbUserId, role: actorRole },
+          { clerkId, userId: dbUserId, role: actorRole },
           id,
           updateData,
         ),
@@ -354,9 +381,34 @@ export const PATCH = withAuth<{ id: string }>(
       return apiError("Unauthorized access to asset", HttpStatus.FORBIDDEN);
     }
 
-    await IdempotencyService.complete(idempotencyKey, data.data);
+    try {
+      await IdempotencyService.complete(idempotencyKey, data.data);
+    } catch (error) {
+      await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+      logger.error(
+        "Failed to complete certificate idempotency replay",
+        normalizeCaughtError(error),
+        {
+          correlationId,
+          operationName,
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          actorRole,
+          outcome: "idempotency_complete_failed",
+          httpStatus: HttpStatus.OK,
+          durationMs: Date.now() - requestStartedAt,
+        },
+      );
+    }
+
     logOutcome("succeeded", HttpStatus.OK, { certificateId: id });
     return apiSuccess(data.data, HttpStatus.OK);
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+    csrf: {},
   },
 );
 
@@ -365,7 +417,7 @@ export const PATCH = withAuth<{ id: string }>(
  * Soft-delete a specific certificate.
  */
 export const DELETE = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId, userRole }, params) => {
+  async (req: NextRequest, { clerkId, dbUserId, userRole }, params) => {
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
@@ -398,9 +450,12 @@ export const DELETE = withAuth<{ id: string }>(
       return apiError("Invalid certificate ID format", HttpStatus.BAD_REQUEST);
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "prof-certificates-write",
+    );
     const rateLimitResult = await checkRateLimit(
-      `certificate-delete:${identifier}`,
+      rateLimitKey,
       RateLimits.WRITE.limit,
       RateLimits.WRITE.window,
     );
@@ -420,7 +475,7 @@ export const DELETE = withAuth<{ id: string }>(
     const result = await resilientExecutor.execute(
       () =>
         certificatesService.deleteCertificate(
-          { userId: dbUserId, role: actorRole },
+          { clerkId, userId: dbUserId, role: actorRole },
           id,
         ),
       { operationName },
@@ -465,7 +520,7 @@ export const DELETE = withAuth<{ id: string }>(
 
     ComplianceService.logAdminAction(
       dbUserId,
-      AuditAction.PROFILE_UPDATED,
+      AuditAction.DATA_RECTIFIED,
       "ProfessionalDocument",
       id,
       { category: data.data.category, action: "DELETE_CERTIFICATE" },
@@ -484,12 +539,17 @@ export const DELETE = withAuth<{ id: string }>(
 
     logOutcome("succeeded", HttpStatus.OK, {
       certificateId: id,
-      category: data.data.category,
     });
 
     return apiSuccess(
       { message: "Certificate deleted successfully" },
       HttpStatus.OK,
     );
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+    csrf: {},
   },
 );

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
+import { UserRole } from "@build/db";
+import type { AuthContext } from "@/app/lib/api/api-middleware";
 import {
   GET,
   PATCH,
@@ -17,6 +19,12 @@ const guardMocks = vi.hoisted(() => ({
   checkBodySize: vi.fn().mockReturnValue(null),
 }));
 
+const mockAuthContext: AuthContext = {
+  clerkId: "clerk_123",
+  dbUserId: "db_user_123",
+  userRole: UserRole.CLIENT,
+};
+
 vi.mock("@/app/lib/domains/idea-books", () => ({
   ideaBooksService: serviceMocks,
 }));
@@ -26,21 +34,12 @@ vi.mock("@/app/lib/api/api-middleware", () => ({
     (
       handler: (
         req: NextRequest,
-        context: unknown,
+        context: AuthContext,
         params?: unknown,
       ) => Promise<unknown>,
     ) =>
     async (req: NextRequest, params?: unknown) =>
-      handler(
-        req,
-        {
-          clerkId: "clerk_123",
-          dbUserId: "db_user_123",
-          userEmail: "test@example.com",
-          userRole: "client",
-        },
-        params,
-      ),
+      handler(req, mockAuthContext, params),
 }));
 
 vi.mock("@/app/lib/api/api-response", () => ({
@@ -127,7 +126,7 @@ describe("idea-books attachment item route adapters", () => {
 
     expect(response.status).toBe(200);
     expect(serviceMocks.getAttachmentById).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "client" },
+      { userId: "db_user_123", role: UserRole.CLIENT },
       "att_1",
     );
     expect(body.success).toBe(true);

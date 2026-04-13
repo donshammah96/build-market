@@ -744,6 +744,21 @@ function extractWithAuthExportOptionsBlock(source, exportName) {
   };
 }
 
+function findNumericConstantAssignment(source, symbol) {
+  const constantPattern = new RegExp(
+    `\\bconst\\s+${symbol}\\s*=\\s*(\\d+)\\s*;`,
+  );
+  const constantMatch = constantPattern.exec(source);
+  if (!constantMatch || constantMatch.index === undefined) {
+    return null;
+  }
+
+  return {
+    line: findLineNumber(source, constantMatch.index),
+    value: Number.parseInt(constantMatch[1], 10),
+  };
+}
+
 function collectHighValueRouteGuardDrift() {
   const offenders = [];
 
@@ -989,6 +1004,37 @@ function collectHighValueServerActionGuardDrift() {
           "High-value action rate-limit configuration must match the canonical key pattern.",
       });
       break;
+    }
+
+    for (const requiredNumericConstant of rule.requiredNumericConstants ?? []) {
+      const assignment = findNumericConstantAssignment(
+        source,
+        requiredNumericConstant.symbol,
+      );
+      if (!assignment) {
+        offenders.push({
+          file: rule.file,
+          actionName: rule.actionName,
+          line: findLineNumber(source, secureActionIndex),
+          check: "missing-numeric-constant",
+          message:
+            "High-value action guard constants must declare explicit numeric assignments.",
+        });
+        continue;
+      }
+
+      if (assignment.value === requiredNumericConstant.expectedValue) {
+        continue;
+      }
+
+      offenders.push({
+        file: rule.file,
+        actionName: rule.actionName,
+        line: assignment.line,
+        check: "invalid-numeric-constant",
+        message:
+          "High-value action guard constants must match the canonical numeric policy value.",
+      });
     }
   }
 
@@ -1279,8 +1325,8 @@ function collectIdempotencyCompletionSafetyDrift() {
   const catchPattern = /catch(?:\s*\([^)]*\))?\s*\{/;
   const chainedCatchPattern = /\.catch\s*\(/;
 
-  const transitionRules = CRITICAL_TRANSITION_STEP_SEQUENCE_RULES.filter((rule) =>
-    rule.orderedSnippets.includes("IdempotencyService.complete("),
+  const transitionRules = CRITICAL_TRANSITION_STEP_SEQUENCE_RULES.filter(
+    (rule) => rule.orderedSnippets.includes("IdempotencyService.complete("),
   );
 
   for (const rule of transitionRules) {
@@ -1289,7 +1335,10 @@ function collectIdempotencyCompletionSafetyDrift() {
       continue;
     }
 
-    const extracted = extractExportedAsyncFunctionBlock(source, rule.actionName);
+    const extracted = extractExportedAsyncFunctionBlock(
+      source,
+      rule.actionName,
+    );
     if (!extracted) {
       continue;
     }
@@ -1303,7 +1352,8 @@ function collectIdempotencyCompletionSafetyDrift() {
       }
 
       const lookahead = block.slice(match.index, match.index + 500);
-      const hasGuard = catchPattern.test(lookahead) || chainedCatchPattern.test(lookahead);
+      const hasGuard =
+        catchPattern.test(lookahead) || chainedCatchPattern.test(lookahead);
       if (!hasGuard) {
         offenders.push({
           file: rule.file,
@@ -1358,7 +1408,10 @@ function collectIdempotencyCompletionSafetyDrift() {
       continue;
     }
 
-    const extracted = extractWithAuthExportHandlerBlock(source, rule.exportName);
+    const extracted = extractWithAuthExportHandlerBlock(
+      source,
+      rule.exportName,
+    );
     if (!extracted) {
       continue;
     }
@@ -1372,7 +1425,8 @@ function collectIdempotencyCompletionSafetyDrift() {
       }
 
       const lookahead = block.slice(match.index, match.index + 500);
-      const hasGuard = catchPattern.test(lookahead) || chainedCatchPattern.test(lookahead);
+      const hasGuard =
+        catchPattern.test(lookahead) || chainedCatchPattern.test(lookahead);
       if (!hasGuard) {
         offenders.push({
           file: rule.file,

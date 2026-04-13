@@ -164,6 +164,16 @@ class ConcurrencyLimiter {
 class PropertiesClient {
   private readonly bulkhead: ConcurrencyLimiter;
 
+  private buildOptimisticLockHeaders(
+    version: number,
+    idempotencyKey?: string,
+  ): HeadersInit {
+    return {
+      "If-Match": `"${version}"`,
+      ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+    };
+  }
+
   constructor() {
     this.bulkhead = new ConcurrencyLimiter(BULKHEAD_CONCURRENCY);
   }
@@ -255,10 +265,11 @@ class PropertiesClient {
     return this.bulkhead.run(() =>
       apiFetch<PropertyMutationPayload>(`/api/properties/${input.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ ...input.data, version: input.version }),
-        headers: input.idempotencyKey
-          ? { "Idempotency-Key": input.idempotencyKey }
-          : undefined,
+        body: JSON.stringify(input.data),
+        headers: this.buildOptimisticLockHeaders(
+          input.version,
+          input.idempotencyKey,
+        ),
       }),
     );
   }
@@ -271,10 +282,10 @@ class PropertiesClient {
     return this.bulkhead.run(() =>
       apiFetch<PropertyMutationPayload>(`/api/properties/${input.id}`, {
         method: "DELETE",
-        body: JSON.stringify({ version: input.version }),
-        headers: input.idempotencyKey
-          ? { "Idempotency-Key": input.idempotencyKey }
-          : undefined,
+        headers: this.buildOptimisticLockHeaders(
+          input.version,
+          input.idempotencyKey,
+        ),
       }),
     );
   }

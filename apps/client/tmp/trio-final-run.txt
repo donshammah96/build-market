@@ -1,0 +1,12 @@
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90mC:/Users/User/build-market/apps/client[39m
+
+ [32m✓[39m __tests__/api/messaging/route-auth-mapping.test.ts [2m([22m[2m31 tests[22m[2m)[22m[32m 124[2mms[22m[39m
+ [32m✓[39m __tests__/api/properties/property-id.route.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 226[2mms[22m[39m
+ [32m✓[39m __tests__/api/stores/store-id.route.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 67[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m52 passed[39m[22m[90m (52)[39m
+[2m   Start at [22m 07:38:06
+[2m   Duration [22m 19.63s[2m (transform 9.39s, setup 424ms, import 13.79s, tests 418ms, environment 1ms)[22m
+

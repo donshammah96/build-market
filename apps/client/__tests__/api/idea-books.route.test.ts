@@ -1,18 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
+import { UserRole } from "@build/db";
+import type { AuthContext } from "@/app/lib/api/api-middleware";
 import { GET } from "@/app/api/idea-books/route";
 
 const mockIdeaBooksList = vi.hoisted(() => vi.fn());
 
+const mockAuthContext: AuthContext = {
+  clerkId: "clerk_123",
+  dbUserId: "db_user_123",
+  userRole: UserRole.CLIENT,
+};
+
 vi.mock("@/app/lib/api/api-middleware", () => ({
   withAuth:
-    (handler: (...args: unknown[]) => Promise<Response>) =>
+    (handler: (req: NextRequest, context: AuthContext) => Promise<Response>) =>
     async (req: NextRequest) =>
-      handler(req, {
-        clerkId: "clerk_123",
-        dbUserId: "db_user_123",
-        userRole: "CLIENT",
-      }),
+      handler(req, mockAuthContext),
 }));
 
 vi.mock("@/app/lib/api/api-response", () => ({

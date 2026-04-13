@@ -126,6 +126,7 @@ export function ProfileCompletionWidget({
   // Load saved state from localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
+      // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive profile widget UI state.
       const saved = localStorage.getItem(WIDGET_STORAGE_KEY);
       if (saved) {
         try {
@@ -161,6 +162,7 @@ export function ProfileCompletionWidget({
   const saveState = useCallback((newState: WidgetState) => {
     setState(newState);
     if (typeof window !== "undefined") {
+      // SECURITY_PERSISTENCE_ALLOWLIST: Persists non-sensitive profile widget UI state.
       localStorage.setItem(
         WIDGET_STORAGE_KEY,
         JSON.stringify({

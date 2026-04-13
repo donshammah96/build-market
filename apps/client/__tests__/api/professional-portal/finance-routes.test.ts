@@ -82,6 +82,11 @@ vi.mock("@/app/lib/api/resilient-api", () => ({
 vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: mockCheckRateLimit,
   getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
+  getActorRateLimitIdentifier: vi
+    .fn()
+    .mockImplementation(
+      (userId: string, scope: string) => `${scope}:${userId}`,
+    ),
   RateLimits: {
     READ: { limit: 100, window: 60000 },
     WRITE: { limit: 10, window: 60000 },

@@ -1,9 +1,15 @@
+export type GuardNumericConstantRule = {
+  symbol: string;
+  expectedValue: number;
+};
+
 export type HighValueServerActionGuardRule = {
   file: string;
   actionName: string;
   requiredOptions: string[];
   requiredRecentAuthSnippets?: string[];
   requiredRateLimitSnippets?: string[];
+  requiredNumericConstants?: GuardNumericConstantRule[];
 };
 
 export type HighValueRouteGuardRule = {
@@ -36,6 +42,12 @@ export const HIGH_VALUE_SERVER_ACTION_GUARD_RULES: HighValueServerActionGuardRul
       requiredRecentAuthSnippets: [
         "maxAgeSeconds: WITHDRAWAL_RECENT_AUTH_MAX_AGE_SECONDS",
       ],
+      requiredNumericConstants: [
+        {
+          symbol: "WITHDRAWAL_RECENT_AUTH_MAX_AGE_SECONDS",
+          expectedValue: 180,
+        },
+      ],
       requiredRateLimitSnippets: ["high-value-withdrawal:"],
     },
     {
@@ -45,6 +57,12 @@ export const HIGH_VALUE_SERVER_ACTION_GUARD_RULES: HighValueServerActionGuardRul
       requiredRecentAuthSnippets: [
         "maxAgeSeconds: ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
       ],
+      requiredNumericConstants: [
+        {
+          symbol: "ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+          expectedValue: 300,
+        },
+      ],
       requiredRateLimitSnippets: ["high-value-onboarding-transition:submit:"],
     },
     {
@@ -53,6 +71,12 @@ export const HIGH_VALUE_SERVER_ACTION_GUARD_RULES: HighValueServerActionGuardRul
       requiredOptions: ["recentAuth", "rateLimit"],
       requiredRecentAuthSnippets: [
         "maxAgeSeconds: ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+      ],
+      requiredNumericConstants: [
+        {
+          symbol: "ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+          expectedValue: 300,
+        },
       ],
       requiredRateLimitSnippets: [
         "high-value-onboarding-transition:skip-client:",
@@ -64,6 +88,12 @@ export const HIGH_VALUE_SERVER_ACTION_GUARD_RULES: HighValueServerActionGuardRul
       requiredOptions: ["recentAuth", "rateLimit"],
       requiredRecentAuthSnippets: [
         "maxAgeSeconds: ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+      ],
+      requiredNumericConstants: [
+        {
+          symbol: "ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+          expectedValue: 300,
+        },
       ],
       requiredRateLimitSnippets: [
         "high-value-onboarding-transition:skip-professional:",

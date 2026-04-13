@@ -7,7 +7,7 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
@@ -24,6 +24,9 @@ import { withAuth } from "@/app/lib/api/api-middleware";
 import { certificatesService } from "@/app/lib/domains/certificates";
 import { normalizeRole } from "@/app/lib/security/roles";
 
+// ADR-006 classification: Class B - certificate verification metadata and identifiers cross this boundary.
+// Reviewed: 2026-04-09 by @copilot
+
 const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/professional-portal/certificates";
 
@@ -37,6 +40,12 @@ type CertificatesAdapterOutcome =
   | "conflict"
   | "not_found";
 
+type CertificatesOutcomeLogFields = {
+  certificateId?: string;
+  idempotency?: "replay" | "pending";
+  domainError?: string;
+};
+
 function createCertificatesOutcomeLogger(
   req: NextRequest,
   correlationId: string,
@@ -47,7 +56,7 @@ function createCertificatesOutcomeLogger(
   return (
     outcome: CertificatesAdapterOutcome,
     httpStatus: number,
-    additional: Record<string, unknown> = {},
+    details: CertificatesOutcomeLogFields = {},
   ) => {
     logger.info("Professional certificates adapter outcome", {
       correlationId,
@@ -58,7 +67,11 @@ function createCertificatesOutcomeLogger(
       outcome,
       httpStatus,
       durationMs: Date.now() - requestStartedAt,
-      additionalContext: additional,
+      ...(details.certificateId
+        ? { certificateId: details.certificateId }
+        : {}),
+      ...(details.idempotency ? { idempotency: details.idempotency } : {}),
+      ...(details.domainError ? { domainError: details.domainError } : {}),
     });
   };
 }
@@ -71,12 +84,33 @@ function parseCertificateQuery(req: NextRequest) {
   };
 }
 
+function normalizeCaughtError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function buildCreateCertificateIdempotencySummary(input: {
+  assetId: string;
+  title: string;
+  issuer?: string;
+  issueDate?: string;
+  expiryDate?: string;
+}) {
+  return {
+    domain: "certificate",
+    assetId: input.assetId,
+    titleLength: input.title.trim().length,
+    issuerLength: input.issuer?.trim().length ?? 0,
+    hasIssueDate: Boolean(input.issueDate),
+    hasExpiryDate: Boolean(input.expiryDate),
+  };
+}
+
 /**
  * GET /api/professional-portal/certificates
  * List certificates for the authenticated professional.
  */
 export const GET = withAuth(
-  async (req: NextRequest, { dbUserId, userRole }) => {
+  async (req: NextRequest, { clerkId, dbUserId, userRole }) => {
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
@@ -114,9 +148,12 @@ export const GET = withAuth(
     }
     const query = validation.data;
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "prof-certificates-read",
+    );
     const rateLimitResult = await checkRateLimit(
-      `certificates-read:${identifier}`,
+      rateLimitKey,
       RateLimits.READ.limit,
       RateLimits.READ.window,
     );
@@ -134,7 +171,7 @@ export const GET = withAuth(
     const result = await resilientExecutor.execute(
       () =>
         certificatesService.getCertificates(
-          { userId: dbUserId, role: actorRole },
+          { clerkId, userId: dbUserId, role: actorRole },
           query,
         ),
       { operationName },
@@ -163,10 +200,7 @@ export const GET = withAuth(
       logOutcome("forbidden", HttpStatus.FORBIDDEN, {
         domainError: (data as { error?: string }).error,
       });
-      return apiError(
-        (data as { message?: string }).message ?? "Forbidden",
-        HttpStatus.FORBIDDEN,
-      );
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
 
     logOutcome("succeeded", HttpStatus.OK);
@@ -180,7 +214,7 @@ export const GET = withAuth(
  * Create a new certificate.
  */
 export const POST = withAuth(
-  async (req: NextRequest, { dbUserId, userRole }) => {
+  async (req: NextRequest, { clerkId, dbUserId, userRole }) => {
     const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
@@ -234,10 +268,11 @@ export const POST = withAuth(
 
     const idempotencyKey =
       req.headers.get("Idempotency-Key") ||
-      IdempotencyService.generateKey(dbUserId, "POST", {
-        domain: "certificate",
-        ...certData,
-      });
+      IdempotencyService.generateKey(
+        dbUserId,
+        "POST",
+        buildCreateCertificateIdempotencySummary(certData),
+      );
 
     const idempotencyCheck = await IdempotencyService.checkOrCreate(
       idempotencyKey,
@@ -264,9 +299,12 @@ export const POST = withAuth(
       );
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "prof-certificates-write",
+    );
     const rateLimitResult = await checkRateLimit(
-      `certificates-write:${identifier}`,
+      rateLimitKey,
       RateLimits.WRITE.limit,
       RateLimits.WRITE.window,
     );
@@ -279,13 +317,13 @@ export const POST = withAuth(
       );
     }
 
-    logOutcome("started", HttpStatus.OK, { category: certData.category });
+    logOutcome("started", HttpStatus.OK);
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
       () =>
         certificatesService.createCertificate(
-          { userId: dbUserId, role: actorRole },
+          { clerkId, userId: dbUserId, role: actorRole },
           certData,
           { ipAddress, userAgent },
         ),
@@ -319,16 +357,13 @@ export const POST = withAuth(
         logOutcome("not_found", HttpStatus.NOT_FOUND, {
           domainError: err.error,
         });
-        return apiError(err.message ?? "Asset not found", HttpStatus.NOT_FOUND);
+        return apiError("Asset not found", HttpStatus.NOT_FOUND);
       }
       if (err.error === "asset_forbidden") {
         logOutcome("forbidden", HttpStatus.FORBIDDEN, {
           domainError: err.error,
         });
-        return apiError(
-          err.message ?? "Unauthorized access to asset",
-          HttpStatus.FORBIDDEN,
-        );
+        return apiError("Unauthorized access to asset", HttpStatus.FORBIDDEN);
       }
 
       logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
@@ -359,10 +394,35 @@ export const POST = withAuth(
       }),
     );
 
-    await IdempotencyService.complete(idempotencyKey, data.data);
+    try {
+      await IdempotencyService.complete(idempotencyKey, data.data);
+    } catch (error) {
+      await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+      logger.error(
+        "Failed to complete certificate idempotency replay",
+        normalizeCaughtError(error),
+        {
+          correlationId,
+          operationName,
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          actorRole,
+          outcome: "idempotency_complete_failed",
+          httpStatus: HttpStatus.CREATED,
+          durationMs: Date.now() - requestStartedAt,
+        },
+      );
+    }
+
     logOutcome("succeeded", HttpStatus.CREATED, {
-      category: certData.category,
+      certificateId: data.data.id,
     });
     return apiSuccess(data.data, HttpStatus.CREATED);
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+    csrf: {},
   },
 );

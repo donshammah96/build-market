@@ -23,6 +23,7 @@ export const SECURITY_PERSISTENCE_ALLOWLIST = [
 export function clearOnboardingDrafts(): void {
   if (typeof window === "undefined") return;
   const keysToRemove: string[] = [];
+  // SECURITY_PERSISTENCE_ALLOWLIST: Enumerates non-sensitive onboarding draft keys in sessionStorage.
   for (let i = 0; i < sessionStorage.length; i++) {
     const key = sessionStorage.key(i);
     if (
@@ -33,6 +34,7 @@ export function clearOnboardingDrafts(): void {
       keysToRemove.push(key);
     }
   }
+  // SECURITY_PERSISTENCE_ALLOWLIST: Removes non-sensitive onboarding draft keys from sessionStorage.
   keysToRemove.forEach((k) => sessionStorage.removeItem(k));
 }
 

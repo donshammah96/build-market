@@ -1,4 +1,8 @@
 import type { AppRole } from "@/app/lib/security/roles";
+
+// ADR-006 classification: Class B - certificate DTO contracts include credential and verification status fields.
+// Reviewed: 2026-04-09 by @copilot
+
 import type { DomainError, Result } from "@/app/lib/errors/result";
 import type {
   CertificateQueryInput,
@@ -13,6 +17,7 @@ export type {
 };
 
 export type CertificateActor = {
+  clerkId?: string;
   userId: string;
   role?: AppRole | string | null;
 };

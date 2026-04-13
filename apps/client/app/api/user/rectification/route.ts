@@ -20,6 +20,9 @@
  * GET /api/user/rectification - Get rectification history
  */
 
+// ADR-006 classification: Class A/B - rectification payloads include identity, contact, and compliance profile fields.
+// Reviewed: 2026-04-09 by @copilot
+
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { County, Prisma } from "@prisma/client";
@@ -36,6 +39,11 @@ import {
   safeParseJsonBody,
   getRequestMetadata,
 } from "@/app/lib/api/request-utils";
+import {
+  RateLimits,
+  checkRateLimit,
+  getActorRateLimitIdentifier,
+} from "@/app/lib/api/rate-limit";
 import { userProfileComplianceService } from "@/app/lib/domains/user-profile";
 
 const logger = getClientLogger();
@@ -126,6 +134,28 @@ export const POST = withAuth(
     const correlationId = initializeCorrelationId(req);
 
     try {
+      const rateLimitKey = getActorRateLimitIdentifier(
+        dbUserId,
+        "user-rectification",
+      );
+      const { success } = await checkRateLimit(
+        rateLimitKey,
+        RateLimits.WRITE.limit,
+        RateLimits.WRITE.window,
+      );
+
+      if (!success) {
+        logger.warn("Rate limit exceeded for rectification request", {
+          correlationId,
+          operationName: "user-data-rectification",
+          rateLimitKey,
+        });
+        return apiError(
+          "Rate limit exceeded. Please try again later.",
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+
       // Safe JSON parsing
       const parseResult = await safeParseJsonBody(req);
       if (!parseResult.success) {

@@ -413,6 +413,7 @@ const HomeownerForm: React.FC<Props> = ({
 
   // Restore draft from sessionStorage on mount (hydration-safe)
   useEffect(() => {
+    // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive onboarding draft state.
     const raw = sessionStorage.getItem(HOMEOWNER_DRAFT_KEY);
     if (!raw) return;
     try {
@@ -421,10 +422,12 @@ const HomeownerForm: React.FC<Props> = ({
       if (result.success) {
         reset(result.data);
       } else {
+        // SECURITY_PERSISTENCE_ALLOWLIST: Clears invalid non-sensitive onboarding draft state.
         sessionStorage.removeItem(HOMEOWNER_DRAFT_KEY);
         analytics.trackDraftRestoreFailed();
       }
     } catch {
+      // SECURITY_PERSISTENCE_ALLOWLIST: Clears malformed non-sensitive onboarding draft state.
       sessionStorage.removeItem(HOMEOWNER_DRAFT_KEY);
       analytics.trackDraftRestoreFailed();
     }
@@ -433,6 +436,7 @@ const HomeownerForm: React.FC<Props> = ({
   // Persist draft to sessionStorage when form values change
   useEffect(() => {
     if (success) return;
+    // SECURITY_PERSISTENCE_ALLOWLIST: Persists non-sensitive onboarding draft state.
     sessionStorage.setItem(HOMEOWNER_DRAFT_KEY, JSON.stringify(formValues));
   }, [formValues, success]);
 
@@ -506,6 +510,7 @@ const HomeownerForm: React.FC<Props> = ({
     try {
       showToast("info", "Submitting your details…");
       await onSubmit(data);
+      // SECURITY_PERSISTENCE_ALLOWLIST: Clears non-sensitive onboarding draft after successful submission.
       sessionStorage.removeItem(HOMEOWNER_DRAFT_KEY);
       showToast("success", "Profile completed successfully!");
       setSuccess(true);

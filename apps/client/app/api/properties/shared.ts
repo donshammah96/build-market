@@ -232,27 +232,6 @@ export function conflictResponse(
   return response;
 }
 
-export function extractExpectedVersion(
-  req: NextRequest,
-  body: unknown,
-): number | null {
-  const ifMatch = req.headers.get("If-Match");
-  if (ifMatch) {
-    const parsed = Number.parseInt(ifMatch.replace(/"/g, ""), 10);
-    return Number.isNaN(parsed) ? null : parsed;
-  }
-
-  if (body && typeof body === "object" && "version" in body) {
-    const parsed = Number.parseInt(
-      String((body as Record<string, unknown>).version),
-      10,
-    );
-    return Number.isNaN(parsed) ? null : parsed;
-  }
-
-  return null;
-}
-
 export function isOptimisticRetryEnabled(req: NextRequest): boolean {
   const headerValue = req.headers.get("x-optimistic-retry");
   return headerValue === "true" || headerValue === "1";

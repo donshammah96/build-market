@@ -66,7 +66,7 @@ The old `fileUrl`/`fileKey` fields are deprecated. New certificates must use the
 ## Cross-Cutting Concerns
 
 - **Authentication**: All endpoints require Clerk authentication via `withAuth`.
-- **Rate Limiting**: Scoped keys (`certificates-read`, `certificates-write`, `certificate-*`).
+- **Rate Limiting**: Scoped keys (`prof-certificates-read`, `prof-certificates-write`).
 - **Resilience**: All database operations wrapped in `getResilientExecutor().execute()`.
 - **Idempotency**: POST and PATCH mutations use `IdempotencyService` (SHA-256 keyed).
 - **Validation**: Zod schemas restrict `category` to certificate-only values.

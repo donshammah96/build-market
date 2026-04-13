@@ -248,12 +248,14 @@ const ProfessionalForm: React.FC<Props> = ({
 
   // Restore draft from sessionStorage on mount (hydration-safe; validates with Zod)
   useEffect(() => {
+    // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive professional onboarding draft state.
     const saved = sessionStorage.getItem(storageKey);
     if (!saved) return;
     try {
       const parsed = JSON.parse(saved);
       const result = professionalDraftSchema.safeParse(parsed);
       if (!result.success) {
+        // SECURITY_PERSISTENCE_ALLOWLIST: Clears invalid non-sensitive professional onboarding draft state.
         sessionStorage.removeItem(storageKey);
         analytics.trackDraftRestoreFailed();
         return;
@@ -265,6 +267,7 @@ const ProfessionalForm: React.FC<Props> = ({
         idDocuments: [],
       });
     } catch {
+      // SECURITY_PERSISTENCE_ALLOWLIST: Clears malformed non-sensitive professional onboarding draft state.
       sessionStorage.removeItem(storageKey);
       analytics.trackDraftRestoreFailed();
     }
@@ -299,12 +302,14 @@ const ProfessionalForm: React.FC<Props> = ({
         stores: formData.stores,
         properties: formData.properties,
       };
+      // SECURITY_PERSISTENCE_ALLOWLIST: Persists non-sensitive professional onboarding draft state.
       sessionStorage.setItem(storageKey, JSON.stringify(dataToSave));
     }
   }, [formData, storageKey]);
 
   // Clear sessionStorage on successful submission
   const clearSavedData = useCallback(() => {
+    // SECURITY_PERSISTENCE_ALLOWLIST: Removes non-sensitive professional onboarding draft state.
     sessionStorage.removeItem(storageKey);
   }, [storageKey]);
 

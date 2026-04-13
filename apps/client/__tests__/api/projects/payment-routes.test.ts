@@ -1,28 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { UserRole } from "@build/db";
+import type { AuthContext } from "@/app/lib/api/api-middleware";
 import { POST as approveMilestone } from "@/app/api/projects/[id]/milestones/[milestoneId]/approve/route";
 import { POST as fundEscrow } from "@/app/api/projects/[id]/escrow/[escrowId]/fund/route";
 import { POST as releaseEscrow } from "@/app/api/projects/[id]/escrow/[escrowId]/release/route";
 import { projectsService } from "@/app/lib/domains/projects/service";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 
+const mockAuthContext: AuthContext = {
+  clerkId: "clerk-1",
+  dbUserId: "user-1",
+  userRole: UserRole.PROFESSIONAL,
+};
+
 vi.mock("@/app/lib/api/api-middleware", () => ({
-  withAuth: (handler: (...args: unknown[]) => Promise<Response>) => {
+  withAuth: (
+    handler: (
+      req: NextRequest,
+      context: AuthContext,
+      params?: Record<string, string>,
+    ) => Promise<Response>,
+  ) => {
     return async (req: NextRequest) =>
-      handler(
-        req,
-        {
-          clerkId: "clerk-1",
-          dbUserId: "user-1",
-          userEmail: "test@example.com",
-          userRole: "professional",
-        },
-        {
-          id: "2cbabfaf-a869-4f4d-abf0-dcd3e9c8c153",
-          milestoneId: "cdf84f91-f94b-4698-a02d-77b2640508ef",
-          escrowId: "f0df99e2-67f0-436e-8868-7332751720fe",
-        },
-      );
+      handler(req, mockAuthContext, {
+        id: "2cbabfaf-a869-4f4d-abf0-dcd3e9c8c153",
+        milestoneId: "cdf84f91-f94b-4698-a02d-77b2640508ef",
+        escrowId: "f0df99e2-67f0-436e-8868-7332751720fe",
+      });
   },
 }));
 
@@ -45,6 +50,11 @@ vi.mock("@/app/lib/api/resilient-api", () => ({
 vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
   getRateLimitIdentifier: vi.fn().mockReturnValue("ip-test"),
+  getActorRateLimitIdentifier: vi
+    .fn()
+    .mockImplementation(
+      (userId: string, namespace: string) => `${namespace}:${userId}`,
+    ),
   RateLimits: {
     WRITE: { limit: 10, window: 60_000 },
   },

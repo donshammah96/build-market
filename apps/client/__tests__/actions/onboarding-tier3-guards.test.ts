@@ -233,4 +233,40 @@ describe("onboarding Tier-3 guards", () => {
     expect(mocks.idempotencyFail).toHaveBeenCalledWith("idem-key");
     expect(mocks.idempotencyComplete).not.toHaveBeenCalled();
   });
+
+  it("returns success when onboarding completion persistence fails after finalization", async () => {
+    mocks.completeOnboarding.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        userId: "db_user_123",
+        role: "CLIENT",
+        isProfileComplete: true,
+      },
+    });
+    mocks.idempotencyComplete.mockRejectedValueOnce(
+      new Error("idempotency persistence failed"),
+    );
+
+    const result = await submitOnboarding({
+      role: "client",
+      county: "NAIROBI",
+      city: "Nairobi",
+      type: "HOMEOWNER",
+      projectType: "new_construction",
+      projectLocation: "Nairobi",
+      estimatedBudget: "1000000-5000000",
+      description: "Building a new home",
+    } as never);
+
+    expect(result).toEqual({
+      success: true,
+      data: {
+        userId: "db_user_123",
+        role: "CLIENT",
+        isProfileComplete: true,
+      },
+    });
+    expect(mocks.finalizeClerkOnboardingTransition).toHaveBeenCalled();
+    expect(mocks.idempotencyFail).not.toHaveBeenCalled();
+  });
 });

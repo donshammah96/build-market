@@ -35,10 +35,14 @@
     "pnpm": true,
     "Push-Location": true,
     "Pop-Location": true,
-    "/^Copy-Item -Path \\.\\/.*-Destination \\.\\//":{
-      "approve": true, "matchCommandLine": true
+    "/^Copy-Item -Path \\.\\/.*-Destination \\.\\//": {
+      "approve": true,
+      "matchCommandLine": true
     },
-    "/^Set-Content -Path \\.\\//": { "approve": true, "matchCommandLine": true },
+    "/^Set-Content -Path \\.\\//": {
+      "approve": true,
+      "matchCommandLine": true
+    },
     "pnpm test:projects-api:json": true,
     "pnpm test:projects-api": true,
     "pnpm test:portfolio-api": true,
@@ -65,6 +69,30 @@
     },
     ".\\scripts\\invoke-clean.ps1": true,
     "/^cmd /d /s /c \"set REDIS_FAMILY=4 && pnpm run redis:healthcheck\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cmd /c \"pnpm -C apps/client exec vitest run __tests__/api/properties/property-id\\.route\\.test\\.ts __tests__/api/stores/store-id\\.route\\.test\\.ts __tests__/api/messaging/route-auth-mapping\\.test\\.ts --maxWorkers=1 --coverage --coverage\\.reporter=json-summary --coverage\\.reportsDirectory=tmp/coverage-trio7 --coverage\\.thresholds\\.statements=0 --coverage\\.thresholds\\.branches=0 --coverage\\.thresholds\\.functions=0 --coverage\\.thresholds\\.lines=0\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cmd /c \"pnpm -C apps/client exec vitest run __tests__/api/professional-portal/documents\\.route\\.test\\.ts __tests__/api/professional-portal/certificates\\.route\\.test\\.ts __tests__/api/professional-portal/licenses\\.route\\.test\\.ts --maxWorkers=1\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cmd /c \"pnpm -C apps/client exec vitest run __tests__/api/properties/property-id\\.route\\.test\\.ts __tests__/api/stores/store-id\\.route\\.test\\.ts __tests__/api/messaging/route-auth-mapping\\.test\\.ts --maxWorkers=1\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cmd /c \"pnpm -C apps/client exec vitest run __tests__/api/properties/property-id\\.route\\.test\\.ts __tests__/api/stores/store-id\\.route\\.test\\.ts __tests__/api/messaging/route-auth-mapping\\.test\\.ts --maxWorkers=1\"; Write-Output \"EXIT:\\$LASTEXITCODE\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^pnpm -C apps/client exec tsc --noEmit --pretty false; Set-Content -Path \"apps/client/tmp/tsc-exit\\.txt\" -Value \\$LASTEXITCODE$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cmd /c \"pnpm -C apps/client exec tsc --noEmit --pretty false\"$/": {
       "approve": true,
       "matchCommandLine": true
     }

@@ -1,4 +1,8 @@
 import { z } from "zod";
+
+// ADR-006 classification: Class B - finance DTO contracts include payout, transaction, and payment method fields.
+// Reviewed: 2026-04-09 by @copilot
+
 import type { AppRole } from "@/app/lib/security/roles";
 import type { DomainError, Result } from "@/app/lib/errors/result";
 import type {
@@ -52,9 +56,9 @@ export type FinanceTransactionListItem = {
   netAmount: number;
   currency: string;
   referenceCode: string | null;
-  date: Date;
-  completedAt: Date | null;
-  createdAt: Date;
+  date: string;
+  completedAt: string | null;
+  createdAt: string;
   project: {
     id: string;
     title: string;
@@ -66,7 +70,7 @@ export type FinanceTransactionDetail = FinanceTransactionListItem & {
   subscriptionId: string | null;
   failedReason: string | null;
   providerMetadata: Prisma.JsonValue;
-  updatedAt: Date;
+  updatedAt: string;
 };
 
 /**

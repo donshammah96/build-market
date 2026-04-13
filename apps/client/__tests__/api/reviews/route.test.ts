@@ -138,15 +138,17 @@ describe("reviews route", () => {
     mockReviewsService.getReviews.mockResolvedValue({
       ok: false,
       error: "forbidden",
-      message: "Forbidden",
+      message: "internal policy detail",
       status: 403,
     });
 
     const response = await getReviewsRoute(
       new NextRequest("http://localhost:3500/api/reviews"),
     );
+    const body = await response.json();
 
     expect(response.status).toBe(403);
+    expect(body.error).toBe("Forbidden");
   });
 
   it("maps resilient executor failure to 500", async () => {

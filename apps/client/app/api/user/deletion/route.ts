@@ -28,6 +28,9 @@
  * GET /api/user/deletion - Check deletion status
  */
 
+// ADR-006 classification: Class A/B - deletion workflows process identity and account-lifecycle sensitive fields.
+// Reviewed: 2026-04-09 by @copilot
+
 import { NextRequest } from "next/server";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { HttpStatus } from "@/app/lib/api/api-response";
@@ -40,6 +43,7 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   RateLimits,
+  getActorRateLimitIdentifier,
   getRateLimitIdentifier,
   checkRateLimit,
 } from "@/app/lib/api/rate-limit";
@@ -92,16 +96,19 @@ export const POST = withAuth(
     const correlationId = initializeCorrelationId(req);
 
     try {
-      const identifier = getRateLimitIdentifier(req);
+      const rateLimitKey = getActorRateLimitIdentifier(
+        dbUserId,
+        "user-deletion",
+      );
       const { success } = await checkRateLimit(
-        identifier,
+        rateLimitKey,
         RateLimits.WRITE.limit,
         RateLimits.WRITE.window,
       );
 
       if (!success) {
         logger.warn("Rate limit exceeded for deletion request", {
-          identifier,
+          rateLimitKey,
           correlationId,
           operationName: "request-account-deletion",
         });
@@ -361,55 +368,89 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
  *
  * Rate Limited: 5 requests per hour (prevent abuse)
  */
-export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
+export const PATCH = withAuth(
+  async (req: NextRequest, { dbUserId }) => {
+    const correlationId = initializeCorrelationId(req);
 
-  try {
-    const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window,
-    );
+    try {
+      const rateLimitKey = getActorRateLimitIdentifier(
+        dbUserId,
+        "user-deletion-cancel",
+      );
+      const { success } = await checkRateLimit(
+        rateLimitKey,
+        RateLimits.WRITE.limit,
+        RateLimits.WRITE.window,
+      );
 
-    if (!success) {
-      logger.warn("Rate limit exceeded for deletion cancellation", {
-        identifier,
+      if (!success) {
+        logger.warn("Rate limit exceeded for deletion cancellation", {
+          rateLimitKey,
+          correlationId,
+          operationName: "cancel-account-deletion",
+        });
+        return apiError(
+          "Rate limit exceeded. Please try again later.",
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+
+      logger.info("Processing deletion cancellation request", {
         correlationId,
         operationName: "cancel-account-deletion",
       });
-      return apiError(
-        "Rate limit exceeded. Please try again later.",
-        HttpStatus.TOO_MANY_REQUESTS,
+
+      const { ipAddress, userAgent } = getRequestMetadata(req);
+
+      const result = await executor.execute(
+        async () =>
+          userProfileComplianceService.cancelDeletion({
+            actor: { userId: dbUserId, correlationId },
+            ipAddress,
+            userAgent,
+          }),
+        {
+          timeout: TimeoutConfig.NORMAL,
+          retry: { maxAttempts: 2 },
+          circuitBreaker: true,
+          operationName: "cancel-account-deletion",
+        },
       );
-    }
 
-    logger.info("Processing deletion cancellation request", {
-      correlationId,
-      operationName: "cancel-account-deletion",
-    });
+      if (!result.success || !result.data) {
+        logger.error(
+          "Failed to cancel deletion",
+          result.error || new Error("Unknown error"),
+          {
+            correlationId,
+            operationName: "cancel-account-deletion",
+            outcome: "failed",
+          },
+        );
+        return apiError(
+          "Failed to cancel deletion",
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
 
-    const { ipAddress, userAgent } = getRequestMetadata(req);
+      if (!result.data.ok) {
+        return apiError(
+          result.data.message || "Failed to cancel deletion",
+          result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
 
-    const result = await executor.execute(
-      async () =>
-        userProfileComplianceService.cancelDeletion({
-          actor: { userId: dbUserId, correlationId },
-          ipAddress,
-          userAgent,
-        }),
-      {
-        timeout: TimeoutConfig.NORMAL,
-        retry: { maxAttempts: 2 },
-        circuitBreaker: true,
+      logger.info("Deletion cancelled successfully", {
+        correlationId,
         operationName: "cancel-account-deletion",
-      },
-    );
+        outcome: "succeeded",
+      });
 
-    if (!result.success || !result.data) {
+      return apiSuccess(result.data.data, HttpStatus.OK);
+    } catch (error) {
       logger.error(
-        "Failed to cancel deletion",
-        result.error || new Error("Unknown error"),
+        "Deletion cancellation error",
+        error instanceof Error ? error : new Error(String(error)),
         {
           correlationId,
           operationName: "cancel-account-deletion",
@@ -417,38 +458,14 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
         },
       );
       return apiError(
-        "Failed to cancel deletion",
+        "Failed to cancel deletion. Please try again.",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-
-    if (!result.data.ok) {
-      return apiError(
-        result.data.message || "Failed to cancel deletion",
-        result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-
-    logger.info("Deletion cancelled successfully", {
-      correlationId,
-      operationName: "cancel-account-deletion",
-      outcome: "succeeded",
-    });
-
-    return apiSuccess(result.data.data, HttpStatus.OK);
-  } catch (error) {
-    logger.error(
-      "Deletion cancellation error",
-      error instanceof Error ? error : new Error(String(error)),
-      {
-        correlationId,
-        operationName: "cancel-account-deletion",
-        outcome: "failed",
-      },
-    );
-    return apiError(
-      "Failed to cancel deletion. Please try again.",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
-  }
-});
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+  },
+);

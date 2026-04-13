@@ -9,6 +9,12 @@ export const HIGH_VALUE_SERVER_ACTION_GUARD_RULES = [
         requiredRecentAuthSnippets: [
             "maxAgeSeconds: WITHDRAWAL_RECENT_AUTH_MAX_AGE_SECONDS",
         ],
+        requiredNumericConstants: [
+            {
+                symbol: "WITHDRAWAL_RECENT_AUTH_MAX_AGE_SECONDS",
+                expectedValue: 180,
+            },
+        ],
         requiredRateLimitSnippets: ["high-value-withdrawal:"],
     },
     {
@@ -18,6 +24,12 @@ export const HIGH_VALUE_SERVER_ACTION_GUARD_RULES = [
         requiredRecentAuthSnippets: [
             "maxAgeSeconds: ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
         ],
+        requiredNumericConstants: [
+            {
+                symbol: "ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+                expectedValue: 300,
+            },
+        ],
         requiredRateLimitSnippets: ["high-value-onboarding-transition:submit:"],
     },
     {
@@ -26,6 +38,12 @@ export const HIGH_VALUE_SERVER_ACTION_GUARD_RULES = [
         requiredOptions: ["recentAuth", "rateLimit"],
         requiredRecentAuthSnippets: [
             "maxAgeSeconds: ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+        ],
+        requiredNumericConstants: [
+            {
+                symbol: "ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+                expectedValue: 300,
+            },
         ],
         requiredRateLimitSnippets: [
             "high-value-onboarding-transition:skip-client:",
@@ -37,6 +55,12 @@ export const HIGH_VALUE_SERVER_ACTION_GUARD_RULES = [
         requiredOptions: ["recentAuth", "rateLimit"],
         requiredRecentAuthSnippets: [
             "maxAgeSeconds: ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+        ],
+        requiredNumericConstants: [
+            {
+                symbol: "ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+                expectedValue: 300,
+            },
         ],
         requiredRateLimitSnippets: [
             "high-value-onboarding-transition:skip-professional:",

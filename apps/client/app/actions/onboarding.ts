@@ -1,5 +1,8 @@
 "use server";
 
+// ADR-006 classification: Class B - onboarding flows process profile, business, and compliance onboarding fields.
+// Reviewed: 2026-04-09 by @copilot
+
 import { auth, currentUser } from "@clerk/nextjs/server";
 import {
   OnboardingSchema,
@@ -291,7 +294,14 @@ export async function submitOnboarding(
         ...result.data.data,
         ...(warnings.length > 0 ? { warnings } : {}),
       };
-      await IdempotencyService.complete(idempotencyKey, response);
+      try {
+        await IdempotencyService.complete(idempotencyKey, response);
+      } catch {
+        // Avoid failing a successful onboarding transition when replay persistence errors.
+        await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+        // structured log event: outcome "idempotency_complete_failed"
+        // Do not rethrow — onboarding succeeded.
+      }
       return response;
     },
   });

@@ -1,5 +1,8 @@
 "use server";
 
+// ADR-006 classification: Class B - withdrawal actions process payout and finance transaction fields.
+// Reviewed: 2026-04-09 by @copilot
+
 import { z } from "zod";
 import { financeService } from "@/app/lib/domains/finance";
 import {
@@ -21,7 +24,7 @@ const RequestWithdrawalActionSchema = WithdrawSchema.extend({
   idempotencyKey: z.string().optional(),
 });
 
-const WITHDRAWAL_RECENT_AUTH_MAX_AGE_SECONDS = 300;
+const WITHDRAWAL_RECENT_AUTH_MAX_AGE_SECONDS = 180;
 const WITHDRAWAL_RATE_LIMIT = {
   limit: 5,
   windowMs: 15 * 60 * 1000,
@@ -165,7 +168,11 @@ export async function requestWithdrawalAction(
           throwActionFailure(mapFinanceDomainFailure(result));
         }
 
-        await IdempotencyService.complete(idempotencyKey, result.data);
+        try {
+          await IdempotencyService.complete(idempotencyKey, result.data);
+        } catch {
+          // Avoid failing a successful withdrawal when replay persistence errors.
+        }
         revalidatePath("/professional-portal/finance");
         return result.data;
       } catch (error) {

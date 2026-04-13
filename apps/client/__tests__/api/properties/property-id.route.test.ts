@@ -80,6 +80,15 @@ vi.mock("@/app/lib/api/request-utils", () => ({
     ipAddress: "127.0.0.1",
     userAgent: "test-agent",
   }),
+  extractExpectedVersionFromIfMatch: vi.fn((req: NextRequest) => {
+    const ifMatch = req.headers.get("If-Match");
+    if (!ifMatch) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(ifMatch.replace(/"/g, ""), 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  }),
 }));
 
 vi.mock("@clerk/nextjs/server", () => ({
@@ -380,13 +389,31 @@ describe("PATCH /api/properties/[id]", () => {
       "http://localhost:3500/api/properties/prop_1",
       {
         method: "PATCH",
-        body: JSON.stringify({ title: "No version" }),
+        body: JSON.stringify({ title: "No header", version: 2 }),
         headers: { "Content-Type": "application/json" },
       },
     );
     const response = await PATCH_ID(request, {}, { id: "prop_1" });
 
     expect(response.status).toBe(428);
+    expect(svcId.updatePropertyWithRetry).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when If-Match header is invalid", async () => {
+    const request = new NextRequest(
+      "http://localhost:3500/api/properties/prop_1",
+      {
+        method: "PATCH",
+        body: JSON.stringify({ title: "Bad header", version: 2 }),
+        headers: {
+          "Content-Type": "application/json",
+          "If-Match": '"abc"',
+        },
+      },
+    );
+    const response = await PATCH_ID(request, {}, { id: "prop_1" });
+
+    expect(response.status).toBe(400);
     expect(svcId.updatePropertyWithRetry).not.toHaveBeenCalled();
   });
 
@@ -497,6 +524,20 @@ describe("DELETE /api/properties/[id]", () => {
     const response = await DELETE_ID(request, {}, { id: "prop_1" });
 
     expect(response.status).toBe(428);
+    expect(svcId.deleteProperty).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when If-Match header is invalid", async () => {
+    const request = new NextRequest(
+      "http://localhost:3500/api/properties/prop_1",
+      {
+        method: "DELETE",
+        headers: { "If-Match": '"abc"' },
+      },
+    );
+    const response = await DELETE_ID(request, {}, { id: "prop_1" });
+
+    expect(response.status).toBe(400);
     expect(svcId.deleteProperty).not.toHaveBeenCalled();
   });
 });

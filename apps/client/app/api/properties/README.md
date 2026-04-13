@@ -25,7 +25,6 @@ and response mapping). Business rules and DTO shaping live in
 | `DELETE` | `/api/properties/[id]/attachments/[attachmentId]` | Owner         | Delete attachment                                 |
 | `GET`    | `/api/properties/[id]/documents`                  | Owner         | List property documents                           |
 | `POST`   | `/api/properties/[id]/documents`                  | Owner         | Create document                                   |
-| `DELETE` | `/api/properties/[id]/documents?documentId=...`   | Owner         | Deprecated compatibility shim for item delete     |
 | `PATCH`  | `/api/properties/[id]/documents/[documentId]`     | Owner         | Update/replace a document                         |
 | `DELETE` | `/api/properties/[id]/documents/[documentId]`     | Owner         | Delete a document                                 |
 
@@ -42,7 +41,7 @@ Duplicate requests return the cached response (HTTP 200) or `409` if the origina
 
 ### Optimistic Locking
 
-`PATCH` and `DELETE` use `If-Match` as the canonical optimistic-lock input:
+`PATCH` and `DELETE` require `If-Match` as the optimistic-lock input:
 
 ```http
 PATCH /api/properties/abc123
@@ -51,8 +50,6 @@ Content-Type: application/json
 
 { "title": "Updated Title" }
 ```
-
-For backward compatibility, a body-level `version` field is still accepted as a temporary shim.
 
 On conflict (version mismatch), the API returns `409 Conflict` with the current version in both
 `X-Property-Version` and `ETag`.
@@ -81,8 +78,6 @@ Request bodies are validated with Zod schemas from
 
 Collection routes are intentionally collection-only (`GET`/`POST`) while item-level
 mutations use resource-scoped routes (`[attachmentId]`, `[documentId]`).
-The one temporary exception is `DELETE /documents?documentId=...`, which now delegates to
-the item-route semantics and is explicitly deprecated.
 
 ### Observability
 

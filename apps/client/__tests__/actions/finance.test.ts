@@ -118,15 +118,15 @@ describe("finance actions", () => {
       netAmount: 5000,
       currency: "KES",
       referenceCode: null,
-      date: new Date("2026-01-01T00:00:00.000Z"),
+      date: "2026-01-01T00:00:00.000Z",
       completedAt: null,
-      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      createdAt: "2026-01-01T00:00:00.000Z",
       project: null,
       leadId: null,
       subscriptionId: null,
       failedReason: null,
       providerMetadata: null,
-      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: "2026-01-01T00:00:00.000Z",
       ...overrides,
     };
   }
@@ -190,7 +190,7 @@ describe("finance actions", () => {
         status: 401,
         details: expect.objectContaining({
           reason: "stale_claim",
-          maxAgeSeconds: 300,
+          maxAgeSeconds: 180,
         }),
       },
     });
@@ -288,6 +288,35 @@ describe("finance actions", () => {
       success: true,
       data: createdWithdrawal,
     });
+  });
+
+  it("returns success when idempotency completion persistence fails after a successful withdrawal", async () => {
+    const createdWithdrawal = buildWithdrawalDetail({
+      id: "withdrawal_2",
+    });
+
+    vi.mocked(financeService.createWithdrawal).mockResolvedValue({
+      ok: true,
+      data: createdWithdrawal,
+    });
+    vi.mocked(IdempotencyService.complete).mockRejectedValueOnce(
+      new Error("idempotency persistence failed"),
+    );
+
+    const result = await requestWithdrawalAction({
+      amount: 7500,
+      method: "MPESA",
+      description: "Daily payout",
+    });
+
+    expect(result).toEqual({
+      success: true,
+      data: createdWithdrawal,
+    });
+    expect(revalidatePathMock).toHaveBeenCalledWith(
+      "/professional-portal/finance",
+    );
+    expect(IdempotencyService.fail).not.toHaveBeenCalled();
   });
 
   it("fails the idempotency record and returns a safe structured domain failure", async () => {

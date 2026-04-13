@@ -12,7 +12,10 @@ import {
   getRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
-import { getRequestMetadata } from "@/app/lib/api/request-utils";
+import {
+  getRequestMetadata,
+  extractExpectedVersionFromIfMatch,
+} from "@/app/lib/api/request-utils";
 import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import {
@@ -24,7 +27,6 @@ import {
   conflictResponse,
   domainErrorCodeToStatus,
   domainResultToErrorResponse,
-  extractExpectedVersion,
   isOptimisticRetryEnabled,
   logPropertiesRouteOutcome,
   now,
@@ -239,12 +241,32 @@ export const PATCH = withAuth(
       return sizeError;
     }
 
-    let body: unknown;
-    try {
-      body = await req.json();
-    } catch {
+    const ifMatch = req.headers.get("If-Match");
+    if (!ifMatch) {
       const response = apiError(
-        "Invalid JSON body",
+        'Missing If-Match header. Include the property version as: If-Match: "N"',
+        HttpStatus.PRECONDITION_REQUIRED,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.PRECONDITION_REQUIRED,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    const expectedVersion = extractExpectedVersionFromIfMatch(req);
+    if (expectedVersion === null) {
+      const response = apiError(
+        "Invalid If-Match header value",
         HttpStatus.BAD_REQUEST,
         undefined,
         correlationId,
@@ -263,11 +285,13 @@ export const PATCH = withAuth(
       return response;
     }
 
-    const expectedVersion = extractExpectedVersion(req, body);
-    if (expectedVersion === null) {
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
       const response = apiError(
-        "Missing or invalid version for optimistic locking. Provide 'If-Match' header or legacy body 'version'.",
-        HttpStatus.PRECONDITION_REQUIRED,
+        "Invalid JSON body",
+        HttpStatus.BAD_REQUEST,
         undefined,
         correlationId,
       );
@@ -275,10 +299,10 @@ export const PATCH = withAuth(
         correlationId,
         operationName,
         actorRole,
-        outcome: "domain_error",
-        httpStatus: HttpStatus.PRECONDITION_REQUIRED,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
         durationMs: now() - startedAt,
-        domainError: "conflict",
+        domainError: "invalid_input",
         resourceType: "property",
         resourceId: propertyId,
       });
@@ -510,17 +534,10 @@ export const DELETE = withAuth(
       return response;
     }
 
-    let body: unknown = null;
-    try {
-      body = await req.json().catch(() => null);
-    } catch {
-      body = null;
-    }
-
-    const expectedVersion = extractExpectedVersion(req, body);
-    if (expectedVersion === null) {
+    const ifMatch = req.headers.get("If-Match");
+    if (!ifMatch) {
       const response = apiError(
-        "Missing or invalid version for optimistic locking. Provide 'If-Match' header or legacy body 'version'.",
+        'Missing If-Match header. Include the property version as: If-Match: "N"',
         HttpStatus.PRECONDITION_REQUIRED,
         undefined,
         correlationId,
@@ -529,10 +546,32 @@ export const DELETE = withAuth(
         correlationId,
         operationName,
         actorRole,
-        outcome: "domain_error",
+        outcome: "validation_error",
         httpStatus: HttpStatus.PRECONDITION_REQUIRED,
         durationMs: now() - startedAt,
-        domainError: "conflict",
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    const expectedVersion = extractExpectedVersionFromIfMatch(req);
+    if (expectedVersion === null) {
+      const response = apiError(
+        "Invalid If-Match header value",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
         resourceType: "property",
         resourceId: propertyId,
       });

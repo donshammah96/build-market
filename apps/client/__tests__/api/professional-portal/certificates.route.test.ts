@@ -1,12 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { GET as listCertificatesRoute } from "@/app/api/professional-portal/certificates/route";
+import { UserRole } from "@build/db";
+import type { AuthContext } from "@/app/lib/api/api-middleware";
+import {
+  GET as listCertificatesRoute,
+  POST as createCertificateRoute,
+} from "@/app/api/professional-portal/certificates/route";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import {
   GET as getCertificateRoute,
   PATCH as updateCertificateRoute,
   DELETE as deleteCertificateRoute,
 } from "@/app/api/professional-portal/certificates/[id]/route";
+import { getActorRateLimitIdentifier } from "@/app/lib/api/rate-limit";
 
 const validCertId = "550e8400-e29b-41d4-a716-446655440001";
 
@@ -16,6 +22,12 @@ const mockLogger = vi.hoisted(() => ({
   error: vi.fn(),
   debug: vi.fn(),
 }));
+
+const mockAuthContext: AuthContext = {
+  clerkId: "clerk_123",
+  dbUserId: "db_user_123",
+  userRole: UserRole.PROFESSIONAL,
+};
 
 const mockCertificatesService = vi.hoisted(() => ({
   getCertificates: vi.fn(),
@@ -30,21 +42,12 @@ vi.mock("@/app/lib/api/api-middleware", () => ({
     (
       handler: (
         req: NextRequest,
-        context: unknown,
+        context: AuthContext,
         params?: { id: string },
       ) => Promise<unknown>,
     ) =>
     async (req: NextRequest, params?: { id: string }) =>
-      handler(
-        req,
-        {
-          clerkId: "clerk_123",
-          dbUserId: "db_user_123",
-          userEmail: "pro@example.com",
-          userRole: "PROFESSIONAL",
-        },
-        params ?? { id: validCertId },
-      ),
+      handler(req, mockAuthContext, params ?? { id: validCertId }),
 }));
 
 vi.mock("@/app/lib/api/api-guards", async () => {
@@ -67,6 +70,11 @@ vi.mock("@/app/lib/services/idempotency.service", () => ({
 vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
   getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
+  getActorRateLimitIdentifier: vi
+    .fn()
+    .mockImplementation(
+      (userId: string, namespace: string) => `${namespace}:${userId}`,
+    ),
   RateLimits: {
     READ: { limit: 100, window: 60000 },
     WRITE: { limit: 10, window: 60000 },
@@ -145,8 +153,16 @@ describe("professional certificates routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockCertificatesService.getCertificates).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "PROFESSIONAL" },
+      {
+        clerkId: "clerk_123",
+        userId: "db_user_123",
+        role: "PROFESSIONAL",
+      },
       {},
+    );
+    expect(vi.mocked(getActorRateLimitIdentifier)).toHaveBeenCalledWith(
+      "db_user_123",
+      "prof-certificates-read",
     );
   });
 
@@ -154,7 +170,7 @@ describe("professional certificates routes", () => {
     mockCertificatesService.getCertificates.mockResolvedValue({
       ok: false,
       error: "forbidden",
-      message: "Forbidden",
+      message: "sensitive detail",
       status: 403,
     });
 
@@ -163,8 +179,66 @@ describe("professional certificates routes", () => {
         "http://localhost:3500/api/professional-portal/certificates",
       ),
     );
+    const body = await response.json();
 
     expect(response.status).toBe(403);
+    expect(body.error).toBe("Forbidden");
+  });
+
+  it("generates certificate POST idempotency key from summary projection", async () => {
+    mockCertificatesService.createCertificate.mockResolvedValue({
+      ok: true,
+      data: {
+        id: validCertId,
+        category: "EDUCATION_CERT",
+        title: "Degree",
+        status: "PENDING",
+        createdAt: "2026-03-10T12:00:00.000Z",
+        updatedAt: "2026-03-10T12:00:00.000Z",
+        asset: {
+          id: "a1",
+          cdnUrl: "/url",
+          originalName: "degree.pdf",
+          mimeType: "application/pdf",
+          size: 2048,
+        },
+      },
+    });
+
+    const response = await createCertificateRoute(
+      new NextRequest(
+        "http://localhost:3500/api/professional-portal/certificates",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            title: "Degree",
+            category: "EDUCATION_CERT",
+            assetId: validCertId,
+            issuer: "University",
+            issueDate: "2026-03-10T12:00:00.000Z",
+          }),
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    expect(response.status).toBe(201);
+    expect(IdempotencyService.generateKey).toHaveBeenCalledWith(
+      "db_user_123",
+      "POST",
+      {
+        domain: "certificate",
+        assetId: validCertId,
+        titleLength: "Degree".length,
+        issuerLength: "University".length,
+        hasIssueDate: true,
+        hasExpiryDate: false,
+      },
+    );
+    expect(vi.mocked(getActorRateLimitIdentifier)).toHaveBeenCalledWith(
+      "db_user_123",
+      "prof-certificates-write",
+    );
   });
 
   it("emits required observability keys for certificates list success", async () => {
@@ -242,8 +316,16 @@ describe("professional certificates routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockCertificatesService.getCertificateById).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "PROFESSIONAL" },
+      {
+        clerkId: "clerk_123",
+        userId: "db_user_123",
+        role: "PROFESSIONAL",
+      },
       validCertId,
+    );
+    expect(vi.mocked(getActorRateLimitIdentifier)).toHaveBeenCalledWith(
+      "db_user_123",
+      "prof-certificates-read",
     );
   });
 
@@ -261,6 +343,10 @@ describe("professional certificates routes", () => {
     );
 
     expect(response.status).toBe(404);
+    expect(vi.mocked(getActorRateLimitIdentifier)).toHaveBeenCalledWith(
+      "db_user_123",
+      "prof-certificates-read",
+    );
   });
 
   it("maps update not_found to 404", async () => {
@@ -282,6 +368,40 @@ describe("professional certificates routes", () => {
     );
 
     expect(response.status).toBe(404);
+    expect(vi.mocked(getActorRateLimitIdentifier)).toHaveBeenCalledWith(
+      "db_user_123",
+      "prof-certificates-write",
+    );
+  });
+
+  it("returns update success when idempotency completion fails", async () => {
+    mockCertificatesService.updateCertificate.mockResolvedValue({
+      ok: true,
+      data: {
+        id: validCertId,
+        category: "EDUCATION_CERT",
+        title: "Degree",
+        status: "PENDING",
+      },
+    });
+    vi.mocked(IdempotencyService.complete).mockRejectedValueOnce(
+      new Error("serialize failure"),
+    );
+
+    const response = await updateCertificateRoute(
+      new NextRequest(
+        `http://localhost:3500/api/professional-portal/certificates/${validCertId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ title: "Updated" }),
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+      { id: validCertId },
+    );
+
+    expect(response.status).toBe(200);
+    expect(IdempotencyService.fail).toHaveBeenCalledWith("idem-key");
   });
 
   it("deletes a certificate and returns success", async () => {
@@ -303,8 +423,16 @@ describe("professional certificates routes", () => {
 
     expect(response.status).toBe(200);
     expect(mockCertificatesService.deleteCertificate).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "PROFESSIONAL" },
+      {
+        clerkId: "clerk_123",
+        userId: "db_user_123",
+        role: "PROFESSIONAL",
+      },
       validCertId,
+    );
+    expect(vi.mocked(getActorRateLimitIdentifier)).toHaveBeenCalledWith(
+      "db_user_123",
+      "prof-certificates-write",
     );
   });
 });

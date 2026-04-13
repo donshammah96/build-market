@@ -76,6 +76,7 @@ export const CookieConsentContext = createContext<CookieConsentState | null>(
 function readStoredConsent(): StoredConsent | null {
   if (typeof window === "undefined") return null;
   try {
+    // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive cookie-consent preferences.
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredConsent;
@@ -94,6 +95,7 @@ function writeStoredConsent(consent: CookieConsent): void {
     necessary: true, // enforce
     timestamp: new Date().toISOString(),
   };
+  // SECURITY_PERSISTENCE_ALLOWLIST: Persists non-sensitive cookie-consent preferences.
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
 }
 

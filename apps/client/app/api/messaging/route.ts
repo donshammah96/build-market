@@ -11,7 +11,7 @@ export async function GET() {
     const serviceResult = await messagingService.healthStatus();
     if (!serviceResult.ok) {
       return apiError(
-        serviceResult.message || "Messaging service is unavailable",
+        "Messaging service is unavailable",
         serviceResult.status || HttpStatus.SERVICE_UNAVAILABLE,
       );
     }

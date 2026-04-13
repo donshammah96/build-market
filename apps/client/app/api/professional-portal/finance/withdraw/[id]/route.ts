@@ -11,6 +11,7 @@ import {
   checkRateLimit,
   RateLimits,
   getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
 } from "@/app/lib/api/rate-limit";
 import { isValidId } from "@/app/lib/api/api-guards";
 import {
@@ -93,9 +94,12 @@ export const DELETE = withAuth<{ id: string }>(
       return apiError("Invalid withdrawal ID format", HttpStatus.BAD_REQUEST);
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "finance-withdrawal-cancel",
+    );
     const rateLimitResult = await checkRateLimit(
-      `finance-withdrawal-cancel:${identifier}`,
+      rateLimitKey,
       RateLimits.WRITE.limit,
       RateLimits.WRITE.window,
     );
@@ -159,5 +163,10 @@ export const DELETE = withAuth<{ id: string }>(
       },
       HttpStatus.OK,
     );
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 180,
+    },
   },
 );

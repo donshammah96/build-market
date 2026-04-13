@@ -8,7 +8,7 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { checkBodySize } from "@/app/lib/api/api-guards";
@@ -77,9 +77,12 @@ export const POST = withAuth(
       );
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "finance-withdraw",
+    );
     const rateLimitResult = await checkRateLimit(
-      `finance-withdraw:${identifier}`,
+      rateLimitKey,
       RateLimits.WRITE.limit,
       RateLimits.WRITE.window,
     );
@@ -158,7 +161,7 @@ export const POST = withAuth(
   },
   {
     recentAuth: {
-      maxAgeSeconds: 300,
+      maxAgeSeconds: 180,
     },
   },
 );

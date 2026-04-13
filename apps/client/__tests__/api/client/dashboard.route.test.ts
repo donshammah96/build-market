@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
+import { UserRole } from "@build/db";
+import type { AuthContext } from "@/app/lib/api/api-middleware";
 import { GET as getDashboardRoute } from "@/app/api/client/dashboard/route";
 
 const mockLogger = vi.hoisted(() => ({
@@ -13,16 +15,17 @@ const mockClientDashboardService = vi.hoisted(() => ({
   getDashboardData: vi.fn(),
 }));
 
+const mockAuthContext: AuthContext = {
+  clerkId: "clerk_123",
+  dbUserId: "db_user_123",
+  userRole: UserRole.PROFESSIONAL,
+};
+
 vi.mock("@/app/lib/api/api-middleware", () => ({
   withAuth:
-    (
-      handler: (
-        req: NextRequest,
-        context: { dbUserId: string },
-      ) => Promise<unknown>,
-    ) =>
+    (handler: (req: NextRequest, context: AuthContext) => Promise<unknown>) =>
     async (req: NextRequest) =>
-      handler(req, { dbUserId: "db_user_123" }),
+      handler(req, mockAuthContext),
 }));
 
 vi.mock("@/app/lib/api/rate-limit", () => ({
@@ -115,15 +118,17 @@ describe("client dashboard route", () => {
     mockClientDashboardService.getDashboardData.mockResolvedValue({
       ok: false,
       error: "forbidden",
-      message: "Forbidden",
+      message: "internal policy detail",
       status: 403,
     });
 
     const response = await getDashboardRoute(
       new NextRequest("http://localhost:3500/api/client/dashboard"),
     );
+    const body = await response.json();
 
     expect(response.status).toBe(403);
+    expect(body.error).toBe("Forbidden");
   });
 
   it("maps resilient executor failure to 500", async () => {

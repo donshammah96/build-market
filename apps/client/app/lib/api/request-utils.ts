@@ -91,14 +91,24 @@ export const TimeoutConfig = {
 export type TimeoutConfigType =
   (typeof TimeoutConfig)[keyof typeof TimeoutConfig];
 
+export function extractExpectedVersionFromIfMatch(
+  req: NextRequest,
+): number | null {
+  const ifMatch = req.headers.get("If-Match");
+  if (!ifMatch) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(ifMatch.replace(/"/g, ""), 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
 export function extractExpectedVersion(
   req: NextRequest,
   body: unknown,
 ): number | null {
-  const ifMatch = req.headers.get("If-Match");
-  if (ifMatch) {
-    const v = parseInt(ifMatch.replace(/"/g, ""), 10);
-    return Number.isNaN(v) ? null : v;
+  if (req.headers.get("If-Match")) {
+    return extractExpectedVersionFromIfMatch(req);
   }
   if (
     body &&

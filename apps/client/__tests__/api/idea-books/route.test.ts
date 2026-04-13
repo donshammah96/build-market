@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
+import { UserRole } from "@build/db";
+import type { AuthContext } from "@/app/lib/api/api-middleware";
 import { GET, POST } from "@/app/api/idea-books/route";
 
 const serviceMocks = vi.hoisted(() => ({
@@ -14,6 +16,12 @@ const idempotencyMocks = vi.hoisted(() => ({
   fail: vi.fn().mockResolvedValue(undefined),
 }));
 
+const mockAuthContext: AuthContext = {
+  clerkId: "clerk_123",
+  dbUserId: "db_user_123",
+  userRole: UserRole.CLIENT,
+};
+
 vi.mock("@/app/lib/domains/idea-books", () => ({
   ideaBooksService: serviceMocks,
 }));
@@ -23,21 +31,12 @@ vi.mock("@/app/lib/api/api-middleware", () => ({
     (
       handler: (
         req: NextRequest,
-        context: unknown,
+        context: AuthContext,
         params?: unknown,
       ) => Promise<unknown>,
     ) =>
     async (req: NextRequest, params?: unknown) =>
-      handler(
-        req,
-        {
-          clerkId: "clerk_123",
-          dbUserId: "db_user_123",
-          userEmail: "test@example.com",
-          userRole: "client",
-        },
-        params,
-      ),
+      handler(req, mockAuthContext, params),
 }));
 
 vi.mock("@/app/lib/api/api-response", () => ({
@@ -142,7 +141,7 @@ describe("idea-books collection route adapters", () => {
 
     expect(response.status).toBe(200);
     expect(serviceMocks.list).toHaveBeenCalledWith(
-      { userId: "db_user_123", role: "client" },
+      { userId: "db_user_123", role: UserRole.CLIENT },
       expect.objectContaining({ page: 1, limit: 20 }),
     );
     expect(body.success).toBe(true);
