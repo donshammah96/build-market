@@ -1,24 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockEnv } = vi.hoisted(() => ({
-  mockEnv: {
-    features: {
-      genericProjectsApi: false,
-      genericProjectsApiMutations: false,
-    },
-  },
-}));
-
-vi.mock("@/app/lib/infrastructure/env", () => ({
-  env: mockEnv,
-}));
-
-describe("projects client facade rollout gate", () => {
+describe("projects client facade generic API", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
-    mockEnv.features.genericProjectsApi = false;
-    mockEnv.features.genericProjectsApiMutations = false;
   });
 
   afterEach(() => {
@@ -26,33 +11,18 @@ describe("projects client facade rollout gate", () => {
     vi.resetModules();
   });
 
-  it("blocks generic reads through the public facade when the rollout gate is disabled", async () => {
-    mockEnv.features.genericProjectsApi = false;
-    mockEnv.features.genericProjectsApiMutations = false;
-
-    const fetchMock = vi.spyOn(globalThis, "fetch");
-    const { projectsClient } = await import("@/lib/projects-client");
-
-    const result = await projectsClient.getProjects({ page: 1 });
-
-    expect(result).toEqual({
-      success: false,
-      error:
-        "Generic projects API is disabled. Use professional portal projects APIs or enable NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API.",
-    });
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("keeps generic reads enabled but blocks generic mutations during read-only rollout", async () => {
-    mockEnv.features.genericProjectsApi = true;
-    mockEnv.features.genericProjectsApiMutations = false;
-
+  it("routes generic reads through the public projects facade", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
           data: {
-            items: [],
-            pagination: { page: 1, limit: 10, total: 0, totalPages: 0 },
+            items: [
+              {
+                id: "11111111-1111-4111-8111-111111111111",
+                title: "Facade read",
+              },
+            ],
+            pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
           },
         }),
         {
@@ -63,36 +33,54 @@ describe("projects client facade rollout gate", () => {
     );
 
     const { projectsClient } = await import("@/lib/projects-client");
+    const result = await projectsClient.getProjects({ page: 1 });
 
-    const readResult = await projectsClient.getProjects({ page: 1 });
-    const mutationResult = await projectsClient.createProject({
-      title: "Read-only rollout",
-      clientId: "11111111-1111-4111-8111-111111111111",
-      type: "RESIDENTIAL",
-      contractType: "FULL_CONTRACT",
-      status: "PLANNING",
-    });
-
-    expect(readResult.success).toBe(true);
-    expect(mutationResult).toEqual({
-      success: false,
-      error:
-        "Generic projects mutations are disabled. Keep read-only rollout enabled or set NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API_MUTATIONS=true to enable writes.",
-    });
+    expect(result.success).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/projects?");
   });
 
-  it("allows generic mutations through the public facade when both rollout gates are enabled", async () => {
-    mockEnv.features.genericProjectsApi = true;
-    mockEnv.features.genericProjectsApiMutations = true;
-
+  it("routes generic mutations through the public projects facade", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
           data: {
             item: {
               id: "11111111-1111-4111-8111-111111111111",
-              title: "Enabled mutation",
+              title: "Facade mutation",
+            },
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    const { projectsClient } = await import("@/lib/projects-client");
+    const result = await projectsClient.createProject({
+      title: "Facade mutation",
+      clientId: "11111111-1111-4111-8111-111111111111",
+      type: "RESIDENTIAL",
+      contractType: "FULL_CONTRACT",
+      status: "PLANNING",
+    });
+
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(request?.method).toBe("POST");
+  });
+
+  it("preserves idempotency key and payload on mutation requests", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            item: {
+              id: "11111111-1111-4111-8111-111111111111",
+              title: "Idempotency facade mutation",
             },
           },
         }),
@@ -106,14 +94,20 @@ describe("projects client facade rollout gate", () => {
     const { projectsClient } = await import("@/lib/projects-client");
 
     const result = await projectsClient.createProject({
-      title: "Enabled mutation",
+      title: "Idempotency facade mutation",
       clientId: "11111111-1111-4111-8111-111111111111",
       type: "RESIDENTIAL",
       contractType: "FULL_CONTRACT",
       status: "PLANNING",
+      idempotencyKey: "idem-facade-1",
     });
 
     expect(result.success).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const headers = request?.headers as Record<string, string> | undefined;
+    expect(headers?.["Idempotency-Key"]).toBe("idem-facade-1");
+    const body = JSON.parse(String(request?.body));
+    expect(body).toMatchObject({ title: "Idempotency facade mutation" });
   });
 });

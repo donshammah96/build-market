@@ -13,7 +13,6 @@ import type { ApiResponse } from "@build/types";
 import { PROJECTS_CLIENT_CONFIG } from "@/lib/config/project.config";
 import { isValidId } from "@/lib/utils/validators";
 import { API_ROUTES } from "@/lib/links";
-import { env } from "@/app/lib/infrastructure/env";
 import { z } from "zod";
 import {
   ProjectQuerySchema,
@@ -35,26 +34,6 @@ import {
 export * from "@/app/lib/domains/projects/client";
 
 const { BULKHEAD_CONCURRENCY } = PROJECTS_CLIENT_CONFIG;
-
-const isGenericProjectsReadEnabled = env.features.genericProjectsApi;
-const isGenericProjectsMutationEnabled =
-  isGenericProjectsReadEnabled && env.features.genericProjectsApiMutations;
-
-function genericReadApiDisabled<T>(): ApiResponse<T> {
-  return {
-    success: false,
-    error:
-      "Generic projects API is disabled. Use professional portal projects APIs or enable NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API.",
-  };
-}
-
-function genericMutationApiDisabled<T>(): ApiResponse<T> {
-  return {
-    success: false,
-    error:
-      "Generic projects mutations are disabled. Keep read-only rollout enabled or set NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API_MUTATIONS=true to enable writes.",
-  };
-}
 
 // ─── Response Schemas (Project Vertical Slice) ───────────────────────────────
 
@@ -218,10 +197,6 @@ class ProjectsClient {
   async getProjects(
     filters?: Partial<ProjectQueryInput>,
   ): Promise<ApiResponse<ProjectListPayload>> {
-    if (!isGenericProjectsReadEnabled) {
-      return genericReadApiDisabled();
-    }
-
     return this.bulkhead.run(() => {
       const searchParams = new URLSearchParams();
       if (filters) {
@@ -240,10 +215,6 @@ class ProjectsClient {
   async getProject(
     projectId: string,
   ): Promise<ApiResponse<ProjectDetailPayload>> {
-    if (!isGenericProjectsReadEnabled) {
-      return genericReadApiDisabled();
-    }
-
     if (!isValidId(projectId))
       return { success: false, error: "Invalid project ID" };
     return this.bulkhead.run(() =>
@@ -258,10 +229,6 @@ class ProjectsClient {
   async createProject(
     data: CreateProfessionalProjectClientInput,
   ): Promise<ApiResponse<ProjectDetailPayload>> {
-    if (!isGenericProjectsMutationEnabled) {
-      return genericMutationApiDisabled();
-    }
-
     return this.bulkhead.run(() =>
       apiFetch<ProjectDetailPayload>(
         "/api/projects",
@@ -280,10 +247,6 @@ class ProjectsClient {
   async updateProject(
     input: UpdateProjectClientInput,
   ): Promise<ApiResponse<ProjectDetailPayload>> {
-    if (!isGenericProjectsMutationEnabled) {
-      return genericMutationApiDisabled();
-    }
-
     if (!isValidId(input.projectId))
       return { success: false, error: "Invalid project ID" };
     return this.bulkhead.run(() =>
@@ -304,10 +267,6 @@ class ProjectsClient {
   async deleteProject(
     input: DeleteProjectClientInput,
   ): Promise<ApiResponse<GenericMutationPayload>> {
-    if (!isGenericProjectsMutationEnabled) {
-      return genericMutationApiDisabled();
-    }
-
     if (!isValidId(input.projectId))
       return { success: false, error: "Invalid project ID" };
     return this.bulkhead.run(() =>
@@ -328,10 +287,6 @@ class ProjectsClient {
   async getMilestones(
     projectId: string,
   ): Promise<ApiResponse<MilestoneListPayload>> {
-    if (!isGenericProjectsReadEnabled) {
-      return genericReadApiDisabled();
-    }
-
     if (!isValidId(projectId))
       return { success: false, error: "Invalid project ID" };
     return this.bulkhead.run(() =>
@@ -346,10 +301,6 @@ class ProjectsClient {
   async createMilestone(
     input: CreateMilestoneClientInput,
   ): Promise<ApiResponse<MilestoneMutationPayload>> {
-    if (!isGenericProjectsMutationEnabled) {
-      return genericMutationApiDisabled();
-    }
-
     if (!isValidId(input.projectId))
       return { success: false, error: "Invalid project ID" };
     return this.bulkhead.run(() =>
@@ -370,10 +321,6 @@ class ProjectsClient {
   async updateMilestone(
     input: UpdateMilestoneClientInput,
   ): Promise<ApiResponse<MilestoneMutationPayload>> {
-    if (!isGenericProjectsMutationEnabled) {
-      return genericMutationApiDisabled();
-    }
-
     if (!isValidId(input.projectId) || !isValidId(input.milestoneId)) {
       return { success: false, error: "Invalid IDs" };
     }
@@ -395,10 +342,6 @@ class ProjectsClient {
   async deleteMilestone(
     input: DeleteMilestoneClientInput,
   ): Promise<ApiResponse<GenericMutationPayload>> {
-    if (!isGenericProjectsMutationEnabled) {
-      return genericMutationApiDisabled();
-    }
-
     if (!isValidId(input.projectId) || !isValidId(input.milestoneId)) {
       return { success: false, error: "Invalid IDs" };
     }

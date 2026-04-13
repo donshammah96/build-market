@@ -28,6 +28,90 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+### [CHECKPOINT] Non-Autopsy 6 - Generic Projects Rollout Flag Retirement + Client Surface GA Cutover - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Completed the next rollout/contract-signoff tranche by retiring generic-projects rollout flags from runtime clients and env templates, then validating always-on generic read/write behavior for the canonical `/api/projects/**` surface.
+- Actual files changed: `apps/client/app/lib/domains/projects/client/index.ts`; `apps/client/lib/projects-client.ts`; `apps/client/app/lib/infrastructure/env.ts`; `apps/client/__tests__/lib/projects-client-gate.test.ts`; `apps/client/__tests__/lib/projects-client-facade-gate.test.ts`; `apps/client/__tests__/lib/projects-client-split.test.ts`; `apps/client/.env.example`; `apps/client/.env.test`; `apps/client/.env.development`; `apps/client/.env.local.example`; `apps/client/docs/PROJECTS-GENERIC-API-ROLLOUT.md`; `apps/client/app/lib/API_ARCHITECTURE.md`; `apps/client/docs/ENV-FILES-AUDIT.md`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/lib/projects-client-gate.test.ts --maxWorkers=1` (pass, 1 file and 3 tests); `./scripts/invoke-clean.ps1 -WorkingDirectory . -CommandLine "pnpm -C apps/client exec vitest run __tests__/lib/projects-client-facade-gate.test.ts --maxWorkers=1"` (pass, 1 file and 3 tests); `./scripts/invoke-clean.ps1 -WorkingDirectory . -CommandLine "pnpm -C apps/client exec vitest run __tests__/lib/projects-client-split.test.ts __tests__/lib/projects-client-contracts.test.ts --maxWorkers=1"` (pass, 2 files and 5 tests); task `test-projects-api` (pass, 4 files and 19 tests); task `verify-projects-envelope-single-worker` (pass, 4 files and 25 tests); diagnostics scan on touched files reported no errors.
+- Guardrail outcomes delivered:
+  1. Generic projects reads and mutations now use one always-on runtime path across both domain and facade clients.
+  2. Deprecated `NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API*` runtime dependencies were removed from env boundary typing and env templates.
+  3. Projects client regression suites now validate post-cutover request-shaping behavior (including idempotency key propagation) instead of rollout gate toggles.
+- Deferred items: production/staging mutation-path monitoring evidence remains pending as the final Phase 2 rollout signoff item.
+
+### [CHECKPOINT] Non-Autopsy 5 - Idea Books AuthContext Fixture Cleanup + Projects Rollout Contract-Signoff Tranche 1 - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Completed cleanup of idea-books API adapter auth fixtures to canonical `AuthContext`, then completed the next rollout/contract-signoff tranche by validating `/api/projects/**` envelope signoff coverage.
+- Actual files changed: `apps/client/__tests__/api/idea-books.route.test.ts`; `apps/client/__tests__/api/idea-books/route.test.ts`; `apps/client/__tests__/api/idea-books/book-id.route.test.ts`; `apps/client/__tests__/api/idea-books/attachments.route.test.ts`; `apps/client/__tests__/api/idea-books/attachment-id.route.test.ts`; `apps/client/__tests__/api/projects/payment-routes.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/idea-books.route.test.ts __tests__/api/idea-books __tests__/policy/idea-books __tests__/lib/idea-books-client-contracts.test.ts --maxWorkers=1` (pass, 7 files and 24 tests); task `verify-projects-envelope-single-worker` (pass, 4 files and 25 tests); task `test-projects-api` (pass, 4 files and 19 tests after route-mock parity fix); task `build-client-tsc-noemit-checkpoint` (pass, no TypeScript diagnostics).
+- Guardrail outcomes delivered:
+  1. Idea-books API test fixtures now use production-faithful `AuthContext` shape only.
+  2. Projects payment-route test mocks now include actor-scoped limiter helper parity (`getActorRateLimitIdentifier`) required by escrow fund/release adapters.
+  3. Phase 2 rollout acceptance criterion for `/api/projects/**` route-envelope confirmation now has fresh passing signoff evidence.
+- Deferred items: rollout monitoring and final generic-projects flag removal remain pending for subsequent tranches.
+
+### [CHECKPOINT] Non-Autopsy 4 - Idea Books Deep Follow-Through (Browser Contracts + Collaborator/Privacy Policy Tests) - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Completed the next non-autopsy queue item by normalizing idea-books browser contracts against domain DTOs and adding collaborator/privacy policy follow-through tests.
+- Actual files changed: `apps/client/lib/idea-books-client.ts`; `apps/client/hooks/useIdeaBooks.ts`; `apps/client/__tests__/lib/idea-books-client-contracts.test.ts`; `apps/client/__tests__/policy/idea-books/access.policy.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/lib/idea-books-client-contracts.test.ts __tests__/policy/idea-books/access.policy.test.ts __tests__/lib/domains/idea-books.service.test.ts __tests__/api/idea-books/route.test.ts __tests__/api/idea-books/book-id.route.test.ts __tests__/api/idea-books/attachments.route.test.ts __tests__/api/idea-books/attachment-id.route.test.ts --maxWorkers=1` (pass, 7 files and 25 tests); task `build-client-tsc-noemit-checkpoint` (pass, no TypeScript diagnostics).
+- Guardrail outcomes delivered:
+  1. Idea-books client contracts now reuse domain-owned DTO shapes with explicit Date-to-string serialization at the browser boundary.
+  2. Idea-books browser facade now has focused client-contract regression coverage for list/create/attachment endpoint semantics.
+  3. Idea-books policy coverage now enforces collaborator/private access boundaries and owner-only mutation/delete constraints.
+- Deferred items: remaining non-autopsy migration queue items continue in subsequent tranches.
+
+### [CHECKPOINT] Non-Autopsy 3 - Documents/Licenses/Certificates/Reviews/Search/Client Dashboard Test Follow-Through - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Completed the next non-autopsy queue item by delivering adapter-test follow-through for Documents, Licenses, Certificates, Reviews, Search, and Client Dashboard, including missing Search route coverage and safe-message contract tightening.
+- Actual files changed: `apps/client/app/api/search/professionals/route.ts`; `apps/client/app/api/reviews/route.ts`; `apps/client/app/api/client/dashboard/route.ts`; `apps/client/__tests__/api/search/professionals.route.test.ts`; `apps/client/__tests__/api/reviews/route.test.ts`; `apps/client/__tests__/api/client/dashboard.route.test.ts`; `apps/client/__tests__/api/professional-portal/documents.route.test.ts`; `apps/client/__tests__/api/professional-portal/licenses.route.test.ts`; `apps/client/__tests__/api/professional-portal/certificates.route.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/search/professionals.route.test.ts __tests__/api/reviews/route.test.ts __tests__/api/client/dashboard.route.test.ts __tests__/api/professional-portal/documents.route.test.ts __tests__/api/professional-portal/licenses.route.test.ts __tests__/api/professional-portal/certificates.route.test.ts --maxWorkers=1` (pass, 6 files and 41 tests); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all categories `0`); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass).
+- Guardrail outcomes delivered:
+  1. Search, reviews, and client-dashboard adapters no longer pass domain message strings into `apiError(...)` for forbidden mappings.
+  2. Search professionals route now has focused API coverage across validation, throttling, success mapping, and resilient failure behavior.
+  3. Documents/licenses/certificates/client-dashboard route tests now use canonical `AuthContext` mock shape (`clerkId`, `dbUserId`, `userRole`) with no extra fixture fields.
+- Deferred items: remaining non-autopsy migration queue items continue in subsequent tranches.
+
+### [CHECKPOINT] Non-Autopsy 2 - Properties Document Collection DELETE Shim Retirement - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Completed the next non-autopsy backlog item by retiring the deprecated collection-level property document delete shim and enforcing canonical item-route deletion.
+- Actual files changed: `apps/client/app/api/properties/[id]/documents/route.ts`; `apps/client/__tests__/api/properties/property-documents.route.test.ts`; `apps/client/app/api/properties/README.md`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/properties/property-documents.route.test.ts --maxWorkers=1` (pass, 1 file and 11 tests); diagnostics scan on touched files reports no errors.
+- Guardrail outcomes delivered:
+  1. Properties document collection route surface is now strict (`GET` and `POST` only), removing the query-parameter delete compatibility shim.
+  2. Properties adapter regression coverage now enforces canonical item-resource delete behavior and validates complete actor propagation in delete calls.
+  3. Properties API docs now remove deprecated shim references and keep route-contract guidance aligned to item-resource mutations.
+- Deferred items: remaining non-autopsy migration queue items continue in subsequent tranches.
+
+### [CHECKPOINT] Non-Autopsy 1 - Properties If-Match Contract Hardening - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed the next non-autopsy backlog item by enforcing strict header-based optimistic locking for property item updates and aligning browser facade mutation contracts.
+- Actual files changed: `apps/client/app/api/properties/[id]/route.ts`; `apps/client/lib/properties-client.ts`; `apps/client/__tests__/api/properties/property-id.route.test.ts`; `apps/client/__tests__/lib/properties-client-contracts.test.ts`; `apps/client/app/api/properties/README.md`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/properties/property-id.route.test.ts __tests__/lib/properties-client-contracts.test.ts --maxWorkers=1` (pass, 2 files and 20 tests); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all reported categories `0`); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `TSC_EXIT:0`).
+- Guardrail outcomes delivered:
+  1. Property PATCH now returns `428` when `If-Match` is missing and `400` when `If-Match` is invalid, removing legacy body-version fallback behavior.
+  2. Browser-side property update and delete clients now send canonical `If-Match` headers (`"N"`) and no longer include legacy body `version` fallback payloads.
+  3. Route and browser-contract tests now enforce header-only optimistic-lock semantics to prevent fallback regressions.
+- Deferred items: remaining non-autopsy migration queue items continue in subsequent tranches.
+
+### [CHECKPOINT] Minor Fix 4 - High-Risk Guard Numeric Constant Enforcement - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed the next minor autopsy item by adding explicit numeric constant checks for high-risk server-action guard values, preventing constant-name-only drift blind spots.
+- Actual files changed: `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/scripts/high-risk-registry.mjs`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/__tests__/actions/tier3-high-value-guard-policy.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client run build:high-risk-registry` (pass); `pnpm -C apps/client exec vitest run __tests__/actions/tier3-high-value-guard-policy.test.ts --maxWorkers=1` (pass, 1 file and 9 tests); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all reported categories `0` including `highValueServerActionGuards`); `pnpm run client:tsc-noemit` (pass).
+- Guardrail outcomes delivered:
+  1. Registry policy now includes canonical numeric expectations for high-value guard constants.
+  2. Drift checks now fail when required guard constants are missing or hold non-canonical numeric values.
+  3. Tier-3 policy regression tests now explicitly cover mismatched guard constant value detection.
+- Deferred items: remaining autopsy backlog proceeds outside this minor-fix tranche.
+
 ### [CHECKPOINT] Minor Fix 3 - Empty-Auth GET Rationale Marker Enforcement - Completed
 
 - Date: 2026-04-11

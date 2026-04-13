@@ -336,15 +336,14 @@ Primary tiers:
 
 Do not create route-local ad hoc rate buckets when an existing family is sufficient. If a vertical needs a new bucket, add it centrally.
 
-## Rollout-Gated Surfaces
+## Generic Projects Surface
 
-The generic projects API remains rollout-gated.
+The generic projects API is now always enabled after rollout completion.
 
 Current rule:
 
-- enforce `NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API` and mutation gating in both the canonical projects client and the public `lib/projects-client.ts` facade
-
-This is important because public facades can otherwise bypass the intended release gate.
+- keep canonical behavior aligned between the domain client (`app/lib/domains/projects/client`) and the public facade (`lib/projects-client.ts`)
+- enforce stability through contract and API suites rather than env-based rollout toggles
 
 ## What Good Looks Like
 

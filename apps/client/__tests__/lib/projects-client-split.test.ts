@@ -1,21 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const originalReadFlag = process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API;
-const originalMutationFlag =
-  process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API_MUTATIONS;
-
 describe("projects client context split", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
-    process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API = "true";
-    process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API_MUTATIONS = "true";
   });
 
   afterEach(() => {
-    process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API = originalReadFlag;
-    process.env.NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API_MUTATIONS =
-      originalMutationFlag;
     vi.restoreAllMocks();
     vi.resetModules();
   });

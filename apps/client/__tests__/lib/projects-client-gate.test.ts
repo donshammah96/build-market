@@ -1,24 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockEnv } = vi.hoisted(() => ({
-  mockEnv: {
-    features: {
-      genericProjectsApi: false,
-      genericProjectsApiMutations: false,
-    },
-  },
-}));
-
-vi.mock("@/app/lib/infrastructure/env", () => ({
-  env: mockEnv,
-}));
-
-describe("projects client gate rollout", () => {
+describe("projects domain client generic API", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
-    mockEnv.features.genericProjectsApi = false;
-    mockEnv.features.genericProjectsApiMutations = false;
   });
 
   afterEach(() => {
@@ -26,28 +11,18 @@ describe("projects client gate rollout", () => {
     vi.resetModules();
   });
 
-  it("blocks generic reads when generic API gate is disabled", async () => {
-    mockEnv.features.genericProjectsApi = false;
-    mockEnv.features.genericProjectsApiMutations = false;
-
-    const { projectsClient } =
-      await import("@/app/lib/domains/projects/client/index");
-
-    await expect(projectsClient.getProjects()).rejects.toThrow(
-      "Generic projects API is disabled",
-    );
-  });
-
-  it("allows generic reads but blocks generic mutations in controlled rollout mode", async () => {
-    mockEnv.features.genericProjectsApi = true;
-    mockEnv.features.genericProjectsApiMutations = false;
-
+  it("routes generic reads through /api/projects", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
           data: {
-            items: [],
-            pagination: { page: 1, limit: 10, total: 0, totalPages: 0 },
+            items: [
+              {
+                id: "11111111-1111-4111-8111-111111111111",
+                title: "Always-on read",
+              },
+            ],
+            pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
           },
         }),
         {
@@ -60,32 +35,21 @@ describe("projects client gate rollout", () => {
     const { projectsClient } =
       await import("@/app/lib/domains/projects/client/index");
 
-    const readResult = await projectsClient.getProjects({ page: 1 });
-    expect(readResult.success).toBe(true);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const result = await projectsClient.getProjects({ page: 1 });
 
-    await expect(
-      projectsClient.createProject({
-        title: "Controlled rollout",
-        clientId: "11111111-1111-4111-8111-111111111111",
-        type: "RESIDENTIAL",
-        contractType: "FULL_CONTRACT",
-        status: "PLANNING",
-      }),
-    ).rejects.toThrow("Generic projects mutations are disabled");
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/projects?");
   });
 
-  it("allows generic mutations when mutation gate is enabled", async () => {
-    mockEnv.features.genericProjectsApi = true;
-    mockEnv.features.genericProjectsApiMutations = true;
-
+  it("keeps generic mutation methods available after cutover", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
           data: {
             item: {
               id: "11111111-1111-4111-8111-111111111111",
-              title: "Enabled mutation",
+              title: "Always-on mutation",
             },
           },
         }),
@@ -99,15 +63,54 @@ describe("projects client gate rollout", () => {
     const { projectsClient } =
       await import("@/app/lib/domains/projects/client/index");
 
-    const createResult = await projectsClient.createProject({
-      title: "Enabled mutation",
+    const result = await projectsClient.createProject({
+      title: "Always-on mutation",
       clientId: "11111111-1111-4111-8111-111111111111",
       type: "RESIDENTIAL",
       contractType: "FULL_CONTRACT",
       status: "PLANNING",
     });
 
-    expect(createResult.success).toBe(true);
+    expect(result.success).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(request?.method).toBe("POST");
+  });
+
+  it("preserves idempotency header shaping for mutations", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            item: {
+              id: "11111111-1111-4111-8111-111111111111",
+              title: "Idempotent mutation",
+            },
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    const { projectsClient } =
+      await import("@/app/lib/domains/projects/client/index");
+
+    const result = await projectsClient.createProject({
+      title: "Idempotent mutation",
+      clientId: "11111111-1111-4111-8111-111111111111",
+      type: "RESIDENTIAL",
+      contractType: "FULL_CONTRACT",
+      status: "PLANNING",
+      idempotencyKey: "idem-domain-1",
+    });
+
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const headers = request?.headers as Record<string, string> | undefined;
+    expect(headers?.["Idempotency-Key"]).toBe("idem-domain-1");
   });
 });

@@ -35,6 +35,8 @@ type AppUserRole =
   | "SUPPORT"
   | "pending_professional";
 
+type RateLimitBackendMode = "auto" | "memory" | "redis";
+
 // ============================================
 // Environment Variable Definitions
 // ============================================
@@ -135,6 +137,7 @@ const envGroups: EnvGroup[] = [
       { name: "REDIS_TLS", required: false, default: "false" },
       { name: "REDIS_FAMILY", required: false, default: "4" },
       { name: "REDIS_ENABLED", required: false, default: "true" },
+      { name: "RATE_LIMIT_BACKEND", required: false, default: "auto" },
     ],
   },
   {
@@ -361,6 +364,13 @@ export function validateEnv(
     }
   }
 
+  const validatesRedisGroup = groupsToValidate.some(
+    (group) => group.name === "redis",
+  );
+  if (validatesRedisGroup) {
+    validateRedisRateLimitReadiness(result);
+  }
+
   // Log results
   if (result.errors.length > 0) {
     console.error("\n❌ Environment validation errors:");
@@ -385,6 +395,11 @@ function getStringEnv(name: string, fallback = ""): string {
   return process.env[name] || fallback;
 }
 
+function getOptionalStringEnv(name: string): string | undefined {
+  const value = getStringEnv(name);
+  return value.length > 0 ? value : undefined;
+}
+
 function getBooleanEnv(name: string, fallback = false): boolean {
   const value = process.env[name];
   return value === undefined ? fallback : value === "true";
@@ -398,6 +413,64 @@ function getNumberEnv(name: string, fallback: number): number {
 
   const parsed = Number.parseInt(value, 10);
   return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+function getRateLimitBackendEnv(
+  name: string,
+  fallback: RateLimitBackendMode,
+): RateLimitBackendMode {
+  const value = getStringEnv(name, fallback).toLowerCase();
+  if (value === "auto" || value === "memory" || value === "redis") {
+    return value;
+  }
+
+  return fallback;
+}
+
+function isRedisRateLimitBackendRequired(
+  nodeEnv: string,
+  backend: RateLimitBackendMode,
+): boolean {
+  if (backend === "redis") {
+    return true;
+  }
+
+  return backend === "auto" && nodeEnv === "production";
+}
+
+function validateRedisRateLimitReadiness(result: ValidationResult): void {
+  const nodeEnv = getStringEnv("NODE_ENV", "development");
+  const rateLimitBackend = getRateLimitBackendEnv("RATE_LIMIT_BACKEND", "auto");
+
+  if (!isRedisRateLimitBackendRequired(nodeEnv, rateLimitBackend)) {
+    return;
+  }
+
+  const redisEnabled = getBooleanEnv("REDIS_ENABLED", true);
+  if (!redisEnabled) {
+    result.valid = false;
+    result.errors.push(
+      `[redis] RATE_LIMIT_BACKEND=${rateLimitBackend} requires REDIS_ENABLED=true when NODE_ENV=${nodeEnv}`,
+    );
+  }
+
+  const redisHost = getStringEnv("REDIS_HOST").trim();
+  const redisPortRaw = getStringEnv("REDIS_PORT").trim();
+  if (!redisHost || !redisPortRaw) {
+    result.valid = false;
+    result.errors.push(
+      "[redis] Redis rate-limit backend requires explicit REDIS_HOST and REDIS_PORT values.",
+    );
+    return;
+  }
+
+  const redisPort = Number.parseInt(redisPortRaw, 10);
+  if (!Number.isFinite(redisPort) || redisPort <= 0) {
+    result.valid = false;
+    result.errors.push(
+      `[redis] Invalid REDIS_PORT value: ${redisPortRaw}. Must be a positive integer.`,
+    );
+  }
 }
 
 function parseOriginList(raw?: string): string[] {
@@ -513,11 +586,12 @@ function buildEnvConfig() {
     // Redis
     redis: {
       enabled: getBooleanEnv("REDIS_ENABLED", true),
+      rateLimitBackend: getRateLimitBackendEnv("RATE_LIMIT_BACKEND", "auto"),
       host: getStringEnv("REDIS_HOST", "localhost"),
       port: getNumberEnv("REDIS_PORT", 6379),
-      password: process.env.REDIS_PASSWORD || undefined,
+      password: getOptionalStringEnv("REDIS_PASSWORD"),
       db: getNumberEnv("REDIS_DB", 0),
-      url: process.env.REDIS_URL,
+      url: getOptionalStringEnv("REDIS_URL"),
       upstashRestUrl: getStringEnv("UPSTASH_REDIS_REST_URL"),
       upstashRestToken: getStringEnv("UPSTASH_REDIS_REST_TOKEN"),
       tls: getBooleanEnv("REDIS_TLS"),
@@ -565,12 +639,6 @@ function buildEnvConfig() {
       gdpr: getBooleanEnv("ENABLE_GDPR_FEATURES"),
       encryption: getBooleanEnv("ENABLE_ENCRYPTION"),
       auditLogging: getBooleanEnv("ENABLE_AUDIT_LOGGING"),
-      genericProjectsApi: getBooleanEnv(
-        "NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API",
-      ),
-      genericProjectsApiMutations: getBooleanEnv(
-        "NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API_MUTATIONS",
-      ),
     },
 
     analytics: {
@@ -677,7 +745,17 @@ export const envConfig = buildEnvConfig();
 // ============================================
 
 if (typeof window === "undefined" && process.env.NODE_ENV !== "test") {
-  validateEnv(["clerk", "database", "urls", "encryption"]);
+  const startupGroups = ["clerk", "database", "urls", "encryption"];
+  if (
+    isRedisRateLimitBackendRequired(
+      getStringEnv("NODE_ENV", "development"),
+      getRateLimitBackendEnv("RATE_LIMIT_BACKEND", "auto"),
+    )
+  ) {
+    startupGroups.push("redis");
+  }
+
+  validateEnv(startupGroups);
 }
 
 export default envConfig;
