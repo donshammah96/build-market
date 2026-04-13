@@ -4,6 +4,20 @@ Last updated: 2026-04-13
 
 ## Snapshot
 
+### [CHECKPOINT] Non-Autopsy 8 - Phase 2 Criterion 2 Operational Handoff Checklist (Commit-Visible) - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Added a commit-visible Criterion 2 handoff checklist so staging/production mutation telemetry evidence can be captured in a consistent, auditable format for final rollout signoff.
+- Actual files changed: `apps/client/docs/PROGRESS-SUMMARY.md`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results: `pnpm -C apps/client run report:projects-mutation-health -- --help` passed (usage output rendered); `node apps/client/scripts/summarize-project-mutation-health.mjs --input apps/client/tmp/coverage-trio/coverage-summary.json --json` passed (safe zero-signal JSON summary).
+- Operational handoff checklist:
+  1. Capture NDJSON exports for staging canary day 1-2 and production broad-rollout day 1-2 windows.
+  2. Run `pnpm -C apps/client run report:projects-mutation-health -- --input <export.ndjson> --json` per window.
+  3. Record write-path rates for 5xx errors, idempotency `409` conflicts, and optimistic-lock (`428` plus version/conflict `409`) signals.
+  4. When threshold mode is used, record the exact tuple for `--max-write-error-rate`, `--max-idempotency-conflict-rate`, and `--max-optimistic-conflict-rate` with each output.
+- Decision: Final closeout checkpoint for Phase 2 Criterion 2 is deferred until the project is production-ready and both staging and production NDJSON exports are available.
+- Deferred items: Execute the final closeout checkpoint only when production-readiness is declared and evidence windows can be captured from real staging and production traffic.
+
 ### [CHECKPOINT] Non-Autopsy 7 - Projects Mutation Monitoring Evidence Tooling (Criterion 2 Enablement) - Completed
 
 - Date: 2026-04-13

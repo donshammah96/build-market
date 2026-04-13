@@ -28,6 +28,19 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+### [CHECKPOINT] Non-Autopsy 8 - Phase 2 Criterion 2 Operational Handoff Checklist (Commit-Visible) - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Added a commit-visible Criterion 2 evidence-capture checklist so the final staging/production monitoring signoff can be executed and audited without depending on ignored doc surfaces.
+- Actual files changed: `apps/client/docs/PROGRESS-SUMMARY.md`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results: `pnpm -C apps/client run report:projects-mutation-health -- --help` (pass, usage output); `node apps/client/scripts/summarize-project-mutation-health.mjs --input apps/client/tmp/coverage-trio/coverage-summary.json --json` (pass, safe zero-signal JSON output).
+- Guardrail outcomes delivered:
+  1. Captured a single operational checklist for required canary and broad-rollout evidence windows.
+  2. Locked command shape and required signal set (write 5xx, idempotency `409`, optimistic-lock `428`/version-conflict `409`) in tracked docs.
+  3. Preserved explicit deferred-state semantics: Criterion 2 remains open until real staging/production exports are ingested and archived.
+- Decision: Final closeout checkpoint for Phase 2 Criterion 2 is deferred until the project is production-ready and real staging/production NDJSON exports are available.
+- Deferred items: run final closeout only after production-readiness declaration and evidence capture from staging plus production windows.
+
 ### [CHECKPOINT] Non-Autopsy 7 - Projects Mutation Monitoring Evidence Tooling (Criterion 2 Enablement) - Completed
 
 - Date: 2026-04-13
