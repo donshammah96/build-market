@@ -1,4 +1,174 @@
-# Progress Summary
+# apps/client Migration and Remediation Progress Summary
+
+> **For agents:** Read this file immediately after loading Section 14 of
+> `API-TO-FRONTEND-ARCHITECTURE.md`. The structured sections below give you
+> current state. The `## Snapshot` section below those gives you recent
+> operational context. Do not start work without reading both.
+>
+> **Format note:** The structured sections (Active Phase, Slice Status
+> Registry, Open Defects, Verification Commands) were added 2026-04-11 and
+> supersede the stale tables in the generated Section 14.3 insert. All
+> pre-existing content below the `---` divider is unchanged.
+
+## Tracked Governance Mirror (Section 14)
+
+This file is the commit-visible mirror for Section 14 governance. In this
+repository, use this tracked document as the canonical execution surface for
+registry state, open defects, and remediation sequencing.
+
+Mirror map:
+
+- Active execution phase: [Active Phase](#active-phase)
+- Audit registry state: [Slice Status Registry](#slice-status-registry)
+- Unresolved defect ledger: [Open Defects](#open-defects)
+- Ordered next phases: [Next Priority](#next-priority)
+- Verification contract: [Verification Command Reference](#verification-command-reference)
+
+Current mirrored phase sequence:
+
+1. R8 - Notifications and Seller-Insights full compliance audit
+2. R9 - IDOR policy matrix completion
+3. R10 - Observability annotation sweep
+
+Update rule: any change to mirrored governance state must update this file and
+`apps/client/docs/CHANGELOG.md` in the same commit.
+
+---
+
+## Active Phase
+
+**Phase:** R8 - Notifications and Seller-Insights Full Compliance Audit  
+**Status:** Not started  
+**Entry criteria:**
+
+- Strict drift baseline: ✅ all categories 0 (confirmed 2026-04-13)
+- Typecheck baseline: ✅ clean (confirmed 2026-04-13)
+- Phase 2 Acceptance Criterion 2 monitoring evidence: pending
+
+**Remaining steps:**
+
+1. Read `app/api/notifications/**` and
+   `app/api/professional-portal/seller-insights/**` route handlers.
+   Assign pass/fail per compliance rubric checks B1-B12, G1-G4.
+2. Run adapter suites for notifications and seller-insights; confirm
+   runtime output (previously pending due to terminal stream issues).
+3. For each ❌ finding: fix, re-run targeted suite, confirm drift is 0.
+4. Update Slice Status Registry below.
+5. Write CHANGELOG entry. Update this file.
+
+**Blocked by:** Phase 2 Criterion 2 monitoring evidence (external; does not
+block R8 code work - proceed in parallel)
+
+---
+
+## Slice Status Registry
+
+Status codes: ✅ compliant - ❌ known defect - ⚠️ unaudited/in-progress - N/A
+
+> This table reflects actual state as of 2026-04-13, reconciled against the
+> full CHANGELOG history. It supersedes the stale table in the generated
+> Section 14.3. All slices previously listed as Tier 4 "not migrated" are
+> confirmed migrated.
+
+| Slice                               | Tier | Domain | Adapters | Actions | Tests | Observability | Overall |
+| ----------------------------------- | ---- | ------ | -------- | ------- | ----- | ------------- | ------- |
+| **finance**                         | T1   | ✅     | ✅       | ✅      | ✅    | ⚠️            | ✅      |
+| **user-rights**                     | T1   | ✅     | ✅       | N/A     | ⚠️    | ⚠️            | ✅      |
+| **professional-verification**       | T2   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
+| **onboarding**                      | T2   | ✅     | N/A      | ✅      | ✅    | ✅            | ✅      |
+| **messaging**                       | T2   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
+| **properties**                      | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
+| **projects**                        | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
+| **professionals**                   | T3   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
+| **portfolio**                       | T3   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
+| **user-profile**                    | T3   | ✅     | ✅       | ✅      | ✅    | ✅            | ✅      |
+| **crm** (leads/inquiries/pipeline)  | T3   | ✅     | ✅       | ✅      | ✅    | ✅            | ✅      |
+| **idea-books**                      | T3   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
+| **documents/licenses/certificates** | T3   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
+| **reviews / search**                | T3   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
+| **client-dashboard**                | T3   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
+| **calendar**                        | T3   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
+| **notifications**                   | T3   | ⚠️     | ⚠️       | N/A     | ⚠️    | ⚠️            | ⚠️      |
+| **seller-insights**                 | T3   | ⚠️     | ⚠️       | N/A     | ⚠️    | ⚠️            | ⚠️      |
+
+**No slices remain unmigrated.** All previously-queued slices are on the
+canonical domain path. ⚠️ means migrated but not yet fully audited.
+
+---
+
+## Open Defects
+
+| ID     | Slice              | Severity | Description                                                                                                | Evidence                              |
+| ------ | ------------------ | -------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| OD-001 | notifications      | Medium   | Full compliance audit not yet performed; adapter suites created but runtime output confirmation pending    | PROGRESS-SUMMARY line ~885            |
+| OD-002 | seller-insights    | Medium   | Same as OD-001                                                                                             | PROGRESS-SUMMARY line ~885            |
+| OD-003 | user-rights        | Low      | IDOR policy suite `__tests__/policy/user-rights/` not yet created                                          | Section 14.4 Phase R9                 |
+| OD-004 | multiple ⚠️ slices | Low      | ADR-005 `operationName` inventory not yet documented in domain contracts for migrated-but-unaudited slices | Section 14.4 Phase R10                |
+| OD-005 | projects           | Low      | Phase 2 Acceptance Criterion 2 monitoring evidence pending staging/production log exports                  | See Phase 2 Acceptance Criteria below |
+
+**All Critical and High autopsy defects from 2026-04-11 are closed.**
+See CHANGELOG checkpoints Critical Fix 1, High Fix 1, High Fix Wave 2,
+High Fix Wave 3, Medium Fix 1-5, and Minor Fix 1-4 for closure evidence.
+
+---
+
+## Completed Phases (last 10)
+
+| Phase          | Completed  | Summary                                                                      |
+| -------------- | ---------- | ---------------------------------------------------------------------------- |
+| Docs hardening | 2026-04-11 | Section 14 + addenda; instruction files updated; ADR-001 amended             |
+| Non-Autopsy 8  | 2026-04-13 | Phase 2 Criterion 2 operational handoff checklist                            |
+| Non-Autopsy 7  | 2026-04-13 | Projects mutation monitoring evidence tooling                                |
+| Non-Autopsy 6  | 2026-04-13 | Generic projects flag retirement + client GA cutover                         |
+| Non-Autopsy 5  | 2026-04-13 | Idea-books auth fixture cleanup + projects rollout Criterion 1               |
+| Non-Autopsy 4  | 2026-04-13 | Idea-books browser contracts + policy tests                                  |
+| Non-Autopsy 3  | 2026-04-13 | Documents/licenses/certificates/reviews/search/dashboard test follow-through |
+| Non-Autopsy 2  | 2026-04-13 | Properties document collection DELETE shim retirement                        |
+| Non-Autopsy 1  | 2026-04-11 | Properties If-Match contract hardening                                       |
+| Minor Fix 4    | 2026-04-11 | High-risk guard numeric constant enforcement                                 |
+
+---
+
+## Next Priority
+
+**Phase R8 - Notifications + Seller-Insights Full Compliance Audit**  
+Entry criteria: strict drift ✅, typecheck ✅  
+Estimated scope: read-pass + targeted fixes, 2-4 files
+
+**Then R9 - IDOR Policy Matrix Completion**  
+Add `__tests__/policy/<domain>.policy.test.ts` for: user-rights, professionals,
+idea-books, notifications, seller-insights, calendar
+
+**Then R10 - Observability Annotation Sweep**  
+Document `operationName` inventory in domain contracts for all ⚠️ slices
+
+---
+
+## Verification Command Reference
+
+```bash
+# Strict drift (must be 0 for all categories before any phase closes):
+pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict
+
+# Typecheck:
+pnpm -C apps/client exec tsc --noEmit --pretty false
+
+# Tier-3 policy tests:
+pnpm -C apps/client exec vitest run __tests__/actions/tier3-high-value-guard-policy.test.ts __tests__/actions/onboarding-tier3-guards.test.ts --maxWorkers=1
+
+# All client tests:
+pnpm run client:test:all
+
+# Rebuild high-risk registry after changes to high-risk-registry.ts:
+pnpm -C apps/client run build:high-risk-registry
+
+# Projects mutation health report:
+pnpm -C apps/client run report:projects-mutation-health -- --input <file.ndjson>
+```
+
+---
+
+## Progress Summary
 
 Last updated: 2026-04-13
 

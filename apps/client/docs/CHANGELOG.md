@@ -28,6 +28,43 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+### [DOCS] Section 14 Domain Audit Registry + Documentation Hardening - 2026-04-11
+
+#### Documentation
+
+- Added Section 14 `Domain Audit Registry and Remediation Plan` to
+  `API-TO-FRONTEND-ARCHITECTURE.md`. Defines binary compliance rubric (Layers
+  A-G, 46 checks), risk tier classification, full slice registry with current
+  status, ordered remediation phases, CHANGELOG and PROGRESS-SUMMARY
+  documentation protocols, and agent execution standard.
+- Added `ARCH-GUIDE-SECTION5-ADDENDUM.md` (new cross-cutting rules 5.A-5.E:
+  idempotency completion fail-safe, tiered recentAuth windows, actor context
+  completeness, high-risk registry governance, security utility deprecation).
+- Added `ARCH-GUIDE-SECTION6-7-ADDENDUM.md` (anti-patterns 27-32, Section 7.6
+  Mock Type Fidelity Requirement).
+- Added `ADR-001-AMENDMENT-2026-04-11.md` (canonical Tier 1/Tier 2 recentAuth
+  window constants; clerkId forwarding requirement for verification/onboarding).
+- Updated `apps-client-api-adapters.instructions.md` (rules 12-17: variable-
+  rebound message passthrough prohibition, idempotency completion fail-safe,
+  clerkId forwarding, registry completeness, maxAgeSeconds tier verification).
+- Updated `apps-client-testing-risk.instructions.md` (rules 7-11: AuthContext
+  mock fidelity, error assertion inversion prohibition, actor call argument
+  completeness, complete() throw testing, BYPASS_AUTH exclusion assertion).
+- Produced reconciliation guide correcting Section 14 slice registry to reflect
+  actual post-autopsy state (all Tier 4 slices confirmed migrated; all Critical
+  and High autopsy defects confirmed closed).
+- Added a tracked governance mirror section in `apps/client/docs/PROGRESS-SUMMARY.md`
+  so Section 14 execution state is commit-visible through tracked docs surfaces.
+
+**Files changed:** `apps/client/docs/CHANGELOG.md`;
+`apps/client/docs/PROGRESS-SUMMARY.md`; architecture guide Section 14 insert;
+five instruction/ADR addendum files
+
+**Verification:** Architecture guide cross-checked against ADR-001 through
+ADR-006 - no conflicts. Instruction files cross-checked against existing
+`.github/instructions/` - no conflicts. Slice status reconciled against full
+CHANGELOG history - all Critical/High autopsy defects confirmed closed.
+
 ### [CHECKPOINT] Non-Autopsy 8 - Phase 2 Criterion 2 Operational Handoff Checklist (Commit-Visible) - Completed
 
 - Date: 2026-04-13
@@ -1039,3 +1076,11 @@ Scope-impact criteria used for ranking:
 
 - ...
 ```
+
+## Format Note (Entries from 2026-04-11 forward)
+
+New entries use the semantic category format with an explicit `**Files changed:**`
+and `**Verification:**` block. Existing checkpoint entries are preserved as-is.
+
+Categories: `Added` - `Changed` - `Deprecated` - `Removed` - `Fixed` -
+`Security` - `Docs`
