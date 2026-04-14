@@ -110,7 +110,7 @@ export const POST = withAuth(
         logger.warn("Rate limit exceeded for deletion request", {
           rateLimitKey,
           correlationId,
-          operationName: "request-account-deletion",
+          operationName: "request_account_deletion",
         });
         return apiError(
           "Rate limit exceeded. Please try again later.",
@@ -124,7 +124,7 @@ export const POST = withAuth(
         logger.warn("Failed to parse deletion request body", {
           error: bodyResult.error,
           correlationId,
-          operationName: "request-account-deletion",
+          operationName: "request_account_deletion",
         });
         return apiError(bodyResult.error, HttpStatus.BAD_REQUEST);
       }
@@ -135,7 +135,7 @@ export const POST = withAuth(
         logger.warn("Deletion request validation failed", {
           errors: validationResult.error.issues,
           correlationId,
-          operationName: "request-account-deletion",
+          operationName: "request_account_deletion",
         });
         return apiError(
           "Validation failed",
@@ -154,7 +154,7 @@ export const POST = withAuth(
         hasEmailConfirmation: !!confirmEmail,
         ipAddress,
         correlationId,
-        operationName: "request-account-deletion",
+        operationName: "request_account_deletion",
       });
 
       // Execute with resilience patterns
@@ -171,7 +171,7 @@ export const POST = withAuth(
           timeout: TimeoutConfig.BACKGROUND,
           retry: { maxAttempts: 2 },
           circuitBreaker: true,
-          operationName: "request-account-deletion",
+          operationName: "request_account_deletion",
         },
       );
 
@@ -181,7 +181,7 @@ export const POST = withAuth(
           result.error || new Error("Unknown error"),
           {
             correlationId,
-            operationName: "request-account-deletion",
+            operationName: "request_account_deletion",
             outcome: "failed",
           },
         );
@@ -201,7 +201,7 @@ export const POST = withAuth(
       logger.info("Account deletion scheduled successfully", {
         scheduledDate: result.data.data.scheduledDeletionAt,
         correlationId,
-        operationName: "request-account-deletion",
+        operationName: "request_account_deletion",
         outcome: "scheduled",
       });
 
@@ -212,7 +212,7 @@ export const POST = withAuth(
         error instanceof Error ? error : new Error(String(error)),
         {
           correlationId,
-          operationName: "request-account-deletion",
+          operationName: "request_account_deletion",
           outcome: "failed",
         },
       );
@@ -272,7 +272,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.warn("Rate limit exceeded for deletion status check", {
         identifier,
         correlationId,
-        operationName: "fetch-deletion-status",
+        operationName: "fetch_deletion_status",
       });
       return apiError(
         "Rate limit exceeded. Please try again later.",
@@ -282,7 +282,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     logger.info("Fetching deletion status", {
       correlationId,
-      operationName: "fetch-deletion-status",
+      operationName: "fetch_deletion_status",
     });
 
     // Execute with resilience
@@ -296,7 +296,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         timeout: TimeoutConfig.NORMAL,
         retry: { maxAttempts: 2 },
         circuitBreaker: true,
-        operationName: "fetch-deletion-status",
+        operationName: "fetch_deletion_status",
       },
     );
 
@@ -306,7 +306,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         result.error || new Error("Unknown error"),
         {
           correlationId,
-          operationName: "fetch-deletion-status",
+          operationName: "fetch_deletion_status",
           outcome: "failed",
         },
       );
@@ -333,7 +333,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     logger.info("Deletion status fetched", {
       isDeletionScheduled: status.data.isDeletionScheduled,
       correlationId,
-      operationName: "fetch-deletion-status",
+      operationName: "fetch_deletion_status",
       outcome: "succeeded",
     });
 
@@ -344,7 +344,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       error instanceof Error ? error : new Error(String(error)),
       {
         correlationId,
-        operationName: "fetch-deletion-status",
+        operationName: "fetch_deletion_status",
         outcome: "failed",
       },
     );
@@ -387,7 +387,7 @@ export const PATCH = withAuth(
         logger.warn("Rate limit exceeded for deletion cancellation", {
           rateLimitKey,
           correlationId,
-          operationName: "cancel-account-deletion",
+          operationName: "cancel_account_deletion",
         });
         return apiError(
           "Rate limit exceeded. Please try again later.",
@@ -397,7 +397,7 @@ export const PATCH = withAuth(
 
       logger.info("Processing deletion cancellation request", {
         correlationId,
-        operationName: "cancel-account-deletion",
+        operationName: "cancel_account_deletion",
       });
 
       const { ipAddress, userAgent } = getRequestMetadata(req);
@@ -413,7 +413,7 @@ export const PATCH = withAuth(
           timeout: TimeoutConfig.NORMAL,
           retry: { maxAttempts: 2 },
           circuitBreaker: true,
-          operationName: "cancel-account-deletion",
+          operationName: "cancel_account_deletion",
         },
       );
 
@@ -423,7 +423,7 @@ export const PATCH = withAuth(
           result.error || new Error("Unknown error"),
           {
             correlationId,
-            operationName: "cancel-account-deletion",
+            operationName: "cancel_account_deletion",
             outcome: "failed",
           },
         );
@@ -442,7 +442,7 @@ export const PATCH = withAuth(
 
       logger.info("Deletion cancelled successfully", {
         correlationId,
-        operationName: "cancel-account-deletion",
+        operationName: "cancel_account_deletion",
         outcome: "succeeded",
       });
 
@@ -453,7 +453,7 @@ export const PATCH = withAuth(
         error instanceof Error ? error : new Error(String(error)),
         {
           correlationId,
-          operationName: "cancel-account-deletion",
+          operationName: "cancel_account_deletion",
           outcome: "failed",
         },
       );

@@ -1,5 +1,10 @@
 import type { DomainError, Result } from "@/app/lib/errors/result";
 
+/**
+ * ADR-005 observable operationName inventory:
+ * - search_professionals (GET /api/search/professionals)
+ */
+
 /** Public read actor — no auth required; empty for unauthenticated access */
 export type SearchActor = Record<string, never>;
 

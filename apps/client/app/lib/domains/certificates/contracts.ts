@@ -1,5 +1,14 @@
 import type { AppRole } from "@/app/lib/security/roles";
 
+/**
+ * ADR-005 observable operationName inventory:
+ * - get_certificates (GET /api/professional-portal/certificates)
+ * - create_certificate (POST /api/professional-portal/certificates)
+ * - get_professional_certificate (GET /api/professional-portal/certificates/[id])
+ * - update_professional_certificate (PATCH /api/professional-portal/certificates/[id])
+ * - delete_certificate (DELETE /api/professional-portal/certificates/[id])
+ */
+
 // ADR-006 classification: Class B - certificate DTO contracts include credential and verification status fields.
 // Reviewed: 2026-04-09 by @copilot
 

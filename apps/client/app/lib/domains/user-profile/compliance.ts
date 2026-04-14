@@ -11,6 +11,21 @@ import {
 } from "@/app/lib/errors/result";
 import type { UserProfileActor } from "./service";
 
+/**
+ * ADR-005 observable operationName inventory (user-rights adapters):
+ * - update_user_consent (POST /api/user/consent)
+ * - fetch_user_consents (GET /api/user/consent)
+ * - bulk_update_user_consents (PUT /api/user/consent)
+ * - request_data_export (POST /api/user/export)
+ * - fetch_export_status (GET /api/user/export?id=...)
+ * - list_user_exports (GET /api/user/export)
+ * - request_account_deletion (POST /api/user/deletion)
+ * - fetch_deletion_status (GET /api/user/deletion)
+ * - cancel_account_deletion (PATCH /api/user/deletion)
+ * - user_data_rectification (POST /api/user/rectification)
+ * - fetch_rectification_history (GET /api/user/rectification)
+ */
+
 export type UserProfileComplianceErrorCode =
   | "not_found"
   | "forbidden"

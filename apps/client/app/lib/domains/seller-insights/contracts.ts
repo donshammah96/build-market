@@ -2,6 +2,13 @@ import type { AppRole } from "@/app/lib/security/roles";
 import type { DomainError, Result } from "@/app/lib/errors/result";
 import type { OrdersQueryInput } from "@/app/lib/validation/orders-validation";
 
+/**
+ * ADR-005 observable operationName inventory:
+ * - get_inventory_alerts (GET /api/professional-portal/inventory/alerts)
+ * - get_professional_orders (GET /api/professional-portal/orders)
+ * - get_top_products (GET /api/professional-portal/products/top)
+ */
+
 export type SellerInsightsActor = {
   userId: string;
   role?: AppRole | string | null;

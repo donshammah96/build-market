@@ -11,6 +11,16 @@ import type {
   UpdateNotificationInput,
 } from "@/app/lib/validation/notifications-validation";
 
+/**
+ * ADR-005 observable operationName inventory:
+ * - list_notifications (GET /api/notifications)
+ * - mark_notification_read (PATCH /api/notifications)
+ * - delete_notifications (DELETE /api/notifications)
+ * - get_notification (GET /api/notifications/[id])
+ * - update_notification (PATCH /api/notifications/[id])
+ * - delete_notification (DELETE /api/notifications/[id])
+ */
+
 export type NotificationsActor = {
   userId: string;
   role?: string | null;

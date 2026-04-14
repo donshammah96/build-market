@@ -5,6 +5,15 @@ import type {
   UpdateCalendarEventInput,
 } from "@/app/lib/validation/calendar-validation";
 
+/**
+ * ADR-005 observable operationName inventory:
+ * - get_calendar_events (GET /api/professional-portal/calendar)
+ * - create_calendar_event (POST /api/professional-portal/calendar)
+ * - get_calendar_event (GET /api/professional-portal/calendar/[id])
+ * - update_calendar_event (PATCH /api/professional-portal/calendar/[id])
+ * - delete_calendar_event (DELETE /api/professional-portal/calendar/[id])
+ */
+
 export type {
   CalendarQueryInput,
   CreateCalendarEventInput,

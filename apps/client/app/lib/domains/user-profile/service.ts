@@ -25,6 +25,12 @@ import {
   type Serialized,
 } from "./mappers";
 
+/**
+ * ADR-005 observable operationName inventory (profile adapters):
+ * - fetch_user_profile (GET /api/user/profile)
+ * - update_user_profile (PATCH /api/user/profile)
+ */
+
 type VerificationProfile = {
   verified: boolean | null;
   verificationStatus: string | null;

@@ -1,4 +1,11 @@
 import type { DomainError, Result } from "@/app/lib/errors/result";
+
+/**
+ * ADR-005 observable operationName inventory:
+ * - fetch_professionals (GET /api/professionals)
+ * - get_professional_detail (GET /api/professionals/[id])
+ */
+
 import {
   ProfessionalQuerySchema as ProfessionalQuerySchemaValue,
   type ProfessionalQueryInput as ProfessionalQueryInputValue,

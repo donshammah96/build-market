@@ -64,7 +64,7 @@ export const GET = withAuth(
           userId: dbUserId,
         }),
       {
-        operationName: "client:get_dashboard",
+        operationName: "get_client_dashboard",
         timeout: 10000,
         retry: false,
       },

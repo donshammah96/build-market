@@ -1,5 +1,18 @@
 import type { DomainError, Result } from "@/app/lib/errors/result";
 
+/**
+ * ADR-005 observable operationName inventory:
+ * - get_portfolio_items (GET /api/professional-portal/portfolio)
+ * - create_portfolio_item (POST /api/professional-portal/portfolio)
+ * - get_portfolio_detail (GET /api/professional-portal/portfolio/[id])
+ * - update_portfolio_item (PATCH /api/professional-portal/portfolio/[id])
+ * - delete_portfolio_item (DELETE /api/professional-portal/portfolio/[id])
+ * - get_portfolio_images (GET /api/professional-portal/portfolio/[id]/images)
+ * - add_portfolio_images (POST /api/professional-portal/portfolio/[id]/images)
+ * - update_portfolio_image_item (PATCH /api/professional-portal/portfolio/[id]/images/[imageId])
+ * - delete_portfolio_image_item (DELETE /api/professional-portal/portfolio/[id]/images/[imageId])
+ */
+
 export type PortfolioDomainErrorCode =
   | "not_found"
   | "forbidden"

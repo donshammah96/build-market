@@ -1,5 +1,10 @@
 import type { DomainError, Result } from "@/app/lib/errors/result";
 
+/**
+ * ADR-005 observable operationName inventory:
+ * - fetch_reviews (GET /api/reviews)
+ */
+
 export type ReviewType = "PROFESSIONAL" | "STORE";
 
 /** Public read actor — no auth required; empty for unauthenticated access */

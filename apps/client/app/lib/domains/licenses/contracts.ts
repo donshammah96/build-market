@@ -1,5 +1,14 @@
 import type { AppRole } from "@/app/lib/security/roles";
 
+/**
+ * ADR-005 observable operationName inventory:
+ * - get_professional_licenses (GET /api/professional-portal/licenses)
+ * - create_professional_licenses (POST /api/professional-portal/licenses)
+ * - get_professional_license_detail (GET /api/professional-portal/licenses/[id])
+ * - update_professional_license (PATCH /api/professional-portal/licenses/[id])
+ * - delete_professional_license (DELETE /api/professional-portal/licenses/[id])
+ */
+
 // ADR-006 classification: Class B - license DTO contracts include regulated identifier and authority-linked fields.
 // Reviewed: 2026-04-09 by @copilot
 

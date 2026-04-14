@@ -1,5 +1,14 @@
 import type { AppRole } from "@/app/lib/security/roles";
 
+/**
+ * ADR-005 observable operationName inventory:
+ * - get_professional_documents (GET /api/professional-portal/documents)
+ * - create_professional_document (POST /api/professional-portal/documents)
+ * - get_professional_document_detail (GET /api/professional-portal/documents/[id])
+ * - update_professional_document (PATCH /api/professional-portal/documents/[id])
+ * - delete_professional_document (DELETE /api/professional-portal/documents/[id])
+ */
+
 // ADR-006 classification: Class B - document DTO contracts include verification-category and compliance-linked fields.
 // Reviewed: 2026-04-09 by @copilot
 

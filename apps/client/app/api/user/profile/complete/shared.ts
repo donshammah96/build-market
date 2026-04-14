@@ -62,7 +62,7 @@ export async function parseAndValidateProfileCompleteBody<
     params.logger.warn("Profile complete validation failed", {
       correlationId: params.correlationId,
       target: params.target,
-      operationName: "route-profile-complete",
+      operationName: "route_profile_complete",
       errors: validationResult.error.issues,
     });
     return {

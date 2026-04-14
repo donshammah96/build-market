@@ -37,27 +37,23 @@ Update rule: any change to mirrored governance state must update this file and
 
 ## Active Phase
 
-**Phase:** R8 - Notifications and Seller-Insights Full Compliance Audit  
-**Status:** Not started  
+**Phase:** Phase 2 Acceptance Criterion 2 - Operational Evidence Closeout  
+**Status:** In progress  
 **Entry criteria:**
 
-- Strict drift baseline: ✅ all categories 0 (confirmed 2026-04-13)
-- Typecheck baseline: ✅ clean (confirmed 2026-04-13)
+- Strict drift baseline: ✅ all categories 0 (confirmed 2026-04-14)
+- Typecheck baseline: ✅ clean (confirmed 2026-04-14)
+- R8 adapter verification: ✅ notifications + seller-insights suites passed (11/11 tests)
+- R9 policy verification: ✅ full policy suite passed (55/55 tests)
 - Phase 2 Acceptance Criterion 2 monitoring evidence: pending
 
 **Remaining steps:**
 
-1. Read `app/api/notifications/**` and
-   `app/api/professional-portal/seller-insights/**` route handlers.
-   Assign pass/fail per compliance rubric checks B1-B12, G1-G4.
-2. Run adapter suites for notifications and seller-insights; confirm
-   runtime output (previously pending due to terminal stream issues).
-3. For each ❌ finding: fix, re-run targeted suite, confirm drift is 0.
-4. Update Slice Status Registry below.
-5. Write CHANGELOG entry. Update this file.
+1. Capture Phase 2 Criterion 2 monitoring evidence from staging and production
+   NDJSON log exports.
 
 **Blocked by:** Phase 2 Criterion 2 monitoring evidence (external; does not
-block R8 code work - proceed in parallel)
+block ongoing docs/inventory follow-through work)
 
 ---
 
@@ -65,31 +61,31 @@ block R8 code work - proceed in parallel)
 
 Status codes: ✅ compliant - ❌ known defect - ⚠️ unaudited/in-progress - N/A
 
-> This table reflects actual state as of 2026-04-13, reconciled against the
+> This table reflects actual state as of 2026-04-14, reconciled against the
 > full CHANGELOG history. It supersedes the stale table in the generated
 > Section 14.3. All slices previously listed as Tier 4 "not migrated" are
 > confirmed migrated.
 
 | Slice                               | Tier | Domain | Adapters | Actions | Tests | Observability | Overall |
 | ----------------------------------- | ---- | ------ | -------- | ------- | ----- | ------------- | ------- |
-| **finance**                         | T1   | ✅     | ✅       | ✅      | ✅    | ⚠️            | ✅      |
-| **user-rights**                     | T1   | ✅     | ✅       | N/A     | ⚠️    | ⚠️            | ✅      |
-| **professional-verification**       | T2   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
+| **finance**                         | T1   | ✅     | ✅       | ✅      | ✅    | ✅            | ✅      |
+| **user-rights**                     | T1   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
+| **professional-verification**       | T2   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
 | **onboarding**                      | T2   | ✅     | N/A      | ✅      | ✅    | ✅            | ✅      |
-| **messaging**                       | T2   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
+| **messaging**                       | T2   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
 | **properties**                      | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
 | **projects**                        | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
-| **professionals**                   | T3   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
-| **portfolio**                       | T3   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
+| **professionals**                   | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
+| **portfolio**                       | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
 | **user-profile**                    | T3   | ✅     | ✅       | ✅      | ✅    | ✅            | ✅      |
 | **crm** (leads/inquiries/pipeline)  | T3   | ✅     | ✅       | ✅      | ✅    | ✅            | ✅      |
-| **idea-books**                      | T3   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
-| **documents/licenses/certificates** | T3   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
-| **reviews / search**                | T3   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
-| **client-dashboard**                | T3   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
-| **calendar**                        | T3   | ✅     | ✅       | N/A     | ✅    | ⚠️            | ✅      |
-| **notifications**                   | T3   | ⚠️     | ⚠️       | N/A     | ⚠️    | ⚠️            | ⚠️      |
-| **seller-insights**                 | T3   | ⚠️     | ⚠️       | N/A     | ⚠️    | ⚠️            | ⚠️      |
+| **idea-books**                      | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
+| **documents/licenses/certificates** | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
+| **reviews / search**                | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
+| **client-dashboard**                | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
+| **calendar**                        | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
+| **notifications**                   | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
+| **seller-insights**                 | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
 
 **No slices remain unmigrated.** All previously-queued slices are on the
 canonical domain path. ⚠️ means migrated but not yet fully audited.
@@ -98,13 +94,9 @@ canonical domain path. ⚠️ means migrated but not yet fully audited.
 
 ## Open Defects
 
-| ID     | Slice              | Severity | Description                                                                                                | Evidence                              |
-| ------ | ------------------ | -------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| OD-001 | notifications      | Medium   | Full compliance audit not yet performed; adapter suites created but runtime output confirmation pending    | PROGRESS-SUMMARY line ~885            |
-| OD-002 | seller-insights    | Medium   | Same as OD-001                                                                                             | PROGRESS-SUMMARY line ~885            |
-| OD-003 | user-rights        | Low      | IDOR policy suite `__tests__/policy/user-rights/` not yet created                                          | Section 14.4 Phase R9                 |
-| OD-004 | multiple ⚠️ slices | Low      | ADR-005 `operationName` inventory not yet documented in domain contracts for migrated-but-unaudited slices | Section 14.4 Phase R10                |
-| OD-005 | projects           | Low      | Phase 2 Acceptance Criterion 2 monitoring evidence pending staging/production log exports                  | See Phase 2 Acceptance Criteria below |
+1. `OD-005` | Slice: projects | Severity: Low  
+   Phase 2 Acceptance Criterion 2 monitoring evidence is pending staging/production log exports.  
+   Evidence: Phase 2 Acceptance Criteria section.
 
 **All Critical and High autopsy defects from 2026-04-11 are closed.**
 See CHANGELOG checkpoints Critical Fix 1, High Fix 1, High Fix Wave 2,
@@ -114,33 +106,24 @@ High Fix Wave 3, Medium Fix 1-5, and Minor Fix 1-4 for closure evidence.
 
 ## Completed Phases (last 10)
 
-| Phase          | Completed  | Summary                                                                      |
-| -------------- | ---------- | ---------------------------------------------------------------------------- |
-| Docs hardening | 2026-04-11 | Section 14 + addenda; instruction files updated; ADR-001 amended             |
-| Non-Autopsy 8  | 2026-04-13 | Phase 2 Criterion 2 operational handoff checklist                            |
-| Non-Autopsy 7  | 2026-04-13 | Projects mutation monitoring evidence tooling                                |
-| Non-Autopsy 6  | 2026-04-13 | Generic projects flag retirement + client GA cutover                         |
-| Non-Autopsy 5  | 2026-04-13 | Idea-books auth fixture cleanup + projects rollout Criterion 1               |
-| Non-Autopsy 4  | 2026-04-13 | Idea-books browser contracts + policy tests                                  |
-| Non-Autopsy 3  | 2026-04-13 | Documents/licenses/certificates/reviews/search/dashboard test follow-through |
-| Non-Autopsy 2  | 2026-04-13 | Properties document collection DELETE shim retirement                        |
-| Non-Autopsy 1  | 2026-04-11 | Properties If-Match contract hardening                                       |
-| Minor Fix 4    | 2026-04-11 | High-risk guard numeric constant enforcement                                 |
+1. `R10 Residual Sweep` (2026-04-14): Completed ADR-005 operation-name inventory annotations for finance, professional-verification, messaging, professionals, portfolio, idea-books, reviews/search, and calendar.
+2. `R10` (2026-04-14): User-rights and client-dashboard operation-name normalization plus contract inventory updates.
+3. `R9` (2026-04-14): Policy matrix completion for notifications, seller-insights, user-rights, professionals, calendar, and idea-books.
+4. `R8` (2026-04-14): Notifications and seller-insights adapter hardening (actor throttling, CSRF, safe mapping, structured logs).
+5. `Docs hardening` (2026-04-11): Section 14 plus addenda; instruction files updated; ADR-001 amended.
+6. `Non-Autopsy 8` (2026-04-13): Phase 2 Criterion 2 operational handoff checklist.
+7. `Non-Autopsy 7` (2026-04-13): Projects mutation monitoring evidence tooling.
+8. `Non-Autopsy 6` (2026-04-13): Generic projects flag retirement plus client GA cutover.
+9. `Non-Autopsy 5` (2026-04-13): Idea-books auth-fixture cleanup plus projects rollout Criterion 1.
+10. `Non-Autopsy 4` (2026-04-13): Idea-books browser contracts plus policy tests.
 
 ---
 
 ## Next Priority
 
-**Phase R8 - Notifications + Seller-Insights Full Compliance Audit**  
-Entry criteria: strict drift ✅, typecheck ✅  
-Estimated scope: read-pass + targeted fixes, 2-4 files
-
-**Then R9 - IDOR Policy Matrix Completion**  
-Add `__tests__/policy/<domain>.policy.test.ts` for: user-rights, professionals,
-idea-books, notifications, seller-insights, calendar
-
-**Then R10 - Observability Annotation Sweep**  
-Document `operationName` inventory in domain contracts for all ⚠️ slices
+**Phase 2 Acceptance Criterion 2 - Operational Evidence Closeout**  
+Capture staging/production NDJSON exports and run
+`report:projects-mutation-health` evidence workflow for canary and broad windows.
 
 ---
 
@@ -170,9 +153,38 @@ pnpm -C apps/client run report:projects-mutation-health -- --input <file.ndjson>
 
 ## Progress Summary
 
-Last updated: 2026-04-13
+Last updated: 2026-04-14
 
 ## Snapshot
+
+### [CHECKPOINT] Section 14 R10 Residual Observability Inventory Sweep - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Closed residual R10 observability inventory debt by annotating ADR-005 operationName inventories across all previously observability-⚠️ slices in domain contracts.
+- Actual files changed: `apps/client/app/lib/domains/finance/contracts.ts`; `apps/client/app/lib/domains/documents/contracts.ts`; `apps/client/app/lib/domains/licenses/contracts.ts`; `apps/client/app/lib/domains/certificates/contracts.ts`; `apps/client/app/lib/domains/messaging/contracts.ts`; `apps/client/app/lib/domains/professionals/contracts.ts`; `apps/client/app/lib/domains/portfolio/contracts.ts`; `apps/client/app/lib/domains/idea-books/contracts.ts`; `apps/client/app/lib/domains/reviews/contracts.ts`; `apps/client/app/lib/domains/search/contracts.ts`; `apps/client/app/lib/domains/calendar/contracts.ts`; `apps/client/docs/PROGRESS-SUMMARY.md`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results:
+  1. Task `report-security-drift-strict-medium3` passed (all reported drift categories `0`).
+  2. `pnpm -C apps/client exec tsc --noEmit --pretty false` passed (`TSC_EXIT:0`).
+- Security outcomes:
+  1. Observability operation-name inventory coverage is now documented for all slices in the current Section 14 registry.
+  2. Open defect `OD-004` is closed; remaining governance blocker is Phase 2 Criterion 2 operational evidence capture.
+
+### [CHECKPOINT] Section 14 R8-R10 Closure Wave (Notifications, Seller-Insights, User-Rights) - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Completed the Section 14 execution wave requested for R8-R10 by hardening notifications and seller-insights adapters, finalizing IDOR policy matrix coverage for the targeted slices, normalizing operation-name join keys to ADR-005 snake_case conventions, and documenting operation inventories in domain contract surfaces.
+- Actual files changed: `apps/client/app/api/notifications/route.ts`; `apps/client/app/api/notifications/[id]/route.ts`; `apps/client/app/api/professional-portal/inventory/alerts/route.ts`; `apps/client/app/api/professional-portal/orders/route.ts`; `apps/client/app/api/professional-portal/products/top/route.ts`; `apps/client/app/api/user/consent/route.ts`; `apps/client/app/api/user/deletion/route.ts`; `apps/client/app/api/user/export/route.ts`; `apps/client/app/api/user/profile/route.ts`; `apps/client/app/api/user/profile/complete/route.ts`; `apps/client/app/api/user/profile/complete/client/route.ts`; `apps/client/app/api/user/profile/complete/professional/route.ts`; `apps/client/app/api/user/profile/complete/shared.ts`; `apps/client/app/api/user/rectification/route.ts`; `apps/client/app/api/client/dashboard/route.ts`; `apps/client/app/lib/domains/{notifications,seller-insights,client-dashboard,user-profile}/contracts and services`; policy and adapter tests under `apps/client/__tests__/api/**` and `apps/client/__tests__/policy/**`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/api/notifications __tests__/api/professional-portal/seller-insights-adapters.route.test.ts --maxWorkers=1` passed (`4` files, `11` tests).
+  2. `pnpm -C apps/client exec vitest run __tests__/policy --maxWorkers=1 --reporter=json --outputFile tmp-r9-policy-all.json` passed (`16` files, `55` tests).
+  3. Task `report-security-drift-strict-medium3` passed (all reported drift categories `0`).
+  4. `pnpm -C apps/client exec tsc --noEmit --pretty false` passed (`TSC_EXIT:0`).
+- Security outcomes:
+  1. Notifications and seller-insights adapters now enforce actor-scoped throttling, static-safe forbidden mapping, and structured terminal outcome logs with ADR-005 required fields.
+  2. Notification mutation adapters now enforce CSRF via route-level `withAuth` options.
+  3. R9 policy suites now cover owner/non-owner/not-found boundaries for notifications, calendar, seller-insights, user-rights, professionals, and expanded idea-books attachment scenarios.
+  4. User-rights and client-dashboard operation-name keys are now normalized to snake_case and inventoried in domain contract documentation.
+- Deferred items: Phase 2 Criterion 2 staging/production evidence capture remains open.
 
 ### [CHECKPOINT] Non-Autopsy 8 - Phase 2 Criterion 2 Operational Handoff Checklist (Commit-Visible) - Completed
 

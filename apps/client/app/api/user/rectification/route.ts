@@ -147,7 +147,7 @@ export const POST = withAuth(
       if (!success) {
         logger.warn("Rate limit exceeded for rectification request", {
           correlationId,
-          operationName: "user-data-rectification",
+          operationName: "user_data_rectification",
           rateLimitKey,
         });
         return apiError(
@@ -169,7 +169,7 @@ export const POST = withAuth(
 
       logger.info("Rectification request received", {
         correlationId,
-        operationName: "user-data-rectification",
+        operationName: "user_data_rectification",
         fieldsRequested: Object.keys(body || {}),
       });
 
@@ -178,7 +178,7 @@ export const POST = withAuth(
       if (!validationResult.success) {
         logger.warn("Rectification validation failed", {
           correlationId,
-          operationName: "user-data-rectification",
+          operationName: "user_data_rectification",
           errors: validationResult.error.issues,
         });
         return apiError(
@@ -206,7 +206,7 @@ export const POST = withAuth(
           timeout: "normal",
           retry: { maxAttempts: 2 },
           circuitBreaker: true,
-          operationName: "user-data-rectification",
+          operationName: "user_data_rectification",
         },
       );
 
@@ -216,7 +216,7 @@ export const POST = withAuth(
           result.error || new Error("Unknown error"),
           {
             correlationId,
-            operationName: "user-data-rectification",
+            operationName: "user_data_rectification",
             outcome: "failed",
           },
         );
@@ -237,7 +237,7 @@ export const POST = withAuth(
 
       logger.info("Rectification completed successfully", {
         correlationId,
-        operationName: "user-data-rectification",
+        operationName: "user_data_rectification",
         changedFieldsCount: changedFields.length,
         fields: changedFields,
       });
@@ -249,7 +249,7 @@ export const POST = withAuth(
         err instanceof Error ? err : new Error(String(err)),
         {
           correlationId,
-          operationName: "user-data-rectification",
+          operationName: "user_data_rectification",
           outcome: "failed",
         },
       );
@@ -294,7 +294,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
   try {
     logger.info("Fetching rectification history", {
       correlationId,
-      operationName: "fetch-rectification-history",
+      operationName: "fetch_rectification_history",
     });
 
     // Parse pagination parameters
@@ -318,7 +318,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         timeout: "normal",
         retry: { maxAttempts: 2 },
         circuitBreaker: true,
-        operationName: "fetch-rectification-history",
+        operationName: "fetch_rectification_history",
       },
     );
 
@@ -328,7 +328,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         result.error || new Error("Unknown error"),
         {
           correlationId,
-          operationName: "fetch-rectification-history",
+          operationName: "fetch_rectification_history",
           outcome: "failed",
         },
       );
@@ -344,7 +344,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         result.error || new Error("Unknown error"),
         {
           correlationId,
-          operationName: "fetch-rectification-history",
+          operationName: "fetch_rectification_history",
           outcome: "failed",
         },
       );
@@ -362,7 +362,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     logger.info("Rectification history fetched", {
       correlationId,
-      operationName: "fetch-rectification-history",
+      operationName: "fetch_rectification_history",
       recordsReturned: result.data.data.data.length,
       totalRecords: result.data.data.pagination.total,
     });
@@ -374,7 +374,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       err instanceof Error ? err : new Error(String(err)),
       {
         correlationId,
-        operationName: "fetch-rectification-history",
+        operationName: "fetch_rectification_history",
         outcome: "failed",
       },
     );

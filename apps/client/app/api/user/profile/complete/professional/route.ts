@@ -57,7 +57,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     logger.info("Professional profile complete request received", {
       correlationId,
-      operationName: "update-professional-profile-complete",
+      operationName: "update_professional_profile_complete",
       fieldsReceived: Object.keys(body),
       ipAddress,
     });
@@ -66,7 +66,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
     if (!validationResult.success) {
       logger.warn("Professional profile validation failed", {
         correlationId,
-        operationName: "update-professional-profile-complete",
+        operationName: "update_professional_profile_complete",
         errors: validationResult.error.issues,
       });
       return apiError(
@@ -93,7 +93,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
         timeout: "normal",
         retry: { maxAttempts: 3 },
         circuitBreaker: true,
-        operationName: "update-professional-profile-complete",
+        operationName: "update_professional_profile_complete",
       },
     );
 
@@ -103,7 +103,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
         result.error || new Error("Unknown error"),
         {
           correlationId,
-          operationName: "update-professional-profile-complete",
+          operationName: "update_professional_profile_complete",
           outcome: "failed",
         },
       );
@@ -132,7 +132,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     logger.info("Professional profile updated successfully", {
       correlationId,
-      operationName: "update-professional-profile-complete",
+      operationName: "update_professional_profile_complete",
       isComplete: responseData.completion.isComplete,
       percentage: responseData.completion.percentage,
     });
@@ -144,7 +144,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
       err instanceof Error ? err : new Error(String(err)),
       {
         correlationId,
-        operationName: "update-professional-profile-complete",
+        operationName: "update_professional_profile_complete",
         outcome: "failed",
       },
     );

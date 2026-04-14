@@ -1,5 +1,19 @@
 import { z } from "zod";
 
+/**
+ * ADR-005 observable operationName inventory:
+ * - get_finance_stats (GET /api/professional-portal/finance/stats)
+ * - get_project_finance_stats (GET /api/professional-portal/finance/stats/[id])
+ * - get_transactions (GET /api/professional-portal/finance/transactions)
+ * - get_transaction (GET /api/professional-portal/finance/transactions/[id])
+ * - update_transaction (PATCH /api/professional-portal/finance/transactions/[id])
+ * - delete_transaction (DELETE /api/professional-portal/finance/transactions/[id])
+ * - create_withdrawal (POST /api/professional-portal/finance/withdraw)
+ * - get_withdrawal (GET /api/professional-portal/finance/withdraw/[id])
+ * - cancel_withdrawal (DELETE /api/professional-portal/finance/withdraw/[id])
+ * - request_withdrawal_action (server action: app/actions/finance.ts)
+ */
+
 // ADR-006 classification: Class B - finance DTO contracts include payout, transaction, and payment method fields.
 // Reviewed: 2026-04-09 by @copilot
 

@@ -1,6 +1,11 @@
 import type { ProjectStatus } from "@prisma/client";
 import type { DomainError, Result } from "@/app/lib/errors/result";
 
+/**
+ * ADR-005 observable operationName inventory:
+ * - get_client_dashboard (GET /api/client/dashboard)
+ */
+
 export type ClientDashboardActor = {
   userId: string;
 };

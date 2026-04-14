@@ -1,6 +1,29 @@
 import type { z } from "zod";
 import type { DomainError, Result } from "@/app/lib/errors/result";
 import type { AppRole } from "@/app/lib/security/roles";
+
+/**
+ * ADR-005 observable operationName inventory:
+ * - list_threads (GET /api/messaging/conversations)
+ * - create_thread (POST /api/messaging/conversations)
+ * - get_thread (GET /api/messaging/conversations/[id])
+ * - update_thread (PATCH /api/messaging/conversations/[id])
+ * - delete_thread (DELETE /api/messaging/conversations/[id])
+ * - mark_thread_read (PATCH /api/messaging/conversations/[id]/read)
+ * - list_thread_messages (GET /api/messaging/messages/conversation/[conversationId])
+ * - send_message (POST /api/messaging/messages)
+ * - get_message (GET /api/messaging/messages/[id])
+ * - update_message (PATCH /api/messaging/messages/[id])
+ * - delete_message (DELETE /api/messaging/messages/[id])
+ * - mark_message_read (PATCH /api/messaging/messages/[id]/read)
+ * - create_reaction (POST /api/messaging/messages/[id]/reactions)
+ * - delete_reaction (DELETE /api/messaging/messages/[id]/reactions)
+ * - add_participant (POST /api/messaging/conversations/[id]/participants)
+ * - list_participants (GET /api/messaging/conversations/[id]/participants)
+ * - update_participant (PATCH /api/messaging/conversations/[id]/participants)
+ * - delete_participant (DELETE /api/messaging/conversations/[id]/participants)
+ */
+
 import {
   AddParticipantSchema,
   CreateThreadSchema,

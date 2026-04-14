@@ -102,7 +102,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.warn("Rate limit exceeded for consent update", {
         identifier,
         correlationId,
-        operationName: "update-user-consent",
+        operationName: "update_user_consent",
       });
       return apiError(
         "Rate limit exceeded. Please try again later.",
@@ -116,7 +116,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.warn("Failed to parse consent request body", {
         error: bodyResult.error,
         correlationId,
-        operationName: "update-user-consent",
+        operationName: "update_user_consent",
       });
       return apiError(bodyResult.error, HttpStatus.BAD_REQUEST);
     }
@@ -127,7 +127,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.warn("Consent validation failed", {
         errors: validationResult.error.issues,
         correlationId,
-        operationName: "update-user-consent",
+        operationName: "update_user_consent",
       });
       return apiError(
         "Invalid consent data",
@@ -147,7 +147,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       documentVersion,
       ipAddress,
       correlationId,
-      operationName: "update-user-consent",
+      operationName: "update_user_consent",
     });
 
     // Execute with resilience patterns
@@ -162,7 +162,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
         timeout: TimeoutConfig.NORMAL,
         retry: { maxAttempts: 2 },
         circuitBreaker: true,
-        operationName: "update-user-consent",
+        operationName: "update_user_consent",
       },
     );
 
@@ -172,7 +172,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
         executionResult.error || new Error("Unknown error"),
         {
           correlationId,
-          operationName: "update-user-consent",
+          operationName: "update_user_consent",
           outcome: "failed",
         },
       );
@@ -201,7 +201,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       granted,
       consentId: consentResult.data.consent.id,
       correlationId,
-      operationName: "update-user-consent",
+      operationName: "update_user_consent",
       outcome: "succeeded",
     });
 
@@ -212,7 +212,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       error instanceof Error ? error : new Error(String(error)),
       {
         correlationId,
-        operationName: "update-user-consent",
+        operationName: "update_user_consent",
         outcome: "failed",
       },
     );
@@ -261,7 +261,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.warn("Rate limit exceeded for consent fetch", {
         identifier,
         correlationId,
-        operationName: "fetch-user-consents",
+        operationName: "fetch_user_consents",
       });
       return apiError(
         "Rate limit exceeded. Please try again later.",
@@ -271,7 +271,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     logger.info("Fetching user consents", {
       correlationId,
-      operationName: "fetch-user-consents",
+      operationName: "fetch_user_consents",
     });
 
     // Execute with resilience
@@ -285,7 +285,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         timeout: TimeoutConfig.NORMAL,
         retry: { maxAttempts: 2 },
         circuitBreaker: true,
-        operationName: "fetch-user-consents",
+        operationName: "fetch_user_consents",
       },
     );
 
@@ -295,7 +295,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         result.error || new Error("Unknown error"),
         {
           correlationId,
-          operationName: "fetch-user-consents",
+          operationName: "fetch_user_consents",
           outcome: "failed",
         },
       );
@@ -322,7 +322,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     logger.info("Consents fetched successfully", {
       consentCount: consentsResult.data.total,
       correlationId,
-      operationName: "fetch-user-consents",
+      operationName: "fetch_user_consents",
       outcome: "succeeded",
     });
 
@@ -333,7 +333,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       error instanceof Error ? error : new Error(String(error)),
       {
         correlationId,
-        operationName: "fetch-user-consents",
+        operationName: "fetch_user_consents",
         outcome: "failed",
       },
     );
@@ -369,7 +369,7 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.warn("Rate limit exceeded for bulk consent update", {
         identifier,
         correlationId,
-        operationName: "bulk-update-user-consents",
+        operationName: "bulk_update_user_consents",
       });
       return apiError(
         "Rate limit exceeded. Please try again later.",
@@ -383,7 +383,7 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.warn("Failed to parse bulk consent request body", {
         error: bodyResult.error,
         correlationId,
-        operationName: "bulk-update-user-consents",
+        operationName: "bulk_update_user_consents",
       });
       return apiError(bodyResult.error, HttpStatus.BAD_REQUEST);
     }
@@ -394,7 +394,7 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.warn("Bulk consent validation failed", {
         errors: validationResult.error.issues,
         correlationId,
-        operationName: "bulk-update-user-consents",
+        operationName: "bulk_update_user_consents",
       });
       return apiError(
         "Invalid consent data",
@@ -410,7 +410,7 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
       consentCount: consents.length,
       ipAddress,
       correlationId,
-      operationName: "bulk-update-user-consents",
+      operationName: "bulk_update_user_consents",
     });
 
     // Process all consents
@@ -425,7 +425,7 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
         timeout: TimeoutConfig.NORMAL,
         retry: { maxAttempts: 2 },
         circuitBreaker: true,
-        operationName: "bulk-update-user-consents",
+        operationName: "bulk_update_user_consents",
       },
     );
 
@@ -447,7 +447,7 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
       successCount: result.data.data.results.length,
       allSuccessful: true,
       correlationId,
-      operationName: "bulk-update-user-consents",
+      operationName: "bulk_update_user_consents",
       outcome: "succeeded",
     });
 
@@ -465,7 +465,7 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
       error instanceof Error ? error : new Error(String(error)),
       {
         correlationId,
-        operationName: "bulk-update-user-consents",
+        operationName: "bulk_update_user_consents",
         outcome: "failed",
       },
     );

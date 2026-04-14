@@ -101,7 +101,7 @@ export const POST = withAuth(
         logger.warn("Rate limit exceeded for export request", {
           rateLimitKey,
           correlationId,
-          operationName: "request-data-export",
+          operationName: "request_data_export",
         });
         return apiError(
           "Rate limit exceeded. Please try again later.",
@@ -115,7 +115,7 @@ export const POST = withAuth(
       logger.info("Processing data export request", {
         ipAddress,
         correlationId,
-        operationName: "request-data-export",
+        operationName: "request_data_export",
       });
 
       // Execute with resilience patterns
@@ -130,7 +130,7 @@ export const POST = withAuth(
           timeout: TimeoutConfig.BACKGROUND,
           retry: { maxAttempts: 2 },
           circuitBreaker: true,
-          operationName: "request-data-export",
+          operationName: "request_data_export",
         },
       );
 
@@ -141,7 +141,7 @@ export const POST = withAuth(
         if (error?.message?.includes("rate limit")) {
           logger.warn("Export rate limit exceeded", {
             correlationId,
-            operationName: "request-data-export",
+            operationName: "request_data_export",
           });
           return apiError(
             "You can only request one data export per 24 hours. Please try again later.",
@@ -154,7 +154,7 @@ export const POST = withAuth(
           error || new Error("Unknown error"),
           {
             correlationId,
-            operationName: "request-data-export",
+            operationName: "request_data_export",
             outcome: "failed",
           },
         );
@@ -177,7 +177,7 @@ export const POST = withAuth(
         logger.warn("Export request rejected", {
           message: exportResult.message,
           correlationId,
-          operationName: "request-data-export",
+          operationName: "request_data_export",
           outcome: "rejected",
         });
 
@@ -191,7 +191,7 @@ export const POST = withAuth(
         exportId: exportResult.data.exportId,
         status: exportResult.data.status,
         correlationId,
-        operationName: "request-data-export",
+        operationName: "request_data_export",
         outcome: "accepted",
       });
 
@@ -202,7 +202,7 @@ export const POST = withAuth(
         error instanceof Error ? error : new Error(String(error)),
         {
           correlationId,
-          operationName: "request-data-export",
+          operationName: "request_data_export",
           outcome: "failed",
         },
       );
@@ -250,7 +250,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.warn("Rate limit exceeded for export status check", {
         identifier,
         correlationId,
-        operationName: "fetch-export-status",
+        operationName: "fetch_export_status",
       });
       return apiError(
         "Rate limit exceeded. Please try again later.",
@@ -265,7 +265,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     if (!exportId) {
       logger.info("Fetching all exports for user", {
         correlationId,
-        operationName: "list-user-exports",
+        operationName: "list_user_exports",
       });
 
       const listResult = await executor.execute(
@@ -277,7 +277,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
           timeout: TimeoutConfig.NORMAL,
           retry: { maxAttempts: 2 },
           circuitBreaker: true,
-          operationName: "list-user-exports",
+          operationName: "list_user_exports",
         },
       );
 
@@ -287,7 +287,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
           listResult.error || new Error("Unknown error"),
           {
             correlationId,
-            operationName: "list-user-exports",
+            operationName: "list_user_exports",
             outcome: "failed",
           },
         );
@@ -318,7 +318,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.warn("Invalid export ID format", {
         exportId,
         correlationId,
-        operationName: "fetch-export-status",
+        operationName: "fetch_export_status",
       });
       return apiError(
         "Invalid export ID format. Must be a valid UUID.",
@@ -336,7 +336,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         timeout: TimeoutConfig.NORMAL,
         retry: { maxAttempts: 2 },
         circuitBreaker: true,
-        operationName: "fetch-export-status",
+        operationName: "fetch_export_status",
       },
     );
 
@@ -347,7 +347,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         {
           exportId,
           correlationId,
-          operationName: "fetch-export-status",
+          operationName: "fetch_export_status",
           outcome: "failed",
         },
       );
@@ -368,7 +368,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.warn("Export not found or unauthorized", {
         exportId,
         correlationId,
-        operationName: "fetch-export-status",
+        operationName: "fetch_export_status",
         outcome: "not_found",
       });
       return apiError(
@@ -384,7 +384,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       error instanceof Error ? error : new Error(String(error)),
       {
         correlationId,
-        operationName: "fetch-export-status",
+        operationName: "fetch_export_status",
         outcome: "failed",
       },
     );

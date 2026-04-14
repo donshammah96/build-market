@@ -8,6 +8,15 @@ import {
 } from "@prisma/client";
 import { z } from "zod";
 
+/**
+ * ADR-005 observable operationName inventory (profile-complete adapters):
+ * - route_profile_complete (PATCH /api/user/profile/complete)
+ * - update_client_profile_complete (PATCH /api/user/profile/complete/client)
+ * - update_professional_profile_complete (PATCH /api/user/profile/complete/professional)
+ * - update_client_profile_complete_routed (internal routed execution)
+ * - update_professional_profile_complete_routed (internal routed execution)
+ */
+
 const LicenseSchema = z.object({
   licenseNumber: z.string().min(1, "License number is required"),
   authority: z.nativeEnum(LicenseAuthority),

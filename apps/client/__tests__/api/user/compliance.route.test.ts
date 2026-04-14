@@ -38,7 +38,6 @@ vi.mock("@/app/lib/api/api-middleware", () => ({
       handler(req, {
         clerkId: "clerk_123",
         dbUserId: "db_user_123",
-        userEmail: "test@example.com",
         userRole: "CLIENT",
       }),
 }));
@@ -48,6 +47,11 @@ vi.mock("@/app/lib/api/rate-limit", () => ({
     .fn()
     .mockResolvedValue({ success: true, reset: Date.now() + 60000 }),
   getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
+  getActorRateLimitIdentifier: vi
+    .fn()
+    .mockImplementation(
+      (dbUserId: string, namespace: string) => `${namespace}:${dbUserId}`,
+    ),
   RateLimits: {
     READ: { limit: 100, window: 60000 },
     WRITE: { limit: 10, window: 60000 },

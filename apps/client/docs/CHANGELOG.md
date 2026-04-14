@@ -28,6 +28,37 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+### [CHECKPOINT] Section 14 R10 Residual Observability Inventory Sweep - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Completed the residual R10 observability sweep by adding ADR-005 operation-name inventory annotations across all previously observability-⚠️ slices in domain contracts.
+- Actual files changed: `apps/client/app/lib/domains/finance/contracts.ts`; `apps/client/app/lib/domains/documents/contracts.ts`; `apps/client/app/lib/domains/licenses/contracts.ts`; `apps/client/app/lib/domains/certificates/contracts.ts`; `apps/client/app/lib/domains/messaging/contracts.ts`; `apps/client/app/lib/domains/professionals/contracts.ts`; `apps/client/app/lib/domains/portfolio/contracts.ts`; `apps/client/app/lib/domains/idea-books/contracts.ts`; `apps/client/app/lib/domains/reviews/contracts.ts`; `apps/client/app/lib/domains/search/contracts.ts`; `apps/client/app/lib/domains/calendar/contracts.ts`; `apps/client/docs/PROGRESS-SUMMARY.md`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results:
+  1. Task `report-security-drift-strict-medium3` (pass, all reported drift categories `0`).
+  2. `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `TSC_EXIT:0`).
+- Guardrail outcomes delivered:
+  1. Observability operationName inventories are now documented for all slices currently represented in the Section 14 registry.
+  2. Open defect `OD-004` (residual observability inventory gap) is closed in `PROGRESS-SUMMARY`.
+  3. Remaining governance blocker is narrowed to Phase 2 Criterion 2 operational monitoring evidence capture.
+- Deferred items: capture staging and production NDJSON evidence windows for Phase 2 Criterion 2 closeout.
+
+### [CHECKPOINT] Section 14 R8-R10 Closure Wave (Notifications, Seller-Insights, User-Rights) - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Completed the requested Section 14 implementation wave by hardening notifications and seller-insights adapters (R8), completing targeted IDOR policy matrix suites (R9), and normalizing/documenting ADR-005 operation-name inventories for user-rights and client-dashboard surfaces (R10).
+- Actual files changed: `apps/client/app/api/notifications/route.ts`; `apps/client/app/api/notifications/[id]/route.ts`; `apps/client/app/api/professional-portal/inventory/alerts/route.ts`; `apps/client/app/api/professional-portal/orders/route.ts`; `apps/client/app/api/professional-portal/products/top/route.ts`; `apps/client/app/api/user/consent/route.ts`; `apps/client/app/api/user/deletion/route.ts`; `apps/client/app/api/user/export/route.ts`; `apps/client/app/api/user/profile/route.ts`; `apps/client/app/api/user/profile/complete/route.ts`; `apps/client/app/api/user/profile/complete/client/route.ts`; `apps/client/app/api/user/profile/complete/professional/route.ts`; `apps/client/app/api/user/profile/complete/shared.ts`; `apps/client/app/api/user/rectification/route.ts`; `apps/client/app/api/client/dashboard/route.ts`; `apps/client/app/lib/domains/client-dashboard/contracts.ts`; `apps/client/app/lib/domains/notifications/contracts.ts`; `apps/client/app/lib/domains/seller-insights/contracts.ts`; `apps/client/app/lib/domains/user-profile/compliance.ts`; `apps/client/app/lib/domains/user-profile/profile-complete-contracts.ts`; `apps/client/app/lib/domains/user-profile/service.ts`; `apps/client/__tests__/api/notifications.route.test.ts`; `apps/client/__tests__/api/notifications/notification-id.route.test.ts`; `apps/client/__tests__/api/professional-portal/seller-insights-adapters.route.test.ts`; `apps/client/__tests__/policy/{calendar,notifications,professionals,seller-insights,user-rights,idea-books}/**`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/api/notifications __tests__/api/professional-portal/seller-insights-adapters.route.test.ts --maxWorkers=1` (pass, `4` files and `11` tests).
+  2. `pnpm -C apps/client exec vitest run __tests__/policy --maxWorkers=1 --reporter=json --outputFile tmp-r9-policy-all.json` (pass, `16` files and `55` tests).
+  3. Task `report-security-drift-strict-medium3` (pass, all reported drift categories `0`).
+  4. `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `TSC_EXIT:0`).
+- Guardrail outcomes delivered:
+  1. Notifications and seller-insights adapters now use actor-scoped rate-limit keys, safe static forbidden mapping, and structured terminal outcome logs aligned to ADR-005 fields.
+  2. Notifications collection and item mutation handlers now enforce CSRF via route-level `withAuth` options.
+  3. Policy matrix coverage now includes targeted owner vs non-owner vs not-found boundaries across calendar, notifications, seller-insights, user-rights, professionals, and idea-books attachment flows.
+  4. User-rights and client-dashboard operation-name join keys are normalized to snake_case and inventoried in domain contract annotations.
+- Deferred items: residual R10 inventory follow-through for remaining observability-⚠️ slices and Phase 2 Criterion 2 staging/production telemetry evidence capture remain open.
+
 ### [DOCS] Section 14 Domain Audit Registry + Documentation Hardening - 2026-04-11
 
 #### Documentation

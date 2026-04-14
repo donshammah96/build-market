@@ -84,7 +84,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
   try {
     logger.info("Fetching user profile", {
       correlationId,
-      operationName: "fetch-user-profile",
+      operationName: "fetch_user_profile",
     });
 
     const result = await executor.execute(
@@ -94,7 +94,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         timeout: TimeoutConfig.NORMAL,
         retry: { maxAttempts: 2 },
         circuitBreaker: true,
-        operationName: "fetch-user-profile",
+        operationName: "fetch_user_profile",
       },
     );
 
@@ -106,7 +106,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
           : new Error(String(result.error)),
         {
           correlationId,
-          operationName: "fetch-user-profile",
+          operationName: "fetch_user_profile",
           outcome: "failed",
         },
       );
@@ -128,7 +128,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       if (profileResult.error === "not_found") {
         logger.info("User not found in database", {
           correlationId,
-          operationName: "fetch-user-profile",
+          operationName: "fetch_user_profile",
           outcome: "not_found",
         });
         return apiError(
@@ -142,7 +142,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
         new Error(profileResult.message || "Profile fetch failed"),
         {
           correlationId,
-          operationName: "fetch-user-profile",
+          operationName: "fetch_user_profile",
           outcome: "failed",
         },
       );
@@ -154,7 +154,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     logger.info("Profile fetched successfully", {
       correlationId,
-      operationName: "fetch-user-profile",
+      operationName: "fetch_user_profile",
       isComplete: profileResult.data.completion.isComplete,
       percentage: profileResult.data.completion.percentage,
       accountLocked: profileResult.data.alerts.accountLocked,
@@ -168,7 +168,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       err instanceof Error ? err : new Error(String(err)),
       {
         correlationId,
-        operationName: "fetch-user-profile",
+        operationName: "fetch_user_profile",
         outcome: "failed",
       },
     );
@@ -210,7 +210,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     logger.info("Updating user profile", {
       correlationId,
-      operationName: "update-user-profile",
+      operationName: "update_user_profile",
       hasProfileData: !!validationResult.data.profileData,
     });
     const updateResult = await executor.execute(
@@ -223,7 +223,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
         timeout: TimeoutConfig.NORMAL,
         retry: { maxAttempts: 2 },
         circuitBreaker: true,
-        operationName: "update-user-profile",
+        operationName: "update_user_profile",
       },
     );
 
@@ -235,7 +235,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
           : new Error("Update failed"),
         {
           correlationId,
-          operationName: "update-user-profile",
+          operationName: "update_user_profile",
           outcome: "failed",
         },
       );
@@ -264,7 +264,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
         new Error(updateResult.data.message || "Update failed"),
         {
           correlationId,
-          operationName: "update-user-profile",
+          operationName: "update_user_profile",
           outcome: "failed",
         },
       );
@@ -277,7 +277,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     logger.info("Profile updated successfully", {
       correlationId,
-      operationName: "update-user-profile",
+      operationName: "update_user_profile",
       outcome: "succeeded",
     });
 
@@ -288,7 +288,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
       err instanceof Error ? err : new Error(String(err)),
       {
         correlationId,
-        operationName: "update-user-profile",
+        operationName: "update_user_profile",
         outcome: "failed",
       },
     );

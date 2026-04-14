@@ -47,7 +47,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
   try {
     logger.info("Profile complete request received - routing by role", {
       correlationId,
-      operationName: "route-profile-complete",
+      operationName: "route_profile_complete",
     });
 
     const rateLimitResult = await checkProfileCompleteRateLimit(req, dbUserId);
@@ -67,7 +67,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.warn("Profile complete target resolution failed", {
         correlationId,
         error: targetResult.error,
-        operationName: "route-profile-complete",
+        operationName: "route_profile_complete",
         outcome: "failed",
       });
       return apiError(
@@ -96,7 +96,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
       const domainResult = await executeProfileCompleteOperation({
         executor,
-        operationName: "update-client-profile-complete-routed",
+        operationName: "update_client_profile_complete_routed",
         operation: async () =>
           completeClientProfile(
             {
@@ -118,7 +118,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.info("Profile complete request routed successfully", {
         target,
         correlationId,
-        operationName: "route-profile-complete",
+        operationName: "route_profile_complete",
         outcome: "succeeded",
       });
 
@@ -141,7 +141,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     const domainResult = await executeProfileCompleteOperation({
       executor,
-      operationName: "update-professional-profile-complete-routed",
+      operationName: "update_professional_profile_complete_routed",
       operation: async () =>
         completeProfessionalProfile(
           {
@@ -167,7 +167,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
     logger.info("Profile complete request routed successfully", {
       target,
       correlationId,
-      operationName: "route-profile-complete",
+      operationName: "route_profile_complete",
       outcome: "succeeded",
     });
 
@@ -178,7 +178,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
       err instanceof Error ? err : new Error(String(err)),
       {
         correlationId,
-        operationName: "route-profile-complete",
+        operationName: "route_profile_complete",
         outcome: "failed",
       },
     );

@@ -7,6 +7,20 @@ import type {
   UpdateIdeaBookInput,
 } from "@/app/lib/validation/idea-books-validation";
 
+/**
+ * ADR-005 observable operationName inventory:
+ * - list_idea_books (GET /api/idea-books)
+ * - create_idea_book (POST /api/idea-books)
+ * - get_idea_book (GET /api/idea-books/[id])
+ * - update_idea_book (PATCH /api/idea-books/[id])
+ * - delete_idea_book (DELETE /api/idea-books/[id])
+ * - add_idea_book_attachment (POST /api/idea-books/[id])
+ * - list_idea_book_attachments (GET /api/idea-books/[id]/attachments)
+ * - get_idea_book_attachment (GET /api/idea-books/[id]/attachments/[attachmentId])
+ * - update_idea_book_attachment (PATCH /api/idea-books/[id]/attachments/[attachmentId])
+ * - delete_idea_book_attachment (DELETE /api/idea-books/[id]/attachments/[attachmentId])
+ */
+
 export type IdeaBooksActor = {
   userId: string;
   role?: string | null;
