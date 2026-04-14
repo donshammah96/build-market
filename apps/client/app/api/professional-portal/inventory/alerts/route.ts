@@ -8,13 +8,47 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { sellerInsightsService } from "@/app/lib/domains/seller-insights";
 import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
+const ROUTE_PATTERN = "/api/professional-portal/inventory/alerts";
+
+type SellerInsightsAdapterOutcome =
+  | "started"
+  | "succeeded"
+  | "failed"
+  | "rate_limited"
+  | "domain_error";
+
+function createSellerInsightsOutcomeLogger(
+  req: NextRequest,
+  correlationId: string,
+  actorRole: string,
+  requestStartedAt: number,
+  operationName: string,
+) {
+  return (
+    outcome: SellerInsightsAdapterOutcome,
+    httpStatus: number,
+    details: { domainError?: string } = {},
+  ) => {
+    logger.info("Seller insights inventory alerts adapter outcome", {
+      correlationId,
+      operationName,
+      httpMethod: req.method,
+      routePattern: ROUTE_PATTERN,
+      actorRole,
+      outcome,
+      httpStatus,
+      durationMs: Date.now() - requestStartedAt,
+      ...(details.domainError ? { domainError: details.domainError } : {}),
+    });
+  };
+}
 
 /**
  * GET /api/professional-portal/inventory/alerts
@@ -22,15 +56,29 @@ const logger = getClientLogger();
  */
 export const GET = withAuth(
   async (req: NextRequest, { dbUserId, userRole }) => {
-    initializeCorrelationId(req);
+    const requestStartedAt = Date.now();
+    const correlationId = initializeCorrelationId(req);
+    const actorRole = normalizeRole(String(userRole)) ?? String(userRole);
+    const operationName = "get_inventory_alerts";
+    const logOutcome = createSellerInsightsOutcomeLogger(
+      req,
+      correlationId,
+      actorRole,
+      requestStartedAt,
+      operationName,
+    );
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "seller-insights-read",
+    );
     const rateLimitResult = await checkRateLimit(
-      `inventory-alerts:${identifier}`,
+      rateLimitKey,
       RateLimits.READ.limit,
       RateLimits.READ.window,
     );
     if (!rateLimitResult.success) {
+      logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
       return apiError(
         "Too many requests. Please try again later.",
         HttpStatus.TOO_MANY_REQUESTS,
@@ -38,17 +86,28 @@ export const GET = withAuth(
     }
 
     const resilientExecutor = getResilientExecutor();
+    logOutcome("started", HttpStatus.OK);
     const result = await resilientExecutor.execute(
       () =>
         sellerInsightsService.getInventoryAlerts({
           userId: dbUserId,
-          role: normalizeRole(String(userRole)),
+          role: actorRole,
         }),
-      { operationName: "get_inventory_alerts" },
+      { operationName },
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch inventory alerts", result.error);
+      logger.error("Failed to fetch inventory alerts", result.error, {
+        correlationId,
+        operationName,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: Date.now() - requestStartedAt,
+      });
+      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR);
       return apiError(
         "Failed to fetch inventory alerts",
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -57,12 +116,13 @@ export const GET = withAuth(
 
     const data = result.data;
     if (!data.ok) {
-      return apiError(
-        (data as { message?: string }).message ?? "Forbidden",
-        HttpStatus.FORBIDDEN,
-      );
+      logOutcome("domain_error", HttpStatus.FORBIDDEN, {
+        domainError: (data as { error?: string }).error,
+      });
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
 
+    logOutcome("succeeded", HttpStatus.OK);
     return apiSuccess(data.data, HttpStatus.OK);
   },
 );

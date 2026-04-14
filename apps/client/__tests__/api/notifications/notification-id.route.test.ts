@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
+import { UserRole } from "@build/db";
+import type { AuthContext } from "@/app/lib/api/api-middleware";
 import {
   GET as getNotificationRoute,
   PATCH as patchNotificationRoute,
@@ -14,6 +16,21 @@ const mockNotificationsService = vi.hoisted(() => ({
   deleteById: vi.fn(),
 }));
 
+const mockAuthContext: AuthContext = {
+  clerkId: "clerk_123",
+  dbUserId: "db_user_123",
+  userRole: UserRole.PROFESSIONAL,
+};
+
+const mockGetActorRateLimitIdentifier = vi.hoisted(() =>
+  vi
+    .fn()
+    .mockImplementation(
+      (dbUserId: string, routeNamespace: string) =>
+        `${routeNamespace}:${dbUserId}`,
+    ),
+);
+
 vi.mock("@/app/lib/api/api-middleware", () => ({
   withAuth:
     (
@@ -24,16 +41,7 @@ vi.mock("@/app/lib/api/api-middleware", () => ({
       ) => Promise<unknown>,
     ) =>
     async (req: NextRequest, params?: { id: string }) =>
-      handler(
-        req,
-        {
-          clerkId: "clerk_123",
-          dbUserId: "db_user_123",
-          userEmail: "pro@example.com",
-          userRole: "PROFESSIONAL",
-        },
-        params ?? { id: notificationId },
-      ),
+      handler(req, mockAuthContext, params ?? { id: notificationId }),
 }));
 
 vi.mock("@/app/lib/api/api-response", () => ({
@@ -62,7 +70,7 @@ vi.mock("@/app/lib/api/api-response", () => ({
 
 vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
-  getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
+  getActorRateLimitIdentifier: mockGetActorRateLimitIdentifier,
   RateLimits: {
     READ: { limit: 100, window: 60000 },
     WRITE: { limit: 10, window: 60000 },
@@ -119,6 +127,10 @@ describe("notifications item routes", () => {
       notificationId,
     );
     expect(body.data.id).toBe(notificationId);
+    expect(mockGetActorRateLimitIdentifier).toHaveBeenCalledWith(
+      "db_user_123",
+      "notifications-read",
+    );
   });
 
   it("maps domain no_update to 400", async () => {
@@ -143,6 +155,10 @@ describe("notifications item routes", () => {
 
     expect(response.status).toBe(400);
     expect(body.error).toBe("No fields to update");
+    expect(mockGetActorRateLimitIdentifier).toHaveBeenCalledWith(
+      "db_user_123",
+      "notifications-write",
+    );
   });
 
   it("maps domain forbidden delete to 403", async () => {
@@ -166,5 +182,9 @@ describe("notifications item routes", () => {
 
     expect(response.status).toBe(403);
     expect(body.error).toBe("Forbidden");
+    expect(mockGetActorRateLimitIdentifier).toHaveBeenCalledWith(
+      "db_user_123",
+      "notifications-write",
+    );
   });
 });

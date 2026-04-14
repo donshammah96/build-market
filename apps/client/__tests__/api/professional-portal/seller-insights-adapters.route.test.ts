@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
+import { UserRole } from "@build/db";
+import type { AuthContext } from "@/app/lib/api/api-middleware";
 import { GET as inventoryAlertsGet } from "@/app/api/professional-portal/inventory/alerts/route";
 import { GET as ordersGet } from "@/app/api/professional-portal/orders/route";
 import { GET as topProductsGet } from "@/app/api/professional-portal/products/top/route";
@@ -12,21 +14,31 @@ const mockLogger = vi.hoisted(() => ({
   debug: vi.fn(),
 }));
 
+const mockAuthContext: AuthContext = {
+  clerkId: "clerk_123",
+  dbUserId: "db_user_123",
+  userRole: UserRole.PROFESSIONAL,
+};
+
+const mockGetActorRateLimitIdentifier = vi.hoisted(() =>
+  vi
+    .fn()
+    .mockImplementation(
+      (dbUserId: string, routeNamespace: string) =>
+        `${routeNamespace}:${dbUserId}`,
+    ),
+);
+
 vi.mock("@/app/lib/api/api-middleware", () => ({
   withAuth:
-    (
-      handler: (
-        req: NextRequest,
-        context: { dbUserId: string; userRole: string },
-      ) => Promise<unknown>,
-    ) =>
+    (handler: (req: NextRequest, context: AuthContext) => Promise<unknown>) =>
     async (req: NextRequest) =>
-      handler(req, { dbUserId: "db_user_123", userRole: "PROFESSIONAL" }),
+      handler(req, mockAuthContext),
 }));
 
 vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
-  getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
+  getActorRateLimitIdentifier: mockGetActorRateLimitIdentifier,
   RateLimits: {
     READ: { limit: 100, window: 60000 },
     WRITE: { limit: 10, window: 60000 },
@@ -108,13 +120,17 @@ describe("seller insights route adapters", () => {
       userId: "db_user_123",
       role: "PROFESSIONAL",
     });
+    expect(mockGetActorRateLimitIdentifier).toHaveBeenCalledWith(
+      "db_user_123",
+      "seller-insights-read",
+    );
   });
 
-  it("maps forbidden to 403", async () => {
+  it("maps forbidden to 403 with static safe message", async () => {
     vi.mocked(sellerInsightsService.getInventoryAlerts).mockResolvedValue({
       ok: false,
       error: "forbidden",
-      message: "Forbidden",
+      message: "Internal seller policy detail should not leak",
       status: 403,
     });
 
@@ -125,6 +141,8 @@ describe("seller insights route adapters", () => {
     );
 
     expect(response.status).toBe(403);
+    const body = await response.json();
+    expect(body.error).toBe("Forbidden");
   });
 
   it("parses orders query and delegates to seller-insights domain", async () => {
@@ -146,6 +164,10 @@ describe("seller insights route adapters", () => {
     expect(sellerInsightsService.getOrders).toHaveBeenCalledWith(
       { userId: "db_user_123", role: "PROFESSIONAL" },
       expect.objectContaining({ page: 2, limit: 50, status: "PENDING" }),
+    );
+    expect(mockGetActorRateLimitIdentifier).toHaveBeenCalledWith(
+      "db_user_123",
+      "seller-insights-read",
     );
   });
 
@@ -185,6 +207,10 @@ describe("seller insights route adapters", () => {
     expect(sellerInsightsService.getTopProducts).toHaveBeenCalledWith(
       { userId: "db_user_123", role: "PROFESSIONAL" },
       { limit: 3 },
+    );
+    expect(mockGetActorRateLimitIdentifier).toHaveBeenCalledWith(
+      "db_user_123",
+      "seller-insights-read",
     );
   });
 });

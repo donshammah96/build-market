@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { GET } from "@/app/api/notifications/route";
 
 const mockNotificationsList = vi.hoisted(() => vi.fn());
+const mockGetActorRateLimitIdentifier = vi.hoisted(() =>
+  vi.fn().mockReturnValue("notifications-read:db_user_123"),
+);
 
 vi.mock("@/app/lib/api/api-middleware", () => ({
   withAuth:
@@ -41,7 +44,7 @@ vi.mock("@/app/lib/api/api-response", () => ({
 
 vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
-  getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
+  getActorRateLimitIdentifier: mockGetActorRateLimitIdentifier,
   RateLimits: {
     READ: { limit: 60, window: 60_000 },
   },
@@ -89,5 +92,9 @@ describe("GET /api/notifications", () => {
 
     expect(response.status).toBe(403);
     expect(payload.error).toBe("Forbidden");
+    expect(mockGetActorRateLimitIdentifier).toHaveBeenCalledWith(
+      "db_user_123",
+      "notifications-read",
+    );
   });
 });
