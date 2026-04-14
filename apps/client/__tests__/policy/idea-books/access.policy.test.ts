@@ -155,4 +155,109 @@ describe("Idea books collaborator/privacy policy", () => {
 
     expect(result.data.privacy).toBe("PUBLIC");
   });
+
+  it("permits owner to add attachment", async () => {
+    repositoryMocks.findOwnershipById.mockResolvedValue({
+      id: "book-1",
+      clientId: OWNER_ACTOR.userId,
+    });
+    repositoryMocks.findAssetById.mockResolvedValue({ id: "asset-1" });
+    repositoryMocks.createAttachment.mockResolvedValue({
+      id: "att-1",
+      ideaBookId: "book-1",
+      fileKey: "uploads/att-1",
+      fileUrl: "https://cdn.example.com/att-1",
+      sourceUrl: null,
+      caption: "Mood board",
+      notes: null,
+      mimeType: "image/png",
+      fileSize: 120,
+      sortOrder: 0,
+      uploadedBy: OWNER_ACTOR.userId,
+      assetId: "asset-1",
+      createdAt: new Date("2026-04-13T08:00:00.000Z"),
+      updatedAt: new Date("2026-04-13T08:00:00.000Z"),
+    });
+
+    const result = await ideaBooksService.addAttachment(OWNER_ACTOR, "book-1", {
+      caption: "Mood board",
+      assetId: "asset-1",
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("denies non-owner add attachment", async () => {
+    repositoryMocks.findOwnershipById.mockResolvedValue({
+      id: "book-1",
+      clientId: OWNER_ACTOR.userId,
+    });
+
+    const result = await ideaBooksService.addAttachment(
+      OUTSIDER_ACTOR,
+      "book-1",
+      {
+        fileUrl: "https://cdn.example.com/hidden-board",
+      },
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "forbidden",
+      status: 403,
+    });
+  });
+
+  it("returns not_found when attachment is missing", async () => {
+    repositoryMocks.findAttachmentWithOwner.mockResolvedValue(null);
+
+    const result = await ideaBooksService.getAttachmentById(
+      OWNER_ACTOR,
+      "att-missing",
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "not_found",
+      status: 404,
+    });
+  });
+
+  it("denies non-owner attachment update", async () => {
+    repositoryMocks.findAttachmentWithOwner.mockResolvedValue({
+      id: "att-1",
+      ideaBook: { clientId: OWNER_ACTOR.userId },
+    });
+
+    const result = await ideaBooksService.updateAttachment(
+      OUTSIDER_ACTOR,
+      "att-1",
+      { caption: "Updated" },
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "forbidden",
+      status: 403,
+    });
+  });
+
+  it("denies non-owner attachment delete", async () => {
+    repositoryMocks.findAttachmentDeleteMetadata.mockResolvedValue({
+      id: "att-1",
+      fileKey: "uploads/att-1",
+      ideaBook: { clientId: OWNER_ACTOR.userId },
+    });
+
+    const result = await ideaBooksService.deleteAttachment(
+      OUTSIDER_ACTOR,
+      "att-1",
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "forbidden",
+      status: 403,
+    });
+  });
 });
