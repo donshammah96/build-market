@@ -172,7 +172,7 @@ export default function AuthCallbackPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-zinc-50 to-zinc-100">
+    <div className="flex min-h-screen items-center justify-center bg-linear-to-br from-zinc-50 to-zinc-100">
       <div className="text-center max-w-md mx-auto px-4">
         {/* Loading Spinner */}
         <div className="relative mb-6">
