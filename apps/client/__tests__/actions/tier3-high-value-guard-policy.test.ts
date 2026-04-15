@@ -280,6 +280,30 @@ function extractWithAuthExportHandlerBlock(
   };
 }
 
+function extractDirectRouteExportHandlerBlock(
+  source: string,
+  exportName: string,
+): { block: string; actionIndex: number } | null {
+  const exportPattern = new RegExp(
+    `export\\s+async\\s+function\\s+${exportName}\\s*\\(`,
+  );
+  const exportMatch = exportPattern.exec(source);
+  if (!exportMatch || exportMatch.index === undefined) {
+    return null;
+  }
+
+  const bodyStartIndex = source.indexOf("{", exportMatch.index);
+  const block = extractBalancedBraceBlock(source, bodyStartIndex);
+  if (!block) {
+    return null;
+  }
+
+  return {
+    block,
+    actionIndex: exportMatch.index,
+  };
+}
+
 function extractWithAuthExportOptionsBlock(
   source: string,
   exportName: string,
@@ -462,26 +486,56 @@ function collectRouteGuardViolationsFromSource(
   rule: HighValueRouteRule,
 ): PolicyViolation[] {
   const offenders: PolicyViolation[] = [];
-  const extractedHandler = extractWithAuthExportHandlerBlock(
+  const extractedWithAuthHandler = extractWithAuthExportHandlerBlock(
     source,
     rule.exportName,
   );
+
+  let extractedHandler = extractedWithAuthHandler;
+  let optionsBlock = "";
+
+  if (!extractedWithAuthHandler) {
+    const allowsDirectAuthExport =
+      rule.requiredAuthOptions.length === 0 && !!rule.emptyAuthOptionsRationale;
+
+    if (!allowsDirectAuthExport) {
+      offenders.push({
+        file: rule.file,
+        actionName: rule.exportName,
+        check: "missing-withauth-export",
+        message:
+          "High-value route mutation must be wrapped by withAuth with Tier-3 guard options.",
+      });
+      return offenders;
+    }
+
+    extractedHandler = extractDirectRouteExportHandlerBlock(
+      source,
+      rule.exportName,
+    );
+
+    if (!extractedHandler) {
+      offenders.push({
+        file: rule.file,
+        actionName: rule.exportName,
+        check: "missing-route-export",
+        message:
+          "High-value route export is missing; cannot verify Tier-3 guardrails.",
+      });
+      return offenders;
+    }
+  } else {
+    const extractedOptions = extractWithAuthExportOptionsBlock(
+      source,
+      rule.exportName,
+    );
+    optionsBlock = extractedOptions?.optionsBlock ?? "";
+  }
+
   if (!extractedHandler) {
-    offenders.push({
-      file: rule.file,
-      actionName: rule.exportName,
-      check: "missing-withauth-export",
-      message:
-        "High-value route mutation must be wrapped by withAuth with Tier-3 guard options.",
-    });
     return offenders;
   }
 
-  const extractedOptions = extractWithAuthExportOptionsBlock(
-    source,
-    rule.exportName,
-  );
-  const optionsBlock = extractedOptions?.optionsBlock ?? "";
   const actionLine = findLineNumber(source, extractedHandler.actionIndex);
 
   for (const requiredAuthOption of rule.requiredAuthOptions) {
@@ -834,6 +888,30 @@ describe("Tier-3 high-value guard policy", () => {
     ]);
   });
 
+  it("allows direct auth route exports when auth options are intentionally empty", () => {
+    const source = [
+      "export async function POST() {",
+      "  await checkRateLimit(getActorRateLimitIdentifier(clerkId, 'onboarding-submit'), 5, 60000);",
+      "  return apiSuccess({ ok: true });",
+      "}",
+    ].join("\n");
+
+    const offenders = collectRouteGuardViolationsFromSource(source, {
+      file: "sample/api/onboarding/route.ts",
+      exportName: "POST",
+      requiredAuthOptions: [],
+      emptyAuthOptionsRationale:
+        "AUTH-RATIONALE: Uses direct Clerk auth() because DB user may not exist yet.",
+      requiredRateLimitSnippets: [
+        "checkRateLimit(",
+        "onboarding-submit",
+        "getActorRateLimitIdentifier(",
+      ],
+    });
+
+    expect(offenders).toEqual([]);
+  });
+
   it("scopes rate-limit snippet checks to the matched withAuth handler", () => {
     const source = [
       "export const POST = withAuth(async () => {",
@@ -875,9 +953,8 @@ describe("Tier-3 critical transition sequencing policy", () => {
   it("flags out-of-order onboarding transition steps", () => {
     const source = [
       "export async function submitOnboarding() {",
-      "  await finalizeClerkOnboardingTransition('clerk_123', { status: 'ACTIVE' });",
-      "  await userProfileOnboardingService.completeOnboarding({ actor: { clerkId: 'clerk_123' } });",
-      "  await IdempotencyService.complete('idem-key', {});",
+      "  await executeOnboardingTransition({ operationName: 'complete_onboarding_action', clerkId: 'clerk_123', clerkUser: {} as never, intent: { kind: 'submit', role: 'CLIENT', data: {} as never }, idempotencyKey: 'idem-key' });",
+      "  await checkOnboardingTransitionIdempotency({ idempotencyKey: 'idem-key', clerkId: 'clerk_123' });",
       "}",
     ].join("\n");
 
@@ -885,9 +962,8 @@ describe("Tier-3 critical transition sequencing policy", () => {
       file: "sample/actions/onboarding.ts",
       actionName: "submitOnboarding",
       orderedSnippets: [
-        "userProfileOnboardingService.completeOnboarding(",
-        "finalizeClerkOnboardingTransition(",
-        "IdempotencyService.complete(",
+        "checkOnboardingTransitionIdempotency(",
+        "executeOnboardingTransition(",
       ],
     });
 
@@ -897,7 +973,7 @@ describe("Tier-3 critical transition sequencing policy", () => {
         actionName: "submitOnboarding",
         line: 1,
         check: "out-of-order-step",
-        missingStep: "finalizeClerkOnboardingTransition(",
+        missingStep: "executeOnboardingTransition(",
         message: "Critical transition steps must execute in canonical order.",
       },
     ]);

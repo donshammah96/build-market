@@ -31,6 +31,13 @@ export default function Onboarding() {
   return (
     <OnboardingAnalyticsProvider value={onboardingAnalytics}>
       <div className="dark min-h-screen">
+        <noscript>
+          <meta httpEquiv="refresh" content="0; url=/onboarding/no-js" />
+          <p>
+            JavaScript is required for this page. {" "}
+            <a href="/onboarding/no-js">Continue without JavaScript.</a>
+          </p>
+        </noscript>
         <OnboardingView
           step={step}
           setStep={setStep}

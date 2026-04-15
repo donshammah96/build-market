@@ -58,6 +58,18 @@ export {
 } from "./settings";
 export type { SystemSettings } from "./settings";
 
+// Onboarding Remediation
+export {
+  onboardingReconcile,
+  onboardingClerkSync,
+  onboardingIdempotencyReconcile,
+} from "./onboarding-remediation";
+export type {
+  AdminOnboardingReconciliationResult,
+  AdminOnboardingClerkSyncResult,
+  AdminOnboardingIdempotencyReconcileResult,
+} from "./onboarding-remediation";
+
 // Verification
 export {
   getPendingVerifications,

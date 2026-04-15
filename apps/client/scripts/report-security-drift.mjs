@@ -697,6 +697,27 @@ function extractWithAuthExportHandlerBlock(source, exportName) {
   };
 }
 
+function extractDirectRouteExportHandlerBlock(source, exportName) {
+  const exportPattern = new RegExp(
+    `export\\s+async\\s+function\\s+${exportName}\\s*\\(`,
+  );
+  const exportMatch = exportPattern.exec(source);
+  if (!exportMatch || exportMatch.index === undefined) {
+    return null;
+  }
+
+  const bodyStartIndex = source.indexOf("{", exportMatch.index);
+  const block = extractBalancedBraceBlock(source, bodyStartIndex);
+  if (!block) {
+    return null;
+  }
+
+  return {
+    block,
+    actionIndex: exportMatch.index,
+  };
+}
+
 function extractWithAuthExportOptionsBlock(source, exportName) {
   const exportPattern = new RegExp(
     `export\\s+const\\s+${exportName}\\s*=\\s*withAuth(?:<[^>]+>)?\\s*\\(`,
@@ -775,26 +796,53 @@ function collectHighValueRouteGuardDrift() {
       continue;
     }
 
-    const extractedHandler = extractWithAuthExportHandlerBlock(
+    const extractedWithAuthHandler = extractWithAuthExportHandlerBlock(
       source,
       rule.exportName,
     );
-    if (!extractedHandler) {
-      offenders.push({
-        file: rule.file,
-        actionName: rule.exportName,
-        check: "missing-withauth-export",
-        message:
-          "High-value route mutation must be wrapped by withAuth with Tier-3 guard options.",
-      });
-      continue;
+
+    let extractedHandler = extractedWithAuthHandler;
+    let optionsBlock = "";
+
+    if (!extractedWithAuthHandler) {
+      const allowsDirectAuthExport =
+        rule.requiredAuthOptions.length === 0 &&
+        !!rule.emptyAuthOptionsRationale;
+
+      if (!allowsDirectAuthExport) {
+        offenders.push({
+          file: rule.file,
+          actionName: rule.exportName,
+          check: "missing-withauth-export",
+          message:
+            "High-value route mutation must be wrapped by withAuth with Tier-3 guard options.",
+        });
+        continue;
+      }
+
+      extractedHandler = extractDirectRouteExportHandlerBlock(
+        source,
+        rule.exportName,
+      );
+
+      if (!extractedHandler) {
+        offenders.push({
+          file: rule.file,
+          actionName: rule.exportName,
+          check: "missing-route-export",
+          message:
+            "High-value route export is missing; cannot verify Tier-3 guardrails.",
+        });
+        continue;
+      }
+    } else {
+      const extractedOptions = extractWithAuthExportOptionsBlock(
+        source,
+        rule.exportName,
+      );
+      optionsBlock = extractedOptions?.optionsBlock ?? "";
     }
 
-    const extractedOptions = extractWithAuthExportOptionsBlock(
-      source,
-      rule.exportName,
-    );
-    const optionsBlock = extractedOptions?.optionsBlock ?? "";
     const actionLine = findLineNumber(source, extractedHandler.actionIndex);
 
     for (const requiredAuthOption of rule.requiredAuthOptions) {
@@ -852,7 +900,7 @@ function collectHighValueRouteGuardDrift() {
 function collectActorScopedThrottlingDrift() {
   const offenders = [];
   const directActorPattern =
-    /checkRateLimit\([^)]*(?:dbUserId|actor(?:\s*\?\.|\.)userId)/;
+    /checkRateLimit\([^)]*(?:dbUserId|clerkId|actor(?:\s*\?\.|\.)userId)/;
 
   for (const rule of HIGH_VALUE_ROUTE_GUARD_RULES) {
     const source = readOptionalRelativeFile(rule.file);
@@ -860,10 +908,19 @@ function collectActorScopedThrottlingDrift() {
       continue;
     }
 
-    const extractedHandler = extractWithAuthExportHandlerBlock(
+    const extractedWithAuthHandler = extractWithAuthExportHandlerBlock(
       source,
       rule.exportName,
     );
+
+    let extractedHandler = extractedWithAuthHandler;
+    if (!extractedHandler && rule.requiredAuthOptions.length === 0) {
+      extractedHandler = extractDirectRouteExportHandlerBlock(
+        source,
+        rule.exportName,
+      );
+    }
+
     if (!extractedHandler) {
       continue;
     }
@@ -876,7 +933,7 @@ function collectActorScopedThrottlingDrift() {
     const usesIpScopedIdentifier = block.includes("getRateLimitIdentifier(");
     const usesActorScopedHelper =
       block.includes("getActorRateLimitIdentifier(") &&
-      block.includes("dbUserId");
+      /(dbUserId|clerkId|actor(?:\s*\?\.|\.)userId)/.test(block);
     const usesActorScopedIdentifier =
       usesActorScopedHelper || directActorPattern.test(block);
 

@@ -50,6 +50,9 @@ export const ADMIN_ACTION_POLICY_MAP: Record<string, AdminActionPolicy> = {
   verifyStore: { allowedRoles: ["admin", "verification_admin"], risk: "high" },
   rejectStore: { allowedRoles: ["admin", "verification_admin"], risk: "high" },
   deleteStore: { allowedRoles: ["admin"], risk: "high" },
+  onboardingReconcile: { allowedRoles: ["admin"], risk: "high" },
+  onboardingClerkSync: { allowedRoles: ["admin"], risk: "high" },
+  onboardingIdempotencyReconcile: { allowedRoles: ["admin"], risk: "high" },
 };
 
 const DEFAULT_ADMIN_ACTION_POLICY: AdminActionPolicy = {

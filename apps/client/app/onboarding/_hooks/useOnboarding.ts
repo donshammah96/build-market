@@ -197,7 +197,8 @@ export function useOnboarding() {
   const handleSubmit = async (data: OnboardingData) => {
     setSubmitting(true);
     try {
-      // Store creation is now handled within submit POST route
+      // Store and property creation is handled by shared onboarding orchestration.
+      // Non-fatal side-effect failures are surfaced as response warnings.
       const result = await onboardingClient.submit(data);
 
       if (!result.success) {

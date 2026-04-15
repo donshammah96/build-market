@@ -34,7 +34,11 @@ vi.mock("@clerk/nextjs/server", () => ({
 
 vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
-  getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
+  getActorRateLimitIdentifier: vi
+    .fn()
+    .mockImplementation(
+      (actorId: string, namespace: string) => `${namespace}:${actorId}`,
+    ),
   RateLimits: {
     AUTH: { limit: 5, window: 60000 },
   },
@@ -75,10 +79,12 @@ vi.mock("@/app/lib/api/api-response", () => ({
     ),
   HttpStatus: {
     OK: 200,
+    BAD_REQUEST: 400,
     FORBIDDEN: 403,
     UNAUTHORIZED: 401,
     CONFLICT: 409,
     TOO_MANY_REQUESTS: 429,
+    SERVICE_UNAVAILABLE: 503,
     INTERNAL_SERVER_ERROR: 500,
   },
 }));
@@ -278,5 +284,31 @@ describe("POST /api/onboarding/skip-professional", () => {
 
     expect(response.status).toBe(429);
     expect(data.error).toContain("Too many requests");
+  });
+
+  it("returns success when idempotency completion persistence fails", async () => {
+    const { IdempotencyService } =
+      await import("@/app/lib/services/idempotency.service");
+    vi.mocked(IdempotencyService.complete).mockRejectedValueOnce(
+      new Error("redis unavailable"),
+    );
+
+    const response = await POST(
+      new NextRequest(
+        "http://localhost:3500/api/onboarding/skip-professional",
+        {
+          method: "POST",
+        },
+      ),
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(IdempotencyService.complete).toHaveBeenCalledWith(
+      "idem-key",
+      expect.objectContaining({ role: "PROFESSIONAL" }),
+    );
+    expect(IdempotencyService.fail).toHaveBeenCalledWith("idem-key");
   });
 });

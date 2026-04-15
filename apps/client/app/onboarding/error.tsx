@@ -28,7 +28,7 @@ export default function OnboardingError({
     <div className="relative min-h-screen overflow-hidden bg-background px-4 py-8 md:px-6 md:py-10">
       <div className="absolute inset-0 z-0">
         <div className="absolute inset-0 bg-[linear-gradient(130deg,var(--color-onboarding-surface)_0%,color-mix(in_oklab,var(--color-onboarding-primary)_20%,transparent)_38%,transparent_100%)]" />
-        <div className="absolute top-[-8rem] right-[-7rem] h-[28rem] w-[28rem] rounded-full bg-[var(--color-onboarding-glow)]/30 blur-3xl" />
+        <div className="absolute -top-32 -right-28 h-112 w-md rounded-full bg-[var(--color-onboarding-glow)]/30 blur-3xl" />
         <div className="absolute bottom-[-10rem] left-[-8rem] h-[26rem] w-[26rem] rounded-full bg-[var(--color-onboarding-accent)]/22 blur-3xl" />
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#4b5f7f1f_1px,transparent_1px),linear-gradient(to_bottom,#4b5f7f1f_1px,transparent_1px)] bg-[size:22px_22px]" />
       </div>

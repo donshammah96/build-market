@@ -5,6 +5,8 @@ import {
   submitOnboarding,
 } from "@/app/actions/onboarding";
 
+vi.mock("server-only", () => ({}));
+
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   currentUser: vi.fn(),
@@ -12,12 +14,7 @@ const mocks = vi.hoisted(() => ({
   checkRateLimit: vi.fn(),
   userFindUnique: vi.fn(),
   adminProfileFindUnique: vi.fn(),
-  completeOnboarding: vi.fn(),
-  skipClientOnboarding: vi.fn(),
-  skipProfessionalOnboardingService: vi.fn(),
-  createStore: vi.fn(),
-  createProperty: vi.fn(),
-  finalizeClerkOnboardingTransition: vi.fn(),
+  executeOnboardingOrchestration: vi.fn(),
   idempotencyCheckOrCreate: vi.fn(),
   idempotencyComplete: vi.fn(),
   idempotencyFail: vi.fn(),
@@ -53,10 +50,19 @@ vi.mock("@/app/lib/api/resilient-api", () => ({
     error: mocks.loggerError,
   }),
   getResilientExecutor: () => ({
-    execute: vi.fn(async (fn: () => Promise<unknown>) => ({
-      success: true,
-      data: await fn(),
-    })),
+    execute: vi.fn(async (fn: () => Promise<unknown>) => {
+      try {
+        return {
+          success: true,
+          data: await fn(),
+        };
+      } catch (error) {
+        return {
+          success: false,
+          error,
+        };
+      }
+    }),
   }),
 }));
 
@@ -64,30 +70,10 @@ vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: mocks.checkRateLimit,
 }));
 
-vi.mock("@/app/lib/domains/user-profile", () => ({
-  userProfileOnboardingService: {
-    completeOnboarding: mocks.completeOnboarding,
-    skipClientOnboarding: mocks.skipClientOnboarding,
-    skipProfessionalOnboarding: mocks.skipProfessionalOnboardingService,
-  },
-}));
-
-vi.mock("@/app/lib/domains/stores", () => ({
-  storesService: {
-    createStore: mocks.createStore,
-  },
-}));
-
-vi.mock("@/app/lib/domains/properties", () => ({
-  propertiesService: {
-    createProperty: mocks.createProperty,
-  },
-}));
-
-vi.mock("@/app/lib/domains/user-profile/clerk-metadata", () => ({
+vi.mock("@/app/lib/domains/shared/onboarding-orchestration", () => ({
   CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE:
     "Unable to finalize account state. Please retry.",
-  finalizeClerkOnboardingTransition: mocks.finalizeClerkOnboardingTransition,
+  executeOnboardingOrchestration: mocks.executeOnboardingOrchestration,
 }));
 
 vi.mock("@/app/lib/services/idempotency.service", () => ({
@@ -130,7 +116,16 @@ describe("onboarding Tier-3 guards", () => {
     mocks.idempotencyCheckOrCreate.mockResolvedValue({ status: "new" });
     mocks.idempotencyComplete.mockResolvedValue(undefined);
     mocks.idempotencyFail.mockResolvedValue(undefined);
-    mocks.finalizeClerkOnboardingTransition.mockResolvedValue(undefined);
+    mocks.executeOnboardingOrchestration.mockResolvedValue({
+      ok: true,
+      data: {
+        userId: "db_user_123",
+        role: "CLIENT",
+        isProfileComplete: true,
+        status: "ACTIVE",
+        redirectTo: "/dashboard",
+      },
+    });
   });
 
   it("blocks verification-role transition when recent-auth is stale", async () => {
@@ -158,7 +153,7 @@ describe("onboarding Tier-3 guards", () => {
     });
     expect(mocks.checkRateLimit).not.toHaveBeenCalled();
     expect(mocks.currentUser).not.toHaveBeenCalled();
-    expect(mocks.skipProfessionalOnboardingService).not.toHaveBeenCalled();
+    expect(mocks.executeOnboardingOrchestration).not.toHaveBeenCalled();
   });
 
   it("rate-limits onboarding critical transitions before handler execution", async () => {
@@ -178,8 +173,7 @@ describe("onboarding Tier-3 guards", () => {
       15 * 60 * 1000,
     );
     expect(mocks.currentUser).not.toHaveBeenCalled();
-    expect(mocks.skipClientOnboarding).not.toHaveBeenCalled();
-    expect(mocks.finalizeClerkOnboardingTransition).not.toHaveBeenCalled();
+    expect(mocks.executeOnboardingOrchestration).not.toHaveBeenCalled();
     expect(result).toEqual({
       success: false,
       error: {
@@ -195,21 +189,13 @@ describe("onboarding Tier-3 guards", () => {
     });
   });
 
-  it("returns 503 and skips idempotency completion when Clerk finalization fails", async () => {
-    mocks.completeOnboarding.mockResolvedValueOnce({
-      ok: true,
-      data: {
-        userId: "db_user_123",
-        role: "CLIENT",
-        isProfileComplete: true,
-      },
+  it("returns 503 with static-safe mapping when orchestration reports clerk sync failure", async () => {
+    mocks.executeOnboardingOrchestration.mockResolvedValueOnce({
+      ok: false,
+      error: "clerk_sync_failed",
+      message: "Unable to finalize account state. Please retry.",
+      status: 503,
     });
-    mocks.finalizeClerkOnboardingTransition.mockImplementationOnce(
-      async (params?: { onFailure?: () => Promise<void> | void }) => {
-        await params?.onFailure?.();
-        throw new Error("clerk unavailable");
-      },
-    );
 
     const result = await submitOnboarding({
       role: "client",
@@ -230,22 +216,37 @@ describe("onboarding Tier-3 guards", () => {
         status: 503,
       },
     });
-    expect(mocks.idempotencyFail).toHaveBeenCalledWith("idem-key");
-    expect(mocks.idempotencyComplete).not.toHaveBeenCalled();
+    expect(mocks.executeOnboardingOrchestration).toHaveBeenCalledWith(
+      {
+        clerkId: "clerk_123",
+        correlationId: expect.any(String),
+      },
+      expect.objectContaining({ id: "clerk_123" }),
+      {
+        kind: "submit",
+        role: "CLIENT",
+        data: expect.objectContaining({ role: "client", county: "NAIROBI" }),
+      },
+      {
+        key: "idem-key",
+        scope: "onboarding",
+        actorId: "clerk_123",
+        method: "POST",
+      },
+    );
   });
 
-  it("returns success when onboarding completion persistence fails after finalization", async () => {
-    mocks.completeOnboarding.mockResolvedValueOnce({
+  it("returns success when orchestration returns success", async () => {
+    mocks.executeOnboardingOrchestration.mockResolvedValueOnce({
       ok: true,
       data: {
         userId: "db_user_123",
         role: "CLIENT",
         isProfileComplete: true,
+        status: "ACTIVE",
+        redirectTo: "/dashboard",
       },
     });
-    mocks.idempotencyComplete.mockRejectedValueOnce(
-      new Error("idempotency persistence failed"),
-    );
 
     const result = await submitOnboarding({
       role: "client",
@@ -264,9 +265,100 @@ describe("onboarding Tier-3 guards", () => {
         userId: "db_user_123",
         role: "CLIENT",
         isProfileComplete: true,
+        status: "ACTIVE",
+        redirectTo: "/dashboard",
       },
     });
-    expect(mocks.finalizeClerkOnboardingTransition).toHaveBeenCalled();
+    expect(mocks.executeOnboardingOrchestration).toHaveBeenCalled();
     expect(mocks.idempotencyFail).not.toHaveBeenCalled();
+  });
+
+  it("returns cached idempotency response without invoking orchestration", async () => {
+    mocks.idempotencyCheckOrCreate.mockResolvedValueOnce({
+      status: "completed",
+      response: {
+        userId: "db_user_cached",
+        role: "CLIENT",
+        isProfileComplete: true,
+        status: "ACTIVE",
+        redirectTo: "/dashboard",
+      },
+    });
+
+    const result = await submitOnboarding({
+      role: "client",
+      county: "NAIROBI",
+      city: "Nairobi",
+      type: "HOMEOWNER",
+      projectType: "new_construction",
+      projectLocation: "Nairobi",
+      estimatedBudget: "1000000-5000000",
+      description: "Building a new home",
+    } as never);
+
+    expect(result).toEqual({
+      success: true,
+      data: {
+        userId: "db_user_cached",
+        role: "CLIENT",
+        isProfileComplete: true,
+        status: "ACTIVE",
+        redirectTo: "/dashboard",
+      },
+    });
+    expect(mocks.executeOnboardingOrchestration).not.toHaveBeenCalled();
+  });
+
+  it("returns conflict when idempotency key is pending", async () => {
+    mocks.idempotencyCheckOrCreate.mockResolvedValueOnce({ status: "pending" });
+
+    const result = await submitOnboarding({
+      role: "client",
+      county: "NAIROBI",
+      city: "Nairobi",
+      type: "HOMEOWNER",
+      projectType: "new_construction",
+      projectLocation: "Nairobi",
+      estimatedBudget: "1000000-5000000",
+      description: "Building a new home",
+    } as never);
+
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: "conflict",
+        message: "Request is being processed",
+        status: 409,
+      },
+    });
+    expect(mocks.executeOnboardingOrchestration).not.toHaveBeenCalled();
+    expect(mocks.idempotencyComplete).not.toHaveBeenCalled();
+  });
+
+  it("returns internal when orchestration executor fails", async () => {
+    mocks.executeOnboardingOrchestration.mockRejectedValueOnce(
+      new Error("executor failure"),
+    );
+
+    const result = await submitOnboarding({
+      role: "client",
+      county: "NAIROBI",
+      city: "Nairobi",
+      type: "HOMEOWNER",
+      projectType: "new_construction",
+      projectLocation: "Nairobi",
+      estimatedBudget: "1000000-5000000",
+      description: "Building a new home",
+    } as never);
+
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: "internal",
+        message: "Onboarding failed",
+        status: 500,
+      },
+    });
+    expect(mocks.idempotencyFail).toHaveBeenCalledWith("idem-key");
   });
 });

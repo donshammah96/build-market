@@ -18,26 +18,6 @@
  *    That double cast bypassed TypeScript completely. All five routes had it.
  */
 
-/**
- * POST /api/onboarding
- * app/api/onboarding/route.ts
- *
- * KEY CHANGES FROM ORIGINAL:
- *
- * 1. CLERK UPDATE ORDERING FIX (critical)
- *    Original: domain logic → IdempotencyService.complete() → Clerk update
- *    Fixed:    domain logic → Clerk update → IdempotencyService.complete()
- *
- *    If Clerk update ran after complete() and failed silently, any retry
- *    returned the cached "completed" response without re-attempting the Clerk
- *    update. The user ended up with DB isOnboarded=true but stale Clerk
- *    metadata, breaking every middleware auth check on next page load.
- *
- * 2. SHARED CLERK HELPER replaces the duplicated:
- *    (await clerkClient()) as unknown as ClerkMetadataClient
- *    That double cast bypassed TypeScript completely. All five routes had it.
- */
-
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { OnboardingSchema } from "@build/types";
@@ -49,7 +29,7 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { checkBodySize } from "@/app/lib/api/api-guards";
@@ -69,6 +49,15 @@ const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 const ROUTE_PATTERN = "/api/onboarding";
 const OPERATION_NAME = "complete_onboarding";
 
+const ONBOARDING_ERROR_MESSAGE_MAP: Partial<Record<string, string>> = {
+  conflict: "Onboarding already completed",
+  invalid_input: "Invalid or expired document uploads",
+  invalid_state: "Invalid onboarding state",
+  forbidden: "Forbidden",
+  not_found: "User not found",
+  internal: "Onboarding failed",
+};
+
 function mapOutcomeFromStatus(status: number): string {
   if (status === HttpStatus.BAD_REQUEST) return "bad_request";
   if (status === HttpStatus.UNAUTHORIZED) return "unauthorized";
@@ -83,10 +72,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const correlationId = initializeCorrelationId(req);
   let actorRole: "unknown" | "CLIENT" | "PROFESSIONAL" = "unknown";
 
+  type LogOutcomeFields = {
+    reason?: string;
+    source?: string;
+    domainError?: string;
+    completedRole?: string;
+    errors?: string[];
+  };
+
   const logOutcome = (
     outcome: string,
     httpStatus: number,
-    additionalContext?: Record<string, unknown>,
+    fields?: LogOutcomeFields,
   ) => {
     logger.info("Onboarding adapter outcome", {
       correlationId,
@@ -97,7 +94,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       outcome,
       httpStatus,
       durationMs: Date.now() - startedAt,
-      ...(additionalContext ? { additionalContext } : {}),
+      ...(fields?.reason ? { reason: fields.reason } : {}),
+      ...(fields?.source ? { source: fields.source } : {}),
+      ...(fields?.domainError ? { domainError: fields.domainError } : {}),
+      ...(fields?.completedRole ? { completedRole: fields.completedRole } : {}),
+      ...(fields?.errors ? { errors: fields.errors } : {}),
     });
   };
 
@@ -107,9 +108,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED);
   }
 
-  const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
-    `onboarding:${identifier}`,
+    getActorRateLimitIdentifier(clerkId, "onboarding-submit"),
     RateLimits.AUTH.limit,
     RateLimits.AUTH.window,
   );
@@ -253,9 +253,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         outcome: "failed",
         httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
         durationMs: Date.now() - startedAt,
-        additionalContext: {
-          reason: "executor_failure",
-        },
+        reason: "executor_failure",
       },
     );
     return apiError("Onboarding failed", HttpStatus.INTERNAL_SERVER_ERROR);
@@ -264,11 +262,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!result.data.ok) {
     await IdempotencyService.fail(idempotencyKey);
     const status = result.data.status || HttpStatus.INTERNAL_SERVER_ERROR;
+    const safeMessage =
+      ONBOARDING_ERROR_MESSAGE_MAP[result.data.error ?? ""] ||
+      "Onboarding failed";
+
     logOutcome(mapOutcomeFromStatus(status), status, {
       reason: "domain_error",
-      domainError: result.data.error,
+      domainError: result.data.error || "unknown",
     });
-    return apiError(result.data.message || "Onboarding failed", status);
+    return apiError(safeMessage, status);
   }
 
   const responseData = result.data.data;
@@ -299,7 +301,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  await IdempotencyService.complete(idempotencyKey, responseData);
+  try {
+    await IdempotencyService.complete(idempotencyKey, responseData);
+  } catch (completionError) {
+    await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+    logger.error(
+      "Failed to complete onboarding idempotency replay",
+      completionError instanceof Error
+        ? completionError
+        : new Error("Idempotency completion failed"),
+      {
+        correlationId,
+        operationName: OPERATION_NAME,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "idempotency_complete_failed",
+        httpStatus: HttpStatus.OK,
+        durationMs: Date.now() - startedAt,
+      },
+    );
+  }
 
   logOutcome("succeeded", HttpStatus.OK, {
     completedRole: responseData.role,

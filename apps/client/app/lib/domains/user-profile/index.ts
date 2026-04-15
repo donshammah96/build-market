@@ -7,3 +7,4 @@ export * from "./onboarding";
 export * from "./client-type-compliance";
 export * from "./client-type-policy";
 export * from "./mappers";
+export * from "./remediation";

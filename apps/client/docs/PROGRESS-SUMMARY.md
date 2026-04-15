@@ -157,6 +157,134 @@ Last updated: 2026-04-14
 
 ## Snapshot
 
+### [RUN] Onboarding Convergence Phase 6 - Baseline Validation Gates Executed (Telemetry Pending)
+
+- Date: 2026-04-14
+- Outcome summary: Completed the Phase 6 baseline validation command bundle and captured evidence outputs; telemetry health report generation is pending required NDJSON exports for staging and production windows.
+- Runtime evidence captured:
+  1. `apps/client/tmp/phase6-evidence/onboarding-validation-vitest.txt`
+  2. `apps/client/tmp/phase6-evidence/onboarding-validation-drift.txt`
+  3. `apps/client/tmp/phase6-evidence/onboarding-validation-client-tsc.txt`
+  4. `apps/client/tmp/phase6-evidence/onboarding-validation-admin-tsc.txt`
+- Validation results:
+  1. Onboarding-adjacent Vitest suite passed (`10` files, `76` tests).
+  2. Strict drift passed (all reported categories `0`).
+  3. Client typecheck passed (exit code `0`).
+  4. Admin typecheck passed.
+- Remaining external inputs:
+  1. `apps/client/tmp/phase6-evidence/staging-canary.ndjson`
+  2. `apps/client/tmp/phase6-evidence/staging-broad.ndjson`
+  3. `apps/client/tmp/phase6-evidence/production-canary.ndjson`
+  4. `apps/client/tmp/phase6-evidence/production-broad.ndjson`
+- Notes: Phase 6 cannot be marked complete until mutation-health and summary artifacts are produced from all four telemetry windows.
+
+### [PREP] Onboarding Convergence Phase 6 - Production Validation Runbook Ready
+
+- Date: 2026-04-14
+- Outcome summary: Added an explicit Phase 6 operator runbook with exact PowerShell commands, deterministic artifact locations, and completion gates for staging and production telemetry evidence windows.
+- Actual files changed: `apps/client/docs/ONBOARDING-CONVERGENCE-PLAN.md`; docs tracking entries updated.
+- Runbook coverage added:
+  1. Full onboarding-adjacent validation suite command with output capture.
+  2. Strict drift/typecheck/admin typecheck commands with artifact capture.
+  3. `report:projects-mutation-health` commands for staging and production canary and broad windows.
+  4. `summarize-project-mutation-health.mjs` commands for each health report output.
+- Notes: This is a preparation checkpoint only. Phase 6 remains pending until runtime command execution artifacts are captured from actual staging and production NDJSON exports.
+
+### [CHECKPOINT] Onboarding Convergence Phase 5 - Guard/Policy Drift Rebalancing - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Completed Phase 5 by adding onboarding route guard registry coverage, rebalancing drift enforcement for direct-auth onboarding routes, adding dedicated onboarding route guard/sequencing policy tests, and removing stale onboarding hook guidance.
+- Actual files changed: `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/scripts/high-risk-registry.mjs`; `apps/client/__tests__/actions/tier3-high-value-guard-policy.test.ts`; `apps/client/__tests__/api/onboarding/onboarding-route-guard-and-sequencing.test.ts`; `apps/client/app/onboarding/_hooks/useOnboarding.ts`; docs tracking entries updated.
+- Verification commands run and results:
+  1. `pnpm -C apps/client run build:high-risk-registry` passed (regenerated `scripts/high-risk-registry.mjs`).
+  2. `pnpm -C apps/client exec vitest run __tests__/api/onboarding/ --maxWorkers=1` passed (`6` files, `43` tests).
+  3. `pnpm -C apps/client exec vitest run __tests__/actions/tier3-high-value-guard-policy.test.ts --maxWorkers=1` passed (`1` file, `10` tests).
+  4. `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` passed (all reported drift categories `0`; output captured in `tmp-phase5-drift.txt`).
+  5. `pnpm -C apps/client exec tsc --noEmit --pretty false` passed (no diagnostics output).
+- Security outcomes:
+  1. `HIGH_VALUE_ROUTE_GUARD_RULES` now covers all three active onboarding mutation routes with explicit direct-auth rationale markers.
+  2. Drift policy checks now validate direct-export onboarding routes when empty auth options are intentional and justified.
+  3. Actor-scoped throttling drift checks now recognize `clerkId`-scoped `getActorRateLimitIdentifier(...)` usage in authenticated direct-auth routes.
+  4. Dedicated onboarding route guard/sequencing tests now enforce canonical transition ordering, idempotency fail-safe semantics, actor-scoped rate limiting, and static-safe adapter messages.
+  5. Onboarding hook guidance now correctly references shared orchestration warning handling.
+
+### [SNAPSHOT] Onboarding Convergence Pre-Phase 5 Verification - Green
+
+- Timestamp: 2026-04-14 11:12 (local)
+- Scope: Fresh pre-implementation verification baseline before starting Phase 5 guard and policy rebalancing.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/api/internal/onboarding-remediation.route.test.ts --maxWorkers=1` passed (`1` file, `8` tests).
+  2. `pnpm -C apps/admin exec vitest run src/actions/admin/__tests__/onboarding-remediation.test.ts --maxWorkers=1` passed (`1` file, `5` tests).
+  3. `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` passed (all reported drift categories `0`; output captured in `tmp-phase5-preflight-drift.txt`).
+  4. `pnpm -C apps/client exec tsc --noEmit --pretty false` passed (no diagnostics output).
+- Notes: Snapshot confirms the Phase 4 remediation stack is stable at the point Phase 5 work begins.
+
+### [CHECKPOINT] Onboarding Convergence Phase 4 - Internal Remediation Workflows - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Completed Phase 4 by implementing onboarding remediation domain workflows, internal remediation API surfaces, and admin-triggered remediation actions with targeted route and action tests.
+- Actual files changed: `apps/client/app/lib/domains/user-profile/remediation.ts`; `apps/client/app/lib/domains/user-profile/index.ts`; `apps/client/app/api/internal/onboarding-remediation/reconcile/route.ts`; `apps/client/app/api/internal/onboarding-remediation/clerk-sync/route.ts`; `apps/client/app/api/internal/onboarding-remediation/idempotency-reconcile/route.ts`; `apps/client/__tests__/api/internal/onboarding-remediation.route.test.ts`; `apps/admin/src/actions/admin/onboarding-remediation.ts`; `apps/admin/src/actions/admin/__tests__/onboarding-remediation.test.ts`; `apps/admin/src/lib/security/authorization-policy.ts`; `apps/admin/src/actions/admin/index.ts`; `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/scripts/high-risk-registry.mjs`; docs tracking entries updated.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/api/internal/onboarding-remediation.route.test.ts --maxWorkers=1` passed (`1` file, `8` tests).
+  2. `pnpm -C apps/admin exec vitest run src/actions/admin/__tests__/onboarding-remediation.test.ts --maxWorkers=1` passed (`1` file, `5` tests).
+  3. `pnpm run admin:check-types` passed.
+  4. `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` passed (all reported categories `0`).
+  5. Task `build-client-tsc-noemit-checkpoint` completed with no diagnostics output.
+- Security outcomes:
+  1. Internal remediation adapters enforce service-to-service secret gating and explicit rate limiting before domain execution.
+  2. Remediation operations now expose static-safe error mapping for reconciliation, Clerk sync, and idempotency recovery flows.
+  3. Admin remediation mutations are governed by `ADMIN_ACTION_POLICY_MAP` high-risk entries and `SUPER_ADMIN` granular-role checks.
+  4. Strict drift remains zero after removing incompatible internal-secret routes from withAuth-oriented high-value route guard registry enforcement.
+- Deferred items: Phase 5 guard and policy rebalancing remains pending in `apps/client/docs/ONBOARDING-CONVERGENCE-PLAN.md`.
+
+### [CHECKPOINT] Onboarding Convergence Phase 3 - Server Action + No-JS Fallback - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Completed Phase 3 by refactoring onboarding server actions to shared orchestration, removing action-level stores/properties side-effect loops, adding signed no-JS fallback pages, and introducing a noscript routing hint from the JS onboarding page.
+- Actual files changed: `apps/client/app/actions/onboarding.ts`; `apps/client/__tests__/actions/onboarding-tier3-guards.test.ts`; `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/__tests__/actions/tier3-high-value-guard-policy.test.ts`; `apps/client/scripts/high-risk-registry.mjs`; `apps/client/app/lib/infrastructure/onboarding-nojs-session.ts`; `apps/client/app/onboarding/no-js/page.tsx`; `apps/client/app/onboarding/no-js/client/page.tsx`; `apps/client/app/onboarding/no-js/professional/page.tsx`; `apps/client/app/onboarding/no-js/review/page.tsx`; `apps/client/app/onboarding/no-js/_components/NoJsClientForm.tsx`; `apps/client/app/onboarding/no-js/_components/NoJsProfessionalForm.tsx`; `apps/client/app/onboarding/no-js/_components/NoJsReview.tsx`; `apps/client/app/onboarding/page.tsx`; docs tracking entries updated.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/actions/onboarding-tier3-guards.test.ts __tests__/actions/tier3-high-value-guard-policy.test.ts --maxWorkers=1 --reporter=verbose` passed (`2` files, `16` tests).
+  2. `pnpm -C apps/client run build:high-risk-registry` passed (registry artifact regenerated).
+  3. `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` passed (all reported categories `0`).
+  4. `pnpm -C apps/client exec tsc --noEmit --pretty false` passed (`TSC_EXIT:0`).
+- Security outcomes:
+  1. Onboarding server action responses now use static-safe orchestration error mapping instead of domain message passthrough.
+  2. Tier-3 transition sequencing checks now enforce action-level idempotency check before orchestration transition execution.
+  3. No-JS onboarding state is now persisted only in signed, HttpOnly, SameSite=Strict cookie storage with ADR-006 Class C/D boundaries.
+  4. No-JS onboarding forms can now complete submit and skip transitions through server actions without client-side JavaScript.
+- Deferred items: Phase 4 remediation workflow surfaces remain pending in `apps/client/docs/ONBOARDING-CONVERGENCE-PLAN.md`.
+
+### [CHECKPOINT] Onboarding Convergence Phase 1 - Shared Orchestration Contract - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Completed Phase 1 by introducing a shared onboarding orchestration domain surface with a canonical intent contract, warning result envelope, Clerk finalization sequencing, and idempotency completion fail-safe behavior.
+- Actual files changed: `apps/client/app/lib/domains/shared/onboarding-orchestration/contracts.ts`; `apps/client/app/lib/domains/shared/onboarding-orchestration/service.ts`; `apps/client/app/lib/domains/shared/onboarding-orchestration/index.ts`; `apps/client/__tests__/lib/domains/onboarding-orchestration.contract.test.ts`; `apps/client/docs/PROGRESS-SUMMARY.md`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/lib/domains/onboarding-orchestration.contract.test.ts --maxWorkers=1` passed (`1` file, `8` tests, `EXIT:0`).
+  2. Task `shell: build-client-tsc-noemit` passed after import fix (no diagnostics output in final task run).
+- Security outcomes:
+  1. Shared orchestration now enforces canonical ordering: domain transition, Clerk finalization, idempotency completion.
+  2. Clerk finalization failure now maps to a structured `clerk_sync_failed` domain error while marking replay state failed.
+  3. Idempotency completion persistence failures now preserve success responses and still mark replay state failed for retryability.
+  4. Professional submit side-effects (store and property creation) now return explicit warning objects instead of throwing non-fatal failures.
+- Deferred items: Phase 2 route convergence and Phase 3 server-action convergence remain open in `apps/client/docs/ONBOARDING-CONVERGENCE-PLAN.md`.
+
+### [CHECKPOINT] Onboarding Convergence Phase 0 - Route Hardening - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Completed Phase 0 live-regression hardening on the active onboarding API adapters by enforcing actor-scoped throttling, static-safe error mapping, explicit structured log fields, duplicate-header cleanup, and idempotency completion fail-safe behavior.
+- Actual files changed: `apps/client/app/api/onboarding/route.ts`; `apps/client/app/api/onboarding/skip/route.ts`; `apps/client/app/api/onboarding/skip-professional/route.ts`; `apps/client/__tests__/api/onboarding/route.test.ts`; `apps/client/__tests__/api/onboarding/skip.test.ts`; `apps/client/__tests__/api/onboarding/skip-professional.test.ts`; `apps/client/docs/PROGRESS-SUMMARY.md`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/api/onboarding/ --maxWorkers=1` passed (`5` files, `39` tests).
+  2. `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` passed (all reported categories `0`, including `additionalContextInLogs`, `adapterMessagePassthrough`, `actorScopedThrottling`, and `idempotencyCompletionSafety`).
+  3. Task `build-client-tsc-noemit-checkpoint` completed with no diagnostics output in the task terminal.
+- Security outcomes:
+  1. Active onboarding routes no longer use IP-scoped rate-limit keys.
+  2. Skip-route and submit-route adapter responses no longer passthrough domain message text to `apiError(...)`.
+  3. Onboarding route adapters now preserve success responses when `IdempotencyService.complete(...)` fails post-success, while still marking replay state failed for retryability.
+  4. Onboarding route adapter logs now use explicit root fields instead of opaque `additionalContext` bags.
+- Deferred items: Phase 1 shared onboarding orchestration module, adapter convergence migration, and no-JS fallback alignment remain open in `apps/client/docs/ONBOARDING-CONVERGENCE-PLAN.md`.
+
 ### [CHECKPOINT] Section 14 R10 Residual Observability Inventory Sweep - Completed
 
 - Date: 2026-04-14

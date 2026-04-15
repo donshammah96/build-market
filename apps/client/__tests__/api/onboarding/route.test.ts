@@ -30,7 +30,11 @@ vi.mock("@clerk/nextjs/server", () => ({
 
 vi.mock("@/app/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
-  getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
+  getActorRateLimitIdentifier: vi
+    .fn()
+    .mockImplementation(
+      (actorId: string, namespace: string) => `${namespace}:${actorId}`,
+    ),
   RateLimits: {
     AUTH: { limit: 5, window: 60000 },
   },
@@ -80,7 +84,9 @@ vi.mock("@/app/lib/api/api-response", () => ({
     CREATED: 201,
     BAD_REQUEST: 400,
     UNAUTHORIZED: 401,
+    FORBIDDEN: 403,
     NOT_FOUND: 404,
+    CONFLICT: 409,
     TOO_MANY_REQUESTS: 429,
     SERVICE_UNAVAILABLE: 503,
     INTERNAL_SERVER_ERROR: 500,
@@ -405,5 +411,38 @@ describe("POST /api/onboarding", () => {
 
     expect(IdempotencyService.fail).toHaveBeenCalledWith("idem-key");
     expect(IdempotencyService.complete).not.toHaveBeenCalled();
+  });
+
+  it("returns success when idempotency completion persistence fails", async () => {
+    const { IdempotencyService } =
+      await import("@/app/lib/services/idempotency.service");
+    vi.mocked(IdempotencyService.complete).mockRejectedValueOnce(
+      new Error("redis unavailable"),
+    );
+
+    const request = new NextRequest("http://localhost:3500/api/onboarding", {
+      method: "POST",
+      body: JSON.stringify({
+        role: "client",
+        county: "NAIROBI",
+        city: "Nairobi",
+        type: "HOMEOWNER",
+        projectType: "new_construction",
+        projectLocation: "Nairobi",
+        estimatedBudget: "1000000-5000000",
+        description: "Building a new home",
+      }),
+    });
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(IdempotencyService.complete).toHaveBeenCalledWith(
+      "idem-key",
+      expect.objectContaining({ role: "CLIENT" }),
+    );
+    expect(IdempotencyService.fail).toHaveBeenCalledWith("idem-key");
   });
 });

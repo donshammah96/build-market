@@ -336,6 +336,42 @@ export const HIGH_VALUE_ROUTE_GUARD_RULES: HighValueRouteGuardRule[] = [
       "getActorRateLimitIdentifier(",
     ],
   },
+  {
+    file: "app/api/onboarding/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: [],
+    emptyAuthOptionsRationale:
+      "AUTH-RATIONALE: Uses direct Clerk auth() because DB user may not exist yet. Actor-scoped rate limiting via clerkId.",
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "onboarding-submit",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/onboarding/skip/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: [],
+    emptyAuthOptionsRationale:
+      "AUTH-RATIONALE: Uses direct Clerk auth(). Actor-scoped rate limiting via clerkId.",
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "onboarding-skip-client",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/onboarding/skip-professional/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: [],
+    emptyAuthOptionsRationale:
+      "AUTH-RATIONALE: Uses direct Clerk auth(). Actor-scoped rate limiting via clerkId.",
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "onboarding-skip-professional",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
 ];
 
 export const CRITICAL_TRANSITION_STEP_SEQUENCE_RULES: CriticalTransitionStepSequenceRule[] =
@@ -344,25 +380,24 @@ export const CRITICAL_TRANSITION_STEP_SEQUENCE_RULES: CriticalTransitionStepSequ
       file: "app/actions/onboarding.ts",
       actionName: "submitOnboarding",
       orderedSnippets: [
-        "userProfileOnboardingService.completeOnboarding(",
-        "finalizeClerkOnboardingTransition(",
-        "IdempotencyService.complete(",
+        "checkOnboardingTransitionIdempotency(",
+        "executeOnboardingTransition(",
       ],
     },
     {
       file: "app/actions/onboarding.ts",
       actionName: "skipOnboarding",
       orderedSnippets: [
-        "userProfileOnboardingService.skipClientOnboarding(",
-        "finalizeClerkOnboardingTransition(",
+        "checkOnboardingTransitionIdempotency(",
+        "executeOnboardingTransition(",
       ],
     },
     {
       file: "app/actions/onboarding.ts",
       actionName: "skipProfessionalOnboarding",
       orderedSnippets: [
-        "userProfileOnboardingService.skipProfessionalOnboarding(",
-        "finalizeClerkOnboardingTransition(",
+        "checkOnboardingTransitionIdempotency(",
+        "executeOnboardingTransition(",
       ],
     },
   ];

@@ -11,19 +11,6 @@
  * 2. SHARED CLERK HELPER replaces (await clerkClient()) as unknown as ClerkMetadataClient
  */
 
-/**
- * POST /api/onboarding/skip
- * app/api/onboarding/skip/route.ts
- *
- * KEY CHANGES FROM ORIGINAL:
- *
- * 1. CLERK UPDATE ORDERING FIX (critical)
- *    Original: domain logic → IdempotencyService.complete() → Clerk update
- *    Fixed:    domain logic → Clerk update → IdempotencyService.complete()
- *
- * 2. SHARED CLERK HELPER replaces (await clerkClient()) as unknown as ClerkMetadataClient
- */
-
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { apiError, HttpStatus } from "@/app/lib/api/api-response";
@@ -35,7 +22,7 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
@@ -53,6 +40,15 @@ const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/onboarding/skip";
 const OPERATION_NAME = "skip_onboarding";
 
+const SKIP_ONBOARDING_ERROR_MESSAGE_MAP: Partial<Record<string, string>> = {
+  conflict: "Onboarding already completed",
+  forbidden: "Forbidden",
+  not_found: "User not found",
+  invalid_state: "Invalid onboarding state",
+  invalid_input: "Invalid onboarding input",
+  internal: "Skip onboarding failed",
+};
+
 function mapOutcomeFromStatus(status: number): string {
   if (status === HttpStatus.BAD_REQUEST) return "bad_request";
   if (status === HttpStatus.UNAUTHORIZED) return "unauthorized";
@@ -67,10 +63,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const correlationId = initializeCorrelationId(req);
   let actorRole: "unknown" | AppRole = "unknown";
 
+  type LogOutcomeFields = {
+    reason?: string;
+    source?: string;
+    domainError?: string;
+    skipped?: boolean;
+  };
+
   const logOutcome = (
     outcome: string,
     httpStatus: number,
-    additionalContext?: Record<string, unknown>,
+    fields?: LogOutcomeFields,
   ) => {
     logger.info("Onboarding adapter outcome", {
       correlationId,
@@ -81,7 +84,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       outcome,
       httpStatus,
       durationMs: Date.now() - startedAt,
-      ...(additionalContext ? { additionalContext } : {}),
+      ...(fields?.reason ? { reason: fields.reason } : {}),
+      ...(fields?.source ? { source: fields.source } : {}),
+      ...(fields?.domainError ? { domainError: fields.domainError } : {}),
+      ...(typeof fields?.skipped === "boolean"
+        ? { skipped: fields.skipped }
+        : {}),
     });
   };
 
@@ -91,9 +99,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED);
   }
 
-  const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
-    `onboarding-skip:${identifier}`,
+    getActorRateLimitIdentifier(clerkId, "onboarding-skip-client"),
     RateLimits.AUTH.limit,
     RateLimits.AUTH.window,
   );
@@ -194,9 +201,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         outcome: "failed",
         httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
         durationMs: Date.now() - startedAt,
-        additionalContext: {
-          reason: "executor_failure",
-        },
+        reason: "executor_failure",
       },
     );
     return apiError("Skip onboarding failed", HttpStatus.INTERNAL_SERVER_ERROR);
@@ -205,11 +210,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!result.data.ok) {
     await IdempotencyService.fail(idempotencyKey);
     const status = result.data.status || HttpStatus.INTERNAL_SERVER_ERROR;
+    const safeMessage =
+      SKIP_ONBOARDING_ERROR_MESSAGE_MAP[result.data.error ?? ""] ||
+      "Skip onboarding failed";
+
     logOutcome(mapOutcomeFromStatus(status), status, {
       reason: "domain_error",
-      domainError: result.data.error,
+      domainError: result.data.error || "unknown",
     });
-    return apiError(result.data.message || "Skip onboarding failed", status);
+    return apiError(safeMessage, status);
   }
 
   const responseData = result.data.data;
@@ -232,10 +241,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  await IdempotencyService.complete(idempotencyKey, responseData);
+  try {
+    await IdempotencyService.complete(idempotencyKey, responseData);
+  } catch (completionError) {
+    await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+    logger.error(
+      "Failed to complete onboarding skip idempotency replay",
+      completionError instanceof Error
+        ? completionError
+        : new Error("Idempotency completion failed"),
+      {
+        correlationId,
+        operationName: OPERATION_NAME,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "idempotency_complete_failed",
+        httpStatus: HttpStatus.OK,
+        durationMs: Date.now() - startedAt,
+      },
+    );
+  }
 
   logOutcome("succeeded", HttpStatus.OK, {
-    role: resolvedActorRole,
     skipped: true,
   });
 
