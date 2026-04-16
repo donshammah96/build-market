@@ -14,6 +14,7 @@
   "scripts": {
     "lint": "echo \"No lint configured\" && exit 0",
     "healthcheck": "node --env-file=../.env --import tsx ./src/healthcheck.ts",
+    "enforce-maxmemory-policy": "node --env-file=../.env --import tsx ./src/enforce-maxmemory-policy.ts",
     "check-types": "tsc --noEmit",
     "test": "echo \"No tests configured\" && exit 0"
   },

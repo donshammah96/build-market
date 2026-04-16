@@ -29,6 +29,7 @@
     "db:seed": "pnpm -C packages/db exec prisma db seed",
     "redis:audit": "node ./scripts/redis-path-audit.mjs",
     "redis:healthcheck": "pnpm -C packages/redis run healthcheck",
+    "redis:enforce-policy": "pnpm -C packages/redis run enforce-maxmemory-policy",
     "admin:check-types": "pnpm -C apps/admin run check-types",
     "queue-server:check-types": "pnpm -C packages/queue-server run check-types",
     "client:tsc-noemit": "pnpm -C apps/client exec tsc --noEmit",
