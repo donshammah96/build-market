@@ -8,9 +8,9 @@ import {
 import { ROUTES } from "@/lib/links";
 
 type NoJsProfessionalPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     error?: string | string[];
-  };
+  }>;
 };
 
 function noJsSignInUrl(): string {
@@ -84,6 +84,7 @@ export default async function OnboardingNoJsProfessionalPage({
     redirect(noJsSignInUrl());
   }
 
+  const resolvedSearchParams = await searchParams;
   const session = await readOnboardingNoJsSession();
   if (!session?.role) {
     redirect("/onboarding/no-js");
@@ -94,7 +95,7 @@ export default async function OnboardingNoJsProfessionalPage({
   }
 
   const errorMessage = professionalPageErrorMessage(
-    parseQueryParam(searchParams?.error),
+    parseQueryParam(resolvedSearchParams?.error),
   );
 
   async function saveProfessionalDraft(formData: FormData) {

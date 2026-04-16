@@ -1,9 +1,24 @@
 import { normalizeRole, type AppRole } from "@/app/lib/security/roles";
 import { env } from "@/app/lib/infrastructure/env";
-import { getClientLogger } from "@/app/lib/api/resilient-api";
 
-const logger = getClientLogger();
 const OPERATION_NAME = "resolve_onboarding_status";
+
+function logOnboardingResolverOutcome(
+  level: "info" | "warn",
+  payload: Record<string, unknown>,
+) {
+  const logEvent = {
+    operationName: OPERATION_NAME,
+    ...payload,
+  };
+
+  if (level === "warn") {
+    console.warn("Onboarding resolver outcome", logEvent);
+    return;
+  }
+
+  console.info("Onboarding resolver outcome", logEvent);
+}
 
 export type OnboardingResolutionMode = "strict" | "lenient";
 
@@ -60,8 +75,7 @@ export async function resolveOnboardingStatus(
       reason: "internal_secret_missing",
     };
 
-    logger.warn("Onboarding resolver outcome", {
-      operationName: OPERATION_NAME,
+    logOnboardingResolverOutcome("warn", {
       outcome: "fallback",
       reason: fallbackResult.reason,
       source: fallbackResult.source,
@@ -94,8 +108,7 @@ export async function resolveOnboardingStatus(
         reason: "internal_api_non_ok",
       };
 
-      logger.warn("Onboarding resolver outcome", {
-        operationName: OPERATION_NAME,
+      logOnboardingResolverOutcome("warn", {
         outcome: "fallback",
         reason: fallbackResult.reason,
         source: fallbackResult.source,
@@ -123,8 +136,7 @@ export async function resolveOnboardingStatus(
       reason: "internal_api_resolved",
     };
 
-    logger.info("Onboarding resolver outcome", {
-      operationName: OPERATION_NAME,
+    logOnboardingResolverOutcome("info", {
       outcome: "resolved",
       reason: resolvedResult.reason,
       source: resolvedResult.source,
@@ -147,8 +159,7 @@ export async function resolveOnboardingStatus(
       reason: "internal_api_error",
     };
 
-    logger.warn("Onboarding resolver outcome", {
-      operationName: OPERATION_NAME,
+    logOnboardingResolverOutcome("warn", {
       outcome: "fallback",
       reason: fallbackResult.reason,
       source: fallbackResult.source,

@@ -4,6 +4,7 @@
   "globalEnv": ["NODE_ENV"],
   "tasks": {
     "build": {
+      "cache": true,
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**", "build/**"],
@@ -32,6 +33,15 @@
         "RESEND_API_KEY",
         "DEV_ADMIN_BYPASS"
       ]
+    },
+    "admin#build": {
+      "outputs": [".next/**", "!.next/cache/**"]
+    },
+    "client#build": {
+      "outputs": [".next/**", "!.next/cache/**"]
+    },
+    "project-service#build": {
+      "outputs": []
     },
     "lint": {
       "dependsOn": ["^lint"],

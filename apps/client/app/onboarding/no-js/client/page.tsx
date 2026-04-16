@@ -8,9 +8,9 @@ import {
 import { ROUTES } from "@/lib/links";
 
 type NoJsClientPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     error?: string | string[];
-  };
+  }>;
 };
 
 function noJsSignInUrl(): string {
@@ -67,6 +67,7 @@ export default async function OnboardingNoJsClientPage({
     redirect(noJsSignInUrl());
   }
 
+  const resolvedSearchParams = await searchParams;
   const session = await readOnboardingNoJsSession();
   if (!session?.role) {
     redirect("/onboarding/no-js");
@@ -77,7 +78,7 @@ export default async function OnboardingNoJsClientPage({
   }
 
   const errorMessage = clientPageErrorMessage(
-    parseQueryParam(searchParams?.error),
+    parseQueryParam(resolvedSearchParams?.error),
   );
 
   async function saveClientDraft(formData: FormData) {

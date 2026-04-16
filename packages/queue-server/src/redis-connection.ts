@@ -1,6 +1,26 @@
 import Redis, { type RedisOptions } from "ioredis";
 
 const DEFAULT_REDIS_URL = "redis://localhost:6379";
+const DEFAULT_REQUIRED_MAXMEMORY_POLICY = "noeviction";
+
+type RuntimePolicyEnforcementMode = "off" | "warn" | "error";
+
+export type BullMQRedisConnectionOptions = RedisOptions & {
+  skipVersionCheck?: boolean;
+};
+
+const requiredMaxMemoryPolicy = (
+  process.env.REDIS_REQUIRED_MAXMEMORY_POLICY ||
+  DEFAULT_REQUIRED_MAXMEMORY_POLICY
+)
+  .trim()
+  .toLowerCase();
+
+const runtimePolicyEnforcementMode = normalizeRuntimePolicyEnforcementMode(
+  process.env.REDIS_MAXMEMORY_POLICY_ENFORCEMENT,
+);
+
+let runtimePolicyValidationPromise: Promise<void> | null = null;
 
 export interface BullMQConnectionSummary {
   enabled: boolean;
@@ -19,6 +39,83 @@ function parseIntOrDefault(
 ): number {
   const parsed = Number.parseInt(value || "", 10);
   return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+function normalizeRuntimePolicyEnforcementMode(
+  value: string | undefined,
+): RuntimePolicyEnforcementMode {
+  const normalized = value?.trim().toLowerCase();
+
+  if (normalized === "off" || normalized === "warn" || normalized === "error") {
+    return normalized;
+  }
+
+  return "warn";
+}
+
+function getRedisInfoValue(info: string, fieldName: string): string | null {
+  const prefix = `${fieldName}:`;
+  const lines = info.split(/\r?\n/);
+
+  for (const line of lines) {
+    if (line.startsWith(prefix)) {
+      return line.slice(prefix.length).trim();
+    }
+  }
+
+  return null;
+}
+
+async function validateRedisRuntimePolicy(connection: Redis): Promise<void> {
+  if (runtimePolicyEnforcementMode === "off") {
+    return;
+  }
+
+  const info = await connection.info();
+  const detectedMaxMemoryPolicy = getRedisInfoValue(info, "maxmemory_policy");
+
+  if (!detectedMaxMemoryPolicy) {
+    console.warn(
+      "[Redis] Runtime policy check skipped: maxmemory_policy was not returned by Redis INFO.",
+    );
+    return;
+  }
+
+  if (detectedMaxMemoryPolicy.toLowerCase() === requiredMaxMemoryPolicy) {
+    return;
+  }
+
+  const message =
+    `[Redis] Runtime policy mismatch: maxmemory_policy=${detectedMaxMemoryPolicy}; ` +
+    `expected=${requiredMaxMemoryPolicy}. Configure Redis to prevent BullMQ job loss under memory pressure.`;
+
+  if (runtimePolicyEnforcementMode === "error") {
+    throw new Error(message);
+  }
+
+  console.warn(message);
+}
+
+function handleRuntimePolicyValidationError(error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (runtimePolicyEnforcementMode === "error") {
+    console.error(`[Redis] Runtime policy validation failed: ${message}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  console.warn(`[Redis] Runtime policy validation failed: ${message}`);
+}
+
+export async function ensureRedisRuntimePolicy(
+  connection: Redis,
+): Promise<void> {
+  if (!runtimePolicyValidationPromise) {
+    runtimePolicyValidationPromise = validateRedisRuntimePolicy(connection);
+  }
+
+  return runtimePolicyValidationPromise;
 }
 
 function buildConnectionFromUrl(redisUrl: string): RedisOptions {
@@ -47,8 +144,8 @@ function buildConnectionFromEnv(): RedisOptions {
 }
 
 export function getBullMQConnectionOptions(
-  overrides: Partial<RedisOptions> = {},
-): RedisOptions {
+  overrides: Partial<BullMQRedisConnectionOptions> = {},
+): BullMQRedisConnectionOptions {
   const baseConfig = process.env.REDIS_URL
     ? buildConnectionFromUrl(process.env.REDIS_URL)
     : buildConnectionFromEnv();
@@ -57,6 +154,9 @@ export function getBullMQConnectionOptions(
     ...baseConfig,
     maxRetriesPerRequest: null,
     enableReadyCheck: true,
+    // BullMQ emits a warning for each Queue/Worker instance when this is false.
+    // We run a centralized one-time runtime policy check from this package instead.
+    skipVersionCheck: true,
     retryStrategy: (times: number) => {
       const delay = Math.min(times * 500, 30000);
       console.log(`[Redis] Reconnecting attempt ${times}, delay: ${delay}ms`);
@@ -99,12 +199,23 @@ export function getBullMQConnectionSummary(): BullMQConnectionSummary {
 }
 
 export function createRedisConnection(
-  overrides: Partial<RedisOptions> = {},
+  overrides: Partial<BullMQRedisConnectionOptions> = {},
 ): Redis {
-  return new Redis(getBullMQConnectionOptions(overrides));
+  const options = getBullMQConnectionOptions(overrides);
+  const connection = new Redis(options);
+
+  // BullMQ reads skipVersionCheck from the shared connection object.
+  (connection as Redis & { skipVersionCheck?: boolean }).skipVersionCheck =
+    options.skipVersionCheck ?? true;
+
+  return connection;
 }
 
 export const redisConnection = createRedisConnection();
+
+void ensureRedisRuntimePolicy(redisConnection).catch(
+  handleRuntimePolicyValidationError,
+);
 
 redisConnection.on("error", (err: Error) => {
   console.error("[Redis] Connection error:", err.message);

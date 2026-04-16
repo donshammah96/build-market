@@ -7,9 +7,9 @@ import {
 import { ROUTES } from "@/lib/links";
 
 type NoJsRolePageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     error?: string | string[];
-  };
+  }>;
 };
 
 function noJsSignInUrl(): string {
@@ -48,10 +48,11 @@ export default async function OnboardingNoJsRolePage({
     redirect(noJsSignInUrl());
   }
 
+  const resolvedSearchParams = await searchParams;
   const session = await readOnboardingNoJsSession();
   const selectedRole = session?.role ?? "client";
   const errorMessage = rolePageErrorMessage(
-    parseQueryParam(searchParams?.error),
+    parseQueryParam(resolvedSearchParams?.error),
   );
 
   async function selectRole(formData: FormData) {

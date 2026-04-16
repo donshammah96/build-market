@@ -13,9 +13,9 @@ import {
 import { ROUTES } from "@/lib/links";
 
 type NoJsReviewPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     error?: string | string[];
-  };
+  }>;
 };
 
 function noJsSignInUrl(): string {
@@ -65,6 +65,7 @@ export default async function OnboardingNoJsReviewPage({
     redirect(noJsSignInUrl());
   }
 
+  const resolvedSearchParams = await searchParams;
   const session = await readOnboardingNoJsSession();
   if (!session?.role) {
     redirect("/onboarding/no-js");
@@ -78,7 +79,9 @@ export default async function OnboardingNoJsReviewPage({
     redirect("/onboarding/no-js/professional");
   }
 
-  const errorMessage = reviewErrorMessage(parseQueryParam(searchParams?.error));
+  const errorMessage = reviewErrorMessage(
+    parseQueryParam(resolvedSearchParams?.error),
+  );
 
   async function submitFromNoJs(_formData: FormData) {
     "use server";
