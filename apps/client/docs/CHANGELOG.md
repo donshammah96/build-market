@@ -28,6 +28,19 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+### [CHECKPOINT] Env Validation Build-Phase Deferral + Runtime Fail-Fast Regression Coverage - Completed
+
+- Date: 2026-04-18
+- Outcome summary: Updated the canonical env boundary to defer missing server-only required secrets during Next build static analysis while preserving strict runtime fail-fast behavior, and added focused regression tests for build-vs-runtime validation semantics.
+- Actual files changed: `apps/client/app/lib/infrastructure/env.ts`; `apps/client/__tests__/lib/env.validation.test.ts`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/lib/env.validation.test.ts --maxWorkers=1` (pass, `1` file and `6` tests).
+  2. Task `build-client-tsc-noemit-checkpoint` (`pnpm -C apps/client exec tsc --noEmit`) (pass, no diagnostics).
+- Guardrail outcomes delivered:
+  1. Build-phase env validation now defers only the explicit server-only required set (`AUTH_SECRET`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SECRET`, `DATABASE_URL`, `ENCRYPTION_KEY_V1`).
+  2. Runtime validation remains strict and throws immediately when deferred secrets are still missing.
+  3. Regression tests now lock in both build deferral and runtime fail-fast behavior for `validateEnv(...)`.
+
 ### [CHECKPOINT] Legacy NextAuth Surface Removal (Clerk Canonical Path) - Completed
 
 - Date: 2026-04-18

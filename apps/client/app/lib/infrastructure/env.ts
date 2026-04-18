@@ -309,6 +309,22 @@ type ValidationResult = {
   warnings: string[];
 };
 
+const BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS = new Set<string>([
+  "AUTH_SECRET",
+  "CLERK_SECRET_KEY",
+  "CLERK_WEBHOOK_SECRET",
+  "DATABASE_URL",
+  "ENCRYPTION_KEY_V1",
+]);
+
+function shouldDeferServerOnlyValidationForBuild(): boolean {
+  if (process.env.NEXT_PHASE === "phase-production-build") {
+    return true;
+  }
+
+  return process.argv.join(" ").includes("next build");
+}
+
 /**
  * Validates environment variables for specified groups
  * @param groups - Array of group names to validate, or 'all' for all groups
@@ -328,6 +344,8 @@ export function validateEnv(
     groups === "all"
       ? envGroups
       : envGroups.filter((g) => groups.includes(g.name));
+  const deferServerOnlyRequiredErrors =
+    shouldDeferServerOnlyValidationForBuild();
 
   for (const group of groupsToValidate) {
     for (const variable of group.variables) {
@@ -335,6 +353,16 @@ export function validateEnv(
 
       // Check required variables
       if (variable.required && !value) {
+        if (
+          deferServerOnlyRequiredErrors &&
+          BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS.has(variable.name)
+        ) {
+          result.warnings.push(
+            `[${group.name}] Deferring required server env until runtime: ${variable.name}`,
+          );
+          continue;
+        }
+
         result.valid = false;
         result.errors.push(
           `[${group.name}] Missing required: ${variable.name}`,
