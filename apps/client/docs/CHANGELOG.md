@@ -28,6 +28,16 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+### [CHECKPOINT] Legacy NextAuth Surface Removal (Clerk Canonical Path) - Completed
+
+- Date: 2026-04-18
+- Outcome summary: Removed the legacy NextAuth route and support surfaces so `apps/client` auth stays Clerk-canonical, eliminating stale `/api/auth` references that were causing build-time route collection failures.
+- Actual files changed: `apps/client/app/api/auth/[...nextauth]/route.ts`; `apps/client/app/lib/auth/auth.ts`; `apps/client/app/lib/auth/auth.config.ts`; `apps/client/app/lib/auth/index.ts`; `apps/client/app/actions/passwordReset.ts`; `apps/client/app/auth/signin/page.tsx`; `apps/client/app/auth/credentials/page.tsx`; `apps/client/app/ui/GoogleSignIn.tsx`; `apps/client/types/next-auth.d.ts`; `apps/client/package.json`; `apps/client/app/lib/infrastructure/env.ts`; `apps/client/.env.example`; `apps/client/.env.test`; `apps/client/.env.development`; `apps/client/components/chat/README.md`; `apps/client/app/lib/auth/password-hash.ts`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results:
+  1. `rg -n "next-auth|nextauth|/api/auth|NEXTAUTH_URL|AUTH_URL" apps/client` (pass, no matches).
+  2. `pnpm -C apps/client exec tsc --noEmit` (pass, exit code `0` after clearing stale `.next` generated route types).
+- Notes: Local `pnpm -C apps/client run build` was interrupted by an interactive shell timeout prompt (`Terminate batch job`), so build verification should be re-run in CI or a non-interrupted terminal session.
+
 ### [RUN] Onboarding Convergence Phase 6 - Baseline Validation Gates Executed (Telemetry Pending)
 
 - Date: 2026-04-14

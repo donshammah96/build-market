@@ -1,9 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { signIn } from "@/app/lib/auth/auth";
 import crypto from "node:crypto";
-import { AuthError } from "next-auth";
 import { Redis } from "@upstash/redis";
 import { getSqlClient } from "@/app/lib/infrastructure/db";
 import { verifyHCaptcha } from "@/app/lib/infrastructure/hcaptcha";
@@ -14,32 +12,13 @@ import {
   hashPasswordScrypt,
   scryptAsync,
   verifyScryptPassword,
-} from "@build/auth-server/password-hash";
+} from "@/app/lib/auth/password-hash";
 
 // Redis client initialization
 const redis = new Redis({
   url: env.redis.upstashRestUrl,
   token: env.redis.upstashRestToken,
 });
-
-export async function authenticate(
-  prevState: string | undefined,
-  formData: FormData,
-) {
-  try {
-    await signIn("credentials", formData);
-  } catch (error) {
-    if (error instanceof AuthError) {
-      switch (error.type) {
-        case "CredentialsSignin":
-          return "Invalid credentials.";
-        default:
-          return "Something went wrong.";
-      }
-    }
-    throw error;
-  }
-}
 
 const SignUpSchema = z
   .object({

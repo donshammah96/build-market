@@ -75,8 +75,6 @@ const envGroups: EnvGroup[] = [
     description: "Authentication",
     variables: [
       { name: "AUTH_SECRET", required: true },
-      { name: "AUTH_URL", required: false },
-      { name: "NEXTAUTH_URL", required: false },
       { name: "GOOGLE_CLIENT_ID", required: false },
       { name: "GOOGLE_CLIENT_SECRET", required: false },
       { name: "GITHUB_CLIENT_ID", required: false },
