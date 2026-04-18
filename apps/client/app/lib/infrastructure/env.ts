@@ -315,6 +315,10 @@ const BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS = new Set<string>([
   "CLERK_WEBHOOK_SECRET",
   "DATABASE_URL",
   "ENCRYPTION_KEY_V1",
+  "NEXT_PUBLIC_APP_URL",
+  "NEXT_PUBLIC_API_URL",
+  "REDIS_HOST",
+  "REDIS_PORT",
 ]);
 
 function shouldDeferServerOnlyValidationForBuild(): boolean {
