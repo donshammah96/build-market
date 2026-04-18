@@ -38,7 +38,7 @@
     "test:e2e:open": "start-server-and-test dev http://localhost:3500 cy:open",
     "gen-keys": "tsx generate-keys.ts",
     "build": "next build",
-    "build:cloudflare-worker": "pnpm dlx @opennextjs/cloudflare@latest build",
+    "build:cloudflare-worker": "opennextjs-cloudflare build --config wrangler.toml --skipWranglerConfigCheck",
     "start": "next start",
     "lint": "next lint --max-warnings 0",
     "check-types": "tsc --noEmit"

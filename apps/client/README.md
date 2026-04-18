@@ -147,8 +147,9 @@ pnpm --filter client test
 
 ### Cloudflare Worker Deployment
 
-This repository uses an explicit Wrangler config at the repo root so Cloudflare
-deploys do not rely on implicit entrypoint detection.
+This repository uses an explicit Wrangler config in `apps/client` so the
+OpenNext Cloudflare build stays non-interactive in CI and does not prompt to
+create missing config files.
 
 From repo root:
 
@@ -159,13 +160,14 @@ pnpm run client:deploy:cloudflare-worker
 
 Deployment contract:
 
-- Worker entrypoint: `apps/client/.open-next/worker.js`
-- Worker assets: `apps/client/.open-next/assets`
-- Wrangler config: `wrangler.toml`
+- Worker entrypoint: `.open-next/worker.js` (relative to `apps/client`)
+- Worker assets: `.open-next/assets` (relative to `apps/client`)
+- Wrangler config: `apps/client/wrangler.toml`
+- Build command: `opennextjs-cloudflare build --config wrangler.toml --skipWranglerConfigCheck`
 
-If Cloudflare invokes `wrangler deploy` directly, `wrangler.toml` runs
-`pnpm run client:build:cloudflare-worker` first via the Wrangler `build.command`
-hook, ensuring the Worker entrypoint exists before upload.
+The explicit `--config` and `--skipWranglerConfigCheck` flags ensure Cloudflare
+custom builds do not block on interactive confirmation when running in
+non-interactive CI environments.
 
 ### Runtime Health and Probes
 

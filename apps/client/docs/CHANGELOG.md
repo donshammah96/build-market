@@ -28,6 +28,19 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+### [FIX] Cloudflare OpenNext Build Prompt Timeout (Wrangler Discovery) - Completed
+
+- Date: 2026-04-18
+- Outcome summary: Eliminated the Cloudflare custom-build timeout caused by OpenNext waiting for interactive Wrangler config confirmation by adding an app-local Wrangler config and forcing explicit non-interactive build flags.
+- Actual files changed: `apps/client/wrangler.toml`; `apps/client/package.json`; `package.json`; `apps/client/README.md`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec opennextjs-cloudflare build --config wrangler.toml --skipWranglerConfigCheck --skipNextBuild` (confirmed no interactive Wrangler-config prompt; command then fails fast on missing `.next` artifact as expected when `--skipNextBuild` is set).
+  2. `pnpm run client:tsc-noemit` (pass, no diagnostics).
+- Guardrail outcomes delivered:
+  1. OpenNext Cloudflare builds now resolve Wrangler config from `apps/client/wrangler.toml` in the app working directory.
+  2. Build script now uses explicit `--config wrangler.toml --skipWranglerConfigCheck` flags to avoid CI prompt hangs.
+  3. Deploy script now runs Wrangler from `apps/client` to keep build and deploy config resolution aligned.
+
 ### [CHECKPOINT] Cloudflare Worker Entrypoint Contract for Client Deploys - Completed
 
 - Date: 2026-04-18
