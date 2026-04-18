@@ -315,18 +315,10 @@ const BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS = new Set<string>([
   "CLERK_WEBHOOK_SECRET",
   "DATABASE_URL",
   "ENCRYPTION_KEY_V1",
-  "NEXT_PUBLIC_APP_URL",
-  "NEXT_PUBLIC_API_URL",
-  "REDIS_HOST",
-  "REDIS_PORT",
 ]);
 
 function shouldDeferServerOnlyValidationForBuild(): boolean {
-  if (process.env.NEXT_PHASE === "phase-production-build") {
-    return true;
-  }
-
-  return process.argv.join(" ").includes("next build");
+  return process.env.NEXT_PHASE === "phase-production-build";
 }
 
 /**
@@ -473,6 +465,13 @@ function validateRedisRateLimitReadiness(result: ValidationResult): void {
   const rateLimitBackend = getRateLimitBackendEnv("RATE_LIMIT_BACKEND", "auto");
 
   if (!isRedisRateLimitBackendRequired(nodeEnv, rateLimitBackend)) {
+    return;
+  }
+
+  if (shouldDeferServerOnlyValidationForBuild()) {
+    result.warnings.push(
+      `[redis] Deferring Redis rate-limit readiness checks until runtime (backend=${rateLimitBackend}, env=${nodeEnv}).`,
+    );
     return;
   }
 

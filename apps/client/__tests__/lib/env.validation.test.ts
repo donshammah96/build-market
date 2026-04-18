@@ -68,6 +68,26 @@ describe("env redis readiness validation", () => {
 
     expect(result.valid).toBe(true);
   });
+
+  it("defers Redis readiness checks during Next production build phase", () => {
+    process.env = {
+      ...process.env,
+      NODE_ENV: "production",
+      NEXT_PHASE: "phase-production-build",
+      RATE_LIMIT_BACKEND: "auto",
+      REDIS_ENABLED: "false",
+    };
+    delete process.env.REDIS_HOST;
+    delete process.env.REDIS_PORT;
+
+    const result = validateEnv(["redis"], false);
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toContain(
+      "[redis] Deferring Redis rate-limit readiness checks until runtime (backend=auto, env=production).",
+    );
+  });
 });
 
 describe("env build-vs-runtime secret validation", () => {
