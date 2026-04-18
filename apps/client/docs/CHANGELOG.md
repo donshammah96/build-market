@@ -28,6 +28,19 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+### [CHECKPOINT] Cloudflare Worker Entrypoint Contract for Client Deploys - Completed
+
+- Date: 2026-04-18
+- Outcome summary: Added an explicit Cloudflare Worker deployment contract so `wrangler deploy` always has a deterministic Worker entrypoint and asset directory, eliminating "Missing entry point to Worker script or to asset directory" deployment failures.
+- Actual files changed: `wrangler.toml`; `apps/client/package.json`; `package.json`; `apps/client/README.md`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/lib/env.validation.test.ts --maxWorkers=1` (pass, `1` file and `7` tests).
+  2. `pnpm -C apps/client exec tsc --noEmit` (pass, no diagnostics).
+- Guardrail outcomes delivered:
+  1. Root Wrangler configuration now pins Worker main to `apps/client/.open-next/worker.js` and assets to `apps/client/.open-next/assets`.
+  2. Wrangler build hook now generates the Cloudflare Worker artifact before deploy via `pnpm run client:build:cloudflare-worker`.
+  3. Root scripts now provide explicit operator commands for Cloudflare Worker build and deploy flows.
+
 ### [CHECKPOINT] Env Validation Build-Phase Deferral + Runtime Fail-Fast Regression Coverage - Completed
 
 - Date: 2026-04-18

@@ -145,6 +145,28 @@ pnpm --filter client check-types
 pnpm --filter client test
 ```
 
+### Cloudflare Worker Deployment
+
+This repository uses an explicit Wrangler config at the repo root so Cloudflare
+deploys do not rely on implicit entrypoint detection.
+
+From repo root:
+
+```bash
+pnpm run client:build:cloudflare-worker
+pnpm run client:deploy:cloudflare-worker
+```
+
+Deployment contract:
+
+- Worker entrypoint: `apps/client/.open-next/worker.js`
+- Worker assets: `apps/client/.open-next/assets`
+- Wrangler config: `wrangler.toml`
+
+If Cloudflare invokes `wrangler deploy` directly, `wrangler.toml` runs
+`pnpm run client:build:cloudflare-worker` first via the Wrangler `build.command`
+hook, ensuring the Worker entrypoint exists before upload.
+
 ### Runtime Health and Probes
 
 Primary endpoints:

@@ -33,6 +33,8 @@
     "admin:check-types": "pnpm -C apps/admin run check-types",
     "queue-server:check-types": "pnpm -C packages/queue-server run check-types",
     "client:tsc-noemit": "pnpm -C apps/client exec tsc --noEmit",
+    "client:build:cloudflare-worker": "pnpm -C apps/client run build:cloudflare-worker",
+    "client:deploy:cloudflare-worker": "pnpm dlx wrangler@latest deploy --config wrangler.toml",
     "client:check-env-contract": "pnpm -C apps/client run check-env-contract",
     "client:check-security-drift": "pnpm -C apps/client run check-security-drift",
     "client:report-security-drift": "pnpm -C apps/client run report-security-drift",
