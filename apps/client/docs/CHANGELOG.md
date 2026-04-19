@@ -28,6 +28,22 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+### [FIX] Cloudflare Worker Oversized Asset Failures (25 MiB Cap) - Completed
+
+- Date: 2026-04-20
+- Outcome summary: Resolved Cloudflare deploy failures caused by oversized PNG assets by compressing oversized `public/` imagery, removing one unreferenced decode-corrupt asset, and adding explicit build-time asset budget enforcement.
+- Actual files changed: `apps/client/public/*.png` (optimized set including `architect.png`, `hero.png`, `hardware.png`, `professional.png`, `kitchen-fixtures.png`, `tiles.png`); `apps/client/public/furniture.png` (removed, unreferenced); `apps/client/scripts/optimize-public-images.mjs`; `apps/client/scripts/check-worker-asset-budget.mjs`; `apps/client/package.json`; `apps/client/docs/CHANGELOG.md`; `apps/client/README.md`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client run optimize:public-images` (pass after removing decode-corrupt unreferenced `public/furniture.png`; optimized 12 oversized files).
+  2. `pnpm -C apps/client run optimize:public-images` (rerun pass; optimized `0` files, confirming deterministic/idempotent behavior on current assets).
+  3. `pnpm -C apps/client run check:worker-asset-budget:public` (pass; top largest asset now `public/favicon.svg` at `11.84 MiB`, all files <= `25 MiB`).
+  4. `cd apps/client; pnpm run build` (pass, terminal exit code `0`).
+  5. `pnpm -C apps/client run build:cloudflare-worker` (local Windows run progressed through pre-build asset-budget pass and Next.js compilation/static generation; standalone trace emitted Windows symlink `EPERM` warnings, so CI/Linux run remains authoritative for deployment gating).
+- Guardrail outcomes delivered:
+  1. Cloudflare Worker build now fails fast with actionable output if any static asset exceeds 25 MiB.
+  2. Public image optimization is scripted and repeatable, reducing the chance of regression from manual image updates.
+  3. Deployment path now enforces size policy before and after OpenNext generation.
+
 ### [FIX] Cloudflare OpenNext Build Prompt Timeout (Wrangler Discovery) - Completed
 
 - Date: 2026-04-18

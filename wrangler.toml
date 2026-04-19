@@ -1,4 +1,4 @@
-name = "build-market-client"
+name = "build-market"
 main = "apps/client/.open-next/worker.js"
 compatibility_date = "2026-04-18"
 compatibility_flags = ["nodejs_compat"]

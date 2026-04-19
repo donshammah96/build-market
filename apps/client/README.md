@@ -154,6 +154,7 @@ create missing config files.
 From repo root:
 
 ```bash
+pnpm -C apps/client run optimize:public-images
 pnpm run client:build:cloudflare-worker
 pnpm run client:deploy:cloudflare-worker
 ```
@@ -164,6 +165,12 @@ Deployment contract:
 - Worker assets: `.open-next/assets` (relative to `apps/client`)
 - Wrangler config: `apps/client/wrangler.toml`
 - Build command: `opennextjs-cloudflare build --config wrangler.toml --skipWranglerConfigCheck`
+
+Asset governance for Cloudflare Worker deploys:
+
+- `pnpm -C apps/client run check:worker-asset-budget:public` enforces the 25 MiB hard cap before OpenNext starts.
+- `pnpm -C apps/client run check:worker-asset-budget:open-next` verifies generated Worker assets after build.
+- `pnpm -C apps/client run optimize:public-images` performs deterministic downscale/compression for oversized raster assets before commit.
 
 The explicit `--config` and `--skipWranglerConfigCheck` flags ensure Cloudflare
 custom builds do not block on interactive confirmation when running in

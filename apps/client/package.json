@@ -26,6 +26,9 @@
     "report-security-drift": "pnpm run build:high-risk-registry && node scripts/report-security-drift.mjs",
     "report-security-drift:strict": "pnpm run build:high-risk-registry && node scripts/report-security-drift.mjs --fail-on-any",
     "check-security-drift": "pnpm run check-log-safety && pnpm run check-no-direct-env && pnpm run check-browser-persistence && pnpm run check-cors-policy && pnpm run check-security-lint",
+    "optimize:public-images": "node scripts/optimize-public-images.mjs",
+    "check:worker-asset-budget:public": "node scripts/check-worker-asset-budget.mjs public",
+    "check:worker-asset-budget:open-next": "node scripts/check-worker-asset-budget.mjs .open-next/assets",
     "test:add-009-policy": "vitest run __tests__/actions/add-009-server-action-validation-policy.test.ts",
     "test:tier3-transition-policy": "vitest run __tests__/actions/tier3-high-value-guard-policy.test.ts __tests__/actions/onboarding-tier3-guards.test.ts",
     "cy:open": "cypress open",
@@ -38,7 +41,7 @@
     "test:e2e:open": "start-server-and-test dev http://localhost:3500 cy:open",
     "gen-keys": "tsx generate-keys.ts",
     "build": "next build",
-    "build:cloudflare-worker": "opennextjs-cloudflare build --config wrangler.toml --skipWranglerConfigCheck",
+    "build:cloudflare-worker": "pnpm run check:worker-asset-budget:public && opennextjs-cloudflare build --config wrangler.toml --skipWranglerConfigCheck && pnpm run check:worker-asset-budget:open-next",
     "start": "next start",
     "lint": "next lint --max-warnings 0",
     "check-types": "tsc --noEmit"
