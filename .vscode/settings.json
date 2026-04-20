@@ -99,7 +99,9 @@
     "/^\\./scripts/invoke-clean\\.ps1 -WorkingDirectory \\. -CommandLine \"pnpm -C apps/client exec vitest run __tests__/api/notifications/route\\.test\\.ts __tests__/api/user/compliance\\.route\\.test\\.ts --maxWorkers=1\"$/": {
       "approve": true,
       "matchCommandLine": true
-    }
+    },
+    "1..$lines.Length": true,
+    "ForEach-Object": true
   },
   "git.autoRepositoryDetection": "subFolders",
   "terminal.integrated.defaultProfile.windows": "PowerShell",

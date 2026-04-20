@@ -51,6 +51,78 @@ jobs:
               core.info("Client changelog guard passed.");
             }
 
+  client-preview-smoke-gate:
+    name: Client Preview Smoke Gate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
+      CLERK_SECRET_KEY: sk_test_ci_placeholder
+      CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/build_market_ci
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3500
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:3500/api
+      ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      RATE_LIMIT_BACKEND: memory
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build client preview artifact
+        run: pnpm -C apps/client run build
+
+      - name: Smoke check root route (fail on 5xx)
+        run: |
+          set -euo pipefail
+
+          pnpm -C apps/client run start -- --hostname 127.0.0.1 --port 3500 > /tmp/client-preview-smoke.log 2>&1 &
+          APP_PID=$!
+
+          cleanup() {
+            kill "$APP_PID" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          STATUS="000"
+          for _ in {1..45}; do
+            STATUS="$(curl --silent --show-error --output /tmp/client-preview-body.txt --write-out "%{http_code}" http://127.0.0.1:3500/ || true)"
+            if [ "$STATUS" != "000" ] && [ -n "$STATUS" ]; then
+              break
+            fi
+            sleep 1
+          done
+
+          echo "Smoke status: $STATUS"
+
+          if [ -z "$STATUS" ] || [ "$STATUS" = "000" ]; then
+            echo "Smoke gate failed: client preview root was unreachable."
+            cat /tmp/client-preview-smoke.log || true
+            exit 1
+          fi
+
+          if [ "${STATUS:0:1}" = "5" ]; then
+            echo "Smoke gate failed: root route returned 5xx."
+            cat /tmp/client-preview-smoke.log || true
+            cat /tmp/client-preview-body.txt || true
+            exit 1
+          fi
+
+          echo "Smoke gate passed: root route returned non-5xx status $STATUS."
+
   validate:
     name: Validate
     runs-on: ubuntu-latest

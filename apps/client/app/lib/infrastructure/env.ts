@@ -4,12 +4,18 @@
  * Validates required environment variables on startup.
  * Import this file early in your application to catch misconfigurations.
  *
- * Usage in app/layout.tsx or _app.tsx:
+ * Usage in app/layout.tsx or app/lib/infrastructure/env.ts:
  *   import '@/app/lib/infrastructure/env';
  *
  * Or validate specific groups:
  *   import { validateEnv, envConfig } from '@/app/lib/infrastructure/env';
  *   validateEnv(['database', 'auth']);
+ *
+ * ARCHITECTURE NOTE (ADR-004):
+ *   All process.env reads in apps/client MUST go through this module.
+ *   Direct process.env access in routes, services, or UI code is a boundary violation.
+ *   Bootstrap exceptions (next.config.ts, instrumentation.ts, sentry.*.config.ts)
+ *   must carry a comment: // bootstrap-only: module graph not initialized at this callsite
  */
 
 import { assertUploadProcessingModeInvariant } from "./upload-processing-mode";
@@ -28,12 +34,12 @@ type EnvGroup = {
   variables: EnvVar[];
 };
 
-type AppUserRole =
-  | "CLIENT"
-  | "PROFESSIONAL"
-  | "ADMIN"
-  | "SUPPORT"
-  | "pending_professional";
+/**
+ * Canonical role set per ADR-007.
+ * "SUPPORT" and "pending_professional" are removed — legacy trust-boundary
+ * normalization maps SUPPORT → ADMIN at adapter entry points.
+ */
+type AppUserRole = "CLIENT" | "PROFESSIONAL" | "ADMIN";
 
 type RateLimitBackendMode = "auto" | "memory" | "redis";
 
@@ -50,9 +56,13 @@ const envGroups: EnvGroup[] = [
       { name: "CLERK_SECRET_KEY", required: true },
       {
         name: "CLERK_WEBHOOK_SECRET",
-        required: process.env.NODE_ENV === "production",
+        // FIX: previously computed at module-parse time via process.env.NODE_ENV === "production".
+        // That caused a false required=true during Vercel build even when the var was legitimately
+        // deferred. Marking always-required and relying on BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS
+        // for build-phase deferral is the canonical pattern.
+        required: true,
         errorMessage:
-          "CLERK_WEBHOOK_SECRET is required in production for webhook signature verification",
+          "CLERK_WEBHOOK_SECRET is required for webhook signature verification (set in Vercel env settings)",
       },
       {
         name: "NEXT_PUBLIC_CLERK_SIGN_IN_URL",
@@ -97,6 +107,8 @@ const envGroups: EnvGroup[] = [
           v.startsWith("postgresql://") || v.startsWith("postgres://"),
         errorMessage: "Must be a valid PostgreSQL connection string",
       },
+      // POSTGRES_URL is an optional alias (e.g., Vercel Postgres injects this automatically).
+      { name: "POSTGRES_URL", required: false },
     ],
   },
   {
@@ -125,9 +137,12 @@ const envGroups: EnvGroup[] = [
     name: "redis",
     description: "Redis Configuration",
     variables: [
+      // FIX: REDIS_URL is the primary connection string (preferred for Vercel/Upstash).
+      // When set, REDIS_HOST/REDIS_PORT are not required.
       { name: "REDIS_URL", required: false },
       { name: "REDIS_HOST", required: false, default: "localhost" },
       { name: "REDIS_PORT", required: false, default: "6379" },
+      // Upstash REST API (HTTP-based, best for Vercel serverless functions)
       { name: "UPSTASH_REDIS_REST_URL", required: false },
       { name: "UPSTASH_REDIS_REST_TOKEN", required: false },
       { name: "REDIS_PASSWORD", required: false },
@@ -159,6 +174,9 @@ const envGroups: EnvGroup[] = [
     description: "Internal Services",
     variables: [
       { name: "MESSAGING_SERVICE_URL", required: false },
+      // FIX: NEXT_PUBLIC_MESSAGING_SERVICE_URL was used in buildEnvConfig but absent
+      // from envGroups, causing check-env-contract.mjs false negatives.
+      { name: "NEXT_PUBLIC_MESSAGING_SERVICE_URL", required: false },
       { name: "NOTIFICATION_SERVICE_URL", required: false },
       { name: "HCAPTCHA_SECRET_KEY", required: false },
       { name: "INTERNAL_API_SECRET", required: false },
@@ -172,9 +190,16 @@ const envGroups: EnvGroup[] = [
         name: "ENCRYPTION_KEY_V1",
         required: true,
         validate: (v) => /^[0-9a-f]{64}$/i.test(v),
-        errorMessage: "Must be 64 hex characters (32 bytes)",
+        errorMessage:
+          "Must be 64 hex characters (32 bytes) — generate with: openssl rand -hex 32",
       },
       { name: "CURRENT_KEY_VERSION", required: false, default: "v1" },
+      { name: "ENCRYPTION_KEY_V2", required: false },
+      { name: "ENCRYPTION_KEY_V3", required: false },
+      { name: "ENCRYPTION_KEY_V4", required: false },
+      { name: "ENCRYPTION_KEY_V5", required: false },
+      // Legacy fallback key for backward-compatible decryption
+      { name: "ENCRYPTION_KEY", required: false },
     ],
   },
   {
@@ -247,6 +272,52 @@ const envGroups: EnvGroup[] = [
     ],
   },
   {
+    name: "gdpr",
+    description: "GDPR Compliance",
+    variables: [
+      { name: "EXPORT_EXPIRY_HOURS", required: false, default: "48" },
+      { name: "DELETION_GRACE_PERIOD_DAYS", required: false, default: "30" },
+      {
+        name: "DPO_EMAIL",
+        required: false,
+        default: "security@buildmarket.co.ke",
+      },
+      { name: "ENCRYPTION_MIGRATION_MODE", required: false, default: "false" },
+      { name: "LEGACY_FORMAT_DEADLINE", required: false },
+      { name: "ROTATION_BATCH_SIZE", required: false, default: "100" },
+    ],
+  },
+  {
+    name: "s3exports",
+    description: "S3 Export Buckets",
+    variables: [
+      { name: "S3_EXPORT_BUCKET", required: false },
+      { name: "EXPORTS_BUCKET_NAME", required: false },
+      { name: "EXPORT_LOCAL_DIR", required: false, default: "./temp-exports" },
+    ],
+  },
+  {
+    name: "analytics",
+    description: "Analytics and Telemetry",
+    variables: [
+      { name: "NEXT_PUBLIC_POSTHOG_KEY", required: false },
+      {
+        name: "NEXT_PUBLIC_POSTHOG_HOST",
+        required: false,
+        default: "https://us.i.posthog.com",
+      },
+    ],
+  },
+  {
+    name: "ai",
+    description: "AI / LLM Integrations",
+    variables: [
+      // FIX: NEXT_PUBLIC_GEMINI_API_KEY was present in buildEnvConfig but missing
+      // from envGroups, causing check-env-contract.mjs to flag it as undeclared.
+      { name: "NEXT_PUBLIC_GEMINI_API_KEY", required: false },
+    ],
+  },
+  {
     name: "localDev",
     description: "Local-only developer auth bypass settings",
     variables: [
@@ -309,6 +380,14 @@ type ValidationResult = {
   warnings: string[];
 };
 
+/**
+ * Server-only required variables that are deferred during Next.js production build
+ * (NEXT_PHASE=phase-production-build). These variables are NOT available at build
+ * time and are injected at runtime by the hosting platform (e.g., Vercel).
+ *
+ * NEXT_PUBLIC_* variables are intentionally excluded here because Vercel DOES
+ * inject them at build time — they must be present before the first deployment.
+ */
 const BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS = new Set<string>([
   "AUTH_SECRET",
   "CLERK_SECRET_KEY",
@@ -321,10 +400,19 @@ function shouldDeferServerOnlyValidationForBuild(): boolean {
   return process.env.NEXT_PHASE === "phase-production-build";
 }
 
+function isEdgeRuntime(): boolean {
+  if (process.env.NEXT_RUNTIME === "edge") {
+    return true;
+  }
+
+  const runtimeMarker = (globalThis as { EdgeRuntime?: unknown }).EdgeRuntime;
+  return typeof runtimeMarker === "string";
+}
+
 /**
- * Validates environment variables for specified groups
+ * Validates environment variables for specified groups.
  * @param groups - Array of group names to validate, or 'all' for all groups
- * @param throwOnError - Whether to throw an error on validation failure
+ * @param throwOnError - Whether to throw an error on validation failure (default: true)
  */
 export function validateEnv(
   groups: string[] | "all" = "all",
@@ -413,10 +501,18 @@ export function validateEnv(
   return result;
 }
 
+// ============================================
+// Helper Functions (boundary-safe)
+// ============================================
+
 function getStringEnv(name: string, fallback = ""): string {
   return process.env[name] || fallback;
 }
 
+/**
+ * Returns undefined instead of empty string for optional secrets.
+ * Use this for credentials that must be absent (not empty) when not configured.
+ */
 function getOptionalStringEnv(name: string): string | undefined {
   const value = getStringEnv(name);
   return value.length > 0 ? value : undefined;
@@ -460,6 +556,11 @@ function isRedisRateLimitBackendRequired(
   return backend === "auto" && nodeEnv === "production";
 }
 
+/**
+ * FIX: Updated to accept REDIS_URL as valid Redis configuration in addition to
+ * REDIS_HOST + REDIS_PORT. This is required for Vercel + Upstash deployments
+ * where you connect via a connection URL, not separate host/port values.
+ */
 function validateRedisRateLimitReadiness(result: ValidationResult): void {
   const nodeEnv = getStringEnv("NODE_ENV", "development");
   const rateLimitBackend = getRateLimitBackendEnv("RATE_LIMIT_BACKEND", "auto");
@@ -483,12 +584,22 @@ function validateRedisRateLimitReadiness(result: ValidationResult): void {
     );
   }
 
+  // FIX: Accept REDIS_URL (connection string) OR REDIS_HOST+REDIS_PORT (separate values).
+  // Upstash and many managed Redis providers supply a connection string only.
+  const redisUrl = getOptionalStringEnv("REDIS_URL");
+  const upstashRestUrl = getOptionalStringEnv("UPSTASH_REDIS_REST_URL");
+
+  if (redisUrl || upstashRestUrl) {
+    // Connection string present — host/port are not required.
+    return;
+  }
+
   const redisHost = getStringEnv("REDIS_HOST").trim();
   const redisPortRaw = getStringEnv("REDIS_PORT").trim();
   if (!redisHost || !redisPortRaw) {
     result.valid = false;
     result.errors.push(
-      "[redis] Redis rate-limit backend requires explicit REDIS_HOST and REDIS_PORT values.",
+      "[redis] Redis rate-limit backend requires either REDIS_URL or both REDIS_HOST and REDIS_PORT.",
     );
     return;
   }
@@ -513,20 +624,29 @@ function parseOriginList(raw?: string): string[] {
     .filter(Boolean);
 }
 
+// ============================================
+// Config Builder
+// ============================================
+
 function buildEnvConfig() {
   const nodeEnv = getStringEnv("NODE_ENV", "development");
   const isDev = nodeEnv === "development";
   const isProd = nodeEnv === "production";
   const isTest = nodeEnv === "test";
+  const edgeRuntime = isEdgeRuntime();
   const uploadProcessInline = getBooleanEnv(
     "UPLOAD_PROCESS_INLINE",
     isDev || isTest,
   );
 
-  assertUploadProcessingModeInvariant({
-    isProd,
-    uploadProcessInline,
-  });
+  // Middleware and other edge entry points must not fail import-time on
+  // node-only startup invariants. Node runtimes still enforce this strictly.
+  if (!edgeRuntime) {
+    assertUploadProcessingModeInvariant({
+      isProd,
+      uploadProcessInline,
+    });
+  }
 
   return {
     // Environment
@@ -558,42 +678,48 @@ function buildEnvConfig() {
       },
       oauth: {
         google: {
-          clientId: getStringEnv("GOOGLE_CLIENT_ID"),
-          clientSecret: getStringEnv("GOOGLE_CLIENT_SECRET"),
+          clientId: getOptionalStringEnv("GOOGLE_CLIENT_ID"),
+          clientSecret: getOptionalStringEnv("GOOGLE_CLIENT_SECRET"),
         },
         github: {
-          clientId: getStringEnv("GITHUB_CLIENT_ID"),
-          clientSecret: getStringEnv("GITHUB_CLIENT_SECRET"),
+          clientId: getOptionalStringEnv("GITHUB_CLIENT_ID"),
+          clientSecret: getOptionalStringEnv("GITHUB_CLIENT_SECRET"),
         },
         facebook: {
-          clientId: getStringEnv("FACEBOOK_CLIENT_ID"),
-          clientSecret: getStringEnv("FACEBOOK_CLIENT_SECRET"),
+          clientId: getOptionalStringEnv("FACEBOOK_CLIENT_ID"),
+          clientSecret: getOptionalStringEnv("FACEBOOK_CLIENT_SECRET"),
         },
         azureAd: {
-          clientId: getStringEnv("AZURE_AD_CLIENT_ID"),
-          clientSecret: getStringEnv("AZURE_AD_CLIENT_SECRET"),
+          clientId: getOptionalStringEnv("AZURE_AD_CLIENT_ID"),
+          clientSecret: getOptionalStringEnv("AZURE_AD_CLIENT_SECRET"),
           tenantId: getStringEnv("AZURE_AD_TENANT_ID", "common"),
         },
       },
     },
 
-    // CORS
+    // CORS — FIX: use helper functions instead of direct process.env access
     cors: {
-      allowedOrigins: parseOriginList(process.env.CORS_ALLOWED_ORIGINS),
-      devAllowedOrigins: parseOriginList(process.env.CORS_DEV_ALLOWED_ORIGINS),
+      allowedOrigins: parseOriginList(
+        getOptionalStringEnv("CORS_ALLOWED_ORIGINS"),
+      ),
+      devAllowedOrigins: parseOriginList(
+        getOptionalStringEnv("CORS_DEV_ALLOWED_ORIGINS"),
+      ),
     },
 
-    // CSRF / same-origin mutation protection
+    // CSRF / same-origin mutation protection — FIX: use helper
     csrf: {
-      trustedOrigins: parseOriginList(process.env.CSRF_TRUSTED_ORIGINS),
+      trustedOrigins: parseOriginList(
+        getOptionalStringEnv("CSRF_TRUSTED_ORIGINS"),
+      ),
     },
 
     // Clerk
     clerk: {
       publishableKey: getStringEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"),
-      frontendApi: getStringEnv("NEXT_PUBLIC_CLERK_FRONTEND_API"),
-      secretKey: getStringEnv("CLERK_SECRET_KEY"),
-      webhookSecret: getStringEnv("CLERK_WEBHOOK_SECRET"),
+      frontendApi: getOptionalStringEnv("NEXT_PUBLIC_CLERK_FRONTEND_API"),
+      secretKey: getOptionalStringEnv("CLERK_SECRET_KEY"),
+      webhookSecret: getOptionalStringEnv("CLERK_WEBHOOK_SECRET"),
       replayWindowSeconds: getNumberEnv(
         "CLERK_WEBHOOK_REPLAY_WINDOW_SECONDS",
         300,
@@ -609,10 +735,15 @@ function buildEnvConfig() {
     },
 
     // Database
-    databaseUrl: getStringEnv("DATABASE_URL"),
-    postgresUrl: getStringEnv("POSTGRES_URL", getStringEnv("DATABASE_URL")),
+    databaseUrl: getOptionalStringEnv("DATABASE_URL"),
+    // FIX: POSTGRES_URL is now declared in envGroups. It's an alias Vercel Postgres injects.
+    postgresUrl:
+      getOptionalStringEnv("POSTGRES_URL") ??
+      getOptionalStringEnv("DATABASE_URL"),
 
-    // Redis
+    // Redis — FIX: upstashRestUrl and upstashRestToken now use getOptionalStringEnv
+    // (previously used getStringEnv which returned empty string instead of undefined,
+    // causing the Upstash client to receive an empty string as its URL/token).
     redis: {
       enabled: getBooleanEnv("REDIS_ENABLED", true),
       rateLimitBackend: getRateLimitBackendEnv("RATE_LIMIT_BACKEND", "auto"),
@@ -621,29 +752,30 @@ function buildEnvConfig() {
       password: getOptionalStringEnv("REDIS_PASSWORD"),
       db: getNumberEnv("REDIS_DB", 0),
       url: getOptionalStringEnv("REDIS_URL"),
-      upstashRestUrl: getStringEnv("UPSTASH_REDIS_REST_URL"),
-      upstashRestToken: getStringEnv("UPSTASH_REDIS_REST_TOKEN"),
+      upstashRestUrl: getOptionalStringEnv("UPSTASH_REDIS_REST_URL"),
+      upstashRestToken: getOptionalStringEnv("UPSTASH_REDIS_REST_TOKEN"),
       tls: getBooleanEnv("REDIS_TLS"),
     },
 
-    // Storage
+    // Storage — FIX: replaced direct process.env.AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+    // with getOptionalStringEnv to stay within the ADR-004 boundary.
     storage: {
       provider: getStringEnv("STORAGE_PROVIDER", "local") as
         | "local"
         | "s3"
         | "gcs",
       localPath: getStringEnv("UPLOAD_DIR", "./public/uploads"),
-      bucket: process.env.STORAGE_BUCKET || undefined,
+      bucket: getOptionalStringEnv("STORAGE_BUCKET"),
       region: getStringEnv("STORAGE_REGION", "af-south-1"),
       cdnUrl: getStringEnv("CDN_URL", "/uploads"),
       s3Disabled: getBooleanEnv("S3_DISABLED", true),
       assetBucket: getStringEnv("S3_ASSET_BUCKET", "buildmarket-assets"),
       awsRegion: getStringEnv("AWS_REGION", "af-south-1"),
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      accessKeyId: getOptionalStringEnv("AWS_ACCESS_KEY_ID"),
+      secretAccessKey: getOptionalStringEnv("AWS_SECRET_ACCESS_KEY"),
     },
 
-    // Services
+    // Services — FIX: messagingPublic now reads the correct variable name
     services: {
       messaging: getStringEnv("MESSAGING_SERVICE_URL", "http://localhost:3010"),
       messagingPublic: getStringEnv(
@@ -658,8 +790,8 @@ function buildEnvConfig() {
         "NEXT_PUBLIC_SEARCH_SERVICE_URL",
         "http://localhost:3005",
       ),
-      hcaptchaSecretKey: getStringEnv("HCAPTCHA_SECRET_KEY"),
-      internalApiSecret: getStringEnv("INTERNAL_API_SECRET"),
+      hcaptchaSecretKey: getOptionalStringEnv("HCAPTCHA_SECRET_KEY"),
+      internalApiSecret: getOptionalStringEnv("INTERNAL_API_SECRET"),
     },
 
     // Feature Flags
@@ -671,15 +803,17 @@ function buildEnvConfig() {
     },
 
     analytics: {
-      posthogKey: getStringEnv("NEXT_PUBLIC_POSTHOG_KEY"),
+      posthogKey: getOptionalStringEnv("NEXT_PUBLIC_POSTHOG_KEY"),
       posthogHost: getStringEnv(
         "NEXT_PUBLIC_POSTHOG_HOST",
         "https://us.i.posthog.com",
       ),
     },
 
+    // FIX: NEXT_PUBLIC_GEMINI_API_KEY is now in envGroups (ai group) and uses
+    // getOptionalStringEnv so absence returns undefined rather than empty string.
     ai: {
-      geminiApiKey: getStringEnv("NEXT_PUBLIC_GEMINI_API_KEY"),
+      geminiApiKey: getOptionalStringEnv("NEXT_PUBLIC_GEMINI_API_KEY"),
     },
 
     // GDPR
@@ -690,7 +824,7 @@ function buildEnvConfig() {
       odpcEmail: getStringEnv("ODPC_EMAIL", "dataprotection@odpc.go.ke"),
     },
 
-    // S3 exports
+    // S3 exports — FIX: replaced direct process.env access with helpers
     s3: {
       disabled: getBooleanEnv("S3_DISABLED", true),
       region: getStringEnv("AWS_REGION", "af-south-1"),
@@ -698,22 +832,22 @@ function buildEnvConfig() {
         getStringEnv("S3_EXPORT_BUCKET") ||
         getStringEnv("EXPORTS_BUCKET_NAME", "buildmarket-exports"),
       localDir: getStringEnv("EXPORT_LOCAL_DIR", "./temp-exports"),
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      accessKeyId: getOptionalStringEnv("AWS_ACCESS_KEY_ID"),
+      secretAccessKey: getOptionalStringEnv("AWS_SECRET_ACCESS_KEY"),
     },
 
     // Encryption
     encryption: {
       currentVersion: getStringEnv("CURRENT_KEY_VERSION", "v1"),
       migrationMode: getBooleanEnv("ENCRYPTION_MIGRATION_MODE"),
-      legacyDeadline: getStringEnv("LEGACY_FORMAT_DEADLINE"),
-      legacyKey: getStringEnv("ENCRYPTION_KEY"),
+      legacyDeadline: getOptionalStringEnv("LEGACY_FORMAT_DEADLINE"),
+      legacyKey: getOptionalStringEnv("ENCRYPTION_KEY"),
       keys: {
-        v1: getStringEnv("ENCRYPTION_KEY_V1"),
-        v2: getStringEnv("ENCRYPTION_KEY_V2"),
-        v3: getStringEnv("ENCRYPTION_KEY_V3"),
-        v4: getStringEnv("ENCRYPTION_KEY_V4"),
-        v5: getStringEnv("ENCRYPTION_KEY_V5"),
+        v1: getOptionalStringEnv("ENCRYPTION_KEY_V1"),
+        v2: getOptionalStringEnv("ENCRYPTION_KEY_V2"),
+        v3: getOptionalStringEnv("ENCRYPTION_KEY_V3"),
+        v4: getOptionalStringEnv("ENCRYPTION_KEY_V4"),
+        v5: getOptionalStringEnv("ENCRYPTION_KEY_V5"),
       },
       batchSize: getNumberEnv("ROTATION_BATCH_SIZE", 100),
     },
@@ -740,13 +874,13 @@ function buildEnvConfig() {
       cleanupBatchSize: getNumberEnv("CLEANUP_BATCH_SIZE", 100),
     },
 
-    // NATS Messaging
+    // NATS Messaging — FIX: replaced all direct process.env access with helpers
     nats: {
       url: getStringEnv("NATS_URL", "nats://localhost:4222"),
-      clientName: process.env.NATS_CLIENT_NAME || `build-market-${nodeEnv}`,
-      token: process.env.NATS_TOKEN,
-      user: process.env.NATS_USER,
-      pass: process.env.NATS_PASS,
+      clientName: getStringEnv("NATS_CLIENT_NAME", `build-market-${nodeEnv}`),
+      token: getOptionalStringEnv("NATS_TOKEN"),
+      user: getOptionalStringEnv("NATS_USER"),
+      pass: getOptionalStringEnv("NATS_PASS"),
       reconnect: true,
       maxReconnectAttempts: getNumberEnv("NATS_MAX_RECONNECT_ATTEMPTS", -1),
       reconnectTimeWait: getNumberEnv(
@@ -764,16 +898,21 @@ function buildEnvConfig() {
 // ============================================
 
 /**
- * Type-safe environment configuration
- * Access environment variables with proper types and defaults
+ * Type-safe environment configuration.
+ * Access environment variables with proper types and defaults.
+ * Import this instead of reading process.env directly (ADR-004).
  */
 export const envConfig = buildEnvConfig();
 
 // ============================================
-// Auto-validate on import (server runtime)
+// Auto-validate on import (server runtime only)
 // ============================================
 
-if (typeof window === "undefined" && process.env.NODE_ENV !== "test") {
+if (
+  typeof window === "undefined" &&
+  process.env.NODE_ENV !== "test" &&
+  !isEdgeRuntime()
+) {
   const startupGroups = ["clerk", "database", "urls", "encryption"];
   if (
     isRedisRateLimitBackendRequired(

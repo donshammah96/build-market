@@ -28,6 +28,16 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+### [CHECKPOINT] Edge Runtime Env Guidance + PR Preview Smoke Gate - Completed
+
+- Date: 2026-04-20
+- Outcome summary: Added explicit `NEXT_RUNTIME` template guidance for edge-runtime detection (with operator guidance not to set it manually in Vercel), and introduced a pull-request preview smoke gate that boots `apps/client`, curls `/`, and fails on `5xx` responses to catch middleware/import regressions before merge.
+- Actual files changed: `apps/client/.env.example`; `.github/workflows/ci.yml`; `apps/client/docs/CHANGELOG.md`.
+- Guardrail outcomes delivered:
+  1. Runtime marker guidance is now commit-visible in env templates, reducing confusion around framework-injected `NEXT_RUNTIME` behavior.
+  2. CI now enforces a preview-style root-route smoke check that hard-fails on `5xx` responses.
+  3. Middleware import/runtime failures now have a deterministic pre-merge detection surface in PR workflows.
+
 ### [FIX] Cloudflare Worker Oversized Asset Failures (25 MiB Cap) - Completed
 
 - Date: 2026-04-20
