@@ -102,10 +102,6 @@ const cspValue = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
-  // Disable linting during build since turbo will handle it separately
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
 
   // Disable type checking during build since turbo will handle it separately
   typescript: {

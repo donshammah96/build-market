@@ -122,7 +122,9 @@
       "next": ">=15.5.15",
       "@clerk/nextjs": ">=7.2.1",
       "dompurify": ">=3.4.0",
-      "axios": ">=1.15.0"
+      "axios": ">=1.15.0",
+      "protobufjs": ">=7.5.5",
+      "@clerk/shared": ">=4.8.1"
     }
   }
 }
