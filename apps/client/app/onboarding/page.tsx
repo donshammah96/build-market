@@ -10,7 +10,7 @@ import { PostHogOnboardingAnalytics } from "@/lib/analytics/posthog-onboarding-a
 import { env } from "@/app/lib/infrastructure/env";
 
 const onboardingAnalytics =
-  env.isProd && env.analytics.posthogKey.length > 0
+  env.isProd && env.analytics.posthogKey && env.analytics.posthogKey.length > 0
     ? PostHogOnboardingAnalytics
     : NullAnalytics;
 
@@ -34,7 +34,7 @@ export default function Onboarding() {
         <noscript>
           <meta httpEquiv="refresh" content="0; url=/onboarding/no-js" />
           <p>
-            JavaScript is required for this page. {" "}
+            JavaScript is required for this page.{" "}
             <a href="/onboarding/no-js">Continue without JavaScript.</a>
           </p>
         </noscript>
