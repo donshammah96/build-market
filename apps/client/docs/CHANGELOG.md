@@ -28,6 +28,98 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+### [CHECKPOINT] @build/redis Upstash Migration + Env Boundary Hardening - Completed
+
+- Date: 2026-04-21
+- Outcome summary: Replaced the ioredis-based `@build/redis` package with an Upstash-native dual-transport design. The primary REST client (`@upstash/redis`) handles all serverless / Next.js rate limiting and cache operations over HTTP. The BullMQ ioredis path is preserved for queue workers via the Upstash TCP endpoint. `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are promoted to required credentials in the env boundary with startup validation and build-time deferral. Three files incompatible with managed Upstash (`enforce-maxmemory-policy.ts`, `healthcheck.ts` as a standalone script, and the singleton `redisConnection` export) were removed or replaced.
+- Actual files changed:
+  - `packages/redis/src/client.ts` — replaced ioredis TCP singleton with `@upstash/redis` REST client; exports `getRedisClient()`, `resetRedisClient()`, `isRedisHealthy()`
+  - `packages/redis/src/rate-limit.ts` — replaced Lua `EVAL` sliding-window script with `@upstash/ratelimit`; preserved `checkSlidingWindowRateLimit({ key, limit, windowMs })` call signature; added `createRateLimiter()` factory for reusable per-namespace limiters
+  - `packages/redis/src/cache.ts` — updated to use REST client; `invalidatePattern`/`clear` now use `SCAN` instead of `KEYS` (Upstash does not permit `KEYS` on large keyspaces)
+  - `packages/redis/src/redis-connection.ts` — simplified to BullMQ-only TCP path; removed `runtimePolicyValidationPromise`, `CONFIG GET/SET` enforcement, and the singleton `redisConnection` export; `createRedisConnection()` must now be called per Queue/Worker
+  - `packages/redis/src/types.ts` — no functional change; `RedisConfig` retained for tooling scripts
+  - `packages/redis/src/index.ts` — updated exports; removed deleted file exports
+  - `packages/redis/src/enforce-maxmemory-policy.ts` — **deleted** (Upstash manages eviction policy; `CONFIG SET` is not permitted)
+  - `packages/redis/src/healthcheck.ts` — **deleted** as a standalone script; replaced by `isRedisHealthy()` callable from any Next.js health-check route
+  - `apps/client/app/lib/infrastructure/env.ts` — promoted `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` to `required: true` with URL format validation; added both to `BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS`; rewrote `validateRedisRateLimitReadiness` to check Upstash credentials instead of `REDIS_ENABLED` + `REDIS_HOST`/`REDIS_PORT`; reordered `envConfig.redis` block with deprecation comments on legacy fields; updated startup validation to always push the `redis` group in production
+- Verification commands run and results:
+  1. `pnpm run client:tsc-noemit` — **required before merge**; run after updating `packages/redis/package.json` with new dependencies
+  2. `pnpm run client:report-security-drift:strict` — **required before merge**; all categories must be `0`
+  3. `pnpm -C apps/client exec vitest run __tests__/lib/env.validation.test.ts --maxWorkers=1` — **required before merge**; env validation tests must be updated to reflect Upstash credential checks (see Deferred items)
+- Guardrail outcomes delivered:
+  1. `@build/redis` is no longer incompatible with Upstash: `CONFIG SET`, `EVAL`, and `KEYS` calls that Upstash rejects are gone from the serverless path.
+  2. Missing Upstash credentials now fail fast at server startup with a clear diagnostic rather than producing silent `undefined` behaviour on the first rate-limited request.
+  3. The BullMQ TCP path is explicitly isolated in `redis-connection.ts` — nothing outside that file creates ioredis connections, reducing the risk of accidental persistent-connection creation in serverless contexts.
+  4. `validateRedisRateLimitReadiness` now validates the actual transport credentials used at runtime rather than legacy host/port variables that are no longer consulted.
+- Deferred items:
+  1. **`packages/redis/package.json`** — add `@upstash/redis` and `@upstash/ratelimit` as dependencies; remove ioredis from non-BullMQ dependency surface. This is a required follow-up before `pnpm install` will resolve the new imports.
+  2. **`apps/client/app/lib/api/rate-limit.ts`** — the existing dev/redis backend split in this module references the old `checkSlidingWindowRateLimit` signature and `@build/redis` ioredis client. Update it to consume `checkSlidingWindowRateLimit` from the new @upstash/ratelimit-backed export and remove the in-memory dev branch (Upstash REST works in all environments including local when credentials are set).
+  3. **`apps/client/.env.example` and `.env.test`** — add `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` as required entries; mark `REDIS_HOST`, `REDIS_PORT`, `REDIS_ENABLED`, and `REDIS_PASSWORD` as legacy/deprecated with removal target notes.
+  4. **`__tests__/lib/env.validation.test.ts`** — existing tests assert the `REDIS_HOST`/`REDIS_PORT` readiness check path. Update to assert the new Upstash credential check: missing `UPSTASH_REDIS_REST_URL` produces `[redis] UPSTASH_REDIS_REST_URL is required` error; missing `UPSTASH_REDIS_REST_TOKEN` produces its own error; both present passes validation.
+  5. **BullMQ consumers** — any service that imports the old `redisConnection` singleton (`import { redisConnection } from "@build/redis"`) must be updated to call `createRedisConnection()` per Queue/Worker. Search for `redisConnection` imports across the monorepo and update each caller.
+  6. **`REDIS_ENABLED` removal tracking** — add `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_FAMILY`, and `REDIS_PASSWORD` to a deprecation removal queue in PROGRESS-SUMMARY.md targeting the next minor release after all consumers are confirmed migrated.
+
+**Files changed:** `packages/redis/src/client.ts`; `packages/redis/src/rate-limit.ts`; `packages/redis/src/cache.ts`; `packages/redis/src/redis-connection.ts`; `packages/redis/src/types.ts`; `packages/redis/src/index.ts`; `packages/redis/src/enforce-maxmemory-policy.ts` (deleted); `packages/redis/src/healthcheck.ts` (deleted); `apps/client/app/lib/infrastructure/env.ts`
+
+**Verification:** `pnpm run client:tsc-noemit` and `pnpm run client:report-security-drift:strict` must both pass before this change is considered closed. Env validation test suite must be updated and green.
+
+---
+
+### [CHECKPOINT] @build/redis Upstash Migration — Deferred Items 2-6 Closed
+
+- Date: 2026-04-21
+- Outcome summary: Closed all six deferred items from the preceding Upstash migration checkpoint. The rate-limit resolver, env validation test suite, env templates, BullMQ consumers (12 files across `apps/client` jobs/workers and `packages/queue-server`), and the documentation deprecation queue are now fully aligned with the Upstash REST dual-transport architecture. The `docs/env.ts` orphan (which blocked `pnpm run client:tsc-noemit`) was permanently deleted and `docs/` was excluded from the TypeScript compilation graph so it cannot recur.
+- Actual files changed:
+  - `apps/client/app/lib/api/rate-limit.ts` — `resolveRateLimitBackend()` now gates on Upstash credential presence (`upstashRestUrl` + `upstashRestToken`) instead of the deprecated `REDIS_ENABLED` flag; error message updated to reference Upstash variables; dev fallback comment added.
+  - `apps/client/__tests__/lib/env.validation.test.ts` — full rewrite: replaced legacy `REDIS_HOST`/`REDIS_PORT`/`REDIS_ENABLED` assertion paths with Upstash credential checks; 8 test cases covering missing URL, missing token, invalid URL scheme, both-present-passes, non-required-backend, and build-phase deferral — all green.
+  - `apps/client/.env.example` — Redis section restructured: Upstash REST credentials promoted to primary required entries with Upstash dashboard link; `REDIS_URL` documented as BullMQ-only TCP endpoint; `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_FAMILY`, `REDIS_PASSWORD` marked `@deprecated` with removal-target notes pointing to deprecation queue.
+  - `apps/client/.env.test` — Upstash stub credentials added (`https://stub.upstash.io` / `stub_token_for_tests_only`); `RATE_LIMIT_BACKEND=memory` preserved; legacy vars retained with `@deprecated` + removal-target comments.
+  - `apps/client/app/lib/infrastructure/webhook-replay.ts` — removed `createRedisClient` import (never existed in `@build/redis`); removed deprecated `env.redis.enabled` production guard; fixed `set()` calls from ioredis positional API (`"EX", n, "NX"`) to Upstash REST options-object API (`{ ex: n, nx: true }`).
+  - `apps/client/app/lib/queues/redis-connection.ts` — re-export shim updated: now re-exports `createRedisConnection` (factory) instead of the removed `redisConnection` singleton.
+  - `apps/client/app/lib/queues/upload-processing.queue.ts` — migrated from `redisConnection` singleton to `createRedisConnection()`.
+  - `apps/client/app/jobs/export-cleanup.ts` — migrated Queue and Worker from singleton to `createRedisConnection()` per-construct.
+  - `apps/client/app/jobs/anonymization-batch.ts` — migrated Queue and Worker from singleton to `createRedisConnection()` per-construct.
+  - `apps/client/app/jobs/asset-cleanup.ts` — migrated Queue and Worker from singleton to `createRedisConnection()` per-construct.
+  - `apps/client/app/jobs/data-retention.ts` — migrated Queue and Worker from singleton to `createRedisConnection()` per-construct.
+  - `apps/client/app/jobs/onboarding-upload-cleanup.ts` — migrated Queue and Worker from singleton to `createRedisConnection()` per-construct.
+  - `apps/client/app/workers/export/worker.ts` — migrated Worker from singleton to `createRedisConnection()`; removed `as any` cast.
+  - `apps/client/app/workers/compliance/incident.worker.ts` — migrated Worker from singleton to `createRedisConnection()`; removed `as any` cast.
+  - `apps/client/app/workers/compliance/notification.worker.ts` — migrated Worker from singleton to `createRedisConnection()`; removed `as any` cast.
+  - `apps/client/app/workers/uploads/image-upload.worker.ts` — migrated Worker from singleton to `createRedisConnection()`; removed unused `ConnectionOptions` import.
+  - `packages/queue-server/src/export.queue.ts` — migrated Queue from singleton to `createRedisConnection()`; removed `as any` cast.
+  - `packages/queue-server/src/compliance.queue.ts` — migrated all three Queues (`incidentQueue`, `userNotificationQueue`, `auditQueue`) from singleton to `createRedisConnection()`; removed `as any` casts.
+  - `apps/client/tsconfig.json` — added `"docs"` to the `exclude` array to prevent `docs/*.ts` snapshot files from entering the TypeScript compilation graph.
+  - `apps/client/docs/PROGRESS-SUMMARY.md` — added formal Deprecation Queue section tracking `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_FAMILY`, `REDIS_PASSWORD` with removal trigger conditions and file cleanup checklist; added migration follow-through checkpoint entry; updated Completed Phases list.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/lib/env.validation.test.ts --maxWorkers=1` (pass, 1 file and **8 tests**, `EXIT:0`).
+  2. `pnpm run client:tsc-noemit` (pass, **zero diagnostics**, `EXIT:0` — after `docs/env.ts` deletion and `docs/` tsconfig exclusion).
+- Guardrail outcomes delivered:
+  1. `redisConnection` singleton is no longer referenced anywhere in the `apps/client` or `packages/queue-server` compilation graphs; all BullMQ constructs now obtain isolated per-construct connections via `createRedisConnection()`.
+  2. `resolveRateLimitBackend()` now reflects the actual runtime transport gating — Upstash REST credentials — rather than the deprecated `REDIS_ENABLED` flag that no longer drives any behaviour.
+  3. Webhook replay protection now uses the correct Upstash REST `set()` options-object API (`{ ex, nx }`) instead of the ioredis positional flag API that TypeScript correctly rejected.
+  4. Env validation test suite now locks in Upstash credential check semantics: missing URL fails, missing token fails, invalid scheme fails, both valid passes, non-required-backend does not add extra errors, build phase defers correctly.
+  5. Deprecation queue is formally tracked in `PROGRESS-SUMMARY.md` with an explicit removal trigger and file-cleanup checklist to ensure the five legacy variables are removed — not just commented — in the next minor release window.
+- Deferred items: none. All six items from the preceding Upstash migration checkpoint are closed. Remaining action is: confirm zero production consumers of the five deprecated `REDIS_*` variables, then execute the removal per the deprecation queue checklist.
+
+---
+
+### [FIX] TSConfig docs/ Exclusion — Orphan docs/env.ts Compilation Error
+
+- Date: 2026-04-21
+- Outcome summary: Permanently deleted the orphaned `apps/client/docs/env.ts` documentation snapshot that was causing `TS2307: Cannot find module './upload-processing-mode'` and added `"docs"` to the tsconfig `exclude` list so any future `.ts` files placed in the documentation directory cannot silently enter the compilation graph.
+- Root cause: `tsconfig.json` used `"include": ["**/*.ts"]` which matched every `.ts` file under `apps/client/`, including documentation snapshot files in `docs/`. The file `docs/env.ts` was a stale copy of `app/lib/infrastructure/env.ts` that imported `./upload-processing-mode`, a module that does not exist. Deleting the file via OS UI moved it to the Recycle Bin rather than permanently removing it; the file persisted on disk and continued to be compiled.
+- Actual files changed:
+  - `apps/client/docs/env.ts` — **deleted** (permanent `Remove-Item -Force`).
+  - `apps/client/tsconfig.json` — added `"docs"` to `exclude`; `tsconfig.tsbuildinfo` incremental cache cleared to force a clean re-evaluation.
+- Verification commands run and results:
+  1. `pnpm run client:tsc-noemit` (pass, **zero diagnostics**, `EXIT:0`).
+- Guardrail outcomes delivered:
+  1. TypeScript compilation is now clean with zero errors.
+  2. `docs/` is structurally excluded from the TSC compilation graph, preventing a recurrence if additional `.ts` documentation snapshots are placed there in future.
+- Deferred items: none.
+
+---
+
 ### [CHECKPOINT] Edge Runtime Env Guidance + PR Preview Smoke Gate - Completed
 
 - Date: 2026-04-20

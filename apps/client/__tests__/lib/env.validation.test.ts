@@ -4,15 +4,24 @@ import { validateEnv } from "@/app/lib/infrastructure/env";
 const ORIGINAL_ENV = process.env;
 const ORIGINAL_ARGV = [...process.argv];
 
+/**
+ * Puts the process into a state where the Redis group validation requires
+ * Upstash credentials (production + explicit redis backend).
+ * Does NOT set Upstash credentials — callers that want a passing result must
+ * add them explicitly.
+ */
 function setRedisRequiredBaseline() {
-  process.env = { ...process.env, NODE_ENV: "production" };
-  process.env.RATE_LIMIT_BACKEND = "redis";
-  process.env.REDIS_ENABLED = "true";
-  process.env.REDIS_HOST = "redis.internal";
-  process.env.REDIS_PORT = "6379";
+  process.env = {
+    ...process.env,
+    NODE_ENV: "production",
+    RATE_LIMIT_BACKEND: "redis",
+  };
+  // Remove any stubs that might have leaked in from .env.test
+  delete process.env.UPSTASH_REDIS_REST_URL;
+  delete process.env.UPSTASH_REDIS_REST_TOKEN;
 }
 
-describe("env redis readiness validation", () => {
+describe("env redis readiness validation — Upstash credential checks", () => {
   beforeEach(() => {
     process.env = { ...ORIGINAL_ENV };
     process.argv = [...ORIGINAL_ARGV];
@@ -23,33 +32,47 @@ describe("env redis readiness validation", () => {
     process.argv = ORIGINAL_ARGV;
   });
 
-  it("fails when a Redis-required backend is configured but Redis is disabled", () => {
+  it("fails when UPSTASH_REDIS_REST_URL is missing in a Redis-required backend", () => {
     setRedisRequiredBaseline();
-    process.env.REDIS_ENABLED = "false";
+    process.env.UPSTASH_REDIS_REST_TOKEN = "valid_token";
 
     const result = validateEnv(["redis"], false);
 
     expect(result.valid).toBe(false);
-    expect(result.errors).toContain(
-      "[redis] RATE_LIMIT_BACKEND=redis requires REDIS_ENABLED=true when NODE_ENV=production",
-    );
+    expect(
+      result.errors.some((e) => e.includes("UPSTASH_REDIS_REST_URL")),
+    ).toBe(true);
   });
 
-  it("fails when a Redis-required backend does not provide explicit host and port", () => {
+  it("fails when UPSTASH_REDIS_REST_TOKEN is missing in a Redis-required backend", () => {
     setRedisRequiredBaseline();
-    delete process.env.REDIS_HOST;
-    delete process.env.REDIS_PORT;
+    process.env.UPSTASH_REDIS_REST_URL = "https://valid-db.upstash.io";
 
     const result = validateEnv(["redis"], false);
 
     expect(result.valid).toBe(false);
-    expect(result.errors).toContain(
-      "[redis] Redis rate-limit backend requires explicit REDIS_HOST and REDIS_PORT values.",
-    );
+    expect(
+      result.errors.some((e) => e.includes("UPSTASH_REDIS_REST_TOKEN")),
+    ).toBe(true);
   });
 
-  it("passes when Redis-required backend configuration is explicitly ready", () => {
+  it("fails when UPSTASH_REDIS_REST_URL does not start with https://", () => {
     setRedisRequiredBaseline();
+    process.env.UPSTASH_REDIS_REST_URL = "http://invalid.upstash.io";
+    process.env.UPSTASH_REDIS_REST_TOKEN = "valid_token";
+
+    const result = validateEnv(["redis"], false);
+
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) => e.includes("UPSTASH_REDIS_REST_URL")),
+    ).toBe(true);
+  });
+
+  it("passes when both Upstash credentials are present and valid", () => {
+    setRedisRequiredBaseline();
+    process.env.UPSTASH_REDIS_REST_URL = "https://valid-db.upstash.io";
+    process.env.UPSTASH_REDIS_REST_TOKEN = "valid_token";
 
     const result = validateEnv(["redis"], false);
 
@@ -57,36 +80,43 @@ describe("env redis readiness validation", () => {
     expect(result.errors).toHaveLength(0);
   });
 
-  it("does not enforce Redis readiness when backend mode does not require Redis", () => {
+  it("does not add readiness errors on top of group errors when backend mode does not require Redis", () => {
+    // In dev + auto mode, validateRedisRateLimitReadiness returns early (no Redis required).
+    // The group-level required: true check still fires for missing Upstash vars.
+    // This test confirms that the EXTRA readiness-function errors (the validateRedisRateLimitReadiness
+    // path) are NOT added — only the standard required-field errors from the group scan appear.
     process.env = { ...process.env, NODE_ENV: "development" };
     process.env.RATE_LIMIT_BACKEND = "auto";
-    process.env.REDIS_ENABLED = "false";
-    delete process.env.REDIS_HOST;
-    delete process.env.REDIS_PORT;
+    // Provide credentials so the group-level required check passes cleanly.
+    process.env.UPSTASH_REDIS_REST_URL = "https://stub.upstash.io";
+    process.env.UPSTASH_REDIS_REST_TOKEN = "stub_token";
 
     const result = validateEnv(["redis"], false);
 
     expect(result.valid).toBe(true);
+    // Confirm no readiness-function errors were appended for the non-required backend
+    expect(result.errors).toHaveLength(0);
   });
 
-  it("defers Redis readiness checks during Next production build phase", () => {
+  it("defers Upstash credential checks during Next production build phase", () => {
     process.env = {
       ...process.env,
       NODE_ENV: "production",
       NEXT_PHASE: "phase-production-build",
       RATE_LIMIT_BACKEND: "auto",
-      REDIS_ENABLED: "false",
     };
-    delete process.env.REDIS_HOST;
-    delete process.env.REDIS_PORT;
+    delete process.env.UPSTASH_REDIS_REST_URL;
+    delete process.env.UPSTASH_REDIS_REST_TOKEN;
 
     const result = validateEnv(["redis"], false);
 
     expect(result.valid).toBe(true);
     expect(result.errors).toHaveLength(0);
-    expect(result.warnings).toContain(
-      "[redis] Deferring Redis rate-limit readiness checks until runtime (backend=auto, env=production).",
-    );
+    expect(
+      result.warnings.some((w) =>
+        w.includes("Deferring Upstash credential checks"),
+      ),
+    ).toBe(true);
   });
 });
 

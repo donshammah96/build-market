@@ -8,7 +8,7 @@
  */
 
 import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
-import { redisConnection } from "@build/queue-server";
+import { createRedisConnection } from "@build/queue-server";
 import { prisma } from "@build/db";
 import { AssetCleanupService } from "@/app/lib/gdpr/services/asset-cleanup.service";
 import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
@@ -20,7 +20,7 @@ const CLEANUP_BATCH_SIZE = env.jobs.cleanupBatchSize;
 const S3_DISABLED = env.storage.s3Disabled;
 
 const assetCleanupQueue = new Queue("gdpr-asset-cleanup", {
-  connection: redisConnection as ConnectionOptions,
+  connection: createRedisConnection(),
 });
 
 // Initialize S3 client if enabled
@@ -273,7 +273,7 @@ export function createAssetCleanupWorker() {
       }
     },
     {
-      connection: redisConnection as ConnectionOptions,
+      connection: createRedisConnection(),
       concurrency: 1, // Only one cleanup job at a time
     },
   );

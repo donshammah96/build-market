@@ -1,4 +1,4 @@
-import { createRedisClient, getRedisClient } from "@build/redis";
+import { getRedisClient } from "@build/redis";
 import { env } from "@/app/lib/infrastructure/env";
 
 type ReplayClaimResult =
@@ -12,17 +12,19 @@ function getReplayKeys(deliveryId: string) {
   };
 }
 
-async function getReplayClient() {
-  if (env.isProd) {
-    if (!env.redis.enabled) {
-      throw new Error(
-        "Webhook replay protection requires Redis in production.",
-      );
-    }
-
-    return createRedisClient();
-  }
-
+/**
+ * Returns the Upstash REST client for webhook replay protection.
+ *
+ * Uses @upstash/redis via @build/redis — the REST client is serverless-safe
+ * and requires no persistent TCP connection. Startup validation in env.ts
+ * guarantees UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are present
+ * in production before this is called.
+ *
+ * NOTE: Upstash REST uses an options-object API for SET, not positional args:
+ *   client.set(key, value, { ex: seconds, nx: true })
+ * This differs from the ioredis positional API ("EX", n, "NX").
+ */
+function getReplayClient() {
   return getRedisClient();
 }
 
@@ -46,20 +48,18 @@ export function isWebhookTimestampFresh(
 export async function claimClerkWebhookDelivery(
   deliveryId: string,
 ): Promise<ReplayClaimResult> {
-  const client = await getReplayClient();
+  const client = getReplayClient();
   const keys = getReplayKeys(deliveryId);
 
   if ((await client.exists(keys.processed)) > 0) {
     return { status: "duplicate", deliveryId };
   }
 
-  const claimed = await client.set(
-    keys.processing,
-    "processing",
-    "EX",
-    env.clerk.processingTtlSeconds,
-    "NX",
-  );
+  // Upstash REST API: options object, not positional flags
+  const claimed = await client.set(keys.processing, "processing", {
+    ex: env.clerk.processingTtlSeconds,
+    nx: true,
+  });
 
   if (claimed !== "OK") {
     return { status: "duplicate", deliveryId };
@@ -71,22 +71,20 @@ export async function claimClerkWebhookDelivery(
 export async function markClerkWebhookDeliveryProcessed(
   deliveryId: string,
 ): Promise<void> {
-  const client = await getReplayClient();
+  const client = getReplayClient();
   const keys = getReplayKeys(deliveryId);
 
-  await client.set(
-    keys.processed,
-    "processed",
-    "EX",
-    env.clerk.processedTtlSeconds,
-  );
+  // Upstash REST API: options object
+  await client.set(keys.processed, "processed", {
+    ex: env.clerk.processedTtlSeconds,
+  });
   await client.del(keys.processing);
 }
 
 export async function releaseClerkWebhookDelivery(
   deliveryId: string,
 ): Promise<void> {
-  const client = await getReplayClient();
+  const client = getReplayClient();
   const keys = getReplayKeys(deliveryId);
   await client.del(keys.processing);
 }

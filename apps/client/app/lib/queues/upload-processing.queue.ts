@@ -1,5 +1,5 @@
 import { Queue, type ConnectionOptions, type JobsOptions } from "bullmq";
-import { redisConnection } from "@build/queue-server";
+import { createRedisConnection } from "@build/queue-server";
 
 export type ImageUploadProcessingJobData = {
   uploadId: string;
@@ -33,7 +33,7 @@ export const UploadProcessingJobNames = {
 export const uploadProcessingQueue = new Queue<ImageUploadProcessingJobData>(
   "uploads-image-processing",
   {
-    connection: redisConnection as ConnectionOptions,
+    connection: createRedisConnection(),
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: "exponential", delay: 2_000 },

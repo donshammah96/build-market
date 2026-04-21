@@ -1,73 +1,88 @@
-import { randomUUID } from "node:crypto";
+/**
+ * Rate limiting via @upstash/ratelimit.
+ *
+ * Replaces the previous Lua EVAL sliding-window script, which is not
+ * supported by Upstash's REST API. The Ratelimit class from @upstash/ratelimit
+ * implements the same sliding-window algorithm atomically on Upstash's
+ * infrastructure without requiring EVAL.
+ *
+ * Two entry points are exported:
+ *
+ *   checkSlidingWindowRateLimit  — drop-in replacement for the old function.
+ *   createRateLimiter            — factory for reusable limiter instances with
+ *                                  a fixed limit/window, preferred for
+ *                                  per-resource namespacing.
+ */
+
+import { Ratelimit } from "@upstash/ratelimit";
 import { getRedisClient } from "./client.js";
 
-const SLIDING_WINDOW_LUA = `
-local key = KEYS[1]
-local now = tonumber(ARGV[1])
-local windowMs = tonumber(ARGV[2])
-local limit = tonumber(ARGV[3])
-local member = ARGV[4]
-local windowStart = now - windowMs
+// ---------------------------------------------------------------------------
+// Ratelimit instance cache
+// A single Ratelimit instance per (limit, windowMs) pair is sufficient;
+// key-level isolation is handled by the key argument passed to .limit().
+// ---------------------------------------------------------------------------
 
-redis.call("ZREMRANGEBYSCORE", key, 0, windowStart)
+const limiterCache = new Map<string, Ratelimit>();
 
-local current = redis.call("ZCARD", key)
-local allowed = 0
-if current < limit then
-  redis.call("ZADD", key, now, member)
-  current = current + 1
-  allowed = 1
-end
+function getLimiterCacheKey(limit: number, windowMs: number): string {
+  return `${limit}:${windowMs}`;
+}
 
-redis.call("PEXPIRE", key, windowMs)
+function getOrCreateLimiter(limit: number, windowMs: number): Ratelimit {
+  const cacheKey = getLimiterCacheKey(limit, windowMs);
+  const cached = limiterCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
 
-local oldest = redis.call("ZRANGE", key, 0, 0, "WITHSCORES")
-local reset = now + windowMs
-if oldest[2] then
-  reset = tonumber(oldest[2]) + windowMs
-end
+  const limiter = new Ratelimit({
+    redis: getRedisClient(),
+    limiter: Ratelimit.slidingWindow(limit, `${windowMs} ms`),
+    // Prefix all rate-limit keys with "rl:" to isolate them from other
+    // namespaces in the same Upstash database.
+    prefix: "rl",
+  });
 
-local remaining = limit - current
-if remaining < 0 then
-  remaining = 0
-end
+  limiterCache.set(cacheKey, limiter);
+  return limiter;
+}
 
-return { allowed, limit, remaining, reset }
-`;
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
 
 export interface SlidingWindowRateLimitParams {
+  /** Fully-qualified rate-limit key, e.g. "actor:{userId}:create_project" */
   key: string;
+  /** Maximum number of requests allowed in the window */
   limit: number;
+  /** Window duration in milliseconds */
   windowMs: number;
-  nowMs?: number;
-  member?: string;
 }
 
 export interface SlidingWindowRateLimitResult {
+  /** true when the request is within the limit */
   success: boolean;
+  /** The configured limit */
   limit: number;
+  /** Remaining requests in the current window */
   remaining: number;
+  /** Unix timestamp (ms) when the window resets */
   reset: number;
 }
 
-function toInteger(value: unknown, fallback: number): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
-}
-
-function normalizePositive(value: number, field: string): number {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`${field} must be a positive number`);
-  }
-
-  return Math.trunc(value);
-}
+// ---------------------------------------------------------------------------
+// Drop-in replacement for the previous checkSlidingWindowRateLimit function.
+// Callers that already pass (key, limit, windowMs) require no changes.
+// ---------------------------------------------------------------------------
 
 /**
- * Redis-backed sliding-window limiter.
+ * Check a sliding-window rate limit for the given key.
  *
- * Uses a sorted set keyed by timestamp so boundary bursts are smoothed versus
- * fixed-window counters, and relies on key TTL for cleanup.
+ * Internally delegates to @upstash/ratelimit so no Lua EVAL is required.
+ * The nowMs and member parameters from the old signature are intentionally
+ * absent — they were only needed to drive the Lua script internally.
  */
 export async function checkSlidingWindowRateLimit(
   params: SlidingWindowRateLimitParams,
@@ -77,30 +92,77 @@ export async function checkSlidingWindowRateLimit(
     throw new Error("key must be a non-empty string");
   }
 
-  const limit = normalizePositive(params.limit, "limit");
-  const windowMs = normalizePositive(params.windowMs, "windowMs");
-  const nowMs = params.nowMs ?? Date.now();
-  const member = params.member ?? `${nowMs}-${randomUUID()}`;
-
-  const redis = getRedisClient();
-  const raw = (await redis.eval(
-    SLIDING_WINDOW_LUA,
-    1,
-    key,
-    String(nowMs),
-    String(windowMs),
-    String(limit),
-    member,
-  )) as unknown;
-
-  if (!Array.isArray(raw) || raw.length < 4) {
-    throw new Error("Unexpected Redis sliding-window response");
+  if (!Number.isFinite(params.limit) || params.limit <= 0) {
+    throw new Error("limit must be a positive number");
   }
 
+  if (!Number.isFinite(params.windowMs) || params.windowMs <= 0) {
+    throw new Error("windowMs must be a positive number");
+  }
+
+  const limiter = getOrCreateLimiter(
+    Math.trunc(params.limit),
+    Math.trunc(params.windowMs),
+  );
+
+  const result = await limiter.limit(key);
+
   return {
-    success: toInteger(raw[0], 0) === 1,
-    limit: toInteger(raw[1], limit),
-    remaining: Math.max(0, toInteger(raw[2], 0)),
-    reset: toInteger(raw[3], nowMs + windowMs),
+    success: result.success,
+    limit: result.limit,
+    remaining: Math.max(0, result.remaining),
+    reset: result.reset,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Factory for reusable per-namespace limiters
+// ---------------------------------------------------------------------------
+
+export interface RateLimiterOptions {
+  /** Maximum requests per window */
+  limit: number;
+  /** Window duration in milliseconds */
+  windowMs: number;
+}
+
+export interface RateLimiter {
+  /**
+   * Check and record a request against this limiter for the given key.
+   * The key should be scoped to the actor and operation being protected,
+   * e.g. `actor:${userId}:upload_document`.
+   */
+  check(key: string): Promise<SlidingWindowRateLimitResult>;
+}
+
+/**
+ * Create a reusable rate limiter with a fixed limit and window.
+ *
+ * Prefer this over calling checkSlidingWindowRateLimit directly when a
+ * route family shares the same limit/window configuration. The returned
+ * object is safe to store at module scope.
+ *
+ * @example
+ * const limiter = createRateLimiter({ limit: 10, windowMs: 60_000 });
+ * const result = await limiter.check(`actor:${userId}:create_project`);
+ * if (!result.success) return apiError("Too many requests", 429);
+ */
+export function createRateLimiter(options: RateLimiterOptions): RateLimiter {
+  return {
+    async check(key: string): Promise<SlidingWindowRateLimitResult> {
+      return checkSlidingWindowRateLimit({
+        key,
+        limit: options.limit,
+        windowMs: options.windowMs,
+      });
+    },
+  };
+}
+
+/**
+ * Flush the in-process limiter instance cache.
+ * Intended for use in tests only — do not call in production.
+ */
+export function resetLimiterCache(): void {
+  limiterCache.clear();
 }

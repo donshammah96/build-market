@@ -1,5 +1,5 @@
-import { Worker, type ConnectionOptions, type Job } from "bullmq";
-import { redisConnection } from "@build/queue-server";
+import { Worker, type Job } from "bullmq";
+import { createRedisConnection } from "@build/queue-server";
 import {
   UploadProcessingJobNames,
   type ImageUploadProcessingJobData,
@@ -17,7 +17,7 @@ export const imageUploadWorker = new Worker<ImageUploadProcessingJobData>(
     return { uploadId: job.data.uploadId };
   },
   {
-    connection: redisConnection as ConnectionOptions,
+    connection: createRedisConnection(),
     concurrency: 2,
     limiter: {
       max: 20,

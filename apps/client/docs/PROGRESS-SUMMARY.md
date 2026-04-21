@@ -104,18 +104,45 @@ High Fix Wave 3, Medium Fix 1-5, and Minor Fix 1-4 for closure evidence.
 
 ---
 
+## Deprecation Queue
+
+Variables listed here are confirmed deprecated and must be removed in the next
+minor release **after** all BullMQ consumers are confirmed migrated to `REDIS_URL`
+and Upstash REST credentials (`UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`).
+
+**Removal trigger:** confirm via monorepo-wide `grep` that no production code imports
+or reads the variables below outside of the `envGroups` declaration and the `.env*`
+templates themselves. Update this section and CHANGELOG.md when removal is executed.
+
+| Variable         | Deprecated Since | Reason                                                                                                          | Removal Target                                        |
+| ---------------- | ---------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `REDIS_ENABLED`  | 2026-04-21       | No longer consulted by `@upstash/ratelimit` or the REST client; Upstash credentials gate enablement.            | Next minor release after consumer migration confirmed |
+| `REDIS_HOST`     | 2026-04-21       | Replaced by `REDIS_URL` (full connection URL for BullMQ TCP) and Upstash REST URL.                              | Next minor release after consumer migration confirmed |
+| `REDIS_PORT`     | 2026-04-21       | Replaced by `REDIS_URL` (port embedded in the URL).                                                             | Next minor release after consumer migration confirmed |
+| `REDIS_FAMILY`   | 2026-04-21       | Upstash manages the IP address family on managed databases; not configurable via REST.                          | Next minor release after consumer migration confirmed |
+| `REDIS_PASSWORD` | 2026-04-21       | Replaced by `UPSTASH_REDIS_REST_TOKEN` (REST auth) and the password field within `REDIS_URL` (BullMQ TCP auth). | Next minor release after consumer migration confirmed |
+
+**Files to clean up at removal:**
+
+- `apps/client/app/lib/infrastructure/env.ts` — remove the five fields from `envGroups.redis.variables` and from `buildEnvConfig().redis`.
+- `apps/client/.env.example` — remove the deprecated block entirely.
+- `apps/client/.env.test` — remove the deprecated block entirely.
+- Any other `.env.*` templates that still carry these vars.
+
+---
+
 ## Completed Phases (last 10)
 
-1. `R10 Residual Sweep` (2026-04-14): Completed ADR-005 operation-name inventory annotations for finance, professional-verification, messaging, professionals, portfolio, idea-books, reviews/search, and calendar.
-2. `R10` (2026-04-14): User-rights and client-dashboard operation-name normalization plus contract inventory updates.
-3. `R9` (2026-04-14): Policy matrix completion for notifications, seller-insights, user-rights, professionals, calendar, and idea-books.
-4. `R8` (2026-04-14): Notifications and seller-insights adapter hardening (actor throttling, CSRF, safe mapping, structured logs).
-5. `Docs hardening` (2026-04-11): Section 14 plus addenda; instruction files updated; ADR-001 amended.
-6. `Non-Autopsy 8` (2026-04-13): Phase 2 Criterion 2 operational handoff checklist.
-7. `Non-Autopsy 7` (2026-04-13): Projects mutation monitoring evidence tooling.
-8. `Non-Autopsy 6` (2026-04-13): Generic projects flag retirement plus client GA cutover.
-9. `Non-Autopsy 5` (2026-04-13): Idea-books auth-fixture cleanup plus projects rollout Criterion 1.
-10. `Non-Autopsy 4` (2026-04-13): Idea-books browser contracts plus policy tests.
+1. `Upstash Migration Follow-Through` (2026-04-21): Completed deferred items 2–6 from the @build/redis Upstash migration: rate-limit.ts resolver updated to Upstash credential presence; env.validation test suite updated for Upstash credential checks; .env.example and .env.test modernized; BullMQ consumers migrated to `createRedisConnection()`; deprecation queue registered.
+2. `R10 Residual Sweep` (2026-04-14): Completed ADR-005 operation-name inventory annotations for finance, professional-verification, messaging, professionals, portfolio, idea-books, reviews/search, and calendar.
+3. `R10` (2026-04-14): User-rights and client-dashboard operation-name normalization plus contract inventory updates.
+4. `R9` (2026-04-14): Policy matrix completion for notifications, seller-insights, user-rights, professionals, calendar, and idea-books.
+5. `R8` (2026-04-14): Notifications and seller-insights adapter hardening (actor throttling, CSRF, safe mapping, structured logs).
+6. `Docs hardening` (2026-04-11): Section 14 plus addenda; instruction files updated; ADR-001 amended.
+7. `Non-Autopsy 8` (2026-04-13): Phase 2 Criterion 2 operational handoff checklist.
+8. `Non-Autopsy 7` (2026-04-13): Projects mutation monitoring evidence tooling.
+9. `Non-Autopsy 6` (2026-04-13): Generic projects flag retirement plus client GA cutover.
+10. `Non-Autopsy 5` (2026-04-13): Idea-books auth-fixture cleanup plus projects rollout Criterion 1.
 
 ---
 
@@ -153,9 +180,27 @@ pnpm -C apps/client run report:projects-mutation-health -- --input <file.ndjson>
 
 ## Progress Summary
 
-Last updated: 2026-04-14
+Last updated: 2026-04-21
 
 ## Snapshot
+
+### [CHECKPOINT] @build/redis Upstash Migration Follow-Through — Deferred Items 2-6 Completed
+
+- Date: 2026-04-21
+- Outcome summary: Completed all five remaining deferred items from the @build/redis Upstash migration checkpoint. The rate-limit backend resolver, env validation test suite, env templates, BullMQ consumers, and documentation are now fully aligned with the Upstash REST transport. Five legacy env vars are formally queued for removal after consumer migration is confirmed.
+- Actual files changed:
+  - `apps/client/app/lib/api/rate-limit.ts` — replaced `REDIS_ENABLED` / `envConfig.redis.enabled` gating in `resolveRateLimitBackend()` with Upstash credential presence checks (`upstashRestUrl` + `upstashRestToken`); removed misleading error message referencing `REDIS_ENABLED=true`.
+  - `apps/client/__tests__/lib/env.validation.test.ts` — rewrote env readiness test suite: replaced legacy `REDIS_HOST`/`REDIS_PORT`/`REDIS_ENABLED` assertion paths with Upstash credential checks; added distinct test cases for missing URL, missing token, invalid URL scheme, both-present-passes, non-required-backend, and build-phase deferral.
+  - `apps/client/.env.example` — restructured Redis section: Upstash REST credentials promoted to primary required entries with Upstash dashboard link; `REDIS_URL` documented as BullMQ-only TCP endpoint; `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_FAMILY`, `REDIS_PASSWORD` marked `@deprecated` with removal-target notes and a pointer to the deprecation queue in PROGRESS-SUMMARY.md.
+  - `apps/client/.env.test` — replaced legacy Redis block with Upstash stub credentials (non-functional) and in-process `RATE_LIMIT_BACKEND=memory`; deprecated legacy vars retained with removal-target comments.
+  - `packages/queue-server/src/export.queue.ts` — migrated `redisConnection` singleton import to `createRedisConnection()` per-Queue; removed `as any` cast.
+  - `packages/queue-server/src/compliance.queue.ts` — migrated all three Queue instantiations (`incidentQueue`, `userNotificationQueue`, `auditQueue`) from `redisConnection` singleton to `createRedisConnection()` per-Queue; removed `as any` casts.
+  - `apps/client/docs/PROGRESS-SUMMARY.md` — added Deprecation Queue section tracking the five legacy vars; updated Completed Phases list.
+- Verification commands required before merge:
+  1. `pnpm run client:tsc-noemit` — must pass with no diagnostics.
+  2. `pnpm run client:report-security-drift:strict` — all categories must be `0`.
+  3. `pnpm -C apps/client exec vitest run __tests__/lib/env.validation.test.ts --maxWorkers=1` — all test cases must be green.
+- Deprecation queue status: `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_FAMILY`, `REDIS_PASSWORD` formally registered. Removal blocked on confirming zero production consumers remain after BullMQ consumer migration is validated.
 
 ### [RUN] Onboarding Convergence Phase 6 - Baseline Validation Gates Executed (Telemetry Pending)
 

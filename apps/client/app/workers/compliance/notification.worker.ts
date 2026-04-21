@@ -1,6 +1,6 @@
 import { Worker, Job } from "bullmq";
 import {
-  redisConnection,
+  createRedisConnection,
   userNotificationQueue,
   UserNotificationJobData,
   ComplianceJobs,
@@ -141,7 +141,7 @@ export const notificationWorker = new Worker<UserNotificationJobData>(
     };
   },
   {
-    connection: redisConnection as any,
+    connection: createRedisConnection(),
     concurrency: 5, // 5 batches at a time
     limiter: {
       max: 50, // 50 batches per minute (adjust based on your email provider limits)

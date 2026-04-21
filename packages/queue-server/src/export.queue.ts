@@ -1,5 +1,5 @@
-import { Queue, JobsOptions } from "bullmq";
-import { redisConnection } from "./redis-connection";
+import { Queue, type JobsOptions } from "bullmq";
+import { createRedisConnection } from "./redis-connection";
 
 export interface ExportJobData {
   exportId: string;
@@ -8,8 +8,12 @@ export interface ExportJobData {
   userAgent: string;
 }
 
+/**
+ * BullMQ requires a dedicated ioredis connection per Queue instance.
+ * Do not share this connection with Workers or other Queues.
+ */
 export const exportQueue = new Queue<ExportJobData>("gdpr-data-export", {
-  connection: redisConnection as any,
+  connection: createRedisConnection(),
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: "exponential", delay: 2000 },

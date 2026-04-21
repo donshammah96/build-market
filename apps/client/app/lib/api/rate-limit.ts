@@ -17,18 +17,23 @@ function resolveRateLimitBackend(): ResolvedRateLimitBackend {
   const configuredBackend = envConfig.redis
     .rateLimitBackend as ConfiguredRateLimitBackend;
 
+  const hasUpstashCredentials =
+    Boolean(envConfig.redis.upstashRestUrl) &&
+    Boolean(envConfig.redis.upstashRestToken);
+
   if (configuredBackend === "memory") {
     return "memory";
   }
 
   if (configuredBackend === "redis") {
-    if (!envConfig.redis.enabled && envConfig.isProd) {
+    if (!hasUpstashCredentials && envConfig.isProd) {
       throw new Error(
-        "RATE_LIMIT_BACKEND=redis requires REDIS_ENABLED=true in production.",
+        "RATE_LIMIT_BACKEND=redis requires UPSTASH_REDIS_REST_URL and " +
+          "UPSTASH_REDIS_REST_TOKEN to be set in production.",
       );
     }
 
-    return envConfig.redis.enabled ? "redis" : "memory";
+    return hasUpstashCredentials ? "redis" : "memory";
   }
 
   if (envConfig.isTest) {
@@ -39,7 +44,9 @@ function resolveRateLimitBackend(): ResolvedRateLimitBackend {
     return "redis";
   }
 
-  return envConfig.redis.enabled ? "redis" : "memory";
+  // In development: use Redis only when Upstash credentials are available.
+  // Local dev without an Upstash account falls back to the in-process store.
+  return hasUpstashCredentials ? "redis" : "memory";
 }
 
 /**

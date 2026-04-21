@@ -1,9 +1,13 @@
 import { Queue } from "bullmq";
-import { redisConnection } from "./redis-connection";
+import { createRedisConnection } from "./redis-connection";
 import { AuditAction, IncidentSeverity } from "@build/db";
 
+/**
+ * BullMQ requires a dedicated ioredis connection per Queue instance.
+ * Each queue below gets its own connection — do not share across constructs.
+ */
 export const incidentQueue = new Queue<IncidentJobData>("security-incidents", {
-  connection: redisConnection as any,
+  connection: createRedisConnection(),
   defaultJobOptions: {
     attempts: 5,
     backoff: { type: "exponential", delay: 5000 },
@@ -15,7 +19,7 @@ export const incidentQueue = new Queue<IncidentJobData>("security-incidents", {
 export const userNotificationQueue = new Queue<UserNotificationJobData>(
   "compliance-notifications",
   {
-    connection: redisConnection as any,
+    connection: createRedisConnection(),
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: "fixed", delay: 60000 },
@@ -25,7 +29,7 @@ export const userNotificationQueue = new Queue<UserNotificationJobData>(
 );
 
 export const auditQueue = new Queue<AuditJobData>("audit-logs", {
-  connection: redisConnection as any,
+  connection: createRedisConnection(),
   defaultJobOptions: {
     attempts: 3,
     removeOnComplete: { age: 7 * 24 * 3600 },

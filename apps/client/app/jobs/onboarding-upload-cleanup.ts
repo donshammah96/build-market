@@ -9,7 +9,7 @@
  */
 
 import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
-import { redisConnection } from "@build/queue-server";
+import { createRedisConnection } from "@build/queue-server";
 import { uploadService } from "@/app/lib/domains/uploads";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import { env } from "@/app/lib/infrastructure/env";
@@ -22,7 +22,7 @@ const CLEANUP_MAX_RETRIES = 3;
 const onboardingUploadCleanupQueue = new Queue(
   "maintenance-onboarding-uploads",
   {
-    connection: redisConnection as ConnectionOptions,
+    connection: createRedisConnection(),
   },
 );
 
@@ -114,7 +114,7 @@ export function createOnboardingUploadCleanupWorker() {
       }
     },
     {
-      connection: redisConnection as ConnectionOptions,
+      connection: createRedisConnection(),
       concurrency: 1,
       limiter: {
         max: 1,

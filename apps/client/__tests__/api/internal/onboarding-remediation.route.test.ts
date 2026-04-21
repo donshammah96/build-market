@@ -284,7 +284,10 @@ describe("internal onboarding remediation routes", () => {
     const data = await response.json();
 
     expect(response.status).toBe(409);
-    expect(data).toEqual({ success: false, error: "Mutation already completed" });
+    expect(data).toEqual({
+      success: false,
+      error: "Mutation already completed",
+    });
   });
 
   it("returns idempotency reconciliation success payload", async () => {

@@ -10,7 +10,7 @@
  */
 
 import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
-import { redisConnection } from "@build/queue-server";
+import { createRedisConnection } from "@build/queue-server";
 import { prisma } from "@build/db";
 import { AnonymizationService } from "@/app/lib/gdpr/services/anonymization.service";
 import { env } from "@/app/lib/infrastructure/env";
@@ -20,7 +20,7 @@ const RETENTION_CRON_PATTERN = env.jobs.dataRetentionCron;
 const RETENTION_BATCH_SIZE = env.jobs.retentionBatchSize;
 
 const retentionQueue = new Queue("gdpr-data-retention", {
-  connection: redisConnection as ConnectionOptions,
+  connection: createRedisConnection(),
 });
 
 interface RetentionMetrics {
@@ -229,7 +229,7 @@ export function createDataRetentionWorker() {
       }
     },
     {
-      connection: redisConnection as ConnectionOptions,
+      connection: createRedisConnection(),
       concurrency: 1, // Only one retention job at a time
     },
   );

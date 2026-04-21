@@ -19,6 +19,8 @@
     "test": "echo \"No tests configured\" && exit 0"
   },
   "dependencies": {
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.36.2",
     "ioredis": "^5.4.1"
   },
   "devDependencies": {

@@ -135,20 +135,43 @@ const envGroups: EnvGroup[] = [
   },
   {
     name: "redis",
-    description: "Redis Configuration",
+    description: "Upstash Redis Configuration",
     variables: [
-      // FIX: REDIS_URL is the primary connection string (preferred for Vercel/Upstash).
-      // When set, REDIS_HOST/REDIS_PORT are not required.
+      // PRIMARY: Upstash REST credentials — required for rate limiting and cache.
+      // The REST client uses HTTP transport; no persistent TCP connections are created.
+      // Both variables are injected at runtime by Vercel and are not available during
+      // Next.js production build (phase-production-build), so they are listed in
+      // BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS below.
+      {
+        name: "UPSTASH_REDIS_REST_URL",
+        required: true,
+        validate: (v) => v.startsWith("https://"),
+        errorMessage:
+          "Must be a valid HTTPS Upstash REST URL (e.g. https://<db>.upstash.io)",
+      },
+      {
+        name: "UPSTASH_REDIS_REST_TOKEN",
+        required: true,
+        errorMessage:
+          "UPSTASH_REDIS_REST_TOKEN is required. Copy it from the Upstash dashboard.",
+      },
+      // BullMQ TCP endpoint — required only for services running queue workers.
+      // Format: rediss://:TOKEN@<host>.upstash.io:6379
+      // The token value is the same as UPSTASH_REDIS_REST_TOKEN.
       { name: "REDIS_URL", required: false },
+      // LEGACY — the fields below are no longer used by the primary REST client
+      // or the @upstash/ratelimit rate limiter. They are retained for backwards
+      // compatibility during transition and for non-client packages that may still
+      // reference them. Safe to remove from apps/client once all consumers have
+      // been migrated to the Upstash REST path.
       { name: "REDIS_HOST", required: false, default: "localhost" },
       { name: "REDIS_PORT", required: false, default: "6379" },
-      // Upstash REST API (HTTP-based, best for Vercel serverless functions)
-      { name: "UPSTASH_REDIS_REST_URL", required: false },
-      { name: "UPSTASH_REDIS_REST_TOKEN", required: false },
       { name: "REDIS_PASSWORD", required: false },
       { name: "REDIS_DB", required: false, default: "0" },
       { name: "REDIS_TLS", required: false, default: "false" },
       { name: "REDIS_FAMILY", required: false, default: "4" },
+      // LEGACY — REDIS_ENABLED is no longer meaningful for the REST client.
+      // Rate limiting always uses Upstash REST when credentials are present.
       { name: "REDIS_ENABLED", required: false, default: "true" },
       { name: "RATE_LIMIT_BACKEND", required: false, default: "auto" },
     ],
@@ -394,6 +417,9 @@ const BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS = new Set<string>([
   "CLERK_WEBHOOK_SECRET",
   "DATABASE_URL",
   "ENCRYPTION_KEY_V1",
+  // Upstash credentials are runtime-injected by Vercel; not available at build time.
+  "UPSTASH_REDIS_REST_URL",
+  "UPSTASH_REDIS_REST_TOKEN",
 ]);
 
 function shouldDeferServerOnlyValidationForBuild(): boolean {
@@ -557,9 +583,13 @@ function isRedisRateLimitBackendRequired(
 }
 
 /**
- * FIX: Updated to accept REDIS_URL as valid Redis configuration in addition to
- * REDIS_HOST + REDIS_PORT. This is required for Vercel + Upstash deployments
- * where you connect via a connection URL, not separate host/port values.
+ * Validates that Upstash REST credentials are present when Redis rate limiting
+ * is required at runtime (production, or explicit RATE_LIMIT_BACKEND=redis).
+ *
+ * The previous host/port/REDIS_ENABLED check has been removed: the rate limiter
+ * now uses @upstash/ratelimit over the REST transport, not ioredis over TCP.
+ * REDIS_ENABLED and REDIS_HOST/REDIS_PORT are legacy fields that are no longer
+ * consulted by the primary client or rate limiter.
  */
 function validateRedisRateLimitReadiness(result: ValidationResult): void {
   const nodeEnv = getStringEnv("NODE_ENV", "development");
@@ -571,44 +601,33 @@ function validateRedisRateLimitReadiness(result: ValidationResult): void {
 
   if (shouldDeferServerOnlyValidationForBuild()) {
     result.warnings.push(
-      `[redis] Deferring Redis rate-limit readiness checks until runtime (backend=${rateLimitBackend}, env=${nodeEnv}).`,
+      `[redis] Deferring Upstash credential checks until runtime (backend=${rateLimitBackend}, env=${nodeEnv}).`,
     );
     return;
   }
 
-  const redisEnabled = getBooleanEnv("REDIS_ENABLED", true);
-  if (!redisEnabled) {
+  const upstashUrl = getOptionalStringEnv("UPSTASH_REDIS_REST_URL");
+  const upstashToken = getOptionalStringEnv("UPSTASH_REDIS_REST_TOKEN");
+
+  if (!upstashUrl) {
     result.valid = false;
     result.errors.push(
-      `[redis] RATE_LIMIT_BACKEND=${rateLimitBackend} requires REDIS_ENABLED=true when NODE_ENV=${nodeEnv}`,
+      "[redis] UPSTASH_REDIS_REST_URL is required for rate limiting in production. " +
+        "Set it to your Upstash REST endpoint (https://<db>.upstash.io).",
+    );
+  } else if (!upstashUrl.startsWith("https://")) {
+    result.valid = false;
+    result.errors.push(
+      "[redis] UPSTASH_REDIS_REST_URL must start with https://. " +
+        `Received: ${upstashUrl.slice(0, 40)}`,
     );
   }
 
-  // FIX: Accept REDIS_URL (connection string) OR REDIS_HOST+REDIS_PORT (separate values).
-  // Upstash and many managed Redis providers supply a connection string only.
-  const redisUrl = getOptionalStringEnv("REDIS_URL");
-  const upstashRestUrl = getOptionalStringEnv("UPSTASH_REDIS_REST_URL");
-
-  if (redisUrl || upstashRestUrl) {
-    // Connection string present — host/port are not required.
-    return;
-  }
-
-  const redisHost = getStringEnv("REDIS_HOST").trim();
-  const redisPortRaw = getStringEnv("REDIS_PORT").trim();
-  if (!redisHost || !redisPortRaw) {
+  if (!upstashToken) {
     result.valid = false;
     result.errors.push(
-      "[redis] Redis rate-limit backend requires either REDIS_URL or both REDIS_HOST and REDIS_PORT.",
-    );
-    return;
-  }
-
-  const redisPort = Number.parseInt(redisPortRaw, 10);
-  if (!Number.isFinite(redisPort) || redisPort <= 0) {
-    result.valid = false;
-    result.errors.push(
-      `[redis] Invalid REDIS_PORT value: ${redisPortRaw}. Must be a positive integer.`,
+      "[redis] UPSTASH_REDIS_REST_TOKEN is required for rate limiting in production. " +
+        "Copy it from the Upstash dashboard.",
     );
   }
 }
@@ -741,19 +760,27 @@ function buildEnvConfig() {
       getOptionalStringEnv("POSTGRES_URL") ??
       getOptionalStringEnv("DATABASE_URL"),
 
-    // Redis — FIX: upstashRestUrl and upstashRestToken now use getOptionalStringEnv
-    // (previously used getStringEnv which returned empty string instead of undefined,
-    // causing the Upstash client to receive an empty string as its URL/token).
+    // Redis / Upstash
+    // upstashRestUrl and upstashRestToken are the primary credentials for the
+    // @upstash/redis REST client used by rate limiting and cache.
+    // url is the TCP endpoint for BullMQ workers (ioredis).
+    // The remaining fields are legacy/deprecated; retained for packages outside
+    // apps/client that still read them during the transition period.
     redis: {
-      enabled: getBooleanEnv("REDIS_ENABLED", true),
+      // PRIMARY — Upstash REST transport (serverless / Next.js / edge)
+      upstashRestUrl: getOptionalStringEnv("UPSTASH_REDIS_REST_URL"),
+      upstashRestToken: getOptionalStringEnv("UPSTASH_REDIS_REST_TOKEN"),
+      // BullMQ TCP transport — long-running worker processes only
+      url: getOptionalStringEnv("REDIS_URL"),
+      // Rate-limit backend selection (auto | memory | redis).
+      // "auto" resolves to Upstash REST in production when credentials are present.
       rateLimitBackend: getRateLimitBackendEnv("RATE_LIMIT_BACKEND", "auto"),
+      // @deprecated — no longer consulted by the REST client or rate limiter.
+      enabled: getBooleanEnv("REDIS_ENABLED", true),
       host: getStringEnv("REDIS_HOST", "localhost"),
       port: getNumberEnv("REDIS_PORT", 6379),
       password: getOptionalStringEnv("REDIS_PASSWORD"),
       db: getNumberEnv("REDIS_DB", 0),
-      url: getOptionalStringEnv("REDIS_URL"),
-      upstashRestUrl: getOptionalStringEnv("UPSTASH_REDIS_REST_URL"),
-      upstashRestToken: getOptionalStringEnv("UPSTASH_REDIS_REST_TOKEN"),
       tls: getBooleanEnv("REDIS_TLS"),
     },
 
@@ -914,7 +941,13 @@ if (
   !isEdgeRuntime()
 ) {
   const startupGroups = ["clerk", "database", "urls", "encryption"];
+
+  // Always validate Upstash credentials in production — the REST client and
+  // rate limiter require them regardless of RATE_LIMIT_BACKEND setting.
+  // In development/test, only add the redis group when explicitly configured
+  // to use Redis so local dev without Upstash credentials still boots.
   if (
+    process.env.NODE_ENV === "production" ||
     isRedisRateLimitBackendRequired(
       getStringEnv("NODE_ENV", "development"),
       getRateLimitBackendEnv("RATE_LIMIT_BACKEND", "auto"),

@@ -1,0 +1,26 @@
+# Normalize line endings for all text files on commit.
+# Git will convert to LF on check-in and to the OS native line ending on checkout.
+* text=auto
+
+# Explicit overrides for files that must always be LF on all platforms
+# (shell scripts, YAML, Dockerfiles — Windows checkout must not convert these).
+*.sh    text eol=lf
+*.bash  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+
+# Binary files — never touch line endings
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.svg   binary
+*.webp  binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary

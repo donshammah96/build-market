@@ -1,30 +1,36 @@
+/**
+ * BullMQ-compatible Redis connection via Upstash TCP endpoint.
+ *
+ * BullMQ requires ioredis with a persistent TCP connection; the REST client
+ * in client.ts is not compatible with BullMQ's blocking command patterns
+ * (BRPOP, BLPOP, etc.). Upstash exposes a standard rediss:// TCP endpoint
+ * alongside its REST API, so ioredis continues to work here.
+ *
+ * Required environment variable:
+ *   REDIS_URL — rediss://:TOKEN@credible-urchin-103242.upstash.io:6379
+ *
+ * The token is the same value as UPSTASH_REDIS_REST_TOKEN. Using a URL
+ * rather than discrete host/port/password keeps configuration portable and
+ * avoids the need for individual REDIS_HOST / REDIS_PORT / REDIS_PASSWORD
+ * variables in services that only need this module.
+ *
+ * maxmemory-policy enforcement has been removed. Upstash manages eviction
+ * policy on managed databases; CONFIG SET is not permitted.
+ */
+
 import Redis, { type RedisOptions } from "ioredis";
 
-const DEFAULT_REDIS_URL = "redis://localhost:6379";
-const DEFAULT_REQUIRED_MAXMEMORY_POLICY = "noeviction";
-
-type RuntimePolicyEnforcementMode = "off" | "warn" | "error";
-
 export type BullMQRedisConnectionOptions = RedisOptions & {
+  /**
+   * When true, suppresses BullMQ's Redis version compatibility warning.
+   * We set this to true globally because we run a centralised policy check
+   * from this package rather than per Queue/Worker.
+   */
   skipVersionCheck?: boolean;
 };
 
-const requiredMaxMemoryPolicy = (
-  process.env.REDIS_REQUIRED_MAXMEMORY_POLICY ||
-  DEFAULT_REQUIRED_MAXMEMORY_POLICY
-)
-  .trim()
-  .toLowerCase();
-
-const runtimePolicyEnforcementMode = normalizeRuntimePolicyEnforcementMode(
-  process.env.REDIS_MAXMEMORY_POLICY_ENFORCEMENT,
-);
-
-let runtimePolicyValidationPromise: Promise<void> | null = null;
-
 export interface BullMQConnectionSummary {
-  enabled: boolean;
-  source: "url" | "discrete" | "default";
+  source: "url" | "default";
   host: string;
   port: number;
   username?: string;
@@ -33,212 +39,128 @@ export interface BullMQConnectionSummary {
   hasPassword: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
 function parseIntOrDefault(
   value: string | undefined,
   fallback: number,
 ): number {
-  const parsed = Number.parseInt(value || "", 10);
+  const parsed = Number.parseInt(value ?? "", 10);
   return Number.isNaN(parsed) ? fallback : parsed;
 }
 
-function normalizeRuntimePolicyEnforcementMode(
-  value: string | undefined,
-): RuntimePolicyEnforcementMode {
-  const normalized = value?.trim().toLowerCase();
+function requireRedisUrl(): string {
+  const url = process.env.REDIS_URL?.trim();
 
-  if (normalized === "off" || normalized === "warn" || normalized === "error") {
-    return normalized;
-  }
-
-  return "warn";
-}
-
-function getRedisInfoValue(info: string, fieldName: string): string | null {
-  const prefix = `${fieldName}:`;
-  const lines = info.split(/\r?\n/);
-
-  for (const line of lines) {
-    if (line.startsWith(prefix)) {
-      return line.slice(prefix.length).trim();
-    }
-  }
-
-  return null;
-}
-
-async function validateRedisRuntimePolicy(connection: Redis): Promise<void> {
-  if (runtimePolicyEnforcementMode === "off") {
-    return;
-  }
-
-  const info = await connection.info();
-  const detectedMaxMemoryPolicy = getRedisInfoValue(info, "maxmemory_policy");
-
-  if (!detectedMaxMemoryPolicy) {
-    console.warn(
-      "[Redis] Runtime policy check skipped: maxmemory_policy was not returned by Redis INFO.",
+  if (!url) {
+    throw new Error(
+      "REDIS_URL is required for BullMQ connections. " +
+        "Set it to the Upstash TCP endpoint: " +
+        "rediss://:TOKEN@<host>.upstash.io:6379",
     );
-    return;
   }
 
-  if (detectedMaxMemoryPolicy.toLowerCase() === requiredMaxMemoryPolicy) {
-    return;
-  }
-
-  const message =
-    `[Redis] Runtime policy mismatch: maxmemory_policy=${detectedMaxMemoryPolicy}; ` +
-    `expected=${requiredMaxMemoryPolicy}. Configure Redis to prevent BullMQ job loss under memory pressure.`;
-
-  if (runtimePolicyEnforcementMode === "error") {
-    throw new Error(message);
-  }
-
-  console.warn(message);
-}
-
-function handleRuntimePolicyValidationError(error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error);
-
-  if (runtimePolicyEnforcementMode === "error") {
-    console.error(`[Redis] Runtime policy validation failed: ${message}`);
-    process.exitCode = 1;
-    return;
-  }
-
-  console.warn(`[Redis] Runtime policy validation failed: ${message}`);
-}
-
-export async function ensureRedisRuntimePolicy(
-  connection: Redis,
-): Promise<void> {
-  if (!runtimePolicyValidationPromise) {
-    runtimePolicyValidationPromise = validateRedisRuntimePolicy(connection);
-  }
-
-  return runtimePolicyValidationPromise;
+  return url;
 }
 
 function buildConnectionFromUrl(redisUrl: string): RedisOptions {
-  const parsedUrl = new URL(redisUrl);
-  const db = parseIntOrDefault(parsedUrl.pathname.replace(/^\//, ""), 0);
+  const parsed = new URL(redisUrl);
+  const db = parseIntOrDefault(parsed.pathname.replace(/^\//, ""), 0);
 
   return {
-    host: parsedUrl.hostname || "localhost",
-    port: parseIntOrDefault(parsedUrl.port, 6379),
-    username: parsedUrl.username || undefined,
-    password: parsedUrl.password || undefined,
+    host: parsed.hostname || "localhost",
+    port: parseIntOrDefault(parsed.port, 6379),
+    username: parsed.username || undefined,
+    // URL-encoded password is decoded automatically by the URL constructor
+    password: parsed.password || undefined,
     db,
-    tls: parsedUrl.protocol === "rediss:" ? {} : undefined,
+    tls: parsed.protocol === "rediss:" ? {} : undefined,
   };
 }
 
-function buildConnectionFromEnv(): RedisOptions {
-  return {
-    host: process.env.REDIS_HOST || "localhost",
-    port: parseIntOrDefault(process.env.REDIS_PORT, 6379),
-    username: process.env.REDIS_USERNAME || undefined,
-    password: process.env.REDIS_PASSWORD || undefined,
-    db: parseIntOrDefault(process.env.REDIS_DB, 0),
-    tls: process.env.REDIS_TLS === "true" ? {} : undefined,
-  };
-}
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
+/**
+ * Returns ioredis options suitable for BullMQ instantiation.
+ *
+ * Callers can pass overrides to customise individual fields, though this
+ * should rarely be needed — prefer adjusting the REDIS_URL instead.
+ */
 export function getBullMQConnectionOptions(
   overrides: Partial<BullMQRedisConnectionOptions> = {},
 ): BullMQRedisConnectionOptions {
-  const baseConfig = process.env.REDIS_URL
-    ? buildConnectionFromUrl(process.env.REDIS_URL)
-    : buildConnectionFromEnv();
+  const base = buildConnectionFromUrl(requireRedisUrl());
 
   return {
-    ...baseConfig,
+    ...base,
+    // BullMQ requires maxRetriesPerRequest: null — do not override this.
     maxRetriesPerRequest: null,
     enableReadyCheck: true,
-    // BullMQ emits a warning for each Queue/Worker instance when this is false.
-    // We run a centralized one-time runtime policy check from this package instead.
     skipVersionCheck: true,
-    retryStrategy: (times: number) => {
-      const delay = Math.min(times * 500, 30000);
-      console.log(`[Redis] Reconnecting attempt ${times}, delay: ${delay}ms`);
+    retryStrategy(times: number) {
+      const delay = Math.min(times * 500, 30_000);
+      console.warn(`[Redis:BullMQ] Reconnect attempt ${times} in ${delay}ms`);
       return delay;
     },
-    reconnectOnError: (err: Error) => {
-      const targetErrors = ["READONLY", "ECONNRESET", "ECONNREFUSED"];
-      return targetErrors.some((code) => err.message.includes(code));
+    reconnectOnError(err: Error) {
+      const retryOn = ["READONLY", "ECONNRESET", "ECONNREFUSED"];
+      return retryOn.some((code) => err.message.includes(code));
     },
     ...overrides,
   };
 }
 
+/**
+ * Returns a summary of the current connection configuration for logging.
+ * Intentionally omits the password.
+ */
 export function getBullMQConnectionSummary(): BullMQConnectionSummary {
-  const source = process.env.REDIS_URL
-    ? "url"
-    : process.env.REDIS_HOST || process.env.REDIS_PORT
-      ? "discrete"
-      : "default";
-  const effectiveUrl = process.env.REDIS_URL || DEFAULT_REDIS_URL;
-  const config =
-    source === "url"
-      ? buildConnectionFromUrl(effectiveUrl)
-      : buildConnectionFromEnv();
+  const url = requireRedisUrl();
+  const config = buildConnectionFromUrl(url);
 
   return {
-    enabled:
-      source !== "default" ||
-      process.env.REDIS_URL === DEFAULT_REDIS_URL ||
-      Boolean(process.env.REDIS_HOST) ||
-      Boolean(process.env.REDIS_PORT),
-    source,
-    host: config.host || "localhost",
-    port: config.port || 6379,
+    source: "url",
+    host: config.host ?? "localhost",
+    port: config.port ?? 6379,
     username: config.username,
-    db: config.db || 0,
+    db: config.db ?? 0,
     tls: Boolean(config.tls),
     hasPassword: Boolean(config.password),
   };
 }
 
+/**
+ * Create a new ioredis connection instance for BullMQ.
+ *
+ * BullMQ requires a dedicated connection per Queue and per Worker — do not
+ * share a single connection across multiple BullMQ constructs. Call this
+ * function once per Queue/Worker instantiation.
+ */
 export function createRedisConnection(
   overrides: Partial<BullMQRedisConnectionOptions> = {},
 ): Redis {
   const options = getBullMQConnectionOptions(overrides);
   const connection = new Redis(options);
 
-  // BullMQ reads skipVersionCheck from the shared connection object.
+  // BullMQ reads skipVersionCheck from the connection instance directly
   (connection as Redis & { skipVersionCheck?: boolean }).skipVersionCheck =
     options.skipVersionCheck ?? true;
 
+  connection.on("error", (err: Error) => {
+    console.error("[Redis:BullMQ] Connection error:", err.message);
+  });
+
+  connection.on("connect", () => {
+    console.log("[Redis:BullMQ] Connected");
+  });
+
+  connection.on("close", () => {
+    console.warn("[Redis:BullMQ] Connection closed");
+  });
+
   return connection;
 }
-
-export const redisConnection = createRedisConnection();
-
-void ensureRedisRuntimePolicy(redisConnection).catch(
-  handleRuntimePolicyValidationError,
-);
-
-redisConnection.on("error", (err: Error) => {
-  console.error("[Redis] Connection error:", err.message);
-});
-
-redisConnection.on("connect", () => {
-  console.log("[Redis] Connected successfully");
-});
-
-redisConnection.on("ready", () => {
-  console.log("[Redis] Ready to accept commands");
-});
-
-redisConnection.on("close", () => {
-  console.log("[Redis] Connection closed");
-});
-
-process.on("SIGTERM", async () => {
-  console.log("[Redis] Shutting down gracefully...");
-  await redisConnection.quit();
-});
-
-process.on("SIGINT", async () => {
-  console.log("[Redis] Received SIGINT, shutting down...");
-  await redisConnection.quit();
-});

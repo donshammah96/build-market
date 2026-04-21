@@ -1,6 +1,6 @@
 import { Worker, Job } from "bullmq";
 import {
-  redisConnection,
+  createRedisConnection,
   incidentQueue,
   IncidentJobData,
   ComplianceJobs,
@@ -36,7 +36,7 @@ export const incidentWorker = new Worker<IncidentJobData>(
     }
   },
   {
-    connection: redisConnection as any,
+    connection: createRedisConnection(),
     concurrency: 2, // Process 2 incidents simultaneously
     limiter: {
       max: 10,
