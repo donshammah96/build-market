@@ -2,6 +2,7 @@ import { nextJsConfig } from "@build/eslint-config/next-js";
 
 /** @type {import("eslint").Linter.Config} */
 const config = [
+  { ignores: [".next/**", "dist/**", "node_modules/**", "coverage/**"] },
   ...nextJsConfig,
   {
     rules: {

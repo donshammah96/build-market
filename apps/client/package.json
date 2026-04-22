@@ -43,7 +43,7 @@
     "build": "next build",
     "build:cloudflare-worker": "pnpm run check:worker-asset-budget:public && opennextjs-cloudflare build --config wrangler.toml --skipWranglerConfigCheck && pnpm run check:worker-asset-budget:open-next",
     "start": "next start",
-    "lint": "next lint --max-warnings 0",
+    "lint": "eslint . --cache",
     "check-types": "tsc --noEmit"
   },
   "dependencies": {

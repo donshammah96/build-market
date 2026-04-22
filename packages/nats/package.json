@@ -12,7 +12,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "lint": "eslint src/",
+    "lint": "eslint src/ --cache",
     "check-types": "tsc --noEmit",
     "test": "echo \"No tests configured\" && exit 0"
   },
