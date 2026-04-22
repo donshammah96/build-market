@@ -6,6 +6,7 @@ import {
   OnboardingView,
   type OnboardingRole,
 } from "@/app/onboarding/_components/OnboardingView";
+import { dashboardForRole } from "@/lib/links";
 
 const PREVIEW_DELAY_MS = 350;
 
@@ -95,9 +96,9 @@ export default function OnboardingPreviewClient() {
         success: true,
         data: {
           userId: "preview-user",
-          role: "PROFESSIONAL",
+          role: role === "professional" ? "PROFESSIONAL" : "CLIENT",
           isProfileComplete: true,
-          redirectTo: "/dashboard",
+          redirectTo: dashboardForRole(role ?? "CLIENT"),
         },
       });
     };
@@ -105,7 +106,7 @@ export default function OnboardingPreviewClient() {
     return () => {
       globalThis.fetch = originalFetch;
     };
-  }, [mockApiEnabled]);
+  }, [mockApiEnabled, role]);
 
   const toggleMockApi = useCallback(() => {
     setMockApiEnabled((previous) => {

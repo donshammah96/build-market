@@ -4,7 +4,7 @@ import { useAuth, useUser, useClerk } from "@clerk/nextjs";
 import { toast } from "react-toastify";
 import { OnboardingData } from "@build/types";
 import { onboardingClient } from "@/lib/onboarding-client";
-import { ROUTES } from "@/lib/links";
+import { ROUTES, dashboardForRole } from "@/lib/links";
 import { useOnboardingAnalytics } from "@/lib/analytics/OnboardingAnalyticsContext";
 import { normalizeRole } from "@/app/lib/security/roles";
 import {
@@ -109,11 +109,7 @@ export function useOnboarding() {
     const normalizedRole = normalizeRole(metadata?.role);
 
     if (metadata?.isOnboarded) {
-      const dashboardPath =
-        normalizedRole === "PROFESSIONAL"
-          ? ROUTES.professionalDashboard
-          : ROUTES.userDashboard;
-      router.replace(dashboardPath);
+      router.replace(dashboardForRole(normalizedRole));
     }
   }, [userLoaded, user, router]);
 
@@ -136,10 +132,7 @@ export function useOnboarding() {
 
   const navigateToDashboard = useCallback(
     async (targetRole: UserRole) => {
-      const dashboardPath =
-        targetRole === "professional"
-          ? ROUTES.professionalDashboard
-          : ROUTES.userDashboard;
+      const dashboardPath = dashboardForRole(targetRole);
 
       const metadataReady = await waitForMetadataPropagation(targetRole);
 

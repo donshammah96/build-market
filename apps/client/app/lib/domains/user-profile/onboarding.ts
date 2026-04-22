@@ -30,6 +30,7 @@ import {
   resolveClientType,
   type ClientTypeComplianceRouting,
 } from "./client-type-compliance";
+import { ROUTES } from "@/lib/links";
 
 export type ClerkUserProfile = {
   emailAddresses?: Array<{ emailAddress?: string | null }>;
@@ -683,7 +684,7 @@ export const userProfileOnboardingService = {
         isProfileComplete: user.user.isProfileComplete,
         clientTypeCompliance: user.clientTypeCompliance,
         skipped: true,
-        redirectTo: "/dashboard",
+        redirectTo: ROUTES.userDashboard,
         message:
           "Onboarding skipped. You can complete your profile from the dashboard.",
       });
@@ -775,7 +776,7 @@ export const userProfileOnboardingService = {
         role: user.role,
         isProfileComplete: user.isProfileComplete,
         skipped: true,
-        redirectTo: "/professional-portal/dashboard",
+        redirectTo: ROUTES.professionalDashboard,
         message:
           "Professional onboarding skipped. Complete your verification from the dashboard.",
       });

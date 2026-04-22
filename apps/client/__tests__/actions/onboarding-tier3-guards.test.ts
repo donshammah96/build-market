@@ -4,6 +4,7 @@ import {
   skipProfessionalOnboarding,
   submitOnboarding,
 } from "@/app/actions/onboarding";
+import { ROUTES } from "@/lib/links";
 
 vi.mock("server-only", () => ({}));
 
@@ -123,7 +124,7 @@ describe("onboarding Tier-3 guards", () => {
         role: "CLIENT",
         isProfileComplete: true,
         status: "ACTIVE",
-        redirectTo: "/dashboard",
+        redirectTo: ROUTES.userDashboard,
       },
     });
   });
@@ -244,7 +245,7 @@ describe("onboarding Tier-3 guards", () => {
         role: "CLIENT",
         isProfileComplete: true,
         status: "ACTIVE",
-        redirectTo: "/dashboard",
+        redirectTo: ROUTES.userDashboard,
       },
     });
 
@@ -266,7 +267,7 @@ describe("onboarding Tier-3 guards", () => {
         role: "CLIENT",
         isProfileComplete: true,
         status: "ACTIVE",
-        redirectTo: "/dashboard",
+        redirectTo: ROUTES.userDashboard,
       },
     });
     expect(mocks.executeOnboardingOrchestration).toHaveBeenCalled();
@@ -281,7 +282,7 @@ describe("onboarding Tier-3 guards", () => {
         role: "CLIENT",
         isProfileComplete: true,
         status: "ACTIVE",
-        redirectTo: "/dashboard",
+        redirectTo: ROUTES.userDashboard,
       },
     });
 
@@ -303,7 +304,7 @@ describe("onboarding Tier-3 guards", () => {
         role: "CLIENT",
         isProfileComplete: true,
         status: "ACTIVE",
-        redirectTo: "/dashboard",
+        redirectTo: ROUTES.userDashboard,
       },
     });
     expect(mocks.executeOnboardingOrchestration).not.toHaveBeenCalled();

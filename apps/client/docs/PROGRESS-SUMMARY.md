@@ -114,13 +114,15 @@ and Upstash REST credentials (`UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOK
 or reads the variables below outside of the `envGroups` declaration and the `.env*`
 templates themselves. Update this section and CHANGELOG.md when removal is executed.
 
-| Variable         | Deprecated Since | Reason                                                                                                          | Removal Target                                        |
-| ---------------- | ---------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `REDIS_ENABLED`  | 2026-04-21       | No longer consulted by `@upstash/ratelimit` or the REST client; Upstash credentials gate enablement.            | Next minor release after consumer migration confirmed |
-| `REDIS_HOST`     | 2026-04-21       | Replaced by `REDIS_URL` (full connection URL for BullMQ TCP) and Upstash REST URL.                              | Next minor release after consumer migration confirmed |
-| `REDIS_PORT`     | 2026-04-21       | Replaced by `REDIS_URL` (port embedded in the URL).                                                             | Next minor release after consumer migration confirmed |
-| `REDIS_FAMILY`   | 2026-04-21       | Upstash manages the IP address family on managed databases; not configurable via REST.                          | Next minor release after consumer migration confirmed |
-| `REDIS_PASSWORD` | 2026-04-21       | Replaced by `UPSTASH_REDIS_REST_TOKEN` (REST auth) and the password field within `REDIS_URL` (BullMQ TCP auth). | Next minor release after consumer migration confirmed |
+| Variable                                          | Deprecated Since | Reason                                                                                                          | Removal Target                                                  |
+| ------------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `REDIS_ENABLED`                                   | 2026-04-21       | No longer consulted by `@upstash/ratelimit` or the REST client; Upstash credentials gate enablement.            | Next minor release after consumer migration confirmed           |
+| `REDIS_HOST`                                      | 2026-04-21       | Replaced by `REDIS_URL` (full connection URL for BullMQ TCP) and Upstash REST URL.                              | Next minor release after consumer migration confirmed           |
+| `REDIS_PORT`                                      | 2026-04-21       | Replaced by `REDIS_URL` (port embedded in the URL).                                                             | Next minor release after consumer migration confirmed           |
+| `REDIS_FAMILY`                                    | 2026-04-21       | Upstash manages the IP address family on managed databases; not configurable via REST.                          | Next minor release after consumer migration confirmed           |
+| `REDIS_PASSWORD`                                  | 2026-04-21       | Replaced by `UPSTASH_REDIS_REST_TOKEN` (REST auth) and the password field within `REDIS_URL` (BullMQ TCP auth). | Next minor release after consumer migration confirmed           |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL` | 2026-04-22       | Mobile auth entry points now force redirect through `/auth-callback`; keep as a Clerk fallback safety net only. | Remove after confirming no Clerk SDK fallback path consults it. |
+| `NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL`             | 2026-04-22       | Same deprecation as the sign-in fallback var; runtime redirects now resolve through `/auth-callback`.           | Remove after confirming no Clerk SDK fallback path consults it. |
 
 **Files to clean up at removal:**
 
@@ -133,16 +135,16 @@ templates themselves. Update this section and CHANGELOG.md when removal is execu
 
 ## Completed Phases (last 10)
 
-1. `Upstash Migration Follow-Through` (2026-04-21): Completed deferred items 2–6 from the @build/redis Upstash migration: rate-limit.ts resolver updated to Upstash credential presence; env.validation test suite updated for Upstash credential checks; .env.example and .env.test modernized; BullMQ consumers migrated to `createRedisConnection()`; deprecation queue registered.
-2. `R10 Residual Sweep` (2026-04-14): Completed ADR-005 operation-name inventory annotations for finance, professional-verification, messaging, professionals, portfolio, idea-books, reviews/search, and calendar.
-3. `R10` (2026-04-14): User-rights and client-dashboard operation-name normalization plus contract inventory updates.
-4. `R9` (2026-04-14): Policy matrix completion for notifications, seller-insights, user-rights, professionals, calendar, and idea-books.
-5. `R8` (2026-04-14): Notifications and seller-insights adapter hardening (actor throttling, CSRF, safe mapping, structured logs).
-6. `Docs hardening` (2026-04-11): Section 14 plus addenda; instruction files updated; ADR-001 amended.
-7. `Non-Autopsy 8` (2026-04-13): Phase 2 Criterion 2 operational handoff checklist.
-8. `Non-Autopsy 7` (2026-04-13): Projects mutation monitoring evidence tooling.
-9. `Non-Autopsy 6` (2026-04-13): Generic projects flag retirement plus client GA cutover.
-10. `Non-Autopsy 5` (2026-04-13): Idea-books auth-fixture cleanup plus projects rollout Criterion 1.
+1. `Dashboard Path Standardization` (2026-04-22): Renamed the homeowner dashboard to `/homeowner-dashboard`, centralized role-aware dashboard routing in `dashboardForRole()`, added a legacy `/dashboard` redirect shim, fixed mobile Clerk auth redirect parity, and realigned Clerk fallback env vars to `/auth-callback`.
+2. `Upstash Migration Follow-Through` (2026-04-21): Completed deferred items 2–6 from the @build/redis Upstash migration: rate-limit.ts resolver updated to Upstash credential presence; env.validation test suite updated for Upstash credential checks; .env.example and .env.test modernized; BullMQ consumers migrated to `createRedisConnection()`; deprecation queue registered.
+3. `R10 Residual Sweep` (2026-04-14): Completed ADR-005 operation-name inventory annotations for finance, professional-verification, messaging, professionals, portfolio, idea-books, reviews/search, and calendar.
+4. `R10` (2026-04-14): User-rights and client-dashboard operation-name normalization plus contract inventory updates.
+5. `R9` (2026-04-14): Policy matrix completion for notifications, seller-insights, user-rights, professionals, calendar, and idea-books.
+6. `R8` (2026-04-14): Notifications and seller-insights adapter hardening (actor throttling, CSRF, safe mapping, structured logs).
+7. `Docs hardening` (2026-04-11): Section 14 plus addenda; instruction files updated; ADR-001 amended.
+8. `Non-Autopsy 8` (2026-04-13): Phase 2 Criterion 2 operational handoff checklist.
+9. `Non-Autopsy 7` (2026-04-13): Projects mutation monitoring evidence tooling.
+10. `Non-Autopsy 6` (2026-04-13): Generic projects flag retirement plus client GA cutover.
 
 ---
 
@@ -180,9 +182,29 @@ pnpm -C apps/client run report:projects-mutation-health -- --input <file.ndjson>
 
 ## Progress Summary
 
-Last updated: 2026-04-21
+Last updated: 2026-04-22
 
 ## Snapshot
+
+### [CHECKPOINT] Dashboard Path Standardization — /dashboard → /homeowner-dashboard
+
+- Date: 2026-04-22
+- Outcome summary: Renamed the ambiguous homeowner route from `/dashboard` to `/homeowner-dashboard`, centralized role-aware dashboard routing in `dashboardForRole()`, added a legacy `/dashboard` redirect shim, fixed the mobile Clerk auth buttons to use explicit `forceRedirectUrl` props, and realigned Clerk fallback env vars to `/auth-callback`.
+- Actual files changed:
+  - `apps/client/lib/links.ts` — `ROUTES.userDashboard` now points at `/homeowner-dashboard`; added `dashboardForRole(role)` as the single role→dashboard resolver.
+  - `apps/client/app/(user)/homeowner-dashboard/**` — copied the homeowner dashboard route tree to the new URL path.
+  - `apps/client/app/(user)/dashboard/page.tsx` — legacy redirect shim to `ROUTES.userDashboard`.
+  - `apps/client/app/lib/security/middleware/redirect-policy.ts`; `apps/client/middleware.ts`; `apps/client/app/lib/security/middleware/route-matcher.ts` — middleware now resolves homeowner redirects through the centralized helper and protects `/homeowner-dashboard(.*)`.
+  - `apps/client/app/lib/domains/shared/onboarding-orchestration/service.ts`; `apps/client/app/lib/domains/user-profile/onboarding.ts`; `apps/client/app/onboarding/_hooks/useOnboarding.ts`; `apps/client/app/auth-callback/page.tsx`; `apps/client/app/onboarding-preview/onboarding-preview-client.tsx` — onboarding and auth flows now resolve the homeowner dashboard through centralized constants/helpers.
+  - `apps/client/components/layout/NavBar.tsx`; `apps/client/components/home/Onboarding.tsx`; `apps/client/components/forms/HomeownerForm.tsx` — user-facing UI redirects now target the renamed route; mobile Clerk modals now force `/auth-callback` or `/onboarding`.
+  - `apps/client/.env`; `.env.development`; `.env.example`; `.env.test`; `.env.vercel`; `.env.vercel.example` — sign-in fallback env vars now point to `/auth-callback` and are documented as safety nets.
+  - `apps/client/__tests__/middleware/route-guards.test.ts`; `apps/client/__tests__/lib/middleware-decision-log.test.ts`; `apps/client/__tests__/lib/domains/onboarding-orchestration.contract.test.ts`; `apps/client/__tests__/hooks/useOnboarding.test.tsx`; `apps/client/__tests__/api/onboarding/skip.test.ts`; `apps/client/__tests__/actions/onboarding-tier3-guards.test.ts` — updated redirect expectations.
+  - `apps/client/__tests__/lib/dashboard-for-role.test.ts`; `apps/client/__tests__/lib/redirect-policy.test.ts` — new helper/policy coverage.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/middleware/route-guards.test.ts __tests__/api/onboarding/skip.test.ts __tests__/actions/onboarding-tier3-guards.test.ts __tests__/hooks/useOnboarding.test.tsx __tests__/lib/dashboard-for-role.test.ts __tests__/lib/redirect-policy.test.ts __tests__/lib/middleware-decision-log.test.ts __tests__/lib/domains/onboarding-orchestration.contract.test.ts --pool=threads --maxWorkers=1` — passed (`8` files, `49` tests).
+  2. `pnpm run client:tsc-noemit` — passed with zero diagnostics.
+  3. `pnpm run client:report-security-drift:strict` — passed; all reported categories remained `0`.
+- Deprecation queue additions: `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL`; `NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL`.
 
 ### [CHECKPOINT] @build/redis Upstash Migration Follow-Through — Deferred Items 2-6 Completed
 

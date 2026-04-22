@@ -12,7 +12,6 @@ import {
 } from "@/app/lib/security/middleware/route-matcher";
 import { resolveOnboardingStatus } from "@/app/lib/security/middleware/onboarding-resolver";
 import {
-  redirectToDashboard,
   redirectToDashboardForRole,
   redirectToMaintenance,
   redirectToOnboarding,
@@ -259,7 +258,7 @@ export default clerkMiddleware(async (auth, req: Request) => {
         routeClass: "professional",
         role: status.role,
       });
-      return redirectToDashboard(nextReq);
+      return redirectToDashboardForRole(nextReq, status.role);
     }
 
     logMiddlewareDecision(nextReq, "mw_allow_protected", {

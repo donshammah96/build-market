@@ -4,6 +4,7 @@ import type {
   OnboardingIntent,
   ValidatedOnboardingData,
 } from "@/app/lib/domains/shared/onboarding-orchestration";
+import { ROUTES } from "@/lib/links";
 
 vi.mock("server-only", () => ({}));
 
@@ -151,7 +152,7 @@ describe("onboarding orchestration contract", () => {
         role: "CLIENT",
         isProfileComplete: false,
         skipped: true,
-        redirectTo: "/dashboard",
+        redirectTo: ROUTES.userDashboard,
         message: "Onboarding skipped",
       },
     });
@@ -163,7 +164,7 @@ describe("onboarding orchestration contract", () => {
         role: "PROFESSIONAL",
         isProfileComplete: false,
         skipped: true,
-        redirectTo: "/professional-portal/dashboard",
+        redirectTo: ROUTES.professionalDashboard,
         message: "Onboarding skipped",
       },
     });
@@ -197,7 +198,7 @@ describe("onboarding orchestration contract", () => {
       role: "CLIENT",
       isProfileComplete: true,
       status: "ACTIVE",
-      redirectTo: "/dashboard",
+      redirectTo: ROUTES.userDashboard,
     });
 
     expect(mockCompleteOnboarding).toHaveBeenCalledWith(
@@ -334,7 +335,7 @@ describe("onboarding orchestration contract", () => {
       role: "CLIENT",
       isProfileComplete: false,
       status: "ACTIVE",
-      redirectTo: "/dashboard",
+      redirectTo: ROUTES.userDashboard,
     });
 
     expect(mockSkipClientOnboarding).toHaveBeenCalledWith(
@@ -371,7 +372,7 @@ describe("onboarding orchestration contract", () => {
       role: "PROFESSIONAL",
       isProfileComplete: false,
       status: "PENDING_VERIFICATION",
-      redirectTo: "/professional-portal/dashboard",
+      redirectTo: ROUTES.professionalDashboard,
     });
 
     expect(mockSkipProfessionalOnboarding).toHaveBeenCalledWith(
@@ -459,7 +460,7 @@ describe("onboarding orchestration contract", () => {
       role: "CLIENT",
       isProfileComplete: true,
       status: "ACTIVE",
-      redirectTo: "/dashboard",
+      redirectTo: ROUTES.userDashboard,
     });
     expect(mockIdempotencyFail).toHaveBeenCalledWith("idem-key");
   });

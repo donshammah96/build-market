@@ -26,6 +26,7 @@ import {
 } from "@/lib/schemas/onboarding";
 import { COUNTY_LABELS } from "@/types/store";
 import { useOnboardingAnalytics } from "@/lib/analytics/OnboardingAnalyticsContext";
+import { ROUTES } from "@/lib/links";
 
 export const SECURITY_PERSISTENCE_ALLOWLIST = [
   "county",
@@ -444,7 +445,7 @@ const HomeownerForm: React.FC<Props> = ({
   const handleGoDashboard = useCallback(async () => {
     setNavigating(true);
     await new Promise((resolve) => setTimeout(resolve, 4000));
-    window.location.href = "/dashboard";
+    window.location.href = ROUTES.userDashboard;
   }, []);
 
   // Auto-dismiss toast

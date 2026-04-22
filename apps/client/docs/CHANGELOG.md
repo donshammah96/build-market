@@ -28,6 +28,26 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+### [CHECKPOINT] Dashboard Path Standardization + Clerk Redirect Safety-Net Alignment
+
+- Date: 2026-04-22
+- Outcome summary: Renamed the homeowner-facing dashboard route from `/dashboard` to `/homeowner-dashboard`, centralized role-aware dashboard routing in `dashboardForRole()`, added a legacy `/dashboard` redirect shim, fixed the mobile Clerk auth buttons to use explicit `forceRedirectUrl` props, and realigned Clerk fallback env vars to `/auth-callback`.
+- Actual files changed:
+  - `apps/client/lib/links.ts` — `ROUTES.userDashboard` now points at `/homeowner-dashboard`; added `dashboardForRole(role)`.
+  - `apps/client/app/(user)/homeowner-dashboard/**` — new homeowner dashboard route tree at the renamed path.
+  - `apps/client/app/(user)/dashboard/page.tsx` — legacy redirect shim to `ROUTES.userDashboard`.
+  - `apps/client/app/lib/security/middleware/redirect-policy.ts`; `apps/client/middleware.ts`; `apps/client/app/lib/security/middleware/route-matcher.ts` — middleware now routes homeowner redirects through the centralized helper and protects `/homeowner-dashboard(.*)`.
+  - `apps/client/app/lib/domains/shared/onboarding-orchestration/service.ts`; `apps/client/app/lib/domains/user-profile/onboarding.ts`; `apps/client/app/onboarding/_hooks/useOnboarding.ts`; `apps/client/app/auth-callback/page.tsx`; `apps/client/app/onboarding-preview/onboarding-preview-client.tsx` — onboarding/auth flows now resolve homeowner dashboards through shared constants/helpers.
+  - `apps/client/components/layout/NavBar.tsx`; `apps/client/components/home/Onboarding.tsx`; `apps/client/components/forms/HomeownerForm.tsx` — user-facing UI redirects now target the renamed route; mobile Clerk modals now explicitly force `/auth-callback` or `/onboarding`.
+  - `apps/client/.env`; `.env.development`; `.env.example`; `.env.test`; `.env.vercel`; `.env.vercel.example` — sign-in fallback env vars now point to `/auth-callback` and are documented as safety nets.
+  - `apps/client/__tests__/middleware/route-guards.test.ts`; `apps/client/__tests__/lib/middleware-decision-log.test.ts`; `apps/client/__tests__/lib/domains/onboarding-orchestration.contract.test.ts`; `apps/client/__tests__/hooks/useOnboarding.test.tsx`; `apps/client/__tests__/api/onboarding/skip.test.ts`; `apps/client/__tests__/actions/onboarding-tier3-guards.test.ts`; `apps/client/__tests__/lib/dashboard-for-role.test.ts`; `apps/client/__tests__/lib/redirect-policy.test.ts` — updated/new coverage for the renamed route and centralized redirect helper.
+- Verification:
+  1. `pnpm -C apps/client exec vitest run __tests__/middleware/route-guards.test.ts __tests__/api/onboarding/skip.test.ts __tests__/actions/onboarding-tier3-guards.test.ts __tests__/hooks/useOnboarding.test.tsx __tests__/lib/dashboard-for-role.test.ts __tests__/lib/redirect-policy.test.ts __tests__/lib/middleware-decision-log.test.ts __tests__/lib/domains/onboarding-orchestration.contract.test.ts --pool=threads --maxWorkers=1` — passed (`8` files, `49` tests).
+  2. `pnpm run client:tsc-noemit` — passed with zero diagnostics.
+  3. `pnpm run client:report-security-drift:strict` — passed; all reported categories remained `0`.
+
+---
+
 ### [CHECKPOINT] @build/redis Upstash Migration + Env Boundary Hardening - Completed
 
 - Date: 2026-04-21

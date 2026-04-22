@@ -15,6 +15,7 @@ import {
 } from "@/app/lib/domains/user-profile/clerk-metadata";
 import { err, ok } from "@/app/lib/errors/result";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { dashboardForRole } from "@/lib/links";
 import type {
   OnboardingIdempotencyContext,
   OnboardingIntent,
@@ -140,9 +141,7 @@ function resolveRedirect(role: OnboardingRole, redirectTo?: string): string {
     return redirectTo;
   }
 
-  return role === "PROFESSIONAL"
-    ? "/professional-portal/dashboard"
-    : "/dashboard";
+  return dashboardForRole(role);
 }
 
 function resolveStatus(

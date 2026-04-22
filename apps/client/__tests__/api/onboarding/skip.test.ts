@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { POST } from "@/app/api/onboarding/skip/route";
+import { ROUTES } from "@/lib/links";
 
 vi.mock("server-only", () => ({}));
 
@@ -117,7 +118,7 @@ describe("POST /api/onboarding/skip", () => {
         role: "CLIENT",
         isProfileComplete: false,
         skipped: true,
-        redirectTo: "/dashboard",
+        redirectTo: ROUTES.userDashboard,
         message:
           "Onboarding skipped. You can complete your profile from the dashboard.",
       },
@@ -135,7 +136,7 @@ describe("POST /api/onboarding/skip", () => {
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
     expect(data.data.role).toBe("CLIENT");
-    expect(data.data.redirectTo).toBe("/dashboard");
+    expect(data.data.redirectTo).toBe(ROUTES.userDashboard);
     expect(mockSkipClientOnboarding).toHaveBeenCalledWith(
       expect.objectContaining({
         actor: {

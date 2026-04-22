@@ -17,6 +17,7 @@ import { OnboardingData } from "@build/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { onboardingClient } from "@/lib/onboarding-client";
+import { ROUTES } from "@/lib/links";
 
 export default function Onboarding() {
   const router = useRouter();
@@ -41,7 +42,7 @@ export default function Onboarding() {
       }
 
       toast.success("Welcome home! Profile created.");
-      router.push("/dashboard");
+      router.push(ROUTES.userDashboard);
     } catch {
       toast.error("Something went wrong. Please try again.");
     } finally {
@@ -75,7 +76,7 @@ export default function Onboarding() {
       }
 
       toast.success("Professional account verified!");
-      router.push("/professional-portal/dashboard");
+      router.push(ROUTES.professionalDashboard);
     } catch {
       toast.error("Could not verify profile. Please try again.");
     } finally {

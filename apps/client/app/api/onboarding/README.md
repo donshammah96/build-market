@@ -132,7 +132,7 @@ Skip onboarding for homeowners. Creates a minimal `CLIENT` user and an empty `Cl
     "role": "CLIENT",
     "isProfileComplete": false,
     "skipped": true,
-    "redirectTo": "/dashboard",
+    "redirectTo": "/homeowner-dashboard",
     "message": "Onboarding skipped. You can complete your profile from the dashboard."
   }
 }

@@ -3,8 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useUser, useClerk } from "@clerk/nextjs";
-import { ROUTES } from "@/lib/links";
-import { normalizeRole } from "@/app/lib/security/roles";
+import { ROUTES, dashboardForRole } from "@/lib/links";
 import {
   CLERK_CLAIM_REFRESH_FAILURE_MESSAGE,
   hasExpectedOnboardingClaims,
@@ -24,7 +23,7 @@ import {
  * Flow:
  * 1. Not signed in → /sign-in
  * 2. Signed in + onboarded + professional → /professional-portal/dashboard
- * 3. Signed in + onboarded + client → /dashboard
+ * 3. Signed in + onboarded + client → /homeowner-dashboard
  * 4. Signed in + NOT onboarded → /onboarding
  *
  * Session freshness:
@@ -75,9 +74,9 @@ export default function AuthCallbackPage() {
       if (metadata?.isOnboarded !== true) {
         return ROUTES.onboarding;
       }
-      return normalizeRole(metadata.role) === "PROFESSIONAL"
-        ? ROUTES.professionalDashboard
-        : ROUTES.userDashboard;
+      return dashboardForRole(
+        typeof metadata?.role === "string" ? metadata.role : undefined,
+      );
     },
     [],
   );

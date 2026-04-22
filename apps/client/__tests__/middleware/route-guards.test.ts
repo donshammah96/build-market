@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, type NextResponse } from "next/server";
+import { ROUTES } from "@/lib/links";
 
 const mockAuth = vi.fn();
 const mockResolveOnboardingStatus = vi.fn();
@@ -79,13 +80,15 @@ describe("middleware route guards", () => {
 
   it("redirects unauthenticated protected requests to sign-in", async () => {
     mockAuth.mockResolvedValue({ userId: null, sessionClaims: null });
-    const req = new NextRequest("http://localhost:3500/dashboard");
+    const req = new NextRequest(`http://localhost:3500${ROUTES.userDashboard}`);
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toContain("/sign-in");
-    expect(res.headers.get("location")).toContain("redirect_url=%2Fdashboard");
+    expect(res.headers.get("location")).toContain(
+      `redirect_url=${encodeURIComponent(ROUTES.userDashboard)}`,
+    );
   });
 
   it("allows onboarded professional access to professional routes", async () => {
@@ -131,7 +134,7 @@ describe("middleware route guards", () => {
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
     expect(res.status).toBe(307);
-    expect(res.headers.get("location")).toContain("/dashboard");
+    expect(res.headers.get("location")).toContain(ROUTES.userDashboard);
   });
 
   it("redirects authenticated but not-onboarded users to onboarding", async () => {
@@ -141,7 +144,7 @@ describe("middleware route guards", () => {
         metadata: { role: "CLIENT", isOnboarded: false },
       },
     });
-    const req = new NextRequest("http://localhost:3500/dashboard");
+    const req = new NextRequest(`http://localhost:3500${ROUTES.userDashboard}`);
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
@@ -167,7 +170,7 @@ describe("middleware route guards", () => {
       userId: "u1",
       sessionClaims: { metadata: { role: "client" } },
     });
-    const req = new NextRequest("http://localhost:3500/dashboard");
+    const req = new NextRequest(`http://localhost:3500${ROUTES.userDashboard}`);
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
@@ -201,7 +204,7 @@ describe("middleware route guards", () => {
       confidence: "high",
       reason: "metadata_present",
     });
-    const req = new NextRequest("http://localhost:3500/dashboard");
+    const req = new NextRequest(`http://localhost:3500${ROUTES.userDashboard}`);
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
@@ -285,7 +288,7 @@ describe("middleware route guards", () => {
       confidence: "low",
       reason: "internal_api_non_ok",
     });
-    const req = new NextRequest("http://localhost:3500/dashboard");
+    const req = new NextRequest(`http://localhost:3500${ROUTES.userDashboard}`);
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);

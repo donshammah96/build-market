@@ -8,6 +8,7 @@ import {
   OnboardingAnalyticsProvider,
   NullAnalytics,
 } from "@/lib/analytics/OnboardingAnalyticsContext";
+import { ROUTES } from "@/lib/links";
 
 const mockReplace = vi.hoisted(() => vi.fn());
 const mockPush = vi.hoisted(() => vi.fn());
@@ -100,9 +101,7 @@ describe("useOnboarding", () => {
     });
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith(
-        "/professional-portal/dashboard",
-      );
+      expect(mockReplace).toHaveBeenCalledWith(ROUTES.professionalDashboard);
     });
   });
 
@@ -147,7 +146,7 @@ describe("useOnboarding", () => {
       "Profile created! Redirecting...",
     );
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith("/professional-portal/dashboard");
+      expect(mockPush).toHaveBeenCalledWith(ROUTES.professionalDashboard);
     });
   });
 
@@ -174,7 +173,7 @@ describe("useOnboarding", () => {
     });
 
     expect(mockGetToken).toHaveBeenCalled();
-    expect(mockPush).not.toHaveBeenCalledWith("/professional-portal/dashboard");
+    expect(mockPush).not.toHaveBeenCalledWith(ROUTES.professionalDashboard);
     expect(toast.error).toHaveBeenCalledWith(
       CLERK_CLAIM_REFRESH_FAILURE_MESSAGE,
     );
@@ -213,7 +212,7 @@ describe("useOnboarding", () => {
       "Welcome! Redirecting to your dashboard...",
     );
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith("/dashboard");
+      expect(mockPush).toHaveBeenCalledWith(ROUTES.userDashboard);
     });
   });
 

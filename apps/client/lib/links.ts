@@ -1,3 +1,5 @@
+import { normalizeRole, type AppRole } from "@/app/lib/security/roles";
+
 export const ROUTES = {
   // Public Routes
   home: "/",
@@ -8,7 +10,7 @@ export const ROUTES = {
 
   // Client / Homeowner Routes
   client: "/client",
-  userDashboard: "/dashboard",
+  userDashboard: "/homeowner-dashboard",
   userProfile: "/profile",
   userProfileComplete: "/profile/complete",
   userSettings: "/profile", // mapped to profile for now
@@ -145,6 +147,12 @@ export const ROUTES = {
 } as const;
 
 export type RouteKey = keyof typeof ROUTES;
+
+export function dashboardForRole(role?: AppRole | string): string {
+  return normalizeRole(role) === "PROFESSIONAL"
+    ? ROUTES.professionalDashboard
+    : ROUTES.userDashboard;
+}
 
 // Helper to generate dynamic routes
 export const getProfessionalUrl = (id: string) => `/professionals/${id}`;

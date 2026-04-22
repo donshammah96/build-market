@@ -6,7 +6,8 @@ import { usePathname } from "next/navigation";
 import { Button } from "../ui/button";
 import { Menu, X, LayoutDashboard, Accessibility } from "lucide-react";
 import { SignInButton, SignUpButton, UserButton, useUser } from "@clerk/nextjs";
-import { ROUTES } from "@/lib/links";
+import { normalizeRole } from "@/app/lib/security/roles";
+import { ROUTES, dashboardForRole } from "@/lib/links";
 import { cn } from "@/lib/utils";
 import {
   useThrottledScroll,
@@ -117,6 +118,11 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
   const shouldAnimate = useShouldAnimate();
 
   const userRole = user?.publicMetadata?.role as string | undefined;
+  const normalizedUserRole = normalizeRole(userRole);
+  const dashboardHref =
+    normalizedUserRole && normalizedUserRole !== "ADMIN"
+      ? dashboardForRole(normalizedUserRole)
+      : null;
   const enableIdeaBooks = useFeatureFlag("enableIdeaBooks");
   const useScrolledStyles = variant === "light" || isScrolled;
 
@@ -218,8 +224,8 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
               </>
             ) : (
               <>
-                {userRole === "client" && (
-                  <Link href={ROUTES.client}>
+                {dashboardHref && (
+                  <Link href={dashboardHref}>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -293,7 +299,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
         <div className="mt-4 flex flex-col gap-3">
           {!isSignedIn ? (
             <>
-              <SignInButton mode="modal">
+              <SignInButton mode="modal" forceRedirectUrl={ROUTES.authCallback}>
                 <Button
                   variant="outline"
                   size="lg"
@@ -302,7 +308,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
                   Sign In
                 </Button>
               </SignInButton>
-              <SignUpButton mode="modal">
+              <SignUpButton mode="modal" forceRedirectUrl={ROUTES.onboarding}>
                 <Button
                   size="lg"
                   className="w-full justify-center bg-primary text-primary-foreground hover:bg-primary/90"
@@ -313,22 +319,18 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
             </>
           ) : (
             <>
-              <Link
-                href={
-                  userRole === "professional"
-                    ? "/professional-portal/dashboard"
-                    : "/dashboard"
-                }
-              >
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  className="w-full justify-start"
-                >
-                  <LayoutDashboard className="mr-2 h-4 w-4" />
-                  My Dashboard
-                </Button>
-              </Link>
+              {dashboardHref && (
+                <Link href={dashboardHref}>
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    className="w-full justify-start"
+                  >
+                    <LayoutDashboard className="mr-2 h-4 w-4" />
+                    My Dashboard
+                  </Button>
+                </Link>
+              )}
               <div className="flex items-center gap-2 mt-4">
                 <UserButton />
                 <span className="text-muted-foreground">Manage Account</span>

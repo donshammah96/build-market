@@ -1,7 +1,7 @@
 import { createRouteMatcher } from "@clerk/nextjs/server";
 
 export const isProtectedRoute = createRouteMatcher([
-  "/dashboard(.*)",
+  "/homeowner-dashboard(.*)",
   "/professional-portal(.*)",
   "/messages(.*)",
   "/profile(.*)",
