@@ -132,6 +132,7 @@
     "@build/types": "workspace:*",
     "@build/typescript-config": "workspace:*",
     "@cypress/react": "^9.0.1",
+    "@next/bundle-analyzer": "^16.2.4",
     "@opennextjs/cloudflare": "^1.19.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",

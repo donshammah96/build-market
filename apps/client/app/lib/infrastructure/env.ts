@@ -16,6 +16,17 @@
  *   Direct process.env access in routes, services, or UI code is a boundary violation.
  *   Bootstrap exceptions (next.config.ts, instrumentation.ts, sentry.*.config.ts)
  *   must carry a comment: // bootstrap-only: module graph not initialized at this callsite
+ *
+ * BOOTSTRAP EXCEPTION INVENTORY (ADR-004):
+ *   These variables are accessed outside this module at bootstrap-only callsites.
+ *   They are validated by next-config-env.ts, not by this module.
+ *
+ *   Callsite: next.config.ts (via next-config-env.ts)
+ *     - NODE_ENV              → configEnv.nodeEnv
+ *     - NEXT_PUBLIC_APP_URL   → configEnv.appUrl
+ *     - NEXT_PUBLIC_API_URL   → configEnv.apiUrl
+ *     - NEXT_PUBLIC_CLERK_FRONTEND_API → configEnv.clerkFrontendApi (optional)
+ *     - NEXT_PUBLIC_POSTHOG_HOST       → configEnv.analyticsPosthogHost
  */
 
 import { assertUploadProcessingModeInvariant } from "./upload-processing-mode";
