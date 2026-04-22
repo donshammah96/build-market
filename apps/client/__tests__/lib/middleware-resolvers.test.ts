@@ -3,21 +3,15 @@ import { env } from "@/app/lib/infrastructure/env";
 import { resolveOnboardingStatus } from "@/app/lib/security/middleware/onboarding-resolver";
 import { resolveSystemSettings } from "@/app/lib/security/middleware/system-settings-resolver";
 
-const mockLoggerInfo = vi.hoisted(() => vi.fn());
-const mockLoggerWarn = vi.hoisted(() => vi.fn());
-const mockLoggerError = vi.hoisted(() => vi.fn());
-const mockLoggerDebug = vi.hoisted(() => vi.fn());
-
-vi.mock("@/app/lib/api/resilient-api", () => ({
-  getClientLogger: vi.fn().mockReturnValue({
-    info: mockLoggerInfo,
-    warn: mockLoggerWarn,
-    error: mockLoggerError,
-    debug: mockLoggerDebug,
-  }),
-}));
+let mockLoggerInfo: ReturnType<typeof vi.spyOn>;
+let mockLoggerWarn: ReturnType<typeof vi.spyOn>;
 
 describe("middleware resolvers", () => {
+  beforeEach(() => {
+    mockLoggerInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+    mockLoggerWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
     vi.restoreAllMocks();

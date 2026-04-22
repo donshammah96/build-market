@@ -11,7 +11,7 @@ let capturedProcessor:
   | null = null;
 
 vi.mock("@build/queue-server", () => ({
-  redisConnection: { host: "localhost", port: 6379 },
+  createRedisConnection: () => ({ host: "localhost", port: 6379 }),
 }));
 
 vi.mock("bullmq", () => ({

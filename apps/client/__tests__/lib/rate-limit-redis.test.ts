@@ -7,6 +7,8 @@ const { mockEnv, checkSlidingWindowRateLimitMock } = vi.hoisted(() => ({
     redis: {
       enabled: true,
       rateLimitBackend: "auto" as "auto" | "memory" | "redis",
+      upstashRestUrl: "https://mock.upstash.io",
+      upstashRestToken: "mock-token",
     },
   },
   checkSlidingWindowRateLimitMock: vi.fn(),
@@ -30,6 +32,8 @@ describe("rate-limit backend routing", () => {
     mockEnv.isTest = false;
     mockEnv.redis.enabled = true;
     mockEnv.redis.rateLimitBackend = "auto";
+    mockEnv.redis.upstashRestUrl = "https://mock.upstash.io";
+    mockEnv.redis.upstashRestToken = "mock-token";
     checkSlidingWindowRateLimitMock.mockReset();
     checkSlidingWindowRateLimitMock.mockResolvedValue({
       success: true,
@@ -50,8 +54,9 @@ describe("rate-limit backend routing", () => {
     expect(result.success).toBe(true);
   });
 
-  it("uses in-memory fallback when Redis is disabled in auto mode", async () => {
-    mockEnv.redis.enabled = false;
+  it("uses in-memory fallback when Upstash credentials are missing in auto mode", async () => {
+    mockEnv.redis.upstashRestUrl = "";
+    mockEnv.redis.upstashRestToken = "";
 
     const identifier = `memory-auto-${Date.now()}`;
     const first = await checkRateLimit(identifier, 2, 60_000);
@@ -79,6 +84,8 @@ describe("rate-limit backend routing", () => {
   it("fails closed in production when Redis backend throws", async () => {
     mockEnv.isProd = true;
     mockEnv.redis.rateLimitBackend = "redis";
+    mockEnv.redis.upstashRestUrl = "https://mock.upstash.io";
+    mockEnv.redis.upstashRestToken = "mock-token";
     checkSlidingWindowRateLimitMock.mockRejectedValueOnce(new Error("boom"));
 
     const result = await checkRateLimit("prod-write:user-1", 5, 30_000);
