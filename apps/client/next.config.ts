@@ -152,7 +152,7 @@ const nextConfig: NextConfig = {
       },
       {
         // Immutable cache for fingerprinted static assets.
-        source: "/(.*)\\.(?:ico|png|jpg|jpeg|gif|webp|avif|svg|woff|woff2)",
+        source: "/(.*)\\.(ico|png|jpg|jpeg|gif|webp|avif|svg|woff|woff2)",
         headers: [
           {
             key: "Cache-Control",
