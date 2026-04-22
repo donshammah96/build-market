@@ -1,6 +1,6 @@
 // src/lib/queues/compliance.queue.ts
 import { Queue, JobsOptions } from "bullmq";
-import { redisConnection } from "./redis-connection";
+import { createRedisConnection } from "./redis-connection";
 import {
   AuditAction,
   IncidentSeverity,
@@ -10,7 +10,7 @@ import {
 
 // Queue instances
 export const incidentQueue = new Queue<IncidentJobData>("security-incidents", {
-  connection: redisConnection as any,
+  connection: createRedisConnection() as any,
   defaultJobOptions: {
     attempts: 5,
     backoff: {
@@ -29,7 +29,7 @@ export const incidentQueue = new Queue<IncidentJobData>("security-incidents", {
 export const userNotificationQueue = new Queue<UserNotificationJobData>(
   "compliance-notifications",
   {
-    connection: redisConnection as any,
+    connection: createRedisConnection() as any,
     defaultJobOptions: {
       attempts: 3,
       backoff: {
@@ -44,7 +44,7 @@ export const userNotificationQueue = new Queue<UserNotificationJobData>(
 );
 
 export const auditQueue = new Queue<AuditJobData>("audit-logs", {
-  connection: redisConnection as any,
+  connection: createRedisConnection() as any,
   defaultJobOptions: {
     attempts: 3,
     removeOnComplete: {

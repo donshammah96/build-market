@@ -8,7 +8,7 @@
  */
 
 import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
-import { redisConnection } from "@/lib/queues/redis-connection";
+import { createRedisConnection } from "@/lib/queues/redis-connection";
 import { prisma } from "@build/db";
 import { AnonymizationService } from "@/lib/gdpr/services/anonymization.service";
 
@@ -25,7 +25,7 @@ const GRACE_PERIOD_DAYS = parseInt(
 );
 
 const anonymizationQueue = new Queue("gdpr-anonymization-batch", {
-  connection: redisConnection as ConnectionOptions,
+  connection: createRedisConnection() as any,
 });
 
 interface AnonymizationMetrics {
@@ -234,7 +234,7 @@ export function createAnonymizationBatchWorker() {
       }
     },
     {
-      connection: redisConnection as ConnectionOptions,
+      connection: createRedisConnection() as any,
       concurrency: 1, // Only one batch job at a time
     },
   );

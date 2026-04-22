@@ -1,6 +1,6 @@
 // src/jobs/export-cleanup.ts
 import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
-import { redisConnection } from "@/lib/queues/redis-connection";
+import { createRedisConnection } from "@/lib/queues/redis-connection";
 import { prisma } from "@build/db";
 import { ExportProcessor } from "@/lib/workers/export/processor";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
@@ -19,7 +19,7 @@ const CLEANUP_MAX_RETRIES = parseInt(
 );
 
 const cleanupQueue = new Queue("maintenance-jobs", {
-  connection: redisConnection as ConnectionOptions,
+  connection: createRedisConnection() as any,
 });
 
 interface CleanupMetrics {
@@ -278,7 +278,7 @@ export function createCleanupWorker() {
       }
     },
     {
-      connection: redisConnection as ConnectionOptions,
+      connection: createRedisConnection() as any,
       concurrency: 1, // Process one cleanup job at a time
       limiter: {
         max: 1,

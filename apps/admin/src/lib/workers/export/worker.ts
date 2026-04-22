@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { redisConnection } from "@/lib/queues/redis-connection";
+import { createRedisConnection } from "@/lib/queues/redis-connection";
 import { ExportJobData } from "@/lib/queues/export.queue";
 import { ExportProcessor } from "./processor";
 import { prisma } from "@build/db";
@@ -110,7 +110,7 @@ export const exportWorker = new Worker<ExportJobData>(
     }
   },
   {
-    connection: redisConnection as any,
+    connection: createRedisConnection() as any,
     concurrency: 2, // Process 2 exports simultaneously (adjust based on memory/CPU)
     limiter: {
       max: 10, // Max 10 exports per minute (prevent DDOS via exports)

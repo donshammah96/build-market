@@ -1,6 +1,6 @@
 // src/lib/queues/export.queue.ts
 import { Queue, JobsOptions } from "bullmq";
-import { redisConnection } from "./redis-connection";
+import { createRedisConnection } from "./redis-connection";
 
 export interface ExportJobData {
   exportId: string;
@@ -10,7 +10,7 @@ export interface ExportJobData {
 }
 
 export const exportQueue = new Queue<ExportJobData>("gdpr-data-export", {
-  connection: redisConnection as any,
+  connection: createRedisConnection() as any,
   defaultJobOptions: {
     attempts: 3,
     backoff: {
