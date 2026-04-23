@@ -28,6 +28,13 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+### Fixed
+
+- Date: 2026-04-24
+- Regenerated `PropertyForm` snapshots to reflect current component output after
+  imageAssets, document-upload-first, and credential verification refinements
+  (`__tests__/components/forms/__snapshots__/PropertyForm.test.tsx.snap`).
+
 ### [CHECKPOINT] Dashboard Path Standardization + Clerk Redirect Safety-Net Alignment
 
 - Date: 2026-04-22
