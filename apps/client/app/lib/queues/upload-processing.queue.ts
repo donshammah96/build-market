@@ -29,19 +29,22 @@ export type ImageUploadProcessingJobData = {
 export const UploadProcessingJobNames = {
   PROCESS_IMAGE_UPLOAD: "process-image-upload",
 } as const;
+type UploadProcessingJobName =
+  (typeof UploadProcessingJobNames)[keyof typeof UploadProcessingJobNames];
 
-export const uploadProcessingQueue = new Queue<ImageUploadProcessingJobData>(
-  "uploads-image-processing",
-  {
-    connection: createRedisConnection(),
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 2_000 },
-      removeOnComplete: { age: 60 * 60, count: 1_000 },
-      removeOnFail: { age: 24 * 60 * 60 },
-    },
+export const uploadProcessingQueue = new Queue<
+  ImageUploadProcessingJobData,
+  unknown,
+  UploadProcessingJobName
+>("uploads-image-processing", {
+  connection: createRedisConnection(),
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 2_000 },
+    removeOnComplete: { age: 60 * 60, count: 1_000 },
+    removeOnFail: { age: 24 * 60 * 60 },
   },
-);
+});
 
 export async function enqueueImageUploadProcessingJob(
   data: ImageUploadProcessingJobData,

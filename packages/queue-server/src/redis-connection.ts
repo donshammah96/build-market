@@ -18,7 +18,7 @@
  * policy on managed databases; CONFIG SET is not permitted.
  */
 
-import Redis, { type RedisOptions } from "ioredis";
+import type { RedisOptions } from "ioredis";
 
 export type BullMQRedisConnectionOptions = RedisOptions & {
   /**
@@ -134,33 +134,14 @@ export function getBullMQConnectionSummary(): BullMQConnectionSummary {
 }
 
 /**
- * Create a new ioredis connection instance for BullMQ.
+ * Build BullMQ connection options.
  *
- * BullMQ requires a dedicated connection per Queue and per Worker — do not
- * share a single connection across multiple BullMQ constructs. Call this
- * function once per Queue/Worker instantiation.
+ * Returning plain options (instead of a concrete ioredis instance) avoids
+ * cross-package type incompatibilities when multiple ioredis versions are
+ * present in a monorepo dependency graph.
  */
 export function createRedisConnection(
   overrides: Partial<BullMQRedisConnectionOptions> = {},
-): Redis {
-  const options = getBullMQConnectionOptions(overrides);
-  const connection = new Redis(options);
-
-  // BullMQ reads skipVersionCheck from the connection instance directly
-  (connection as Redis & { skipVersionCheck?: boolean }).skipVersionCheck =
-    options.skipVersionCheck ?? true;
-
-  connection.on("error", (err: Error) => {
-    console.error("[Redis:BullMQ] Connection error:", err.message);
-  });
-
-  connection.on("connect", () => {
-    console.log("[Redis:BullMQ] Connected");
-  });
-
-  connection.on("close", () => {
-    console.warn("[Redis:BullMQ] Connection closed");
-  });
-
-  return connection;
+): BullMQRedisConnectionOptions {
+  return getBullMQConnectionOptions(overrides);
 }
