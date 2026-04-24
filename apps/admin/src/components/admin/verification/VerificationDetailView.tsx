@@ -366,7 +366,7 @@ export function VerificationDetailView({
                           Bio / Description
                         </dt>
                         <dd className="text-sm whitespace-pre-wrap">
-                          {details.entity.bio || details.entity.description}
+                          {details.entity.bio ?? details.entity.description}
                         </dd>
                       </div>
                     </>

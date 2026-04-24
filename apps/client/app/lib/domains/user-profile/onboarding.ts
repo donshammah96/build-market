@@ -171,8 +171,6 @@ type OnboardingRequestMetadata = {
   userAgent?: string;
 };
 
-const USER_STATUS_ONBOARDING = "ONBOARDING";
-const USER_STATUS_PENDING_VERIFICATION = "PENDING_VERIFICATION";
 const USER_STATUS_ACTIVE = "ACTIVE";
 
 function buildUniqueSlug(value: string) {
@@ -324,17 +322,11 @@ export const userProfileOnboardingService = {
               lastName: clerkUser.lastName || null,
               phone: clerkUser.phoneNumbers?.[0]?.phoneNumber || null,
               role: userRole,
-              status:
-                userRole === "PROFESSIONAL"
-                  ? USER_STATUS_PENDING_VERIFICATION
-                  : USER_STATUS_ACTIVE,
+              status: USER_STATUS_ACTIVE,
             },
             update: {
               role: userRole,
-              status:
-                userRole === "PROFESSIONAL"
-                  ? USER_STATUS_PENDING_VERIFICATION
-                  : USER_STATUS_ACTIVE,
+              status: USER_STATUS_ACTIVE,
             },
             select: {
               id: true,
@@ -741,12 +733,12 @@ export const userProfileOnboardingService = {
               phone: clerkUser.phoneNumbers?.[0]?.phoneNumber || null,
               role: "PROFESSIONAL",
               isProfileComplete: false,
-              status: USER_STATUS_PENDING_VERIFICATION,
+              status: USER_STATUS_ACTIVE,
             },
             update: {
               role: "PROFESSIONAL",
               isProfileComplete: false,
-              status: USER_STATUS_PENDING_VERIFICATION,
+              status: USER_STATUS_ACTIVE,
             },
             select: { id: true, role: true, isProfileComplete: true },
           });
@@ -848,7 +840,6 @@ export const userProfileOnboardingService = {
       }
 
       const now = new Date();
-      const currentStatus = String(currentUserRecord.status);
       const consentWithdrawn =
         (currentUserRecord.emailMarketingConsent &&
           data.emailMarketingConsent === false) ||
@@ -1068,9 +1059,7 @@ export const userProfileOnboardingService = {
             where: { id: actor.userId },
             data: {
               isProfileComplete: true,
-              ...(currentStatus === USER_STATUS_ONBOARDING && {
-                status: USER_STATUS_PENDING_VERIFICATION,
-              }),
+              status: USER_STATUS_ACTIVE,
               ...(data.emailMarketingConsent !== undefined && {
                 emailMarketingConsent: data.emailMarketingConsent,
               }),

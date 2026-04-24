@@ -309,7 +309,7 @@ const PortfolioCard = memo(function PortfolioCard({
         <div className="aspect-video overflow-hidden bg-slate-200">
           <ImageWithFallback
             src={portfolio.images?.[0]?.url ?? ""}
-            alt={portfolio.title}
+            alt={portfolio.title ?? "Portfolio image"}
             className="w-full h-full object-cover img-zoom transition-transform duration-300"
           />
         </div>

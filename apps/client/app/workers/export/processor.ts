@@ -313,7 +313,7 @@ export class ExportProcessor {
       Key: s3Key,
     });
 
-    fileUrl = await getSignedUrl(this.s3Client, command, {
+    fileUrl = await getSignedUrl(this.s3Client as any, command, {
       expiresIn: 7 * 24 * 60 * 60,
     });
 

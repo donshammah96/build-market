@@ -28,6 +28,20 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+### Docs
+
+- Date: 2026-04-24
+- Documented this pass’s client typecheck stabilization work:
+  - normalized onboarding/remediation status typing to align with current
+    generated `UserStatus` unions;
+  - updated `Calendar` to use `react-day-picker` v8 icon slots (`IconLeft` /
+    `IconRight`);
+  - added ambient module declarations in
+    `apps/client/types/external-modules.d.ts` for optional third-party modules
+    used by client code and tests;
+  - re-validated client project typecheck with
+    `node_modules/.bin/tsc --noEmit -p apps/client/tsconfig.json` (pass).
+
 ### Fixed
 
 - Date: 2026-04-24
