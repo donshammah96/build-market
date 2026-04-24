@@ -8,7 +8,7 @@
  * Runs daily at 3 AM by default (configurable via ONBOARDING_UPLOAD_CLEANUP_CRON).
  */
 
-import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
+import { Queue, Worker, Job } from "bullmq";
 import { createRedisConnection } from "@build/queue-server";
 import { uploadService } from "@/app/lib/domains/uploads";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
@@ -16,21 +16,27 @@ import { env } from "@/app/lib/infrastructure/env";
 
 const logger = new StructuredLogger("onboarding-upload-cleanup");
 
+const OPERATION_NAME = "cleanup_expired_staged_uploads";
+
 const ONBOARDING_UPLOAD_CLEANUP_CRON = env.jobs.onboardingUploadCleanupCron;
 const CLEANUP_MAX_RETRIES = 3;
 
-const onboardingUploadCleanupQueue = new Queue(
-  "maintenance-onboarding-uploads",
-  {
-    connection: createRedisConnection(),
-  },
-);
+let onboardingUploadCleanupQueue: Queue | null = null;
+
+export function getOnboardingUploadCleanupQueue(): Queue {
+  if (!onboardingUploadCleanupQueue) {
+    onboardingUploadCleanupQueue = new Queue("maintenance-onboarding-uploads", {
+      connection: createRedisConnection(),
+    });
+  }
+  return onboardingUploadCleanupQueue;
+}
 
 export async function scheduleOnboardingUploadCleanup() {
   const correlationId = CorrelationIdManager.generate();
 
   try {
-    await onboardingUploadCleanupQueue.add(
+    await getOnboardingUploadCleanupQueue().add(
       "cleanup-expired-staged-uploads",
       {},
       {
@@ -48,13 +54,14 @@ export async function scheduleOnboardingUploadCleanup() {
 
     logger.info("Onboarding upload cleanup job scheduled successfully", {
       correlationId,
+      operationName: OPERATION_NAME,
       cronPattern: ONBOARDING_UPLOAD_CLEANUP_CRON,
     });
   } catch (error) {
     logger.error(
       "Failed to schedule onboarding upload cleanup job",
       error instanceof Error ? error : new Error(String(error)),
-      { correlationId },
+      { correlationId, operationName: OPERATION_NAME },
     );
     throw error;
   }
@@ -66,6 +73,7 @@ export function createOnboardingUploadCleanupWorker() {
     async (job: Job) => {
       if (job.name !== "cleanup-expired-staged-uploads") {
         logger.warn("Received unexpected job type", {
+          operationName: OPERATION_NAME,
           jobName: job.name,
           jobId: job.id,
         });
@@ -79,6 +87,7 @@ export function createOnboardingUploadCleanupWorker() {
 
       logger.info("Starting onboarding upload cleanup job", {
         correlationId,
+        operationName: OPERATION_NAME,
         jobId: job.id,
       });
 
@@ -89,8 +98,11 @@ export function createOnboardingUploadCleanupWorker() {
 
         logger.info("Onboarding upload cleanup job completed", {
           correlationId,
+          operationName: OPERATION_NAME,
           jobId: job.id,
-          cleanupResult: result,
+          count: result.count,
+          deletedFromStorage: result.deletedFromStorage,
+          failedDeletions: result.failedDeletions.length,
           durationMs,
         });
 
@@ -106,7 +118,9 @@ export function createOnboardingUploadCleanupWorker() {
           error instanceof Error ? error : new Error(String(error)),
           {
             correlationId,
+            operationName: OPERATION_NAME,
             jobId: job.id,
+            durationMs: Date.now() - startTime,
           },
         );
 
@@ -125,16 +139,20 @@ export function createOnboardingUploadCleanupWorker() {
 
   const shutdown = async (signal: string) => {
     logger.info("Received shutdown signal, closing worker gracefully", {
+      operationName: OPERATION_NAME,
       signal,
     });
 
     try {
       await worker.close();
-      logger.info("Worker closed successfully");
+      logger.info("Worker closed successfully", {
+        operationName: OPERATION_NAME,
+      });
     } catch (error) {
       logger.error(
         "Error during worker shutdown",
         error instanceof Error ? error : new Error(String(error)),
+        { operationName: OPERATION_NAME },
       );
     }
   };
@@ -144,6 +162,7 @@ export function createOnboardingUploadCleanupWorker() {
 
   worker.on("completed", (job, result) => {
     logger.info("Cleanup job completed", {
+      operationName: OPERATION_NAME,
       jobId: job.id,
       result,
     });
@@ -154,6 +173,7 @@ export function createOnboardingUploadCleanupWorker() {
       "Cleanup job failed",
       error instanceof Error ? error : new Error(String(error)),
       {
+        operationName: OPERATION_NAME,
         jobId: job?.id,
         attemptsMade: job?.attemptsMade,
         attemptsRemaining: job
@@ -167,10 +187,9 @@ export function createOnboardingUploadCleanupWorker() {
     logger.error(
       "Worker error occurred",
       error instanceof Error ? error : new Error(String(error)),
+      { operationName: OPERATION_NAME },
     );
   });
 
   return worker;
 }
-
-export { onboardingUploadCleanupQueue };

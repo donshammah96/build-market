@@ -151,6 +151,9 @@ jobs:
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3500/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
+      UPSTASH_REDIS_REST_URL: https://stub.upstash.io
+      UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
+      REDIS_URL: "rediss://:stub_token_for_ci_only@stub.upstash.io:6379"
 
     steps:
       - name: Checkout

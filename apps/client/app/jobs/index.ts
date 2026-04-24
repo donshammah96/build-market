@@ -19,23 +19,24 @@ import { scheduleExportCleanup, createCleanupWorker } from "./export-cleanup";
 import {
   scheduleDataRetentionEnforcement,
   createDataRetentionWorker,
-  retentionQueue,
+  getRetentionQueue,
 } from "./data-retention";
 import {
   scheduleAnonymizationBatch,
   createAnonymizationBatchWorker,
-  anonymizationQueue,
+  getAnonymizationQueue,
 } from "./anonymization-batch";
 import {
   scheduleAssetCleanup,
   createAssetCleanupWorker,
-  assetCleanupQueue,
+  getAssetCleanupQueue,
 } from "./asset-cleanup";
 import {
   scheduleOnboardingUploadCleanup,
   createOnboardingUploadCleanupWorker,
-  onboardingUploadCleanupQueue,
+  getOnboardingUploadCleanupQueue,
 } from "./onboarding-upload-cleanup";
+import { getCleanupQueue } from "./export-cleanup"; // Note: getCleanupQueue is not currently exported; would need to export it for manual trigger to work
 import { Worker } from "bullmq";
 
 // Track all workers for graceful shutdown
@@ -125,10 +126,10 @@ export async function shutdownAllSchedulers(): Promise<void> {
 
     // Close all queues
     await Promise.all([
-      retentionQueue.close(),
-      anonymizationQueue.close(),
-      assetCleanupQueue.close(),
-      onboardingUploadCleanupQueue.close(),
+      getRetentionQueue().close(),
+      getAnonymizationQueue().close(),
+      getAssetCleanupQueue().close(),
+      getOnboardingUploadCleanupQueue().close(),
     ]);
 
     workers = [];
@@ -149,11 +150,14 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
 
   // Get job info from each queue
   const queues = [
-    { name: "Export Cleanup", queue: null as any }, // cleanupQueue is not exported
-    { name: "Data Retention", queue: retentionQueue },
-    { name: "Anonymization Batch", queue: anonymizationQueue },
-    { name: "Asset Cleanup", queue: assetCleanupQueue },
-    { name: "Onboarding Upload Cleanup", queue: onboardingUploadCleanupQueue },
+    { name: "Export Cleanup", queue: getCleanupQueue() }, // cleanupQueue is not exported
+    { name: "Data Retention", queue: getRetentionQueue() },
+    { name: "Anonymization Batch", queue: getAnonymizationQueue() },
+    { name: "Asset Cleanup", queue: getAssetCleanupQueue() },
+    {
+      name: "Onboarding Upload Cleanup",
+      queue: getOnboardingUploadCleanupQueue(),
+    },
   ];
 
   for (const { name, queue } of queues) {
@@ -206,24 +210,24 @@ export async function triggerJob(
 
     switch (jobType) {
       case "data-retention":
-        queue = retentionQueue;
+        queue = getRetentionQueue();
         jobName = "enforce-data-retention";
         break;
       case "anonymization-batch":
-        queue = anonymizationQueue;
+        queue = getAnonymizationQueue();
         jobName = "process-pending-anonymizations";
         break;
       case "asset-cleanup":
-        queue = assetCleanupQueue;
+        queue = getAssetCleanupQueue();
         jobName = "cleanup-expired-assets";
         break;
       case "onboarding-upload-cleanup":
-        queue = onboardingUploadCleanupQueue;
+        queue = getOnboardingUploadCleanupQueue();
         jobName = "cleanup-expired-staged-uploads";
         break;
       case "export-cleanup":
-        // Note: cleanupQueue is not exported from export-cleanup.ts
-        // Would need to export it for this to work
+        queue = getCleanupQueue();
+        jobName = "cleanup-expired-exports";
         return {
           success: false,
           error: "Export cleanup manual trigger not available",

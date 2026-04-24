@@ -1,5 +1,5 @@
 // src/jobs/export-cleanup.ts
-import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
+import { Queue, Worker, Job } from "bullmq";
 import { createRedisConnection } from "@build/queue-server";
 import { prisma } from "@build/db";
 import { ExportProcessor } from "@/app/workers/export/processor";
@@ -8,14 +8,24 @@ import { env } from "@/app/lib/infrastructure/env";
 
 const logger = new StructuredLogger("export-cleanup-job");
 
+const OPERATION_NAME = "cleanup_expired_exports";
+
 // Configuration from environment variables
 const CLEANUP_CRON_PATTERN = env.jobs.exportCleanupCron;
 const CLEANUP_BATCH_SIZE = env.jobs.exportCleanupBatchSize;
 const CLEANUP_MAX_RETRIES = env.jobs.exportCleanupMaxRetries;
 
-const cleanupQueue = new Queue("maintenance-jobs", {
-  connection: createRedisConnection(),
-});
+let cleanupQueue: Queue | null = null;
+
+export function getCleanupQueue(): Queue {
+  if (!cleanupQueue) {
+    cleanupQueue = new Queue("maintenance-jobs", {
+      connection: createRedisConnection(),
+    });
+  }
+  return cleanupQueue;
+}
+// Do NOT export cleanupQueue directly; always use getter.
 
 interface CleanupMetrics {
   totalFound: number;
@@ -30,7 +40,7 @@ export async function scheduleExportCleanup() {
   const correlationId = CorrelationIdManager.generate();
 
   try {
-    await cleanupQueue.add(
+    await getCleanupQueue().add(
       "cleanup-expired-exports",
       {},
       {
@@ -48,6 +58,7 @@ export async function scheduleExportCleanup() {
 
     logger.info("Export cleanup job scheduled successfully", {
       correlationId,
+      operationName: OPERATION_NAME,
       cronPattern: CLEANUP_CRON_PATTERN,
       batchSize: CLEANUP_BATCH_SIZE,
     });
@@ -55,7 +66,7 @@ export async function scheduleExportCleanup() {
     logger.error(
       "Failed to schedule export cleanup job",
       error instanceof Error ? error : new Error(String(error)),
-      { correlationId },
+      { correlationId, operationName: OPERATION_NAME },
     );
     throw error;
   }
@@ -71,6 +82,7 @@ export function createCleanupWorker() {
       // Job validation
       if (job.name !== "cleanup-expired-exports") {
         logger.warn("Received unexpected job type", {
+          operationName: OPERATION_NAME,
           jobName: job.name,
           jobId: job.id,
         });
@@ -90,11 +102,17 @@ export function createCleanupWorker() {
 
       logger.info("Starting export cleanup job", {
         correlationId,
+        operationName: OPERATION_NAME,
         jobId: job.id,
         batchSize: CLEANUP_BATCH_SIZE,
       });
 
       try {
+        // NOTE: `metadata` is intentionally excluded from the select.
+        // It is not needed for cleanup and may carry Class B fields
+        // (ADR-006). The error-tracking update below writes only safe
+        // fields (lastCleanupAttempt, cleanupError) without merging any
+        // prior metadata content.
         const expiredExports = await prisma.dataExport.findMany({
           where: {
             expiresAt: { lt: new Date() },
@@ -116,6 +134,7 @@ export function createCleanupWorker() {
 
         logger.info("Found expired exports to cleanup", {
           correlationId,
+          operationName: OPERATION_NAME,
           count: expiredExports.length,
         });
 
@@ -137,6 +156,7 @@ export function createCleanupWorker() {
           try {
             logger.debug("Cleaning up export", {
               correlationId,
+              operationName: OPERATION_NAME,
               exportId: exportRecord.id,
               ownerPresent: Boolean(exportRecord.userId),
               s3Key: exportRecord.s3Key,
@@ -185,6 +205,7 @@ export function createCleanupWorker() {
 
             logger.info("Export cleaned up successfully", {
               correlationId,
+              operationName: OPERATION_NAME,
               exportId: exportRecord.id,
               ownerPresent: Boolean(exportRecord.userId),
             });
@@ -196,29 +217,27 @@ export function createCleanupWorker() {
               error instanceof Error ? error : new Error(String(error)),
               {
                 correlationId,
+                operationName: OPERATION_NAME,
                 exportId: exportRecord.id,
                 ownerPresent: Boolean(exportRecord.userId),
                 s3Key: exportRecord.s3Key,
               },
             );
 
-            // Track failed cleanup for retry
+            // Track the failed attempt against this export record so the
+            // next cleanup pass can identify chronic failures. We write only
+            // safe fields — the prior `metadata` content is intentionally not
+            // merged here because (a) it was not fetched in the select above
+            // and (b) it may contain Class B fields (ADR-006).
             try {
               await prisma.dataExport.update({
                 where: { id: exportRecord.id },
                 data: {
                   metadata: {
-                    ...(typeof exportRecord === "object" &&
-                    exportRecord !== null &&
-                    "metadata" in exportRecord &&
-                    exportRecord.metadata &&
-                    typeof exportRecord.metadata === "object"
-                      ? exportRecord.metadata
-                      : {}),
                     lastCleanupAttempt: new Date().toISOString(),
                     cleanupError:
                       error instanceof Error ? error.message : String(error),
-                  } as any,
+                  },
                 },
               });
             } catch (updateError) {
@@ -227,7 +246,11 @@ export function createCleanupWorker() {
                 updateError instanceof Error
                   ? updateError
                   : new Error(String(updateError)),
-                { correlationId, exportId: exportRecord.id },
+                {
+                  correlationId,
+                  operationName: OPERATION_NAME,
+                  exportId: exportRecord.id,
+                },
               );
             }
           }
@@ -246,13 +269,14 @@ export function createCleanupWorker() {
 
         logger.info("Export cleanup job completed", {
           correlationId,
+          operationName: OPERATION_NAME,
           jobId: job.id,
-          metrics: {
-            summary: metrics,
-            durationMs,
-            durationSeconds: Math.round(durationMs / 1000),
-            bytesFreedMB: Math.round(metrics.bytesFreed / 1024 / 1024),
-          },
+          totalFound: metrics.totalFound,
+          successCount: metrics.successCount,
+          failureCount: metrics.failureCount,
+          durationMs,
+          durationSeconds: Math.round(durationMs / 1000),
+          bytesFreedMB: Math.round(metrics.bytesFreed / 1024 / 1024),
         });
 
         return metrics;
@@ -264,8 +288,12 @@ export function createCleanupWorker() {
           error instanceof Error ? error : new Error(String(error)),
           {
             correlationId,
+            operationName: OPERATION_NAME,
             jobId: job.id,
-            metrics,
+            totalFound: metrics.totalFound,
+            successCount: metrics.successCount,
+            failureCount: metrics.failureCount,
+            durationMs: metrics.endTime - metrics.startTime,
           },
         );
 
@@ -285,16 +313,20 @@ export function createCleanupWorker() {
   // Graceful shutdown handling
   const shutdown = async (signal: string) => {
     logger.info("Received shutdown signal, closing worker gracefully", {
+      operationName: OPERATION_NAME,
       signal,
     });
 
     try {
       await worker.close();
-      logger.info("Worker closed successfully");
+      logger.info("Worker closed successfully", {
+        operationName: OPERATION_NAME,
+      });
     } catch (error) {
       logger.error(
         "Error during worker shutdown",
         error instanceof Error ? error : new Error(String(error)),
+        { operationName: OPERATION_NAME },
       );
     }
   };
@@ -305,6 +337,7 @@ export function createCleanupWorker() {
   // Worker event handlers
   worker.on("completed", (job, result) => {
     logger.info("Cleanup job completed", {
+      operationName: OPERATION_NAME,
       jobId: job.id,
       result,
     });
@@ -315,6 +348,7 @@ export function createCleanupWorker() {
       "Cleanup job failed",
       error instanceof Error ? error : new Error(String(error)),
       {
+        operationName: OPERATION_NAME,
         jobId: job?.id,
         attemptsMade: job?.attemptsMade,
         attemptsRemaining: job
@@ -328,6 +362,7 @@ export function createCleanupWorker() {
     logger.error(
       "Worker error occurred",
       error instanceof Error ? error : new Error(String(error)),
+      { operationName: OPERATION_NAME },
     );
   });
 

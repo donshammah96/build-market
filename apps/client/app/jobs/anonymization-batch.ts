@@ -7,21 +7,32 @@
  * Runs daily at 4 AM by default (configurable via ANONYMIZATION_BATCH_CRON)
  */
 
-import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
+import { Queue, Worker, Job } from "bullmq";
 import { createRedisConnection } from "@build/queue-server";
 import { prisma } from "@build/db";
 import { AnonymizationService } from "@/app/lib/gdpr/services/anonymization.service";
+import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import { env } from "@/app/lib/infrastructure/env";
+
+const logger = new StructuredLogger("anonymization-batch-job");
+
+const OPERATION_NAME = "anonymization_batch_job";
 
 // Configuration
 const ANONYMIZATION_CRON_PATTERN = env.jobs.anonymizationBatchCron;
 const ANONYMIZATION_BATCH_SIZE = env.jobs.anonymizationBatchSize;
 const GRACE_PERIOD_DAYS = env.gdpr.deletionGraceDays;
 
-const anonymizationQueue = new Queue("gdpr-anonymization-batch", {
-  connection: createRedisConnection(),
-});
-
+let anonymizationQueue: Queue | null = null;
+export function getAnonymizationQueue(): Queue {
+  if (!anonymizationQueue) {
+    anonymizationQueue = new Queue("gdpr-anonymization-batch", {
+      connection: createRedisConnection(),
+    });
+  }
+  return anonymizationQueue;
+}
+// Do NOT export anonymizationQueue directly; always use getter.
 interface AnonymizationMetrics {
   totalCandidates: number;
   anonymized: number;
@@ -36,8 +47,10 @@ interface AnonymizationMetrics {
  * Schedule the anonymization batch job
  */
 export async function scheduleAnonymizationBatch() {
+  const correlationId = CorrelationIdManager.generate();
+
   try {
-    await anonymizationQueue.add(
+    await getAnonymizationQueue().add(
       "process-pending-anonymizations",
       {},
       {
@@ -53,11 +66,20 @@ export async function scheduleAnonymizationBatch() {
       },
     );
 
-    console.log(
-      `[AnonymizationBatch] Scheduled with pattern: ${ANONYMIZATION_CRON_PATTERN}`,
-    );
+    logger.info("Anonymization batch job scheduled", {
+      correlationId,
+      operationName: OPERATION_NAME,
+      cronPattern: ANONYMIZATION_CRON_PATTERN,
+    });
   } catch (error) {
-    console.error("[AnonymizationBatch] Failed to schedule job:", error);
+    logger.error(
+      "Failed to schedule anonymization batch job",
+      error instanceof Error ? error : new Error(String(error)),
+      {
+        correlationId,
+        operationName: OPERATION_NAME,
+      },
+    );
     throw error;
   }
 }
@@ -70,9 +92,16 @@ export function createAnonymizationBatchWorker() {
     "gdpr-anonymization-batch",
     async (job: Job) => {
       if (job.name !== "process-pending-anonymizations") {
-        console.warn(`[AnonymizationBatch] Unexpected job type: ${job.name}`);
+        logger.warn("Unexpected job type", {
+          operationName: OPERATION_NAME,
+          jobName: job.name,
+          jobId: job.id,
+        });
         return;
       }
+
+      const correlationId = CorrelationIdManager.generate();
+      CorrelationIdManager.set(correlationId);
 
       const metrics: AnonymizationMetrics = {
         totalCandidates: 0,
@@ -83,7 +112,12 @@ export function createAnonymizationBatchWorker() {
         startTime: Date.now(),
       };
 
-      console.log("[AnonymizationBatch] Starting batch anonymization job");
+      logger.info("Starting batch anonymization job", {
+        correlationId,
+        operationName: OPERATION_NAME,
+        jobId: job.id,
+        batchSize: ANONYMIZATION_BATCH_SIZE,
+      });
 
       try {
         const now = new Date();
@@ -105,9 +139,9 @@ export function createAnonymizationBatchWorker() {
           take: ANONYMIZATION_BATCH_SIZE,
           select: {
             id: true,
-            email: true,
             deletionRequestedAt: true,
             scheduledDeletionAt: true,
+            // Do NOT select email (PII)
           },
         });
 
@@ -115,9 +149,11 @@ export function createAnonymizationBatchWorker() {
 
         await job.updateProgress(20);
 
-        console.log(
-          `[AnonymizationBatch] Found ${candidates.length} candidates for anonymization`,
-        );
+        logger.info("Found candidates for anonymization", {
+          correlationId,
+          operationName: OPERATION_NAME,
+          count: candidates.length,
+        });
 
         // Process each candidate
         for (let i = 0; i < candidates.length; i++) {
@@ -130,9 +166,11 @@ export function createAnonymizationBatchWorker() {
             const holds = await AnonymizationService.checkLegalHold(user.id);
 
             if (holds.length > 0) {
-              console.log(
-                `[AnonymizationBatch] User ${user.id} has legal hold: ${holds.join(", ")}`,
-              );
+              logger.info("User has legal hold", {
+                operationName: OPERATION_NAME,
+                userId: user.id,
+                holds: holds.join(", "),
+              });
               metrics.skippedLegalHold++;
               continue;
             }
@@ -144,17 +182,21 @@ export function createAnonymizationBatchWorker() {
             });
 
             if (currentStatus?.status === "ACTIVE") {
-              console.log(
-                `[AnonymizationBatch] User ${user.id} reactivated, skipping`,
-              );
+              logger.info("User has reactivated", {
+                correlationId,
+                operationName: OPERATION_NAME,
+                userId: user.id,
+              });
               metrics.skippedActive++;
               continue;
             }
 
             if (currentStatus?.anonymizedAt) {
-              console.log(
-                `[AnonymizationBatch] User ${user.id} already anonymized, skipping`,
-              );
+              logger.info("User already anonymized", {
+                correlationId,
+                operationName: OPERATION_NAME,
+                userId: user.id,
+              });
               metrics.skippedActive++;
               continue;
             }
@@ -163,11 +205,19 @@ export function createAnonymizationBatchWorker() {
             await AnonymizationService.executeAnonymization(user.id);
             metrics.anonymized++;
 
-            console.log(`[AnonymizationBatch] Anonymized user ${user.id}`);
+            logger.info("Anonymized user", {
+              correlationId,
+              operationName: OPERATION_NAME,
+              userId: user.id,
+            });
           } catch (error) {
-            console.error(
-              `[AnonymizationBatch] Error anonymizing user ${user.id}:`,
-              error,
+            logger.error(
+              "Error anonymizing user",
+              error instanceof Error ? error : new Error(String(error)),
+              {
+                operationName: OPERATION_NAME,
+                userId: user.id,
+              },
             );
             metrics.errors++;
           }
@@ -182,7 +232,8 @@ export function createAnonymizationBatchWorker() {
         metrics.endTime = Date.now();
         const duration = metrics.endTime - metrics.startTime;
 
-        console.log("[AnonymizationBatch] Job completed", {
+        logger.info("Anonymization batch job completed", {
+          operationName: OPERATION_NAME,
           metrics,
           durationMs: duration,
         });
@@ -196,7 +247,13 @@ export function createAnonymizationBatchWorker() {
             entityType: "System",
             entityId: "anonymization-batch-job",
             metadata: {
-              metrics: JSON.parse(JSON.stringify(metrics)),
+              correlationId,
+              totalCandidates: metrics.totalCandidates,
+              errors: metrics.errors,
+              anonymized: metrics.anonymized,
+              skippedLegalHold: metrics.skippedLegalHold,
+              skippedActive: metrics.skippedActive,
+              durationMs: duration,
             },
           },
         });
@@ -208,7 +265,21 @@ export function createAnonymizationBatchWorker() {
           metrics,
         };
       } catch (error) {
-        console.error("[AnonymizationBatch] Job failed:", error);
+        metrics.endTime = Date.now();
+        const duration = metrics.endTime - metrics.startTime;
+
+        logger.error(
+          "Anonymization batch job failed",
+          error instanceof Error ? error : new Error(String(error)),
+          {
+            correlationId,
+            operationName: OPERATION_NAME,
+            jobId: job.id,
+            skippedLegalHold: metrics.skippedLegalHold,
+            errors: metrics.errors,
+            durationMs: duration,
+          },
+        );
 
         await prisma.auditLog.create({
           data: {
@@ -218,8 +289,13 @@ export function createAnonymizationBatchWorker() {
             entityType: "System",
             entityId: "anonymization-batch-job",
             metadata: {
+              correlationId,
               error: error instanceof Error ? error.message : "Unknown error",
-              metrics: JSON.parse(JSON.stringify(metrics)),
+              totalCandidates: metrics.totalCandidates,
+              errors: metrics.errors,
+              anonymized: metrics.anonymized,
+              skippedLegalHold: metrics.skippedLegalHold,
+              durationMs: duration,
             },
           },
         });
@@ -230,23 +306,65 @@ export function createAnonymizationBatchWorker() {
     {
       connection: createRedisConnection(),
       concurrency: 1, // Only one batch job at a time
+      limiter: {
+        max: 1,
+        duration: 60000, // Max 1 cleanup per minute — hard limit for irreversible GDPR operations
+      },
     },
   );
 
+  // Graceful shutdown handling
+  const shutdown = async (signal: string) => {
+    logger.info("Received shutdown signal, closing worker gracefully", {
+      operationName: OPERATION_NAME,
+      signal,
+    });
+
+    try {
+      await worker.close();
+      logger.info("Worker closed successfully", {
+        operationName: OPERATION_NAME,
+      });
+    } catch (error) {
+      logger.error(
+        "Error during worker shutdown",
+        error instanceof Error ? error : new Error(String(error)),
+        { operationName: OPERATION_NAME },
+      );
+    }
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+
   worker.on("completed", (job) => {
-    console.log(`[AnonymizationBatch] Job ${job.id} completed`);
+    logger.info("Anonymization batch job completed", {
+      operationName: OPERATION_NAME,
+      jobId: job.id,
+    });
   });
 
   worker.on("failed", (job, error) => {
-    console.error(`[AnonymizationBatch] Job ${job?.id} failed:`, error);
+    logger.error(
+      "Anonymization batch job failed",
+      error instanceof Error ? error : new Error(String(error)),
+      {
+        operationName: OPERATION_NAME,
+        jobId: job?.id,
+      },
+    );
   });
 
   worker.on("error", (error) => {
-    console.error("[AnonymizationBatch] Worker error:", error);
+    logger.error(
+      "Worker error occurred",
+      error instanceof Error ? error : new Error(String(error)),
+      {
+        operationName: OPERATION_NAME,
+      },
+    );
   });
 
   return worker;
 }
-
-// Export for use in central job orchestrator
-export { anonymizationQueue };
+// Do NOT export retentionQueue directly; always use getter.

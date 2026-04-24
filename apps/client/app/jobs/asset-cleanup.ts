@@ -7,37 +7,55 @@
  * Runs daily at 5 AM by default (configurable via ASSET_CLEANUP_CRON)
  */
 
-import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
+import { Queue, Worker, Job } from "bullmq";
 import { createRedisConnection } from "@build/queue-server";
 import { prisma } from "@build/db";
 import { AssetCleanupService } from "@/app/lib/gdpr/services/asset-cleanup.service";
 import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import { env } from "@/app/lib/infrastructure/env";
 
-// Configuration
+const logger = new StructuredLogger("asset-cleanup-job");
+
+const OPERATION_NAME = "cleanup_expired_assets";
+
+// Configuration — read from the validated env boundary at module scope is
+// safe here: these are plain scalar reads against an already-parsed object,
+// not connection instantiation. The S3 client and Queue are lazy (see below).
 const ASSET_CLEANUP_CRON_PATTERN = env.jobs.assetCleanupCron;
 const CLEANUP_BATCH_SIZE = env.jobs.cleanupBatchSize;
-const S3_DISABLED = env.storage.s3Disabled;
 
-const assetCleanupQueue = new Queue("gdpr-asset-cleanup", {
-  connection: createRedisConnection(),
-});
+let assetCleanupQueue: Queue | null = null;
 
-// Initialize S3 client if enabled
+export function getAssetCleanupQueue(): Queue {
+  if (!assetCleanupQueue) {
+    assetCleanupQueue = new Queue("gdpr-asset-cleanup", {
+      connection: createRedisConnection(),
+    });
+  }
+  return assetCleanupQueue;
+}
+// Do NOT export assetCleanupQueue directly; always use getter.
+
+// IMPORTANT: The S3 client must be lazily initialised — never at module scope.
+// Module-scope instantiation runs during `next build`'s page-data collection
+// phase, which has no real S3 credentials available and will throw or produce
+// a client instance that silently uses wrong credentials.
 let s3Client: S3Client | null = null;
-if (!S3_DISABLED) {
-  const accessKeyId = env.storage.accessKeyId;
-  const secretAccessKey = env.storage.secretAccessKey;
-
-  if (accessKeyId && secretAccessKey) {
+function getS3Client(): S3Client | null {
+  // S3 client must be lazy, never at module scope
+  if (env.storage.s3Disabled) return null;
+  if (!s3Client) {
+    const accessKeyId = env.storage.accessKeyId;
+    const secretAccessKey = env.storage.secretAccessKey;
+    if (!accessKeyId || !secretAccessKey) return null;
     s3Client = new S3Client({
       region: env.storage.awsRegion,
       credentials: { accessKeyId, secretAccessKey },
     });
   }
+  return s3Client;
 }
-
-const ASSET_BUCKET = env.storage.assetBucket;
 
 interface AssetCleanupMetrics {
   totalExpired: number;
@@ -54,8 +72,10 @@ interface AssetCleanupMetrics {
  * Schedule the asset cleanup job
  */
 export async function scheduleAssetCleanup() {
+  const correlationId = CorrelationIdManager.generate();
+
   try {
-    await assetCleanupQueue.add(
+    await getAssetCleanupQueue().add(
       "cleanup-expired-assets",
       {},
       {
@@ -71,33 +91,52 @@ export async function scheduleAssetCleanup() {
       },
     );
 
-    console.log(
-      `[AssetCleanup] Scheduled with pattern: ${ASSET_CLEANUP_CRON_PATTERN}`,
-    );
+    logger.info("Asset cleanup job scheduled successfully", {
+      correlationId,
+      operationName: OPERATION_NAME,
+      cronPattern: ASSET_CLEANUP_CRON_PATTERN,
+      batchSize: CLEANUP_BATCH_SIZE,
+    });
   } catch (error) {
-    console.error("[AssetCleanup] Failed to schedule job:", error);
+    logger.error(
+      "Failed to schedule asset cleanup job",
+      error instanceof Error ? error : new Error(String(error)),
+      { correlationId, operationName: OPERATION_NAME },
+    );
     throw error;
   }
 }
 
 /**
- * Delete an asset from S3
+ * Delete an asset from S3.
+ *
+ * NOTE: The S3 key is derived from the CDN URL by stripping the leading
+ * path segment. This assumes the CDN URL maps 1:1 to the S3 key with no
+ * additional prefix (e.g. CloudFront distribution serving directly from
+ * the bucket root). If a CDN prefix is ever introduced, this derivation
+ * will silently produce wrong keys and deletions will fail. Prefer storing
+ * the raw S3 key on the Asset record directly to remove this assumption.
  */
 async function deleteFromS3(s3Key: string): Promise<boolean> {
-  if (!s3Client || !s3Key) {
+  const client = getS3Client();
+  if (!client || !s3Key) {
     return false;
   }
 
   try {
-    await s3Client.send(
+    await client.send(
       new DeleteObjectCommand({
-        Bucket: ASSET_BUCKET,
+        Bucket: env.storage.assetBucket,
         Key: s3Key,
       }),
     );
     return true;
   } catch (error) {
-    console.error(`[AssetCleanup] Failed to delete S3 object ${s3Key}:`, error);
+    logger.error(
+      "Failed to delete S3 object",
+      error instanceof Error ? error : new Error(String(error)),
+      { operationName: OPERATION_NAME, s3Key },
+    );
     return false;
   }
 }
@@ -110,9 +149,16 @@ export function createAssetCleanupWorker() {
     "gdpr-asset-cleanup",
     async (job: Job) => {
       if (job.name !== "cleanup-expired-assets") {
-        console.warn(`[AssetCleanup] Unexpected job type: ${job.name}`);
+        logger.warn("Received unexpected job type", {
+          operationName: OPERATION_NAME,
+          jobName: job.name,
+          jobId: job.id,
+        });
         return;
       }
+
+      const correlationId = CorrelationIdManager.generate();
+      CorrelationIdManager.set(correlationId);
 
       const metrics: AssetCleanupMetrics = {
         totalExpired: 0,
@@ -124,7 +170,12 @@ export function createAssetCleanupWorker() {
         startTime: Date.now(),
       };
 
-      console.log("[AssetCleanup] Starting asset cleanup job");
+      logger.info("Starting asset cleanup job", {
+        correlationId,
+        operationName: OPERATION_NAME,
+        jobId: job.id,
+        batchSize: CLEANUP_BATCH_SIZE,
+      });
 
       try {
         const now = new Date();
@@ -147,9 +198,11 @@ export function createAssetCleanupWorker() {
 
         await job.updateProgress(10);
 
-        console.log(
-          `[AssetCleanup] Found ${expiredAssets.length} expired assets`,
-        );
+        logger.info("Found expired assets to process", {
+          correlationId,
+          operationName: OPERATION_NAME,
+          count: expiredAssets.length,
+        });
 
         // Process each asset
         for (let i = 0; i < expiredAssets.length; i++) {
@@ -161,20 +214,27 @@ export function createAssetCleanupWorker() {
             const refCount = await AssetCleanupService.getRefCount(asset.id);
 
             if (refCount === 0) {
-              // Asset is orphaned - safe to delete
+              // Asset is orphaned — safe to delete permanently
 
-              // Extract S3 key from URL
+              // Derive S3 key from CDN URL (see deleteFromS3 for the
+              // assumption this relies on).
               let s3Key: string | null = null;
               if (asset.cdnUrl) {
                 try {
                   const url = new URL(asset.cdnUrl);
                   s3Key = url.pathname.slice(1); // Remove leading /
                 } catch {
-                  // URL parsing failed, skip S3 deletion
+                  // Malformed CDN URL — log and skip S3 deletion
+                  logger.warn("Malformed CDN URL — skipping S3 deletion", {
+                    correlationId,
+                    operationName: OPERATION_NAME,
+                    assetId: asset.id,
+                  });
                 }
               }
 
-              // Delete from S3 first
+              // Delete from S3 first; if this fails the DB row is retained
+              // so a future pass can retry.
               if (s3Key) {
                 const s3Deleted = await deleteFromS3(s3Key);
                 if (s3Deleted) {
@@ -190,9 +250,14 @@ export function createAssetCleanupWorker() {
               metrics.deletedFromDB++;
               metrics.bytesFreed += asset.size || 0;
 
-              console.log(`[AssetCleanup] Deleted orphaned asset ${asset.id}`);
+              logger.info("Deleted orphaned asset", {
+                correlationId,
+                operationName: OPERATION_NAME,
+                assetId: asset.id,
+              });
             } else {
-              // Asset is still referenced - transfer to system user
+              // Asset is still referenced — transfer ownership to the system
+              // user and clear the deletion schedule.
               await prisma.asset.update({
                 where: { id: asset.id },
                 data: {
@@ -203,14 +268,22 @@ export function createAssetCleanupWorker() {
 
               metrics.transferredToSystem++;
 
-              console.log(
-                `[AssetCleanup] Transferred asset ${asset.id} to system (refCount: ${refCount})`,
-              );
+              logger.info("Transferred referenced asset to system", {
+                correlationId,
+                operationName: OPERATION_NAME,
+                assetId: asset.id,
+                refCount,
+              });
             }
           } catch (error) {
-            console.error(
-              `[AssetCleanup] Error processing asset ${asset.id}:`,
-              error,
+            logger.error(
+              "Error processing asset",
+              error instanceof Error ? error : new Error(String(error)),
+              {
+                correlationId,
+                operationName: OPERATION_NAME,
+                assetId: asset.id,
+              },
             );
             metrics.errors++;
           }
@@ -223,25 +296,38 @@ export function createAssetCleanupWorker() {
         await job.updateProgress(95);
 
         metrics.endTime = Date.now();
-        const duration = metrics.endTime - metrics.startTime;
+        const durationMs = metrics.endTime - metrics.startTime;
 
-        console.log("[AssetCleanup] Job completed", {
-          metrics,
-          durationMs: duration,
-          bytesFreedMB: (metrics.bytesFreed / 1024 / 1024).toFixed(2),
+        logger.info("Asset cleanup job completed", {
+          correlationId,
+          operationName: OPERATION_NAME,
+          jobId: job.id,
+          totalExpired: metrics.totalExpired,
+          deletedFromS3: metrics.deletedFromS3,
+          deletedFromDB: metrics.deletedFromDB,
+          transferredToSystem: metrics.transferredToSystem,
+          errors: metrics.errors,
+          bytesFreedMB: Math.round(metrics.bytesFreed / 1024 / 1024),
+          durationMs,
         });
 
         // Log audit entry for compliance
         await prisma.auditLog.create({
           data: {
             actorType: "SYSTEM",
-            actorEmail: "system@buildmarket.co.ke",
+            actorId: "SYSTEM",
             action: "ASSET_CLEANUP_COMPLETED",
             entityType: "System",
             entityId: "asset-cleanup-job",
             metadata: {
-              metrics: JSON.parse(JSON.stringify(metrics)),
-              bytesFreedMB: (metrics.bytesFreed / 1024 / 1024).toFixed(2),
+              correlationId,
+              totalExpired: metrics.totalExpired,
+              deletedFromS3: metrics.deletedFromS3,
+              deletedFromDB: metrics.deletedFromDB,
+              transferredToSystem: metrics.transferredToSystem,
+              errors: metrics.errors,
+              bytesFreedMB: Math.round(metrics.bytesFreed / 1024 / 1024),
+              durationMs,
             },
           },
         });
@@ -253,18 +339,35 @@ export function createAssetCleanupWorker() {
           metrics,
         };
       } catch (error) {
-        console.error("[AssetCleanup] Job failed:", error);
+        metrics.endTime = Date.now();
+        const durationMs = metrics.endTime - metrics.startTime;
+
+        logger.error(
+          "Asset cleanup job failed",
+          error instanceof Error ? error : new Error(String(error)),
+          {
+            correlationId,
+            operationName: OPERATION_NAME,
+            jobId: job.id,
+            totalExpired: metrics.totalExpired,
+            errors: metrics.errors,
+            durationMs,
+          },
+        );
 
         await prisma.auditLog.create({
           data: {
             actorType: "SYSTEM",
-            actorEmail: "system@buildmarket.co.ke",
+            actorId: "SYSTEM",
             action: "ASSET_CLEANUP_FAILED",
             entityType: "System",
             entityId: "asset-cleanup-job",
             metadata: {
+              correlationId,
               error: error instanceof Error ? error.message : "Unknown error",
-              metrics: JSON.parse(JSON.stringify(metrics)),
+              totalExpired: metrics.totalExpired,
+              errors: metrics.errors,
+              durationMs,
             },
           },
         });
@@ -274,24 +377,57 @@ export function createAssetCleanupWorker() {
     },
     {
       connection: createRedisConnection(),
-      concurrency: 1, // Only one cleanup job at a time
+      concurrency: 1,
+      limiter: {
+        max: 1,
+        duration: 60000,
+      },
     },
   );
 
+  // Graceful shutdown handling
+  const shutdown = async (signal: string) => {
+    logger.info("Received shutdown signal, closing worker gracefully", {
+      operationName: OPERATION_NAME,
+      signal,
+    });
+    try {
+      await worker.close();
+      logger.info("Worker closed successfully", {
+        operationName: OPERATION_NAME,
+      });
+    } catch (error) {
+      logger.error(
+        "Error during worker shutdown",
+        error instanceof Error ? error : new Error(String(error)),
+        { operationName: OPERATION_NAME },
+      );
+    }
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
   worker.on("completed", (job) => {
-    console.log(`[AssetCleanup] Job ${job.id} completed`);
+    logger.info("Asset cleanup job completed", {
+      operationName: OPERATION_NAME,
+      jobId: job.id,
+    });
   });
-
   worker.on("failed", (job, error) => {
-    console.error(`[AssetCleanup] Job ${job?.id} failed:`, error);
+    logger.error(
+      "Asset cleanup job failed",
+      error instanceof Error ? error : new Error(String(error)),
+      {
+        operationName: OPERATION_NAME,
+        jobId: job?.id,
+      },
+    );
   });
-
   worker.on("error", (error) => {
-    console.error("[AssetCleanup] Worker error:", error);
+    logger.error(
+      "Worker error occurred",
+      error instanceof Error ? error : new Error(String(error)),
+      { operationName: OPERATION_NAME },
+    );
   });
-
   return worker;
 }
-
-// Export for use in central job orchestrator
-export { assetCleanupQueue };
