@@ -1,6 +1,6 @@
 import { clerkClient } from "@clerk/nextjs/server";
 import { prisma } from "@build/db";
-import { IdempotencyStatus, UserStatus } from "@prisma/client";
+import { IdempotencyStatus } from "@prisma/client";
 import {
   err,
   ok,
@@ -140,13 +140,13 @@ async function readClerkOnboardingSnapshot(
   };
 }
 
-function requiresOnboardedState(status: UserStatus): boolean {
-  return status !== UserStatus.ONBOARDING;
+function requiresOnboardedState(status: string): boolean {
+  return status !== "ONBOARDING";
 }
 
 function toDbOnboardingSnapshot(params: {
-  role: AppRole;
-  status: UserStatus;
+  role: AppRole | null;
+  status: string;
   isProfileComplete: boolean;
 }): OnboardingStateSnapshot {
   return {
@@ -225,7 +225,7 @@ export const onboardingRemediationService = {
     }
 
     const dbSnapshot = toDbOnboardingSnapshot({
-      role: user.role,
+      role: normalizeRole(user.role) ?? null,
       status: user.status,
       isProfileComplete: user.isProfileComplete,
     });
@@ -295,14 +295,6 @@ export const onboardingRemediationService = {
         error: "not_found",
         message: "User not found",
         status: 404,
-      });
-    }
-
-    if (user.status === UserStatus.ONBOARDING) {
-      return err({
-        error: "invalid_state",
-        message: "User is not onboarded in the database",
-        status: 409,
       });
     }
 
@@ -398,10 +390,7 @@ export const onboardingRemediationService = {
       },
     });
 
-    if (
-      user &&
-      (user.isProfileComplete || user.status !== UserStatus.ONBOARDING)
-    ) {
+    if (user && user.isProfileComplete) {
       return err({
         error: "conflict",
         message: "Onboarding mutation appears to have completed",

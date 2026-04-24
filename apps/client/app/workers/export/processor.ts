@@ -1,9 +1,14 @@
 import { prisma } from "@build/db";
 import archiver from "archiver";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import fs from "fs";
 import path from "path";
 import { Upload } from "@aws-sdk/lib-storage";
-import { S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createReadStream } from "fs";
 import { env } from "@/app/lib/infrastructure/env";
 
@@ -305,9 +310,6 @@ export class ExportProcessor {
     await onProgress?.(95);
 
     // Generate signed URL (valid for 7 days to match expiresAt)
-    const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
-    const { GetObjectCommand } = await import("@aws-sdk/client-s3");
-
     const command = new GetObjectCommand({
       Bucket: this.bucketName,
       Key: s3Key,
@@ -345,7 +347,6 @@ export class ExportProcessor {
     }
 
     try {
-      const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
       await this.s3Client.send(
         new DeleteObjectCommand({
           Bucket: this.bucketName,

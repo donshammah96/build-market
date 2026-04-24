@@ -242,17 +242,15 @@ export const clerkIntegrationService = {
       const primaryEmail = email_addresses?.[0];
       const email = primaryEmail?.email_address;
       const emailVerificationStatus = primaryEmail?.verification?.status;
-      const isEmailVerified =
-        typeof emailVerificationStatus === "string"
-          ? emailVerificationStatus === "verified"
-          : undefined;
+      const hasEmailVerificationStatus =
+        typeof emailVerificationStatus === "string";
+      const isEmailVerified = emailVerificationStatus === "verified";
       const primaryPhone = phone_numbers?.[0];
       const phone = primaryPhone?.phone_number;
       const phoneVerificationStatus = primaryPhone?.verification?.status;
-      const isPhoneVerified =
-        typeof phoneVerificationStatus === "string"
-          ? phoneVerificationStatus === "verified"
-          : undefined;
+      const hasPhoneVerificationStatus =
+        typeof phoneVerificationStatus === "string";
+      const isPhoneVerified = phoneVerificationStatus === "verified";
       const effectiveFirstName =
         first_name !== undefined ? first_name : existingUser.firstName;
       const effectiveLastName =
@@ -269,8 +267,8 @@ export const clerkIntegrationService = {
         displayName: computeDisplayName(effectiveFirstName, effectiveLastName),
         ...(phone !== undefined ? { phone: phone || null } : {}),
         ...(image_url !== undefined ? { avatar: image_url || null } : {}),
-        ...(isEmailVerified !== undefined ? { isEmailVerified } : {}),
-        ...(isPhoneVerified !== undefined ? { isPhoneVerified } : {}),
+        ...(hasEmailVerificationStatus ? { isEmailVerified } : {}),
+        ...(hasPhoneVerificationStatus ? { isPhoneVerified } : {}),
         ...(emailJustVerified ? { emailVerifiedAt: new Date() } : {}),
         ...(phoneJustVerified ? { phoneVerifiedAt: new Date() } : {}),
         ...(public_metadata?.role
