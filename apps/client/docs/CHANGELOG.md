@@ -1148,7 +1148,7 @@ CHANGELOG history - all Critical/High autopsy defects confirmed closed.
 - **Environment and auth-bypass hardening (Phase 2/3):** tightened `BYPASS_AUTH` handling in `app/lib/api/api-middleware.ts` so bypass is constrained to safe local-development conditions and blocked in CI and non-local contexts; added focused middleware regression coverage in `__tests__/lib/api-middleware.test.ts` for both allowed and blocked bypass flows.
 - **Env contract checker hardening:** tightened `apps/client/scripts/check-env-contract.mjs` to fail on high-risk unused template keys (not only missing keys), added env-definition key detection (`name: "KEY"`) to avoid false positives for centralized env schemas, and narrowed high-risk NATS matching to credential-like keys.
 
-### Fixed
+### Fixed (General)
 
 - **Tailwind utility warning cleanup in shared chart UI (2026-04-08):** normalized the tooltip minimum-width class in `apps/admin/src/components/ui/chart.tsx` from `min-w-[8rem]` to `min-w-32` to remove arbitrary-value utility warnings without changing rendered layout.
 - **Tailwind warning cleanup in chat and professional forms (2026-04-08):** resolved Tailwind lint and utility-class warnings in `components/chat/ConversationsList.tsx`, `components/forms/MultiPropertyForm.tsx`, `components/forms/MultiStoreForm.tsx`, and `components/forms/ProfessionalForm.tsx` without changing runtime behavior.
@@ -1156,6 +1156,8 @@ CHANGELOG history - all Critical/High autopsy defects confirmed closed.
 - **PropertyForm snapshot normalization no-op fix (2026-04-08):** fixed `__tests__/components/forms/PropertyForm.test.tsx` snapshot markup normalization by replacing dynamic `radix-*` IDs with `radix-__ID__` instead of a self-replacement no-op.
 - **Onboarding compliance and completion semantics (2026-04-04):** aligned user-profile consent and completion flows to transaction-safe and explicit `Result<T, DomainError>` semantics so onboarding/profile-complete callers no longer depend on partial-success branching or implicit completion fallback behavior.
 - **Canonical env-boundary test alignment:** updated middleware resolver regression coverage to override `env.services.internalApiSecret` directly instead of mutating `process.env.INTERNAL_API_SECRET` at runtime, matching the canonical env singleton behavior in resolver modules.
+
+### Fixed (Staff-level onboarding and user-profile)
 
 - **Staff-level onboarding and user-profile fixes:** GDPR consent records now create one `ConsentRecord` per changed type (MARKETING_EMAIL, MARKETING_SMS, ANALYTICS_COOKIES) in `service.ts`, `profile-complete.ts`, and `onboarding.ts` — previously a ternary picked a single type and dropped the others. Clerk metadata update now runs before `IdempotencyService.complete()` in all onboarding routes so retries re-attempt the Clerk update. Replaced duplicated `ClerkMetadataClient` type cast in `actions/onboarding.ts` with shared `updateClerkOnboardingMetadata` from `clerk-metadata.ts`. `skipClientOnboarding` no longer hardcodes county (uses null). `skipProfessionalOnboarding` uses `companyName: ""` instead of fabricated strings. Document materialization runs before `prisma.$transaction` in `completeOnboarding` and `completeProfessionalOnboarding`. `completeOnboarding` now guards against already-onboarded users (returns conflict). Property fields use `z.nativeEnum(PropertyType|Category|Status)` and removed `as never` casts. `syncUserProfileCompletionStatus` runs after transaction commit. Upload route uses `isOk()` and correct Result field access instead of fragile discriminant union.
 
@@ -1220,7 +1222,7 @@ CHANGELOG history - all Critical/High autopsy defects confirmed closed.
 - Added focused adapter regression coverage in `__tests__/api/notifications/route.test.ts`, `__tests__/api/notifications/notification-id.route.test.ts`, and `__tests__/api/professional-portal/seller-insights-adapters.route.test.ts` for route-to-domain delegation and status-code mappings.
 - Added focused idea-books adapter regression coverage across the full route family in `__tests__/api/idea-books/route.test.ts`, `__tests__/api/idea-books/book-id.route.test.ts`, `__tests__/api/idea-books/attachments.route.test.ts`, and `__tests__/api/idea-books/attachment-id.route.test.ts`.
 
-### Docs
+### Docs (Historical Architecture Review Checklist)
 
 - Added a staff-level architecture review checklist to `.agent/API-TO-FRONTEND-ARCHITECTURE.md` for data flow, DTO serialization, bundle review, hydration safety, and route-level resilience checks.
 - Added a migrated-slice refinement checklist to `.agent/API-TO-FRONTEND-ARCHITECTURE.md` so completed slices are still reviewed for server-owned DTO mapping, dynamic split opportunities, and App Router error/loading boundaries.

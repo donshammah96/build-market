@@ -127,7 +127,8 @@
       "dompurify": ">=3.4.0",
       "axios": ">=1.15.0",
       "protobufjs": ">=7.5.5",
-      "@clerk/shared": ">=4.8.1"
+      "@clerk/shared": ">=4.8.1",
+      "postcss": ">=8.5.10"
     }
   }
 }
