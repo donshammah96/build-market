@@ -6,7 +6,7 @@ export class AnonymizationService {
   /**
    * Instance method: Request account deletion (matches test contract)
    */
-  async requestDeletion(userId: string, requestorId: string) {
+  static async requestDeletion(userId: string, requestorId: string) {
     // Check legal holds
     const holds = await AnonymizationService.checkLegalHold(userId);
     if (holds.length > 0) {

@@ -16,14 +16,12 @@ import { env } from "@/app/lib/infrastructure/env";
 
 const logger = new StructuredLogger("onboarding-upload-cleanup");
 
-const OPERATION_NAME = "cleanup_expired_staged_uploads";
-
 const ONBOARDING_UPLOAD_CLEANUP_CRON = env.jobs.onboardingUploadCleanupCron;
 const CLEANUP_MAX_RETRIES = 3;
 
 let onboardingUploadCleanupQueue: Queue | null = null;
 
-export function getOnboardingUploadCleanupQueue(): Queue {
+function getOnboardingUploadCleanupQueue(): Queue {
   if (!onboardingUploadCleanupQueue) {
     onboardingUploadCleanupQueue = new Queue("maintenance-onboarding-uploads", {
       connection: createRedisConnection(),
@@ -54,14 +52,13 @@ export async function scheduleOnboardingUploadCleanup() {
 
     logger.info("Onboarding upload cleanup job scheduled successfully", {
       correlationId,
-      operationName: OPERATION_NAME,
       cronPattern: ONBOARDING_UPLOAD_CLEANUP_CRON,
     });
   } catch (error) {
     logger.error(
       "Failed to schedule onboarding upload cleanup job",
       error instanceof Error ? error : new Error(String(error)),
-      { correlationId, operationName: OPERATION_NAME },
+      { correlationId },
     );
     throw error;
   }
@@ -73,7 +70,6 @@ export function createOnboardingUploadCleanupWorker() {
     async (job: Job) => {
       if (job.name !== "cleanup-expired-staged-uploads") {
         logger.warn("Received unexpected job type", {
-          operationName: OPERATION_NAME,
           jobName: job.name,
           jobId: job.id,
         });
@@ -87,7 +83,6 @@ export function createOnboardingUploadCleanupWorker() {
 
       logger.info("Starting onboarding upload cleanup job", {
         correlationId,
-        operationName: OPERATION_NAME,
         jobId: job.id,
       });
 
@@ -98,11 +93,8 @@ export function createOnboardingUploadCleanupWorker() {
 
         logger.info("Onboarding upload cleanup job completed", {
           correlationId,
-          operationName: OPERATION_NAME,
           jobId: job.id,
-          count: result.count,
-          deletedFromStorage: result.deletedFromStorage,
-          failedDeletions: result.failedDeletions.length,
+          cleanupResult: result,
           durationMs,
         });
 
@@ -118,9 +110,7 @@ export function createOnboardingUploadCleanupWorker() {
           error instanceof Error ? error : new Error(String(error)),
           {
             correlationId,
-            operationName: OPERATION_NAME,
             jobId: job.id,
-            durationMs: Date.now() - startTime,
           },
         );
 
@@ -137,32 +127,28 @@ export function createOnboardingUploadCleanupWorker() {
     },
   );
 
+  // process.once (not process.on) — see export-cleanup.ts for full rationale.
   const shutdown = async (signal: string) => {
     logger.info("Received shutdown signal, closing worker gracefully", {
-      operationName: OPERATION_NAME,
       signal,
     });
 
     try {
       await worker.close();
-      logger.info("Worker closed successfully", {
-        operationName: OPERATION_NAME,
-      });
+      logger.info("Worker closed successfully");
     } catch (error) {
       logger.error(
         "Error during worker shutdown",
         error instanceof Error ? error : new Error(String(error)),
-        { operationName: OPERATION_NAME },
       );
     }
   };
 
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
 
   worker.on("completed", (job, result) => {
     logger.info("Cleanup job completed", {
-      operationName: OPERATION_NAME,
       jobId: job.id,
       result,
     });
@@ -173,7 +159,6 @@ export function createOnboardingUploadCleanupWorker() {
       "Cleanup job failed",
       error instanceof Error ? error : new Error(String(error)),
       {
-        operationName: OPERATION_NAME,
         jobId: job?.id,
         attemptsMade: job?.attemptsMade,
         attemptsRemaining: job
@@ -187,9 +172,14 @@ export function createOnboardingUploadCleanupWorker() {
     logger.error(
       "Worker error occurred",
       error instanceof Error ? error : new Error(String(error)),
-      { operationName: OPERATION_NAME },
     );
   });
 
   return worker;
 }
+
+// Export the getter so callers at the orchestrator boundary receive the live
+// queue instance. Exporting the module-scope `let` variable directly would
+// always yield null because the variable is only populated on first call to
+// getOnboardingUploadCleanupQueue().
+export { getOnboardingUploadCleanupQueue };

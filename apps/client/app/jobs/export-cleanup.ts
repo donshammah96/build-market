@@ -8,7 +8,7 @@ import { env } from "@/app/lib/infrastructure/env";
 
 const logger = new StructuredLogger("export-cleanup-job");
 
-const OPERATION_NAME = "cleanup_expired_exports";
+const OPERATION_NAME = "export_cleanup_job";
 
 // Configuration from environment variables
 const CLEANUP_CRON_PATTERN = env.jobs.exportCleanupCron;
@@ -17,7 +17,7 @@ const CLEANUP_MAX_RETRIES = env.jobs.exportCleanupMaxRetries;
 
 let cleanupQueue: Queue | null = null;
 
-export function getCleanupQueue(): Queue {
+function getCleanupQueue(): Queue {
   if (!cleanupQueue) {
     cleanupQueue = new Queue("maintenance-jobs", {
       connection: createRedisConnection(),
@@ -25,7 +25,6 @@ export function getCleanupQueue(): Queue {
   }
   return cleanupQueue;
 }
-// Do NOT export cleanupQueue directly; always use getter.
 
 interface CleanupMetrics {
   totalFound: number;
@@ -66,7 +65,10 @@ export async function scheduleExportCleanup() {
     logger.error(
       "Failed to schedule export cleanup job",
       error instanceof Error ? error : new Error(String(error)),
-      { correlationId, operationName: OPERATION_NAME },
+      {
+        correlationId,
+        operationName: OPERATION_NAME,
+      },
     );
     throw error;
   }
@@ -108,11 +110,6 @@ export function createCleanupWorker() {
       });
 
       try {
-        // NOTE: `metadata` is intentionally excluded from the select.
-        // It is not needed for cleanup and may carry Class B fields
-        // (ADR-006). The error-tracking update below writes only safe
-        // fields (lastCleanupAttempt, cleanupError) without merging any
-        // prior metadata content.
         const expiredExports = await prisma.dataExport.findMany({
           where: {
             expiresAt: { lt: new Date() },
@@ -224,11 +221,10 @@ export function createCleanupWorker() {
               },
             );
 
-            // Track the failed attempt against this export record so the
-            // next cleanup pass can identify chronic failures. We write only
-            // safe fields — the prior `metadata` content is intentionally not
-            // merged here because (a) it was not fetched in the select above
-            // and (b) it may contain Class B fields (ADR-006).
+            // Record the cleanup failure on the export row so it can be
+            // inspected and retried. The Prisma select for this job does not
+            // include a `metadata` field, so there is nothing to spread —
+            // write a clean, typed error record instead.
             try {
               await prisma.dataExport.update({
                 where: { id: exportRecord.id },
@@ -271,17 +267,15 @@ export function createCleanupWorker() {
           correlationId,
           operationName: OPERATION_NAME,
           jobId: job.id,
-          totalFound: metrics.totalFound,
-          successCount: metrics.successCount,
-          failureCount: metrics.failureCount,
+          metrics,
           durationMs,
-          durationSeconds: Math.round(durationMs / 1000),
           bytesFreedMB: Math.round(metrics.bytesFreed / 1024 / 1024),
         });
 
         return metrics;
       } catch (error) {
         metrics.endTime = Date.now();
+        const durationMs = metrics.endTime - metrics.startTime;
 
         logger.error(
           "Export cleanup job failed",
@@ -290,10 +284,8 @@ export function createCleanupWorker() {
             correlationId,
             operationName: OPERATION_NAME,
             jobId: job.id,
-            totalFound: metrics.totalFound,
-            successCount: metrics.successCount,
-            failureCount: metrics.failureCount,
-            durationMs: metrics.endTime - metrics.startTime,
+            metrics,
+            durationMs,
           },
         );
 
@@ -310,7 +302,14 @@ export function createCleanupWorker() {
     },
   );
 
-  // Graceful shutdown handling
+  // Graceful shutdown handling.
+  //
+  // process.once (not process.on) is intentional. process.on accumulates a new
+  // listener on every call to createCleanupWorker(). In a process that starts
+  // multiple workers, or if this factory is called more than once, process.on
+  // would register duplicate handlers and Node.js would emit
+  // MaxListenersExceededWarning. process.once fires at most once and then
+  // removes itself automatically.
   const shutdown = async (signal: string) => {
     logger.info("Received shutdown signal, closing worker gracefully", {
       operationName: OPERATION_NAME,
@@ -331,8 +330,8 @@ export function createCleanupWorker() {
     }
   };
 
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
 
   // Worker event handlers
   worker.on("completed", (job, result) => {
@@ -368,3 +367,5 @@ export function createCleanupWorker() {
 
   return worker;
 }
+
+export { getCleanupQueue };

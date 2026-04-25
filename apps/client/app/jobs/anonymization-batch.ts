@@ -24,6 +24,7 @@ const ANONYMIZATION_BATCH_SIZE = env.jobs.anonymizationBatchSize;
 const GRACE_PERIOD_DAYS = env.gdpr.deletionGraceDays;
 
 let anonymizationQueue: Queue | null = null;
+
 export function getAnonymizationQueue(): Queue {
   if (!anonymizationQueue) {
     anonymizationQueue = new Queue("gdpr-anonymization-batch", {
@@ -32,7 +33,7 @@ export function getAnonymizationQueue(): Queue {
   }
   return anonymizationQueue;
 }
-// Do NOT export anonymizationQueue directly; always use getter.
+
 interface AnonymizationMetrics {
   totalCandidates: number;
   anonymized: number;
@@ -85,7 +86,14 @@ export async function scheduleAnonymizationBatch() {
 }
 
 /**
- * Create the anonymization batch worker
+ * Create the anonymization batch worker.
+ *
+ * Uses process.once (not process.on) for signal handlers. process.on
+ * accumulates a new listener on every call to this factory. In a process that
+ * restarts workers, or if this factory is ever called more than once,
+ * process.on would register duplicate handlers and Node.js would emit
+ * MaxListenersExceededWarning. process.once fires at most once and removes
+ * itself automatically.
  */
 export function createAnonymizationBatchWorker() {
   const worker = new Worker(
@@ -120,7 +128,6 @@ export function createAnonymizationBatchWorker() {
       });
 
       try {
-        const now = new Date();
         const gracePeriodCutoff = new Date();
         gracePeriodCutoff.setDate(
           gracePeriodCutoff.getDate() - GRACE_PERIOD_DAYS,
@@ -166,9 +173,9 @@ export function createAnonymizationBatchWorker() {
             const holds = await AnonymizationService.checkLegalHold(user.id);
 
             if (holds.length > 0) {
-              logger.info("User has legal hold", {
+              logger.info("User has legal hold, skipping anonymization", {
+                correlationId,
                 operationName: OPERATION_NAME,
-                userId: user.id,
                 holds: holds.join(", "),
               });
               metrics.skippedLegalHold++;
@@ -182,20 +189,18 @@ export function createAnonymizationBatchWorker() {
             });
 
             if (currentStatus?.status === "ACTIVE") {
-              logger.info("User has reactivated", {
+              logger.info("User has reactivated, skipping anonymization", {
                 correlationId,
                 operationName: OPERATION_NAME,
-                userId: user.id,
               });
               metrics.skippedActive++;
               continue;
             }
 
             if (currentStatus?.anonymizedAt) {
-              logger.info("User already anonymized", {
+              logger.info("User already anonymized, skipping", {
                 correlationId,
                 operationName: OPERATION_NAME,
-                userId: user.id,
               });
               metrics.skippedActive++;
               continue;
@@ -205,18 +210,17 @@ export function createAnonymizationBatchWorker() {
             await AnonymizationService.executeAnonymization(user.id);
             metrics.anonymized++;
 
-            logger.info("Anonymized user", {
+            logger.info("User anonymized successfully", {
               correlationId,
               operationName: OPERATION_NAME,
-              userId: user.id,
             });
           } catch (error) {
             logger.error(
               "Error anonymizing user",
               error instanceof Error ? error : new Error(String(error)),
               {
+                correlationId,
                 operationName: OPERATION_NAME,
-                userId: user.id,
               },
             );
             metrics.errors++;
@@ -230,12 +234,13 @@ export function createAnonymizationBatchWorker() {
         await job.updateProgress(95);
 
         metrics.endTime = Date.now();
-        const duration = metrics.endTime - metrics.startTime;
+        const durationMs = metrics.endTime - metrics.startTime;
 
         logger.info("Anonymization batch job completed", {
+          correlationId,
           operationName: OPERATION_NAME,
           metrics,
-          durationMs: duration,
+          durationMs,
         });
 
         // Log audit entry for compliance
@@ -253,7 +258,7 @@ export function createAnonymizationBatchWorker() {
               anonymized: metrics.anonymized,
               skippedLegalHold: metrics.skippedLegalHold,
               skippedActive: metrics.skippedActive,
-              durationMs: duration,
+              durationMs,
             },
           },
         });
@@ -266,7 +271,7 @@ export function createAnonymizationBatchWorker() {
         };
       } catch (error) {
         metrics.endTime = Date.now();
-        const duration = metrics.endTime - metrics.startTime;
+        const durationMs = metrics.endTime - metrics.startTime;
 
         logger.error(
           "Anonymization batch job failed",
@@ -277,7 +282,7 @@ export function createAnonymizationBatchWorker() {
             jobId: job.id,
             skippedLegalHold: metrics.skippedLegalHold,
             errors: metrics.errors,
-            durationMs: duration,
+            durationMs,
           },
         );
 
@@ -295,7 +300,7 @@ export function createAnonymizationBatchWorker() {
               errors: metrics.errors,
               anonymized: metrics.anonymized,
               skippedLegalHold: metrics.skippedLegalHold,
-              durationMs: duration,
+              durationMs,
             },
           },
         });
@@ -308,12 +313,12 @@ export function createAnonymizationBatchWorker() {
       concurrency: 1, // Only one batch job at a time
       limiter: {
         max: 1,
-        duration: 60000, // Max 1 cleanup per minute — hard limit for irreversible GDPR operations
+        duration: 60000, // Max 1 run per minute — hard limit for irreversible GDPR operations
       },
     },
   );
 
-  // Graceful shutdown handling
+  // process.once (not process.on) — see export-cleanup.ts for full rationale.
   const shutdown = async (signal: string) => {
     logger.info("Received shutdown signal, closing worker gracefully", {
       operationName: OPERATION_NAME,
@@ -334,8 +339,8 @@ export function createAnonymizationBatchWorker() {
     }
   };
 
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
 
   worker.on("completed", (job) => {
     logger.info("Anonymization batch job completed", {
@@ -367,4 +372,3 @@ export function createAnonymizationBatchWorker() {
 
   return worker;
 }
-// Do NOT export retentionQueue directly; always use getter.

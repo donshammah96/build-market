@@ -15,7 +15,11 @@
  *   await shutdownAllSchedulers();
  */
 
-import { scheduleExportCleanup, createCleanupWorker } from "./export-cleanup";
+import {
+  scheduleExportCleanup,
+  createCleanupWorker,
+  getCleanupQueue,
+} from "./export-cleanup";
 import {
   scheduleDataRetentionEnforcement,
   createDataRetentionWorker,
@@ -36,12 +40,12 @@ import {
   createOnboardingUploadCleanupWorker,
   getOnboardingUploadCleanupQueue,
 } from "./onboarding-upload-cleanup";
-import { getCleanupQueue } from "./export-cleanup"; // Note: getCleanupQueue is not currently exported; would need to export it for manual trigger to work
 import { Worker } from "bullmq";
 
 // Track all workers for graceful shutdown
 let workers: Worker[] = [];
 let isInitialized = false;
+let startedAt: Date | undefined;
 
 export interface SchedulerStatus {
   name: string;
@@ -75,11 +79,14 @@ export async function initializeAllSchedulers(): Promise<void> {
       scheduleDataRetentionEnforcement(),
       scheduleAnonymizationBatch(),
       scheduleAssetCleanup(),
+      scheduleOnboardingUploadCleanup(),
     ]);
 
     console.log("[JobOrchestrator] All jobs scheduled");
 
-    // 2. Create workers
+    // 2. Create workers — order must match the workerNames tuple in
+    //    healthCheck() and getSchedulerStatus() so index-based lookups remain
+    //    correct.
     workers = [
       createCleanupWorker(),
       createDataRetentionWorker(),
@@ -91,6 +98,7 @@ export async function initializeAllSchedulers(): Promise<void> {
     console.log("[JobOrchestrator] All workers created");
 
     isInitialized = true;
+    startedAt = new Date();
 
     console.log(
       "[JobOrchestrator] GDPR job orchestrator initialized successfully",
@@ -126,6 +134,7 @@ export async function shutdownAllSchedulers(): Promise<void> {
 
     // Close all queues
     await Promise.all([
+      getCleanupQueue().close(),
       getRetentionQueue().close(),
       getAnonymizationQueue().close(),
       getAssetCleanupQueue().close(),
@@ -134,6 +143,7 @@ export async function shutdownAllSchedulers(): Promise<void> {
 
     workers = [];
     isInitialized = false;
+    startedAt = undefined;
 
     console.log("[JobOrchestrator] All schedulers shut down");
   } catch (error) {
@@ -150,7 +160,7 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
 
   // Get job info from each queue
   const queues = [
-    { name: "Export Cleanup", queue: getCleanupQueue() }, // cleanupQueue is not exported
+    { name: "Export Cleanup", queue: getCleanupQueue() },
     { name: "Data Retention", queue: getRetentionQueue() },
     { name: "Anonymization Batch", queue: getAnonymizationQueue() },
     { name: "Asset Cleanup", queue: getAssetCleanupQueue() },
@@ -162,21 +172,14 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
 
   for (const { name, queue } of queues) {
     try {
-      if (queue) {
-        const repeatableJobs = await queue.getRepeatableJobs();
-        const job = repeatableJobs[0];
+      const repeatableJobs = await queue.getRepeatableJobs();
+      const job = repeatableJobs[0];
 
-        schedulers.push({
-          name,
-          isRunning: workers.some((w) => w.isRunning()),
-          nextRun: job?.next ? new Date(job.next) : undefined,
-        });
-      } else {
-        schedulers.push({
-          name,
-          isRunning: false,
-        });
-      }
+      schedulers.push({
+        name,
+        isRunning: workers.some((w) => w.isRunning()),
+        nextRun: job?.next ? new Date(job.next) : undefined,
+      });
     } catch (error) {
       schedulers.push({
         name,
@@ -189,7 +192,7 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
   return {
     isInitialized,
     schedulers,
-    startedAt: isInitialized ? new Date() : undefined,
+    startedAt,
   };
 }
 
@@ -209,6 +212,10 @@ export async function triggerJob(
     let jobName;
 
     switch (jobType) {
+      case "export-cleanup":
+        queue = getCleanupQueue();
+        jobName = "cleanup-expired-exports";
+        break;
       case "data-retention":
         queue = getRetentionQueue();
         jobName = "enforce-data-retention";
@@ -225,13 +232,6 @@ export async function triggerJob(
         queue = getOnboardingUploadCleanupQueue();
         jobName = "cleanup-expired-staged-uploads";
         break;
-      case "export-cleanup":
-        queue = getCleanupQueue();
-        jobName = "cleanup-expired-exports";
-        return {
-          success: false,
-          error: "Export cleanup manual trigger not available",
-        };
       default:
         return { success: false, error: `Unknown job type: ${jobType}` };
     }
@@ -260,7 +260,11 @@ export async function triggerJob(
 }
 
 /**
- * Health check for all schedulers
+ * Health check for all schedulers.
+ *
+ * Worker names must match the order in which workers are created in
+ * initializeAllSchedulers(). If you add or reorder workers there, update
+ * this tuple accordingly.
  */
 export async function healthCheck(): Promise<{
   healthy: boolean;
@@ -278,7 +282,7 @@ export async function healthCheck(): Promise<{
     };
   }
 
-  // Check each worker
+  // Worker names must stay in sync with the workers[] creation order.
   const workerNames = [
     "export-cleanup",
     "data-retention",
@@ -286,14 +290,25 @@ export async function healthCheck(): Promise<{
     "asset-cleanup",
     "onboarding-upload-cleanup",
   ] as const;
-  for (let i = 0; i < workers.length; i++) {
-    const worker = workers[i];
-    const name = workerNames[i];
 
-    if (!name) continue;
+  for (let i = 0; i < workerNames.length; i++) {
+    const name = workerNames[i];
+    const worker = workers[i];
+
+    if (!name) {
+      continue;
+    }
+
+    if (!worker) {
+      details[name] = {
+        healthy: false,
+        message: "Worker not found",
+      };
+      continue;
+    }
 
     try {
-      const running = worker!.isRunning();
+      const running = worker.isRunning();
       details[name] = {
         healthy: running,
         message: running ? "Worker running" : "Worker stopped",

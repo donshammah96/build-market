@@ -17,11 +17,9 @@ import { env } from "@/app/lib/infrastructure/env";
 
 const logger = new StructuredLogger("asset-cleanup-job");
 
-const OPERATION_NAME = "cleanup_expired_assets";
+const OPERATION_NAME = "asset_cleanup_job";
 
-// Configuration — read from the validated env boundary at module scope is
-// safe here: these are plain scalar reads against an already-parsed object,
-// not connection instantiation. The S3 client and Queue are lazy (see below).
+// Configuration
 const ASSET_CLEANUP_CRON_PATTERN = env.jobs.assetCleanupCron;
 const CLEANUP_BATCH_SIZE = env.jobs.cleanupBatchSize;
 
@@ -35,26 +33,37 @@ export function getAssetCleanupQueue(): Queue {
   }
   return assetCleanupQueue;
 }
-// Do NOT export assetCleanupQueue directly; always use getter.
 
-// IMPORTANT: The S3 client must be lazily initialised — never at module scope.
-// Module-scope instantiation runs during `next build`'s page-data collection
-// phase, which has no real S3 credentials available and will throw or produce
-// a client instance that silently uses wrong credentials.
-let s3Client: S3Client | null = null;
+// S3 client is initialised lazily on the first deletion attempt rather than
+// at module scope. Module-scope instantiation of SDK clients runs during
+// next build's page-data-collection phase, which can fail when environment
+// variables (credentials, region) are not available in the build environment.
+// A sentinel value of `undefined` distinguishes "not yet evaluated" from
+// "evaluated but disabled/unconfigured" (null).
+let s3ClientInstance: S3Client | null | undefined = undefined;
+
 function getS3Client(): S3Client | null {
-  // S3 client must be lazy, never at module scope
-  if (env.storage.s3Disabled) return null;
-  if (!s3Client) {
-    const accessKeyId = env.storage.accessKeyId;
-    const secretAccessKey = env.storage.secretAccessKey;
-    if (!accessKeyId || !secretAccessKey) return null;
-    s3Client = new S3Client({
-      region: env.storage.awsRegion,
-      credentials: { accessKeyId, secretAccessKey },
-    });
+  if (s3ClientInstance !== undefined) return s3ClientInstance;
+
+  if (env.storage.s3Disabled) {
+    s3ClientInstance = null;
+    return null;
   }
-  return s3Client;
+
+  const accessKeyId = env.storage.accessKeyId;
+  const secretAccessKey = env.storage.secretAccessKey;
+
+  if (!accessKeyId || !secretAccessKey) {
+    s3ClientInstance = null;
+    return null;
+  }
+
+  s3ClientInstance = new S3Client({
+    region: env.storage.awsRegion,
+    credentials: { accessKeyId, secretAccessKey },
+  });
+
+  return s3ClientInstance;
 }
 
 interface AssetCleanupMetrics {
@@ -95,27 +104,23 @@ export async function scheduleAssetCleanup() {
       correlationId,
       operationName: OPERATION_NAME,
       cronPattern: ASSET_CLEANUP_CRON_PATTERN,
-      batchSize: CLEANUP_BATCH_SIZE,
     });
   } catch (error) {
     logger.error(
       "Failed to schedule asset cleanup job",
       error instanceof Error ? error : new Error(String(error)),
-      { correlationId, operationName: OPERATION_NAME },
+      {
+        correlationId,
+        operationName: OPERATION_NAME,
+      },
     );
     throw error;
   }
 }
 
 /**
- * Delete an asset from S3.
- *
- * NOTE: The S3 key is derived from the CDN URL by stripping the leading
- * path segment. This assumes the CDN URL maps 1:1 to the S3 key with no
- * additional prefix (e.g. CloudFront distribution serving directly from
- * the bucket root). If a CDN prefix is ever introduced, this derivation
- * will silently produce wrong keys and deletions will fail. Prefer storing
- * the raw S3 key on the Asset record directly to remove this assumption.
+ * Delete an asset from S3. Returns true if the object was deleted, false if
+ * S3 is disabled, unconfigured, or the deletion request failed.
  */
 async function deleteFromS3(s3Key: string): Promise<boolean> {
   const client = getS3Client();
@@ -135,14 +140,20 @@ async function deleteFromS3(s3Key: string): Promise<boolean> {
     logger.error(
       "Failed to delete S3 object",
       error instanceof Error ? error : new Error(String(error)),
-      { operationName: OPERATION_NAME, s3Key },
+      {
+        operationName: OPERATION_NAME,
+        s3Key,
+      },
     );
     return false;
   }
 }
 
 /**
- * Create the asset cleanup worker
+ * Create the asset cleanup worker.
+ *
+ * Uses process.once (not process.on) for signal handlers. See export-cleanup.ts
+ * for full rationale on why process.once is mandatory for worker factories.
  */
 export function createAssetCleanupWorker() {
   const worker = new Worker(
@@ -198,7 +209,7 @@ export function createAssetCleanupWorker() {
 
         await job.updateProgress(10);
 
-        logger.info("Found expired assets to process", {
+        logger.info("Found expired assets to cleanup", {
           correlationId,
           operationName: OPERATION_NAME,
           count: expiredAssets.length,
@@ -214,18 +225,19 @@ export function createAssetCleanupWorker() {
             const refCount = await AssetCleanupService.getRefCount(asset.id);
 
             if (refCount === 0) {
-              // Asset is orphaned — safe to delete permanently
+              // Asset is orphaned — safe to delete permanently.
 
-              // Derive S3 key from CDN URL (see deleteFromS3 for the
-              // assumption this relies on).
+              // Extract S3 key from CDN URL. The pathname after the leading /
+              // is the object key for standard S3 and CloudFront distributions.
               let s3Key: string | null = null;
               if (asset.cdnUrl) {
                 try {
                   const url = new URL(asset.cdnUrl);
                   s3Key = url.pathname.slice(1); // Remove leading /
                 } catch {
-                  // Malformed CDN URL — log and skip S3 deletion
-                  logger.warn("Malformed CDN URL — skipping S3 deletion", {
+                  // URL parsing failed — skip S3 deletion and continue with DB
+                  // deletion so the record does not accumulate indefinitely.
+                  logger.warn("Could not parse CDN URL for asset", {
                     correlationId,
                     operationName: OPERATION_NAME,
                     assetId: asset.id,
@@ -233,8 +245,6 @@ export function createAssetCleanupWorker() {
                 }
               }
 
-              // Delete from S3 first; if this fails the DB row is retained
-              // so a future pass can retry.
               if (s3Key) {
                 const s3Deleted = await deleteFromS3(s3Key);
                 if (s3Deleted) {
@@ -256,8 +266,8 @@ export function createAssetCleanupWorker() {
                 assetId: asset.id,
               });
             } else {
-              // Asset is still referenced — transfer ownership to the system
-              // user and clear the deletion schedule.
+              // Asset is still referenced — transfer to system user so it is
+              // no longer scheduled for deletion.
               await prisma.asset.update({
                 where: { id: asset.id },
                 data: {
@@ -276,8 +286,10 @@ export function createAssetCleanupWorker() {
               });
             }
           } catch (error) {
+            metrics.errors++;
+
             logger.error(
-              "Error processing asset",
+              "Error processing asset during cleanup",
               error instanceof Error ? error : new Error(String(error)),
               {
                 correlationId,
@@ -285,7 +297,6 @@ export function createAssetCleanupWorker() {
                 assetId: asset.id,
               },
             );
-            metrics.errors++;
           }
 
           // Update progress
@@ -302,32 +313,22 @@ export function createAssetCleanupWorker() {
           correlationId,
           operationName: OPERATION_NAME,
           jobId: job.id,
-          totalExpired: metrics.totalExpired,
-          deletedFromS3: metrics.deletedFromS3,
-          deletedFromDB: metrics.deletedFromDB,
-          transferredToSystem: metrics.transferredToSystem,
-          errors: metrics.errors,
-          bytesFreedMB: Math.round(metrics.bytesFreed / 1024 / 1024),
+          metrics,
           durationMs,
+          bytesFreedMB: (metrics.bytesFreed / 1024 / 1024).toFixed(2),
         });
 
         // Log audit entry for compliance
         await prisma.auditLog.create({
           data: {
             actorType: "SYSTEM",
-            actorId: "SYSTEM",
+            actorEmail: "system@buildmarket.co.ke",
             action: "ASSET_CLEANUP_COMPLETED",
             entityType: "System",
             entityId: "asset-cleanup-job",
             metadata: {
-              correlationId,
-              totalExpired: metrics.totalExpired,
-              deletedFromS3: metrics.deletedFromS3,
-              deletedFromDB: metrics.deletedFromDB,
-              transferredToSystem: metrics.transferredToSystem,
-              errors: metrics.errors,
-              bytesFreedMB: Math.round(metrics.bytesFreed / 1024 / 1024),
-              durationMs,
+              metrics: JSON.parse(JSON.stringify(metrics)),
+              bytesFreedMB: (metrics.bytesFreed / 1024 / 1024).toFixed(2),
             },
           },
         });
@@ -349,8 +350,7 @@ export function createAssetCleanupWorker() {
             correlationId,
             operationName: OPERATION_NAME,
             jobId: job.id,
-            totalExpired: metrics.totalExpired,
-            errors: metrics.errors,
+            metrics,
             durationMs,
           },
         );
@@ -358,16 +358,13 @@ export function createAssetCleanupWorker() {
         await prisma.auditLog.create({
           data: {
             actorType: "SYSTEM",
-            actorId: "SYSTEM",
+            actorEmail: "system@buildmarket.co.ke",
             action: "ASSET_CLEANUP_FAILED",
             entityType: "System",
             entityId: "asset-cleanup-job",
             metadata: {
-              correlationId,
               error: error instanceof Error ? error.message : "Unknown error",
-              totalExpired: metrics.totalExpired,
-              errors: metrics.errors,
-              durationMs,
+              metrics: JSON.parse(JSON.stringify(metrics)),
             },
           },
         });
@@ -377,20 +374,17 @@ export function createAssetCleanupWorker() {
     },
     {
       connection: createRedisConnection(),
-      concurrency: 1,
-      limiter: {
-        max: 1,
-        duration: 60000,
-      },
+      concurrency: 1, // Only one cleanup job at a time
     },
   );
 
-  // Graceful shutdown handling
+  // process.once (not process.on) — see export-cleanup.ts for full rationale.
   const shutdown = async (signal: string) => {
     logger.info("Received shutdown signal, closing worker gracefully", {
       operationName: OPERATION_NAME,
       signal,
     });
+
     try {
       await worker.close();
       logger.info("Worker closed successfully", {
@@ -404,14 +398,17 @@ export function createAssetCleanupWorker() {
       );
     }
   };
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
+
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
+
   worker.on("completed", (job) => {
     logger.info("Asset cleanup job completed", {
       operationName: OPERATION_NAME,
       jobId: job.id,
     });
   });
+
   worker.on("failed", (job, error) => {
     logger.error(
       "Asset cleanup job failed",
@@ -422,12 +419,16 @@ export function createAssetCleanupWorker() {
       },
     );
   });
+
   worker.on("error", (error) => {
     logger.error(
       "Worker error occurred",
       error instanceof Error ? error : new Error(String(error)),
-      { operationName: OPERATION_NAME },
+      {
+        operationName: OPERATION_NAME,
+      },
     );
   });
+
   return worker;
 }

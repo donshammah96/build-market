@@ -28,6 +28,39 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+## [2026-04-26] Staff Audit — GDPR Job Orchestrator Hardening
+
+### Fixed
+
+- **`anonymization-batch.ts`**: Replaced `process.on` with `process.once` for SIGTERM/SIGINT handlers. Worker factories are called once per process but `process.on` accumulates listeners on repeated calls, producing `MaxListenersExceededWarning`. `process.once` fires at most once and self-removes. Added missing `correlationId` to per-user log events inside the candidate loop. Removed stale `now` variable that was computed but never used after the gracePeriodCutoff refactor. Improved log messages to be more precise ("User already anonymized, skipping" vs "User already anonymized").
+
+- **`data-retention.ts`**: Replaced all `console.log`, `console.error`, and `console.warn` calls with structured `StructuredLogger` calls, aligning with ADR-005 observability contract. Added `correlationId` and `operationName` to every log event including the per-user processing loop. Replaced `process.on` with `process.once`. Removed unused `anonymizationService` local variable (`new AnonymizationService()` was instantiated but `AnonymizationService.requestDeletion` is called as a static/instance method — fixed the call site to match the actual API). Added `durationMs` to the failure audit log metadata for consistency with other jobs. Added structured log event when candidates are found, including `scheduledForDeletion`, `exceededRetention`, and `deduplicated` counts for operational observability.
+
+- **`asset-cleanup.ts`**: Added `operationName: OPERATION_NAME` to all log events where it was missing (including `scheduleAssetCleanup`, `deleteFromS3`, and the completion summary log). Replaced `process.on` with `process.once`. Flattened the nested `metrics: { summary: metrics, durationMs, bytesFreedMB }` log shape into flat top-level fields (`metrics`, `durationMs`, `bytesFreedMB`) for consistent structured log querying. Fixed the `ASSET_CLEANUP_FAILED` audit log which was hardcoding `system@buildmarket.live` instead of the canonical `system@buildmarket.co.ke` address used by all other jobs.
+
+- **`export-cleanup.ts`**: Added `operationName: OPERATION_NAME` to worker event handler log calls (`.on("completed")`, `.on("failed")`, `.on("error")`) which previously emitted events with no `operationName` field. Flattened the nested `metrics: { summary, durationMs, durationSeconds, bytesFreedMB }` log shape to flat fields.
+
+- **`index.ts`** (orchestrator):
+  - `scheduleOnboardingUploadCleanup()` was never called in `initializeAllSchedulers()`. The worker was created but its schedule was never registered with BullMQ, meaning the job would never fire on the cron schedule. Added the missing `scheduleOnboardingUploadCleanup()` call to the `Promise.all` scheduling block.
+  - `startedAt` was always returning `new Date()` (current call time) rather than the actual initialization time, making the field meaningless. Introduced a module-level `startedAt: Date | undefined` variable set during `initializeAllSchedulers()` and cleared during `shutdownAllSchedulers()`.
+  - `triggerJob` for `"export-cleanup"` always returned early with `{ success: false, error: "Export cleanup manual trigger not available" }` despite `getCleanupQueue` being available and exported. Removed the early return; all five job types are now triggerable.
+  - `healthCheck()` used `worker!.isRunning()` (non-null assertion) which throws a `TypeError` if the `workers` array has fewer entries than `workerNames`. Replaced with an explicit null guard that reports `{ healthy: false, message: "Worker not found" }` instead.
+  - `getSchedulerStatus()` no longer wraps each queue in an `if (queue)` guard since all queue getters are guaranteed to return a `Queue` (they are never null). Removed dead branch.
+  - Removed stale comment `// Note: getCleanupQueue is not currently exported` — `getCleanupQueue` has been exported since the initial implementation.
+  - `shutdownAllSchedulers()` now also closes `getCleanupQueue()` alongside the other four queues so all BullMQ connections are cleanly released on shutdown.
+
+### Docs
+
+- Added `operationName` constant `OPERATION_NAME` to `export-cleanup.ts` for consistency with the other four job files; all five jobs now define and use a stable snake_case operation name as the ADR-005 observability join key.
+- Propagated the `process.once` rationale comment from `export-cleanup.ts` (where it was originally documented) to `anonymization-batch.ts`, `data-retention.ts`, and `asset-cleanup.ts` via a cross-reference so the reasoning is visible at each call site.
+
+**Files changed:** `apps/client/app/jobs/anonymization-batch.ts`; `apps/client/app/jobs/data-retention.ts`; `apps/client/app/jobs/asset-cleanup.ts`; `apps/client/app/jobs/export-cleanup.ts`; `apps/client/app/jobs/index.ts`
+
+**Verification:**
+
+- `pnpm run client:tsc-noemit` → expected exit 0
+- `pnpm run client:report-security-drift:strict` → all categories 0
+
 ### Latest Docs
 
 - Date: 2026-04-24
