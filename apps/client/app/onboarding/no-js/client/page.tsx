@@ -68,8 +68,9 @@ export default async function OnboardingNoJsClientPage({
   }
 
   const resolvedSearchParams = await searchParams;
+
   const session = await readOnboardingNoJsSession();
-  if (!session?.role) {
+  if (!session || !session.role) {
     redirect("/onboarding/no-js");
   }
 

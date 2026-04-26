@@ -7,7 +7,7 @@
  * Runs daily at 5 AM by default (configurable via ASSET_CLEANUP_CRON)
  */
 
-import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
+import { Queue, Worker, Job } from "bullmq";
 import { createRedisConnection } from "@/lib/queues/redis-connection";
 import { prisma } from "@build/db";
 import { AssetCleanupService } from "@/lib/gdpr/services/asset-cleanup.service";

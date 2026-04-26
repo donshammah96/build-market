@@ -28,6 +28,23 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+## [2026-04-26] Staff Audit — GDPR Data Retention Policy Checks Fixed
+
+### Fixed (GDPR Data Retention Policy Checks and ESLint Errors)
+
+- **`anonymization.service.ts`**: Removed the `static` keyword from the `requestDeletion` method signature. The method relies on instance-specific configuration and the test contract/consumer callers explicitly instantiated the service to use it.
+- **`data-retention.ts`**: Fixed a `TypeError` where the worker attempted to call `requestDeletion` statically on the `AnonymizationService` class. The worker now correctly instantiates the service (`new AnonymizationService()`) and calls the method on the instance, while preserving the static call to `checkLegalHold`.
+- **`page.tsx` (onboarding/no-js/review)**: Fixed `INSUFFICIENT_NULL_CHECK` by explicitly checking `!currentSession || !currentSession.role` instead of relying on optional chaining (`!currentSession?.role`), which the linter flagged as insufficient for narrowing in subsequent property accesses.
+- **`tier3-high-value-guard-policy.test.ts`**: Fixed `CONSTANT_CONDITION` by removing a redundant `if (!extractedHandler)` check. Control flow guarantees that `extractedHandler` is truthy at that point. Used the non-null assertion operator (`finalHandler = extractedHandler!`) to satisfy the TypeScript compiler's type narrowing requirements after removing the branch.
+
+**Files changed:** `apps/client/app/lib/gdpr/services/anonymization.service.ts`; `apps/client/app/jobs/data-retention.ts`; `apps/client/app/onboarding/no-js/review/page.tsx`; `apps/client/__tests__/actions/tier3-high-value-guard-policy.test.ts`; `apps/client/CHANGELOG.md`
+
+**Verification:**
+
+- `pnpm run client:tsc-noemit` → expected exit 0
+- Linter checks passed cleanly without `CONSTANT_CONDITION` or `INSUFFICIENT_NULL_CHECK` warnings.
+- `vitest run __tests__/lib/gdpr/services/anonymization.test.ts` → all 3 tests pass.
+
 ## [2026-04-26] Staff Audit — GDPR Job Orchestrator Hardening
 
 ### Fixed

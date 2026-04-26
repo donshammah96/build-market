@@ -532,11 +532,9 @@ function collectRouteGuardViolationsFromSource(
     optionsBlock = extractedOptions?.optionsBlock ?? "";
   }
 
-  if (!extractedHandler) {
-    return offenders;
-  }
+  const finalHandler = extractedHandler!;
 
-  const actionLine = findLineNumber(source, extractedHandler.actionIndex);
+  const actionLine = findLineNumber(source, finalHandler.actionIndex);
 
   for (const requiredAuthOption of rule.requiredAuthOptions) {
     const optionPattern = new RegExp(`\\b${requiredAuthOption}\\s*:`);
@@ -571,7 +569,7 @@ function collectRouteGuardViolationsFromSource(
   }
 
   for (const requiredSnippet of rule.requiredRateLimitSnippets ?? []) {
-    if (extractedHandler.block.includes(requiredSnippet)) {
+    if (finalHandler.block.includes(requiredSnippet)) {
       continue;
     }
 

@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { StoreCategory, County } from "@prisma/client";
+import { StoreCategory } from "@prisma/client";
 import { fromEnumKey } from "@/lib/links";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

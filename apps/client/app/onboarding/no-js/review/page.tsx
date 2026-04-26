@@ -92,7 +92,7 @@ export default async function OnboardingNoJsReviewPage({
     }
 
     const currentSession = await readOnboardingNoJsSession();
-    if (!currentSession?.role) {
+    if (!currentSession || !currentSession.role) {
       redirect("/onboarding/no-js");
     }
 
@@ -168,7 +168,7 @@ export default async function OnboardingNoJsReviewPage({
     }
 
     const currentSession = await readOnboardingNoJsSession();
-    if (!currentSession?.role) {
+    if (!currentSession || !currentSession.role) {
       redirect("/onboarding/no-js");
     }
 

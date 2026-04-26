@@ -5,6 +5,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "../ui/button";
 import { Menu, X, LayoutDashboard, Accessibility } from "lucide-react";
+// Memoized mobile accessibility trigger to avoid new object on each render
+const MobileAccessibilityTrigger = React.memo(
+  function MobileAccessibilityTrigger() {
+    return (
+      <Button
+        variant="outline"
+        size="lg"
+        className="w-full justify-start text-muted-foreground"
+      >
+        <Accessibility className="mr-2 h-4 w-4" />
+        Accessibility Settings
+      </Button>
+    );
+  },
+);
 import { SignInButton, SignUpButton, UserButton, useUser } from "@clerk/nextjs";
 import { normalizeRole } from "@/app/lib/security/roles";
 import { ROUTES, dashboardForRole } from "@/lib/links";
@@ -341,16 +356,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
           {/* Mobile Accessibility Settings Link */}
           <div className="mt-4 pt-4 border-t border-border">
             <AccessibilitySettingsPanel
-              trigger={
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="w-full justify-start text-muted-foreground"
-                >
-                  <Accessibility className="mr-2 h-4 w-4" />
-                  Accessibility Settings
-                </Button>
-              }
+              trigger={<MobileAccessibilityTrigger />}
             />
           </div>
         </div>

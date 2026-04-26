@@ -304,7 +304,6 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       50,
       Math.max(1, parseInt(searchParams.get("limit") || "10", 10)),
     );
-    const skip = (page - 1) * limit;
 
     // Execute query with resilience
     const result = await executor.execute(

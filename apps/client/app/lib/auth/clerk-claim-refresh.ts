@@ -61,7 +61,7 @@ export function hasExpectedOnboardingClaims(
 export function hasRoutableAuthClaims(
   metadata: ClerkPublicMetadataLike,
 ): boolean {
-  return metadata.isOnboarded === true || normalizeRole(metadata.role) !== null;
+  return metadata.isOnboarded === true || !!normalizeRole(metadata.role);
 }
 
 export async function waitForClerkClaimRefresh(

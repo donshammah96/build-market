@@ -1,8 +1,7 @@
 // @ts-nocheck
 // src/services/export.service.ts
 import { prisma } from "@build/db";
-import { addExportJob, ExportJobData } from "@/app/lib/queues/export.queue";
-import { ExportStatus } from "@prisma/client";
+import { addExportJob } from "@/app/lib/queues/export.queue";
 import path from "path";
 import fs from "fs";
 

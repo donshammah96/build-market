@@ -1,10 +1,7 @@
 import { z } from "zod";
 import {
   ApprovalStatusSchema,
-  ContractTypeSchema,
   MilestoneStatusSchema,
-  ProjectStatusSchema,
-  ProjectTypeSchema,
   EscrowStatusSchema,
 } from "@/app/lib/validation/projects-validation";
 

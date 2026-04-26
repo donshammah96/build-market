@@ -143,7 +143,7 @@ export default function CalendarEventDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6 max-w-[1600px] mx-auto">
+      <div className="space-y-6 max-w-400 mx-auto">
         <div className="flex items-center gap-4">
           <div className="h-10 w-10 bg-zinc-200 animate-pulse rounded" />
           <div className="space-y-2">
@@ -163,7 +163,7 @@ export default function CalendarEventDetailPage() {
 
   if (error || !event) {
     return (
-      <div className="space-y-6 max-w-[1600px] mx-auto">
+      <div className="space-y-6 max-w-400 mx-auto">
         <Button variant="ghost" asChild>
           <Link href="/professional-portal/calendar">
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Calendar
@@ -208,7 +208,7 @@ export default function CalendarEventDetailPage() {
     : null;
 
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto">
+    <div className="space-y-6 max-w-400 mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between gap-4 items-start border-b border-zinc-100 pb-6">
         <div className="flex items-center gap-4">
@@ -277,7 +277,7 @@ export default function CalendarEventDetailPage() {
             <div className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
+                  <label className="text-sm font-medium text-zinc-500 mb-2 flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     Start Date & Time
                   </label>
@@ -296,7 +296,7 @@ export default function CalendarEventDetailPage() {
                   </p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
+                  <label className="text-sm font-medium text-zinc-500 mb-2 flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     End Date & Time
                   </label>
@@ -332,7 +332,7 @@ export default function CalendarEventDetailPage() {
                 <>
                   <Separator />
                   <div>
-                    <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
+                    <label className="text-sm font-medium text-zinc-500 mb-2 flex items-center gap-1">
                       <MapPin className="h-3 w-3" />
                       Location
                     </label>
@@ -359,7 +359,7 @@ export default function CalendarEventDetailPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
+                  <label className="text-sm font-medium text-zinc-500 mb-2 flex items-center gap-1">
                     <CalendarIcon className="h-3 w-3" />
                     Created
                   </label>
@@ -374,7 +374,7 @@ export default function CalendarEventDetailPage() {
                   </p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
+                  <label className="text-sm font-medium text-zinc-500 mb-2 flex items-center gap-1">
                     <CalendarIcon className="h-3 w-3" />
                     Last Updated
                   </label>
@@ -484,7 +484,7 @@ export default function CalendarEventDetailPage() {
       </div>
 
       {/* Edit Dialog */}
-      {event && isEditOpen ? (
+      {isEditOpen ? (
         <CalendarEventEditDialog
           event={event}
           open={isEditOpen}
@@ -501,7 +501,7 @@ export default function CalendarEventDetailPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-106.25">
           <DialogHeader>
             <DialogTitle>Delete Event</DialogTitle>
             <DialogDescription>

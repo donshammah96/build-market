@@ -1,12 +1,7 @@
 // src/lib/queues/compliance.queue.ts
-import { Queue, JobsOptions } from "bullmq";
+import { Queue } from "bullmq";
 import { createRedisConnection } from "./redis-connection";
-import {
-  AuditAction,
-  IncidentSeverity,
-  IncidentType,
-  DataClass,
-} from "@prisma/client";
+import { AuditAction, IncidentSeverity } from "@prisma/client";
 
 // Queue instances
 export const incidentQueue = new Queue<IncidentJobData>("security-incidents", {

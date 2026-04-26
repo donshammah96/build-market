@@ -11,7 +11,6 @@ import type {
 } from "./contracts";
 import type {
   DocumentListItem,
-  DocumentDetail,
   DocumentCreateResult,
   DocumentUpdateResult,
   DocumentDeleteResult,

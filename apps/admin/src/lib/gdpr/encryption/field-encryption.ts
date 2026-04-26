@@ -6,7 +6,6 @@ import crypto from "crypto";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12; // GCM standard IV size
-const AUTH_TAG_LENGTH = 16;
 
 // Key versioning for rotation support
 // Format: v{version}:iv:authTag:encrypted (new) or iv:authTag:encrypted (legacy)

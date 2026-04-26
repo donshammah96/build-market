@@ -1,10 +1,6 @@
 import { Worker, Job } from "bullmq";
 import { createRedisConnection } from "@/lib/queues/redis-connection";
-import {
-  userNotificationQueue,
-  UserNotificationJobData,
-  ComplianceJobs,
-} from "@/lib/queues/compliance.queue";
+import { UserNotificationJobData } from "@/lib/queues/compliance.queue";
 import { prisma } from "@build/db";
 import { sendEmail } from "@/lib/infrastructure/mailer";
 import { sendSMS } from "@/lib/infrastructure/sms";

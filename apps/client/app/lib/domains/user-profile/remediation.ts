@@ -233,14 +233,12 @@ export const onboardingRemediationService = {
     let clerkSnapshot: OnboardingStateSnapshot;
     try {
       const resolvedSnapshot = await readClerkOnboardingSnapshot(user.clerkId);
-      clerkSnapshot =
-        resolvedSnapshot ??
-        ({
-          role: null,
-          status: null,
-          isOnboarded: null,
-          isProfileComplete: null,
-        } as OnboardingStateSnapshot);
+      clerkSnapshot = resolvedSnapshot ?? {
+        role: null,
+        status: null,
+        isOnboarded: null,
+        isProfileComplete: null,
+      };
     } catch {
       return err({
         error: "internal",

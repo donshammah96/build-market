@@ -7,7 +7,7 @@
  * Runs daily at 4 AM by default (configurable via ANONYMIZATION_BATCH_CRON)
  */
 
-import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
+import { Queue, Worker, Job } from "bullmq";
 import { createRedisConnection } from "@/lib/queues/redis-connection";
 import { prisma } from "@build/db";
 import { AnonymizationService } from "@/lib/gdpr/services/anonymization.service";
@@ -92,7 +92,6 @@ export function createAnonymizationBatchWorker() {
       console.log("[AnonymizationBatch] Starting batch anonymization job");
 
       try {
-        const now = new Date();
         const gracePeriodCutoff = new Date();
         gracePeriodCutoff.setDate(
           gracePeriodCutoff.getDate() - GRACE_PERIOD_DAYS,

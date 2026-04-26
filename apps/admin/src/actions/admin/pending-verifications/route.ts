@@ -70,12 +70,6 @@ export const GET = withAdminRole([AdminRole.SUPER_ADMIN])(async (
         | "desc";
 
       const skip = (page - 1) * limit;
-
-      // Build common where clause
-      const whereStatus = {
-        status: status as any,
-      };
-
       interface ProfessionalVerification {
         entityType: "professional";
         entityId: string;

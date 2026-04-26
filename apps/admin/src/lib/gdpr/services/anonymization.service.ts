@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { prisma, Prisma } from "@build/db";
 import { AssetCleanupService } from "./asset-cleanup.service";
-import { FieldEncryption } from "@/app/lib/gdpr/encryption/field-encryption";
 
 export class AnonymizationService {
   /**

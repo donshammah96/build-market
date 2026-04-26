@@ -199,6 +199,8 @@ export function createDataRetentionWorker() {
 
         await job.updateProgress(50);
 
+        const anonymizationService = new AnonymizationService();
+
         for (const user of allUsers) {
           try {
             // Check for legal holds
@@ -228,7 +230,7 @@ export function createDataRetentionWorker() {
             }
 
             // Request anonymization (sets up the grace period)
-            await AnonymizationService.requestDeletion(user.id, "system");
+            await anonymizationService.requestDeletion(user.id, "system");
             metrics.scheduledForAnonymization++;
 
             logger.info("Scheduled anonymization for user", {

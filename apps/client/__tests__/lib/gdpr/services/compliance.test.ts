@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 import {
   mockPrismaSuccess,
-  mockPrismaWithDBError,
   generateMockAuditLog,
   generateTestDate,
 } from "../../../mocks";

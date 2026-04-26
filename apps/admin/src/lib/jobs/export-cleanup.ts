@@ -1,5 +1,5 @@
 // src/jobs/export-cleanup.ts
-import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
+import { Queue, Worker, Job } from "bullmq";
 import { createRedisConnection } from "@/lib/queues/redis-connection";
 import { prisma } from "@build/db";
 import { ExportProcessor } from "@/lib/workers/export/processor";
@@ -214,7 +214,6 @@ export function createCleanupWorker() {
                 data: {
                   metadata: {
                     ...(typeof exportRecord === "object" &&
-                    exportRecord !== null &&
                     "metadata" in exportRecord &&
                     exportRecord.metadata &&
                     typeof exportRecord.metadata === "object"
