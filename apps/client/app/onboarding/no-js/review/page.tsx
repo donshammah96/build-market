@@ -62,21 +62,21 @@ export default async function OnboardingNoJsReviewPage({
 }: NoJsReviewPageProps) {
   const { userId } = await auth();
   if (!userId) {
-    redirect(noJsSignInUrl());
+    return redirect(noJsSignInUrl());
   }
 
   const resolvedSearchParams = await searchParams;
   const session = await readOnboardingNoJsSession();
-  if (!session?.role) {
-    redirect("/onboarding/no-js");
+  if (!session || !session.role) {
+    return redirect("/onboarding/no-js");
   }
 
   if (session.role === "client" && !session.client) {
-    redirect("/onboarding/no-js/client");
+    return redirect("/onboarding/no-js/client");
   }
 
   if (session.role === "professional" && !session.professional) {
-    redirect("/onboarding/no-js/professional");
+    return redirect("/onboarding/no-js/professional");
   }
 
   const errorMessage = reviewErrorMessage(
@@ -88,12 +88,12 @@ export default async function OnboardingNoJsReviewPage({
 
     const { userId: actionUserId } = await auth();
     if (!actionUserId) {
-      redirect(noJsSignInUrl());
+      return redirect(noJsSignInUrl());
     }
 
     const currentSession = await readOnboardingNoJsSession();
     if (!currentSession || !currentSession.role) {
-      redirect("/onboarding/no-js");
+      return redirect("/onboarding/no-js");
     }
 
     const payload =
@@ -143,7 +143,7 @@ export default async function OnboardingNoJsReviewPage({
           : null;
 
     if (!payload) {
-      redirect(
+      return redirect(
         currentSession.role === "professional"
           ? "/onboarding/no-js/professional"
           : "/onboarding/no-js/client",
@@ -152,11 +152,11 @@ export default async function OnboardingNoJsReviewPage({
 
     const result = await submitOnboarding(payload);
     if (!result.success) {
-      redirect(`/onboarding/no-js/review?error=${result.error.code}`);
+      return redirect(`/onboarding/no-js/review?error=${result.error.code}`);
     }
 
     await clearOnboardingNoJsSession();
-    redirect(result.data.redirectTo);
+    return redirect(result.data.redirectTo);
   }
 
   async function skipFromNoJs(_formData: FormData) {
@@ -164,12 +164,12 @@ export default async function OnboardingNoJsReviewPage({
 
     const { userId: actionUserId } = await auth();
     if (!actionUserId) {
-      redirect(noJsSignInUrl());
+      return redirect(noJsSignInUrl());
     }
 
     const currentSession = await readOnboardingNoJsSession();
     if (!currentSession || !currentSession.role) {
-      redirect("/onboarding/no-js");
+      return redirect("/onboarding/no-js");
     }
 
     const result =
@@ -178,11 +178,11 @@ export default async function OnboardingNoJsReviewPage({
         : await skipOnboarding();
 
     if (!result.success) {
-      redirect(`/onboarding/no-js/review?error=${result.error.code}`);
+      return redirect(`/onboarding/no-js/review?error=${result.error.code}`);
     }
 
     await clearOnboardingNoJsSession();
-    redirect(result.data.redirectTo);
+    return redirect(result.data.redirectTo);
   }
 
   return (

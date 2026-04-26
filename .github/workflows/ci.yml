@@ -222,7 +222,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          pnpm -C apps/client run start -- --hostname 127.0.0.1 --port 3500 > /tmp/client-preview-smoke.log 2>&1 &
+          pnpm -C apps/client run start --hostname 127.0.0.1 --port 3500 > /tmp/client-preview-smoke.log 2>&1 &
           APP_PID=$!
 
           cleanup() {

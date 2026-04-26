@@ -28,6 +28,22 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+## [2026-04-26] Staff Audit — Static Analysis & React Render Optimization
+
+### Fixed (Static Analysis & React Render Optimization )
+
+- **`remediation.ts`**: Fixed `CONSTANT_CONDITION` warning. Removed the `| null` from the `readClerkOnboardingSnapshot` promise return type, as the function always resolves to a valid object. Removed the redundant `resolvedSnapshot ?? { ... }` fallback block that static analyzers correctly identified as unreachable.
+- **`Footer.tsx` & `NavBar.tsx`**: Fixed `REACT_INEFFICIENT_PURE_COMPONENT_PROP` lint errors. Extracted inline JSX elements passed to the `trigger` prop of the `AccessibilitySettingsPanel` pure component into `useMemo` hooks with stable references, preventing React from breaking memoization and triggering unnecessary re-renders on every parent render.
+- **`step-progress.tsx`**: Fixed `IDENTICAL_BRANCHES` warning by removing a redundant `isDark` ternary check where both the true and false conditions returned the exact same Tailwind utility string.
+- **`page.tsx` (onboarding/no-js/professional & onboarding/no-js/review)**: Fixed persistent `INSUFFICIENT_NULL_CHECK` warnings. Next.js `redirect()` throws an error to halt execution, but static analyzers frequently miss this in control-flow graphs. Prepended `return` to `redirect()` calls to explicitly terminate the branch and replaced optional chaining (`?.`) with explicit `!session || !session.role` null checks.
+
+**Files changed:** `apps/client/app/lib/domains/user-profile/remediation.ts`; `apps/client/components/layout/Footer.tsx`; `apps/client/components/layout/NavBar.tsx`; `apps/client/components/ui/step-progress.tsx`; `apps/client/app/onboarding/no-js/professional/page.tsx`; `apps/client/app/onboarding/no-js/review/page.tsx`; `apps/client/CHANGELOG.md`
+
+**Verification:**
+
+- `pnpm run client:tsc-noemit` → expected exit 0
+- Linter checks passed cleanly without `REACT_INEFFICIENT_PURE_COMPONENT_PROP`, `IDENTICAL_BRANCHES`, `CONSTANT_CONDITION`, or `INSUFFICIENT_NULL_CHECK` warnings.
+
 ## [2026-04-26] Staff Audit — GDPR Data Retention Policy Checks Fixed
 
 ### Fixed (GDPR Data Retention Policy Checks and ESLint Errors)

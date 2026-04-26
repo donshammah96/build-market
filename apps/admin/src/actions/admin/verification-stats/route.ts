@@ -7,7 +7,6 @@
 // @ts-nocheck
 import { NextRequest } from "next/server";
 import { AdminRole, prisma } from "@build/db";
-import { VerificationStatus } from "@prisma/client";
 import { AuthContext, withAdminRole } from "@/lib/api/api-middleware";
 import { apiSuccess, HttpStatus } from "@/lib/api/api-response";
 import {

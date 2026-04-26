@@ -14,7 +14,6 @@ import type {
   ProjectFinanceStats,
   FinanceResult,
   FinanceStats,
-  FinanceTransactionListItem,
   FinanceTransactionDetail,
   FinanceTransactionsResult,
   TransactionQueryInput,

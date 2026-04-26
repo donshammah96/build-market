@@ -125,7 +125,7 @@ function toString(value: unknown): string | null {
 
 async function readClerkOnboardingSnapshot(
   clerkId: string,
-): Promise<OnboardingStateSnapshot | null> {
+): Promise<OnboardingStateSnapshot> {
   const client = (await clerkClient()) as unknown as ClerkReadClient;
   const clerkUser = await client.users.getUser(clerkId);
   const publicMetadata = isRecord(clerkUser.publicMetadata)
@@ -232,13 +232,7 @@ export const onboardingRemediationService = {
 
     let clerkSnapshot: OnboardingStateSnapshot;
     try {
-      const resolvedSnapshot = await readClerkOnboardingSnapshot(user.clerkId);
-      clerkSnapshot = resolvedSnapshot ?? {
-        role: null,
-        status: null,
-        isOnboarded: null,
-        isProfileComplete: null,
-      };
+      clerkSnapshot = await readClerkOnboardingSnapshot(user.clerkId);
     } catch {
       return err({
         error: "internal",

@@ -25,7 +25,7 @@
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { County, Prisma } from "@prisma/client";
+import { County } from "@prisma/client";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { HttpStatus } from "@/app/lib/api/api-response";
 import {

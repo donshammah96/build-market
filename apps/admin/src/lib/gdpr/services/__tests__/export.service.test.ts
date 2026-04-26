@@ -8,9 +8,8 @@
  * - File access security
  */
 
-import { describe, it, expect, beforeEach, vi, Mock } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import path from "path";
-import fs from "fs";
 
 // Mock dependencies
 vi.mock("fs", () => ({

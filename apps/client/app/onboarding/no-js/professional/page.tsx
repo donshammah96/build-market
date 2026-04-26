@@ -86,12 +86,12 @@ export default async function OnboardingNoJsProfessionalPage({
 
   const resolvedSearchParams = await searchParams;
   const session = await readOnboardingNoJsSession();
-  if (!session?.role) {
-    redirect("/onboarding/no-js");
+  if (!session || !session.role) {
+    return redirect("/onboarding/no-js"); // FIX: Added return
   }
 
   if (session.role === "client") {
-    redirect("/onboarding/no-js/client");
+    return redirect("/onboarding/no-js/client");
   }
 
   const errorMessage = professionalPageErrorMessage(
@@ -103,7 +103,7 @@ export default async function OnboardingNoJsProfessionalPage({
 
     const { userId: actionUserId } = await auth();
     if (!actionUserId) {
-      redirect(noJsSignInUrl());
+      return redirect(noJsSignInUrl());
     }
 
     const profession = getOptionalString(formData, "profession", 80);
@@ -111,7 +111,7 @@ export default async function OnboardingNoJsProfessionalPage({
     const county = getOptionalString(formData, "county", 60);
 
     if (!profession || !companyName || !county) {
-      redirect("/onboarding/no-js/professional?error=missing_required");
+      return redirect("/onboarding/no-js/professional?error=missing_required");
     }
 
     await setOnboardingNoJsProfessionalDraft({
@@ -122,7 +122,7 @@ export default async function OnboardingNoJsProfessionalPage({
       yearsExperience: getOptionalNonNegativeInt(formData, "yearsExperience"),
     });
 
-    redirect("/onboarding/no-js/review");
+    return redirect("/onboarding/no-js/review");
   }
 
   return (

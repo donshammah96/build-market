@@ -12,7 +12,6 @@ import type {
 } from "./contracts";
 import type {
   CertificateListItem,
-  CertificateDetail,
   GetCertificateResult,
   CreateCertificateResult,
   UpdateCertificateResult,

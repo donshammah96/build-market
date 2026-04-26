@@ -1,7 +1,5 @@
 import express, { NextFunction, Request, Response } from "express";
 import { clerkMiddleware, getAuth } from "@clerk/express";
-import { shouldBeUser } from "./middleware/authMiddleware.js";
-import cors from "cors";
 
 const app = express();
 

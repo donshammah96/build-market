@@ -9,7 +9,7 @@
  * Runs daily at 3 AM by default (configurable via DATA_RETENTION_CRON)
  */
 
-import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
+import { Queue, Worker, Job } from "bullmq";
 import { createRedisConnection } from "@/lib/queues/redis-connection";
 import { prisma } from "@build/db";
 import { AnonymizationService } from "@/lib/gdpr/services/anonymization.service";

@@ -89,7 +89,7 @@ export default function ProjectDetailsPageClient() {
     const raw = project as { item?: unknown } | undefined;
     if (!raw) return null;
     const item = "item" in raw && raw.item ? raw.item : raw;
-    return typeof item === "object" && item !== null && !Array.isArray(item)
+    return typeof item === "object" && !Array.isArray(item)
       ? (item as Record<string, unknown>)
       : null;
   }, [project]);

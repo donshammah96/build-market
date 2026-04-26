@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GET, DELETE } from "@/app/api/stores/[id]/route";
 import { NextRequest } from "next/server";
-import { prisma } from "@build/db";
 
 const mockIdempotencyCheckOrCreate = vi.hoisted(() => vi.fn());
 const mockIdempotencyComplete = vi.hoisted(() => vi.fn());

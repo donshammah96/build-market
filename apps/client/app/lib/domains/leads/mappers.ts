@@ -8,7 +8,7 @@ import type {
 function toNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "number" && !Number.isNaN(value)) return value;
-  if (typeof value === "object" && value !== null && "toNumber" in value) {
+  if (typeof value === "object" && "toNumber" in value) {
     const fn = (value as { toNumber?: () => number }).toNumber;
     return typeof fn === "function" ? fn.call(value) : null;
   }

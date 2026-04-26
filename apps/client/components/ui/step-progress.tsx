@@ -71,9 +71,7 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
       "bg-(--color-onboarding-primary) text-[oklch(0.08_0.016_222)] border-2 border-(--color-onboarding-primary) shadow-[0_0_0_4px_oklch(0.70_0.21_162/0.18),0_0_20px_oklch(0.70_0.21_162/0.25)]",
     isCurrent &&
       !isCompleted &&
-      (isDark
-        ? "bg-(--color-onboarding-primary)/10 text-(--color-onboarding-primary) border-2 border-(--color-onboarding-primary) ring-4 ring-(--color-onboarding-primary)/20"
-        : "bg-(--color-onboarding-primary)/10 text-(--color-onboarding-primary) border-2 border-(--color-onboarding-primary) ring-4 ring-(--color-onboarding-primary)/20"),
+      "bg-(--color-onboarding-primary)/10 text-(--color-onboarding-primary) border-2 border-(--color-onboarding-primary) ring-4 ring-(--color-onboarding-primary)/20",
     !isCompleted &&
       !isCurrent &&
       (isDark
@@ -135,10 +133,7 @@ const StepConnector: React.FC<StepConnectorProps> = ({
     >
       {/* Background track */}
       <div
-        className={cn(
-          "absolute inset-0",
-          isDark ? "bg-white/[0.08]" : "bg-black/[0.08]",
-        )}
+        className={cn("absolute inset-0", isDark ? "bg-white/8" : "bg-black/8")}
       />
 
       {/* Animated fill */}
@@ -255,7 +250,7 @@ export function StepProgress({
                     {step.description && isHorizontal && (
                       <p
                         className={cn(
-                          "text-[10px] mt-0.5 max-w-[100px] mx-auto hidden sm:block",
+                          "text-[10px] mt-0.5 max-w-25 mx-auto hidden sm:block",
                           isDark
                             ? "text-onboarding-ink/45"
                             : "text-foreground/45",
@@ -328,7 +323,7 @@ export function CompactStepProgress({
       <div
         className={cn(
           "h-1.5 rounded-full overflow-hidden",
-          isDark ? "bg-white/[0.08]" : "bg-black/[0.08]",
+          isDark ? "bg-white/8" : "bg-black/8",
         )}
       >
         <motion.div
@@ -369,9 +364,7 @@ export function DotStepProgress({
             className={cn(
               "rounded-full transition-all duration-300",
               isCurrent && "w-6 h-2 bg-(--color-onboarding-primary)",
-              isCompleted &&
-                !isCurrent &&
-                "w-2 h-2 bg-(--color-onboarding-primary)/60",
+              isCompleted && !isCurrent && "w-2 h-2 bg-onboarding-primary/60",
               !isCompleted && !isCurrent && "w-2 h-2 bg-white/25",
             )}
             layout

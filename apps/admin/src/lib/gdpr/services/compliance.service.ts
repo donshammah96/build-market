@@ -1,5 +1,5 @@
 import { prisma } from "@build/db";
-import { Prisma, AuditAction, LegalBasis, ActorType } from "@prisma/client";
+import { Prisma, AuditAction, LegalBasis } from "@prisma/client";
 
 interface AuditLogFilters {
   actorId?: string;

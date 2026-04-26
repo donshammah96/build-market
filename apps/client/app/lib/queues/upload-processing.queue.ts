@@ -1,4 +1,4 @@
-import { Queue, type ConnectionOptions, type JobsOptions } from "bullmq";
+import { Queue, type JobsOptions } from "bullmq";
 import { createRedisConnection } from "@build/queue-server";
 
 export type ImageUploadProcessingJobData = {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, memo } from "react";
+import React, { useState, useCallback, memo, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "../ui/button";
@@ -158,6 +158,43 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
     setIsMobileMenuOpen(false);
   }, []);
 
+  const desktopAccessibilityTrigger = useMemo(
+    () => (
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "rounded-full transition-colors",
+          textColorClass,
+          hoverClass,
+        )}
+        aria-label="Accessibility settings"
+      >
+        <Accessibility size={18} />
+      </Button>
+    ),
+    [textColorClass, hoverClass],
+  );
+
+  const mobileHeaderAccessibilityTrigger = useMemo(
+    () => (
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn("rounded-full", textColorClass, hoverClass)}
+        aria-label="Accessibility settings"
+      >
+        <Accessibility size={18} />
+      </Button>
+    ),
+    [textColorClass, hoverClass],
+  );
+
+  const mobileMenuAccessibilityTrigger = useMemo(
+    () => <MobileAccessibilityTrigger />,
+    [],
+  );
+
   return (
     <>
       <nav
@@ -171,7 +208,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
             : "bg-transparent border-transparent py-5",
         )}
       >
-        <div className="max-w-[1440px] mx-auto px-4 md:px-8 flex items-center justify-between">
+        <div className="max-w-360 mx-auto px-4 md:px-8 flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="z-50" onClick={onLogoClick}>
             <span
@@ -200,22 +237,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
             <div className="h-6 w-px bg-border/70 mx-2" aria-hidden="true" />
 
             {/* Accessibility Settings Button */}
-            <AccessibilitySettingsPanel
-              trigger={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(
-                    "rounded-full transition-colors",
-                    textColorClass,
-                    hoverClass,
-                  )}
-                  aria-label="Accessibility settings"
-                >
-                  <Accessibility size={18} />
-                </Button>
-              }
-            />
+            <AccessibilitySettingsPanel trigger={desktopAccessibilityTrigger} />
 
             {/* Auth Buttons */}
             {!isSignedIn ? (
@@ -262,16 +284,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
           <div className="flex items-center gap-2 md:hidden">
             {/* Mobile Accessibility Button */}
             <AccessibilitySettingsPanel
-              trigger={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn("rounded-full", textColorClass, hoverClass)}
-                  aria-label="Accessibility settings"
-                >
-                  <Accessibility size={18} />
-                </Button>
-              }
+              trigger={mobileHeaderAccessibilityTrigger}
             />
 
             <Button
@@ -356,7 +369,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
           {/* Mobile Accessibility Settings Link */}
           <div className="mt-4 pt-4 border-t border-border">
             <AccessibilitySettingsPanel
-              trigger={<MobileAccessibilityTrigger />}
+              trigger={mobileMenuAccessibilityTrigger}
             />
           </div>
         </div>

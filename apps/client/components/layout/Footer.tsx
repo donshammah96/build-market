@@ -63,13 +63,26 @@ export const Footer = memo(function Footer() {
   // Memoize current year to prevent recalculation
   const currentYear = useMemo(() => new Date().getFullYear(), []);
 
+  const accessibilityTrigger = useMemo(
+    () => (
+      <button
+        className="flex items-center gap-1.5 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
+        aria-label="Accessibility settings"
+      >
+        <Accessibility size={14} />
+        Accessibility
+      </button>
+    ),
+    [],
+  );
+
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
     <footer className="w-full bg-background border-t border-border pt-16 pb-8">
-      <div className="container mx-auto px-4 md:px-10 max-w-[1280px]">
+      <div className="container mx-auto px-4 md:px-10 max-w-7xl">
         {/* Top Section: Grid Layout */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-8 mb-16">
           {/* Brand Column */}
@@ -231,17 +244,7 @@ export const Footer = memo(function Footer() {
             <span className="text-border" aria-hidden="true">
               |
             </span>
-            <AccessibilitySettingsPanel
-              trigger={
-                <button
-                  className="flex items-center gap-1.5 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
-                  aria-label="Accessibility settings"
-                >
-                  <Accessibility size={14} />
-                  Accessibility
-                </button>
-              }
-            />
+            <AccessibilitySettingsPanel trigger={accessibilityTrigger} />
           </nav>
         </div>
       </div>
