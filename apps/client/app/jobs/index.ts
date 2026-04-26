@@ -15,6 +15,7 @@
  *   await shutdownAllSchedulers();
  */
 
+import { envConfig } from "@/app/lib/infrastructure/env";
 import {
   scheduleExportCleanup,
   createCleanupWorker,
@@ -65,6 +66,24 @@ export interface GDPRJobOrchestrator {
  * Initialize all GDPR schedulers and workers
  */
 export async function initializeAllSchedulers(): Promise<void> {
+  // Guard 1: BullMQ requires a Redis TCP endpoint. Skip entirely when
+  // REDIS_URL is not configured (local dev without Redis, CI smoke gate).
+  if (!envConfig.redis.url) {
+    console.info(
+      "[JobOrchestrator] REDIS_URL not set — background job queues disabled.",
+    );
+    return;
+  }
+
+  // Guard 2: Belt-and-suspenders for CI environments that set
+  // DISABLE_BACKGROUND_JOBS=true explicitly.
+  if (envConfig.isCI && process.env.DISABLE_BACKGROUND_JOBS === "true") {
+    console.info(
+      "[JobOrchestrator] DISABLE_BACKGROUND_JOBS=true — skipping queue initialisation in CI.",
+    );
+    return;
+  }
+
   if (isInitialized) {
     console.log("[JobOrchestrator] Already initialized, skipping");
     return;

@@ -28,6 +28,53 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+## [2026-04-26] CI Smoke Gate Fix — Clerk Key Format + BullMQ Startup
+
+### Fixed ( CI Smoke Gate )
+
+- **CI smoke gate 500 on root route — Clerk key format** (`client-preview-smoke-gate`):
+  `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` was set to `pk_test_ci_placeholder`.
+  Clerk's edge middleware SDK calls `initPublishableKeyValues()` on every
+  request at the edge runtime (including public routes) and throws
+  `Error: Publishable key not valid` when the suffix after `pk_test_` is not
+  valid base64url. This propagated as a 500 to the smoke curl loop regardless
+  of route visibility. Fixed by replacing the placeholder with a real Clerk
+  test-instance key stored as a GitHub Actions repository secret
+  (`CLERK_CI_PUBLISHABLE_KEY`). See `docs/CI-SECRETS.md` for setup.
+
+- **CI smoke gate 500 — BullMQ TCP connection to nonexistent host**
+  (`client-preview-smoke-gate`): `REDIS_URL` was set to
+  `rediss://:stub_token_for_ci_only@stub.upstash.io:6379`. ioredis (used by
+  BullMQ) eagerly opens a TCP connection to the hostname in `REDIS_URL` at
+  job-orchestrator startup. `stub.upstash.io` does not resolve in public DNS,
+  producing repeated `getaddrinfo ENOTFOUND stub.upstash.io` errors and a
+  BullMQ reconnect loop that flooded stdout and destabilised the startup
+  sequence. Fixed by removing `REDIS_URL` from the smoke gate env entirely.
+  Added `DISABLE_BACKGROUND_JOBS: "true"` as a belt-and-suspenders guard.
+
+### Security (Smoke Gate)
+
+- **Job orchestrator guard against implicit BullMQ connections**: added
+  `envConfig.redis.url` guard at the top of the job-orchestrator
+  initialisation function so BullMQ queues are never constructed when `REDIS_URL`
+  is absent (local dev without Redis, CI smoke gate, Vercel deployments that
+  do not run workers). This closes a class of startup crashes caused by
+  supplying a non-resolving `REDIS_URL` and expecting the orchestrator to skip
+  gracefully. Follows the fail-closed startup pattern required by ADR-004 and
+  the OWASP ASVS remediation baseline.
+
+**Files changed:** `.github/workflows/ci.yml`;
+`apps/client/docs/CI-SECRETS.md` (new);
+`apps/client/docs/CHANGELOG.md`;
+`apps/client/app/jobs/index.ts` (user-applied guard — see
+`docs/CI-SECRETS.md` § Code-Side Guard)
+
+**Verification:**
+
+- `client-preview-smoke-gate` job → `Smoke gate passed: root route returned non-5xx status 200`
+- `pnpm run client:report-security-drift:strict` → all categories 0
+- `pnpm -C apps/client exec tsc --noEmit --pretty false` → exit 0
+
 ## [2026-04-26] Staff Audit — Static Analysis & React Render Optimization
 
 ### Fixed (Static Analysis & React Render Optimization )

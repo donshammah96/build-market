@@ -103,6 +103,12 @@ jobs:
         # next lint resolves the env boundary at parse time; supply the minimum
         # set of required variables so the env contract passes without a real
         # database or Clerk account.
+        #
+        # NOTE: pk_test_ci_placeholder is intentionally not a valid Clerk key
+        # format here. next lint is ESLint-based and never executes Clerk's
+        # SDK runtime or middleware — it only parses/analyses source files.
+        # Clerk's initPublishableKeyValues() format validation only fires during
+        # actual request handling, which does not happen during linting.
         env:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
           CLERK_SECRET_KEY: sk_test_ci_placeholder
@@ -143,17 +149,63 @@ jobs:
     # worst-case segments with a small buffer.
     timeout-minutes: 25
     env:
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
-      CLERK_SECRET_KEY: sk_test_ci_placeholder
-      CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
+      # -----------------------------------------------------------------------
+      # Clerk authentication
+      #
+      # FIX: Previously set to `pk_test_ci_placeholder`, which is not valid
+      # base64url. Clerk's edge middleware SDK calls initPublishableKeyValues()
+      # on EVERY request — including public routes — and throws
+      # "Error: Publishable key not valid" when the key cannot be parsed,
+      # producing a 500 on the root route and failing the smoke gate.
+      #
+      # These must be real Clerk test-instance keys stored as GitHub Actions
+      # repository secrets. See docs/CI-SECRETS.md for setup instructions.
+      # -----------------------------------------------------------------------
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.CLERK_CI_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_CI_SECRET_KEY }}
+      CLERK_WEBHOOK_SECRET: ${{ secrets.CLERK_CI_WEBHOOK_SECRET }}
+
       DATABASE_URL: postgresql://ci:ci@localhost:5432/build_market_ci
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3500
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3500/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+      # Rate limiting: force in-process memory backend.
+      # With this setting the redis startup group is NOT added to startupGroups
+      # in env.ts (isRedisRateLimitBackendRequired returns false in non-production),
+      # so Upstash credentials are not validated at startup and the @upstash/ratelimit
+      # REST client is never initialised.
       RATE_LIMIT_BACKEND: memory
-      UPSTASH_REDIS_REST_URL: https://stub.upstash.io
-      UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
-      REDIS_URL: "rediss://:stub_token_for_ci_only@stub.upstash.io:6379"
+
+      # Upstash REST stubs — present only to satisfy the envGroups required
+      # declarations. With RATE_LIMIT_BACKEND=memory these values are stored in
+      # envConfig but never read at runtime. No HTTP connections are made to
+      # these URLs by the rate limiter or REST client in this mode.
+      UPSTASH_REDIS_REST_URL: https://stub-ci.upstash.io
+      UPSTASH_REDIS_REST_TOKEN: stub_token_ci_only
+
+      # -----------------------------------------------------------------------
+      # BullMQ / background jobs — intentionally absent: REDIS_URL
+      #
+      # FIX: The previous config set
+      #   REDIS_URL: rediss://:stub_token_for_ci_only@stub.upstash.io:6379
+      #
+      # BullMQ/ioredis eagerly opens a TCP connection to the hostname in
+      # REDIS_URL at job-orchestrator startup. `stub.upstash.io` does not
+      # resolve in public DNS, so every connection attempt produces:
+      #   Error: getaddrinfo ENOTFOUND stub.upstash.io
+      # ioredis enters a reconnect loop ([Redis:BullMQ] Reconnect attempt N),
+      # which floods stdout and can destabilise the process.
+      #
+      # When REDIS_URL is absent, envConfig.redis.url is undefined. The job
+      # orchestrator must guard its BullMQ initialisation with:
+      #   if (!envConfig.redis.url || envConfig.isCI) return;
+      # See docs/CI-SECRETS.md § Code-Side Guard for the required pattern.
+      #
+      # DISABLE_BACKGROUND_JOBS provides belt-and-suspenders defence so the
+      # smoke gate is not broken if that guard has not yet been applied.
+      # -----------------------------------------------------------------------
+      DISABLE_BACKGROUND_JOBS: "true"
 
     steps:
       - name: Checkout
