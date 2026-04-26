@@ -303,6 +303,9 @@ const envGroups: EnvGroup[] = [
         required: false,
         default: "dataprotection@odpc.go.ke",
       },
+      // Set to "true" in CI environments to suppress BullMQ queue initialisation.
+      // Guards in initializeAllSchedulers() check envConfig.jobs.disableBackgroundJobs.
+      { name: "DISABLE_BACKGROUND_JOBS", required: false, default: "false" },
     ],
   },
   {
@@ -910,6 +913,7 @@ function buildEnvConfig() {
       retentionBatchSize: getNumberEnv("RETENTION_BATCH_SIZE", 100),
       anonymizationBatchSize: getNumberEnv("ANONYMIZATION_BATCH_SIZE", 50),
       cleanupBatchSize: getNumberEnv("CLEANUP_BATCH_SIZE", 100),
+      disableBackgroundJobs: getBooleanEnv("DISABLE_BACKGROUND_JOBS"),
     },
 
     // NATS Messaging — FIX: replaced all direct process.env access with helpers

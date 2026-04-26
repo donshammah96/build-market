@@ -51,6 +51,7 @@ This format is based on Keep a Changelog and uses semantic categories:
   BullMQ reconnect loop that flooded stdout and destabilised the startup
   sequence. Fixed by removing `REDIS_URL` from the smoke gate env entirely.
   Added `DISABLE_BACKGROUND_JOBS: "true"` as a belt-and-suspenders guard.
+  Removed direct env access in orchestrator.
 
 ### Security (Smoke Gate)
 

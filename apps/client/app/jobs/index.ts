@@ -77,7 +77,7 @@ export async function initializeAllSchedulers(): Promise<void> {
 
   // Guard 2: Belt-and-suspenders for CI environments that set
   // DISABLE_BACKGROUND_JOBS=true explicitly.
-  if (envConfig.isCI && process.env.DISABLE_BACKGROUND_JOBS === "true") {
+  if (envConfig.isCI && envConfig.jobs.disableBackgroundJobs) {
     console.info(
       "[JobOrchestrator] DISABLE_BACKGROUND_JOBS=true — skipping queue initialisation in CI.",
     );
