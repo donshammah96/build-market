@@ -128,6 +128,9 @@ jobs:
       - name: Client security drift report
         run: pnpm run client:report-security-drift:strict
 
+      - name: Package build
+        run: pnpm -C packages/resilience run build
+
       - name: Type check
         run: pnpm run check-types
 

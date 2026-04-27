@@ -30,7 +30,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [2026-04-27] TypeScript Baseline Restoration + GDPR Compliance Fixes
 
-### Fixed (TypeScript Baseline Restoration + GDPR Compliance Fixes)
+### Fixed (TypeScript Baseline Restoration + GDPR Compliance Fixes and Tests)
 
 - **`@build/resilience` rebuild required (root cause of 10/12 TS errors).**
   `CorrelationIdManager.run()` was added to `logger.ts` but the package's
