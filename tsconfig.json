@@ -1,0 +1,18 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/typescript-config" },
+    { "path": "packages/db" },
+    { "path": "packages/types" },
+    { "path": "packages/redis" },
+    { "path": "packages/resilience" },
+    { "path": "packages/nats" },
+    { "path": "packages/auth-server" },
+    { "path": "packages/mail-server" },
+    { "path": "packages/messaging-server" },
+    { "path": "packages/queue-server" },
+    { "path": "packages/ui" },
+    { "path": "apps/admin" },
+    { "path": "apps/client" }
+  ]
+}

@@ -2,6 +2,7 @@
   "extends": "@build/typescript-config/react-library.json",
   "compilerOptions": {
     "incremental": true,
+    "composite": true,
     "outDir": "dist"
   },
   "include": ["src"],
