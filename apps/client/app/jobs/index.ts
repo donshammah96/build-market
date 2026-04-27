@@ -9,10 +9,10 @@
  * - Onboarding upload cleanup (marks expired staged uploads as EXPIRED)
  *
  * Usage:
- *   import { initializeAllSchedulers, shutdownAllSchedulers } from '@/app/jobs';
- *   await initializeAllSchedulers();
- *   // On shutdown:
- *   await shutdownAllSchedulers();
+ * import { initializeAllSchedulers, shutdownAllSchedulers } from '@/app/jobs';
+ * await initializeAllSchedulers();
+ * // On shutdown:
+ * await shutdownAllSchedulers();
  */
 
 import { envConfig } from "@/app/lib/infrastructure/env";
@@ -21,6 +21,11 @@ import {
   createCleanupWorker,
   getCleanupQueue,
 } from "./export-cleanup";
+import {
+  type ExportJobData,
+  getExportQueue,
+  addExportJob,
+} from "./export-queue";
 import {
   scheduleDataRetentionEnforcement,
   createDataRetentionWorker,
@@ -158,6 +163,7 @@ export async function shutdownAllSchedulers(): Promise<void> {
       getAnonymizationQueue().close(),
       getAssetCleanupQueue().close(),
       getOnboardingUploadCleanupQueue().close(),
+      getExportQueue().close(),
     ]);
 
     workers = [];
@@ -345,11 +351,14 @@ export async function healthCheck(): Promise<{
   return { healthy, details };
 }
 
-// Re-export individual schedulers for flexibility
+// Re-export individual schedulers and queue functions for flexibility
 export {
   scheduleExportCleanup,
   scheduleDataRetentionEnforcement,
   scheduleAnonymizationBatch,
   scheduleAssetCleanup,
   scheduleOnboardingUploadCleanup,
+  getExportQueue,
+  addExportJob,
+  type ExportJobData,
 };

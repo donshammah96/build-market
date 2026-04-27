@@ -18,7 +18,7 @@ describe("ExportService", () => {
   let ExportService: any;
   let mockPrisma: ReturnType<typeof mockPrismaSuccess>;
   let addExportJobMock: ReturnType<typeof vi.fn>;
-  let exportQueueMock: ReturnType<typeof mockBullMQQueueSuccess>;
+  let exportQueueMock: any;
 
   beforeEach(async () => {
     vi.resetModules();
@@ -30,9 +30,16 @@ describe("ExportService", () => {
       prisma: mockPrisma,
     }));
 
+    // Mock both @build/queue-server and @/app/jobs/export-queue to ensure all BullMQ calls are intercepted
     vi.doMock("@build/queue-server", () => ({
       addExportJob: addExportJobMock,
       exportQueue: exportQueueMock,
+      getExportQueue: () => exportQueueMock,
+    }));
+    vi.doMock("@/app/jobs/export-queue", () => ({
+      addExportJob: addExportJobMock,
+      exportQueue: exportQueueMock,
+      getExportQueue: () => exportQueueMock,
     }));
 
     const serviceModule =
@@ -220,11 +227,13 @@ describe("ExportService", () => {
         status: "CANCELLED",
       } as any);
 
-      const mockJob = {
+      // Patch the queue mock to return a job with isWaiting and remove
+      exportQueueMock.getJob.mockResolvedValue({
         isWaiting: vi.fn().mockResolvedValue(true),
+        isDelayed: vi.fn().mockResolvedValue(false),
         remove: vi.fn().mockResolvedValue(undefined),
-      };
-      vi.mocked(exportQueueMock.getJob).mockResolvedValue(mockJob as any);
+        id: "job-123",
+      });
 
       const result = await ExportService.cancelExport(exportId, userId);
 

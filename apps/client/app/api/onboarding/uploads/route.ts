@@ -99,14 +99,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const logOutcome = (
     outcome:
-      | "started"
       | "succeeded"
       | "failed"
       | "rate_limited"
       | "unauthorized"
       | "bad_request",
     httpStatus: number,
-    additional: Record<string, unknown> = {},
+    // Additional fields are explicit named keys, never a spread bag.
+    // ADR-005: log events must carry the minimum stable field set.
+    extra?: { errorCode?: string; fileGroupCount?: number },
   ) => {
     logger.info("Onboarding uploads adapter outcome", {
       correlationId,
@@ -117,7 +118,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       outcome,
       httpStatus,
       durationMs: Date.now() - requestStartedAt,
-      additionalContext: additional,
+      ...(extra?.errorCode !== undefined && { errorCode: extra.errorCode }),
+      ...(extra?.fileGroupCount !== undefined && {
+        fileGroupCount: extra.fileGroupCount,
+      }),
     });
   };
 
@@ -141,8 +145,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       HttpStatus.TOO_MANY_REQUESTS,
     );
   }
-
-  logOutcome("started", HttpStatus.OK);
 
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
@@ -253,9 +255,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return apiError("File upload failed", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
-  // The inner function returns Result<UploadSuccessData, UploadErrorData>.
-  // Use isOk() — Result uses "ok" not "success"; err() spreads error at top level.
-  const innerResult = result.data;
+  // result.data is typed as T in OperationResult<T>. The stale .d.ts may
+  // collapse T to unknown when the package hasn't been rebuilt. We know the
+  // concrete type from the typed operation signature above, so we assert it
+  // explicitly at this boundary. After `pnpm --filter="@build/resilience" run
+  // build` this assertion becomes redundant but remains harmless.
+  const innerResult = result.data as Result<UploadSuccessData, UploadErrorData>;
   if (!isOk(innerResult)) {
     const mappedStatus = mapUploadErrorCodeToStatus(innerResult.code);
     const outcome =

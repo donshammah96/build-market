@@ -46,22 +46,26 @@ export function apiSuccess<T>(
 export function apiError(
   message: string,
   status: number = 500,
-  details?: any,
+  details?: unknown,
 ): NextResponse {
   const correlationId = CorrelationIdManager.get();
 
-  logger.error(message, undefined, {
-    correlationId,
-    statusCode: status,
-    details,
-  });
+  // ADR-005: 4xx statuses are expected client errors — log at warn.
+  // 5xx statuses are infrastructure or server failures — log at error.
+  // Logging every 400/429 at error level inflates error rates and degrades
+  // the signal value of error-level alerts.
+  if (status >= 500) {
+    logger.error(message, undefined, { correlationId, statusCode: status });
+  } else {
+    logger.warn(message, { correlationId, statusCode: status });
+  }
 
   return NextResponse.json(
     {
       success: false,
       error: message,
       timestamp: new Date().toISOString(),
-      ...(details && { details }),
+      ...(details !== undefined && { details }),
       ...(correlationId && { correlationId }),
     },
     {
@@ -129,8 +133,15 @@ export async function executeResilient<T>(
       );
     }
   } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    return apiError(err.message, options.errorStatus || 500);
+    // Log the real error internally but return a static message to the caller.
+    // Passing error.message directly to apiError() violates ADR anti-pattern 29
+    // (dynamic exception strings reaching client responses).
+    logger.error(
+      "Unhandled error in executeResilient",
+      error instanceof Error ? error : new Error(String(error)),
+      { operationName: options.operationName },
+    );
+    return apiError("An unexpected error occurred", options.errorStatus || 500);
   }
 }
 
@@ -165,7 +176,10 @@ export async function resilientFetch<T = any>(
     {
       timeout,
       retry: retry ? { maxAttempts: 3 } : false,
-      operationName: `${operationName}:${url}`,
+      // operationName must be a static identifier (ADR-005 §3). The URL is
+      // dynamic and must not be embedded here — callers should supply a stable
+      // name like "fetch_property_detail" rather than relying on the default.
+      operationName,
       metrics: true,
     },
   );
@@ -187,24 +201,33 @@ export function initializeCorrelationId(request: NextRequest): string {
 
   logger.debug("Request received", {
     correlationId,
-    method: request.method,
-    url: request.url,
+    // ADR-005: log httpMethod and routePattern (static), never the raw URL.
+    // The full request.url includes path parameters (e.g. /api/users/uuid-here)
+    // which are resource identifiers and must not appear in logs.
+    // Callers that need routePattern should pass it explicitly in their own
+    // structured log event.
+    httpMethod: request.method,
   });
 
   return correlationId;
 }
 
 /**
- * Get executor for advanced usage
+ * Get executor for advanced usage.
+ * Return type is inferred — explicit `ResilientExecutor` annotation causes
+ * TS2749 when the package .d.ts doesn't emit a class declaration shape.
  */
-export function getResilientExecutor(): ResilientExecutor {
+// Explicitly type as 'any' to avoid non-portable type reference issues (see TS2742)
+export function getResilientExecutor(): any {
   return executor;
 }
 
 /**
- * Get logger for the client app
+ * Get logger for the client app.
+ * Return type is inferred for the same reason as getResilientExecutor.
  */
-export function getClientLogger(): StructuredLogger {
+// Explicitly type as 'any' to avoid non-portable type reference issues (see TS2742)
+export function getClientLogger(): any {
   return logger;
 }
 

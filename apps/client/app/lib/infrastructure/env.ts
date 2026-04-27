@@ -688,6 +688,7 @@ function buildEnvConfig() {
     isProd,
     isTest,
     isCI: getBooleanEnv("CI"),
+    isBuildPhase: process.env.NEXT_PHASE === "phase-production-build",
 
     // URLs
     appUrl: getStringEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3500"),

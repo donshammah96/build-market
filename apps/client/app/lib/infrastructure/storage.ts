@@ -110,7 +110,8 @@ class LocalStorageProvider implements StorageProvider {
 
   constructor(config: StorageConfig) {
     this.uploadDir =
-      config.localPath || path.join(process.cwd(), "public", "uploads");
+      config.localPath ||
+      path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "uploads");
     this.publicUrl = config.cdnUrl || "/uploads";
 
     // Ensure upload directory exists
@@ -293,14 +294,18 @@ class S3StorageProvider implements StorageProvider {
       );
       return true;
     } catch (error) {
+      // Only treat a 404 as "does not exist". Any other error (403 Forbidden,
+      // network failure, throttling) means we genuinely don't know whether the
+      // object exists and should propagate the failure rather than silently
+      // returning false, which could lead to orphaned objects never being
+      // cleaned up or double-writes on top of existing objects.
       if (
         error instanceof S3ServiceException &&
         error.$metadata.httpStatusCode === 404
       ) {
         return false;
       }
-
-      return false;
+      throw error;
     }
   }
 
@@ -331,7 +336,10 @@ export function createStorageProvider(
   const defaultConfig: StorageConfig = {
     provider: env.storage.provider,
     localPath: env.storage.localPath.startsWith(".")
-      ? path.join(process.cwd(), env.storage.localPath)
+      ? path.join(
+          /*turbopackIgnore: true*/ process.cwd(),
+          env.storage.localPath,
+        )
       : env.storage.localPath,
     bucket: env.storage.bucket || env.storage.assetBucket,
     region: env.storage.region,

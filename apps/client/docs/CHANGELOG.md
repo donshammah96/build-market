@@ -28,6 +28,110 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+## [2026-04-27] TypeScript Baseline Restoration + GDPR Compliance Fixes
+
+### Fixed (TypeScript Baseline Restoration + GDPR Compliance Fixes)
+
+- **`@build/resilience` rebuild required (root cause of 10/12 TS errors).**
+  `CorrelationIdManager.run()` was added to `logger.ts` but the package's
+  compiled output and `.d.ts` declarations were not updated. TypeScript
+  resolved the old declaration file, which had no `run` method.
+  All 10 `TS2339: Property 'run' does not exist` errors in
+  `compliance.ts` stem from this single missing build step.
+  Fix: `pnpm --filter="@build/resilience" run build` before `tsc`.
+  Files: `packages/resilience` (build step), `apps/client/app/lib/domains/user-profile/compliance.ts`.
+
+- **`TS2693: 'ConsentType' only refers to a type` (2 errors in `route.ts`).**
+  `ConsentType` from `@build/enums` is a TypeScript type alias, not a
+  runtime enum object. `z.nativeEnum()` requires a runtime object.
+  The schema already used `z.enum([...])` correctly; the unused imports
+  `ConsentType` and `CONSENT_TYPES` were the remaining source of errors.
+  Fix: removed both unused imports.
+  File: `apps/client/app/api/user/consent/route.ts`.
+
+- **`TS2345` in `compliance.ts` (latent, surfaces after resilience rebuild).**
+  All nine `CorrelationIdManager.run()` call sites passed `actor.correlationId`
+  which is typed `string | undefined`. After the resilience package is rebuilt,
+  TypeScript would immediately report that `undefined` is not assignable to the
+  `string` parameter of `.run()`. Similarly, `CorrelationIdManager.set()` at
+  line 93 fell back to `""` (empty string), which is indistinguishable from an
+  unset context in log queries.
+  Fix: all `.run()` and `.set()` call sites now use
+  `?? CorrelationIdManager.generate()` to produce a real traceable ID.
+  File: `apps/client/app/lib/domains/user-profile/compliance.ts`.
+
+- **GDPR deletion response contained an invalid support email address.**
+  `requestDeletion` returned `"privacy/buildmarket.co.ke"` (forward slash
+  instead of `@`). Any user following this contact detail after requesting
+  account deletion would receive no response. This is a data subject rights
+  failure under GDPR Article 12 (transparent communication).
+  Fix: corrected to `"privacy@buildmarket.co.ke"`.
+  File: `apps/client/app/lib/domains/user-profile/compliance.ts`.
+
+### Security (TypeScript Baseline Restoration + GDPR Compliance Fixes)
+
+- **PII logged in `bulkUpdateConsents` error handler (ADR-005 / ADR-006 violation).**
+  The error branch inside the consent loop logged `userId: input.actor.userId`.
+  `userId` is a Class B identifier under ADR-006 and must never appear in log
+  events per ADR-005. An error-path log is the highest-risk location for PII
+  because it is emitted on every failure and retained in observability backends.
+  Fix: removed `userId` from the error context; `consentType` (the enum key)
+  is sufficient to identify which operation failed without exposing identity.
+  File: `apps/client/app/lib/domains/user-profile/compliance.ts`.
+
+- **Dynamic domain message strings passed to `apiError()` (ADR anti-pattern 29).**
+  The original GET and PUT handlers passed `consentResult.message` and
+  `result.data.message` as the first argument to `apiError()`. These are
+  domain-layer strings that may contain internal state detail. Any such value
+  reaching a client response is an information-disclosure risk.
+  Fix: all `apiError()` first arguments are now static pre-approved strings.
+  Domain error detail is logged at `warn` level with correlation ID instead.
+  File: `apps/client/app/api/user/consent/route.ts`.
+
+### Changed (TypeScript Baseline Restoration + GDPR Compliance Fixes)
+
+- **`CorrelationIdManager.get()` now treats `""` as unset.**
+  `clear()` uses `enterWith("")` as a sentinel because `AsyncLocalStorage`
+  requires a value of the declared type. Previously `get()` returned `""`,
+  meaning every caller had to guard `value !== "" && value !== undefined`.
+  `get()` now normalises the sentinel to `undefined` at the boundary, so
+  callers receive either a real ID or `undefined` — never the internal sentinel.
+  File: `packages/resilience/src/logger.ts`.
+
+- **`S3StorageProvider.exists()` re-throws non-404 errors.**
+  The previous implementation returned `false` on every S3 error, including
+  403 Forbidden, 429 Throttling, and network failures. This caused the
+  asset-cleanup job to silently skip S3 deletion and log `deletedFromS3: 0`
+  with no indication that a permissions or availability problem occurred.
+  Only a definitive 404 is now treated as "object does not exist"; all other
+  errors propagate to the caller.
+  File: `apps/client/app/lib/infrastructure/storage.ts`.
+
+**Files changed:**
+`packages/resilience/src/logger.ts`;
+`apps/client/app/api/user/consent/route.ts`;
+`apps/client/app/lib/domains/user-profile/compliance.ts`;
+`apps/client/app/lib/infrastructure/storage.ts`
+
+**Verification:**
+
+```bash
+# 1. Rebuild the resilience package first — this is the prerequisite for all TS checks
+pnpm --filter="@build/resilience" run build
+
+# 2. TypeScript baseline — must be zero errors
+pnpm run client:tsc-noemit
+
+# 3. Security drift — must be zero findings in all categories
+pnpm run client:report-security-drift:strict
+
+# 4. Consent route and compliance domain suites
+pnpm -C apps/client exec vitest run \
+  __tests__/api/user/consent.route.test.ts \
+  __tests__/lib/domains/user-profile-compliance.test.ts \
+  --maxWorkers=1
+```
+
 ## [2026-04-26] CI Smoke Gate Fix — Clerk Key Format + BullMQ Startup
 
 ### Fixed ( CI Smoke Gate )

@@ -71,11 +71,11 @@ export default async function OnboardingNoJsClientPage({
 
   const session = await readOnboardingNoJsSession();
   if (!session || !session.role) {
-    redirect("/onboarding/no-js");
+    return redirect("/onboarding/no-js");
   }
 
   if (session.role === "professional") {
-    redirect("/onboarding/no-js/professional");
+    return redirect("/onboarding/no-js/professional");
   }
 
   const errorMessage = clientPageErrorMessage(
@@ -87,14 +87,14 @@ export default async function OnboardingNoJsClientPage({
 
     const { userId: actionUserId } = await auth();
     if (!actionUserId) {
-      redirect(noJsSignInUrl());
+      return redirect(noJsSignInUrl());
     }
 
     const type = getOptionalString(formData, "type", 60);
     const county = getOptionalString(formData, "county", 60);
 
     if (!type || !county) {
-      redirect("/onboarding/no-js/client?error=missing_required");
+      return redirect("/onboarding/no-js/client?error=missing_required");
     }
 
     await setOnboardingNoJsClientDraft({
@@ -108,7 +108,7 @@ export default async function OnboardingNoJsClientPage({
       description: getOptionalString(formData, "description", 500),
     });
 
-    redirect("/onboarding/no-js/review");
+    return redirect("/onboarding/no-js/review");
   }
 
   return (

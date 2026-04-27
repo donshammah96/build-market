@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "Resilience utilities for distributed systems - timeouts, retries, circuit breakers, caching, and observability",
   "main": "./dist/index.js",
-  "types": "./types/index.d.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./types/index.d.ts",
+      "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
   },

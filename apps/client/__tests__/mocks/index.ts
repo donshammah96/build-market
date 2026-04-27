@@ -512,15 +512,24 @@ export function mockRedisConnectionFailure(
  * Creates a mock BullMQ queue with successful operations
  */
 export function mockBullMQQueueSuccess() {
-  return {
+  // Allow test to override getJob return value
+  const jobMock = {
+    isWaiting: vi.fn().mockResolvedValue(false),
+    isDelayed: vi.fn().mockResolvedValue(false),
+    remove: vi.fn().mockResolvedValue(undefined),
+    id: "job-123",
+  };
+  const queue = {
     add: vi.fn().mockResolvedValue({
       id: "job-" + generateTestUUID("job", 1),
       data: {},
       opts: {},
     }),
-    getJob: vi.fn().mockResolvedValue(null),
+    getJob: vi.fn().mockResolvedValue(null), // default to null, override in test
     close: vi.fn().mockResolvedValue(undefined),
-  } as unknown as Queue;
+    __jobMock: jobMock, // expose for test customization
+  };
+  return queue as unknown as Queue;
 }
 
 /**

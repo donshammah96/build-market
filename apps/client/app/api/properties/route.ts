@@ -348,10 +348,7 @@ export const POST = withAuth(
     }
 
     const resilientExecutor = getResilientExecutor();
-    const result = await resilientExecutor.execute<
-      | Awaited<ReturnType<typeof propertiesService.createProperty>>
-      | Awaited<ReturnType<typeof propertiesService.createPropertiesBatch>>
-    >(
+    const result = await resilientExecutor.execute(
       () => {
         const actor = { userId: dbUserId, role: userRole };
         const options = { ipAddress, userAgent };

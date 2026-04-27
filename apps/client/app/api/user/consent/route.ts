@@ -39,7 +39,6 @@ import {
   checkRateLimit,
 } from "@/app/lib/api/rate-limit";
 import { z } from "zod";
-import { ConsentType } from "@prisma/client";
 import {
   getRequestMetadata,
   safeParseJsonBody,
@@ -52,9 +51,15 @@ const executor = getResilientExecutor();
 
 // Comprehensive consent validation schema
 const ConsentUpdateSchema = z.object({
-  type: z.nativeEnum(ConsentType, {
-    message: `Type must be one of: ${Object.values(ConsentType).join(", ")}`,
-  }),
+  type: z.enum([
+    "TERMS_OF_SERVICE",
+    "PRIVACY_POLICY",
+    "MARKETING_EMAIL",
+    "MARKETING_SMS",
+    "ANALYTICS_COOKIES",
+    "LOCATION_TRACKING",
+    "KRA_DATA_SHARING",
+  ]),
   granted: z.boolean({
     message: "Granted status is required and must be a boolean",
   }),
@@ -190,9 +195,15 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       );
     }
     if (!consentResult.ok) {
+      logger.warn("Consent update domain error", {
+        correlationId,
+        operationName: "update_user_consent",
+        domainError: consentResult.error,
+        httpStatus: consentResult.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+      });
       return apiError(
-        consentResult.message || "Failed to update consent",
-        consentResult.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        "Failed to update consent",
+        consentResult.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
 
@@ -313,9 +324,15 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       );
     }
     if (!consentsResult.ok) {
+      logger.warn("Fetch consents domain error", {
+        correlationId,
+        operationName: "fetch_user_consents",
+        domainError: consentsResult.error,
+        httpStatus: consentsResult.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+      });
       return apiError(
-        consentsResult.message || "Failed to fetch consent data",
-        consentsResult.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        "Failed to fetch consent data",
+        consentsResult.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
 
@@ -435,28 +452,29 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-    if (!result.data.ok) {
+    if (
+      !result.data.ok ||
+      (result.data.data && result.data.data.success === false)
+    ) {
+      logger.warn("Bulk consent update domain error", {
+        correlationId,
+        operationName: "bulk_update_user_consents",
+        domainError: result.data.error,
+        httpStatus: result.data.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+      });
       return apiError(
-        result.data.message || "Failed to update consent preferences",
-        result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        "Failed to update consent preferences atomically. At least one consent failed.",
+        result.data.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
 
     logger.info("Bulk consent update completed", {
       totalCount: consents.length,
       successCount: result.data.data.results.length,
-      allSuccessful: true,
       correlationId,
       operationName: "bulk_update_user_consents",
       outcome: "succeeded",
     });
-
-    if (!result.data.data.success) {
-      return apiError(
-        "Failed to update consent preferences atomically. Please try again.",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
 
     return apiSuccess(result.data.data, HttpStatus.OK);
   } catch (error) {

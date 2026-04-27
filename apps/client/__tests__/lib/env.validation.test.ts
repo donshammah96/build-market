@@ -25,6 +25,10 @@ describe("env redis readiness validation — Upstash credential checks", () => {
   beforeEach(() => {
     process.env = { ...ORIGINAL_ENV };
     process.argv = [...ORIGINAL_ARGV];
+    // Set required env vars to dummy values for validation
+    process.env.UPSTASH_REDIS_REST_URL = "https://dummy.upstash.io";
+    process.env.UPSTASH_REDIS_REST_TOKEN = "dummy_token";
+    process.env.CLERK_SECRET_KEY = "dummy_clerk_secret";
   });
 
   afterAll(() => {
