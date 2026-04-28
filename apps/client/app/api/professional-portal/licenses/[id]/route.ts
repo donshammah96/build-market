@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import { AuditAction } from "@prisma/client";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -533,7 +532,7 @@ export const DELETE = withAuth<LicenseParams>(
     } = data.data;
     ComplianceService.logAdminAction(
       dbUserId,
-      AuditAction.DATA_RECTIFIED,
+      "DATA_RECTIFIED",
       "ProfessionalLicense",
       licenseId,
       { authority, licenseNumber, action: "DELETE" },

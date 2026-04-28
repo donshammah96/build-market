@@ -17,6 +17,7 @@ import { messagingRepository } from "@/app/lib/domains/messaging/repository";
 import { HttpStatus } from "@/app/lib/api/api-response";
 import type { ParticipantRole } from "@prisma/client";
 
+// Update fail to use error: string (the code)
 const fail = <T>(
   error: MessagingDomainErrorCode,
   status: number,

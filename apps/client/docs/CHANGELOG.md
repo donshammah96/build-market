@@ -28,6 +28,42 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+## [2026-04-28] Monorepo TypeScript Project References & Messaging Contract Boundary Refactor
+
+### Changed (Monorepo TypeScript Project References & Messaging Contract Boundary Refactor)
+
+- **Monorepo-wide TypeScript project references and root tsconfig.json added.**
+  - Created a root-level `tsconfig.json` with references to all workspace packages and apps, ensuring correct build order and type-checking in CI and local development.
+  - Updated `apps/admin/tsconfig.json` to include references to all `@build/*` packages it depends on, enabling direct source resolution and eliminating reliance on prebuilt `dist/` output.
+  - Updated CI instructions to run `pnpm tsc --build tsconfig.json` or `pnpm --filter "@build/*" run build` before type-checking, ensuring all packages are built in dependency order.
+
+- **Refactored `@build/messaging-server` to own only pure TypeScript contracts.**
+  - Moved all shared messaging types (e.g., `MessagingActor`, `MessagingDomainErrorCode`, `MessagingResult`) into `packages/messaging-server/src/contracts.ts`.
+  - Removed all cross-app imports from `packages/messaging-server` (no more imports from `apps/client`). The package now exports only pure types/interfaces, with no Zod schemas, Prisma types, or app-specific dependencies.
+  - Updated `apps/client/app/lib/domains/messaging/contracts.ts` to import shared types from the package and keep all app-specific validation and schema logic local.
+  - Ensured the package contract shape for `MessagingResult` matches the canonical `Result<T, E>` shape used in the domain layer, eliminating type errors in all consumers.
+
+- **Resolved module resolution and type export issues in `@build/resilience`.**
+  - Ensured all required types (e.g., `OperationCriticality`, `ResilienceOptions`) are exported from the package entrypoint and that build order guarantees type availability for all consumers.
+  - Updated all consuming code to use explicit type imports and `typeof` where required for class-based types, resolving isolatedModules and type/value import errors.
+
+**Files changed:**
+`tsconfig.json` (root); `apps/admin/tsconfig.json`; `packages/messaging-server/src/contracts.ts`; `packages/messaging-server/src/index.ts`; `packages/messaging-server/tsconfig.json`; `apps/client/app/lib/domains/messaging/contracts.ts`; `apps/admin/package.json`; `packages/resilience/src/types.ts`; `packages/resilience/src/index.ts`; `apps/client/app/lib/api/resilient-api.ts`; `apps/admin/src/lib/api/resilient-api.ts`
+
+**Verification:**
+
+```bash
+# 1. Build all workspace packages in dependency order
+pnpm tsc --build tsconfig.json
+
+# 2. Type-check all apps with project references
+pnpm run client:tsc-noemit
+pnpm run admin:check-types
+
+# 3. Confirm no cross-app imports remain in any package
+# 4. Confirm all messaging contract types are imported from @build/messaging-server
+```
+
 ## [2026-04-27] TypeScript Baseline Restoration + GDPR Compliance Fixes
 
 ### Fixed (TypeScript Baseline Restoration + GDPR Compliance Fixes and Tests)

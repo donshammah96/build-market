@@ -213,24 +213,18 @@ export function initializeCorrelationId(request: NextRequest): string {
 }
 
 /**
- * Get executor for advanced usage.
- * Return type is inferred — explicit `ResilientExecutor` annotation causes
- * TS2749 when the package .d.ts doesn't emit a class declaration shape.
+ * Get executor for advanced usage
  */
-// Explicitly type as 'any' to avoid non-portable type reference issues (see TS2742)
-export function getResilientExecutor(): any {
+export function getResilientExecutor(): InstanceType<typeof ResilientExecutor> {
   return executor;
 }
 
 /**
- * Get logger for the client app.
- * Return type is inferred for the same reason as getResilientExecutor.
+ * Get logger for the client app
  */
-// Explicitly type as 'any' to avoid non-portable type reference issues (see TS2742)
-export function getClientLogger(): any {
+export function getClientLogger(): InstanceType<typeof StructuredLogger> {
   return logger;
 }
-
 /**
  * Health check endpoint helper
  */

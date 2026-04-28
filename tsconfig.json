@@ -1,7 +1,6 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/typescript-config" },
     { "path": "packages/db" },
     { "path": "packages/types" },
     { "path": "packages/redis" },
@@ -12,7 +11,6 @@
     { "path": "packages/messaging-server" },
     { "path": "packages/queue-server" },
     { "path": "packages/ui" },
-    { "path": "apps/admin" },
-    { "path": "apps/client" }
+    { "path": "apps/admin" }
   ]
 }

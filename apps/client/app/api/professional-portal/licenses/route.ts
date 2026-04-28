@@ -16,7 +16,6 @@ import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { CreateLicenseSchema } from "@/app/lib/validation/documents-validation";
 import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
-import { AuditAction } from "@prisma/client";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { licensesService } from "@/app/lib/domains/licenses";
 import { normalizeRole } from "@/app/lib/security/roles";
@@ -349,7 +348,7 @@ export const POST = withAuth(
 
     ComplianceService.logAdminAction(
       dbUserId,
-      AuditAction.PROFILE_UPDATED,
+      "PROFILE_UPDATED",
       "ProfessionalLicense",
       data.data.id,
       { authority: licenseData.authority, action: "CREATE" },

@@ -183,6 +183,10 @@ export async function resilientFetch<T = any>(
 export function initializeCorrelationId(request: NextRequest): string {
   const existingId = request.headers.get("X-Correlation-ID");
   const correlationId = existingId || CorrelationIdManager.generate();
+  // Use .set here because this function is called at the top of a withAuth
+  // handler which already owns its own async context. For true isolation
+  // between concurrent requests, the call site should wrap the handler in
+  // CorrelationIdManager.run(correlationId, handler) instead.
   CorrelationIdManager.set(correlationId);
 
   logger.debug("Request received", {
@@ -197,14 +201,14 @@ export function initializeCorrelationId(request: NextRequest): string {
 /**
  * Get executor for advanced usage
  */
-export function getResilientExecutor(): ResilientExecutor {
+export function getResilientExecutor(): InstanceType<typeof ResilientExecutor> {
   return executor;
 }
 
 /**
  * Get logger for the client app
  */
-export function getClientLogger(): StructuredLogger {
+export function getClientLogger(): InstanceType<typeof StructuredLogger> {
   return logger;
 }
 
