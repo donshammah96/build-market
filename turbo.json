@@ -83,6 +83,7 @@
         "CLIENT_APP_URL",
         "UPSTASH_REDIS_REST_URL",
         "UPSTASH_REDIS_REST_TOKEN",
+        "REDIS_URL",
         "GOOGLE_CLIENT_ID",
         "GOOGLE_CLIENT_SECRET",
         "GITHUB_CLIENT_ID",
@@ -98,15 +99,6 @@
         "RESEND_API_KEY",
         "DEV_ADMIN_BYPASS"
       ]
-    },
-    "admin#build": {
-      "outputs": [".next/**", "!.next/cache/**"]
-    },
-    "client#build": {
-      "outputs": [".next/**", "!.next/cache/**"]
-    },
-    "project-service#build": {
-      "outputs": []
     },
     "lint": {
       "dependsOn": ["^lint"],

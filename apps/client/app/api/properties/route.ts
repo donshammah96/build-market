@@ -349,7 +349,7 @@ export const POST = withAuth(
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      () => {
+      async () => {
         const actor = { userId: dbUserId, role: userRole };
         const options = { ipAddress, userAgent };
 

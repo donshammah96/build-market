@@ -55,6 +55,12 @@ function requireRedisUrl(): string {
   const url = process.env.REDIS_URL?.trim();
 
   if (!url) {
+    // During Next.js build or CI, return a dummy URL to satisfy module initialization.
+    // lazyConnect: true ensures we don't actually try to dial this dummy endpoint.
+    if (process.env.NEXT_PHASE === "phase-production-build" || process.env.CI) {
+      return "rediss://:DUMMY@dummy.upstash.io:6379";
+    }
+
     throw new Error(
       "REDIS_URL is required for BullMQ connections. " +
         "Set it to the Upstash TCP endpoint: " +
@@ -101,6 +107,7 @@ export function getBullMQConnectionOptions(
     maxRetriesPerRequest: null,
     enableReadyCheck: true,
     skipVersionCheck: true,
+    lazyConnect: true,
     retryStrategy(times: number) {
       const delay = Math.min(times * 500, 30_000);
       console.warn(`[Redis:BullMQ] Reconnect attempt ${times} in ${delay}ms`);

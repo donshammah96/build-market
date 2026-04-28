@@ -28,6 +28,38 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Latest
 
+## [2026-04-28] Next.js Build Environment Isolation & Type-Inference Remediation
+
+### Fixed (Build Stability & Type Inference)
+
+- **`turbo.json` overrides stripped Vercel build environments.**
+  The `client#build` and `admin#build` entries in `turbo.json` were empty overrides, meaning they dropped the `dependsOn: ["^build"]` and `env: [...]` configuration from the global `build` task. This caused Next.js to build without `REDIS_URL` or topological workspace guarantees, crashing the Vercel static evaluation phase when BullMQ queues eagerly checked for connections.
+  Fix: Removed the overriding definitions, restoring standard `build.env` inheritance.
+  Files: `turbo.json`.
+
+- **BullMQ queues crashed Next.js static page collection.**
+  `createRedisConnection()` strictly validated `process.env.REDIS_URL` and connected eagerly. During `next build`, Next.js evaluates all API routes, instantiating the queues and either crashing on the missing URL or causing stalled TCP connections to Upstash.
+  Fix: Added `lazyConnect: true` to the BullMQ ioredis options, and added a bypass in `requireRedisUrl` that returns a dummy connection string during `process.env.NEXT_PHASE === "phase-production-build"` and `process.env.CI`.
+  Files: `packages/queue-server/src/redis-connection.ts`.
+
+- **TypeScript discriminated union inference failures in API Routes.**
+  1. **`properties/route.ts`**: The `resilientExecutor.execute` generic constraint `<T>` failed to infer the return type of a callback returning `Promise<A> | Promise<B>`. Fixed by making the callback `async` to flatten the return into `Promise<A | B>`.
+  2. **`user/consent/route.ts`**: A combined conditional `if (!ok || (data && !data.success))` broke TypeScript's discriminated union narrowing for `DomainResult`, causing TS2339 property access errors. Fixed by splitting the checks into separate `if` blocks.
+     Files: `apps/client/app/api/properties/route.ts`; `apps/client/app/api/user/consent/route.ts`.
+
+**Files changed:**
+`turbo.json`; `packages/queue-server/src/redis-connection.ts`; `apps/client/app/api/properties/route.ts`; `apps/client/app/api/user/consent/route.ts`
+
+**Verification:**
+
+```bash
+# 1. Type-check client app
+pnpm run client:check-types
+
+# 2. Local test build with Turbo to verify env inheritance and no Next.js crashes
+pnpm build:client
+```
+
 ## [2026-04-28] Monorepo TypeScript Project References & Messaging Contract Boundary Refactor
 
 ### Changed (Monorepo TypeScript Project References & Messaging Contract Boundary Refactor)

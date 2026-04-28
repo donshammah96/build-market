@@ -452,10 +452,7 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-    if (
-      !result.data.ok ||
-      (result.data.data && result.data.data.success === false)
-    ) {
+    if (!result.data.ok) {
       logger.warn("Bulk consent update domain error", {
         correlationId,
         operationName: "bulk_update_user_consents",
@@ -465,6 +462,19 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
       return apiError(
         "Failed to update consent preferences atomically. At least one consent failed.",
         result.data.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    if (result.data.data && result.data.data.success === false) {
+      logger.warn("Bulk consent update domain error (partial failure)", {
+        correlationId,
+        operationName: "bulk_update_user_consents",
+        domainError: "partial_failure",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+      });
+      return apiError(
+        "Failed to update consent preferences atomically. At least one consent failed.",
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
 
