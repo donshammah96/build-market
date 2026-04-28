@@ -285,17 +285,56 @@ jobs:
           }
           trap cleanup EXIT
 
+          # ---------------------------------------------------------------
+          # Phase 1: Wait for Next.js to report readiness in the server log.
+          #
+          # `pnpm -C apps/client run start` has non-trivial overhead —
+          # workspace resolution, lifecycle hooks, and process spawning can
+          # delay the actual `next start` invocation by 30–60+ seconds on
+          # cold CI runners. Polling with curl from t=0 wastes the entire
+          # retry budget before the TCP listener even exists.
+          #
+          # Instead, tail the log for the "Ready" marker that `next start`
+          # prints once the HTTP listener is bound.  We also check process
+          # liveness each iteration to fail fast if the server crashes
+          # during startup.
+          # ---------------------------------------------------------------
+          READY=false
+          echo "Waiting for Next.js server to become ready..."
+          for i in $(seq 1 180); do
+            if grep -q "Ready" /tmp/client-preview-smoke.log 2>/dev/null; then
+              echo "Server reported ready after ${i}s."
+              READY=true
+              break
+            fi
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "Server process (PID $APP_PID) exited before becoming ready."
+              cat /tmp/client-preview-smoke.log || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+          if [ "$READY" != "true" ]; then
+            echo "Server did not become ready within 180 seconds."
+            cat /tmp/client-preview-smoke.log || true
+            exit 1
+          fi
+
+          # ---------------------------------------------------------------
+          # Phase 2: HTTP health probe.
+          #
+          # The server is confirmed ready.  A small number of retries with a
+          # generous per-request timeout handles any remaining TCP warmup or
+          # first-request JIT compilation in Turbopack.
+          # ---------------------------------------------------------------
           STATUS="000"
-          for _ in {1..45}; do
-            # --max-time 5 bounds each individual attempt to 5 seconds.
-            # Without this, a slow-but-alive server could absorb the entire
-            # 45-attempt budget with one hung connection, masking startup failures
-            # and potentially exhausting the job timeout.
-            STATUS="$(curl --silent --show-error --max-time 5 --output /tmp/client-preview-body.txt --write-out "%{http_code}" http://127.0.0.1:3500/ || true)"
+          for _ in {1..5}; do
+            STATUS="$(curl --silent --show-error --max-time 10 --output /tmp/client-preview-body.txt --write-out "%{http_code}" http://127.0.0.1:3500/ || true)"
             if [ "$STATUS" != "000" ] && [ -n "$STATUS" ]; then
               break
             fi
-            sleep 1
+            sleep 2
           done
 
           echo "Smoke status: $STATUS"
