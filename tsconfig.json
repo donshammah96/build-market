@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "packages/enums" },
     { "path": "packages/db" },
     { "path": "packages/types" },
     { "path": "packages/redis" },
