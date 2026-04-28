@@ -55,9 +55,12 @@ function requireRedisUrl(): string {
   const url = process.env.REDIS_URL?.trim();
 
   if (!url) {
-    // During Next.js build or CI, return a dummy URL to satisfy module initialization.
+    // During Next.js build, return a dummy URL to satisfy module initialization.
     // lazyConnect: true ensures we don't actually try to dial this dummy endpoint.
-    if (process.env.NEXT_PHASE === "phase-production-build" || process.env.CI) {
+    // IMPORTANT: This guard is scoped to NEXT_PHASE only. The CI env var must NOT
+    // be checked here because it remains set during `next start` in the smoke gate,
+    // causing BullMQ to dial dummy.upstash.io at runtime and crash the server.
+    if (process.env.NEXT_PHASE === "phase-production-build") {
       return "rediss://:DUMMY@dummy.upstash.io:6379";
     }
 

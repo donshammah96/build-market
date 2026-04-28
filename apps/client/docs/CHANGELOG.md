@@ -26,7 +26,47 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
-## Latest
+## [2026-04-28] CI Smoke Gate Stabilization & Build Graph Completion
+
+### Fixed (CI Pipeline — `client-preview-smoke-gate`)
+
+- **BullMQ eager-connect crash prevented Next.js server from binding port.**
+  The `client-preview-smoke-gate` CI step was timing out on all 45 curl retries because the Next.js server never started. BullMQ/ioredis entered an infinite reconnect loop against the unresolvable `dummy.upstash.io` hostname, flooding stderr and preventing the HTTP listener from accepting connections.
+  Two compounding defects:
+  1. **Eager module-scope Queue instantiation:** `upload-processing.queue.ts` called `new Queue(connection: createRedisConnection())` at the top level — no lazy getter, no build-phase guard, no `DISABLE_BACKGROUND_JOBS` check. Any import chain that touched this module immediately dialled Redis.
+  2. **Over-broad dummy URL guard:** `requireRedisUrl()` in `packages/queue-server` returned a dummy connection string when `process.env.CI` was truthy. Since `CI=true` persists for the entire GitHub Actions pipeline (including `next start`), this silently supplied an unresolvable hostname at runtime instead of throwing.
+     Fix: Refactored `upload-processing.queue.ts` to the lazy-init singleton pattern with three-tier guards (build phase → missing URL / disabled jobs → singleton), matching the established `export-queue.ts` pattern. Preserved the `uploadProcessingQueue` export via a property-forwarding proxy for backward compatibility. Scoped the `requireRedisUrl()` bypass exclusively to `NEXT_PHASE === "phase-production-build"`.
+     Files: `apps/client/app/lib/queues/upload-processing.queue.ts`; `packages/queue-server/src/redis-connection.ts`.
+
+- **`@build/queue-server` missing `build` script caused `Module not found` in CI.**
+  `pnpm --filter="client..." run build` skipped compilation of `@build/queue-server` because the package lacked a `"build"` script. Its `package.json` correctly pointed `main` and `exports` to `./dist/index.js`, but without a build script pnpm had nothing to invoke, so the `dist/` directory was never generated. Next.js then failed with `Module not found: Can't resolve '@build/queue-server'`.
+  Fix: Added `"build": "tsc"` and `"clean": "rm -rf dist"` to `packages/queue-server/package.json`.
+  Files: `packages/queue-server/package.json`.
+
+- **Missing TypeScript project references for `@build/enums` broke `tsc --build`.**
+  The monorepo root `tsconfig.json` and `packages/types/tsconfig.json` did not list `packages/enums` in their `references` arrays. Since `@build/enums` now exports compiled `dist/` artifacts, `tsc --build` must compile it before `@build/types` (which imports from `@build/enums`). On clean Vercel deployments, the missing reference caused `TS2307: Cannot find module '@build/enums'`.
+  Fix: Added `{ "path": "packages/enums" }` to root `tsconfig.json` and `{ "path": "../enums" }` to `packages/types/tsconfig.json`.
+  Files: `tsconfig.json`; `packages/types/tsconfig.json`.
+
+- **Static analyzer false-positive on `consent/route.ts` null check.**
+  Removed redundant `result.data.data &&` truthiness guard that caused the linter to infer the field was nullable, then flag downstream property access as `INSUFFICIENT_NULL_CHECK`. TypeScript's discriminated union narrowing already guarantees the field exists after the early return.
+  Files: `apps/client/app/api/user/consent/route.ts`.
+
+**Files changed:**
+`apps/client/app/lib/queues/upload-processing.queue.ts`; `packages/queue-server/src/redis-connection.ts`; `packages/queue-server/package.json`; `tsconfig.json`; `packages/types/tsconfig.json`; `apps/client/app/api/user/consent/route.ts`
+
+**Verification:**
+
+```bash
+# 1. Type-check client app
+pnpm -C apps/client run check-types
+
+# 2. Build the full client dependency graph (mirrors CI)
+pnpm --filter="client..." run build
+
+# 3. Vitest suites that exercise queue and enum imports
+pnpm -C apps/client exec vitest run __tests__/actions/onboarding-tier3-guards.test.ts
+```
 
 ## [2026-04-28] Next.js Build Environment Isolation & Type-Inference Remediation
 
@@ -39,7 +79,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 - **BullMQ queues crashed Next.js static page collection.**
   `createRedisConnection()` strictly validated `process.env.REDIS_URL` and connected eagerly. During `next build`, Next.js evaluates all API routes, instantiating the queues and either crashing on the missing URL or causing stalled TCP connections to Upstash.
-  Fix: Added `lazyConnect: true` to the BullMQ ioredis options, and added a bypass in `requireRedisUrl` that returns a dummy connection string during `process.env.NEXT_PHASE === "phase-production-build"` and `process.env.CI`.
+  Fix: Added `lazyConnect: true` to the BullMQ ioredis options, and added a bypass in `requireRedisUrl` that returns a dummy connection string during `process.env.NEXT_PHASE === "phase-production-build"`.
   Files: `packages/queue-server/src/redis-connection.ts`.
 
 - **TypeScript discriminated union inference failures in API Routes.**
