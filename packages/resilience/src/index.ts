@@ -12,7 +12,7 @@
  */
 
 // Core types
-export type * from "./types";
+export * from "./types";
 
 // Timeout utilities
 export {

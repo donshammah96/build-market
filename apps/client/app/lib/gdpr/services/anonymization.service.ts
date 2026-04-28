@@ -145,7 +145,7 @@ export class AnonymizationService {
         });
       } catch (error) {
         // Continue with next user if one fails
-        console.error(`Failed to anonymize user ${user.id}:`, error);
+        console.error("Failed to anonymize user record", error);
       }
     }
 

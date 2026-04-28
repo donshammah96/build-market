@@ -1,52 +1,93 @@
 "use server";
 
+import { z } from "zod";
 import {
-  createThread,
-  sendMessage,
-  getThread,
-  getThreadMessages,
-  getUserThreads,
-  markThreadAsRead,
-  deleteThread,
-  getMessage,
-  markMessageAsRead,
-  deleteMessage,
-  verifyParticipant,
-  assertCanDeleteMessage,
-  assertCanDeleteThread,
-  assertCanReadThread,
-  assertCanSendMessage,
-} from "@/lib/services/messaging";
-import { auth } from "@clerk/nextjs/server";
-import { prisma } from "@build/db";
+  CreateThreadSchema,
+  SendMessageSchema,
+  type MessagingActor,
+  type MessageQueryInput,
+  messagingService,
+} from "@/app/lib/domains/messaging";
+import {
+  createActionFailure,
+  secureAction,
+  SecureActionError,
+  unwrapResultOrThrow,
+  type ActionResult,
+} from "@/app/lib/actions/secure-action";
 import { revalidatePath } from "next/cache";
 
-/**
- * Resolve Clerk userId to database user ID.
- * Server actions receive Clerk IDs, but the messaging service
- * operates on database UUIDs.
- */
-async function resolveDbUserId(): Promise<string> {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) throw new Error("Unauthorized");
+const ThreadIdSchema = z.object({
+  threadId: z.string().uuid("Invalid conversation ID"),
+});
 
-  const user = await prisma.user.findUnique({
-    where: { clerkId },
-    select: { id: true },
-  });
-  if (!user) throw new Error("User not found");
+const MessageIdSchema = z.object({
+  messageId: z.string().uuid("Invalid message ID"),
+});
 
-  return user.id;
+const ThreadMessagesActionSchema = z.object({
+  threadId: z.string().uuid("Invalid conversation ID"),
+  options: z
+    .object({
+      cursor: z.string().uuid().optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+      direction: z.enum(["before", "after"]).optional(),
+    })
+    .optional(),
+});
+
+function toMessagingActor(actor: {
+  dbUserId: string;
+  role: MessagingActor["role"];
+}): MessagingActor {
+  return {
+    userId: actor.dbUserId,
+    role: actor.role,
+  };
+}
+
+function createMessagingActionErrorMapper(message: string) {
+  return (error: unknown) => {
+    if (error instanceof SecureActionError) {
+      return undefined;
+    }
+
+    if (error instanceof z.ZodError) {
+      return createActionFailure(
+        "validation_error",
+        error.issues[0]?.message ?? "Validation failed",
+        400,
+        error.issues,
+      );
+    }
+
+    return createActionFailure("internal", message, 500);
+  };
 }
 
 export async function createThreadAction(
   participantIds: string[],
   projectId?: string,
-) {
-  const dbUserId = await resolveDbUserId();
-  const thread = await createThread(dbUserId, participantIds, { projectId });
-  revalidatePath("/messages");
-  return thread;
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input: {
+      participantIds,
+      ...(projectId ? { projectId } : {}),
+    },
+    schema: CreateThreadSchema,
+    handler: async ({ actor, input }) => {
+      const thread = unwrapResultOrThrow(
+        await messagingService.createConversation(
+          toMessagingActor(actor!),
+          input,
+        ),
+        "Failed to create conversation",
+      );
+      revalidatePath("/messages");
+      return thread;
+    },
+    mapError: createMessagingActionErrorMapper("Failed to create conversation"),
+  });
 }
 
 export async function sendMessageAction(
@@ -56,102 +97,193 @@ export async function sendMessageAction(
     type?: "TEXT" | "IMAGE" | "FILE" | "PDF" | "SYSTEM";
     attachmentIds?: string[];
   },
-) {
-  const dbUserId = await resolveDbUserId();
-
-  await assertCanSendMessage(threadId, dbUserId);
-
-  const message = await sendMessage(threadId, dbUserId, content, options);
-  revalidatePath(`/messages/${threadId}`);
-  return message;
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input: {
+      threadId,
+      content,
+      ...(options?.type ? { type: options.type } : {}),
+      ...(options?.attachmentIds
+        ? { attachmentIds: options.attachmentIds }
+        : {}),
+    },
+    schema: SendMessageSchema,
+    handler: async ({ actor, input }) => {
+      const message = unwrapResultOrThrow(
+        await messagingService.sendMessage(toMessagingActor(actor!), input),
+        "Failed to send message",
+      );
+      revalidatePath(`/messages/${input.threadId}`);
+      return message;
+    },
+    mapError: createMessagingActionErrorMapper("Failed to send message"),
+  });
 }
 
-export async function getThreadAction(threadId: string) {
-  const dbUserId = await resolveDbUserId();
-
-  await assertCanReadThread(threadId, dbUserId);
-
-  return await getThread(threadId);
+export async function getThreadAction(
+  threadId: string,
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input: { threadId },
+    schema: ThreadIdSchema,
+    handler: async ({ actor, input }) =>
+      unwrapResultOrThrow(
+        await messagingService.getConversation(
+          toMessagingActor(actor!),
+          input.threadId,
+        ),
+        "Failed to fetch conversation",
+      ),
+    mapError: createMessagingActionErrorMapper("Failed to fetch conversation"),
+  });
 }
 
-export async function getUserThreadsAction() {
-  const dbUserId = await resolveDbUserId();
-  const result = await getUserThreads(dbUserId);
-  return result.threads;
+export async function getUserThreadsAction(): Promise<ActionResult<unknown[]>> {
+  return secureAction({
+    handler: async ({ actor }) => {
+      const result = unwrapResultOrThrow(
+        await messagingService.listConversations(toMessagingActor(actor!), {
+          page: 1,
+          limit: 20,
+        }),
+        "Failed to fetch conversations",
+      ) as { threads: unknown[] };
+      return result.threads;
+    },
+    mapError: createMessagingActionErrorMapper("Failed to fetch conversations"),
+  });
 }
 
 export async function getThreadMessagesAction(
   threadId: string,
-  options?: { cursor?: string; limit?: number; direction?: "before" | "after" },
-) {
-  const dbUserId = await resolveDbUserId();
-
-  await assertCanReadThread(threadId, dbUserId);
-
-  return await getThreadMessages(threadId, options);
-}
-
-export async function markThreadAsReadAction(threadId: string) {
-  const dbUserId = await resolveDbUserId();
-
-  await assertCanReadThread(threadId, dbUserId);
-
-  const result = await markThreadAsRead(threadId, dbUserId);
-  revalidatePath("/messages");
-  return result;
-}
-
-export async function deleteThreadAction(threadId: string) {
-  const dbUserId = await resolveDbUserId();
-
-  const participant = await verifyParticipant(threadId, dbUserId);
-  if (!participant) throw new Error("Not a participant in this thread");
-  assertCanDeleteThread(participant.role);
-
-  await deleteThread(threadId);
-  revalidatePath("/messages");
-}
-
-export async function getMessageAction(messageId: string) {
-  const dbUserId = await resolveDbUserId();
-
-  const message = await getMessage(messageId);
-  if (!message) throw new Error("Message not found");
-
-  // Verify user is in the thread
-  await assertCanReadThread(message.threadId, dbUserId);
-
-  return message;
-}
-
-export async function markMessageAsReadAction(messageId: string) {
-  const dbUserId = await resolveDbUserId();
-
-  const message = await getMessage(messageId);
-  if (!message) throw new Error("Message not found");
-
-  await assertCanReadThread(message.threadId, dbUserId);
-
-  const result = await markMessageAsRead(messageId, dbUserId);
-  revalidatePath("/messages");
-  return result;
-}
-
-export async function deleteMessageAction(messageId: string) {
-  const dbUserId = await resolveDbUserId();
-
-  const message = await getMessage(messageId);
-  if (!message) throw new Error("Message not found");
-
-  // Only sender or thread owner/admin can delete
-  const participant = await verifyParticipant(message.threadId, dbUserId);
-  if (!participant) throw new Error("Not a participant in this thread");
-  assertCanDeleteMessage({
-    senderId: message.senderId,
-    actorId: dbUserId,
-    participantRole: participant.role,
+  options?: {
+    cursor?: string;
+    limit?: number;
+    direction?: "before" | "after";
+  },
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input: { threadId, options },
+    schema: ThreadMessagesActionSchema,
+    handler: async ({ actor, input }) => {
+      const query: MessageQueryInput = {
+        cursor: input.options?.cursor,
+        limit: input.options?.limit ?? 50,
+        direction: input.options?.direction ?? "before",
+      };
+      return unwrapResultOrThrow(
+        await messagingService.listConversationMessages(
+          toMessagingActor(actor!),
+          input.threadId,
+          query,
+        ),
+        "Failed to fetch messages",
+      );
+    },
+    mapError: createMessagingActionErrorMapper("Failed to fetch messages"),
   });
+}
 
-  await deleteMessage(messageId);
-  revalidatePath("/messages");
+export async function markThreadAsReadAction(
+  threadId: string,
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input: { threadId },
+    schema: ThreadIdSchema,
+    handler: async ({ actor, input }) => {
+      const result = unwrapResultOrThrow(
+        await messagingService.markThreadAsRead(
+          toMessagingActor(actor!),
+          input.threadId,
+        ),
+        "Failed to mark conversation as read",
+      );
+      revalidatePath("/messages");
+      return result;
+    },
+    mapError: createMessagingActionErrorMapper(
+      "Failed to mark conversation as read",
+    ),
+  });
+}
+
+export async function deleteThreadAction(
+  threadId: string,
+): Promise<ActionResult<void>> {
+  return secureAction({
+    input: { threadId },
+    schema: ThreadIdSchema,
+    handler: async ({ actor, input }) => {
+      await unwrapResultOrThrow(
+        await messagingService.deleteConversation(
+          toMessagingActor(actor!),
+          input.threadId,
+        ),
+        "Failed to delete conversation",
+      );
+      revalidatePath("/messages");
+    },
+    mapError: createMessagingActionErrorMapper("Failed to delete conversation"),
+  });
+}
+
+export async function getMessageAction(
+  messageId: string,
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input: { messageId },
+    schema: MessageIdSchema,
+    handler: async ({ actor, input }) =>
+      unwrapResultOrThrow(
+        await messagingService.getMessage(
+          toMessagingActor(actor!),
+          input.messageId,
+        ),
+        "Failed to fetch message",
+      ),
+    mapError: createMessagingActionErrorMapper("Failed to fetch message"),
+  });
+}
+
+export async function markMessageAsReadAction(
+  messageId: string,
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input: { messageId },
+    schema: MessageIdSchema,
+    handler: async ({ actor, input }) => {
+      const result = unwrapResultOrThrow(
+        await messagingService.markMessageAsRead(
+          toMessagingActor(actor!),
+          input.messageId,
+        ),
+        "Failed to mark message as read",
+      );
+      revalidatePath("/messages");
+      return result;
+    },
+    mapError: createMessagingActionErrorMapper(
+      "Failed to mark message as read",
+    ),
+  });
+}
+
+export async function deleteMessageAction(
+  messageId: string,
+): Promise<ActionResult<void>> {
+  return secureAction({
+    input: { messageId },
+    schema: MessageIdSchema,
+    handler: async ({ actor, input }) => {
+      await unwrapResultOrThrow(
+        await messagingService.deleteMessage(
+          toMessagingActor(actor!),
+          input.messageId,
+        ),
+        "Failed to delete message",
+      );
+      revalidatePath("/messages");
+    },
+    mapError: createMessagingActionErrorMapper("Failed to delete message"),
+  });
 }

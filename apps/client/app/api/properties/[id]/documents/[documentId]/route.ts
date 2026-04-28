@@ -1,52 +1,59 @@
 import { NextRequest } from "next/server";
-import { z } from "zod";
-import { AuditAction, PropertyDocumentType } from "@prisma/client";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
+import { checkBodySize, isValidId } from "@/app/lib/api/api-guards";
 import {
-  initializeCorrelationId,
-  getClientLogger,
   getResilientExecutor,
+  initializeCorrelationId,
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
-import { checkBodySize, isValidId } from "@/app/lib/api/api-guards";
 import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
 import { propertiesService } from "@/app/lib/domains/properties";
+import { updateDocumentSchema } from "@/app/lib/domains/properties/contracts";
+import {
+  actorRoleLabel,
+  domainErrorCodeToStatus,
+  domainResultToErrorResponse,
+  logPropertiesRouteOutcome,
+  now,
+} from "@/app/api/properties/shared";
 
-const logger = getClientLogger();
-const PropertyDocumentTypeEnum = z.nativeEnum(PropertyDocumentType);
-
-const updateDocumentSchema = z
-  .object({
-    type: PropertyDocumentTypeEnum.optional(),
-    assetId: z.string().uuid("Invalid asset ID").optional(),
-    notes: z.string().optional(),
-  })
-  .refine(
-    (value) =>
-      value.type !== undefined ||
-      value.assetId !== undefined ||
-      value.notes !== undefined,
-    {
-      message: "At least one document field must be provided",
-    },
-  );
+const AUDIT_ACTION_PROFILE_UPDATED = "PROFILE_UPDATED";
+const AUDIT_ACTION_DATA_RECTIFIED = "DATA_RECTIFIED";
 
 export const PATCH = withAuth<{ id: string; documentId: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
+  async (req: NextRequest, { dbUserId, userRole }, params) => {
+    const startedAt = now();
     const correlationId = initializeCorrelationId(req);
-    const { id, documentId } = params!;
+    const operationName = "update_property_document";
+    const actorRole = actorRoleLabel(userRole);
+    const propertyId = params!.id;
+    const documentId = params!.documentId;
 
-    if (!isValidId(id)) {
-      return apiError("Invalid property ID", HttpStatus.BAD_REQUEST);
-    }
-    if (!isValidId(documentId)) {
-      return apiError("Invalid document ID format", HttpStatus.BAD_REQUEST);
+    if (!isValidId(propertyId) || !isValidId(documentId)) {
+      const response = apiError(
+        "Invalid property or document ID",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "propertyDocument",
+        resourceId: documentId,
+      });
+      return response;
     }
 
     const identifier = getRateLimitIdentifier(req);
@@ -56,93 +63,203 @@ export const PATCH = withAuth<{ id: string; documentId: string }>(
       RateLimits.WRITE.window,
     );
     if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+      const response = apiError(
+        "Too many requests",
+        HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+        resourceType: "propertyDocument",
+        resourceId: documentId,
+      });
+      return response;
     }
 
     const bodyError = checkBodySize(req, PROPERTY_CONFIG.MAX_BODY_SIZE);
-    if (bodyError) return bodyError;
+    if (bodyError) {
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: bodyError.status,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "propertyDocument",
+        resourceId: documentId,
+      });
+      return bodyError;
+    }
 
     let body: unknown;
     try {
       body = await req.json();
     } catch {
-      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+      const response = apiError(
+        "Invalid JSON body",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "propertyDocument",
+        resourceId: documentId,
+      });
+      return response;
     }
 
     const validation = updateDocumentSchema.safeParse(body);
     if (!validation.success) {
-      return apiError(
+      const response = apiError(
         validation.error.message,
         HttpStatus.BAD_REQUEST,
         validation.error.issues,
         correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "propertyDocument",
+        resourceId: documentId,
+      });
+      return response;
     }
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
       () =>
         propertiesService.updatePropertyDocument(
-          id,
+          propertyId,
           documentId,
-          dbUserId,
+          { userId: dbUserId, role: userRole },
           validation.data,
         ),
-      { operationName: "update_property_document" },
+      { operationName },
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to update property document", result.error, {
-        correlationId,
-        propertyId: id,
-        documentId,
-      });
-      return apiError(
+      const response = apiError(
         "Failed to update property document",
         HttpStatus.INTERNAL_SERVER_ERROR,
         undefined,
         correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "internal_error",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: now() - startedAt,
+        resourceType: "propertyDocument",
+        resourceId: documentId,
+      });
+      return response;
     }
 
-    if (!result.data.ok) {
-      return apiError(
-        result.data.message,
-        result.data.status,
-        undefined,
+    const domainResult = result.data;
+
+    if (!domainResult.ok) {
+      const errorResponse = domainResultToErrorResponse(
+        domainResult,
         correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(domainResult.error),
+        durationMs: now() - startedAt,
+        domainError: domainResult.error,
+        resourceType: "propertyDocument",
+        resourceId: documentId,
+      });
+      return errorResponse!;
     }
 
     ComplianceService.logAdminAction(
       dbUserId,
-      AuditAction.PROFILE_UPDATED,
+      AUDIT_ACTION_PROFILE_UPDATED,
       "PropertyDocument",
       documentId,
       {
-        propertyId: id,
+        propertyId,
         action: "UPDATE",
         changes: {
           type: validation.data.type,
           assetId: validation.data.assetId,
         },
       },
-    ).catch((err) => logger.error("Failed to create audit log", err));
+    ).catch(() => {});
 
-    return apiSuccess(result.data.data, HttpStatus.OK, correlationId);
+    const response = apiSuccess(
+      domainResult.data,
+      HttpStatus.OK,
+      correlationId,
+    );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "propertyDocument",
+      resourceId: documentId,
+    });
+    return response;
   },
 );
 
 export const DELETE = withAuth<{ id: string; documentId: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
+  async (req: NextRequest, { dbUserId, userRole }, params) => {
+    const startedAt = now();
     const correlationId = initializeCorrelationId(req);
-    const { id, documentId } = params!;
+    const operationName = "delete_property_document";
+    const actorRole = actorRoleLabel(userRole);
+    const propertyId = params!.id;
+    const documentId = params!.documentId;
 
-    if (!isValidId(id)) {
-      return apiError("Invalid property ID", HttpStatus.BAD_REQUEST);
-    }
-    if (!isValidId(documentId)) {
-      return apiError("Invalid document ID format", HttpStatus.BAD_REQUEST);
+    if (!isValidId(propertyId) || !isValidId(documentId)) {
+      const response = apiError(
+        "Invalid property or document ID",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "propertyDocument",
+        resourceId: documentId,
+      });
+      return response;
     }
 
     const identifier = getRateLimitIdentifier(req);
@@ -152,50 +269,100 @@ export const DELETE = withAuth<{ id: string; documentId: string }>(
       RateLimits.WRITE.window,
     );
     if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+      const response = apiError(
+        "Too many requests",
+        HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+        resourceType: "propertyDocument",
+        resourceId: documentId,
+      });
+      return response;
     }
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      () => propertiesService.removePropertyDocument(id, documentId, dbUserId),
-      { operationName: "delete_property_document" },
+      () =>
+        propertiesService.removePropertyDocument(propertyId, documentId, {
+          userId: dbUserId,
+          role: userRole,
+        }),
+      { operationName },
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to delete property document", result.error, {
-        correlationId,
-        propertyId: id,
-        documentId,
-      });
-      return apiError(
-        "Failed to delete document",
+      const response = apiError(
+        "Failed to delete property document",
         HttpStatus.INTERNAL_SERVER_ERROR,
         undefined,
         correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "internal_error",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: now() - startedAt,
+        resourceType: "propertyDocument",
+        resourceId: documentId,
+      });
+      return response;
     }
 
-    if (!result.data.ok) {
-      return apiError(
-        result.data.message,
-        result.data.status,
-        undefined,
+    const domainResult = result.data;
+
+    if (!domainResult.ok) {
+      const errorResponse = domainResultToErrorResponse(
+        domainResult,
         correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(domainResult.error),
+        durationMs: now() - startedAt,
+        domainError: domainResult.error,
+        resourceType: "propertyDocument",
+        resourceId: documentId,
+      });
+      return errorResponse!;
     }
 
     ComplianceService.logAdminAction(
       dbUserId,
-      AuditAction.DATA_RECTIFIED,
+      AUDIT_ACTION_DATA_RECTIFIED,
       "PropertyDocument",
       documentId,
-      { propertyId: id, action: "DELETE" },
-    ).catch((err) => logger.error("Failed to log deletion", err));
+      { propertyId, action: "DELETE" },
+    ).catch(() => {});
 
-    return apiSuccess(
+    const response = apiSuccess(
       { message: "Document deleted successfully" },
       HttpStatus.OK,
       correlationId,
     );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "propertyDocument",
+      resourceId: documentId,
+    });
+    return response;
   },
 );

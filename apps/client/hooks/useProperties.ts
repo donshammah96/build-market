@@ -20,6 +20,9 @@ import {
   type DeletePropertyClientInput,
   type AddPropertyDocumentClientInput,
   type ReplacePropertyDocumentClientInput,
+  type PropertyMutationPayload,
+  type CreatePropertiesBatchPayload,
+  type PropertyDocumentMutationPayload,
 } from "@/lib/properties-client";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -107,9 +110,7 @@ export function usePropertyDocuments(
 
 export function useCreateProperty(
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<ReturnType<typeof propertiesClient.createProperty>>["data"]
-    >,
+    PropertyMutationPayload,
     Error,
     CreatePropertyClientInput
   >,
@@ -120,19 +121,17 @@ export function useCreateProperty(
     ...options,
     mutationFn: async (data) =>
       unwrapApiResponse(await propertiesClient.createProperty(data)),
-    onSuccess: (data, variables, context, mutation) => {
+    onSuccess: (data, variables, onMutateResult, context) => {
       queryClient.invalidateQueries({ queryKey: propertyKeys.myProperties() });
       queryClient.invalidateQueries({ queryKey: propertyKeys.lists() });
-      options?.onSuccess?.(data, variables, context, mutation);
+      options?.onSuccess?.(data, variables, onMutateResult, context);
     },
   });
 }
 
 export function useCreatePropertiesBatch(
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<ReturnType<typeof propertiesClient.createPropertiesBatch>>["data"]
-    >,
+    CreatePropertiesBatchPayload,
     Error,
     CreatePropertiesBatchClientInput
   >,
@@ -143,19 +142,17 @@ export function useCreatePropertiesBatch(
     ...options,
     mutationFn: async (data) =>
       unwrapApiResponse(await propertiesClient.createPropertiesBatch(data)),
-    onSuccess: (data, variables, context, mutation) => {
+    onSuccess: (data, variables, onMutateResult, context) => {
       queryClient.invalidateQueries({ queryKey: propertyKeys.myProperties() });
       queryClient.invalidateQueries({ queryKey: propertyKeys.lists() });
-      options?.onSuccess?.(data, variables, context, mutation);
+      options?.onSuccess?.(data, variables, onMutateResult, context);
     },
   });
 }
 
 export function useUpdateProperty(
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<ReturnType<typeof propertiesClient.updateProperty>>["data"]
-    >,
+    PropertyMutationPayload,
     Error,
     UpdatePropertyClientInput
   >,
@@ -166,22 +163,20 @@ export function useUpdateProperty(
     ...options,
     mutationFn: async (input) =>
       unwrapApiResponse(await propertiesClient.updateProperty(input)),
-    onSuccess: (data, variables, context, mutation) => {
+    onSuccess: (data, variables, onMutateResult, context) => {
       queryClient.invalidateQueries({
         queryKey: propertyKeys.detail(variables.id),
       });
       queryClient.invalidateQueries({ queryKey: propertyKeys.myProperties() });
       queryClient.invalidateQueries({ queryKey: propertyKeys.lists() });
-      options?.onSuccess?.(data, variables, context, mutation);
+      options?.onSuccess?.(data, variables, onMutateResult, context);
     },
   });
 }
 
 export function useDeleteProperty(
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<ReturnType<typeof propertiesClient.deleteProperty>>["data"]
-    >,
+    PropertyMutationPayload,
     Error,
     DeletePropertyClientInput
   >,
@@ -192,13 +187,13 @@ export function useDeleteProperty(
     ...options,
     mutationFn: async (input) =>
       unwrapApiResponse(await propertiesClient.deleteProperty(input)),
-    onSuccess: (data, variables, context, mutation) => {
+    onSuccess: (data, variables, onMutateResult, context) => {
       queryClient.invalidateQueries({
         queryKey: propertyKeys.detail(variables.id),
       });
       queryClient.invalidateQueries({ queryKey: propertyKeys.myProperties() });
       queryClient.invalidateQueries({ queryKey: propertyKeys.lists() });
-      options?.onSuccess?.(data, variables, context, mutation);
+      options?.onSuccess?.(data, variables, onMutateResult, context);
     },
   });
 }
@@ -206,9 +201,7 @@ export function useDeleteProperty(
 export function useAddPropertyDocument(
   propertyId: string,
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<ReturnType<typeof propertiesClient.addPropertyDocument>>["data"]
-    >,
+    PropertyDocumentMutationPayload,
     Error,
     Omit<AddPropertyDocumentClientInput, "propertyId">
   >,
@@ -221,14 +214,14 @@ export function useAddPropertyDocument(
       unwrapApiResponse(
         await propertiesClient.addPropertyDocument({ ...data, propertyId }),
       ),
-    onSuccess: (data, variables, context, mutation) => {
+    onSuccess: (data, variables, onMutateResult, context) => {
       queryClient.invalidateQueries({
         queryKey: propertyKeys.documents(propertyId),
       });
       queryClient.invalidateQueries({
         queryKey: propertyKeys.detail(propertyId),
       });
-      options?.onSuccess?.(data, variables, context, mutation);
+      options?.onSuccess?.(data, variables, onMutateResult, context);
     },
   });
 }
@@ -236,11 +229,7 @@ export function useAddPropertyDocument(
 export function useRemovePropertyDocument(
   propertyId: string,
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<
-        ReturnType<typeof propertiesClient.removePropertyDocument>
-      >["data"]
-    >,
+    PropertyDocumentMutationPayload,
     Error,
     { documentId: string }
   >,
@@ -256,14 +245,14 @@ export function useRemovePropertyDocument(
           documentId: input.documentId,
         }),
       ),
-    onSuccess: (data, variables, context, mutation) => {
+    onSuccess: (data, variables, onMutateResult, context) => {
       queryClient.invalidateQueries({
         queryKey: propertyKeys.documents(propertyId),
       });
       queryClient.invalidateQueries({
         queryKey: propertyKeys.detail(propertyId),
       });
-      options?.onSuccess?.(data, variables, context, mutation);
+      options?.onSuccess?.(data, variables, onMutateResult, context);
     },
   });
 }
@@ -271,11 +260,7 @@ export function useRemovePropertyDocument(
 export function useReplacePropertyDocument(
   propertyId: string,
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<
-        ReturnType<typeof propertiesClient.replacePropertyDocument>
-      >["data"]
-    >,
+    PropertyDocumentMutationPayload,
     Error,
     Omit<ReplacePropertyDocumentClientInput, "propertyId">
   >,
@@ -288,14 +273,14 @@ export function useReplacePropertyDocument(
       unwrapApiResponse(
         await propertiesClient.replacePropertyDocument({ ...data, propertyId }),
       ),
-    onSuccess: (data, variables, context, mutation) => {
+    onSuccess: (data, variables, onMutateResult, context) => {
       queryClient.invalidateQueries({
         queryKey: propertyKeys.documents(propertyId),
       });
       queryClient.invalidateQueries({
         queryKey: propertyKeys.detail(propertyId),
       });
-      options?.onSuccess?.(data, variables, context, mutation);
+      options?.onSuccess?.(data, variables, onMutateResult, context);
     },
   });
 }

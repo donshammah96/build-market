@@ -13,6 +13,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+export const SECURITY_PERSISTENCE_ALLOWLIST = [
+  "profile-completion-widget-dismissed",
+] as const;
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -59,9 +63,9 @@ function CircularProgress({
 
   // Color based on percentage
   const getColor = () => {
-    if (percentage >= 80) return "#10b981"; // emerald-500
-    if (percentage >= 50) return "#f59e0b"; // amber-500
-    return "#f97316"; // orange-500
+    if (percentage >= 80) return "var(--color-success)";
+    if (percentage >= 50) return "var(--color-warning)";
+    return "var(--color-error)";
   };
 
   return (
@@ -78,7 +82,7 @@ function CircularProgress({
           stroke="currentColor"
           strokeWidth={strokeWidth}
           fill="none"
-          className="text-zinc-200"
+          className="text-muted"
         />
         {/* Progress circle */}
         <motion.circle
@@ -99,7 +103,7 @@ function CircularProgress({
       </svg>
       {/* Percentage text */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-xs font-bold text-zinc-900">{percentage}%</span>
+        <span className="text-xs font-bold text-foreground">{percentage}%</span>
       </div>
     </div>
   );
@@ -122,6 +126,7 @@ export function ProfileCompletionWidget({
   // Load saved state from localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
+      // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive profile widget UI state.
       const saved = localStorage.getItem(WIDGET_STORAGE_KEY);
       if (saved) {
         try {
@@ -157,6 +162,7 @@ export function ProfileCompletionWidget({
   const saveState = useCallback((newState: WidgetState) => {
     setState(newState);
     if (typeof window !== "undefined") {
+      // SECURITY_PERSISTENCE_ALLOWLIST: Persists non-sensitive profile widget UI state.
       localStorage.setItem(
         WIDGET_STORAGE_KEY,
         JSON.stringify({
@@ -205,8 +211,8 @@ export function ProfileCompletionWidget({
             <Link
               href={completeProfileRoute}
               className={cn(
-                "block p-3 bg-white rounded-full shadow-lg border border-zinc-200",
-                "hover:shadow-xl hover:border-zinc-300 transition-all duration-200",
+                "block p-3 bg-card rounded-full shadow-lg border border-border",
+                "hover:shadow-xl hover:border-primary/40 transition-all duration-200",
                 "group relative",
               )}
             >
@@ -228,7 +234,7 @@ export function ProfileCompletionWidget({
                       e.stopPropagation();
                       saveState("expanded");
                     }}
-                    className="absolute -top-2 -left-2 p-1 bg-zinc-800 rounded-full text-white hover:bg-zinc-700 transition-colors"
+                    className="absolute -top-2 -left-2 min-h-11 min-w-11 p-2 bg-foreground rounded-full text-background hover:bg-foreground/90 transition-colors"
                     aria-label="Expand widget"
                   >
                     <Maximize2 className="h-3 w-3" />
@@ -247,9 +253,9 @@ export function ProfileCompletionWidget({
           exit={{ opacity: 0, y: 20, scale: 0.95 }}
           className={cn("fixed bottom-6 right-6 z-50 w-80", className)}
         >
-          <div className="bg-white rounded-xl shadow-xl border border-zinc-200 overflow-hidden">
+          <div className="bg-card rounded-xl shadow-xl border border-border overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-zinc-100">
+            <div className="flex items-center justify-between p-4 border-b border-border">
               <div className="flex items-center gap-3">
                 <CircularProgress
                   percentage={percentage}
@@ -257,10 +263,10 @@ export function ProfileCompletionWidget({
                   strokeWidth={3}
                 />
                 <div>
-                  <h4 className="font-semibold text-zinc-900 text-sm">
+                  <h4 className="font-semibold text-foreground text-sm">
                     Complete Your Profile
                   </h4>
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-muted-foreground">
                     {percentage < 50
                       ? "Get started to unlock features"
                       : percentage < 80
@@ -274,14 +280,14 @@ export function ProfileCompletionWidget({
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => saveState("minimized")}
-                  className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-colors"
+                  className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
                   aria-label="Minimize widget"
                 >
                   <Minimize2 className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => saveState("dismissed")}
-                  className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-colors"
+                  className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
                   aria-label="Dismiss widget"
                 >
                   <X className="h-4 w-4" />
@@ -292,21 +298,21 @@ export function ProfileCompletionWidget({
             {/* Missing items */}
             {missingItems.length > 0 && (
               <div className="p-4 space-y-2">
-                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Missing information
                 </p>
                 <ul className="space-y-1.5">
                   {missingItems.slice(0, 3).map((item) => (
                     <li
                       key={item}
-                      className="flex items-center gap-2 text-sm text-zinc-600"
+                      className="flex items-center gap-2 text-sm text-muted-foreground"
                     >
-                      <CircleAlert className="h-3.5 w-3.5 text-orange-500 shrink-0" />
+                      <CircleAlert className="h-3.5 w-3.5 text-warning shrink-0" />
                       <span className="truncate">{item}</span>
                     </li>
                   ))}
                   {missingItems.length > 3 && (
-                    <li className="flex items-center gap-2 text-sm text-zinc-400">
+                    <li className="flex items-center gap-2 text-sm text-muted-foreground">
                       <span className="w-3.5" />
                       <span>+{missingItems.length - 3} more fields</span>
                     </li>
@@ -321,8 +327,8 @@ export function ProfileCompletionWidget({
                 href={completeProfileRoute}
                 className={cn(
                   "flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg",
-                  "bg-zinc-900 text-white font-medium text-sm",
-                  "hover:bg-zinc-800 transition-colors group",
+                  "bg-primary text-primary-foreground font-medium text-sm",
+                  "hover:bg-primary/90 transition-colors group",
                 )}
               >
                 Complete Profile
@@ -333,7 +339,7 @@ export function ProfileCompletionWidget({
             {/* Completion indicator */}
             {percentage >= 80 && (
               <div className="px-4 pb-4">
-                <div className="flex items-center gap-2 text-xs text-emerald-600">
+                <div className="flex items-center gap-2 text-xs text-success">
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   <span>Just a few more details to go!</span>
                 </div>

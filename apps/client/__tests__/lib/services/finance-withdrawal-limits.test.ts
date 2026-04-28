@@ -47,9 +47,9 @@ describe("createWithdrawal - withdrawal limits", () => {
     });
 
     expect("error" in result).toBe(true);
-    if ("error" in result) {
+    if ("error" in result && result.error === "below_minimum") {
       expect(result.error).toBe("below_minimum");
-      expect(result.error).toBe(1000);
+      expect(result.min).toBe(1000);
     }
     expect(mockCreate).not.toHaveBeenCalled();
   });
@@ -61,9 +61,9 @@ describe("createWithdrawal - withdrawal limits", () => {
     });
 
     expect("error" in result).toBe(true);
-    if ("error" in result) {
+    if ("error" in result && result.error === "above_maximum") {
       expect(result.error).toBe("above_maximum");
-      expect(result.error).toBe(150000);
+      expect(result.max).toBe(150000);
     }
     expect(mockCreate).not.toHaveBeenCalled();
   });

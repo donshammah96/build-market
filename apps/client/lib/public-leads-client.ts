@@ -6,7 +6,7 @@
  *
  *   publicLeadsClient (this file)
  *     └── API Routes (/api/leads)
- *           └── Service Layer (lib/services/public-leads.ts)
+ *           └── Domain Layer (app/lib/domains/leads/service.ts)
  *                 └── Prisma (Lead)
  */
 import { API_ROUTES } from "@/lib/links";

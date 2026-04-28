@@ -5,15 +5,19 @@
  * MessageReaction, ReadReceipt, MessageAttachment.
  */
 import { z } from "zod";
-import { MessageType, ThreadType, ParticipantRole } from "@prisma/client";
+import {
+  MessageTypeEnum,
+  ThreadTypeEnum,
+  ParticipantRoleEnum,
+} from "@build/types";
 
 // =============================================================================
-// Enum Schemas
+// Enum Schemas (re-export from @build/types to avoid @prisma/client in API routes)
 // =============================================================================
 
-export const MessageTypeSchema = z.nativeEnum(MessageType);
-export const ThreadTypeSchema = z.nativeEnum(ThreadType);
-export const ParticipantRoleSchema = z.nativeEnum(ParticipantRole);
+export const MessageTypeSchema = MessageTypeEnum;
+export const ThreadTypeSchema = ThreadTypeEnum;
+export const ParticipantRoleSchema = ParticipantRoleEnum;
 
 // =============================================================================
 // Thread Schemas

@@ -4,14 +4,15 @@ Manages professional portfolio items — showcase projects with images, descript
 
 ## Route Structure
 
-```
+```text
 
 /api/professional-portal/portfolio/
   route.ts                    (GET list, POST create)
   [id]/
     route.ts                  (GET detail, PATCH update, DELETE)
     images/
-      route.ts                (GET list, POST add, PATCH update, DELETE remove)
+      route.ts                (GET list, POST add)
+      [imageId]/route.ts      (PATCH update, DELETE remove)
 ```
 
 ## Endpoints
@@ -81,13 +82,13 @@ Add image(s) linked to pre-uploaded Assets.
 - **Batch**: `{ images: [...] }`
 - **Auto-main**: If no main image exists, first image is promoted
 
-### PATCH `/portfolio/[id]/images?imageId=xxx`
+### PATCH `/portfolio/[id]/images/[imageId]`
 
 Update image metadata (caption, category, isMain, sortOrder).
 
 - Setting `isMain: true` automatically unsets previous main image
 
-### DELETE `/portfolio/[id]/images?imageId=xxx`
+### DELETE `/portfolio/[id]/images/[imageId]`
 
 Remove an image. If main image is deleted, next image is promoted.
 

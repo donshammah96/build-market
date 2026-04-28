@@ -1,4 +1,4 @@
-import { PrismaClient } from "@build/db";
+import { PrismaClient, UserRole } from "@build/db";
 import fs from "fs";
 import path from "path";
 
@@ -58,7 +58,7 @@ async function main() {
           firstName: u.firstName,
           lastName: u.lastName,
           avatar: u.imageUrl,
-          role: "client",
+          role: UserRole.CLIENT,
         },
       });
     }

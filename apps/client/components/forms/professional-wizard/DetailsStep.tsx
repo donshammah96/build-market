@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { useForm } from "react-hook-form";
+import { useForm, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -23,6 +23,8 @@ import { StepComponentProps, WIZARD_STYLES } from "./types";
 // ============================================================================
 
 interface FormFieldProps {
+  /** Must match the `id` on the child input for programmatic label association. */
+  htmlFor: string;
   label: string;
   required?: boolean;
   hint?: React.ReactNode;
@@ -31,40 +33,51 @@ interface FormFieldProps {
 }
 
 const FormField: React.FC<FormFieldProps> = ({
+  htmlFor,
   label,
   required,
   hint,
   error,
   children,
-}) => (
-  <div className="space-y-2">
-    <label className="flex items-center justify-between">
-      <span className={WIZARD_STYLES.label}>
-        {label}
-        {required && <span className="text-amber-500 ml-1">*</span>}
-      </span>
-      {hint && (
-        <span className="text-[10px] text-zinc-500 font-normal normal-case tracking-normal">
-          {hint}
-        </span>
-      )}
-    </label>
-    {children}
-    {error && (
-      <p className={WIZARD_STYLES.error}>
-        <AlertCircle className="h-3 w-3" />
-        {error}
-      </p>
-    )}
-  </div>
-);
+}) => {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label htmlFor={htmlFor} className={WIZARD_STYLES.label}>
+          {label}
+          {required && (
+            <span className="text-(--color-error) ml-1" aria-hidden="true">
+              *
+            </span>
+          )}
+          {required && <span className="sr-only">(required)</span>}
+        </label>
+        {hint && (
+          <span className="text-[10px] text-white/35 font-normal normal-case tracking-normal">
+            {hint}
+          </span>
+        )}
+      </div>
+
+      {children}
+
+      {/* aria-live="polite" announces errors without interrupting AT */}
+      <div aria-live="polite" aria-atomic="true">
+        {error && (
+          <p id={`${htmlFor}-error`} className={WIZARD_STYLES.error}>
+            <AlertCircle className="h-3 w-3 shrink-0" aria-hidden="true" />
+            {error}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
 
 // ============================================================================
 // SCHEMA
 // ============================================================================
 
-// We no longer need the dynamic authority schema here since licenses
-// are handled in CredentialsStep.tsx
 const detailsSchema = z.object({
   companyName: z.string().min(1, "Company name is required"),
   yearsExperience: z.number().min(0).max(100).optional(),
@@ -95,6 +108,7 @@ export default function DetailsStep({
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(detailsSchema),
+    shouldFocusError: false,
     defaultValues: {
       companyName: data.companyName || "",
       yearsExperience: data.yearsExperience,
@@ -113,90 +127,136 @@ export default function DetailsStep({
     onNext();
   };
 
+  const focusFieldById = (id: string) => {
+    requestAnimationFrame(() => {
+      const element = document.getElementById(id) as HTMLElement | null;
+      element?.focus();
+    });
+  };
+
+  const onInvalid = (formErrors: FieldErrors<FormData>) => {
+    const fieldOrder: Array<keyof FormData> = [
+      "companyName",
+      "yearsExperience",
+      "website",
+      "bio",
+    ];
+    const firstInvalid = fieldOrder.find((field) => !!formErrors[field]);
+    if (!firstInvalid) return;
+    focusFieldById(firstInvalid);
+  };
+
+  // ── Shared icon class inside inputs ──
+  const inputIconClass =
+    "absolute left-2.5 top-3 h-3.5 w-3.5 text-white/30 pointer-events-none";
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-      {/* Header */}
+    <form
+      onSubmit={handleSubmit(onSubmit, onInvalid)}
+      className="space-y-7"
+      noValidate
+    >
+      {/* ── Header ── */}
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
+        initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
         className="text-center"
       >
-        <div className="inline-flex items-center justify-center gap-2 mb-4">
-          <Building2 className="h-8 w-8 text-emerald-500" />
+        <div className="inline-flex items-center justify-center gap-2 mb-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-onboarding-primary/16 text-(--color-onboarding-primary)">
+            <Building2 className="h-4.5 w-4.5" aria-hidden="true" />
+          </div>
         </div>
-        <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">
+        <h2 className="font-['Syne'] text-[18px] md:text-[22px] font-extrabold leading-[1.2] text-white mb-1.5 tracking-tight">
           Tell us about your business
         </h2>
-        <p className="text-zinc-400 max-w-md mx-auto">
+        <p className="text-white/55 text-[12px] max-w-md mx-auto leading-relaxed">
           This information helps clients find and trust you
         </p>
       </motion.div>
 
-      {/* Form Fields */}
+      {/* ── Form fields ── */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="space-y-6"
+        transition={{ delay: 0.1, duration: 0.38 }}
+        className="space-y-4"
       >
         {/* Company Name */}
         <FormField
+          htmlFor="companyName"
           label="Company / Business Name"
           required
           error={errors.companyName?.message}
         >
           <div className="relative">
-            <Building2 className="absolute left-3 top-3.5 h-5 w-5 text-zinc-500" />
+            <Building2 className={inputIconClass} aria-hidden="true" />
             <input
+              id="companyName"
               type="text"
               placeholder="Your Firm's Legal Name"
               {...register("companyName")}
+              aria-invalid={errors.companyName ? "true" : undefined}
+              aria-describedby={
+                errors.companyName ? "companyName-error" : undefined
+              }
               className={cn(
                 WIZARD_STYLES.input,
-                "pl-11",
-                errors.companyName && "border-red-500/50",
+                "pl-8.5",
+                errors.companyName && "border-error/60 bg-error/4",
               )}
             />
           </div>
         </FormField>
 
-        {/* Two Column Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Two-column row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Years of Experience */}
           <FormField
+            htmlFor="yearsExperience"
             label="Years of Experience"
             hint="Optional"
             error={errors.yearsExperience?.message}
           >
             <div className="relative">
-              <Clock className="absolute left-3 top-3.5 h-5 w-5 text-zinc-500" />
+              <Clock className={inputIconClass} aria-hidden="true" />
               <input
+                id="yearsExperience"
                 type="number"
                 min="0"
                 max="100"
                 placeholder="e.g. 5"
                 {...register("yearsExperience", { valueAsNumber: true })}
-                className={cn(WIZARD_STYLES.input, "pl-11")}
+                aria-invalid={errors.yearsExperience ? "true" : undefined}
+                aria-describedby={
+                  errors.yearsExperience ? "yearsExperience-error" : undefined
+                }
+                className={cn(WIZARD_STYLES.input, "pl-8.5")}
               />
             </div>
           </FormField>
 
           {/* Website */}
           <FormField
+            htmlFor="website"
             label="Website"
             hint="Optional"
             error={errors.website?.message}
           >
             <div className="relative">
-              <Globe className="absolute left-3 top-3.5 h-5 w-5 text-zinc-500" />
+              <Globe className={inputIconClass} aria-hidden="true" />
               <input
+                id="website"
                 type="url"
                 placeholder="https://yourfirm.com"
                 {...register("website")}
+                aria-invalid={errors.website ? "true" : undefined}
+                aria-describedby={errors.website ? "website-error" : undefined}
                 className={cn(
                   WIZARD_STYLES.input,
-                  "pl-11",
-                  errors.website && "border-red-500/50",
+                  "pl-8.5",
+                  errors.website && "border-error/60 bg-error/4",
                 )}
               />
             </div>
@@ -205,32 +265,39 @@ export default function DetailsStep({
 
         {/* Bio */}
         <FormField
+          htmlFor="bio"
           label="Professional Bio"
-          hint="Optional • Max 1000 characters"
+          hint="Optional · Max 1000 characters"
           error={errors.bio?.message}
         >
           <div className="relative">
-            <FileText className="absolute left-3 top-3.5 h-5 w-5 text-zinc-500" />
+            <FileText
+              className="absolute left-3 top-3.5 h-4.5 w-4.5 text-white/30 pointer-events-none"
+              aria-hidden="true"
+            />
             <textarea
+              id="bio"
               rows={4}
-              placeholder="Tell us about your expertise, specializations, and notable projects..."
+              placeholder="Tell us about your expertise, specialisations, and notable projects..."
               {...register("bio")}
+              aria-invalid={errors.bio ? "true" : undefined}
+              aria-describedby={errors.bio ? "bio-error" : undefined}
               className={cn(
                 WIZARD_STYLES.input,
-                "pl-11 resize-none",
-                errors.bio && "border-red-500/50",
+                "pl-8.5 resize-none leading-relaxed min-h-18",
+                errors.bio && "border-error/60 bg-error/4",
               )}
             />
           </div>
         </FormField>
       </motion.div>
 
-      {/* Navigation */}
+      {/* ── Navigation ── */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.3 }}
-        className="flex items-center justify-between pt-4"
+        transition={{ delay: 0.28 }}
+        className="flex items-center justify-between pt-1"
       >
         <button
           type="button"
@@ -241,7 +308,7 @@ export default function DetailsStep({
             "flex items-center gap-2",
           )}
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Back
         </button>
 
@@ -253,7 +320,7 @@ export default function DetailsStep({
           )}
         >
           Continue
-          <ArrowRight className="h-4 w-4" />
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </button>
       </motion.div>
     </form>

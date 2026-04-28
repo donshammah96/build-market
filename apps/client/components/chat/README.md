@@ -382,7 +382,6 @@ toast({
     "framer-motion": "^11.x",
     "socket.io-client": "^4.x",
     "@tanstack/react-query": "^5.x",
-    "next-auth": "^5.x",
     "lucide-react": "^0.x",
     "@build/types": "workspace:*"
   }

@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { encode } from "blurhash";
 
 /**
  * Image processing utilities for thumbnails, compression, and blurhash generation
@@ -46,26 +47,28 @@ const DEFAULT_OPTIONS: ProcessingOptions = {
 
 /**
  * Generate blurhash for image placeholder
- * Simplified implementation - in production, use `blurhash` package
  */
-async function generateBlurHash(buffer: Buffer): Promise<string> {
+async function generateBlurHash(buffer: Buffer): Promise<string | undefined> {
   try {
-    // Resize to tiny image for blurhash
     const tiny = await sharp(buffer)
+      .ensureAlpha()
       .resize(32, 32, { fit: "inside" })
       .raw()
       .toBuffer({ resolveWithObject: true });
 
-    // Simple hash generation (placeholder - use actual blurhash library in production)
-    // This is a simplified version for demonstration
-    const hash = Buffer.from(tiny.data.slice(0, 16))
-      .toString("base64")
-      .substring(0, 16);
-    return `BH${hash}`; // Prefix to indicate it's a blurhash-style string
-    // eslint-disable-next-line /typescript-eslint/no-unused-vars
-  } catch (_error) {
-    // Fallback: return a neutral gray blurhash
-    return "BH8888888888888"; // Neutral placeholder
+    if (!tiny.info.width || !tiny.info.height) {
+      return undefined;
+    }
+
+    const pixels = new Uint8ClampedArray(
+      tiny.data.buffer,
+      tiny.data.byteOffset,
+      tiny.data.byteLength,
+    );
+
+    return encode(pixels, tiny.info.width, tiny.info.height, 4, 3);
+  } catch {
+    return undefined;
   }
 }
 

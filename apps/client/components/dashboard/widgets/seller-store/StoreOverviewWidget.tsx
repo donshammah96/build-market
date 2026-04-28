@@ -1,6 +1,7 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
 import {
   Store,
   Package,
@@ -40,14 +41,16 @@ interface StatItemProps {
 
 function StatItem({ icon: Icon, label, value, subtext }: StatItemProps) {
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg bg-zinc-50 border border-zinc-100">
-      <div className="p-2 rounded-lg bg-white border border-zinc-200">
-        <Icon className="h-4 w-4 text-zinc-500" />
+    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/60 border border-border">
+      <div className="p-2 rounded-lg bg-card border border-border">
+        <Icon className="h-4 w-4 text-muted-foreground" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-xs text-zinc-500">{label}</p>
-        <p className="text-sm font-bold text-zinc-900">{value}</p>
-        {subtext && <p className="text-[10px] text-zinc-400">{subtext}</p>}
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-sm font-bold text-foreground">{value}</p>
+        {subtext && (
+          <p className="text-[10px] text-muted-foreground">{subtext}</p>
+        )}
       </div>
     </div>
   );
@@ -59,20 +62,20 @@ function StatItem({ icon: Icon, label, value, subtext }: StatItemProps) {
 
 function StoreOverviewSkeleton() {
   return (
-    <Card className="border border-zinc-200 shadow-sm bg-white overflow-hidden">
-      <CardHeader className="border-b border-zinc-100 py-5 px-6">
-        <div className="flex items-center gap-2 animate-pulse">
-          <div className="h-10 w-10 bg-zinc-200 rounded-lg" />
+    <Card className="border border-border shadow-sm bg-card overflow-hidden">
+      <CardHeader className="border-b border-border py-5 px-6">
+        <div className="flex items-center gap-2 motion-safe:animate-pulse">
+          <div className="h-10 w-10 bg-muted rounded-lg" />
           <div className="space-y-1">
-            <div className="h-4 w-32 bg-zinc-200 rounded" />
-            <div className="h-3 w-20 bg-zinc-200 rounded" />
+            <div className="h-4 w-32 bg-muted rounded" />
+            <div className="h-3 w-20 bg-muted rounded" />
           </div>
         </div>
       </CardHeader>
       <CardContent className="p-6">
-        <div className="grid grid-cols-2 gap-3 animate-pulse">
+        <div className="grid grid-cols-2 gap-3 motion-safe:animate-pulse">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-20 bg-zinc-100 rounded-lg" />
+            <div key={i} className="h-20 bg-muted rounded-lg" />
           ))}
         </div>
       </CardContent>
@@ -85,21 +88,33 @@ function StoreOverviewSkeleton() {
 // ============================================================================
 
 function NoStoreState() {
+  const router = useRouter();
+  const [isSetupPending, startSetupTransition] = useTransition();
+
+  const handleSetupStore = () => {
+    startSetupTransition(() => {
+      router.push("/professional-portal/settings/stores");
+    });
+  };
+
   return (
-    <Card className="border border-zinc-200 shadow-sm bg-white overflow-hidden">
+    <Card className="border border-border shadow-sm bg-card overflow-hidden">
       <CardContent className="p-12 text-center">
-        <Store className="h-12 w-12 text-zinc-200 mx-auto mb-3" />
-        <h3 className="text-sm font-semibold text-zinc-900 mb-1">
+        <Store className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
+        <h3 className="text-sm font-semibold text-foreground mb-1">
           No Store Setup
         </h3>
-        <p className="text-xs text-zinc-500 mb-4 max-w-xs mx-auto">
+        <p className="text-xs text-muted-foreground mb-4 max-w-xs mx-auto">
           Create your store to start selling products and reach more customers.
         </p>
-        <Button asChild>
-          <Link href="/professional-portal/settings/stores">
-            <Store className="h-4 w-4 mr-2" />
-            Setup Store
-          </Link>
+        <Button
+          className="min-h-11 px-4 motion-safe:active:scale-[0.98]"
+          isLoading={isSetupPending}
+          loadingText="Opening..."
+          onClick={handleSetupStore}
+        >
+          <Store className="h-4 w-4 mr-2" />
+          Setup Store
         </Button>
       </CardContent>
     </Card>
@@ -115,6 +130,12 @@ export function StoreOverviewWidget({
   isLoading = false,
   className,
 }: StoreOverviewWidgetProps) {
+  const router = useRouter();
+  const [isSettingsPending, startSettingsTransition] = useTransition();
+  const [isManageProductsPending, startManageProductsTransition] =
+    useTransition();
+  const [isAddProductPending, startAddProductTransition] = useTransition();
+
   if (isLoading) {
     return <StoreOverviewSkeleton />;
   }
@@ -134,35 +155,57 @@ export function StoreOverviewWidget({
     return `KSh ${amount}`;
   };
 
+  const handleOpenStoreSettings = () => {
+    startSettingsTransition(() => {
+      router.push(`/professional-portal/settings/stores/${store.id}`);
+    });
+  };
+
+  const handleManageProducts = () => {
+    startManageProductsTransition(() => {
+      router.push("/professional-portal/products");
+    });
+  };
+
+  const handleAddProduct = () => {
+    startAddProductTransition(() => {
+      router.push("/professional-portal/products/new");
+    });
+  };
+
   return (
     <Card
       className={cn(
-        "border border-zinc-200 shadow-sm bg-white overflow-hidden",
+        "border border-border shadow-sm bg-card overflow-hidden",
         className,
       )}
     >
       {/* Header */}
-      <CardHeader className="border-b border-zinc-100 py-5 px-6">
+      <CardHeader className="border-b border-border py-5 px-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-100">
-              <Store className="h-5 w-5 text-emerald-600" />
+            <div className="p-2 rounded-lg bg-primary/10 border border-primary/30">
+              <Store className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <CardTitle className="text-base font-bold text-zinc-900">
+              <CardTitle className="text-base font-bold text-foreground">
                 {store.name}
               </CardTitle>
-              <p className="text-xs text-zinc-500 mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 {store.totalProducts} products
               </p>
             </div>
           </div>
-          <Link
-            href={`/professional-portal/settings/stores/${store.id}`}
-            className="p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-colors"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11 inline-flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg motion-safe:transition-colors motion-safe:active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+            isLoading={isSettingsPending}
+            loadingText=""
+            onClick={handleOpenStoreSettings}
           >
             <Settings className="h-4 w-4" />
-          </Link>
+          </Button>
         </div>
       </CardHeader>
 
@@ -201,20 +244,22 @@ export function StoreOverviewWidget({
           <Button
             variant="outline"
             size="sm"
-            className="flex-1 text-xs"
-            asChild
+            className="flex-1 text-xs min-h-11 motion-safe:active:scale-[0.98]"
+            isLoading={isManageProductsPending}
+            loadingText="Opening..."
+            onClick={handleManageProducts}
           >
-            <Link href="/professional-portal/products">
-              Manage Products
-              <ChevronRight className="h-3 w-3 ml-1" />
-            </Link>
+            Manage Products
+            <ChevronRight className="h-3 w-3 ml-1" />
           </Button>
           <Button
             size="sm"
-            className="flex-1 text-xs bg-zinc-900 hover:bg-zinc-800"
-            asChild
+            className="flex-1 text-xs min-h-11 motion-safe:active:scale-[0.98]"
+            isLoading={isAddProductPending}
+            loadingText="Opening..."
+            onClick={handleAddProduct}
           >
-            <Link href="/professional-portal/products/new">Add Product</Link>
+            Add Product
           </Button>
         </div>
       </CardContent>

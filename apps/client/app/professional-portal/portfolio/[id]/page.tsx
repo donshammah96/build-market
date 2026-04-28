@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import {
@@ -56,43 +56,14 @@ import {
 } from "@/components/ui/select";
 import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
-
-// Portfolio interface matching API response
-interface PortfolioImage {
-  id: string;
-  url: string;
-  key?: string | null;
-  caption?: string | null;
-  isMain: boolean;
-  isBefore: boolean;
-  isAfter: boolean;
-  sortOrder: number;
-  createdAt: Date | string;
-}
-
-interface Portfolio {
-  id: string;
-  title: string;
-  description?: string | null;
-  projectType: string;
-  clientTestimonial?: string | null;
-  completedAt?: Date | string | null;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-  images?: PortfolioImage[];
-  professional?: {
-    companyName: string;
-    city?: string | null;
-    county?: string | null;
-    country?: string | null;
-  };
-}
+import { portfolioClient, type PortfolioDetail } from "@/lib/portfolio-client";
+import { ProjectTypeSchema } from "@/lib/validation/portfolio-validation";
 
 // Schema for updating portfolio
 const updatePortfolioSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters"),
   description: z.string().optional(),
-  projectType: z.string().min(1, "Project type is required"),
+  projectType: ProjectTypeSchema,
   clientTestimonial: z.string().optional(),
   completedAt: z.string().optional().nullable(),
 });
@@ -114,17 +85,14 @@ export default function PortfolioDetailPage() {
     data: portfolio,
     isLoading,
     error,
-  } = useQuery<Portfolio>({
+  } = useQuery<PortfolioDetail>({
     queryKey: ["portfolio", id],
     queryFn: async () => {
-      const res = await fetch(`/api/professional-portal/portfolio/${id}`);
-      if (!res.ok) {
-        if (res.status === 404) {
-          throw new Error("Portfolio not found");
-        }
-        throw new Error("Failed to fetch portfolio");
+      const res = await portfolioClient.getPortfolioDetail(id);
+      if (!res.success || res.data === undefined) {
+        throw new Error(res.error || "Failed to fetch portfolio");
       }
-      return res.json();
+      return res.data;
     },
     enabled: !!id,
     retry: 2,
@@ -134,19 +102,19 @@ export default function PortfolioDetailPage() {
   // Update Portfolio Mutation
   const updatePortfolioMutation = useMutation({
     mutationFn: async (data: UpdatePortfolioFormValues) => {
-      const res = await fetch(`/api/professional-portal/portfolio/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const res = await portfolioClient.updatePortfolio({
+        portfolioId: id,
+        data: {
           ...data,
-          completedAt: data.completedAt || null,
-        }),
+          completionDate: data.completedAt
+            ? new Date(data.completedAt).toISOString()
+            : null,
+        },
       });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to update portfolio");
+      if (!res.success) {
+        throw new Error(res.error || "Failed to update portfolio");
       }
-      return res.json();
+      return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["portfolio", id] });
@@ -164,14 +132,13 @@ export default function PortfolioDetailPage() {
   // Delete Portfolio Mutation
   const deletePortfolioMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/professional-portal/portfolio/${id}`, {
-        method: "DELETE",
+      const res = await portfolioClient.deletePortfolio({
+        portfolioId: id,
       });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to delete portfolio");
+      if (!res.success) {
+        throw new Error(res.error || "Failed to delete portfolio");
       }
-      return res.json();
+      return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["professional-portfolio"] });
@@ -190,7 +157,8 @@ export default function PortfolioDetailPage() {
     defaultValues: {
       title: portfolio?.title || "",
       description: portfolio?.description || "",
-      projectType: portfolio?.projectType || "",
+      projectType: (portfolio?.projectType ??
+        "OTHER") as UpdatePortfolioFormValues["projectType"],
       clientTestimonial: portfolio?.clientTestimonial || "",
       completedAt: portfolio?.completedAt
         ? new Date(portfolio.completedAt).toISOString().split("T")[0]
@@ -198,12 +166,16 @@ export default function PortfolioDetailPage() {
     },
   });
 
+  const formControl =
+    form.control as unknown as Control<UpdatePortfolioFormValues>;
+
   // Update form when portfolio data loads
   if (portfolio && form.getValues().title === "") {
     form.reset({
       title: portfolio.title,
       description: portfolio.description || "",
-      projectType: portfolio.projectType,
+      projectType:
+        portfolio.projectType as UpdatePortfolioFormValues["projectType"],
       clientTestimonial: portfolio.clientTestimonial || "",
       completedAt: portfolio.completedAt
         ? new Date(portfolio.completedAt).toISOString().split("T")[0]
@@ -244,7 +216,7 @@ export default function PortfolioDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6 max-w-[1600px] mx-auto">
+      <div className="space-y-6 max-w-400 mx-auto">
         <div className="flex items-center gap-4">
           <div className="h-10 w-10 bg-zinc-200 animate-pulse rounded" />
           <div className="space-y-2">
@@ -264,7 +236,7 @@ export default function PortfolioDetailPage() {
 
   if (error || !portfolio) {
     return (
-      <div className="space-y-6 max-w-[1600px] mx-auto">
+      <div className="space-y-6 max-w-400 mx-auto">
         <Button variant="ghost" asChild>
           <Link href="/professional-portal/portfolio">
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Portfolio
@@ -293,7 +265,7 @@ export default function PortfolioDetailPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto">
+    <div className="space-y-6 max-w-400 mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between gap-4 items-start border-b border-zinc-100 pb-6">
         <div className="flex items-center gap-4">
@@ -375,8 +347,7 @@ export default function PortfolioDetailPage() {
               <div className="p-6 border-b border-zinc-100">
                 <h2 className="text-lg font-semibold text-zinc-900 flex items-center gap-2">
                   <ImageIcon className="h-5 w-5" />
-                  Gallery ({images.length}{" "}
-                  {images.length === 1 ? "image" : "images"})
+                  Gallery ({images.length} images)
                 </h2>
               </div>
               <div className="p-6">
@@ -509,7 +480,7 @@ export default function PortfolioDetailPage() {
 
           {/* Client Testimonial */}
           {portfolio.clientTestimonial && (
-            <Card className="border border-zinc-200 shadow-sm bg-white bg-emerald-50/30 border-emerald-200">
+            <Card className="border border-emerald-200 shadow-sm bg-emerald-50/30">
               <div className="p-6 border-b border-emerald-100">
                 <h2 className="text-lg font-semibold text-zinc-900">
                   Client Testimonial
@@ -547,7 +518,7 @@ export default function PortfolioDetailPage() {
                 <>
                   <Separator />
                   <div>
-                    <label className="text-sm font-medium text-zinc-500 mb-1 block flex items-center gap-1">
+                    <label className="text-sm font-medium text-zinc-500 mb-1 flex items-center gap-1">
                       <Clock className="h-3 w-3" />
                       Completed Date
                     </label>
@@ -566,7 +537,7 @@ export default function PortfolioDetailPage() {
               )}
               <Separator />
               <div>
-                <label className="text-sm font-medium text-zinc-500 mb-1 block flex items-center gap-1">
+                <label className="text-sm font-medium text-zinc-500 mb-1 flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
                   Created
                 </label>
@@ -580,7 +551,7 @@ export default function PortfolioDetailPage() {
               </div>
               <Separator />
               <div>
-                <label className="text-sm font-medium text-zinc-500 mb-1 block flex items-center gap-1">
+                <label className="text-sm font-medium text-zinc-500 mb-1 flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
                   Last Updated
                 </label>
@@ -684,7 +655,7 @@ export default function PortfolioDetailPage() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-150 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Portfolio</DialogTitle>
             <DialogDescription>
@@ -694,7 +665,7 @@ export default function PortfolioDetailPage() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
-                control={form.control}
+                control={formControl}
                 name="title"
                 render={({ field }) => (
                   <FormItem>
@@ -736,7 +707,7 @@ export default function PortfolioDetailPage() {
                 )}
               />
               <FormField
-                control={form.control}
+                control={formControl}
                 name="description"
                 render={({ field }) => (
                   <FormItem>
@@ -770,7 +741,7 @@ export default function PortfolioDetailPage() {
                 )}
               />
               <FormField
-                control={form.control}
+                control={formControl}
                 name="completedAt"
                 render={({ field }) => (
                   <FormItem>
@@ -803,7 +774,7 @@ export default function PortfolioDetailPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-106.25">
           <DialogHeader>
             <DialogTitle>Delete Portfolio</DialogTitle>
             <DialogDescription>

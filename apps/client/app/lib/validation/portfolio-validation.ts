@@ -96,7 +96,7 @@ export const BatchCreatePortfolioImagesSchema = z.object({
   images: z.array(CreatePortfolioImageSchema).min(1).max(20),
 });
 
-/** Body schema for PATCH /portfolio/[id]/images?imageId=xxx (reorder / update) */
+/** Body schema for PATCH /portfolio/[id]/images/[imageId] (reorder / update) */
 export const UpdatePortfolioImageSchema = z.object({
   caption: z.string().max(500).optional(),
   category: PortfolioImageCategorySchema.optional(),

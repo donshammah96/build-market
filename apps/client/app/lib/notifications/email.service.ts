@@ -6,11 +6,19 @@
  */
 
 import { sendEmail as baseSendEmail } from "@/app/lib/infrastructure/mailer";
+import { env } from "@/app/lib/infrastructure/env";
 
+export type DPOEscalationMetadata = Record<string, unknown>;
+export interface IncidentSeverityLevel {
+  LOW: "LOW";
+  MEDIUM: "MEDIUM";
+  HIGH: "HIGH";
+  CRITICAL: "CRITICAL";
+}
 export interface EmailOptions {
   to: string | string[];
   subject: string;
-  html?: string;
+  html: string;
   text?: string;
   attachments?: Array<{
     filename: string;
@@ -26,7 +34,7 @@ export interface BreachNotificationEmailData {
   incidentId: string;
   userName: string;
   incidentDate: Date;
-  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  severity: IncidentSeverityLevel;
   affectedData: string[];
   protectiveMeasures: string[];
 }
@@ -45,7 +53,7 @@ export interface ODPCNotificationEmailData {
  * Send a generic email
  */
 export async function sendEmail(options: EmailOptions) {
-  return await baseSendEmail(options as any);
+  return await baseSendEmail(options as EmailOptions);
 }
 
 /**
@@ -182,7 +190,7 @@ export async function sendODPCNotificationEmail(
     description,
   } = data;
 
-  const odpcEmail = process.env.ODPC_EMAIL || "dpo/odpc.go.ke";
+  const odpcEmail = env.gdpr.odpcEmail;
   const subject = `MANDATORY NOTIFICATION: Data Breach - ${incidentId}`;
 
   const body = `
@@ -243,9 +251,9 @@ This notification is submitted within 72 hours as required by Section 43 of the 
 export async function sendDPOEscalationEmail(
   incidentId: string,
   severity: string,
-  metadata: any,
+  metadata: DPOEscalationMetadata,
 ): Promise<void> {
-  const dpoEmail = process.env.DPO_EMAIL || "security/buildmarket.co.ke";
+  const dpoEmail = env.gdpr.dpoEmail;
 
   await sendEmail({
     to: dpoEmail,

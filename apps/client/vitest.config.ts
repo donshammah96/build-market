@@ -33,6 +33,10 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./"),
       "@/app": path.resolve(__dirname, "./app"),
       "@/components": path.resolve(__dirname, "./components"),
+      "@build/resilience": path.resolve(
+        __dirname,
+        "../../packages/resilience/src/index.ts",
+      ),
     },
   },
 });

@@ -11,6 +11,7 @@ import {
   checkRateLimit,
   RateLimits,
   getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
 } from "@/app/lib/api/rate-limit";
 import { isValidId } from "@/app/lib/api/api-guards";
 import {
@@ -81,7 +82,11 @@ export const GET = withAuth<{ id: string }>(
  * Sets status to CANCELLED instead of hard-deleting.
  */
 export const DELETE = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
     const { id } = params!;
 
@@ -89,9 +94,12 @@ export const DELETE = withAuth<{ id: string }>(
       return apiError("Invalid withdrawal ID format", HttpStatus.BAD_REQUEST);
     }
 
-    const identifier = getRateLimitIdentifier(req);
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "finance-withdrawal-cancel",
+    );
     const rateLimitResult = await checkRateLimit(
-      `finance-withdrawal-cancel:${identifier}`,
+      rateLimitKey,
       RateLimits.WRITE.limit,
       RateLimits.WRITE.window,
     );
@@ -102,7 +110,7 @@ export const DELETE = withAuth<{ id: string }>(
     logger.info("Cancelling withdrawal request", {
       correlationId,
       withdrawalId: id,
-      userId: dbUserId,
+      actorRole: userRole,
     });
 
     const resilientExecutor = getResilientExecutor();
@@ -155,5 +163,10 @@ export const DELETE = withAuth<{ id: string }>(
       },
       HttpStatus.OK,
     );
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 180,
+    },
   },
 );

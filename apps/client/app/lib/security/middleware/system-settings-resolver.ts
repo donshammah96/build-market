@@ -1,3 +1,5 @@
+import { env } from "@/app/lib/infrastructure/env";
+
 export type SystemSettingsSnapshot = {
   maintenanceMode: boolean;
   maintenanceMessage: string | null;
@@ -29,7 +31,7 @@ const DEFAULT_SETTINGS: SystemSettingsSnapshot = {
 export async function resolveSystemSettings(
   baseUrl: string,
 ): Promise<SystemSettingsResult> {
-  const internalSecret = process.env.INTERNAL_API_SECRET;
+  const internalSecret = env.services.internalApiSecret;
   if (!internalSecret) {
     return {
       state: "fallback",

@@ -1,10 +1,4 @@
-import type {
-  NatsConnection,
-  JetStreamClient,
-  JetStreamManager,
-  ConsumerConfig,
-  StreamConfig,
-} from "nats";
+import type { NatsConnection, JetStreamClient, JetStreamManager } from "nats";
 
 /**
  * NATS connection configuration

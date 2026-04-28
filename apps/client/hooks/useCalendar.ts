@@ -7,13 +7,17 @@ import {
   useQueryClient,
   type UseMutationOptions,
 } from "@tanstack/react-query";
+import {
+  calendarClient,
+  type CalendarEventClientDetail,
+  type CalendarEventClientSummary,
+  type CalendarQueryInput,
+  type CreateCalendarEventInput,
+  type UpdateCalendarEventInput,
+} from "@/lib/calendar-client";
 import type { ApiResponse } from "@build/types";
-import { calendarClient } from "@/lib/calendar-client";
-import type { CalendarQueryInput } from "@/lib/services/calendar";
-import type {
-  CreateCalendarEventInput,
-  UpdateCalendarEventInput,
-} from "@/lib/services/calendar";
+
+export type { CalendarEventClientDetail, CalendarEventClientSummary };
 
 function unwrapApiResponse<T>(res: ApiResponse<T>): T {
   if (!res.success) throw new Error(res.error);
@@ -55,7 +59,7 @@ export function useCalendarEvent(
 
 export function useCreateCalendarEvent(
   options?: UseMutationOptions<
-    Awaited<ReturnType<typeof calendarClient.createEvent>>["data"],
+    CalendarEventClientSummary | undefined,
     Error,
     CreateCalendarEventInput
   >,
@@ -75,7 +79,7 @@ export function useCreateCalendarEvent(
 
 export function useUpdateCalendarEvent(
   options?: UseMutationOptions<
-    Awaited<ReturnType<typeof calendarClient.updateEvent>>["data"],
+    CalendarEventClientDetail | undefined,
     Error,
     { eventId: string; payload: UpdateCalendarEventInput }
   >,
@@ -98,7 +102,7 @@ export function useUpdateCalendarEvent(
 
 export function useDeleteCalendarEvent(
   options?: UseMutationOptions<
-    Awaited<ReturnType<typeof calendarClient.deleteEvent>>["data"],
+    { message: string } | undefined,
     Error,
     { eventId: string }
   >,

@@ -15,11 +15,8 @@ import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { UpdateLeadSchema } from "@/app/lib/validation/leads-validation";
 import { LEAD_CONFIG } from "@/app/lib/config/lead.config";
-import {
-  getProfessionalLeadById,
-  updateProfessionalLead,
-  deleteProfessionalLead,
-} from "@/lib/services/leads";
+import { leadsService } from "@/app/lib/domains/leads";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
 
@@ -34,7 +31,11 @@ type LeadParams = { id: string };
  * Get a specific lead by ID (owner only).
  */
 export const GET = withAuth<LeadParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     initializeCorrelationId(req);
 
     const leadId = params?.id;
@@ -55,19 +56,23 @@ export const GET = withAuth<LeadParams>(
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      async () => getProfessionalLeadById(dbUserId, leadId),
+      async () =>
+        leadsService.getProfessionalLeadById(
+          {
+            userId: dbUserId,
+            role: normalizeRole(String(userRole)),
+          },
+          leadId,
+        ),
       { operationName: "get_lead_detail" },
     );
 
-    if (!result.success) {
+    if (!result.success || !result.data) {
       return apiError("Failed to fetch lead", HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     const data = result.data;
-    if (!data) {
-      return apiError("Failed to fetch lead", HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-    if (data.success === false) {
+    if (!data.ok) {
       if (data.error === "not_found")
         return apiError("Lead not found", HttpStatus.NOT_FOUND);
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
@@ -81,7 +86,11 @@ export const GET = withAuth<LeadParams>(
  * Update a lead (owner only).
  */
 export const PATCH = withAuth<LeadParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
 
     const leadId = params?.id;
@@ -155,12 +164,20 @@ export const PATCH = withAuth<LeadParams>(
       correlationId,
       leadId,
       fields: Object.keys(updateData),
-      userId: dbUserId,
+      actorRole: normalizeRole(String(userRole)),
     });
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      async () => updateProfessionalLead(dbUserId, leadId, updateData),
+      async () =>
+        leadsService.updateProfessionalLead(
+          {
+            userId: dbUserId,
+            role: normalizeRole(String(userRole)),
+          },
+          leadId,
+          updateData,
+        ),
       { operationName: "update_lead" },
     );
 
@@ -173,14 +190,7 @@ export const PATCH = withAuth<LeadParams>(
     }
 
     const data = result.data;
-    if (!data) {
-      await IdempotencyService.fail(idempotencyKey);
-      return apiError(
-        "Failed to update lead",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-    if (data.success === false) {
+    if (!data.ok) {
       await IdempotencyService.fail(idempotencyKey);
       if (data.error === "not_found")
         return apiError("Lead not found", HttpStatus.NOT_FOUND);
@@ -196,7 +206,11 @@ export const PATCH = withAuth<LeadParams>(
  * Delete a lead (owner only).
  */
 export const DELETE = withAuth<LeadParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
 
     const leadId = params?.id;
@@ -249,12 +263,19 @@ export const DELETE = withAuth<LeadParams>(
     logger.info("Deleting lead", {
       correlationId,
       leadId,
-      userId: dbUserId,
+      actorRole: normalizeRole(String(userRole)),
     });
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      async () => deleteProfessionalLead(dbUserId, leadId),
+      async () =>
+        leadsService.deleteProfessionalLead(
+          {
+            userId: dbUserId,
+            role: normalizeRole(String(userRole)),
+          },
+          leadId,
+        ),
       { operationName: "delete_lead" },
     );
 
@@ -267,14 +288,7 @@ export const DELETE = withAuth<LeadParams>(
     }
 
     const data = result.data;
-    if (!data) {
-      await IdempotencyService.fail(idempotencyKey);
-      return apiError(
-        "Failed to delete lead",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-    if (data.success === false) {
+    if (!data.ok) {
       await IdempotencyService.fail(idempotencyKey);
       if (data.error === "not_found")
         return apiError("Lead not found", HttpStatus.NOT_FOUND);

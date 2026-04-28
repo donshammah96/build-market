@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { env } from "@/app/lib/infrastructure/env";
 
 // ============================================
 // GDPR Field-Level Encryption with Key Rotation Support
@@ -10,14 +11,13 @@ const AUTH_TAG_LENGTH = 16;
 
 // Key versioning for rotation support
 // Format: v{version}:iv:authTag:encrypted (new) or iv:authTag:encrypted (legacy)
-const CURRENT_KEY_VERSION = process.env.CURRENT_KEY_VERSION || "v1";
-const LEGACY_FORMAT_DEADLINE = process.env.LEGACY_FORMAT_DEADLINE
-  ? new Date(process.env.LEGACY_FORMAT_DEADLINE)
+const CURRENT_KEY_VERSION = env.encryption.currentVersion;
+const LEGACY_FORMAT_DEADLINE = env.encryption.legacyDeadline
+  ? new Date(env.encryption.legacyDeadline)
   : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000); // 90 days from now
 
 // Migration mode allows decryption to return original on failure (for data migration)
-const ENCRYPTION_MIGRATION_MODE =
-  process.env.ENCRYPTION_MIGRATION_MODE === "true";
+const ENCRYPTION_MIGRATION_MODE = env.encryption.migrationMode;
 
 /**
  * Encryption key registry supporting multiple versions for rotation
@@ -38,7 +38,8 @@ function loadEncryptionKeys(): void {
 
   for (const version of keyVersions) {
     const envVar = `ENCRYPTION_KEY_${version.toUpperCase()}`;
-    const keyHex = process.env[envVar];
+    const keyHex =
+      env.encryption.keys[version as keyof typeof env.encryption.keys];
 
     if (keyHex) {
       if (keyHex.length !== 64) {
@@ -57,7 +58,7 @@ function loadEncryptionKeys(): void {
   }
 
   // Fallback: Check legacy ENCRYPTION_KEY for backwards compatibility
-  const legacyKey = process.env.ENCRYPTION_KEY;
+  const legacyKey = env.encryption.legacyKey;
   if (legacyKey && !ENCRYPTION_KEYS["v1"]) {
     if (legacyKey.length !== 64) {
       throw new Error(

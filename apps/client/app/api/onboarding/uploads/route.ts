@@ -1,9 +1,22 @@
+/**
+ * POST /api/onboarding/uploads
+ * app/api/onboarding/uploads/route.ts
+ *
+ * KEY CHANGES FROM ORIGINAL:
+ *
+ * 1. RESULT PATTERN replaces fragile discriminant union
+ *    Original: inner executor returned UploadExecutionData | UploadExecutionError,
+ *    discriminated by "errorCode" in result.data. If the executor's result.data
+ *    shape ever changed (e.g. the domain added an errorCode field to a success
+ *    response), the discriminant would silently match the wrong branch.
+ *    Fixed: use the ok/err Result<T,E> pattern already established across the domain.
+ *
+ * No Clerk ordering issue here — this route has no IdempotencyService calls
+ * and no Clerk metadata update. It is upload-only.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import fs from "fs";
-import path from "path";
-import { randomUUID, createHash } from "crypto";
-import { prisma } from "@build/db";
 import { apiError, HttpStatus } from "@/app/lib/api/api-response";
 import {
   apiSuccess,
@@ -16,17 +29,18 @@ import {
   getRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
+import { validateFile } from "@/app/lib/validation/file-validation";
+import { uploadService } from "@/app/lib/domains/uploads";
+import { ok, err, isOk, type Result } from "@/app/lib/errors/result";
 
 const logger = getClientLogger();
+const ROUTE_PATTERN = "/api/onboarding/uploads";
+const OPERATION_NAME = "onboarding_upload";
 
 // =============================================================================
 // Security Configuration
 // =============================================================================
 
-/**
- * Allowed MIME types for uploaded files.
- * Only images and PDFs are permitted for onboarding documents.
- */
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
   "image/jpg",
@@ -35,167 +49,97 @@ const ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
 ]);
 
-/**
- * Allowed file extensions (as fallback when MIME type detection fails)
- */
 const ALLOWED_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".pdf"]);
-
-/**
- * Maximum file size: 10MB
- */
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-
-/**
- * Maximum files per request
- */
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_FILES_PER_REQUEST = 5;
 
+const ONBOARDING_VALIDATION_CONFIG = {
+  maxFileSize: MAX_FILE_SIZE,
+  allowedMimeTypes: Array.from(ALLOWED_MIME_TYPES),
+  allowedExtensions: Array.from(ALLOWED_EXTENSIONS),
+  checkMagicNumbers: true,
+} as const;
+
 // =============================================================================
-// Validation Helpers
+// Types
 // =============================================================================
 
-interface FileValidationResult {
-  valid: boolean;
-  error?: string;
-}
+type UploadedFileResponse = {
+  originalName: string;
+  uploadId: string;
+  previewUrl: string;
+};
 
-/**
- * Magic bytes (file signatures) for allowed file types.
- * Provides deeper validation than just checking MIME type/extension.
- */
-const FILE_SIGNATURES: Record<string, { bytes: number[]; offset?: number }[]> =
-  {
-    "image/jpeg": [
-      { bytes: [0xff, 0xd8, 0xff] }, // JPEG/JFIF/Exif
-    ],
-    "image/png": [
-      { bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] }, // PNG
-    ],
-    "image/webp": [
-      { bytes: [0x52, 0x49, 0x46, 0x46] }, // RIFF header (WebP starts with RIFF)
-    ],
-    "application/pdf": [
-      { bytes: [0x25, 0x50, 0x44, 0x46] }, // %PDF
-    ],
-  };
+type UploadSuccessData = {
+  uploaded: Record<string, UploadedFileResponse[]>;
+};
 
-/**
- * Verify file content matches claimed type by checking magic bytes.
- * Prevents content-type spoofing attacks.
- */
-async function verifyFileSignature(
-  file: File,
-): Promise<{ valid: boolean; detectedType?: string }> {
-  try {
-    const buffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(buffer.slice(0, 16));
+type UploadErrorData = {
+  code: "invalid_input" | "processing_failed";
+  message: string;
+};
 
-    for (const [mimeType, signatures] of Object.entries(FILE_SIGNATURES)) {
-      for (const sig of signatures) {
-        const offset = sig.offset || 0;
-        let match = true;
-
-        for (let i = 0; i < sig.bytes.length; i++) {
-          if (bytes[offset + i] !== sig.bytes[i]) {
-            match = false;
-            break;
-          }
-        }
-
-        if (match) {
-          // Special check for WebP — must have WEBP at bytes 8-11
-          if (mimeType === "image/webp") {
-            const webpMarker = new TextDecoder().decode(buffer.slice(8, 12));
-            if (webpMarker !== "WEBP") {
-              continue;
-            }
-          }
-          return { valid: true, detectedType: mimeType };
-        }
-      }
-    }
-
-    return { valid: false };
-  } catch {
-    return { valid: false };
+function mapUploadErrorCodeToStatus(code: UploadErrorData["code"]): number {
+  switch (code) {
+    case "invalid_input":
+      return HttpStatus.BAD_REQUEST;
+    default:
+      return HttpStatus.INTERNAL_SERVER_ERROR;
   }
-}
-
-async function validateFile(file: File): Promise<FileValidationResult> {
-  // Check MIME type
-  const mimeType = file.type.toLowerCase();
-  const extension = path.extname(file.name).toLowerCase();
-
-  if (!ALLOWED_MIME_TYPES.has(mimeType) && !ALLOWED_EXTENSIONS.has(extension)) {
-    return {
-      valid: false,
-      error: `Invalid file type: ${file.name}. Allowed: JPEG, PNG, WebP, PDF`,
-    };
-  }
-
-  // Check file size
-  if (file.size > MAX_FILE_SIZE) {
-    const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-    return {
-      valid: false,
-      error: `File too large: ${file.name} (${sizeMB}MB). Maximum: 10MB`,
-    };
-  }
-
-  // Verify magic bytes match claimed type
-  const signatureCheck = await verifyFileSignature(file);
-  if (!signatureCheck.valid) {
-    return {
-      valid: false,
-      error: `File content does not match type: ${file.name}. File may be corrupted or spoofed.`,
-    };
-  }
-
-  return { valid: true };
 }
 
 // =============================================================================
 // Route Handler
 // =============================================================================
 
-/**
- * POST /api/onboarding/uploads
- *
- * Secure upload endpoint for onboarding flow.
- * Only requires Clerk authentication — does NOT require database user to exist.
- *
- * Security:
- * - File type validation (JPEG, PNG, WebP, PDF only)
- * - Magic byte signature verification (prevents content-type spoofing)
- * - File size limit (10MB per file)
- * - Max files per request (5)
- * - Rate limiting
- *
- * NOTE: This endpoint writes to the local filesystem (`public/uploads/`).
- * For production deployments with serverless or multi-instance architectures,
- * migrate to cloud storage (e.g., S3/R2) with the centralized Asset model.
- *
- * Returns: { success: true, data: { uploaded: { <fieldName>: [{ originalName, url }] } } }
- */
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const requestStartedAt = Date.now();
   const correlationId = initializeCorrelationId(req);
+  let actorRole: "anonymous" | "authenticated" = "anonymous";
 
-  // Get Clerk user ID — only requires Clerk auth, not DB user
+  const logOutcome = (
+    outcome:
+      | "succeeded"
+      | "failed"
+      | "rate_limited"
+      | "unauthorized"
+      | "bad_request",
+    httpStatus: number,
+    // Additional fields are explicit named keys, never a spread bag.
+    // ADR-005: log events must carry the minimum stable field set.
+    extra?: { errorCode?: string; fileGroupCount?: number },
+  ) => {
+    logger.info("Onboarding uploads adapter outcome", {
+      correlationId,
+      operationName: OPERATION_NAME,
+      httpMethod: req.method,
+      routePattern: ROUTE_PATTERN,
+      actorRole,
+      outcome,
+      httpStatus,
+      durationMs: Date.now() - requestStartedAt,
+      ...(extra?.errorCode !== undefined && { errorCode: extra.errorCode }),
+      ...(extra?.fileGroupCount !== undefined && {
+        fileGroupCount: extra.fileGroupCount,
+      }),
+    });
+  };
+
   const { userId: clerkId } = await auth();
-
   if (!clerkId) {
+    logOutcome("unauthorized", HttpStatus.UNAUTHORIZED);
     return apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED);
   }
+  actorRole = "authenticated";
 
-  // Rate limiting for uploads
   const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
     `onboarding-uploads:${identifier}`,
     RateLimits.WRITE.limit,
     RateLimits.WRITE.window,
   );
-
   if (!rateLimitResult.success) {
+    logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
     return apiError(
       "Too many upload requests. Please try again later.",
       HttpStatus.TOO_MANY_REQUESTS,
@@ -204,127 +148,130 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
-    async () => {
+    async (): Promise<Result<UploadSuccessData, UploadErrorData>> => {
       const form = await req.formData();
-      const uploadDir = path.join(process.cwd(), "public", "uploads");
 
-      await fs.promises.mkdir(uploadDir, { recursive: true });
-
-      // Collect all files first to validate count
-      const files: Array<{ key: string; file: File }> = [];
-
+      const files: Array<{ key: string; file: File; buffer: Buffer }> = [];
       for (const [key, value] of form.entries()) {
         if (
           typeof value === "object" &&
           "arrayBuffer" in value &&
           typeof (value as File).name === "string"
         ) {
-          files.push({ key, file: value as File });
+          const file = value as File;
+          const buffer = Buffer.from(await file.arrayBuffer());
+          files.push({ key, file, buffer });
         }
       }
 
-      // Check max files limit
       if (files.length === 0) {
-        return {
-          _error: true as const,
-          message: "No files provided",
-          status: HttpStatus.BAD_REQUEST,
-        };
+        return err({ code: "invalid_input", message: "No files provided" });
       }
       if (files.length > MAX_FILES_PER_REQUEST) {
-        return {
-          _error: true as const,
+        return err({
+          code: "invalid_input",
           message: `Too many files. Maximum ${MAX_FILES_PER_REQUEST} files per request.`,
-          status: HttpStatus.BAD_REQUEST,
-        };
+        });
       }
 
-      // Validate all files before writing any (fail-fast)
+      // Validate all files before storing any (fail-fast).
       const validationErrors: string[] = [];
-      for (const { file } of files) {
-        const validResult = await validateFile(file);
+      for (const { file, buffer } of files) {
+        const validResult = validateFile(
+          { name: file.name, size: file.size, type: file.type },
+          buffer,
+          ONBOARDING_VALIDATION_CONFIG,
+        );
         if (!validResult.valid && validResult.error) {
           validationErrors.push(validResult.error);
         }
       }
-
       if (validationErrors.length > 0) {
         logger.warn("Upload validation failed", {
           correlationId,
-          clerkId,
+          actorRole,
           errors: validationErrors,
         });
-        return {
-          _error: true as const,
+        return err({
+          code: "invalid_input",
           message: validationErrors.join("; "),
-          status: HttpStatus.BAD_REQUEST,
-        };
+        });
       }
 
-      // All files valid — proceed with upload
-      const uploaded: Record<
-        string,
-        Array<{ originalName: string; uploadId: string; previewUrl: string }>
-      > = {};
+      const uploaded: Record<string, UploadedFileResponse[]> = {};
 
-      for (const { key, file } of files) {
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const ext = path.extname(file.name) || "";
-        const filename = `${Date.now()}-${randomUUID()}${ext}`;
-        const filepath = path.join(uploadDir, filename);
-
-        await fs.promises.writeFile(filepath, buffer);
-
-        const url = `/uploads/${filename}`;
-        const checksum = createHash("sha256").update(buffer).digest("hex");
-
-        const stagedUpload = await prisma.onboardingUpload.create({
-          data: {
-            clerkId,
-            tempUrl: url,
+      for (const { key, file, buffer } of files) {
+        const stageResult = await uploadService.stageOnboardingUpload({
+          actor: { clerkId, correlationId },
+          file: {
             originalName: file.name,
             mimeType: file.type,
             size: file.size,
-            checksum,
-            storageBucket: "local",
-            storageKey: filename,
-            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+            buffer,
           },
         });
 
+        if (!stageResult.ok) {
+          return err({
+            code:
+              stageResult.error === "invalid_input"
+                ? "invalid_input"
+                : "processing_failed",
+            message: stageResult.message || "File upload failed",
+          });
+        }
+
         if (!uploaded[key]) uploaded[key] = [];
         uploaded[key].push({
-          originalName: file.name,
-          uploadId: stagedUpload.id,
-          previewUrl: url,
+          originalName: stageResult.data.originalName,
+          uploadId: stageResult.data.uploadId,
+          previewUrl: stageResult.data.previewUrl,
         });
       }
 
       logger.info("Onboarding files uploaded successfully", {
         correlationId,
-        clerkId,
+        actorRole,
         fileCount: files.length,
         fieldNames: Object.keys(uploaded),
       });
 
-      return { uploaded };
+      return ok({ uploaded });
     },
     { operationName: "onboarding_upload" },
   );
 
   if (!result.success || !result.data) {
-    logger.error("Onboarding upload failed", result.error, { correlationId });
+    logger.error("Onboarding upload executor failed", result.error, {
+      correlationId,
+      operationName: OPERATION_NAME,
+      httpMethod: req.method,
+      routePattern: ROUTE_PATTERN,
+      actorRole,
+      outcome: "failed",
+      httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+      durationMs: Date.now() - requestStartedAt,
+    });
     return apiError("File upload failed", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
-  // Handle validation errors returned from the executor
-  if ("_error" in result.data && result.data._error) {
-    return apiError(
-      (result.data as { message: string }).message,
-      (result.data as { status: number }).status,
-    );
+  // result.data is typed as T in OperationResult<T>. The stale .d.ts may
+  // collapse T to unknown when the package hasn't been rebuilt. We know the
+  // concrete type from the typed operation signature above, so we assert it
+  // explicitly at this boundary. After `pnpm --filter="@build/resilience" run
+  // build` this assertion becomes redundant but remains harmless.
+  const innerResult = result.data as Result<UploadSuccessData, UploadErrorData>;
+  if (!isOk(innerResult)) {
+    const mappedStatus = mapUploadErrorCodeToStatus(innerResult.code);
+    const outcome =
+      mappedStatus === HttpStatus.BAD_REQUEST ? "bad_request" : "failed";
+    logOutcome(outcome, mappedStatus, { errorCode: innerResult.code });
+    return apiError(innerResult.message ?? "Upload failed", mappedStatus);
   }
 
-  return apiSuccess(result.data, HttpStatus.OK);
+  logOutcome("succeeded", HttpStatus.OK, {
+    fileGroupCount: Object.keys(innerResult.data.uploaded).length,
+  });
+
+  return apiSuccess(innerResult.data, HttpStatus.OK);
 }

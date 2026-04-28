@@ -17,11 +17,7 @@ import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { UpdatePortfolioSchema } from "@/app/lib/validation/portfolio-validation";
 import { PORTFOLIO_CONFIG } from "@/app/lib/config/portfolio.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
-import {
-  getProfessionalPortfolioById,
-  updateProfessionalPortfolio,
-  deleteProfessionalPortfolio,
-} from "@/lib/services/portfolio";
+import { portfolioService } from "@/app/lib/domains/portfolio";
 
 const logger = getClientLogger();
 
@@ -52,7 +48,11 @@ export const GET = withAuth<PortfolioParams>(
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      () => getProfessionalPortfolioById(dbUserId, portfolioId),
+      () =>
+        portfolioService.getPortfolioDetail({
+          portfolioId,
+          userId: dbUserId,
+        }),
       { operationName: "get_portfolio_detail" },
     );
 
@@ -70,7 +70,7 @@ export const GET = withAuth<PortfolioParams>(
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-    if (data.success === false) {
+    if (!data.ok) {
       if (data.error === "not_found")
         return apiError("Portfolio not found", HttpStatus.NOT_FOUND);
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
@@ -84,7 +84,7 @@ export const GET = withAuth<PortfolioParams>(
  * Update a portfolio item (owner only).
  */
 export const PATCH = withAuth<PortfolioParams>(
-  async (req: NextRequest, { dbUserId }, params) => {
+  async (req: NextRequest, { dbUserId, userRole }, params) => {
     const correlationId = initializeCorrelationId(req);
 
     if (!params?.id || !isValidId(params.id)) {
@@ -154,12 +154,17 @@ export const PATCH = withAuth<PortfolioParams>(
       correlationId,
       portfolioId,
       fields: Object.keys(updateData),
-      userId: dbUserId,
+      actorRole: userRole,
     });
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      () => updateProfessionalPortfolio(dbUserId, portfolioId, updateData),
+      () =>
+        portfolioService.updatePortfolio({
+          portfolioId,
+          userId: dbUserId,
+          data: updateData,
+        }),
       { operationName: "update_portfolio_item" },
     );
 
@@ -172,7 +177,7 @@ export const PATCH = withAuth<PortfolioParams>(
     }
 
     const data = result.data;
-    if ("error" in data) {
+    if (!data.ok) {
       await IdempotencyService.fail(idempotencyKey);
       if (data.error === "not_found")
         return apiError("Portfolio not found", HttpStatus.NOT_FOUND);
@@ -191,7 +196,7 @@ export const PATCH = withAuth<PortfolioParams>(
  * Soft-delete a portfolio item (owner only).
  */
 export const DELETE = withAuth<PortfolioParams>(
-  async (req: NextRequest, { dbUserId }, params) => {
+  async (req: NextRequest, { dbUserId, userRole }, params) => {
     const correlationId = initializeCorrelationId(req);
 
     if (!params?.id || !isValidId(params.id)) {
@@ -230,12 +235,16 @@ export const DELETE = withAuth<PortfolioParams>(
     logger.info("Deleting portfolio item", {
       correlationId,
       portfolioId,
-      userId: dbUserId,
+      actorRole: userRole,
     });
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      () => deleteProfessionalPortfolio(dbUserId, portfolioId),
+      () =>
+        portfolioService.deletePortfolio({
+          portfolioId,
+          userId: dbUserId,
+        }),
       { operationName: "delete_portfolio_item" },
     );
 
@@ -248,7 +257,7 @@ export const DELETE = withAuth<PortfolioParams>(
     }
 
     const data = result.data;
-    if ("error" in data) {
+    if (!data.ok) {
       await IdempotencyService.fail(idempotencyKey);
       if (data.error === "not_found")
         return apiError("Portfolio not found", HttpStatus.NOT_FOUND);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Eye, FileText, CheckCircle2 } from "lucide-react";
 import { useProfileStatus } from "./useProfileStatus";
 import {
   getDashboardConfig,
@@ -15,11 +16,20 @@ import {
   PropertyListingData,
   PropertyInquiryData,
 } from "@/lib/dashboard";
-import type { InventoryAlert } from "@/lib/services/inventory";
-import { API_ROUTES } from "@/lib/links";
+import type { SellerInventoryAlert } from "@/app/lib/domains/seller-insights";
+import type { InquiryListItem } from "@/app/lib/domains/inquiries/contracts";
+import { calendarClient } from "@/lib/calendar-client";
+import { dashboardMetricsClient } from "@/lib/dashboard-metrics-client";
+import { inventoryClient } from "@/lib/inventory-client";
+import { leadsClient } from "@/lib/leads-client";
+import { ordersClient } from "@/lib/orders-client";
 import { storesClient } from "@/lib/stores-client";
-import { projectsClient } from "@/lib/projects-client";
 import { propertiesClient } from "@/lib/properties-client";
+import { inquiriesClient } from "@/lib/inquiries-client";
+import { pipelineClient } from "@/lib/pipeline-client";
+import { portfolioClient } from "@/lib/portfolio-client";
+import { productsClient, type TopProduct } from "@/lib/products-client";
+import { projectsClient } from "@/lib/projects-client";
 
 // ============================================================================
 // TYPES
@@ -39,15 +49,6 @@ interface PortfolioItem {
   category?: string;
 }
 
-interface TopProduct {
-  id: string;
-  name: string;
-  imageUrl?: string;
-  price: number;
-  soldCount: number;
-  revenue: number;
-}
-
 interface PipelineStage {
   id: string;
   label: string;
@@ -56,6 +57,30 @@ interface PipelineStage {
   icon: React.ComponentType<{ className?: string }>;
   color: string;
 }
+
+const DASHBOARD_PIPELINE_STAGE_META: Record<
+  string,
+  Omit<PipelineStage, "count" | "value">
+> = {
+  viewing: {
+    id: "viewing",
+    label: "Viewings Scheduled",
+    icon: Eye,
+    color: "text-blue-500 bg-blue-50",
+  },
+  offer: {
+    id: "offer",
+    label: "Offers Pending",
+    icon: FileText,
+    color: "text-amber-500 bg-amber-50",
+  },
+  closing: {
+    id: "closing",
+    label: "Ready to Close",
+    icon: CheckCircle2,
+    color: "text-emerald-500 bg-emerald-50",
+  },
+};
 
 export interface DashboardData {
   // Configuration
@@ -74,7 +99,7 @@ export interface DashboardData {
   stores: StoreData[];
   primaryStore: StoreData | null;
   orders: OrderData[];
-  inventoryAlerts: InventoryAlert[];
+  inventoryAlerts: SellerInventoryAlert[];
   topProducts: TopProduct[];
 
   // Property data
@@ -120,30 +145,210 @@ export const dashboardKeys = {
 // ============================================================================
 
 async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
-  const res = await fetch("/api/professional-portal/dashboard/metrics");
-  if (!res.ok) throw new Error("Failed to fetch metrics");
-  const data = await res.json();
-  return data.data || {};
+  const res = await dashboardMetricsClient.getMetrics();
+  if (!res.success) throw new Error(res.error);
+  return res.data ?? {};
+}
+
+function formatRelativeTime(dateInput?: string | Date | null): string {
+  if (!dateInput) {
+    return "Unknown";
+  }
+
+  const date = new Date(dateInput);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return date.toLocaleDateString("en-KE", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function titleize(value?: string | null, fallback = "Unknown"): string {
+  if (!value) {
+    return fallback;
+  }
+
+  return value
+    .toLowerCase()
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function mapLeadStatus(status?: string): LeadData["status"] {
+  switch ((status ?? "").toUpperCase()) {
+    case "CONTACTED":
+      return "contacted";
+    case "PROPOSAL":
+      return "proposal";
+    case "WON":
+      return "won";
+    case "LOST":
+      return "lost";
+    default:
+      return "new";
+  }
+}
+
+function extractPortfolioImageUrl(
+  images:
+    | string
+    | string[]
+    | Array<{
+        url?: string;
+        asset?: { cdnUrl?: string; thumbnailUrl?: string };
+      }>,
+): string {
+  if (Array.isArray(images)) {
+    const first = images[0];
+    if (typeof first === "string") {
+      return first;
+    }
+    if (first && typeof first === "object") {
+      if ("url" in first && typeof first.url === "string") return first.url;
+      return (
+        first.asset?.thumbnailUrl ?? first.asset?.cdnUrl ?? "/placeholder.svg"
+      );
+    }
+  }
+
+  if (typeof images === "string") {
+    try {
+      const parsed = JSON.parse(images) as unknown;
+      if (Array.isArray(parsed) && typeof parsed[0] === "string") {
+        return parsed[0];
+      }
+    } catch {
+      return images || "/placeholder.svg";
+    }
+
+    return images || "/placeholder.svg";
+  }
+
+  return "/placeholder.svg";
 }
 
 async function fetchLeads(): Promise<LeadData[]> {
-  const res = await fetch(
-    "/api/professional-portal/leads?limit=5&status=new,contacted",
-  );
-  if (!res.ok) throw new Error("Failed to fetch leads");
-  const json = await res.json();
-  const leads = json.data?.leads;
-  return Array.isArray(leads) ? leads : [];
+  const res = await leadsClient.getLeads({
+    limit: 5,
+    status: ["NEW", "CONTACTED"],
+  });
+  if (!res.success) throw new Error(res.error);
+
+  const leads = res.data?.leads ?? [];
+  return leads.map((lead) => {
+    const normalizedBudget =
+      lead.budget == null ? "" : String(lead.budget).trim();
+
+    return {
+      id: lead.id,
+      name: lead.clientName,
+      project: titleize(lead.projectType, "General Inquiry"),
+      budget: normalizedBudget || "Budget TBD",
+      location: lead.location?.trim() || "Location TBD",
+      status: mapLeadStatus(lead.status),
+      receivedAt: formatRelativeTime(lead.createdAt),
+    };
+  });
+}
+
+function mapDashboardProjectStatus(status?: string): ProjectData["status"] {
+  switch (status) {
+    case "COMPLETED":
+      return "completed";
+    case "ON_HOLD":
+    case "CANCELLED":
+      return "delayed";
+    case "IN_PROGRESS":
+      return "on_track";
+    default:
+      return "attention";
+  }
+}
+
+function mapDashboardProjectProgress(status?: string): number {
+  switch (status) {
+    case "COMPLETED":
+      return 100;
+    case "IN_PROGRESS":
+      return 60;
+    case "PLANNING":
+      return 20;
+    case "ON_HOLD":
+      return 40;
+    case "CANCELLED":
+      return 0;
+    default:
+      return 0;
+  }
+}
+
+function normalizeProjectDueDate(
+  endDate?: string | null,
+  startDate?: string | null,
+  createdAt?: string | null,
+): string {
+  const source = endDate ?? startDate ?? createdAt;
+  if (!source) {
+    return new Date().toISOString();
+  }
+  const parsed = new Date(source);
+  return Number.isNaN(parsed.getTime())
+    ? new Date().toISOString()
+    : parsed.toISOString();
+}
+
+export function normalizeProjectClientLabel(project: {
+  client?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+  } | null;
+}): string {
+  const firstName = project.client?.firstName?.trim() ?? "";
+  const lastName = project.client?.lastName?.trim() ?? "";
+  const fullName = `${firstName} ${lastName}`.trim();
+
+  if (fullName) {
+    return fullName;
+  }
+
+  return project.client?.email?.trim() || "Client TBD";
 }
 
 async function fetchProjects(): Promise<ProjectData[]> {
-  const res = await projectsClient.getProjects({
-    limit: 4,
-    status: "active",
-  });
+  const res = await projectsClient.getProjects();
   if (!res.success) throw new Error(res.error);
-  const projects = res.data?.projects;
-  return (Array.isArray(projects) ? projects : []) as ProjectData[];
+
+  const projects = res.data?.items ?? [];
+
+  return projects.map((project) => ({
+    id: project.id,
+    title: project.title ?? "Untitled project",
+    client: normalizeProjectClientLabel(project),
+    progress: mapDashboardProjectProgress(project.status ?? undefined),
+    status: mapDashboardProjectStatus(project.status ?? undefined),
+    dueDate: normalizeProjectDueDate(
+      project.endDate,
+      project.startDate,
+      project.createdAt,
+    ),
+  }));
 }
 
 async function fetchStores(): Promise<StoreData[]> {
@@ -153,27 +358,32 @@ async function fetchStores(): Promise<StoreData[]> {
 }
 
 async function fetchOrders(): Promise<OrderData[]> {
-  const res = await fetch("/api/professional-portal/orders?limit=5");
-  if (!res.ok) throw new Error("Failed to fetch orders");
-  const json = await res.json();
-  const orders = json.data?.data;
-  return Array.isArray(orders) ? orders : [];
+  const res = await ordersClient.getOrders({ limit: 5 });
+  if (!res.success) throw new Error(res.error);
+  return res.data?.items ?? [];
 }
 
 async function fetchProperties(): Promise<PropertyListingData[]> {
   const res = await propertiesClient.getMyProperties({ limit: 4 });
   if (!res.success) throw new Error(res.error);
-  return (res.data ?? []) as PropertyListingData[];
+  return (res.data?.properties ?? []) as PropertyListingData[];
 }
 
 async function fetchPropertyInquiries(): Promise<PropertyInquiryData[]> {
-  const res = await fetch(
-    "/api/professional-portal/inquiries?limit=4&type=property",
-  );
-  if (!res.ok) throw new Error("Failed to fetch inquiries");
-  const json = await res.json();
-  const inquiries = json.data?.data;
-  return Array.isArray(inquiries) ? inquiries : [];
+  const res = await inquiriesClient.getInquiries({ limit: 4 });
+  if (!res.success) throw new Error(res.error);
+  const inquiryPage = res.data;
+  if (!inquiryPage) return [];
+
+  return inquiryPage.data.map((inquiry: InquiryListItem) => ({
+    id: inquiry.id,
+    propertyTitle: inquiry.property.title,
+    clientName: inquiry.clientName,
+    clientPhone: inquiry.clientPhone ?? "",
+    message: inquiry.message ?? "",
+    status: inquiry.status.toLowerCase() as PropertyInquiryData["status"],
+    createdAt: inquiry.createdAt,
+  }));
 }
 
 async function fetchAgenda(): Promise<AgendaEvent[]> {
@@ -182,53 +392,70 @@ async function fetchAgenda(): Promise<AgendaEvent[]> {
   const end = new Date();
   end.setHours(23, 59, 59, 999);
 
-  const res = await fetch(
-    `${API_ROUTES.professionalPortalCalendar}?start=${start.toISOString()}&end=${end.toISOString()}`,
-  );
-  if (!res.ok) throw new Error("Failed to fetch agenda");
-  const json = await res.json();
-  const events = json.data;
-  return Array.isArray(events) ? events : [];
+  const res = await calendarClient.getEvents({
+    start: start.toISOString(),
+    end: end.toISOString(),
+  });
+  if (!res.success) throw new Error(res.error);
+
+  const events = res.data ?? [];
+  return events.map((event) => ({
+    id: event.id,
+    title: event.title,
+    startDate: event.startDate,
+    status: event.status,
+  }));
 }
 
 async function fetchPortfolio(): Promise<PortfolioItem[]> {
-  const res = await fetch("/api/professional-portal/portfolio?limit=4");
-  if (!res.ok) throw new Error("Failed to fetch portfolio");
-  const json = await res.json();
-  const portfolios = json.data?.portfolios;
-  return Array.isArray(portfolios) ? portfolios : [];
+  const res = await portfolioClient.getPortfolios({ limit: 4 });
+  if (!res.success) throw new Error(res.error);
+
+  return (res.data ?? []).map((item) => ({
+    id: item.id,
+    title: item.title,
+    imageUrl: extractPortfolioImageUrl(item.images),
+    category: titleize(item.projectType, undefined),
+  }));
 }
 
-async function fetchInventoryAlerts(): Promise<InventoryAlert[]> {
-  const res = await fetch("/api/professional-portal/inventory/alerts");
-  if (!res.ok) throw new Error("Failed to fetch inventory alerts");
-  const json = await res.json();
-  const alerts = json.data?.data;
-  return Array.isArray(alerts) ? alerts : [];
+async function fetchInventoryAlerts(): Promise<SellerInventoryAlert[]> {
+  const res = await inventoryClient.getAlerts();
+  if (!res.success) throw new Error(res.error);
+  return res.data?.data ?? [];
 }
 
 async function fetchTopProducts(): Promise<TopProduct[]> {
-  const res = await fetch("/api/professional-portal/products/top?limit=5");
-  if (!res.ok) throw new Error("Failed to fetch top products");
-  const json = await res.json();
-  const products = json.data;
-  return Array.isArray(products) ? products : [];
+  const res = await productsClient.getTopProducts({ limit: 5 });
+  if (!res.success) throw new Error(res.error);
+  return res.data ?? [];
 }
 
 async function fetchPipeline(): Promise<{
   stages: PipelineStage[];
   totalValue: number;
 }> {
-  const res = await fetch("/api/professional-portal/pipeline");
-  if (!res.ok) throw new Error("Failed to fetch pipeline");
-  const json = await res.json();
-  const data = json.data;
-  return data && typeof data === "object"
-    ? {
-        stages: Array.isArray(data.stages) ? data.stages : [],
-        totalValue: typeof data.totalValue === "number" ? data.totalValue : 0,
-      }
-    : { stages: [], totalValue: 0 };
+  const res = await pipelineClient.getPipelineSummary();
+  if (!res.success) throw new Error(res.error);
+
+  const summary = res.data;
+  if (!summary) {
+    return { stages: [], totalValue: 0 };
+  }
+
+  return {
+    stages: summary.stages.map((stage) => ({
+      ...(DASHBOARD_PIPELINE_STAGE_META[stage.id] ?? {
+        id: stage.id,
+        label: titleize(stage.id, "Pipeline"),
+        icon: Eye,
+        color: "text-zinc-500 bg-zinc-50",
+      }),
+      count: stage.count,
+      value: stage.value,
+    })),
+    totalValue: summary.totalValue,
+  };
 }
 
 // ============================================================================

@@ -3,9 +3,10 @@
  * Encapsulates: withAuth, rate limit, validation, resilientExecutor, response mapping.
  * Reduces boilerplate in route files.
  */
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import type { z } from "zod";
 import { withAuth } from "@/app/lib/api/api-middleware";
+import type { UserRole } from "@build/db";
 import { HttpStatus } from "@/app/lib/api/api-response";
 import { apiError, apiSuccess } from "@/app/lib/api/resilient-api";
 import {
@@ -28,12 +29,62 @@ const RATE_LIMIT_CONFIG = {
   write: { limit: RateLimits.WRITE.limit, window: RateLimits.WRITE.window },
 } as const;
 
+type ProfessionalPortalAdapterOutcome =
+  | "started"
+  | "succeeded"
+  | "failed"
+  | "rate_limited"
+  | "bad_request";
+
+function getRoutePattern(req: NextRequest): string {
+  try {
+    return req.nextUrl.pathname;
+  } catch {
+    return new URL(req.url).pathname;
+  }
+}
+
+function createProfessionalPortalOutcomeLogger(params: {
+  req: NextRequest;
+  correlationId: string;
+  operationName: string;
+  actorRole: UserRole;
+  requestStartedAt: number;
+}) {
+  const { req, correlationId, operationName, actorRole, requestStartedAt } =
+    params;
+  const routePattern = getRoutePattern(req);
+
+  return (
+    outcome: ProfessionalPortalAdapterOutcome,
+    httpStatus: number,
+    additional: Record<string, unknown> = {},
+  ) => {
+    logger.info("Professional portal adapter outcome", {
+      correlationId,
+      operationName,
+      httpMethod: req.method,
+      routePattern,
+      actorRole,
+      outcome,
+      httpStatus,
+      durationMs: Date.now() - requestStartedAt,
+      additionalContext: additional,
+    });
+  };
+}
+
 export interface GetRouteConfig<TQuery = Record<string, never>> {
   rateLimitKey: string;
   rateLimitType?: RateLimitType;
   querySchema?: z.ZodType<TQuery>;
   parseQuery?: (req: NextRequest) => Record<string, unknown>;
-  handler: (ctx: { dbUserId: string; query: TQuery }) => Promise<unknown>;
+  handler: (ctx: {
+    dbUserId: string;
+    clerkId: string;
+    userRole: UserRole;
+    query: TQuery;
+  }) => Promise<unknown>;
   operationName: string;
   errorMessage?: string;
 }
@@ -57,8 +108,16 @@ export function createProfessionalPortalGet<TQuery = Record<string, never>>(
 
   const { limit, window } = RATE_LIMIT_CONFIG[rateLimitType];
 
-  return withAuth(async (req: NextRequest, { dbUserId }) => {
+  return withAuth(async (req: NextRequest, { dbUserId, clerkId, userRole }) => {
+    const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
+    const logOutcome = createProfessionalPortalOutcomeLogger({
+      req,
+      correlationId,
+      operationName,
+      actorRole: userRole,
+      requestStartedAt,
+    });
 
     const identifier = getRateLimitIdentifier(req);
     const rateLimitResult = await checkRateLimit(
@@ -68,6 +127,7 @@ export function createProfessionalPortalGet<TQuery = Record<string, never>>(
     );
 
     if (!rateLimitResult.success) {
+      logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
       return apiError(
         "Too many requests. Please try again later.",
         HttpStatus.TOO_MANY_REQUESTS,
@@ -83,8 +143,12 @@ export function createProfessionalPortalGet<TQuery = Record<string, never>>(
       if (!validation.success) {
         logger.warn("Query validation failed", {
           correlationId,
-          userId: dbUserId,
-          errors: validation.error.issues,
+          actorRole: userRole,
+          operationName,
+          issueCount: validation.error.issues.length,
+        });
+        logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
+          validationIssueCount: validation.error.issues.length,
         });
         return apiError(
           "Invalid query parameters",
@@ -97,25 +161,30 @@ export function createProfessionalPortalGet<TQuery = Record<string, never>>(
       query = {} as TQuery;
     }
 
-    logger.info(`Executing ${operationName}`, {
-      correlationId,
-      userId: dbUserId,
-    });
+    logOutcome("started", HttpStatus.OK);
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      async () => handler({ dbUserId, query }),
+      async () => handler({ dbUserId, clerkId, userRole, query }),
       { operationName },
     );
 
     if (result.success && result.data !== undefined) {
+      logOutcome("succeeded", HttpStatus.OK);
       return apiSuccess(result.data, HttpStatus.OK);
     }
 
     logger.error(errorMessage, result.error, {
       correlationId,
-      userId: dbUserId,
+      actorRole: userRole,
+      operationName,
+      httpMethod: req.method,
+      routePattern: getRoutePattern(req),
+      outcome: "failed",
+      httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+      durationMs: Date.now() - requestStartedAt,
     });
+    logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR);
     return apiError(errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
   });
 }
@@ -124,7 +193,12 @@ export interface PostRouteConfig<TBody = unknown> {
   rateLimitKey: string;
   rateLimitType?: RateLimitType;
   bodySchema?: z.ZodType<TBody>;
-  handler: (ctx: { dbUserId: string; body: TBody }) => Promise<unknown>;
+  handler: (ctx: {
+    dbUserId: string;
+    clerkId: string;
+    userRole: UserRole;
+    body: TBody;
+  }) => Promise<unknown>;
   operationName: string;
   errorMessage?: string;
   successStatus?: number;
@@ -149,8 +223,31 @@ export function createProfessionalPortalPost<TBody = unknown>(
 
   const { limit, window } = RATE_LIMIT_CONFIG[rateLimitType];
 
-  return withAuth(async (req: NextRequest, { dbUserId }) => {
+  return withAuth(async (req: NextRequest, { dbUserId, clerkId, userRole }) => {
+    const requestStartedAt = Date.now();
     const correlationId = initializeCorrelationId(req);
+    const logOutcome = createProfessionalPortalOutcomeLogger({
+      req,
+      correlationId,
+      operationName,
+      actorRole: userRole,
+      requestStartedAt,
+    });
+
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `${rateLimitKey}:${identifier}`,
+      limit,
+      window,
+    );
+
+    if (!rateLimitResult.success) {
+      logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
 
     let body: TBody;
     try {
@@ -160,8 +257,12 @@ export function createProfessionalPortalPost<TBody = unknown>(
         if (!validation.success) {
           logger.warn("Body validation failed", {
             correlationId,
-            userId: dbUserId,
-            errors: validation.error.issues,
+            actorRole: userRole,
+            operationName,
+            issueCount: validation.error.issues.length,
+          });
+          logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
+            validationIssueCount: validation.error.issues.length,
           });
           return apiError(
             "Invalid input",
@@ -174,42 +275,34 @@ export function createProfessionalPortalPost<TBody = unknown>(
         body = raw as TBody;
       }
     } catch {
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST);
       return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
     }
 
-    const identifier = getRateLimitIdentifier(req);
-    const rateLimitResult = await checkRateLimit(
-      `${rateLimitKey}:${identifier}`,
-      limit,
-      window,
-    );
-
-    if (!rateLimitResult.success) {
-      return apiError(
-        "Too many requests. Please try again later.",
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    logger.info(`Executing ${operationName}`, {
-      correlationId,
-      userId: dbUserId,
-    });
+    logOutcome("started", HttpStatus.OK);
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      async () => handler({ dbUserId, body }),
+      async () => handler({ dbUserId, clerkId, userRole, body }),
       { operationName },
     );
 
     if (result.success && result.data !== undefined) {
+      logOutcome("succeeded", successStatus);
       return apiSuccess(result.data, successStatus);
     }
 
     logger.error(errorMessage, result.error, {
       correlationId,
-      userId: dbUserId,
+      actorRole: userRole,
+      operationName,
+      httpMethod: req.method,
+      routePattern: getRoutePattern(req),
+      outcome: "failed",
+      httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+      durationMs: Date.now() - requestStartedAt,
     });
+    logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR);
     return apiError(errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
   });
 }

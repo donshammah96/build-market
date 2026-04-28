@@ -4,6 +4,7 @@ import {
   StoreType,
   County,
   StoreImageCategory,
+  StoreDocumentType,
 } from "@prisma/client";
 
 /**
@@ -16,6 +17,13 @@ export const StoreCategorySchema = z.nativeEnum(StoreCategory);
 export const StoreTypeSchema = z.nativeEnum(StoreType);
 export const CountySchema = z.nativeEnum(County);
 export const StoreImageCategorySchema = z.nativeEnum(StoreImageCategory);
+export const StoreDocumentTypeSchema = z.nativeEnum(StoreDocumentType);
+
+export const createStoreDocumentSchema = z.object({
+  type: StoreDocumentTypeSchema,
+  assetId: z.string().uuid("Invalid asset ID"),
+  notes: z.string().max(2000).optional(),
+});
 
 // Helper function to generate URL-safe slug from store name
 export function generateSlug(name: string): string {

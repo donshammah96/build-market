@@ -1,15 +1,13 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import {
   useCalendarEvent,
   useUpdateCalendarEvent,
   useDeleteCalendarEvent,
 } from "@/hooks/useCalendar";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import {
   ArrowLeft,
   Calendar as CalendarIcon,
@@ -41,79 +39,30 @@ import { DialogClose } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/text-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
-// Calendar Event interface matching API response
-interface CalendarEvent {
-  id: string;
-  title: string;
-  description?: string | null;
-  startDate: string | Date;
-  endDate: string | Date;
-  location?: string | null;
-  type: string;
-  status: string;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-  clientId?: string | null;
-  projectId?: string | null;
-  client?: {
-    id: string;
-    firstName?: string | null;
-    lastName?: string | null;
-    email?: string | null;
-  } | null;
-  project?: {
-    id: string;
-    title: string;
-    status?: string | null;
-  } | null;
-}
-
-// Schema for updating calendar event
-const updateEventSchema = z.object({
-  title: z.string().min(3, "Title must be at least 3 characters"),
-  description: z.string().optional(),
-  startDate: z.string().min(1, "Start date is required"),
-  endDate: z.string().min(1, "End date is required"),
-  location: z.string().optional(),
-  type: z.string().min(1, "Event type is required"),
-  status: z.enum(["scheduled", "completed", "cancelled"]),
-});
-
-type UpdateEventFormValues = z.infer<typeof updateEventSchema>;
+const CalendarEventEditDialog = dynamic(
+  () => import("./_components/CalendarEventEditDialog"),
+  {
+    ssr: false,
+    loading: () => null,
+  },
+);
 
 const statusConfig: Record<
   string,
   { color: string; icon: React.ReactNode; label: string }
 > = {
-  scheduled: {
+  SCHEDULED: {
     color: "bg-blue-50 text-blue-700 border-blue-200",
     icon: <Clock className="h-4 w-4" />,
     label: "Scheduled",
   },
-  completed: {
+  COMPLETED: {
     color: "bg-emerald-50 text-emerald-700 border-emerald-200",
     icon: <CheckCircle className="h-4 w-4" />,
     label: "Completed",
   },
-  cancelled: {
+  CANCELLED: {
     color: "bg-red-50 text-red-700 border-red-200",
     icon: <XCircle className="h-4 w-4" />,
     label: "Cancelled",
@@ -121,21 +70,17 @@ const statusConfig: Record<
 };
 
 const typeConfig: Record<string, { color: string; label: string }> = {
-  meeting: {
+  MEETING: {
     color: "bg-purple-50 text-purple-700 border-purple-200",
     label: "Meeting",
   },
-  site_visit: {
+  SITE_VISIT: {
     color: "bg-emerald-50 text-emerald-700 border-emerald-200",
     label: "Site Visit",
   },
-  deadline: {
+  DEADLINE: {
     color: "bg-amber-50 text-amber-700 border-amber-200",
     label: "Deadline",
-  },
-  task: {
-    color: "bg-blue-50 text-blue-700 border-blue-200",
-    label: "Task",
   },
 };
 
@@ -149,7 +94,7 @@ export default function CalendarEventDetailPage() {
   // Fetch Calendar Event
   const { data: eventData, isLoading, error } = useCalendarEvent(id, !!id);
 
-  const event = eventData as CalendarEvent | undefined;
+  const event = eventData;
 
   // Update Event Mutation
   const updateEventMutation = useUpdateCalendarEvent({
@@ -177,68 +122,6 @@ export default function CalendarEventDetailPage() {
     },
   });
 
-  const form = useForm<UpdateEventFormValues>({
-    resolver: zodResolver(updateEventSchema),
-    defaultValues: {
-      title: event?.title || "",
-      description: event?.description || "",
-      startDate: event?.startDate
-        ? new Date(event.startDate).toISOString().slice(0, 16)
-        : "",
-      endDate: event?.endDate
-        ? new Date(event.endDate).toISOString().slice(0, 16)
-        : "",
-      location: event?.location || "",
-      type: event?.type || "meeting",
-      status:
-        (event?.status as "scheduled" | "completed" | "cancelled") ||
-        "scheduled",
-    },
-  });
-
-  // Update form when event data loads
-  if (event && form.getValues().title === "") {
-    form.reset({
-      title: event.title,
-      description: event.description || "",
-      startDate: new Date(event.startDate).toISOString().slice(0, 16),
-      endDate: new Date(event.endDate).toISOString().slice(0, 16),
-      location: event.location || "",
-      type: event.type,
-      status:
-        (event.status as "scheduled" | "completed" | "cancelled") ||
-        "scheduled",
-    });
-  }
-
-  function onSubmit(data: UpdateEventFormValues) {
-    updateEventMutation.mutate({
-      eventId: id,
-      payload: {
-        title: data.title,
-        description: data.description,
-        startDate: new Date(data.startDate).toISOString(),
-        endDate: new Date(data.endDate).toISOString(),
-        location: data.location,
-        type: data.type.toUpperCase() as
-          | "MEETING"
-          | "SITE_VISIT"
-          | "DEADLINE"
-          | "PAYMENT_DUE"
-          | "MATERIAL_DELIVERY"
-          | "INSPECTION_NCA"
-          | "INSPECTION_INTERNAL",
-        status: data.status.toUpperCase() as
-          | "SCHEDULED"
-          | "CONFIRMED"
-          | "COMPLETED"
-          | "CANCELLED"
-          | "RESCHEDULED"
-          | "NO_SHOW",
-      },
-    });
-  }
-
   const handleDelete = () => {
     deleteEventMutation.mutate({ eventId: id });
   };
@@ -260,7 +143,7 @@ export default function CalendarEventDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6 max-w-[1600px] mx-auto">
+      <div className="space-y-6 max-w-400 mx-auto">
         <div className="flex items-center gap-4">
           <div className="h-10 w-10 bg-zinc-200 animate-pulse rounded" />
           <div className="space-y-2">
@@ -280,7 +163,7 @@ export default function CalendarEventDetailPage() {
 
   if (error || !event) {
     return (
-      <div className="space-y-6 max-w-[1600px] mx-auto">
+      <div className="space-y-6 max-w-400 mx-auto">
         <Button variant="ghost" asChild>
           <Link href="/professional-portal/calendar">
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Calendar
@@ -306,13 +189,13 @@ export default function CalendarEventDetailPage() {
     );
   }
 
-  const status = (statusConfig[event.status] ?? statusConfig.scheduled) as {
+  const status = (statusConfig[event.status] ?? statusConfig.SCHEDULED) as {
     color: string;
     icon: React.ReactNode;
     label: string;
   };
 
-  const type = (typeConfig[event.type] ?? typeConfig.meeting) as {
+  const type = (typeConfig[event.type] ?? typeConfig.MEETING) as {
     color: string;
     label: string;
   };
@@ -325,7 +208,7 @@ export default function CalendarEventDetailPage() {
     : null;
 
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto">
+    <div className="space-y-6 max-w-400 mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between gap-4 items-start border-b border-zinc-100 pb-6">
         <div className="flex items-center gap-4">
@@ -394,7 +277,7 @@ export default function CalendarEventDetailPage() {
             <div className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
+                  <label className="text-sm font-medium text-zinc-500 mb-2 flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     Start Date & Time
                   </label>
@@ -413,7 +296,7 @@ export default function CalendarEventDetailPage() {
                   </p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
+                  <label className="text-sm font-medium text-zinc-500 mb-2 flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     End Date & Time
                   </label>
@@ -449,7 +332,7 @@ export default function CalendarEventDetailPage() {
                 <>
                   <Separator />
                   <div>
-                    <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
+                    <label className="text-sm font-medium text-zinc-500 mb-2 flex items-center gap-1">
                       <MapPin className="h-3 w-3" />
                       Location
                     </label>
@@ -476,7 +359,7 @@ export default function CalendarEventDetailPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
+                  <label className="text-sm font-medium text-zinc-500 mb-2 flex items-center gap-1">
                     <CalendarIcon className="h-3 w-3" />
                     Created
                   </label>
@@ -491,7 +374,7 @@ export default function CalendarEventDetailPage() {
                   </p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
+                  <label className="text-sm font-medium text-zinc-500 mb-2 flex items-center gap-1">
                     <CalendarIcon className="h-3 w-3" />
                     Last Updated
                   </label>
@@ -601,162 +484,24 @@ export default function CalendarEventDetailPage() {
       </div>
 
       {/* Edit Dialog */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Event</DialogTitle>
-            <DialogDescription>
-              Update the event details. All changes will be saved immediately.
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Event Title</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="e.g. Site Visit: Karen Villa"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="type"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Event Type</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select type" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="meeting">Meeting</SelectItem>
-                          <SelectItem value="site_visit">Site Visit</SelectItem>
-                          <SelectItem value="deadline">Deadline</SelectItem>
-                          <SelectItem value="task">Task</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="status"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Status</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select status" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="scheduled">Scheduled</SelectItem>
-                          <SelectItem value="completed">Completed</SelectItem>
-                          <SelectItem value="cancelled">Cancelled</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="startDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Start Date & Time</FormLabel>
-                      <FormControl>
-                        <Input type="datetime-local" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="endDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>End Date & Time</FormLabel>
-                      <FormControl>
-                        <Input type="datetime-local" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormField
-                control={form.control}
-                name="location"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Location (Optional)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. Karen, Nairobi" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description (Optional)</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Add event details..."
-                        rows={4}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button variant="outline">Cancel</Button>
-                </DialogClose>
-                <Button type="submit" disabled={updateEventMutation.isPending}>
-                  {updateEventMutation.isPending && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Save Changes
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+      {isEditOpen ? (
+        <CalendarEventEditDialog
+          event={event}
+          open={isEditOpen}
+          onOpenChange={setIsEditOpen}
+          isPending={updateEventMutation.isPending}
+          onSubmit={(payload) => {
+            updateEventMutation.mutate({
+              eventId: id,
+              payload,
+            });
+          }}
+        />
+      ) : null}
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-106.25">
           <DialogHeader>
             <DialogTitle>Delete Event</DialogTitle>
             <DialogDescription>

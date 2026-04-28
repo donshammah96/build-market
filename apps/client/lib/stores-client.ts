@@ -12,12 +12,20 @@
 import type { ApiResponse } from "@build/types";
 import { STORES_CLIENT_CONFIG } from "@/lib/config/stores.config";
 import { isValidId } from "@/lib/utils/validators";
-import type { z } from "zod";
+import { z } from "zod";
 import {
   CreateStoreSchema,
   UpdateStoreSchema,
   StoreQuerySchema,
-} from "@/lib/validation/stores-validation";
+} from "@/app/lib/validation/stores-validation";
+import type {
+  StoreListItem,
+  StoreDetail,
+  StoreDocumentItem,
+  MyStoreWithStats,
+  StoreUpdateResultEnvelope,
+  StoreDeleteResultEnvelope,
+} from "@/app/lib/domains/stores/contracts";
 
 const { BULKHEAD_CONCURRENCY } = STORES_CLIENT_CONFIG;
 
@@ -56,20 +64,20 @@ export type RemoveStoreDocumentClientInput = {
   documentId: string;
 };
 
-export interface StoreData {
-  id: string;
-  name: string;
-  slug: string;
-  description?: string | null;
-  version?: number;
-  verificationStatus?: string | null;
-  rejectionReason?: string | null;
-  totalProducts: number;
-  totalOrders: number;
-  pendingOrders: number;
-  totalRevenue: number;
-  views: number;
-}
+export type StoreListPayload = {
+  stores: StoreListItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export type StoreBatchCreatePayload = {
+  stores: StoreListItem[];
+  count: number;
+};
 
 // ─── Helper API Fetcher ─────────────────────────────────────────────────────
 
@@ -99,8 +107,8 @@ async function apiFetch<T>(
       };
     }
 
-    // Adapt to cases where API returns data inside a 'data' key or directly
-    return { success: true, data: json?.data !== undefined ? json.data : json };
+    const payload = json?.data !== undefined ? json.data : json;
+    return { success: true, data: payload as T };
   } catch (error) {
     return {
       success: false,
@@ -143,7 +151,7 @@ class StoresClient {
 
   async getStores(
     filters?: Partial<StoreQueryInput>,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<StoreListPayload>> {
     return this.bulkhead.run(() => {
       const searchParams = new URLSearchParams();
       if (filters) {
@@ -151,22 +159,28 @@ class StoresClient {
           if (value !== undefined) searchParams.append(key, String(value));
         });
       }
-      return apiFetch<any>(`/api/stores?${searchParams.toString()}`);
+      return apiFetch<StoreListPayload>(
+        `/api/stores?${searchParams.toString()}`,
+      );
     });
   }
 
-  async getStore(id: string): Promise<ApiResponse<any>> {
+  async getStore(id: string): Promise<ApiResponse<StoreDetail>> {
     if (!isValidId(id)) return { success: false, error: "Invalid store ID" };
-    return this.bulkhead.run(() => apiFetch<any>(`/api/stores/${id}`));
+    return this.bulkhead.run(() => apiFetch<StoreDetail>(`/api/stores/${id}`));
   }
 
-  async getMyStores(): Promise<ApiResponse<any[]>> {
-    return this.bulkhead.run(() => apiFetch<any[]>("/api/stores/me"));
-  }
-
-  async createStore(data: CreateStoreClientInput): Promise<ApiResponse<any>> {
+  async getMyStores(): Promise<ApiResponse<MyStoreWithStats[]>> {
     return this.bulkhead.run(() =>
-      apiFetch<any>("/api/stores", {
+      apiFetch<MyStoreWithStats[]>("/api/stores/me"),
+    );
+  }
+
+  async createStore(
+    data: CreateStoreClientInput,
+  ): Promise<ApiResponse<StoreDetail>> {
+    return this.bulkhead.run(() =>
+      apiFetch<StoreDetail>("/api/stores", {
         method: "POST",
         body: JSON.stringify(data),
         headers: data.idempotencyKey
@@ -178,9 +192,9 @@ class StoresClient {
 
   async createStoresBatch(
     data: CreateStoresBatchClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<StoreBatchCreatePayload>> {
     return this.bulkhead.run(() =>
-      apiFetch<any>("/api/stores", {
+      apiFetch<StoreBatchCreatePayload>("/api/stores", {
         method: "POST",
         body: JSON.stringify(data),
         headers: data.idempotencyKey
@@ -190,11 +204,13 @@ class StoresClient {
     );
   }
 
-  async updateStore(input: UpdateStoreClientInput): Promise<ApiResponse<any>> {
+  async updateStore(
+    input: UpdateStoreClientInput,
+  ): Promise<ApiResponse<StoreUpdateResultEnvelope>> {
     if (!isValidId(input.id))
       return { success: false, error: "Invalid store ID" };
     return this.bulkhead.run(() =>
-      apiFetch<any>(`/api/stores/${input.id}`, {
+      apiFetch<StoreUpdateResultEnvelope>(`/api/stores/${input.id}`, {
         method: "PATCH",
         body: JSON.stringify({ ...input.data, version: input.version }),
         headers: input.idempotencyKey
@@ -204,11 +220,13 @@ class StoresClient {
     );
   }
 
-  async deleteStore(input: DeleteStoreClientInput): Promise<ApiResponse<any>> {
+  async deleteStore(
+    input: DeleteStoreClientInput,
+  ): Promise<ApiResponse<StoreDeleteResultEnvelope>> {
     if (!isValidId(input.id))
       return { success: false, error: "Invalid store ID" };
     return this.bulkhead.run(() =>
-      apiFetch<any>(`/api/stores/${input.id}`, {
+      apiFetch<StoreDeleteResultEnvelope>(`/api/stores/${input.id}`, {
         method: "DELETE",
         body: JSON.stringify({ version: input.version }),
         headers: input.idempotencyKey
@@ -218,21 +236,25 @@ class StoresClient {
     );
   }
 
-  async getStoreDocuments(storeId: string): Promise<ApiResponse<any[]>> {
+  async getStoreDocuments(
+    storeId: string,
+  ): Promise<ApiResponse<{ documents: StoreDocumentItem[] }>> {
     if (!isValidId(storeId))
       return { success: false, error: "Invalid store ID" };
     return this.bulkhead.run(() =>
-      apiFetch<any[]>(`/api/stores/${storeId}/documents`),
+      apiFetch<{ documents: StoreDocumentItem[] }>(
+        `/api/stores/${storeId}/documents`,
+      ),
     );
   }
 
   async addStoreDocument(
     input: AddStoreDocumentClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<StoreDocumentItem>> {
     if (!isValidId(input.storeId))
       return { success: false, error: "Invalid store ID" };
     return this.bulkhead.run(() =>
-      apiFetch<any>(`/api/stores/${input.storeId}/documents`, {
+      apiFetch<StoreDocumentItem>(`/api/stores/${input.storeId}/documents`, {
         method: "POST",
         body: JSON.stringify({
           type: input.type,
@@ -245,12 +267,12 @@ class StoresClient {
 
   async removeStoreDocument(
     input: RemoveStoreDocumentClientInput,
-  ): Promise<ApiResponse<any>> {
+  ): Promise<ApiResponse<{ success: true }>> {
     if (!isValidId(input.storeId) || !isValidId(input.documentId)) {
       return { success: false, error: "Invalid IDs" };
     }
     return this.bulkhead.run(() =>
-      apiFetch<any>(
+      apiFetch<{ success: true }>(
         `/api/stores/${input.storeId}/documents/${input.documentId}`,
         {
           method: "DELETE",

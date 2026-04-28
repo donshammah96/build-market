@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useUser } from "@clerk/nextjs";
+import { env } from "@/app/lib/infrastructure/env";
+
+// SECURITY_PERSISTENCE_ALLOWLIST: Stores non-sensitive A/B assignment and event telemetry in localStorage.
 
 // ============================================================================
 // TYPES
@@ -45,6 +48,7 @@ interface StoredABTests {
 function getStoredTests(): StoredABTests {
   if (typeof window === "undefined") return {};
   try {
+    // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive anonymous A/B assignment state.
     const stored = localStorage.getItem(AB_TEST_STORAGE_KEY);
     return stored ? JSON.parse(stored) : {};
   } catch {
@@ -57,6 +61,7 @@ function storeTest(name: string, variant: ABTestVariant): void {
   try {
     const tests = getStoredTests();
     tests[name] = { variant, assignedAt: Date.now() };
+    // SECURITY_PERSISTENCE_ALLOWLIST: Persists non-sensitive anonymous A/B assignment state.
     localStorage.setItem(AB_TEST_STORAGE_KEY, JSON.stringify(tests));
   } catch {
     // Ignore storage errors
@@ -94,6 +99,23 @@ function assignVariant(
   return bucket < splitPercentage ? "B" : "A";
 }
 
+function generateAnonymousId(): string {
+  if (typeof window !== "undefined" && typeof window.crypto !== "undefined") {
+    if (typeof window.crypto.randomUUID === "function") {
+      return `anon_${window.crypto.randomUUID()}`;
+    }
+
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    const token = Array.from(bytes, (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    return `anon_${token}`;
+  }
+
+  return "anon_fallback";
+}
+
 // ============================================================================
 // ANALYTICS INTEGRATION
 // ============================================================================
@@ -109,7 +131,7 @@ function trackABEvent(
   data?: Record<string, unknown>,
 ) {
   // Log to console in development
-  if (process.env.NODE_ENV === "development") {
+  if (env.isDev) {
     console.log("[A/B Test]", {
       experiment: experimentName,
       variant,
@@ -140,6 +162,7 @@ function trackABEvent(
   if (typeof window !== "undefined") {
     try {
       const eventsKey = `ab_events_${experimentName}`;
+      // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive A/B telemetry event history.
       const events = JSON.parse(localStorage.getItem(eventsKey) || "[]");
       events.push({
         variant,
@@ -148,6 +171,7 @@ function trackABEvent(
         timestamp: Date.now(),
       });
       // Keep last 100 events per experiment
+      // SECURITY_PERSISTENCE_ALLOWLIST: Persists non-sensitive A/B telemetry event history.
       localStorage.setItem(eventsKey, JSON.stringify(events.slice(-100)));
     } catch {
       // Ignore storage errors
@@ -203,8 +227,8 @@ export function useABTest({
       assignedVariant = assignVariant(user.id, name, splitPercentage);
       storeTest(name, assignedVariant);
     } else if (allowAnonymous) {
-      // Anonymous user: generate random ID
-      const anonymousId = `anon_${Math.random().toString(36).slice(2)}`;
+      // Anonymous user: generate cryptographically secure ID
+      const anonymousId = generateAnonymousId();
       assignedVariant = assignVariant(anonymousId, name, splitPercentage);
       storeTest(name, assignedVariant);
     }
@@ -274,6 +298,7 @@ export function getABTestEvents(experimentName: string): Array<{
   if (typeof window === "undefined") return [];
   try {
     const eventsKey = `ab_events_${experimentName}`;
+    // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive A/B telemetry event history.
     return JSON.parse(localStorage.getItem(eventsKey) || "[]");
   } catch {
     return [];

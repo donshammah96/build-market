@@ -8,6 +8,22 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./roles": {
+      "types": "./src/roles.ts",
+      "default": "./src/roles.ts"
+    },
+    "./password-hash": {
+      "types": "./src/password-hash.ts",
+      "default": "./src/password-hash.ts"
+    },
+    "./session-claims": {
+      "types": "./src/session-claims.ts",
+      "default": "./src/session-claims.ts"
+    },
+    "./check-user-role": {
+      "types": "./src/check-user-role.ts",
+      "default": "./src/check-user-role.ts"
     }
   },
   "scripts": {

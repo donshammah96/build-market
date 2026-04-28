@@ -133,7 +133,7 @@ export function generateMockAuditLog(overrides: Record<string, any> = {}) {
  * Creates a mock Prisma client with successful operations
  */
 export function mockPrismaSuccess() {
-  return {
+  const prisma = {
     user: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
@@ -153,6 +153,12 @@ export function mockPrismaSuccess() {
       update: vi.fn(),
       updateMany: vi.fn(),
     },
+    clientProfile: {
+      updateMany: vi.fn(),
+    },
+    store: {
+      updateMany: vi.fn(),
+    },
     professional: {
       findUnique: vi.fn(),
       update: vi.fn(),
@@ -162,6 +168,7 @@ export function mockPrismaSuccess() {
       create: vi.fn(),
       findMany: vi.fn(),
       count: vi.fn(),
+      groupBy: vi.fn(),
     },
     consent: {
       findFirst: vi.fn(),
@@ -175,6 +182,7 @@ export function mockPrismaSuccess() {
       create: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
+      upsert: vi.fn(),
     },
     securityIncident: {
       findUnique: vi.fn(),
@@ -185,6 +193,7 @@ export function mockPrismaSuccess() {
     },
     asset: {
       findMany: vi.fn(),
+      findUnique: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
       delete: vi.fn(),
@@ -201,21 +210,44 @@ export function mockPrismaSuccess() {
       findMany: vi.fn(),
       count: vi.fn(),
     },
-    $transaction: vi.fn((callback) =>
-      callback({
-        user: { update: vi.fn() },
-        professional: { update: vi.fn() },
-        professionalProfile: { updateMany: vi.fn() },
-        asset: { updateMany: vi.fn() },
-        auditLog: { create: vi.fn() },
-        consentRecord: {
-          create: vi.fn(),
-          update: vi.fn(),
-          updateMany: vi.fn(),
-        },
-      }),
-    ),
+
+    $transaction: vi.fn(),
   } as unknown as PrismaClient;
+
+  (prisma.$transaction as Mock).mockImplementation((callback) =>
+    callback({
+      user: {
+        update: prisma.user.update,
+        findUnique: prisma.user.findUnique,
+      },
+      professionalProfile: {
+        update: prisma.professionalProfile.update,
+        updateMany: prisma.professionalProfile.updateMany,
+      },
+      clientProfile: {
+        updateMany: prisma.clientProfile.updateMany,
+      },
+      store: {
+        updateMany: prisma.store.updateMany,
+      },
+      asset: {
+        updateMany: prisma.asset.updateMany,
+      },
+      auditLog: {
+        create: prisma.auditLog.create,
+      },
+      consentRecord: {
+        findFirst: prisma.consentRecord.findFirst,
+        findMany: prisma.consentRecord.findMany,
+        create: prisma.consentRecord.create,
+        update: prisma.consentRecord.update,
+        updateMany: prisma.consentRecord.updateMany,
+        upsert: prisma.consentRecord.upsert,
+      },
+    }),
+  );
+
+  return prisma;
 }
 
 /**
@@ -249,11 +281,40 @@ export function mockPrismaWithDBError(
     auditLog: {
       create: vi.fn().mockRejectedValue(error),
       findMany: vi.fn().mockRejectedValue(error),
+      count: vi.fn().mockRejectedValue(error),
+      groupBy: vi.fn().mockRejectedValue(error),
     },
     consent: {
       findFirst: vi.fn().mockRejectedValue(error),
       create: vi.fn().mockRejectedValue(error),
       update: vi.fn().mockRejectedValue(error),
+    },
+    consentRecord: {
+      findFirst: vi.fn().mockRejectedValue(error),
+      findMany: vi.fn().mockRejectedValue(error),
+      create: vi.fn().mockRejectedValue(error),
+      update: vi.fn().mockRejectedValue(error),
+      updateMany: vi.fn().mockRejectedValue(error),
+      upsert: vi.fn().mockRejectedValue(error),
+    },
+    asset: {
+      findMany: vi.fn().mockRejectedValue(error),
+      update: vi.fn().mockRejectedValue(error),
+      updateMany: vi.fn().mockRejectedValue(error),
+      delete: vi.fn().mockRejectedValue(error),
+      findUnique: vi.fn().mockRejectedValue(error),
+    },
+    project: {
+      findMany: vi.fn().mockRejectedValue(error),
+      count: vi.fn().mockRejectedValue(error),
+    },
+    order: {
+      findMany: vi.fn().mockRejectedValue(error),
+      count: vi.fn().mockRejectedValue(error),
+    },
+    securityIncident: {
+      findMany: vi.fn().mockRejectedValue(error),
+      count: vi.fn().mockRejectedValue(error),
     },
     $transaction: vi.fn().mockRejectedValue(error),
   } as unknown as PrismaClient;
@@ -263,7 +324,7 @@ export function mockPrismaWithDBError(
  * Creates a mock Prisma client that simulates transaction rollback
  */
 export function mockPrismaWithTransactionRollback(
-  rollbackMessage: string = "Transaction rolled back",
+  rollbackMessage: string = "Transaction rollback",
 ) {
   const prisma = mockPrismaSuccess();
 
@@ -451,15 +512,24 @@ export function mockRedisConnectionFailure(
  * Creates a mock BullMQ queue with successful operations
  */
 export function mockBullMQQueueSuccess() {
-  return {
+  // Allow test to override getJob return value
+  const jobMock = {
+    isWaiting: vi.fn().mockResolvedValue(false),
+    isDelayed: vi.fn().mockResolvedValue(false),
+    remove: vi.fn().mockResolvedValue(undefined),
+    id: "job-123",
+  };
+  const queue = {
     add: vi.fn().mockResolvedValue({
       id: "job-" + generateTestUUID("job", 1),
       data: {},
       opts: {},
     }),
-    getJob: vi.fn().mockResolvedValue(null),
+    getJob: vi.fn().mockResolvedValue(null), // default to null, override in test
     close: vi.fn().mockResolvedValue(undefined),
-  } as unknown as Queue;
+    __jobMock: jobMock, // expose for test customization
+  };
+  return queue as unknown as Queue;
 }
 
 /**

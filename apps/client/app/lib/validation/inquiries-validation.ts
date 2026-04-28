@@ -82,7 +82,7 @@ export type InquiriesQueryInput = z.infer<typeof InquiriesQuerySchema>;
 export const UpdateInquirySchema = z.object({
   status: InquiryStatusSchema.optional(),
   notes: z.string().optional(),
-  preferredViewingDate: z.string().optional().or(z.literal("")),
+  preferredViewingDate: z.string().optional().or(z.literal("")).or(z.null()),
 });
 
 export type UpdateInquiryInput = z.infer<typeof UpdateInquirySchema>;
@@ -121,6 +121,8 @@ export const inquiryDetailSelect = {
   phone: true,
   message: true,
   status: true,
+  notes: true,
+  preferredViewingDate: true,
   createdAt: true,
   updatedAt: true,
   sender: {

@@ -9,21 +9,30 @@
  * Runs daily at 3 AM by default (configurable via DATA_RETENTION_CRON)
  */
 
-import { Queue, Worker, Job, ConnectionOptions } from "bullmq";
-import { redisConnection } from "@build/queue-server";
+import { Queue, Worker, Job } from "bullmq";
+import { createRedisConnection } from "@build/queue-server";
 import { prisma } from "@build/db";
 import { AnonymizationService } from "@/app/lib/gdpr/services/anonymization.service";
+import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
+import { env } from "@/app/lib/infrastructure/env";
+
+const logger = new StructuredLogger("data-retention-job");
+const OPERATION_NAME = "data_retention_enforcement";
 
 // Configuration
-const RETENTION_CRON_PATTERN = process.env.DATA_RETENTION_CRON || "0 3 * * *"; // 3 AM daily
-const RETENTION_BATCH_SIZE = parseInt(
-  process.env.RETENTION_BATCH_SIZE || "100",
-  10,
-);
+const RETENTION_CRON_PATTERN = env.jobs.dataRetentionCron;
+const RETENTION_BATCH_SIZE = env.jobs.retentionBatchSize;
 
-const retentionQueue = new Queue("gdpr-data-retention", {
-  connection: redisConnection as ConnectionOptions,
-});
+let retentionQueue: Queue | null = null;
+
+export function getRetentionQueue(): Queue {
+  if (!retentionQueue) {
+    retentionQueue = new Queue("gdpr-data-retention", {
+      connection: createRedisConnection(),
+    });
+  }
+  return retentionQueue;
+}
 
 interface RetentionMetrics {
   totalEvaluated: number;
@@ -39,8 +48,10 @@ interface RetentionMetrics {
  * Schedule the data retention enforcement job
  */
 export async function scheduleDataRetentionEnforcement() {
+  const correlationId = CorrelationIdManager.generate();
+
   try {
-    await retentionQueue.add(
+    await getRetentionQueue().add(
       "enforce-data-retention",
       {},
       {
@@ -56,28 +67,45 @@ export async function scheduleDataRetentionEnforcement() {
       },
     );
 
-    console.log(
-      `[DataRetention] Scheduled with pattern: ${RETENTION_CRON_PATTERN}`,
-    );
+    logger.info("Data retention job scheduled", {
+      correlationId,
+      operationName: OPERATION_NAME,
+      cronPattern: RETENTION_CRON_PATTERN,
+    });
   } catch (error) {
-    console.error("[DataRetention] Failed to schedule job:", error);
+    logger.error(
+      "Failed to schedule data retention enforcement job",
+      error instanceof Error ? error : new Error(String(error)),
+      {
+        correlationId,
+        operationName: OPERATION_NAME,
+      },
+    );
     throw error;
   }
 }
 
 /**
- * Create the data retention worker
+ * Create the data retention worker.
+ *
+ * Uses process.once (not process.on) for signal handlers. See export-cleanup.ts
+ * for full rationale on why process.once is mandatory for worker factories.
  */
 export function createDataRetentionWorker() {
-  const anonymizationService = new AnonymizationService();
-
   const worker = new Worker(
     "gdpr-data-retention",
     async (job: Job) => {
       if (job.name !== "enforce-data-retention") {
-        console.warn(`[DataRetention] Unexpected job type: ${job.name}`);
+        logger.warn("Unexpected job type", {
+          operationName: OPERATION_NAME,
+          jobName: job.name,
+          jobId: job.id,
+        });
         return;
       }
+
+      const correlationId = CorrelationIdManager.generate();
+      CorrelationIdManager.set(correlationId);
 
       const metrics: RetentionMetrics = {
         totalEvaluated: 0,
@@ -88,7 +116,12 @@ export function createDataRetentionWorker() {
         startTime: Date.now(),
       };
 
-      console.log("[DataRetention] Starting data retention enforcement job");
+      logger.info("Starting data retention enforcement job", {
+        correlationId,
+        operationName: OPERATION_NAME,
+        jobId: job.id,
+        batchSize: RETENTION_BATCH_SIZE,
+      });
 
       try {
         const now = new Date();
@@ -101,58 +134,88 @@ export function createDataRetentionWorker() {
             anonymizedAt: null,
           },
           take: RETENTION_BATCH_SIZE,
-          select: { id: true, email: true, scheduledDeletionAt: true },
+          select: { id: true, scheduledDeletionAt: true }, // Do NOT select email (PII)
         });
 
         await job.updateProgress(30);
 
-        // Phase 2: Find users who exceeded dataRetentionDays
-        // Users with dataRetentionDays set and lastActiveAt + retention > now
-        const usersExceededRetention = await prisma.user.findMany({
-          where: {
-            dataRetentionDays: { not: null, gt: 0 },
-            lastActiveAt: { not: null },
-            status: { not: "ARCHIVED" },
-            anonymizedAt: null,
-            scheduledDeletionAt: null, // Not already scheduled
-          },
-          take: RETENTION_BATCH_SIZE,
-          select: {
-            id: true,
-            email: true,
-            lastActiveAt: true,
-            dataRetentionDays: true,
-          },
-        });
+        // Phase 2: Find users who exceeded dataRetentionDays.
+        // Fetch in batches and filter in memory to avoid silent truncation
+        // when a large number of records match the DB predicate.
+        const usersToProcessRaw: Array<{
+          id: string;
+          lastActiveAt: Date | null;
+          dataRetentionDays: number | null;
+        }> = [];
+        let skip = 0;
+        let batch;
+        do {
+          batch = await prisma.user.findMany({
+            where: {
+              dataRetentionDays: { not: null, gt: 0 },
+              lastActiveAt: { not: null },
+              status: { not: "ARCHIVED" },
+              anonymizedAt: null,
+              scheduledDeletionAt: null,
+            },
+            take: RETENTION_BATCH_SIZE,
+            skip,
+            select: {
+              id: true,
+              lastActiveAt: true,
+              dataRetentionDays: true,
+            },
+          });
+          usersToProcessRaw.push(...batch);
+          skip += RETENTION_BATCH_SIZE;
+        } while (
+          batch.length === RETENTION_BATCH_SIZE &&
+          usersToProcessRaw.length < RETENTION_BATCH_SIZE
+        );
 
         // Filter to those actually exceeding retention
-        const usersToProcess = usersExceededRetention.filter((user) => {
+        const usersToProcess = usersToProcessRaw.filter((user) => {
           if (!user.lastActiveAt || !user.dataRetentionDays) return false;
           const retentionEnd = new Date(user.lastActiveAt);
           retentionEnd.setDate(retentionEnd.getDate() + user.dataRetentionDays);
           return now > retentionEnd;
         });
 
-        const allUsers = [...usersScheduledForDeletion, ...usersToProcess];
+        // Deduplicate users by id (across both queries)
+        const userMap = new Map<string, { id: string }>();
+        for (const user of usersScheduledForDeletion)
+          userMap.set(user.id, user);
+        for (const user of usersToProcess) userMap.set(user.id, user);
+        const allUsers = Array.from(userMap.values());
         metrics.totalEvaluated = allUsers.length;
+
+        logger.info("Found candidates for retention enforcement", {
+          correlationId,
+          operationName: OPERATION_NAME,
+          scheduledForDeletion: usersScheduledForDeletion.length,
+          exceededRetention: usersToProcess.length,
+          deduplicated: allUsers.length,
+        });
 
         await job.updateProgress(50);
 
-        // Process each user
+        const anonymizationService = new AnonymizationService();
+
         for (const user of allUsers) {
           try {
             // Check for legal holds
             const holds = await AnonymizationService.checkLegalHold(user.id);
-
             if (holds.length > 0) {
-              console.log(
-                `[DataRetention] User ${user.id} has legal hold: ${holds.join(", ")}`,
-              );
+              logger.info("User has legal hold, skipping anonymization", {
+                correlationId,
+                operationName: OPERATION_NAME,
+                holds: holds.join(", "),
+              });
               metrics.blockedByLegalHold++;
               continue;
             }
 
-            // Check if already being processed
+            // Check if already being processed or anonymized
             const currentStatus = await prisma.user.findUnique({
               where: { id: user.id },
               select: { status: true, anonymizedAt: true },
@@ -166,17 +229,22 @@ export function createDataRetentionWorker() {
               continue;
             }
 
-            // Request anonymization (this sets up the grace period)
+            // Request anonymization (sets up the grace period)
             await anonymizationService.requestDeletion(user.id, "system");
             metrics.scheduledForAnonymization++;
 
-            console.log(
-              `[DataRetention] Scheduled anonymization for user ${user.id}`,
-            );
+            logger.info("Scheduled anonymization for user", {
+              correlationId,
+              operationName: OPERATION_NAME,
+            });
           } catch (error) {
-            console.error(
-              `[DataRetention] Error processing user ${user.id}:`,
-              error,
+            logger.error(
+              "Error processing user for data retention",
+              error instanceof Error ? error : new Error(String(error)),
+              {
+                correlationId,
+                operationName: OPERATION_NAME,
+              },
             );
             metrics.errors++;
           }
@@ -185,11 +253,13 @@ export function createDataRetentionWorker() {
         await job.updateProgress(90);
 
         metrics.endTime = Date.now();
-        const duration = metrics.endTime - metrics.startTime;
+        const durationMs = metrics.endTime - metrics.startTime;
 
-        console.log("[DataRetention] Job completed", {
-          ...metrics,
-          durationMs: duration,
+        logger.info("Data retention job completed", {
+          correlationId,
+          operationName: OPERATION_NAME,
+          metrics,
+          durationMs,
         });
 
         // Log audit entry for compliance
@@ -211,7 +281,20 @@ export function createDataRetentionWorker() {
           metrics,
         };
       } catch (error) {
-        console.error("[DataRetention] Job failed:", error);
+        metrics.endTime = Date.now();
+        const durationMs = metrics.endTime - metrics.startTime;
+
+        logger.error(
+          "Data retention job failed",
+          error instanceof Error ? error : new Error(String(error)),
+          {
+            correlationId,
+            operationName: OPERATION_NAME,
+            jobId: job.id,
+            metrics,
+            durationMs,
+          },
+        );
 
         await prisma.auditLog.create({
           data: {
@@ -231,25 +314,64 @@ export function createDataRetentionWorker() {
       }
     },
     {
-      connection: redisConnection as ConnectionOptions,
-      concurrency: 1, // Only one retention job at a time
+      connection: createRedisConnection(),
+      concurrency: 1,
+      limiter: {
+        max: 1,
+        duration: 60000,
+      },
     },
   );
 
+  // process.once (not process.on) — see export-cleanup.ts for full rationale.
+  const shutdown = async (signal: string) => {
+    logger.info("Received shutdown signal, closing worker gracefully", {
+      operationName: OPERATION_NAME,
+      signal,
+    });
+
+    try {
+      await worker.close();
+      logger.info("Worker closed successfully", {
+        operationName: OPERATION_NAME,
+      });
+    } catch (error) {
+      logger.error(
+        "Error during worker shutdown",
+        error instanceof Error ? error : new Error(String(error)),
+        { operationName: OPERATION_NAME },
+      );
+    }
+  };
+
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
+
   worker.on("completed", (job) => {
-    console.log(`[DataRetention] Job ${job.id} completed`);
+    logger.info("Data retention job completed", {
+      operationName: OPERATION_NAME,
+      jobId: job.id,
+    });
   });
 
   worker.on("failed", (job, error) => {
-    console.error(`[DataRetention] Job ${job?.id} failed:`, error);
+    logger.error(
+      "Data retention job failed",
+      error instanceof Error ? error : new Error(String(error)),
+      {
+        operationName: OPERATION_NAME,
+        jobId: job?.id,
+      },
+    );
   });
 
   worker.on("error", (error) => {
-    console.error("[DataRetention] Worker error:", error);
+    logger.error(
+      "Worker error occurred",
+      error instanceof Error ? error : new Error(String(error)),
+      { operationName: OPERATION_NAME },
+    );
   });
 
   return worker;
 }
-
-// Export for use in central job orchestrator
-export { retentionQueue };

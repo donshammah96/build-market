@@ -16,17 +16,32 @@ import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import {
   SendMessageSchema,
   MESSAGING_CONFIG,
+  type MessagingActor,
   messagingService,
-} from "@build/messaging-server";
+} from "@/app/lib/domains/messaging";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
+
+function toMessagingActor(context: {
+  clerkId: string;
+  dbUserId: string;
+  userRole: unknown;
+}): MessagingActor {
+  return {
+    clerkId: context.clerkId,
+    userId: context.dbUserId,
+    role: normalizeRole(String(context.userRole)) ?? null,
+  };
+}
 
 /**
  * POST /api/messaging/messages
  */
 export const POST = withAuth(
-  async (req: NextRequest, { dbUserId }): Promise<NextResponse> => {
+  async (req: NextRequest, context): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
 
     const sizeError = checkBodySize(req, MESSAGING_CONFIG.MAX_BODY_SIZE);
     if (sizeError) return sizeError;
@@ -50,7 +65,7 @@ export const POST = withAuth(
 
     const idempotencyKey =
       req.headers.get("Idempotency-Key") ||
-      IdempotencyService.generateKey(dbUserId, "POST", {
+      IdempotencyService.generateKey(actor.userId, "POST", {
         domain: "messaging-message",
         threadId: data.threadId,
         content: data.content.substring(0, 100),
@@ -59,7 +74,7 @@ export const POST = withAuth(
     const idempotencyCheck = await IdempotencyService.checkOrCreate(
       idempotencyKey,
       "messaging",
-      dbUserId,
+      actor.userId,
       "POST",
     );
     if (!idempotencyCheck)
@@ -85,7 +100,7 @@ export const POST = withAuth(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => messagingService.sendMessage(dbUserId, data),
+      () => messagingService.sendMessage(actor, data),
       { operationName: "send_message" },
     );
 
@@ -93,7 +108,7 @@ export const POST = withAuth(
       await IdempotencyService.fail(idempotencyKey).catch(() => {});
       logger.error("Failed to send message", result.error, {
         correlationId,
-        userId: dbUserId,
+        actorRole: actor.role,
         threadId: data.threadId,
       });
       return apiError(
@@ -105,7 +120,7 @@ export const POST = withAuth(
       if (!serviceResult || !serviceResult.ok) {
         await IdempotencyService.fail(idempotencyKey).catch(() => {});
         return apiError(
-          serviceResult?.message ?? "Invalid request",
+          "Invalid request",
           serviceResult?.status ?? HttpStatus.BAD_REQUEST,
         );
       }

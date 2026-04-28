@@ -143,7 +143,8 @@ export function DocumentViewer({
               <FileText className="h-16 w-16 mb-4" />
               <p className="text-lg font-medium">Preview not available</p>
               <p className="text-sm">
-                Click the external link or download button to view this document.
+                Click the external link or download button to view this
+                document.
               </p>
             </div>
           )}

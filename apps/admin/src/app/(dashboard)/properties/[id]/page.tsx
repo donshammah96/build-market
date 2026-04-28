@@ -6,6 +6,7 @@ import {
   verifyProperty,
   togglePropertyFeatured,
 } from "@/actions/admin";
+import { getAdminPermissions } from "@/actions/admin/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,12 +49,21 @@ export default async function PropertyDetailPage({
 }: PropertyDetailPageProps) {
   const { id } = await params;
   const response = await getPropertyDetails(id);
+  const { granularRole } = await getAdminPermissions();
 
   if (!response.success || !response.data) {
-    notFound();
+    return notFound();
   }
 
   const property = response.data;
+
+  // Role checks
+  const canModifyStatus = ["SUPER_ADMIN", "CONTENT_MODERATOR"].includes(
+    granularRole || "",
+  );
+  const canVerify = ["SUPER_ADMIN", "VERIFICATION_SPECIALIST"].includes(
+    granularRole || "",
+  );
 
   return (
     <div className="space-y-6">
@@ -101,11 +111,13 @@ export default async function PropertyDetailPage({
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <ChangePropertyStatus
-            propertyId={id}
-            currentStatus={property.status}
-          />
-          {!property.verified && (
+          {canModifyStatus && (
+            <ChangePropertyStatus
+              propertyId={id}
+              currentStatus={property.status}
+            />
+          )}
+          {canVerify && !property.verified && (
             <form
               action={async () => {
                 "use server";
@@ -118,17 +130,19 @@ export default async function PropertyDetailPage({
               </Button>
             </form>
           )}
-          <form
-            action={async () => {
-              "use server";
-              await togglePropertyFeatured(id);
-            }}
-          >
-            <Button variant="outline">
-              <Star className="mr-2 h-4 w-4" />
-              {property.featured ? "Unfeature" : "Feature"}
-            </Button>
-          </form>
+          {canModifyStatus && (
+            <form
+              action={async () => {
+                "use server";
+                await togglePropertyFeatured(id);
+              }}
+            >
+              <Button variant="outline">
+                <Star className="mr-2 h-4 w-4" />
+                {property.featured ? "Unfeature" : "Feature"}
+              </Button>
+            </form>
+          )}
         </div>
       </div>
 
@@ -146,24 +160,31 @@ export default async function PropertyDetailPage({
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {property.images.map((image) => (
-                    <div
-                      key={image.id}
-                      className="relative aspect-video rounded-lg overflow-hidden bg-zinc-100"
-                    >
-                      <Image
-                        src={image.url}
-                        alt={image.caption || "Property image"}
-                        fill
-                        className="object-cover w-full h-full"
-                      />
-                      {image.isMain && (
-                        <Badge className="absolute top-2 left-2 text-xs">
-                          Main
-                        </Badge>
-                      )}
-                    </div>
-                  ))}
+                  {property.images.map(
+                    (image: {
+                      id: string;
+                      url: string;
+                      caption: string | null;
+                      isMain: boolean;
+                    }) => (
+                      <div
+                        key={image.id}
+                        className="relative aspect-video rounded-lg overflow-hidden bg-zinc-100"
+                      >
+                        <Image
+                          src={image.url}
+                          alt={image.caption || "Property image"}
+                          fill
+                          className="object-cover w-full h-full"
+                        />
+                        {image.isMain && (
+                          <Badge className="absolute top-2 left-2 text-xs">
+                            Main
+                          </Badge>
+                        )}
+                      </div>
+                    ),
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -322,44 +343,51 @@ export default async function PropertyDetailPage({
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {property.attachments.map((attachment) => (
-                    <div
-                      key={attachment.id}
-                      className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg"
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-4 w-4 text-zinc-500" />
-                        <div>
-                          <p className="text-sm font-medium">
-                            {attachment.fileUrl}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {attachment.type}
-                          </p>
+                  {property.attachments.map(
+                    (attachment: {
+                      id: string;
+                      fileUrl: string;
+                      type: string;
+                      isVerified: boolean;
+                    }) => (
+                      <div
+                        key={attachment.id}
+                        className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-4 w-4 text-zinc-500" />
+                          <div>
+                            <p className="text-sm font-medium">
+                              {attachment.fileUrl}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {attachment.type}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {attachment.isVerified ? (
+                            <Badge className="bg-emerald-100 text-emerald-700 text-xs">
+                              <CheckCircle className="mr-1 h-3 w-3" />
+                              Verified
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs">
+                              Pending
+                            </Badge>
+                          )}
+                          <a
+                            href={attachment.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-700"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {attachment.isVerified ? (
-                          <Badge className="bg-emerald-100 text-emerald-700 text-xs">
-                            <CheckCircle className="mr-1 h-3 w-3" />
-                            Verified
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="text-xs">
-                            Pending
-                          </Badge>
-                        )}
-                        <a
-                          href={attachment.fileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-700"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                      </div>
-                    </div>
-                  ))}
+                    ),
+                  )}
                 </div>
               </CardContent>
             </Card>

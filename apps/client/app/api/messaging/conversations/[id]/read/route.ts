@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@build/db";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -13,16 +12,34 @@ import {
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { isValidId } from "@/app/lib/api/api-guards";
+import {
+  type MessagingActor,
+  messagingService,
+} from "@/app/lib/domains/messaging";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
 type ThreadParams = { id: string };
+
+function toMessagingActor(context: {
+  clerkId: string;
+  dbUserId: string;
+  userRole: unknown;
+}): MessagingActor {
+  return {
+    clerkId: context.clerkId,
+    userId: context.dbUserId,
+    role: normalizeRole(String(context.userRole)) ?? null,
+  };
+}
 
 /**
  * POST /api/messaging/conversations/[id]/read
  */
 export const POST = withAuth<ThreadParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
     if (!params?.id || !isValidId(params.id))
       return apiError("Invalid conversation ID", HttpStatus.BAD_REQUEST);
     const threadId = params.id;
@@ -38,22 +55,7 @@ export const POST = withAuth<ThreadParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      async () => {
-        const participant = await prisma.threadParticipant.findUnique({
-          where: { threadId_userId: { threadId, userId: dbUserId } },
-        });
-        if (!participant)
-          return {
-            _error: true as const,
-            message: "Not a participant",
-            status: HttpStatus.FORBIDDEN,
-          };
-        await prisma.threadParticipant.update({
-          where: { id: participant.id },
-          data: { unreadCount: 0, lastReadAt: new Date() },
-        });
-        return { success: true };
-      },
+      () => messagingService.markThreadAsRead(actor, threadId),
       { operationName: "mark_thread_read" },
     );
 
@@ -66,11 +68,16 @@ export const POST = withAuth<ThreadParams>(
         "Failed to mark thread read",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
-    } else {
-      const data = result.data;
-      if (data && "_error" in (data as any) && (data as any)._error)
-        return apiError((data as any).message, (data as any).status);
-      return apiSuccess(data, HttpStatus.OK);
     }
+
+    const serviceResult = result.data;
+    if (!serviceResult || !serviceResult.ok) {
+      return apiError(
+        "Invalid request",
+        serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return apiSuccess(serviceResult.data, HttpStatus.OK);
   },
 );

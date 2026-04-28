@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 import {
   mockPrismaSuccess,
-  mockPrismaWithDBError,
-  mockPrismaWithTransactionRollback,
   generateMockConsent,
   generateMockUser,
 } from "../../../mocks";
@@ -17,6 +15,7 @@ describe("ConsentService", () => {
   let mockPrisma: ReturnType<typeof mockPrismaSuccess>;
 
   beforeEach(async () => {
+    vi.resetModules();
     mockPrisma = mockPrismaSuccess();
     vi.doMock("@build/db", () => ({
       prisma: mockPrisma,
@@ -52,7 +51,7 @@ describe("ConsentService", () => {
           userId,
           type: consentType,
           granted: true,
-          version: "v1.0",
+          documentVersion: "v1.0",
           grantedAt: expect.any(Date),
         },
       });
@@ -73,7 +72,7 @@ describe("ConsentService", () => {
       (mockPrisma.consentRecord.update as Mock).mockResolvedValue({
         ...existingConsent,
         granted: false,
-        revokedAt: new Date(),
+        grantedAt: null,
       });
 
       const result = await service.updateConsent(
@@ -84,12 +83,11 @@ describe("ConsentService", () => {
       );
 
       expect(result.granted).toBe(false);
-      expect(result.revokedAt).toBeDefined();
       expect(mockPrisma.consentRecord.update).toHaveBeenCalledWith({
         where: { id: existingConsent.id },
         data: {
           granted: false,
-          revokedAt: expect.any(Date),
+          grantedAt: undefined,
         },
       });
     });
@@ -109,40 +107,29 @@ describe("ConsentService", () => {
 
       expect(mockPrisma.user.update).toHaveBeenCalledWith({
         where: { id: userId },
-        data: expect.objectContaining({
-          // Legacy fields updated based on consent type
-        }),
+        data: {
+          emailMarketingConsent: true,
+        },
       });
     });
 
-    it.concurrent(
-      "should handle database errors during consent update",
-      async () => {
-        const mockErrorPrisma = mockPrismaWithDBError();
-        vi.doMock("@build/db", () => ({
-          prisma: mockErrorPrisma,
-        }));
-        const serviceModule =
-          await import("@/app/lib/gdpr/services/consent.service");
-        const errorService = new serviceModule.ConsentService();
-
-        await expect(
-          errorService.updateConsent("user_123", "MARKETING_EMAIL", true),
-        ).rejects.toThrow("Database connection failed");
-      },
-    );
-
-    it.concurrent("should rollback on transaction failure", async () => {
-      const mockRollbackPrisma = mockPrismaWithTransactionRollback();
-      vi.doMock("@build/db", () => ({
-        prisma: mockRollbackPrisma,
-      }));
-      const serviceModule =
-        await import("@/app/lib/gdpr/services/consent.service");
-      const rollbackService = new serviceModule.ConsentService();
+    it("should handle database errors during consent update", async () => {
+      (mockPrisma.consentRecord.findFirst as Mock).mockRejectedValue(
+        new Error("Database connection failed"),
+      );
 
       await expect(
-        rollbackService.updateConsent("user_123", "MARKETING_EMAIL", true),
+        service.updateConsent("user_123", "MARKETING_EMAIL", true),
+      ).rejects.toThrow("Database connection failed");
+    });
+
+    it("should rollback on transaction failure", async () => {
+      (mockPrisma.$transaction as Mock).mockRejectedValue(
+        new Error("Transaction rollback"),
+      );
+
+      await expect(
+        service.updateConsent("user_123", "MARKETING_EMAIL", true),
       ).rejects.toThrow("Transaction rollback");
     });
   });
@@ -176,22 +163,15 @@ describe("ConsentService", () => {
       expect(result).toEqual([]);
     });
 
-    it.concurrent(
-      "should handle database errors during consent retrieval",
-      async () => {
-        const mockErrorPrisma = mockPrismaWithDBError();
-        vi.doMock("@build/db", () => ({
-          prisma: mockErrorPrisma,
-        }));
-        const serviceModule =
-          await import("@/app/lib/gdpr/services/consent.service");
-        const errorService = new serviceModule.ConsentService();
+    it("should handle database errors during consent retrieval", async () => {
+      (mockPrisma.consentRecord.findMany as Mock).mockRejectedValue(
+        new Error("Database connection failed"),
+      );
 
-        await expect(errorService.getConsents("user_123")).rejects.toThrow(
-          "Database connection failed",
-        );
-      },
-    );
+      await expect(service.getConsents("user_123")).rejects.toThrow(
+        "Database connection failed",
+      );
+    });
   });
 
   describe("getConsentHistory", () => {
@@ -204,7 +184,7 @@ describe("ConsentService", () => {
           userId,
           type: consentType,
           granted: false,
-          revokedAt: new Date(),
+          grantedAt: null,
         }),
       ];
 
@@ -228,7 +208,11 @@ describe("ConsentService", () => {
       const userId = "user_123";
       const activeConsents = [
         generateMockConsent({ userId, type: "MARKETING_EMAIL", granted: true }),
-        generateMockConsent({ userId, type: "ANALYTICS", granted: true }),
+        generateMockConsent({
+          userId,
+          type: "ANALYTICS_COOKIES",
+          granted: true,
+        }),
       ];
 
       (mockPrisma.consentRecord.findMany as Mock).mockResolvedValue(
@@ -248,7 +232,7 @@ describe("ConsentService", () => {
         },
         data: {
           granted: false,
-          revokedAt: expect.any(Date),
+          grantedAt: undefined,
         },
       });
     });
@@ -266,21 +250,14 @@ describe("ConsentService", () => {
       expect(result.count).toBe(0);
     });
 
-    it.concurrent(
-      "should handle transaction rollback during bulk revoke",
-      async () => {
-        const mockRollbackPrisma = mockPrismaWithTransactionRollback();
-        vi.doMock("@build/db", () => ({
-          prisma: mockRollbackPrisma,
-        }));
-        const serviceModule =
-          await import("@/app/lib/gdpr/services/consent.service");
-        const rollbackService = new serviceModule.ConsentService();
+    it("should handle transaction rollback during bulk revoke", async () => {
+      (mockPrisma.$transaction as Mock).mockRejectedValue(
+        new Error("Transaction rollback"),
+      );
 
-        await expect(
-          rollbackService.revokeAllConsents("user_123"),
-        ).rejects.toThrow("Transaction rollback");
-      },
-    );
+      await expect(service.revokeAllConsents("user_123")).rejects.toThrow(
+        "Transaction rollback",
+      );
+    });
   });
 });

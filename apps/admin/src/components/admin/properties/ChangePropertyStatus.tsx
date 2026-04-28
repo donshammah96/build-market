@@ -39,7 +39,7 @@ export function ChangePropertyStatus({
     startTransition(async () => {
       const result = await changePropertyStatus(
         propertyId,
-        newStatus as "AVAILABLE" | "SOLD" | "RENTED" | "UNDER_OFFER"
+        newStatus as "AVAILABLE" | "SOLD" | "RENTED" | "UNDER_OFFER",
       );
 
       if (result.success) {
@@ -62,7 +62,7 @@ export function ChangePropertyStatus({
         }}
         disabled={isPending}
       >
-        <SelectTrigger className="w-[160px]">
+        <SelectTrigger className="w-40">
           <SelectValue placeholder="Select status" />
         </SelectTrigger>
         <SelectContent>

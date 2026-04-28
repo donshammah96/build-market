@@ -1,20 +1,25 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getStoreDetails, verifyStore, rejectStore, toggleStoreFeatured } from "@/actions/admin";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import Image from "next/image";
+import {
+  getStoreDetails,
+  verifyStore,
+  toggleStoreFeatured,
+} from "@/actions/admin";
+import { getAdminPermissions } from "@/actions/admin/shared";
+import { createAdminIdempotencyKey } from "@/lib/security/idempotency-key";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft,
   CheckCircle,
-  XCircle,
   Star,
   MapPin,
   Phone,
   Mail,
   Globe,
-  Building2,
   Package,
   ShoppingCart,
   MessageSquare,
@@ -30,24 +35,31 @@ interface StoreDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
-export default async function StoreDetailPage({ params }: StoreDetailPageProps) {
+export default async function StoreDetailPage({
+  params,
+}: StoreDetailPageProps) {
   const { id } = await params;
   const response = await getStoreDetails(id);
 
   if (!response.success || !response.data) {
-    notFound();
+    return notFound();
   }
 
   const store = response.data;
+
+  const { granularRole } = await getAdminPermissions();
+  const canVerify = ["SUPER_ADMIN", "VERIFICATION_SPECIALIST"].includes(
+    granularRole || "",
+  );
+  const canManageStores = ["SUPER_ADMIN", "CONTENT_MODERATOR"].includes(
+    granularRole || "",
+  );
 
   return (
     <div className="space-y-6">
       {/* Breadcrumbs */}
       <Breadcrumbs
-        items={[
-          { label: "Stores", href: "/stores" },
-          { label: store.name },
-        ]}
+        items={[{ label: "Stores", href: "/stores" }, { label: store.name }]}
       />
 
       {/* Header */}
@@ -60,7 +72,9 @@ export default async function StoreDetailPage({ params }: StoreDetailPageProps) 
           </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight">{store.name}</h1>
+              <h1 className="text-2xl font-bold tracking-tight">
+                {store.name}
+              </h1>
               {store.verified && (
                 <Badge className="bg-emerald-100 text-emerald-700">
                   <CheckCircle className="mr-1 h-3 w-3" />
@@ -80,26 +94,48 @@ export default async function StoreDetailPage({ params }: StoreDetailPageProps) 
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {!store.verified && (
-            <form action={async () => {
-              "use server";
-              await verifyStore(id);
-            }}>
+          {!store.verified && canVerify && (
+            <form
+              action={async (formData) => {
+                "use server";
+                const idempotencyKey = String(
+                  formData.get("idempotencyKey") || "",
+                );
+                await verifyStore(id, idempotencyKey);
+              }}
+            >
+              <input
+                type="hidden"
+                name="idempotencyKey"
+                value={createAdminIdempotencyKey("verifyStore", id)}
+              />
               <Button className="bg-emerald-600 hover:bg-emerald-700">
                 <CheckCircle className="mr-2 h-4 w-4" />
                 Verify Store
               </Button>
             </form>
           )}
-          <form action={async () => {
-            "use server";
-            await toggleStoreFeatured(id);
-          }}>
-            <Button variant="outline">
-              <Star className="mr-2 h-4 w-4" />
-              {store.featured ? "Remove Featured" : "Mark Featured"}
-            </Button>
-          </form>
+          {canManageStores && (
+            <form
+              action={async (formData) => {
+                "use server";
+                const idempotencyKey = String(
+                  formData.get("idempotencyKey") || "",
+                );
+                await toggleStoreFeatured(id, idempotencyKey);
+              }}
+            >
+              <input
+                type="hidden"
+                name="idempotencyKey"
+                value={createAdminIdempotencyKey("toggleStoreFeatured", id)}
+              />
+              <Button variant="outline">
+                <Star className="mr-2 h-4 w-4" />
+                {store.featured ? "Remove Featured" : "Mark Featured"}
+              </Button>
+            </form>
+          )}
         </div>
       </div>
 
@@ -114,23 +150,33 @@ export default async function StoreDetailPage({ params }: StoreDetailPageProps) 
             <CardContent className="space-y-4">
               {store.description && (
                 <div>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-1">Description</h4>
+                  <h4 className="text-sm font-medium text-muted-foreground mb-1">
+                    Description
+                  </h4>
                   <p className="text-sm">{store.description}</p>
                 </div>
               )}
               <Separator />
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-1">Store Type</h4>
+                  <h4 className="text-sm font-medium text-muted-foreground mb-1">
+                    Store Type
+                  </h4>
                   <Badge variant="secondary" className="capitalize">
                     {store.storeType.replace(/_/g, " ")}
                   </Badge>
                 </div>
                 <div>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-1">Categories</h4>
+                  <h4 className="text-sm font-medium text-muted-foreground mb-1">
+                    Categories
+                  </h4>
                   <div className="flex flex-wrap gap-1">
-                    {store.categories.map((cat) => (
-                      <Badge key={cat} variant="outline" className="capitalize text-xs">
+                    {store.categories.map((cat: string) => (
+                      <Badge
+                        key={cat}
+                        variant="outline"
+                        className="capitalize text-xs"
+                      >
                         {cat.replace(/_/g, " ")}
                       </Badge>
                     ))}
@@ -162,7 +208,10 @@ export default async function StoreDetailPage({ params }: StoreDetailPageProps) 
               {store.email && (
                 <div className="flex items-center gap-3">
                   <Mail className="h-4 w-4 text-muted-foreground" />
-                  <a href={`mailto:${store.email}`} className="text-sm text-blue-600 hover:underline">
+                  <a
+                    href={`mailto:${store.email}`}
+                    className="text-sm text-blue-600 hover:underline"
+                  >
                     {store.email}
                   </a>
                 </div>
@@ -170,9 +219,9 @@ export default async function StoreDetailPage({ params }: StoreDetailPageProps) 
               {store.website && (
                 <div className="flex items-center gap-3">
                   <Globe className="h-4 w-4 text-muted-foreground" />
-                  <a 
-                    href={store.website} 
-                    target="_blank" 
+                  <a
+                    href={store.website}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm text-blue-600 hover:underline flex items-center gap-1"
                   >
@@ -195,17 +244,24 @@ export default async function StoreDetailPage({ params }: StoreDetailPageProps) 
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {store.products.map((product) => (
-                    <div key={product.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg">
-                      <div>
-                        <p className="font-medium text-sm">{product.name}</p>
-                        <p className="text-xs text-muted-foreground capitalize">{product.status}</p>
+                  {store.products.map(
+                    (product: (typeof store.products)[number]) => (
+                      <div
+                        key={product.id}
+                        className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg"
+                      >
+                        <div>
+                          <p className="font-medium text-sm">{product.name}</p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            {product.status}
+                          </p>
+                        </div>
+                        <span className="font-semibold text-sm">
+                          KES {product.price.toLocaleString()}
+                        </span>
                       </div>
-                      <span className="font-semibold text-sm">
-                        KES {product.price.toLocaleString()}
-                      </span>
-                    </div>
-                  ))}
+                    ),
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -219,15 +275,21 @@ export default async function StoreDetailPage({ params }: StoreDetailPageProps) 
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {store.images.map((image) => (
-                    <div key={image.id} className="relative aspect-square rounded-lg overflow-hidden bg-zinc-100">
-                      <img
+                  {store.images.map((image: (typeof store.images)[number]) => (
+                    <div
+                      key={image.id}
+                      className="relative aspect-square rounded-lg overflow-hidden bg-zinc-100"
+                    >
+                      <Image
                         src={image.url}
                         alt={image.caption || "Store image"}
-                        className="object-cover w-full h-full"
+                        fill
+                        className="object-cover"
                       />
                       {image.isMain && (
-                        <Badge className="absolute top-2 left-2 text-xs">Main</Badge>
+                        <Badge className="absolute top-2 left-2 text-xs">
+                          Main
+                        </Badge>
                       )}
                     </div>
                   ))}
@@ -278,9 +340,11 @@ export default async function StoreDetailPage({ params }: StoreDetailPageProps) 
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-3">
                   {store.owner.user.avatar ? (
-                    <img
+                    <Image
                       src={store.owner.user.avatar}
                       alt={store.owner.companyName}
+                      width={48}
+                      height={48}
                       className="h-12 w-12 rounded-full object-cover"
                     />
                   ) : (
@@ -299,7 +363,10 @@ export default async function StoreDetailPage({ params }: StoreDetailPageProps) 
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center gap-2">
                     <Mail className="h-4 w-4 text-muted-foreground" />
-                    <a href={`mailto:${store.owner.user.email}`} className="text-blue-600 hover:underline">
+                    <a
+                      href={`mailto:${store.owner.user.email}`}
+                      className="text-blue-600 hover:underline"
+                    >
                       {store.owner.user.email}
                     </a>
                   </div>
@@ -327,7 +394,9 @@ export default async function StoreDetailPage({ params }: StoreDetailPageProps) 
               </div>
               {store.verifiedAt && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Verified At</span>
+                  <span className="text-sm text-muted-foreground">
+                    Verified At
+                  </span>
                   <span className="text-sm">
                     {new Date(store.verifiedAt).toLocaleDateString()}
                   </span>
@@ -335,8 +404,12 @@ export default async function StoreDetailPage({ params }: StoreDetailPageProps) 
               )}
               {store.rejectionReason && (
                 <div className="p-3 bg-red-50 rounded-lg">
-                  <p className="text-sm font-medium text-red-700">Rejection Reason</p>
-                  <p className="text-sm text-red-600 mt-1">{store.rejectionReason}</p>
+                  <p className="text-sm font-medium text-red-700">
+                    Rejection Reason
+                  </p>
+                  <p className="text-sm text-red-600 mt-1">
+                    {store.rejectionReason}
+                  </p>
                 </div>
               )}
             </CardContent>

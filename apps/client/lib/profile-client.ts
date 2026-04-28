@@ -7,7 +7,14 @@
  */
 import { API_ROUTES } from "@/lib/links";
 import { apiFetch } from "@/lib/api-client-utils";
+import type { ProfessionalOnboardingData } from "@build/types";
 import type { ApiResponse } from "@build/types";
+import type {
+  OwnProfessionalProfile,
+  PublicProfessionalProfile,
+  ServiceGroup,
+  SettingsProfileData,
+} from "@/lib/profile-contracts";
 import type {
   UpdateProfileInput,
   completeProfileSchema,
@@ -15,40 +22,52 @@ import type {
 import type { z } from "zod";
 
 export type CompleteProfileInput = z.infer<typeof completeProfileSchema>;
+export type CompleteProfileResponse = {
+  completed: true;
+};
 
-// Types mapped from the API responses / Server Actions
-export interface ServiceGroup {
-  id: string;
-  name: string;
-  services: {
-    id: string;
-    name: string;
-    slug: string;
-  }[];
+function isProfessionalOnboardingData(
+  data: CompleteProfileInput | ProfessionalOnboardingData,
+): data is ProfessionalOnboardingData {
+  return typeof data === "object" && data !== null && "role" in data;
 }
 
-export interface SettingsProfileData {
-  id: string;
-  userId: string;
-  companyName: string;
-  profession: string | null;
-  bio: string | null;
-  city: string | null;
-  county: string | null;
-  website: string | null;
-  portfolioUrl: string | null;
-  yearsExperience: number | null;
-  licenseNumber: string | null;
-  services: {
-    id: string;
-    name: string;
-    slug: string;
-  }[];
-  user: {
-    firstName: string | null;
-    lastName: string | null;
-    email: string;
-    avatar: string | null;
+export function normalizeCompleteProfileInput(
+  data: ProfessionalOnboardingData,
+): CompleteProfileInput {
+  return {
+    profession: data.profession,
+    companyName: data.companyName || "",
+    yearsExperience: data.yearsExperience ?? undefined,
+    website: data.website ?? undefined,
+    bio: data.bio ?? undefined,
+    documents: data.documents
+      ?.filter(
+        (
+          document,
+        ): document is typeof document & {
+          uploadId: string;
+        } => typeof document.uploadId === "string",
+      )
+      .map((document) => ({
+        uploadId: document.uploadId,
+        previewUrl: document.previewUrl,
+        category: document.category,
+        title: document.title,
+      })),
+    ...(data.stores?.length ? { storeData: data.stores } : {}),
+    ...(data.properties?.length ? { propertyData: data.properties } : {}),
+    ...(data.boardRegistrationNumber
+      ? { earbNumber: data.boardRegistrationNumber }
+      : {}),
+    ...(data.license
+      ? {
+          license: {
+            authority: data.license.authority,
+            licenseNumber: data.license.licenseNumber,
+          },
+        }
+      : {}),
   };
 }
 
@@ -65,8 +84,10 @@ export const profileClient = {
    * Update the professional's profile
    * Equivalent to `updateProfessionalProfileAction`
    */
-  async updateProfile(data: UpdateProfileInput): Promise<ApiResponse<unknown>> {
-    return apiFetch<unknown>(API_ROUTES.professionalProfile, {
+  async updateProfile(
+    data: UpdateProfileInput,
+  ): Promise<ApiResponse<SettingsProfileData>> {
+    return apiFetch<SettingsProfileData>(API_ROUTES.professionalProfile, {
       method: "PATCH",
       body: JSON.stringify(data),
     });
@@ -85,12 +106,19 @@ export const profileClient = {
    * Equivalent to `completeProfessionalProfileAction`
    */
   async completeProfile(
-    data: CompleteProfileInput,
-  ): Promise<ApiResponse<unknown>> {
-    return apiFetch<unknown>(API_ROUTES.professionalProfileComplete, {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
+    data: CompleteProfileInput | ProfessionalOnboardingData,
+  ): Promise<ApiResponse<CompleteProfileResponse>> {
+    const payload = isProfessionalOnboardingData(data)
+      ? normalizeCompleteProfileInput(data)
+      : data;
+
+    return apiFetch<CompleteProfileResponse>(
+      API_ROUTES.professionalProfileComplete,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    );
   },
 
   /** Fetch the current user's own professional profile (profile page view). */
@@ -109,96 +137,3 @@ export const profileClient = {
     );
   },
 };
-
-// ─── Profile Page Types ────────────────────────────────────────────────────
-// Shared across both profile/page.tsx and profile/[id]/page.tsx.
-
-export interface ProfileServiceCategory {
-  id: string;
-  name: string;
-  slug: string;
-  icon?: string | null;
-}
-
-export interface ProfileImage {
-  id: string;
-  url: string;
-  caption?: string | null;
-  isMain: boolean;
-}
-
-export interface ProfilePortfolioImage {
-  id: string;
-  url: string;
-  caption?: string | null;
-  isMain: boolean;
-  isBefore: boolean;
-  isAfter: boolean;
-}
-
-export interface ProfilePortfolioItem {
-  id: string;
-  title: string;
-  description?: string | null;
-  projectType: string;
-  completedAt?: Date | string | null;
-  images?: ProfilePortfolioImage[];
-}
-
-export interface ProfileReview {
-  id: string;
-  rating: number;
-  comment?: string | null;
-  createdAt: Date | string;
-  reviewer: {
-    firstName: string;
-    lastName: string;
-    avatar?: string | null;
-  };
-}
-
-export interface ProfileCertificate {
-  id: string;
-  name: string;
-  issuer: string;
-  issueDate?: Date | string | null;
-  expiryDate?: Date | string | null;
-}
-
-/** Profile as returned by GET /api/professional-portal/profile (own). */
-export interface OwnProfessionalProfile {
-  id: string;
-  userId: string;
-  companyName: string;
-  licenseNumber: string;
-  bio?: string | null;
-  city?: string | null;
-  county?: string | null;
-  website?: string | null;
-  portfolioUrl?: string | null;
-  yearsExperience?: number | null;
-  verified: boolean;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-  user: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    avatar?: string | null;
-  };
-  services?: ProfileServiceCategory[];
-  images?: ProfileImage[];
-}
-
-/** Extended profile as returned by GET /api/professional-portal/profile/:id. */
-export interface PublicProfessionalProfile extends OwnProfessionalProfile {
-  avgRating?: number | null;
-  portfolios?: ProfilePortfolioItem[];
-  reviews?: ProfileReview[];
-  certificates?: ProfileCertificate[];
-  _count?: {
-    reviews: number;
-    projects: number;
-    portfolios: number;
-  };
-}

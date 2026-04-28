@@ -112,7 +112,7 @@ export async function clearSystemCache() {
   try {
     await assertAdmin();
     revalidatePath("/", "layout");
-    return { 
+    return {
       success: true,
       timestamp: new Date().toISOString(),
     };

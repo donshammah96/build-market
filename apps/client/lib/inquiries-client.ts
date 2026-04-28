@@ -3,6 +3,7 @@
  *
  * Client-side facade for professional-portal property inquiries.
  * Uses browser-safe REST APIs with client-side concurrency control.
+ * Types aligned to domain DTOs; no DTO repair.
  */
 import type { ApiResponse } from "@build/types";
 import { apiFetch, ConcurrencyLimiter } from "@/lib/api-client-utils";
@@ -13,30 +14,27 @@ import type { z } from "zod";
 import {
   InquiriesQuerySchema,
   UpdateInquirySchema,
-  PropertyInquiry,
-  PropertyInquiryList,
 } from "@/lib/validation/inquiries-validation";
+import type {
+  InquiryDetailResult,
+  InquiryListResult,
+} from "@/app/lib/domains/inquiries/contracts";
 
 const { BULKHEAD_CONCURRENCY } = INQUIRIES_CLIENT_CONFIG;
 
-// ─── Input Types (Derived locally to avoid server imports) ──────────────────
-
 export type InquiriesQueryInput = z.infer<typeof InquiriesQuerySchema>;
 export type UpdateInquiryInput = z.infer<typeof UpdateInquirySchema>;
-
-export type { PropertyInquiry, PropertyInquiryList };
 
 export type UpdateInquiryClientInput = {
   inquiryId: string;
   data: UpdateInquiryInput;
   idempotencyKey?: string;
 };
+
 export type DeleteInquiryClientInput = {
   inquiryId: string;
   idempotencyKey?: string;
 };
-
-// ─── Inquiries Client ──────────────────────────────────────────────────────
 
 class InquiriesClient {
   private readonly bulkhead: ConcurrencyLimiter;
@@ -47,7 +45,7 @@ class InquiriesClient {
 
   async getInquiries(
     filters?: Partial<InquiriesQueryInput>,
-  ): Promise<ApiResponse<PropertyInquiryList[]>> {
+  ): Promise<ApiResponse<InquiryListResult>> {
     return this.bulkhead.run(async () => {
       const url = filters
         ? withQueryParams(
@@ -56,46 +54,60 @@ class InquiriesClient {
           )
         : API_ROUTES.professionalPortalInquiries;
 
-      return apiFetch<PropertyInquiryList[]>(url);
+      const response = await apiFetch<InquiryListResult>(url);
+      if (!response.success) {
+        return { success: false, error: response.error };
+      }
+      return {
+        success: true,
+        data: response.data!,
+      };
     });
   }
 
-  async getInquiry(inquiryId: string): Promise<ApiResponse<PropertyInquiry>> {
+  async getInquiry(
+    inquiryId: string,
+  ): Promise<ApiResponse<InquiryDetailResult>> {
     if (!isValidId(inquiryId)) {
-      return {
-        success: false,
-        error: "Invalid inquiry ID",
-      };
+      return { success: false, error: "Invalid inquiry ID" };
     }
-    return this.bulkhead.run(() =>
-      apiFetch<PropertyInquiry>(
+    return this.bulkhead.run(async () => {
+      const response = await apiFetch<InquiryDetailResult>(
         API_ROUTES.professionalPortalInquiryDetail(inquiryId),
-      ),
-    );
+      );
+      if (!response.success) {
+        return { success: false, error: response.error };
+      }
+      return { success: true, data: response.data! };
+    });
   }
 
   async updateInquiry(
     input: UpdateInquiryClientInput,
-  ): Promise<ApiResponse<PropertyInquiry>> {
+  ): Promise<ApiResponse<InquiryDetailResult>> {
     const { inquiryId, data, idempotencyKey } = input;
     if (!isValidId(inquiryId)) {
-      return {
-        success: false,
-        error: "Invalid inquiry ID",
-      };
+      return { success: false, error: "Invalid inquiry ID" };
     }
-    return this.bulkhead.run(() =>
-      apiFetch<PropertyInquiry>(
+    return this.bulkhead.run(async () => {
+      const response = await apiFetch<InquiryDetailResult>(
         API_ROUTES.professionalPortalInquiryDetail(inquiryId),
         {
           method: "PATCH",
-          body: JSON.stringify(data),
+          body: JSON.stringify({
+            ...data,
+            preferredViewingDate: data.preferredViewingDate ?? null,
+          }),
           headers: idempotencyKey
             ? { "Idempotency-Key": idempotencyKey }
             : undefined,
         },
-      ),
-    );
+      );
+      if (!response.success) {
+        return { success: false, error: response.error };
+      }
+      return { success: true, data: response.data! };
+    });
   }
 
   async deleteInquiry(
@@ -103,10 +115,7 @@ class InquiriesClient {
   ): Promise<ApiResponse<null>> {
     const { inquiryId, idempotencyKey } = input;
     if (!isValidId(inquiryId)) {
-      return {
-        success: false,
-        error: "Invalid inquiry ID",
-      };
+      return { success: false, error: "Invalid inquiry ID" };
     }
     return this.bulkhead.run(() =>
       apiFetch<null>(API_ROUTES.professionalPortalInquiryDetail(inquiryId), {

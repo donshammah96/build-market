@@ -107,22 +107,14 @@ Recommended action:
 2. Restrict direct `process.env` to the env module and bootstrap code.
 3. Add lint rule or code review gate to discourage new direct reads.
 
-### 5) Medium: Feature flag defaults are inconsistent across files
+### 5) Resolved (2026-04-13): Generic projects rollout flags retired
 
-The mutations rollout flag differs between files:
+The temporary generic-projects rollout flags were removed from runtime code and env templates after full cutover.
 
-- `.env.development` sets `NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API_MUTATIONS=false`
-- `.env.example` and `.env.test` set it to `true`
+Result:
 
-Impact:
-
-- Behavioral differences between local dev and tests can hide rollout regressions.
-
-Recommended action:
-
-1. Define one owner file for default rollout policy.
-2. Keep test defaults intentional and documented.
-3. Add a short matrix in docs showing expected value by environment.
+- Local and test environments now share always-on generic projects read/write behavior.
+- Rollout behavior is governed by contract tests and operational monitoring, not environment toggles.
 
 ### 6) Medium: `.env.vercel` should not be a live-value file in repo
 
@@ -140,28 +132,28 @@ Recommended action:
 
 ## Best-Practice Target State
 
-1. Canonical source of env contract:
+1.Canonical source of env contract:
 
 - `.env.example` defines every variable used by app code.
 - Each variable tagged as required/optional and server/public.
 
-2. Separation of responsibilities:
+  2.Separation of responsibilities:
 
 - `.env.development` and `.env.test` contain only non-secrets.
 - `.env.local` and `.env` contain local secrets only and never leave developer machines.
 
-3. Enforcement:
+  3.Enforcement:
 
 - Startup validation checks all critical vars in non-test environments.
 - CI fails if code references an env var absent from `.env.example`.
 - Secret scanning runs in pre-commit and CI.
 
-4. Safe auth bypass policy:
+  4.Safe auth bypass policy:
 
 - Disabled by default.
 - Requires explicit opt-in plus local-only guardrails.
 
-5. Deployment hygiene:
+  5.Deployment hygiene:
 
 - No committed live-value deployment env files.
 - Use platform-managed encrypted secrets.

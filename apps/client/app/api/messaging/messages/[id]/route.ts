@@ -15,19 +15,37 @@ import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import {
   UpdateMessageSchema,
   MESSAGING_CONFIG,
+  type MessagingActor,
   messagingService,
-} from "@build/messaging-server";
-import { extractExpectedVersion } from "@/app/lib/api/request-utils";
+} from "@/app/lib/domains/messaging";
+import {
+  extractExpectedVersion,
+  extractExpectedVersionFromIfMatch,
+} from "@/app/lib/api/request-utils";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
 type MessageParams = { id: string };
+
+function toMessagingActor(context: {
+  clerkId: string;
+  dbUserId: string;
+  userRole: unknown;
+}): MessagingActor {
+  return {
+    clerkId: context.clerkId,
+    userId: context.dbUserId,
+    role: normalizeRole(String(context.userRole)) ?? null,
+  };
+}
 
 /**
  * GET /api/messaging/messages/[id]
  */
 export const GET = withAuth<MessageParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
-    const correlationId = initializeCorrelationId(req);
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
+    initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
     if (!params?.id || !isValidId(params.id))
       return apiError("Invalid message ID", HttpStatus.BAD_REQUEST);
     const messageId = params.id;
@@ -43,7 +61,7 @@ export const GET = withAuth<MessageParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => messagingService.getMessage(dbUserId, messageId),
+      () => messagingService.getMessage(actor, messageId),
       { operationName: "get_message" },
     );
 
@@ -56,7 +74,7 @@ export const GET = withAuth<MessageParams>(
       const serviceResult = result.data;
       if (!serviceResult || !serviceResult.ok) {
         return apiError(
-          serviceResult?.message ?? "Invalid request",
+          "Invalid request",
           serviceResult?.status ?? HttpStatus.BAD_REQUEST,
         );
       }
@@ -69,8 +87,9 @@ export const GET = withAuth<MessageParams>(
  * PATCH /api/messaging/messages/[id]
  */
 export const PATCH = withAuth<MessageParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
     if (!params?.id || !isValidId(params.id))
       return apiError("Invalid message ID", HttpStatus.BAD_REQUEST);
     const messageId = params.id;
@@ -106,8 +125,7 @@ export const PATCH = withAuth<MessageParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () =>
-        messagingService.updateMessage(dbUserId, messageId, validation.data),
+      () => messagingService.updateMessage(actor, messageId, validation.data),
       { operationName: "update_message" },
     );
 
@@ -124,7 +142,7 @@ export const PATCH = withAuth<MessageParams>(
       const serviceResult = result.data;
       if (!serviceResult || !serviceResult.ok) {
         return apiError(
-          serviceResult?.message ?? "Invalid request",
+          "Invalid request",
           serviceResult?.status ?? HttpStatus.BAD_REQUEST,
         );
       }
@@ -138,21 +156,28 @@ export const PATCH = withAuth<MessageParams>(
  * DELETE /api/messaging/messages/[id]
  */
 export const DELETE = withAuth<MessageParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
     if (!params?.id || !isValidId(params.id))
       return apiError("Invalid message ID", HttpStatus.BAD_REQUEST);
     const messageId = params.id;
 
-    // Safe parse body
-    let body: unknown = null;
-    try {
-      body = await req.json().catch(() => null);
-    } catch {
-      // Ignore JSON parse errors and treat as no body
+    const ifMatch = req.headers.get("If-Match");
+    if (!ifMatch) {
+      return apiError(
+        "Missing If-Match header. Provide entity version in If-Match.",
+        HttpStatus.PRECONDITION_REQUIRED,
+      );
     }
 
-    const expectedVersion = extractExpectedVersion(req, body);
+    const expectedVersion = extractExpectedVersionFromIfMatch(req);
+    if (expectedVersion === null) {
+      return apiError(
+        "Invalid If-Match header. Provide a numeric version.",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     const identifier = getRateLimitIdentifier(req);
     const rateLimitResult = await checkRateLimit(
@@ -165,7 +190,7 @@ export const DELETE = withAuth<MessageParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => messagingService.deleteMessage(dbUserId, messageId),
+      () => messagingService.deleteMessage(actor, messageId),
       { operationName: "delete_message" },
     );
 
@@ -182,7 +207,7 @@ export const DELETE = withAuth<MessageParams>(
       const serviceResult = result.data;
       if (!serviceResult || !serviceResult.ok) {
         return apiError(
-          serviceResult?.message ?? "Invalid request",
+          "Invalid request",
           serviceResult?.status ?? HttpStatus.BAD_REQUEST,
         );
       }

@@ -26,8 +26,1324 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
-## Latest
+## [2026-04-28] CI Smoke Gate Stabilization & Build Graph Completion
 
+### Fixed (CI Pipeline — `client-preview-smoke-gate`)
+
+- **Next.js 16 hostname binding mismatch caused curl timeouts.**
+  The server successfully logged "Ready in 149ms" on `127.0.0.1:3500`, but curl timed out on every probe. Passing `--hostname 127.0.0.1` to the Next.js 16 standalone server causes a binding mismatch on GitHub Actions `ubuntu-latest` runners, where the loopback interface does not identically match 0.0.0.0 for TCP connections.
+  Fix: Dropped the `--hostname` flag to let Next.js default to `0.0.0.0` (all interfaces), replaced the `--port 3500` CLI flag with a `PORT=3500` env var to avoid `pnpm` argument dropping, and forced IPv4 resolution on the curl probes (`curl -4 http://localhost:3500/`).
+  Files: `.github/workflows/ci.yml`.
+
+- **`pnpm` workspace startup overhead exhausted curl retries.**
+  The previous smoke gate polled with curl immediately, but `pnpm -C apps/client run start` incurs significant overhead (workspace graph resolution, lifecycle hooks, child process spawning) before the actual `next start` listener binds. On cold CI runners, this delay often exceeded the entire 45-iteration curl polling window.
+  Fix: Restructured the smoke gate into two decoupled phases: (1) wait up to 180s for the "Ready" log marker while checking process liveness, then (2) execute 5 curl retries with a generous timeout to verify the HTTP route.
+  Files: `.github/workflows/ci.yml`.
+
+- **BullMQ eager-connect crash prevented Next.js server from binding port.**
+  The `client-preview-smoke-gate` CI step was timing out on all 45 curl retries because the Next.js server never started. BullMQ/ioredis entered an infinite reconnect loop against the unresolvable `dummy.upstash.io` hostname, flooding stderr and preventing the HTTP listener from accepting connections.
+  Two compounding defects:
+  1. **Eager module-scope Queue instantiation:** `upload-processing.queue.ts` called `new Queue(connection: createRedisConnection())` at the top level — no lazy getter, no build-phase guard, no `DISABLE_BACKGROUND_JOBS` check. Any import chain that touched this module immediately dialled Redis.
+  2. **Over-broad dummy URL guard:** `requireRedisUrl()` in `packages/queue-server` returned a dummy connection string when `process.env.CI` was truthy. Since `CI=true` persists for the entire GitHub Actions pipeline (including `next start`), this silently supplied an unresolvable hostname at runtime instead of throwing.
+     Fix: Refactored `upload-processing.queue.ts` to the lazy-init singleton pattern with three-tier guards (build phase → missing URL / disabled jobs → singleton), matching the established `export-queue.ts` pattern. Preserved the `uploadProcessingQueue` export via a property-forwarding proxy for backward compatibility. Scoped the `requireRedisUrl()` bypass exclusively to `NEXT_PHASE === "phase-production-build"`.
+     Files: `apps/client/app/lib/queues/upload-processing.queue.ts`; `packages/queue-server/src/redis-connection.ts`.
+
+- **`@build/queue-server` missing `build` script caused `Module not found` in CI.**
+  `pnpm --filter="client..." run build` skipped compilation of `@build/queue-server` because the package lacked a `"build"` script. Its `package.json` correctly pointed `main` and `exports` to `./dist/index.js`, but without a build script pnpm had nothing to invoke, so the `dist/` directory was never generated. Next.js then failed with `Module not found: Can't resolve '@build/queue-server'`.
+  Fix: Added `"build": "tsc"` and `"clean": "rm -rf dist"` to `packages/queue-server/package.json`.
+  Files: `packages/queue-server/package.json`.
+
+- **Missing TypeScript project references for `@build/enums` broke `tsc --build`.**
+  The monorepo root `tsconfig.json` and `packages/types/tsconfig.json` did not list `packages/enums` in their `references` arrays. Since `@build/enums` now exports compiled `dist/` artifacts, `tsc --build` must compile it before `@build/types` (which imports from `@build/enums`). On clean Vercel deployments, the missing reference caused `TS2307: Cannot find module '@build/enums'`.
+  Fix: Added `{ "path": "packages/enums" }` to root `tsconfig.json` and `{ "path": "../enums" }` to `packages/types/tsconfig.json`.
+  Files: `tsconfig.json`; `packages/types/tsconfig.json`.
+
+- **Static analyzer false-positive on `consent/route.ts` null check.**
+  Removed redundant `result.data.data &&` truthiness guard that caused the linter to infer the field was nullable, then flag downstream property access as `INSUFFICIENT_NULL_CHECK`. TypeScript's discriminated union narrowing already guarantees the field exists after the early return.
+  Files: `apps/client/app/api/user/consent/route.ts`.
+
+**Files changed:**
+`apps/client/app/lib/queues/upload-processing.queue.ts`; `packages/queue-server/src/redis-connection.ts`; `packages/queue-server/package.json`; `tsconfig.json`; `packages/types/tsconfig.json`; `apps/client/app/api/user/consent/route.ts`
+
+**Verification:**
+
+```bash
+# 1. Type-check client app
+pnpm -C apps/client run check-types
+
+# 2. Build the full client dependency graph (mirrors CI)
+pnpm --filter="client..." run build
+
+# 3. Vitest suites that exercise queue and enum imports
+pnpm -C apps/client exec vitest run __tests__/actions/onboarding-tier3-guards.test.ts
+```
+
+## [2026-04-28] Next.js Build Environment Isolation & Type-Inference Remediation
+
+### Fixed (Build Stability & Type Inference)
+
+- **`turbo.json` overrides stripped Vercel build environments.**
+  The `client#build` and `admin#build` entries in `turbo.json` were empty overrides, meaning they dropped the `dependsOn: ["^build"]` and `env: [...]` configuration from the global `build` task. This caused Next.js to build without `REDIS_URL` or topological workspace guarantees, crashing the Vercel static evaluation phase when BullMQ queues eagerly checked for connections.
+  Fix: Removed the overriding definitions, restoring standard `build.env` inheritance.
+  Files: `turbo.json`.
+
+- **BullMQ queues crashed Next.js static page collection.**
+  `createRedisConnection()` strictly validated `process.env.REDIS_URL` and connected eagerly. During `next build`, Next.js evaluates all API routes, instantiating the queues and either crashing on the missing URL or causing stalled TCP connections to Upstash.
+  Fix: Added `lazyConnect: true` to the BullMQ ioredis options, and added a bypass in `requireRedisUrl` that returns a dummy connection string during `process.env.NEXT_PHASE === "phase-production-build"`.
+  Files: `packages/queue-server/src/redis-connection.ts`.
+
+- **TypeScript discriminated union inference failures in API Routes.**
+  1. **`properties/route.ts`**: The `resilientExecutor.execute` generic constraint `<T>` failed to infer the return type of a callback returning `Promise<A> | Promise<B>`. Fixed by making the callback `async` to flatten the return into `Promise<A | B>`.
+  2. **`user/consent/route.ts`**: A combined conditional `if (!ok || (data && !data.success))` broke TypeScript's discriminated union narrowing for `DomainResult`, causing TS2339 property access errors. Fixed by splitting the checks into separate `if` blocks.
+     Files: `apps/client/app/api/properties/route.ts`; `apps/client/app/api/user/consent/route.ts`.
+
+- **Vitest ESM resolution failures for `@build/enums`.**
+  Running Vitest suites resulted in `Error: Cannot find module '.../enums/src/user' imported from .../enums/src/index.ts`. The `@build/enums` package incorrectly pointed its `main` and `exports` fields to `./src/index.ts`. When Vitest externalized the package, Node's native ESM resolution failed on the extensionless relative imports inside the source files.
+  Fix: Updated `packages/enums/package.json` to correctly expose the built `./dist/index.js` and `./dist/index.d.ts` artifacts, matching the monorepo standard (e.g. `@build/types`, `@build/resilience`).
+  Files: `packages/enums/package.json`; `packages/enums/src/index.ts`.
+
+**Files changed:**
+`turbo.json`; `packages/queue-server/src/redis-connection.ts`; `apps/client/app/api/properties/route.ts`; `apps/client/app/api/user/consent/route.ts`; `packages/enums/package.json`; `packages/enums/src/index.ts`
+
+**Verification:**
+
+```bash
+# 1. Type-check client app
+pnpm run client:check-types
+
+# 2. Local test build with Turbo to verify env inheritance and no Next.js crashes
+pnpm build:client
+```
+
+## [2026-04-28] Monorepo TypeScript Project References & Messaging Contract Boundary Refactor
+
+### Changed (Monorepo TypeScript Project References & Messaging Contract Boundary Refactor)
+
+- **Monorepo-wide TypeScript project references and root tsconfig.json added.**
+  - Created a root-level `tsconfig.json` with references to all workspace packages and apps, ensuring correct build order and type-checking in CI and local development.
+  - Updated `apps/admin/tsconfig.json` to include references to all `@build/*` packages it depends on, enabling direct source resolution and eliminating reliance on prebuilt `dist/` output.
+  - Updated CI instructions to run `pnpm tsc --build tsconfig.json` or `pnpm --filter "@build/*" run build` before type-checking, ensuring all packages are built in dependency order.
+
+- **Refactored `@build/messaging-server` to own only pure TypeScript contracts.**
+  - Moved all shared messaging types (e.g., `MessagingActor`, `MessagingDomainErrorCode`, `MessagingResult`) into `packages/messaging-server/src/contracts.ts`.
+  - Removed all cross-app imports from `packages/messaging-server` (no more imports from `apps/client`). The package now exports only pure types/interfaces, with no Zod schemas, Prisma types, or app-specific dependencies.
+  - Updated `apps/client/app/lib/domains/messaging/contracts.ts` to import shared types from the package and keep all app-specific validation and schema logic local.
+  - Ensured the package contract shape for `MessagingResult` matches the canonical `Result<T, E>` shape used in the domain layer, eliminating type errors in all consumers.
+
+- **Resolved module resolution and type export issues in `@build/resilience`.**
+  - Ensured all required types (e.g., `OperationCriticality`, `ResilienceOptions`) are exported from the package entrypoint and that build order guarantees type availability for all consumers.
+  - Updated all consuming code to use explicit type imports and `typeof` where required for class-based types, resolving isolatedModules and type/value import errors.
+
+**Files changed:**
+`tsconfig.json` (root); `apps/admin/tsconfig.json`; `packages/messaging-server/src/contracts.ts`; `packages/messaging-server/src/index.ts`; `packages/messaging-server/tsconfig.json`; `apps/client/app/lib/domains/messaging/contracts.ts`; `apps/admin/package.json`; `packages/resilience/src/types.ts`; `packages/resilience/src/index.ts`; `apps/client/app/lib/api/resilient-api.ts`; `apps/admin/src/lib/api/resilient-api.ts`
+
+**Verification:**
+
+```bash
+# 1. Build all workspace packages in dependency order
+pnpm tsc --build tsconfig.json
+
+# 2. Type-check all apps with project references
+pnpm run client:tsc-noemit
+pnpm run admin:check-types
+
+# 3. Confirm no cross-app imports remain in any package
+# 4. Confirm all messaging contract types are imported from @build/messaging-server
+```
+
+## [2026-04-27] TypeScript Baseline Restoration + GDPR Compliance Fixes
+
+### Fixed (TypeScript Baseline Restoration + GDPR Compliance Fixes and Tests)
+
+- **`@build/resilience` rebuild required (root cause of 10/12 TS errors).**
+  `CorrelationIdManager.run()` was added to `logger.ts` but the package's
+  compiled output and `.d.ts` declarations were not updated. TypeScript
+  resolved the old declaration file, which had no `run` method.
+  All 10 `TS2339: Property 'run' does not exist` errors in
+  `compliance.ts` stem from this single missing build step.
+  Fix: `pnpm --filter="@build/resilience" run build` before `tsc`.
+  Files: `packages/resilience` (build step), `apps/client/app/lib/domains/user-profile/compliance.ts`.
+
+- **`TS2693: 'ConsentType' only refers to a type` (2 errors in `route.ts`).**
+  `ConsentType` from `@build/enums` is a TypeScript type alias, not a
+  runtime enum object. `z.nativeEnum()` requires a runtime object.
+  The schema already used `z.enum([...])` correctly; the unused imports
+  `ConsentType` and `CONSENT_TYPES` were the remaining source of errors.
+  Fix: removed both unused imports.
+  File: `apps/client/app/api/user/consent/route.ts`.
+
+- **`TS2345` in `compliance.ts` (latent, surfaces after resilience rebuild).**
+  All nine `CorrelationIdManager.run()` call sites passed `actor.correlationId`
+  which is typed `string | undefined`. After the resilience package is rebuilt,
+  TypeScript would immediately report that `undefined` is not assignable to the
+  `string` parameter of `.run()`. Similarly, `CorrelationIdManager.set()` at
+  line 93 fell back to `""` (empty string), which is indistinguishable from an
+  unset context in log queries.
+  Fix: all `.run()` and `.set()` call sites now use
+  `?? CorrelationIdManager.generate()` to produce a real traceable ID.
+  File: `apps/client/app/lib/domains/user-profile/compliance.ts`.
+
+- **GDPR deletion response contained an invalid support email address.**
+  `requestDeletion` returned `"privacy/buildmarket.co.ke"` (forward slash
+  instead of `@`). Any user following this contact detail after requesting
+  account deletion would receive no response. This is a data subject rights
+  failure under GDPR Article 12 (transparent communication).
+  Fix: corrected to `"privacy@buildmarket.co.ke"`.
+  File: `apps/client/app/lib/domains/user-profile/compliance.ts`.
+
+### Security (TypeScript Baseline Restoration + GDPR Compliance Fixes)
+
+- **PII logged in `bulkUpdateConsents` error handler (ADR-005 / ADR-006 violation).**
+  The error branch inside the consent loop logged `userId: input.actor.userId`.
+  `userId` is a Class B identifier under ADR-006 and must never appear in log
+  events per ADR-005. An error-path log is the highest-risk location for PII
+  because it is emitted on every failure and retained in observability backends.
+  Fix: removed `userId` from the error context; `consentType` (the enum key)
+  is sufficient to identify which operation failed without exposing identity.
+  File: `apps/client/app/lib/domains/user-profile/compliance.ts`.
+
+- **Dynamic domain message strings passed to `apiError()` (ADR anti-pattern 29).**
+  The original GET and PUT handlers passed `consentResult.message` and
+  `result.data.message` as the first argument to `apiError()`. These are
+  domain-layer strings that may contain internal state detail. Any such value
+  reaching a client response is an information-disclosure risk.
+  Fix: all `apiError()` first arguments are now static pre-approved strings.
+  Domain error detail is logged at `warn` level with correlation ID instead.
+  File: `apps/client/app/api/user/consent/route.ts`.
+
+### Changed (TypeScript Baseline Restoration + GDPR Compliance Fixes)
+
+- **`CorrelationIdManager.get()` now treats `""` as unset.**
+  `clear()` uses `enterWith("")` as a sentinel because `AsyncLocalStorage`
+  requires a value of the declared type. Previously `get()` returned `""`,
+  meaning every caller had to guard `value !== "" && value !== undefined`.
+  `get()` now normalises the sentinel to `undefined` at the boundary, so
+  callers receive either a real ID or `undefined` — never the internal sentinel.
+  File: `packages/resilience/src/logger.ts`.
+
+- **`S3StorageProvider.exists()` re-throws non-404 errors.**
+  The previous implementation returned `false` on every S3 error, including
+  403 Forbidden, 429 Throttling, and network failures. This caused the
+  asset-cleanup job to silently skip S3 deletion and log `deletedFromS3: 0`
+  with no indication that a permissions or availability problem occurred.
+  Only a definitive 404 is now treated as "object does not exist"; all other
+  errors propagate to the caller.
+  File: `apps/client/app/lib/infrastructure/storage.ts`.
+
+**Files changed:**
+`packages/resilience/src/logger.ts`;
+`apps/client/app/api/user/consent/route.ts`;
+`apps/client/app/lib/domains/user-profile/compliance.ts`;
+`apps/client/app/lib/infrastructure/storage.ts`
+
+**Verification:**
+
+```bash
+# 1. Rebuild the resilience package first — this is the prerequisite for all TS checks
+pnpm --filter="@build/resilience" run build
+
+# 2. TypeScript baseline — must be zero errors
+pnpm run client:tsc-noemit
+
+# 3. Security drift — must be zero findings in all categories
+pnpm run client:report-security-drift:strict
+
+# 4. Consent route and compliance domain suites
+pnpm -C apps/client exec vitest run \
+  __tests__/api/user/consent.route.test.ts \
+  __tests__/lib/domains/user-profile-compliance.test.ts \
+  --maxWorkers=1
+```
+
+## [2026-04-26] CI Smoke Gate Fix — Clerk Key Format + BullMQ Startup
+
+### Fixed ( CI Smoke Gate )
+
+- **CI smoke gate 500 on root route — Clerk key format** (`client-preview-smoke-gate`):
+  `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` was set to `pk_test_ci_placeholder`.
+  Clerk's edge middleware SDK calls `initPublishableKeyValues()` on every
+  request at the edge runtime (including public routes) and throws
+  `Error: Publishable key not valid` when the suffix after `pk_test_` is not
+  valid base64url. This propagated as a 500 to the smoke curl loop regardless
+  of route visibility. Fixed by replacing the placeholder with a real Clerk
+  test-instance key stored as a GitHub Actions repository secret
+  (`CLERK_CI_PUBLISHABLE_KEY`). See `docs/CI-SECRETS.md` for setup.
+
+- **CI smoke gate 500 — BullMQ TCP connection to nonexistent host**
+  (`client-preview-smoke-gate`): `REDIS_URL` was set to
+  `rediss://:stub_token_for_ci_only@stub.upstash.io:6379`. ioredis (used by
+  BullMQ) eagerly opens a TCP connection to the hostname in `REDIS_URL` at
+  job-orchestrator startup. `stub.upstash.io` does not resolve in public DNS,
+  producing repeated `getaddrinfo ENOTFOUND stub.upstash.io` errors and a
+  BullMQ reconnect loop that flooded stdout and destabilised the startup
+  sequence. Fixed by removing `REDIS_URL` from the smoke gate env entirely.
+  Added `DISABLE_BACKGROUND_JOBS: "true"` as a belt-and-suspenders guard.
+  Removed direct env access in orchestrator.
+
+### Security (Smoke Gate)
+
+- **Job orchestrator guard against implicit BullMQ connections**: added
+  `envConfig.redis.url` guard at the top of the job-orchestrator
+  initialisation function so BullMQ queues are never constructed when `REDIS_URL`
+  is absent (local dev without Redis, CI smoke gate, Vercel deployments that
+  do not run workers). This closes a class of startup crashes caused by
+  supplying a non-resolving `REDIS_URL` and expecting the orchestrator to skip
+  gracefully. Follows the fail-closed startup pattern required by ADR-004 and
+  the OWASP ASVS remediation baseline.
+
+**Files changed:** `.github/workflows/ci.yml`;
+`apps/client/docs/CI-SECRETS.md` (new);
+`apps/client/docs/CHANGELOG.md`;
+`apps/client/app/jobs/index.ts` (user-applied guard — see
+`docs/CI-SECRETS.md` § Code-Side Guard)
+
+**Verification:**
+
+- `client-preview-smoke-gate` job → `Smoke gate passed: root route returned non-5xx status 200`
+- `pnpm run client:report-security-drift:strict` → all categories 0
+- `pnpm -C apps/client exec tsc --noEmit --pretty false` → exit 0
+
+## [2026-04-26] Staff Audit — Static Analysis & React Render Optimization
+
+### Fixed (Static Analysis & React Render Optimization )
+
+- **`remediation.ts`**: Fixed `CONSTANT_CONDITION` warning. Removed the `| null` from the `readClerkOnboardingSnapshot` promise return type, as the function always resolves to a valid object. Removed the redundant `resolvedSnapshot ?? { ... }` fallback block that static analyzers correctly identified as unreachable.
+- **`Footer.tsx` & `NavBar.tsx`**: Fixed `REACT_INEFFICIENT_PURE_COMPONENT_PROP` lint errors. Extracted inline JSX elements passed to the `trigger` prop of the `AccessibilitySettingsPanel` pure component into `useMemo` hooks with stable references, preventing React from breaking memoization and triggering unnecessary re-renders on every parent render.
+- **`step-progress.tsx`**: Fixed `IDENTICAL_BRANCHES` warning by removing a redundant `isDark` ternary check where both the true and false conditions returned the exact same Tailwind utility string.
+- **`page.tsx` (onboarding/no-js/professional & onboarding/no-js/review)**: Fixed persistent `INSUFFICIENT_NULL_CHECK` warnings. Next.js `redirect()` throws an error to halt execution, but static analyzers frequently miss this in control-flow graphs. Prepended `return` to `redirect()` calls to explicitly terminate the branch and replaced optional chaining (`?.`) with explicit `!session || !session.role` null checks.
+
+**Files changed:** `apps/client/app/lib/domains/user-profile/remediation.ts`; `apps/client/components/layout/Footer.tsx`; `apps/client/components/layout/NavBar.tsx`; `apps/client/components/ui/step-progress.tsx`; `apps/client/app/onboarding/no-js/professional/page.tsx`; `apps/client/app/onboarding/no-js/review/page.tsx`; `apps/client/CHANGELOG.md`
+
+**Verification:**
+
+- `pnpm run client:tsc-noemit` → expected exit 0
+- Linter checks passed cleanly without `REACT_INEFFICIENT_PURE_COMPONENT_PROP`, `IDENTICAL_BRANCHES`, `CONSTANT_CONDITION`, or `INSUFFICIENT_NULL_CHECK` warnings.
+
+## [2026-04-26] Staff Audit — GDPR Data Retention Policy Checks Fixed
+
+### Fixed (GDPR Data Retention Policy Checks and ESLint Errors)
+
+- **`anonymization.service.ts`**: Removed the `static` keyword from the `requestDeletion` method signature. The method relies on instance-specific configuration and the test contract/consumer callers explicitly instantiated the service to use it.
+- **`data-retention.ts`**: Fixed a `TypeError` where the worker attempted to call `requestDeletion` statically on the `AnonymizationService` class. The worker now correctly instantiates the service (`new AnonymizationService()`) and calls the method on the instance, while preserving the static call to `checkLegalHold`.
+- **`page.tsx` (onboarding/no-js/review)**: Fixed `INSUFFICIENT_NULL_CHECK` by explicitly checking `!currentSession || !currentSession.role` instead of relying on optional chaining (`!currentSession?.role`), which the linter flagged as insufficient for narrowing in subsequent property accesses.
+- **`tier3-high-value-guard-policy.test.ts`**: Fixed `CONSTANT_CONDITION` by removing a redundant `if (!extractedHandler)` check. Control flow guarantees that `extractedHandler` is truthy at that point. Used the non-null assertion operator (`finalHandler = extractedHandler!`) to satisfy the TypeScript compiler's type narrowing requirements after removing the branch.
+
+**Files changed:** `apps/client/app/lib/gdpr/services/anonymization.service.ts`; `apps/client/app/jobs/data-retention.ts`; `apps/client/app/onboarding/no-js/review/page.tsx`; `apps/client/__tests__/actions/tier3-high-value-guard-policy.test.ts`; `apps/client/CHANGELOG.md`
+
+**Verification:**
+
+- `pnpm run client:tsc-noemit` → expected exit 0
+- Linter checks passed cleanly without `CONSTANT_CONDITION` or `INSUFFICIENT_NULL_CHECK` warnings.
+- `vitest run __tests__/lib/gdpr/services/anonymization.test.ts` → all 3 tests pass.
+
+## [2026-04-26] Staff Audit — GDPR Job Orchestrator Hardening
+
+### Fixed
+
+- **`anonymization-batch.ts`**: Replaced `process.on` with `process.once` for SIGTERM/SIGINT handlers. Worker factories are called once per process but `process.on` accumulates listeners on repeated calls, producing `MaxListenersExceededWarning`. `process.once` fires at most once and self-removes. Added missing `correlationId` to per-user log events inside the candidate loop. Removed stale `now` variable that was computed but never used after the gracePeriodCutoff refactor. Improved log messages to be more precise ("User already anonymized, skipping" vs "User already anonymized").
+
+- **`data-retention.ts`**: Replaced all `console.log`, `console.error`, and `console.warn` calls with structured `StructuredLogger` calls, aligning with ADR-005 observability contract. Added `correlationId` and `operationName` to every log event including the per-user processing loop. Replaced `process.on` with `process.once`. Removed unused `anonymizationService` local variable (`new AnonymizationService()` was instantiated but `AnonymizationService.requestDeletion` is called as a static/instance method — fixed the call site to match the actual API). Added `durationMs` to the failure audit log metadata for consistency with other jobs. Added structured log event when candidates are found, including `scheduledForDeletion`, `exceededRetention`, and `deduplicated` counts for operational observability.
+
+- **`asset-cleanup.ts`**: Added `operationName: OPERATION_NAME` to all log events where it was missing (including `scheduleAssetCleanup`, `deleteFromS3`, and the completion summary log). Replaced `process.on` with `process.once`. Flattened the nested `metrics: { summary: metrics, durationMs, bytesFreedMB }` log shape into flat top-level fields (`metrics`, `durationMs`, `bytesFreedMB`) for consistent structured log querying. Fixed the `ASSET_CLEANUP_FAILED` audit log which was hardcoding `system@buildmarket.live` instead of the canonical `system@buildmarket.co.ke` address used by all other jobs.
+
+- **`export-cleanup.ts`**: Added `operationName: OPERATION_NAME` to worker event handler log calls (`.on("completed")`, `.on("failed")`, `.on("error")`) which previously emitted events with no `operationName` field. Flattened the nested `metrics: { summary, durationMs, durationSeconds, bytesFreedMB }` log shape to flat fields.
+
+- **`index.ts`** (orchestrator):
+  - `scheduleOnboardingUploadCleanup()` was never called in `initializeAllSchedulers()`. The worker was created but its schedule was never registered with BullMQ, meaning the job would never fire on the cron schedule. Added the missing `scheduleOnboardingUploadCleanup()` call to the `Promise.all` scheduling block.
+  - `startedAt` was always returning `new Date()` (current call time) rather than the actual initialization time, making the field meaningless. Introduced a module-level `startedAt: Date | undefined` variable set during `initializeAllSchedulers()` and cleared during `shutdownAllSchedulers()`.
+  - `triggerJob` for `"export-cleanup"` always returned early with `{ success: false, error: "Export cleanup manual trigger not available" }` despite `getCleanupQueue` being available and exported. Removed the early return; all five job types are now triggerable.
+  - `healthCheck()` used `worker!.isRunning()` (non-null assertion) which throws a `TypeError` if the `workers` array has fewer entries than `workerNames`. Replaced with an explicit null guard that reports `{ healthy: false, message: "Worker not found" }` instead.
+  - `getSchedulerStatus()` no longer wraps each queue in an `if (queue)` guard since all queue getters are guaranteed to return a `Queue` (they are never null). Removed dead branch.
+  - Removed stale comment `// Note: getCleanupQueue is not currently exported` — `getCleanupQueue` has been exported since the initial implementation.
+  - `shutdownAllSchedulers()` now also closes `getCleanupQueue()` alongside the other four queues so all BullMQ connections are cleanly released on shutdown.
+
+### Docs
+
+- Added `operationName` constant `OPERATION_NAME` to `export-cleanup.ts` for consistency with the other four job files; all five jobs now define and use a stable snake_case operation name as the ADR-005 observability join key.
+- Propagated the `process.once` rationale comment from `export-cleanup.ts` (where it was originally documented) to `anonymization-batch.ts`, `data-retention.ts`, and `asset-cleanup.ts` via a cross-reference so the reasoning is visible at each call site.
+
+**Files changed:** `apps/client/app/jobs/anonymization-batch.ts`; `apps/client/app/jobs/data-retention.ts`; `apps/client/app/jobs/asset-cleanup.ts`; `apps/client/app/jobs/export-cleanup.ts`; `apps/client/app/jobs/index.ts`
+
+**Verification:**
+
+- `pnpm run client:tsc-noemit` → expected exit 0
+- `pnpm run client:report-security-drift:strict` → all categories 0
+
+### Latest Docs
+
+- Date: 2026-04-24
+- Documented this pass’s client typecheck stabilization work:
+  - normalized onboarding/remediation status typing to align with current
+    generated `UserStatus` unions;
+  - updated `Calendar` to use `react-day-picker` v8 icon slots (`IconLeft` /
+    `IconRight`);
+  - added ambient module declarations in
+    `apps/client/types/external-modules.d.ts` for optional third-party modules
+    used by client code and tests;
+  - re-validated client project typecheck with
+    `node_modules/.bin/tsc --noEmit -p apps/client/tsconfig.json` (pass).
+
+### Latest Fixed
+
+- Date: 2026-04-24
+- Regenerated `PropertyForm` snapshots to reflect current component output after
+  imageAssets, document-upload-first, and credential verification refinements
+  (`__tests__/components/forms/__snapshots__/PropertyForm.test.tsx.snap`).
+
+### [CHECKPOINT] Dashboard Path Standardization + Clerk Redirect Safety-Net Alignment
+
+- Date: 2026-04-22
+- Outcome summary: Renamed the homeowner-facing dashboard route from `/dashboard` to `/homeowner-dashboard`, centralized role-aware dashboard routing in `dashboardForRole()`, added a legacy `/dashboard` redirect shim, fixed the mobile Clerk auth buttons to use explicit `forceRedirectUrl` props, and realigned Clerk fallback env vars to `/auth-callback`.
+- Actual files changed:
+  - `apps/client/lib/links.ts` — `ROUTES.userDashboard` now points at `/homeowner-dashboard`; added `dashboardForRole(role)`.
+  - `apps/client/app/(user)/homeowner-dashboard/**` — new homeowner dashboard route tree at the renamed path.
+  - `apps/client/app/(user)/dashboard/page.tsx` — legacy redirect shim to `ROUTES.userDashboard`.
+  - `apps/client/app/lib/security/middleware/redirect-policy.ts`; `apps/client/middleware.ts`; `apps/client/app/lib/security/middleware/route-matcher.ts` — middleware now routes homeowner redirects through the centralized helper and protects `/homeowner-dashboard(.*)`.
+  - `apps/client/app/lib/domains/shared/onboarding-orchestration/service.ts`; `apps/client/app/lib/domains/user-profile/onboarding.ts`; `apps/client/app/onboarding/_hooks/useOnboarding.ts`; `apps/client/app/auth-callback/page.tsx`; `apps/client/app/onboarding-preview/onboarding-preview-client.tsx` — onboarding/auth flows now resolve homeowner dashboards through shared constants/helpers.
+  - `apps/client/components/layout/NavBar.tsx`; `apps/client/components/home/Onboarding.tsx`; `apps/client/components/forms/HomeownerForm.tsx` — user-facing UI redirects now target the renamed route; mobile Clerk modals now explicitly force `/auth-callback` or `/onboarding`.
+  - `apps/client/.env`; `.env.development`; `.env.example`; `.env.test`; `.env.vercel`; `.env.vercel.example` — sign-in fallback env vars now point to `/auth-callback` and are documented as safety nets.
+  - `apps/client/__tests__/middleware/route-guards.test.ts`; `apps/client/__tests__/lib/middleware-decision-log.test.ts`; `apps/client/__tests__/lib/domains/onboarding-orchestration.contract.test.ts`; `apps/client/__tests__/hooks/useOnboarding.test.tsx`; `apps/client/__tests__/api/onboarding/skip.test.ts`; `apps/client/__tests__/actions/onboarding-tier3-guards.test.ts`; `apps/client/__tests__/lib/dashboard-for-role.test.ts`; `apps/client/__tests__/lib/redirect-policy.test.ts` — updated/new coverage for the renamed route and centralized redirect helper.
+- Verification:
+  1. `pnpm -C apps/client exec vitest run __tests__/middleware/route-guards.test.ts __tests__/api/onboarding/skip.test.ts __tests__/actions/onboarding-tier3-guards.test.ts __tests__/hooks/useOnboarding.test.tsx __tests__/lib/dashboard-for-role.test.ts __tests__/lib/redirect-policy.test.ts __tests__/lib/middleware-decision-log.test.ts __tests__/lib/domains/onboarding-orchestration.contract.test.ts --pool=threads --maxWorkers=1` — passed (`8` files, `49` tests).
+  2. `pnpm run client:tsc-noemit` — passed with zero diagnostics.
+  3. `pnpm run client:report-security-drift:strict` — passed; all reported categories remained `0`.
+
+---
+
+### [CHECKPOINT] @build/redis Upstash Migration + Env Boundary Hardening - Completed
+
+- Date: 2026-04-21
+- Outcome summary: Replaced the ioredis-based `@build/redis` package with an Upstash-native dual-transport design. The primary REST client (`@upstash/redis`) handles all serverless / Next.js rate limiting and cache operations over HTTP. The BullMQ ioredis path is preserved for queue workers via the Upstash TCP endpoint. `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are promoted to required credentials in the env boundary with startup validation and build-time deferral. Three files incompatible with managed Upstash (`enforce-maxmemory-policy.ts`, `healthcheck.ts` as a standalone script, and the singleton `redisConnection` export) were removed or replaced.
+- Actual files changed:
+  - `packages/redis/src/client.ts` — replaced ioredis TCP singleton with `@upstash/redis` REST client; exports `getRedisClient()`, `resetRedisClient()`, `isRedisHealthy()`
+  - `packages/redis/src/rate-limit.ts` — replaced Lua `EVAL` sliding-window script with `@upstash/ratelimit`; preserved `checkSlidingWindowRateLimit({ key, limit, windowMs })` call signature; added `createRateLimiter()` factory for reusable per-namespace limiters
+  - `packages/redis/src/cache.ts` — updated to use REST client; `invalidatePattern`/`clear` now use `SCAN` instead of `KEYS` (Upstash does not permit `KEYS` on large keyspaces)
+  - `packages/redis/src/redis-connection.ts` — simplified to BullMQ-only TCP path; removed `runtimePolicyValidationPromise`, `CONFIG GET/SET` enforcement, and the singleton `redisConnection` export; `createRedisConnection()` must now be called per Queue/Worker
+  - `packages/redis/src/types.ts` — no functional change; `RedisConfig` retained for tooling scripts
+  - `packages/redis/src/index.ts` — updated exports; removed deleted file exports
+  - `packages/redis/src/enforce-maxmemory-policy.ts` — **deleted** (Upstash manages eviction policy; `CONFIG SET` is not permitted)
+  - `packages/redis/src/healthcheck.ts` — **deleted** as a standalone script; replaced by `isRedisHealthy()` callable from any Next.js health-check route
+  - `apps/client/app/lib/infrastructure/env.ts` — promoted `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` to `required: true` with URL format validation; added both to `BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS`; rewrote `validateRedisRateLimitReadiness` to check Upstash credentials instead of `REDIS_ENABLED` + `REDIS_HOST`/`REDIS_PORT`; reordered `envConfig.redis` block with deprecation comments on legacy fields; updated startup validation to always push the `redis` group in production
+- Verification commands run and results:
+  1. `pnpm run client:tsc-noemit` — **required before merge**; run after updating `packages/redis/package.json` with new dependencies
+  2. `pnpm run client:report-security-drift:strict` — **required before merge**; all categories must be `0`
+  3. `pnpm -C apps/client exec vitest run __tests__/lib/env.validation.test.ts --maxWorkers=1` — **required before merge**; env validation tests must be updated to reflect Upstash credential checks (see Deferred items)
+- Guardrail outcomes delivered:
+  1. `@build/redis` is no longer incompatible with Upstash: `CONFIG SET`, `EVAL`, and `KEYS` calls that Upstash rejects are gone from the serverless path.
+  2. Missing Upstash credentials now fail fast at server startup with a clear diagnostic rather than producing silent `undefined` behaviour on the first rate-limited request.
+  3. The BullMQ TCP path is explicitly isolated in `redis-connection.ts` — nothing outside that file creates ioredis connections, reducing the risk of accidental persistent-connection creation in serverless contexts.
+  4. `validateRedisRateLimitReadiness` now validates the actual transport credentials used at runtime rather than legacy host/port variables that are no longer consulted.
+- Deferred items:
+  1. **`packages/redis/package.json`** — add `@upstash/redis` and `@upstash/ratelimit` as dependencies; remove ioredis from non-BullMQ dependency surface. This is a required follow-up before `pnpm install` will resolve the new imports.
+  2. **`apps/client/app/lib/api/rate-limit.ts`** — the existing dev/redis backend split in this module references the old `checkSlidingWindowRateLimit` signature and `@build/redis` ioredis client. Update it to consume `checkSlidingWindowRateLimit` from the new @upstash/ratelimit-backed export and remove the in-memory dev branch (Upstash REST works in all environments including local when credentials are set).
+  3. **`apps/client/.env.example` and `.env.test`** — add `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` as required entries; mark `REDIS_HOST`, `REDIS_PORT`, `REDIS_ENABLED`, and `REDIS_PASSWORD` as legacy/deprecated with removal target notes.
+  4. **`__tests__/lib/env.validation.test.ts`** — existing tests assert the `REDIS_HOST`/`REDIS_PORT` readiness check path. Update to assert the new Upstash credential check: missing `UPSTASH_REDIS_REST_URL` produces `[redis] UPSTASH_REDIS_REST_URL is required` error; missing `UPSTASH_REDIS_REST_TOKEN` produces its own error; both present passes validation.
+  5. **BullMQ consumers** — any service that imports the old `redisConnection` singleton (`import { redisConnection } from "@build/redis"`) must be updated to call `createRedisConnection()` per Queue/Worker. Search for `redisConnection` imports across the monorepo and update each caller.
+  6. **`REDIS_ENABLED` removal tracking** — add `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_FAMILY`, and `REDIS_PASSWORD` to a deprecation removal queue in PROGRESS-SUMMARY.md targeting the next minor release after all consumers are confirmed migrated.
+
+**Files changed:** `packages/redis/src/client.ts`; `packages/redis/src/rate-limit.ts`; `packages/redis/src/cache.ts`; `packages/redis/src/redis-connection.ts`; `packages/redis/src/types.ts`; `packages/redis/src/index.ts`; `packages/redis/src/enforce-maxmemory-policy.ts` (deleted); `packages/redis/src/healthcheck.ts` (deleted); `apps/client/app/lib/infrastructure/env.ts`
+
+**Verification:** `pnpm run client:tsc-noemit` and `pnpm run client:report-security-drift:strict` must both pass before this change is considered closed. Env validation test suite must be updated and green.
+
+---
+
+### [CHECKPOINT] @build/redis Upstash Migration — Deferred Items 2-6 Closed
+
+- Date: 2026-04-21
+- Outcome summary: Closed all six deferred items from the preceding Upstash migration checkpoint. The rate-limit resolver, env validation test suite, env templates, BullMQ consumers (12 files across `apps/client` jobs/workers and `packages/queue-server`), and the documentation deprecation queue are now fully aligned with the Upstash REST dual-transport architecture. The `docs/env.ts` orphan (which blocked `pnpm run client:tsc-noemit`) was permanently deleted and `docs/` was excluded from the TypeScript compilation graph so it cannot recur.
+- Actual files changed:
+  - `apps/client/app/lib/api/rate-limit.ts` — `resolveRateLimitBackend()` now gates on Upstash credential presence (`upstashRestUrl` + `upstashRestToken`) instead of the deprecated `REDIS_ENABLED` flag; error message updated to reference Upstash variables; dev fallback comment added.
+  - `apps/client/__tests__/lib/env.validation.test.ts` — full rewrite: replaced legacy `REDIS_HOST`/`REDIS_PORT`/`REDIS_ENABLED` assertion paths with Upstash credential checks; 8 test cases covering missing URL, missing token, invalid URL scheme, both-present-passes, non-required-backend, and build-phase deferral — all green.
+  - `apps/client/.env.example` — Redis section restructured: Upstash REST credentials promoted to primary required entries with Upstash dashboard link; `REDIS_URL` documented as BullMQ-only TCP endpoint; `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_FAMILY`, `REDIS_PASSWORD` marked `@deprecated` with removal-target notes pointing to deprecation queue.
+  - `apps/client/.env.test` — Upstash stub credentials added (`https://stub.upstash.io` / `stub_token_for_tests_only`); `RATE_LIMIT_BACKEND=memory` preserved; legacy vars retained with `@deprecated` + removal-target comments.
+  - `apps/client/app/lib/infrastructure/webhook-replay.ts` — removed `createRedisClient` import (never existed in `@build/redis`); removed deprecated `env.redis.enabled` production guard; fixed `set()` calls from ioredis positional API (`"EX", n, "NX"`) to Upstash REST options-object API (`{ ex: n, nx: true }`).
+  - `apps/client/app/lib/queues/redis-connection.ts` — re-export shim updated: now re-exports `createRedisConnection` (factory) instead of the removed `redisConnection` singleton.
+  - `apps/client/app/lib/queues/upload-processing.queue.ts` — migrated from `redisConnection` singleton to `createRedisConnection()`.
+  - `apps/client/app/jobs/export-cleanup.ts` — migrated Queue and Worker from singleton to `createRedisConnection()` per-construct.
+  - `apps/client/app/jobs/anonymization-batch.ts` — migrated Queue and Worker from singleton to `createRedisConnection()` per-construct.
+  - `apps/client/app/jobs/asset-cleanup.ts` — migrated Queue and Worker from singleton to `createRedisConnection()` per-construct.
+  - `apps/client/app/jobs/data-retention.ts` — migrated Queue and Worker from singleton to `createRedisConnection()` per-construct.
+  - `apps/client/app/jobs/onboarding-upload-cleanup.ts` — migrated Queue and Worker from singleton to `createRedisConnection()` per-construct.
+  - `apps/client/app/workers/export/worker.ts` — migrated Worker from singleton to `createRedisConnection()`; removed `as any` cast.
+  - `apps/client/app/workers/compliance/incident.worker.ts` — migrated Worker from singleton to `createRedisConnection()`; removed `as any` cast.
+  - `apps/client/app/workers/compliance/notification.worker.ts` — migrated Worker from singleton to `createRedisConnection()`; removed `as any` cast.
+  - `apps/client/app/workers/uploads/image-upload.worker.ts` — migrated Worker from singleton to `createRedisConnection()`; removed unused `ConnectionOptions` import.
+  - `packages/queue-server/src/export.queue.ts` — migrated Queue from singleton to `createRedisConnection()`; removed `as any` cast.
+  - `packages/queue-server/src/compliance.queue.ts` — migrated all three Queues (`incidentQueue`, `userNotificationQueue`, `auditQueue`) from singleton to `createRedisConnection()`; removed `as any` casts.
+  - `apps/client/tsconfig.json` — added `"docs"` to the `exclude` array to prevent `docs/*.ts` snapshot files from entering the TypeScript compilation graph.
+  - `apps/client/docs/PROGRESS-SUMMARY.md` — added formal Deprecation Queue section tracking `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_FAMILY`, `REDIS_PASSWORD` with removal trigger conditions and file cleanup checklist; added migration follow-through checkpoint entry; updated Completed Phases list.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/lib/env.validation.test.ts --maxWorkers=1` (pass, 1 file and **8 tests**, `EXIT:0`).
+  2. `pnpm run client:tsc-noemit` (pass, **zero diagnostics**, `EXIT:0` — after `docs/env.ts` deletion and `docs/` tsconfig exclusion).
+- Guardrail outcomes delivered:
+  1. `redisConnection` singleton is no longer referenced anywhere in the `apps/client` or `packages/queue-server` compilation graphs; all BullMQ constructs now obtain isolated per-construct connections via `createRedisConnection()`.
+  2. `resolveRateLimitBackend()` now reflects the actual runtime transport gating — Upstash REST credentials — rather than the deprecated `REDIS_ENABLED` flag that no longer drives any behaviour.
+  3. Webhook replay protection now uses the correct Upstash REST `set()` options-object API (`{ ex, nx }`) instead of the ioredis positional flag API that TypeScript correctly rejected.
+  4. Env validation test suite now locks in Upstash credential check semantics: missing URL fails, missing token fails, invalid scheme fails, both valid passes, non-required-backend does not add extra errors, build phase defers correctly.
+  5. Deprecation queue is formally tracked in `PROGRESS-SUMMARY.md` with an explicit removal trigger and file-cleanup checklist to ensure the five legacy variables are removed — not just commented — in the next minor release window.
+- Deferred items: none. All six items from the preceding Upstash migration checkpoint are closed. Remaining action is: confirm zero production consumers of the five deprecated `REDIS_*` variables, then execute the removal per the deprecation queue checklist.
+
+---
+
+### [FIX] TSConfig docs/ Exclusion — Orphan docs/env.ts Compilation Error
+
+- Date: 2026-04-21
+- Outcome summary: Permanently deleted the orphaned `apps/client/docs/env.ts` documentation snapshot that was causing `TS2307: Cannot find module './upload-processing-mode'` and added `"docs"` to the tsconfig `exclude` list so any future `.ts` files placed in the documentation directory cannot silently enter the compilation graph.
+- Root cause: `tsconfig.json` used `"include": ["**/*.ts"]` which matched every `.ts` file under `apps/client/`, including documentation snapshot files in `docs/`. The file `docs/env.ts` was a stale copy of `app/lib/infrastructure/env.ts` that imported `./upload-processing-mode`, a module that does not exist. Deleting the file via OS UI moved it to the Recycle Bin rather than permanently removing it; the file persisted on disk and continued to be compiled.
+- Actual files changed:
+  - `apps/client/docs/env.ts` — **deleted** (permanent `Remove-Item -Force`).
+  - `apps/client/tsconfig.json` — added `"docs"` to `exclude`; `tsconfig.tsbuildinfo` incremental cache cleared to force a clean re-evaluation.
+- Verification commands run and results:
+  1. `pnpm run client:tsc-noemit` (pass, **zero diagnostics**, `EXIT:0`).
+- Guardrail outcomes delivered:
+  1. TypeScript compilation is now clean with zero errors.
+  2. `docs/` is structurally excluded from the TSC compilation graph, preventing a recurrence if additional `.ts` documentation snapshots are placed there in future.
+- Deferred items: none.
+
+---
+
+### [CHECKPOINT] Edge Runtime Env Guidance + PR Preview Smoke Gate - Completed
+
+- Date: 2026-04-20
+- Outcome summary: Added explicit `NEXT_RUNTIME` template guidance for edge-runtime detection (with operator guidance not to set it manually in Vercel), and introduced a pull-request preview smoke gate that boots `apps/client`, curls `/`, and fails on `5xx` responses to catch middleware/import regressions before merge.
+- Actual files changed: `apps/client/.env.example`; `.github/workflows/ci.yml`; `apps/client/docs/CHANGELOG.md`.
+- Guardrail outcomes delivered:
+  1. Runtime marker guidance is now commit-visible in env templates, reducing confusion around framework-injected `NEXT_RUNTIME` behavior.
+  2. CI now enforces a preview-style root-route smoke check that hard-fails on `5xx` responses.
+  3. Middleware import/runtime failures now have a deterministic pre-merge detection surface in PR workflows.
+
+### [FIX] Cloudflare Worker Oversized Asset Failures (25 MiB Cap) - Completed
+
+- Date: 2026-04-20
+- Outcome summary: Resolved Cloudflare deploy failures caused by oversized PNG assets by compressing oversized `public/` imagery, removing one unreferenced decode-corrupt asset, and adding explicit build-time asset budget enforcement.
+- Actual files changed: `apps/client/public/*.png` (optimized set including `architect.png`, `hero.png`, `hardware.png`, `professional.png`, `kitchen-fixtures.png`, `tiles.png`); `apps/client/public/furniture.png` (removed, unreferenced); `apps/client/scripts/optimize-public-images.mjs`; `apps/client/scripts/check-worker-asset-budget.mjs`; `apps/client/package.json`; `apps/client/docs/CHANGELOG.md`; `apps/client/README.md`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client run optimize:public-images` (pass after removing decode-corrupt unreferenced `public/furniture.png`; optimized 12 oversized files).
+  2. `pnpm -C apps/client run optimize:public-images` (rerun pass; optimized `0` files, confirming deterministic/idempotent behavior on current assets).
+  3. `pnpm -C apps/client run check:worker-asset-budget:public` (pass; top largest asset now `public/favicon.svg` at `11.84 MiB`, all files <= `25 MiB`).
+  4. `cd apps/client; pnpm run build` (pass, terminal exit code `0`).
+  5. `pnpm -C apps/client run build:cloudflare-worker` (local Windows run progressed through pre-build asset-budget pass and Next.js compilation/static generation; standalone trace emitted Windows symlink `EPERM` warnings, so CI/Linux run remains authoritative for deployment gating).
+- Guardrail outcomes delivered:
+  1. Cloudflare Worker build now fails fast with actionable output if any static asset exceeds 25 MiB.
+  2. Public image optimization is scripted and repeatable, reducing the chance of regression from manual image updates.
+  3. Deployment path now enforces size policy before and after OpenNext generation.
+
+### [FIX] Cloudflare OpenNext Build Prompt Timeout (Wrangler Discovery) - Completed
+
+- Date: 2026-04-18
+- Outcome summary: Eliminated the Cloudflare custom-build timeout caused by OpenNext waiting for interactive Wrangler config confirmation by adding an app-local Wrangler config and forcing explicit non-interactive build flags.
+- Actual files changed: `apps/client/wrangler.toml`; `apps/client/package.json`; `package.json`; `apps/client/README.md`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec opennextjs-cloudflare build --config wrangler.toml --skipWranglerConfigCheck --skipNextBuild` (confirmed no interactive Wrangler-config prompt; command then fails fast on missing `.next` artifact as expected when `--skipNextBuild` is set).
+  2. `pnpm run client:tsc-noemit` (pass, no diagnostics).
+- Guardrail outcomes delivered:
+  1. OpenNext Cloudflare builds now resolve Wrangler config from `apps/client/wrangler.toml` in the app working directory.
+  2. Build script now uses explicit `--config wrangler.toml --skipWranglerConfigCheck` flags to avoid CI prompt hangs.
+  3. Deploy script now runs Wrangler from `apps/client` to keep build and deploy config resolution aligned.
+
+### [CHECKPOINT] Cloudflare Worker Entrypoint Contract for Client Deploys - Completed
+
+- Date: 2026-04-18
+- Outcome summary: Added an explicit Cloudflare Worker deployment contract so `wrangler deploy` always has a deterministic Worker entrypoint and asset directory, eliminating "Missing entry point to Worker script or to asset directory" deployment failures.
+- Actual files changed: `wrangler.toml`; `apps/client/package.json`; `package.json`; `apps/client/README.md`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/lib/env.validation.test.ts --maxWorkers=1` (pass, `1` file and `7` tests).
+  2. `pnpm -C apps/client exec tsc --noEmit` (pass, no diagnostics).
+- Guardrail outcomes delivered:
+  1. Root Wrangler configuration now pins Worker main to `apps/client/.open-next/worker.js` and assets to `apps/client/.open-next/assets`.
+  2. Wrangler build hook now generates the Cloudflare Worker artifact before deploy via `pnpm run client:build:cloudflare-worker`.
+  3. Root scripts now provide explicit operator commands for Cloudflare Worker build and deploy flows.
+
+### [CHECKPOINT] Env Validation Build-Phase Deferral + Runtime Fail-Fast Regression Coverage - Completed
+
+- Date: 2026-04-18
+- Outcome summary: Updated the canonical env boundary to defer missing server-only required secrets during Next build static analysis while preserving strict runtime fail-fast behavior, and added focused regression tests for build-vs-runtime validation semantics.
+- Actual files changed: `apps/client/app/lib/infrastructure/env.ts`; `apps/client/__tests__/lib/env.validation.test.ts`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/lib/env.validation.test.ts --maxWorkers=1` (pass, `1` file and `6` tests).
+  2. Task `build-client-tsc-noemit-checkpoint` (`pnpm -C apps/client exec tsc --noEmit`) (pass, no diagnostics).
+- Guardrail outcomes delivered:
+  1. Build-phase env validation now defers only the explicit server-only required set (`AUTH_SECRET`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SECRET`, `DATABASE_URL`, `ENCRYPTION_KEY_V1`).
+  2. Runtime validation remains strict and throws immediately when deferred secrets are still missing.
+  3. Regression tests now lock in both build deferral and runtime fail-fast behavior for `validateEnv(...)`.
+
+### [CHECKPOINT] Legacy NextAuth Surface Removal (Clerk Canonical Path) - Completed
+
+- Date: 2026-04-18
+- Outcome summary: Removed the legacy NextAuth route and support surfaces so `apps/client` auth stays Clerk-canonical, eliminating stale `/api/auth` references that were causing build-time route collection failures.
+- Actual files changed: `apps/client/app/api/auth/[...nextauth]/route.ts`; `apps/client/app/lib/auth/auth.ts`; `apps/client/app/lib/auth/auth.config.ts`; `apps/client/app/lib/auth/index.ts`; `apps/client/app/actions/passwordReset.ts`; `apps/client/app/auth/signin/page.tsx`; `apps/client/app/auth/credentials/page.tsx`; `apps/client/app/ui/GoogleSignIn.tsx`; `apps/client/types/next-auth.d.ts`; `apps/client/package.json`; `apps/client/app/lib/infrastructure/env.ts`; `apps/client/.env.example`; `apps/client/.env.test`; `apps/client/.env.development`; `apps/client/components/chat/README.md`; `apps/client/app/lib/auth/password-hash.ts`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results:
+  1. `rg -n "next-auth|nextauth|/api/auth|NEXTAUTH_URL|AUTH_URL" apps/client` (pass, no matches).
+  2. `pnpm -C apps/client exec tsc --noEmit` (pass, exit code `0` after clearing stale `.next` generated route types).
+- Notes: Local `pnpm -C apps/client run build` was interrupted by an interactive shell timeout prompt (`Terminate batch job`), so build verification should be re-run in CI or a non-interrupted terminal session.
+
+### [RUN] Onboarding Convergence Phase 6 - Baseline Validation Gates Executed (Telemetry Pending)
+
+- Date: 2026-04-14
+- Outcome summary: Executed the full Phase 6 baseline validation gates and captured artifacts under `apps/client/tmp/phase6-evidence`; telemetry health reporting remains pending because required staging/production NDJSON exports are not present in the workspace.
+- Runtime artifacts generated:
+  1. `apps/client/tmp/phase6-evidence/onboarding-validation-vitest.txt`
+  2. `apps/client/tmp/phase6-evidence/onboarding-validation-drift.txt`
+  3. `apps/client/tmp/phase6-evidence/onboarding-validation-client-tsc.txt`
+  4. `apps/client/tmp/phase6-evidence/onboarding-validation-admin-tsc.txt`
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/api/onboarding/ __tests__/actions/onboarding-tier3-guards.test.ts __tests__/actions/tier3-high-value-guard-policy.test.ts __tests__/lib/domains/onboarding-orchestration.contract.test.ts __tests__/api/internal/onboarding-remediation.route.test.ts --maxWorkers=1` (pass, `10` files and `76` tests).
+  2. `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all reported drift categories `0`).
+  3. `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, exit code `0`).
+  4. `pnpm run admin:check-types` (pass, no diagnostics).
+- Blocking inputs for Phase 6 completion:
+  1. `apps/client/tmp/phase6-evidence/staging-canary.ndjson`
+  2. `apps/client/tmp/phase6-evidence/staging-broad.ndjson`
+  3. `apps/client/tmp/phase6-evidence/production-canary.ndjson`
+  4. `apps/client/tmp/phase6-evidence/production-broad.ndjson`
+- Notes: After the four NDJSON files are provided, run the `report:projects-mutation-health` and summary commands in Section 6.4 of `apps/client/docs/ONBOARDING-CONVERGENCE-PLAN.md` and then record a final Phase 6 completion checkpoint.
+
+### [PREP] Onboarding Convergence Phase 6 - Production Validation Runbook Ready
+
+- Date: 2026-04-14
+- Outcome summary: Added an explicit operator runbook for final Phase 6 production validation, including exact commands, deterministic evidence artifact paths, and completion gates for staging and production telemetry windows.
+- Actual files changed: `apps/client/docs/ONBOARDING-CONVERGENCE-PLAN.md`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Runbook commands added:
+  1. Full onboarding-adjacent validation suite command with output capture.
+  2. Strict drift/typecheck/admin typecheck commands with evidence output capture.
+  3. Staging and production mutation-health report commands for canary and broad windows.
+  4. Summary-generation commands for each telemetry window JSON report.
+- Notes: This prep entry does not mark Phase 6 complete; it records that execution guidance and evidence paths are now commit-visible and ready for runtime use.
+
+### [CHECKPOINT] Onboarding Convergence Phase 5 - Guard/Policy Drift Rebalancing - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Completed Phase 5 by adding onboarding route guard registry coverage, rebalancing drift enforcement for direct-auth onboarding routes, adding dedicated onboarding route guard/sequencing policy tests, and removing stale onboarding hook guidance.
+- Actual files changed: `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/scripts/high-risk-registry.mjs`; `apps/client/__tests__/actions/tier3-high-value-guard-policy.test.ts`; `apps/client/__tests__/api/onboarding/onboarding-route-guard-and-sequencing.test.ts`; `apps/client/app/onboarding/_hooks/useOnboarding.ts`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client run build:high-risk-registry` (pass, regenerated `scripts/high-risk-registry.mjs`).
+  2. `pnpm -C apps/client exec vitest run __tests__/api/onboarding/ --maxWorkers=1` (pass, `6` files and `43` tests).
+  3. `pnpm -C apps/client exec vitest run __tests__/actions/tier3-high-value-guard-policy.test.ts --maxWorkers=1` (pass, `1` file and `10` tests).
+  4. `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all reported drift categories `0`; output captured in `tmp-phase5-drift.txt`).
+  5. `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, no diagnostics output).
+- Guardrail outcomes delivered:
+  1. `HIGH_VALUE_ROUTE_GUARD_RULES` now includes all three active onboarding mutation routes with explicit `AUTH-RATIONALE` markers for direct Clerk-auth surfaces.
+  2. Strict drift now validates direct-export onboarding routes with empty auth options when rationale is declared, instead of forcing false-positive `missing-withauth-export` failures.
+  3. Actor-scoped throttling drift checks now recognize `clerkId`-scoped `getActorRateLimitIdentifier(...)` usage for authenticated direct-auth route handlers.
+  4. Dedicated onboarding route guard/sequencing policy tests now enforce canonical order, actor-scoped rate limiting, idempotency completion fail-safe handling, and static-safe adapter error mapping.
+  5. The stale onboarding hook comment was replaced with the accurate shared-orchestration warning contract note.
+
+### [SNAPSHOT] Onboarding Convergence Pre-Phase 5 Verification - Green
+
+- Timestamp: 2026-04-14 11:12 (local)
+- Scope: Fresh pre-implementation verification baseline before starting Phase 5 guard and policy rebalancing.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/api/internal/onboarding-remediation.route.test.ts --maxWorkers=1` (pass, `1` file and `8` tests).
+  2. `pnpm -C apps/admin exec vitest run src/actions/admin/__tests__/onboarding-remediation.test.ts --maxWorkers=1` (pass, `1` file and `5` tests).
+  3. `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all reported drift categories `0`; output captured in `tmp-phase5-preflight-drift.txt`).
+  4. `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, no diagnostics output).
+- Notes: This snapshot confirms the Phase 4 remediation stack is stable at the point Phase 5 work begins.
+
+### [CHECKPOINT] Onboarding Convergence Phase 4 - Internal Remediation Workflows - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Completed Phase 4 by adding onboarding remediation domain methods, internal secret-gated remediation endpoints, admin remediation actions, policy-map wiring, and targeted tests for both client internal adapters and admin workflows.
+- Actual files changed: `apps/client/app/lib/domains/user-profile/remediation.ts`; `apps/client/app/lib/domains/user-profile/index.ts`; `apps/client/app/api/internal/onboarding-remediation/reconcile/route.ts`; `apps/client/app/api/internal/onboarding-remediation/clerk-sync/route.ts`; `apps/client/app/api/internal/onboarding-remediation/idempotency-reconcile/route.ts`; `apps/client/__tests__/api/internal/onboarding-remediation.route.test.ts`; `apps/admin/src/actions/admin/onboarding-remediation.ts`; `apps/admin/src/actions/admin/__tests__/onboarding-remediation.test.ts`; `apps/admin/src/lib/security/authorization-policy.ts`; `apps/admin/src/actions/admin/index.ts`; `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/scripts/high-risk-registry.mjs`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/api/internal/onboarding-remediation.route.test.ts --maxWorkers=1` (pass, `1` file and `8` tests).
+  2. `pnpm -C apps/admin exec vitest run src/actions/admin/__tests__/onboarding-remediation.test.ts --maxWorkers=1` (pass, `1` file and `5` tests).
+  3. `pnpm run admin:check-types` (pass, no diagnostics).
+  4. `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all reported categories `0`).
+  5. Task `build-client-tsc-noemit-checkpoint` (completed with no diagnostics output in task terminal).
+- Guardrail outcomes delivered:
+  1. Internal onboarding remediation endpoints are authenticated by `INTERNAL_API_SECRET`, rate-limited, and emit structured ADR-005 adapter outcomes.
+  2. Remediation domain methods now support reconciliation reads, Clerk metadata forced sync, and safe idempotency stuck-key recovery with mutation-precondition checks.
+  3. Admin remediation actions are policy-gated (`risk: high`) and require `SUPER_ADMIN` granular role before calling internal endpoints.
+  4. Strict drift remains zero after registry regeneration and internal-route governance alignment.
+- Deferred items: Phase 5 guard/policy rebalancing and additional onboarding route sequencing coverage remain pending in `apps/client/docs/ONBOARDING-CONVERGENCE-PLAN.md`.
+
+### [CHECKPOINT] Onboarding Convergence Phase 3 - Server Action + No-JS Fallback - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Completed Phase 3 by converging onboarding server actions onto shared orchestration, removing action-level side-effect loops, adding a signed no-JS onboarding fallback route family, and wiring a `<noscript>` redirect hint on the JS onboarding entry route.
+- Actual files changed: `apps/client/app/actions/onboarding.ts`; `apps/client/__tests__/actions/onboarding-tier3-guards.test.ts`; `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/__tests__/actions/tier3-high-value-guard-policy.test.ts`; `apps/client/scripts/high-risk-registry.mjs`; `apps/client/app/lib/infrastructure/onboarding-nojs-session.ts`; `apps/client/app/onboarding/no-js/page.tsx`; `apps/client/app/onboarding/no-js/client/page.tsx`; `apps/client/app/onboarding/no-js/professional/page.tsx`; `apps/client/app/onboarding/no-js/review/page.tsx`; `apps/client/app/onboarding/no-js/_components/NoJsClientForm.tsx`; `apps/client/app/onboarding/no-js/_components/NoJsProfessionalForm.tsx`; `apps/client/app/onboarding/no-js/_components/NoJsReview.tsx`; `apps/client/app/onboarding/page.tsx`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/actions/onboarding-tier3-guards.test.ts __tests__/actions/tier3-high-value-guard-policy.test.ts --maxWorkers=1 --reporter=verbose` (pass, `2` files and `16` tests).
+  2. `pnpm -C apps/client run build:high-risk-registry` (pass, regenerated `apps/client/scripts/high-risk-registry.mjs`).
+  3. `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all reported categories `0`, including `highValueServerActionGuards` and `criticalTransitionStepSequencing`).
+  4. `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `TSC_EXIT:0`).
+- Guardrail outcomes delivered:
+  1. Onboarding server actions now execute a single shared orchestration path and return static-safe mapped error responses.
+  2. Tier-3 critical transition sequencing policy is now aligned with action-level idempotency guard and orchestration helper execution order.
+  3. No-JS onboarding now uses a signed, `HttpOnly`, `SameSite=Strict`, one-hour cookie session constrained to ADR-006 Class C/D fields only.
+  4. Server-rendered no-JS onboarding pages now support role selection, client/professional detail collection, review, submit, and skip flows without browser JavaScript.
+- Deferred items: Phase 4 onboarding remediation workflows remain pending in `apps/client/docs/ONBOARDING-CONVERGENCE-PLAN.md`.
+
+### [CHECKPOINT] Onboarding Convergence Phase 1 - Shared Orchestration Contract - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Completed Phase 1 by adding a shared onboarding orchestration module with typed intent contracts, warning-envelope support for non-fatal professional resource creation, Clerk finalization fail-closed handling, and idempotency completion fail-safe semantics.
+- Actual files changed: `apps/client/app/lib/domains/shared/onboarding-orchestration/contracts.ts`; `apps/client/app/lib/domains/shared/onboarding-orchestration/service.ts`; `apps/client/app/lib/domains/shared/onboarding-orchestration/index.ts`; `apps/client/__tests__/lib/domains/onboarding-orchestration.contract.test.ts`; `apps/client/docs/PROGRESS-SUMMARY.md`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/lib/domains/onboarding-orchestration.contract.test.ts --maxWorkers=1` (pass, `1` file and `8` tests, `EXIT:0`).
+  2. Task `shell: build-client-tsc-noemit` (pass after import syntax correction; no diagnostics output in final run).
+- Guardrail outcomes delivered:
+  1. Shared orchestration contract now centralizes onboarding transition sequencing across submit and skip intents.
+  2. Clerk synchronization failures now return a dedicated orchestration error code (`clerk_sync_failed`) and preserve retryability.
+  3. Completion persistence failures no longer convert successful onboarding transitions into failures.
+  4. Professional submit side-effects now produce typed warning entries for non-fatal store/property creation failures.
+- Deferred items: Phase 2 route convergence and Phase 3 server-action convergence remain pending.
+
+### [CHECKPOINT] Onboarding Convergence Phase 0 - Route Hardening - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Completed Phase 0 live-regression hardening for active onboarding route adapters by applying actor-scoped throttling keys, static-safe error mappings, explicit log-field emission, duplicate-header cleanup, and idempotency completion fail-safe handling.
+- Actual files changed: `apps/client/app/api/onboarding/route.ts`; `apps/client/app/api/onboarding/skip/route.ts`; `apps/client/app/api/onboarding/skip-professional/route.ts`; `apps/client/__tests__/api/onboarding/route.test.ts`; `apps/client/__tests__/api/onboarding/skip.test.ts`; `apps/client/__tests__/api/onboarding/skip-professional.test.ts`; `apps/client/docs/PROGRESS-SUMMARY.md`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/api/onboarding/ --maxWorkers=1` (pass, `5` files and `39` tests).
+  2. `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all reported drift categories `0`).
+  3. Task `build-client-tsc-noemit-checkpoint` (completed; no diagnostics output in task terminal).
+- Guardrail outcomes delivered:
+  1. Onboarding adapters now use actor-scoped rate-limit identifiers for authenticated calls.
+  2. Skip and submit onboarding adapters now return static-safe error strings instead of domain-message passthrough.
+  3. Route-level idempotency completion failures no longer convert successful mutations into error responses.
+  4. Onboarding adapter logs now avoid opaque `additionalContext` payload bags.
+- Deferred items: onboarding convergence Phase 1 shared orchestration module and later adapter unification phases remain pending.
+
+### [CHECKPOINT] Section 14 R10 Residual Observability Inventory Sweep - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Completed the residual R10 observability sweep by adding ADR-005 operation-name inventory annotations across all previously observability-⚠️ slices in domain contracts.
+- Actual files changed: `apps/client/app/lib/domains/finance/contracts.ts`; `apps/client/app/lib/domains/documents/contracts.ts`; `apps/client/app/lib/domains/licenses/contracts.ts`; `apps/client/app/lib/domains/certificates/contracts.ts`; `apps/client/app/lib/domains/messaging/contracts.ts`; `apps/client/app/lib/domains/professionals/contracts.ts`; `apps/client/app/lib/domains/portfolio/contracts.ts`; `apps/client/app/lib/domains/idea-books/contracts.ts`; `apps/client/app/lib/domains/reviews/contracts.ts`; `apps/client/app/lib/domains/search/contracts.ts`; `apps/client/app/lib/domains/calendar/contracts.ts`; `apps/client/docs/PROGRESS-SUMMARY.md`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results:
+  1. Task `report-security-drift-strict-medium3` (pass, all reported drift categories `0`).
+  2. `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `TSC_EXIT:0`).
+- Guardrail outcomes delivered:
+  1. Observability operationName inventories are now documented for all slices currently represented in the Section 14 registry.
+  2. Open defect `OD-004` (residual observability inventory gap) is closed in `PROGRESS-SUMMARY`.
+  3. Remaining governance blocker is narrowed to Phase 2 Criterion 2 operational monitoring evidence capture.
+- Deferred items: capture staging and production NDJSON evidence windows for Phase 2 Criterion 2 closeout.
+
+### [CHECKPOINT] Section 14 R8-R10 Closure Wave (Notifications, Seller-Insights, User-Rights) - Completed
+
+- Date: 2026-04-14
+- Outcome summary: Completed the requested Section 14 implementation wave by hardening notifications and seller-insights adapters (R8), completing targeted IDOR policy matrix suites (R9), and normalizing/documenting ADR-005 operation-name inventories for user-rights and client-dashboard surfaces (R10).
+- Actual files changed: `apps/client/app/api/notifications/route.ts`; `apps/client/app/api/notifications/[id]/route.ts`; `apps/client/app/api/professional-portal/inventory/alerts/route.ts`; `apps/client/app/api/professional-portal/orders/route.ts`; `apps/client/app/api/professional-portal/products/top/route.ts`; `apps/client/app/api/user/consent/route.ts`; `apps/client/app/api/user/deletion/route.ts`; `apps/client/app/api/user/export/route.ts`; `apps/client/app/api/user/profile/route.ts`; `apps/client/app/api/user/profile/complete/route.ts`; `apps/client/app/api/user/profile/complete/client/route.ts`; `apps/client/app/api/user/profile/complete/professional/route.ts`; `apps/client/app/api/user/profile/complete/shared.ts`; `apps/client/app/api/user/rectification/route.ts`; `apps/client/app/api/client/dashboard/route.ts`; `apps/client/app/lib/domains/client-dashboard/contracts.ts`; `apps/client/app/lib/domains/notifications/contracts.ts`; `apps/client/app/lib/domains/seller-insights/contracts.ts`; `apps/client/app/lib/domains/user-profile/compliance.ts`; `apps/client/app/lib/domains/user-profile/profile-complete-contracts.ts`; `apps/client/app/lib/domains/user-profile/service.ts`; `apps/client/__tests__/api/notifications.route.test.ts`; `apps/client/__tests__/api/notifications/notification-id.route.test.ts`; `apps/client/__tests__/api/professional-portal/seller-insights-adapters.route.test.ts`; `apps/client/__tests__/policy/{calendar,notifications,professionals,seller-insights,user-rights,idea-books}/**`.
+- Verification commands run and results:
+  1. `pnpm -C apps/client exec vitest run __tests__/api/notifications __tests__/api/professional-portal/seller-insights-adapters.route.test.ts --maxWorkers=1` (pass, `4` files and `11` tests).
+  2. `pnpm -C apps/client exec vitest run __tests__/policy --maxWorkers=1 --reporter=json --outputFile tmp-r9-policy-all.json` (pass, `16` files and `55` tests).
+  3. Task `report-security-drift-strict-medium3` (pass, all reported drift categories `0`).
+  4. `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `TSC_EXIT:0`).
+- Guardrail outcomes delivered:
+  1. Notifications and seller-insights adapters now use actor-scoped rate-limit keys, safe static forbidden mapping, and structured terminal outcome logs aligned to ADR-005 fields.
+  2. Notifications collection and item mutation handlers now enforce CSRF via route-level `withAuth` options.
+  3. Policy matrix coverage now includes targeted owner vs non-owner vs not-found boundaries across calendar, notifications, seller-insights, user-rights, professionals, and idea-books attachment flows.
+  4. User-rights and client-dashboard operation-name join keys are normalized to snake_case and inventoried in domain contract annotations.
+- Deferred items: residual R10 inventory follow-through for remaining observability-⚠️ slices and Phase 2 Criterion 2 staging/production telemetry evidence capture remain open.
+
+### [DOCS] Section 14 Domain Audit Registry + Documentation Hardening - 2026-04-11
+
+#### Documentation
+
+- Added Section 14 `Domain Audit Registry and Remediation Plan` to
+  `API-TO-FRONTEND-ARCHITECTURE.md`. Defines binary compliance rubric (Layers
+  A-G, 46 checks), risk tier classification, full slice registry with current
+  status, ordered remediation phases, CHANGELOG and PROGRESS-SUMMARY
+  documentation protocols, and agent execution standard.
+- Added `ARCH-GUIDE-SECTION5-ADDENDUM.md` (new cross-cutting rules 5.A-5.E:
+  idempotency completion fail-safe, tiered recentAuth windows, actor context
+  completeness, high-risk registry governance, security utility deprecation).
+- Added `ARCH-GUIDE-SECTION6-7-ADDENDUM.md` (anti-patterns 27-32, Section 7.6
+  Mock Type Fidelity Requirement).
+- Added `ADR-001-AMENDMENT-2026-04-11.md` (canonical Tier 1/Tier 2 recentAuth
+  window constants; clerkId forwarding requirement for verification/onboarding).
+- Updated `apps-client-api-adapters.instructions.md` (rules 12-17: variable-
+  rebound message passthrough prohibition, idempotency completion fail-safe,
+  clerkId forwarding, registry completeness, maxAgeSeconds tier verification).
+- Updated `apps-client-testing-risk.instructions.md` (rules 7-11: AuthContext
+  mock fidelity, error assertion inversion prohibition, actor call argument
+  completeness, complete() throw testing, BYPASS_AUTH exclusion assertion).
+- Produced reconciliation guide correcting Section 14 slice registry to reflect
+  actual post-autopsy state (all Tier 4 slices confirmed migrated; all Critical
+  and High autopsy defects confirmed closed).
+- Added a tracked governance mirror section in `apps/client/docs/PROGRESS-SUMMARY.md`
+  so Section 14 execution state is commit-visible through tracked docs surfaces.
+
+**Files changed:** `apps/client/docs/CHANGELOG.md`;
+`apps/client/docs/PROGRESS-SUMMARY.md`; architecture guide Section 14 insert;
+five instruction/ADR addendum files
+
+**Verification:** Architecture guide cross-checked against ADR-001 through
+ADR-006 - no conflicts. Instruction files cross-checked against existing
+`.github/instructions/` - no conflicts. Slice status reconciled against full
+CHANGELOG history - all Critical/High autopsy defects confirmed closed.
+
+### [CHECKPOINT] Non-Autopsy 8 - Phase 2 Criterion 2 Operational Handoff Checklist (Commit-Visible) - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Added a commit-visible Criterion 2 evidence-capture checklist so the final staging/production monitoring signoff can be executed and audited without depending on ignored doc surfaces.
+- Actual files changed: `apps/client/docs/PROGRESS-SUMMARY.md`; `apps/client/docs/CHANGELOG.md`.
+- Verification commands run and results: `pnpm -C apps/client run report:projects-mutation-health -- --help` (pass, usage output); `node apps/client/scripts/summarize-project-mutation-health.mjs --input apps/client/tmp/coverage-trio/coverage-summary.json --json` (pass, safe zero-signal JSON output).
+- Guardrail outcomes delivered:
+  1. Captured a single operational checklist for required canary and broad-rollout evidence windows.
+  2. Locked command shape and required signal set (write 5xx, idempotency `409`, optimistic-lock `428`/version-conflict `409`) in tracked docs.
+  3. Preserved explicit deferred-state semantics: Criterion 2 remains open until real staging/production exports are ingested and archived.
+- Decision: Final closeout checkpoint for Phase 2 Criterion 2 is deferred until the project is production-ready and real staging/production NDJSON exports are available.
+- Deferred items: run final closeout only after production-readiness declaration and evidence capture from staging plus production windows.
+
+### [CHECKPOINT] Non-Autopsy 7 - Projects Mutation Monitoring Evidence Tooling (Criterion 2 Enablement) - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Added projects mutation monitoring tooling and runbook support for Phase 2 Criterion 2 evidence capture across canary and broad rollout windows.
+- Actual files changed: `apps/client/scripts/summarize-project-mutation-health.mjs`; `apps/client/package.json`; `apps/client/docs/PROJECTS-GENERIC-API-ROLLOUT.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results: `node apps/client/scripts/summarize-project-mutation-health.mjs --help` (pass, usage output); `node apps/client/scripts/summarize-project-mutation-health.mjs --input apps/client/tmp/coverage-trio/coverage-summary.json` (pass, safe summary output).
+- Guardrail outcomes delivered:
+  1. Introduced deterministic mutation health summarization for `/api/projects/**` write-path logs.
+  2. Added threshold-based failure options for write error, idempotency conflict, and optimistic-lock conflict rates.
+  3. Added evidence-capture template and interpretation guidance to support auditable rollout signoff.
+- Deferred items: staging/production log export ingestion remains required to mark Criterion 2 fully complete.
+
+### [CHECKPOINT] Non-Autopsy 6 - Generic Projects Rollout Flag Retirement + Client Surface GA Cutover - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Completed the next rollout/contract-signoff tranche by retiring generic-projects rollout flags from runtime clients and env templates, then validating always-on generic read/write behavior for the canonical `/api/projects/**` surface.
+- Actual files changed: `apps/client/app/lib/domains/projects/client/index.ts`; `apps/client/lib/projects-client.ts`; `apps/client/app/lib/infrastructure/env.ts`; `apps/client/__tests__/lib/projects-client-gate.test.ts`; `apps/client/__tests__/lib/projects-client-facade-gate.test.ts`; `apps/client/__tests__/lib/projects-client-split.test.ts`; `apps/client/.env.example`; `apps/client/.env.test`; `apps/client/.env.development`; `apps/client/.env.local.example`; `apps/client/docs/PROJECTS-GENERIC-API-ROLLOUT.md`; `apps/client/app/lib/API_ARCHITECTURE.md`; `apps/client/docs/ENV-FILES-AUDIT.md`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/lib/projects-client-gate.test.ts --maxWorkers=1` (pass, 1 file and 3 tests); `./scripts/invoke-clean.ps1 -WorkingDirectory . -CommandLine "pnpm -C apps/client exec vitest run __tests__/lib/projects-client-facade-gate.test.ts --maxWorkers=1"` (pass, 1 file and 3 tests); `./scripts/invoke-clean.ps1 -WorkingDirectory . -CommandLine "pnpm -C apps/client exec vitest run __tests__/lib/projects-client-split.test.ts __tests__/lib/projects-client-contracts.test.ts --maxWorkers=1"` (pass, 2 files and 5 tests); task `test-projects-api` (pass, 4 files and 19 tests); task `verify-projects-envelope-single-worker` (pass, 4 files and 25 tests); diagnostics scan on touched files reported no errors.
+- Guardrail outcomes delivered:
+  1. Generic projects reads and mutations now use one always-on runtime path across both domain and facade clients.
+  2. Deprecated `NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API*` runtime dependencies were removed from env boundary typing and env templates.
+  3. Projects client regression suites now validate post-cutover request-shaping behavior (including idempotency key propagation) instead of rollout gate toggles.
+- Deferred items: production/staging mutation-path monitoring evidence remains pending as the final Phase 2 rollout signoff item.
+
+### [CHECKPOINT] Non-Autopsy 5 - Idea Books AuthContext Fixture Cleanup + Projects Rollout Contract-Signoff Tranche 1 - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Completed cleanup of idea-books API adapter auth fixtures to canonical `AuthContext`, then completed the next rollout/contract-signoff tranche by validating `/api/projects/**` envelope signoff coverage.
+- Actual files changed: `apps/client/__tests__/api/idea-books.route.test.ts`; `apps/client/__tests__/api/idea-books/route.test.ts`; `apps/client/__tests__/api/idea-books/book-id.route.test.ts`; `apps/client/__tests__/api/idea-books/attachments.route.test.ts`; `apps/client/__tests__/api/idea-books/attachment-id.route.test.ts`; `apps/client/__tests__/api/projects/payment-routes.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/idea-books.route.test.ts __tests__/api/idea-books __tests__/policy/idea-books __tests__/lib/idea-books-client-contracts.test.ts --maxWorkers=1` (pass, 7 files and 24 tests); task `verify-projects-envelope-single-worker` (pass, 4 files and 25 tests); task `test-projects-api` (pass, 4 files and 19 tests after route-mock parity fix); task `build-client-tsc-noemit-checkpoint` (pass, no TypeScript diagnostics).
+- Guardrail outcomes delivered:
+  1. Idea-books API test fixtures now use production-faithful `AuthContext` shape only.
+  2. Projects payment-route test mocks now include actor-scoped limiter helper parity (`getActorRateLimitIdentifier`) required by escrow fund/release adapters.
+  3. Phase 2 rollout acceptance criterion for `/api/projects/**` route-envelope confirmation now has fresh passing signoff evidence.
+- Deferred items: rollout monitoring and final generic-projects flag removal remain pending for subsequent tranches.
+
+### [CHECKPOINT] Non-Autopsy 4 - Idea Books Deep Follow-Through (Browser Contracts + Collaborator/Privacy Policy Tests) - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Completed the next non-autopsy queue item by normalizing idea-books browser contracts against domain DTOs and adding collaborator/privacy policy follow-through tests.
+- Actual files changed: `apps/client/lib/idea-books-client.ts`; `apps/client/hooks/useIdeaBooks.ts`; `apps/client/__tests__/lib/idea-books-client-contracts.test.ts`; `apps/client/__tests__/policy/idea-books/access.policy.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/lib/idea-books-client-contracts.test.ts __tests__/policy/idea-books/access.policy.test.ts __tests__/lib/domains/idea-books.service.test.ts __tests__/api/idea-books/route.test.ts __tests__/api/idea-books/book-id.route.test.ts __tests__/api/idea-books/attachments.route.test.ts __tests__/api/idea-books/attachment-id.route.test.ts --maxWorkers=1` (pass, 7 files and 25 tests); task `build-client-tsc-noemit-checkpoint` (pass, no TypeScript diagnostics).
+- Guardrail outcomes delivered:
+  1. Idea-books client contracts now reuse domain-owned DTO shapes with explicit Date-to-string serialization at the browser boundary.
+  2. Idea-books browser facade now has focused client-contract regression coverage for list/create/attachment endpoint semantics.
+  3. Idea-books policy coverage now enforces collaborator/private access boundaries and owner-only mutation/delete constraints.
+- Deferred items: remaining non-autopsy migration queue items continue in subsequent tranches.
+
+### [CHECKPOINT] Non-Autopsy 3 - Documents/Licenses/Certificates/Reviews/Search/Client Dashboard Test Follow-Through - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Completed the next non-autopsy queue item by delivering adapter-test follow-through for Documents, Licenses, Certificates, Reviews, Search, and Client Dashboard, including missing Search route coverage and safe-message contract tightening.
+- Actual files changed: `apps/client/app/api/search/professionals/route.ts`; `apps/client/app/api/reviews/route.ts`; `apps/client/app/api/client/dashboard/route.ts`; `apps/client/__tests__/api/search/professionals.route.test.ts`; `apps/client/__tests__/api/reviews/route.test.ts`; `apps/client/__tests__/api/client/dashboard.route.test.ts`; `apps/client/__tests__/api/professional-portal/documents.route.test.ts`; `apps/client/__tests__/api/professional-portal/licenses.route.test.ts`; `apps/client/__tests__/api/professional-portal/certificates.route.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/search/professionals.route.test.ts __tests__/api/reviews/route.test.ts __tests__/api/client/dashboard.route.test.ts __tests__/api/professional-portal/documents.route.test.ts __tests__/api/professional-portal/licenses.route.test.ts __tests__/api/professional-portal/certificates.route.test.ts --maxWorkers=1` (pass, 6 files and 41 tests); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all categories `0`); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass).
+- Guardrail outcomes delivered:
+  1. Search, reviews, and client-dashboard adapters no longer pass domain message strings into `apiError(...)` for forbidden mappings.
+  2. Search professionals route now has focused API coverage across validation, throttling, success mapping, and resilient failure behavior.
+  3. Documents/licenses/certificates/client-dashboard route tests now use canonical `AuthContext` mock shape (`clerkId`, `dbUserId`, `userRole`) with no extra fixture fields.
+- Deferred items: remaining non-autopsy migration queue items continue in subsequent tranches.
+
+### [CHECKPOINT] Non-Autopsy 2 - Properties Document Collection DELETE Shim Retirement - Completed
+
+- Date: 2026-04-13
+- Outcome summary: Completed the next non-autopsy backlog item by retiring the deprecated collection-level property document delete shim and enforcing canonical item-route deletion.
+- Actual files changed: `apps/client/app/api/properties/[id]/documents/route.ts`; `apps/client/__tests__/api/properties/property-documents.route.test.ts`; `apps/client/app/api/properties/README.md`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/properties/property-documents.route.test.ts --maxWorkers=1` (pass, 1 file and 11 tests); diagnostics scan on touched files reports no errors.
+- Guardrail outcomes delivered:
+  1. Properties document collection route surface is now strict (`GET` and `POST` only), removing the query-parameter delete compatibility shim.
+  2. Properties adapter regression coverage now enforces canonical item-resource delete behavior and validates complete actor propagation in delete calls.
+  3. Properties API docs now remove deprecated shim references and keep route-contract guidance aligned to item-resource mutations.
+- Deferred items: remaining non-autopsy migration queue items continue in subsequent tranches.
+
+### [CHECKPOINT] Non-Autopsy 1 - Properties If-Match Contract Hardening - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed the next non-autopsy backlog item by enforcing strict header-based optimistic locking for property item updates and aligning browser facade mutation contracts.
+- Actual files changed: `apps/client/app/api/properties/[id]/route.ts`; `apps/client/lib/properties-client.ts`; `apps/client/__tests__/api/properties/property-id.route.test.ts`; `apps/client/__tests__/lib/properties-client-contracts.test.ts`; `apps/client/app/api/properties/README.md`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/properties/property-id.route.test.ts __tests__/lib/properties-client-contracts.test.ts --maxWorkers=1` (pass, 2 files and 20 tests); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all reported categories `0`); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `TSC_EXIT:0`).
+- Guardrail outcomes delivered:
+  1. Property PATCH now returns `428` when `If-Match` is missing and `400` when `If-Match` is invalid, removing legacy body-version fallback behavior.
+  2. Browser-side property update and delete clients now send canonical `If-Match` headers (`"N"`) and no longer include legacy body `version` fallback payloads.
+  3. Route and browser-contract tests now enforce header-only optimistic-lock semantics to prevent fallback regressions.
+- Deferred items: remaining non-autopsy migration queue items continue in subsequent tranches.
+
+### [CHECKPOINT] Minor Fix 4 - High-Risk Guard Numeric Constant Enforcement - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed the next minor autopsy item by adding explicit numeric constant checks for high-risk server-action guard values, preventing constant-name-only drift blind spots.
+- Actual files changed: `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/scripts/high-risk-registry.mjs`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/__tests__/actions/tier3-high-value-guard-policy.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client run build:high-risk-registry` (pass); `pnpm -C apps/client exec vitest run __tests__/actions/tier3-high-value-guard-policy.test.ts --maxWorkers=1` (pass, 1 file and 9 tests); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all reported categories `0` including `highValueServerActionGuards`); `pnpm run client:tsc-noemit` (pass).
+- Guardrail outcomes delivered:
+  1. Registry policy now includes canonical numeric expectations for high-value guard constants.
+  2. Drift checks now fail when required guard constants are missing or hold non-canonical numeric values.
+  3. Tier-3 policy regression tests now explicitly cover mismatched guard constant value detection.
+- Deferred items: remaining autopsy backlog proceeds outside this minor-fix tranche.
+
+### [CHECKPOINT] Minor Fix 3 - Empty-Auth GET Rationale Marker Enforcement - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed the next minor autopsy item by enforcing explicit `AUTH-RATIONALE:` markers on high-risk GET registry entries that intentionally use empty auth-option requirements.
+- Actual files changed: `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/scripts/high-risk-registry.mjs`; `apps/client/scripts/report-security-drift.mjs`.
+- Verification commands run and results: `pnpm -C apps/client run build:high-risk-registry` (pass, `REGISTRY_BUILD_EXIT:0`); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all reported categories `0`, including `emptyAuthOptionRationale`); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `TSC_EXIT:0`).
+- Guardrail outcomes delivered:
+  1. High-risk GET registry entries with `requiredAuthOptions: []` now include explicit `AUTH-RATIONALE:` markers.
+  2. Strict drift now emits `emptyAuthOptionRationale` findings when such rationale markers are missing or malformed.
+  3. Registry-to-drift governance now makes intentionally empty auth-option configuration auditable and machine-enforced.
+- Deferred items: remaining minor autopsy backlog continues in subsequent tranches.
+
+### [CHECKPOINT] Minor Fix 2 - Idempotency Completion Safety Drift Category - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed the next minor autopsy item by introducing explicit strict-drift coverage for post-success idempotency completion safety in critical transitions and verification adapters.
+- Actual files changed: `apps/client/scripts/report-security-drift.mjs`.
+- Verification commands run and results: `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all reported categories `0`, including `idempotencyCompletionSafety`); `pnpm -C apps/client exec vitest run __tests__/actions/tier3-high-value-guard-policy.test.ts --maxWorkers=1` (pass, 1 file and 8 tests); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `TSC_EXIT:0`).
+- Guardrail outcomes delivered:
+  1. Strict drift now checks for unguarded `IdempotencyService.complete(...)` usage in critical transition and verification adapter surfaces.
+  2. Transition-action completion-failure catches are validated for non-rethrow behavior in critical transition rules.
+  3. Completion-safety regressions now surface as first-class drift findings (`idempotencyCompletionSafety`).
+- Deferred items: remaining minor autopsy backlog continues in subsequent tranches.
+
+### [CHECKPOINT] Minor Fix 1 - Redis Env Accessor Boundary Cleanup - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed the next minor autopsy item by removing direct Redis URL/password `process.env` reads from the client env boundary config and routing them through env helper accessors.
+- Actual files changed: `apps/client/app/lib/infrastructure/env.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/lib/env.validation.test.ts --maxWorkers=1` (pass, 1 file and 4 tests passed, `ENV_TEST_EXIT:0`); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all categories `0`, `DRIFT_LAST_EXIT:0`); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `TSC_EXIT:0`).
+- Guardrail outcomes delivered:
+  1. Redis password and URL env reads now flow through typed env helper functions (`getOptionalStringEnv`) instead of direct inline `process.env` access in `envConfig`.
+  2. Empty optional Redis env values normalize to `undefined`, preserving prior optional semantics.
+  3. Env boundary policy alignment improves for Redis connection credential access points.
+- Regression guard added: focused env validation suite remains green after helper-based optional-string normalization.
+- Deferred items: remaining minor autopsy backlog continues in subsequent tranches.
+
+### [CHECKPOINT] Medium Fix 5 - Messaging Auth Fixture Canonical Context Cleanup - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed the next medium autopsy item by removing non-canonical auth-fixture fields from messaging route auth-mapping tests, aligning mocked auth context with current adapter contract shape.
+- Actual files changed: `apps/client/__tests__/api/messaging/route-auth-mapping.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/messaging/route-auth-mapping.test.ts --maxWorkers=1` (pass, 1 file and 31 tests passed, `MSG_TEST_EXIT:0`); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all reported categories `0`, `DRIFT_EXIT:0`).
+- Guardrail outcomes delivered:
+  1. Messaging auth-context fixtures no longer include non-canonical `userEmail` context payload.
+  2. Messaging adapter tests now mock only the actor fields used by route adapters (`clerkId`, `dbUserId`, `userRole`).
+  3. Historical medium autopsy finding on messaging auth-fixture shape is now closed by test-surface alignment.
+- Regression guard added: full messaging auth-mapping suite remains green after fixture contract tightening.
+- Deferred items: remaining medium/minor autopsy backlog continues in subsequent tranches.
+
+### [CHECKPOINT] Medium Fix 4 - Finance Date DTO Boundary Normalization - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed the next medium autopsy item by normalizing finance transaction DTO date fields to string values and enforcing ISO-date shaping in the finance domain service before adapter responses.
+- Actual files changed: `apps/client/app/lib/domains/finance/contracts.ts`; `apps/client/app/lib/domains/finance/service.ts`; `apps/client/__tests__/actions/finance.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/actions/finance.test.ts __tests__/api/professional-portal/finance-routes.test.ts __tests__/lib/domains/finance.service.test.ts --maxWorkers=1` (pass, 3 files and 15 tests passed); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all reported categories `0`); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `TSC_EXIT:0`).
+- Guardrail outcomes delivered:
+  1. `FinanceTransactionListItem` and `FinanceTransactionDetail` contracts now model `date`, `createdAt`, `completedAt`, and `updatedAt` as string DTO fields.
+  2. Finance service now normalizes list/detail transaction dates to ISO strings at the domain boundary, removing `Date` leakage across HTTP-facing adapter surfaces.
+  3. Detail and withdrawal transaction outputs preserve existing numeric serialization while now emitting string timestamps consistently.
+- Regression guard added: finance action and finance route/domain focused suites remain green with contract-aligned string timestamp fixtures.
+- Deferred items: remaining medium/minor autopsy backlog continues in subsequent tranches.
+
+### [CHECKPOINT] Medium Fix 3 - Certificate Limiter Namespace Normalization - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed the next medium autopsy item by normalizing the certificates adapter family on a single actor-scoped limiter namespace (`prof-certificates-read` and `prof-certificates-write`) and aligning guard-policy references.
+- Actual files changed: `apps/client/app/api/professional-portal/certificates/route.ts`; `apps/client/app/api/professional-portal/certificates/[id]/route.ts`; `apps/client/__tests__/api/professional-portal/certificates.route.test.ts`; `apps/client/scripts/high-risk-registry.mjs`; `apps/client/app/lib/security/high-risk-registry.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/professional-portal/certificates.route.test.ts --maxWorkers=1` (pass, 1 file and 10 tests passed); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all reported categories `0` including `actorScopedThrottling`); targeted diagnostics scan on touched certificate adapter, test, and registry files reports no code errors.
+- Guardrail outcomes delivered:
+  1. Certificates collection and by-id routes now use actor-scoped limiter keys consistently under the `prof-certificates-*` namespace.
+  2. Legacy singular `certificate-*` and mixed plural namespace usage was removed from certificates route handling.
+  3. Registry-driven high-risk guard checks now expect the normalized certificates namespace snippets.
+- Regression guard added: certificates adapter tests assert `getActorRateLimitIdentifier(...)` is called with `prof-certificates-read` and `prof-certificates-write` for list/detail/mutation flows.
+- Deferred items: remaining medium/minor autopsy backlog continues in subsequent tranches.
+
+### [CHECKPOINT] Medium Fix 2 - DELETE Fallback Helper Guardrails - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed the next medium autopsy item by removing body-fallback version helper exposure from properties shared utilities and tightening static drift detection for DELETE handlers that call fallback extractors.
+- Actual files changed: `apps/client/app/api/properties/shared.ts`; `apps/client/app/api/properties/[id]/route.ts`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/__tests__/api/properties/property-id.route.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/properties/property-id.route.test.ts __tests__/api/stores/store-id.route.test.ts __tests__/api/messaging/route-auth-mapping.test.ts --maxWorkers=1` (pass, 3 files and 52 tests passed); `pnpm -C apps/client run report-security-drift:strict` (pass, all reported categories `0` including `deleteMethodSemanticsDrift`); `pnpm -C apps/client exec tsc --noEmit` (pass, exit code `0`).
+- Guardrail outcomes delivered:
+  1. `extractExpectedVersion` and `extractExpectedVersionFromIfMatch` are no longer exported from properties shared adapter utilities.
+  2. Properties item route now imports version extractors from canonical request-utils boundary, reducing helper sprawl in shared adapter surfaces.
+  3. `deleteMethodSemanticsDrift` now flags any `extractExpectedVersion(req, <anySecondArg>)` fallback call pattern in DELETE handlers, not only `body`-named arguments.
+- Regression guard added: properties route tests now mock request-utils version extractor helpers directly, matching the canonical import surface.
+- Deferred items: remaining medium/minor autopsy backlog continues in subsequent tranches.
+
+### [CHECKPOINT] Medium Fix 1 - Redis Startup Readiness Validation For Rate-Limit Backend - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed medium autopsy fix by adding explicit env-boundary startup/readiness validation for Redis-required rate-limit backend modes and wiring focused validation coverage.
+- Actual files changed: `apps/client/app/lib/infrastructure/env.ts`; `apps/client/__tests__/lib/env.validation.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/lib/env.validation.test.ts --maxWorkers=1` (pass, 1 file and 4 tests passed, `ENV_TEST_EXIT:0`); `pnpm -C apps/client exec vitest run __tests__/lib/rate-limit-redis.test.ts --maxWorkers=1` (pass, 1 file and 5 tests passed, `RATE_LIMIT_TEST_EXIT:0`); `pnpm -C apps/client run report-security-drift:strict` (pass, all categories `0`, `DRIFT_EXIT:0`); `pnpm -C apps/client exec tsc --noEmit` (pass, `TSC_EXIT:0`).
+- Guardrail outcomes delivered:
+  1. Redis validation now checks `RATE_LIMIT_BACKEND` mode and enforces Redis readiness when required (`redis` always, `auto` in production).
+  2. Startup auto-validation now includes the `redis` group when backend mode requires Redis, ensuring fail-closed startup for misconfigured production-like rate-limit backend selection.
+  3. Env config now exposes typed `redis.rateLimitBackend` for consistent boundary consumers.
+- Regression guard added: dedicated env validation tests assert failure on Redis-disabled and missing host/port cases under Redis-required modes, and non-enforcement when backend mode does not require Redis.
+- Deferred items: remaining medium/minor autopsy items continue in subsequent tranches.
+
+### [CHECKPOINT] High Fix Wave 3 - Actor Context Enrichment + Verification Key Summary Projection - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed the requested next autopsy tranche by forwarding `clerkId` across verification and messaging actor contexts, and replacing verification POST idempotency key payload spreads with explicit summary projections.
+- Actual files changed: `apps/client/app/lib/domains/{messaging,documents,certificates,licenses}/contracts.ts`; `apps/client/app/api/messaging/**`; `apps/client/app/api/professional-portal/{documents,documents/[id],certificates,certificates/[id],licenses,licenses/[id]}/route.ts`; `apps/client/__tests__/api/messaging/route-auth-mapping.test.ts`; `apps/client/__tests__/api/professional-portal/{documents,certificates,licenses}.route.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/messaging/route-auth-mapping.test.ts __tests__/api/professional-portal/documents.route.test.ts __tests__/api/professional-portal/certificates.route.test.ts __tests__/api/professional-portal/licenses.route.test.ts --maxWorkers=1` (pass, 4 files and 60 tests passed); `pnpm -C apps/client run report-security-drift:strict` (pass, all reported categories `0`); `pnpm -C apps/client exec tsc --noEmit` (pass, `EXIT:0`).
+- Guardrail outcomes delivered:
+  1. Messaging adapters now construct enriched `MessagingActor` payloads with `clerkId`, `userId`, and normalized role for domain calls.
+  2. Verification adapters for documents, certificates, and licenses now forward `clerkId` in actor payloads for list/detail/mutation paths.
+  3. Certificate and document POST idempotency-key generation now derives from explicit summary projections (asset reference plus structural field summary) instead of full payload spreading.
+- Regression guard added: route tests now enforce enriched actor payload forwarding and explicit idempotency summary payload generation for document and certificate POST adapters.
+- Deferred items: remaining autopsy medium/minor items continue in the next tranche.
+
+### [CHECKPOINT] High Fix Wave 2 - Registry Parity + 180s Auth + Verification Alias Guard - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed the requested sequence of high-priority autopsy items by expanding high-risk guard coverage to omitted user-rights and payout routes, tightening finance and escrow recent-auth windows to 180 seconds, and removing verification adapter alias message passthrough while widening detector coverage.
+- Actual files changed: `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/scripts/high-risk-registry.mjs`; `apps/client/app/actions/finance.ts`; `apps/client/app/api/projects/[id]/escrow/[escrowId]/{fund,release,dispute}/route.ts`; `apps/client/app/api/professional-portal/finance/withdraw/route.ts`; `apps/client/app/api/professional-portal/finance/withdraw/[id]/route.ts`; `apps/client/app/api/user/{export,deletion,rectification}/route.ts`; `apps/client/app/api/professional-portal/{documents,documents/[id],certificates,licenses,licenses/[id]}/route.ts`; `apps/client/scripts/security-lint-checks.mjs`; `apps/client/__tests__/actions/finance.test.ts`; `apps/client/__tests__/api/professional-portal/finance-routes.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client run build:high-risk-registry` (pass); `pnpm -C apps/client exec vitest run __tests__/actions/tier3-high-value-guard-policy.test.ts __tests__/actions/finance.test.ts __tests__/api/professional-portal/finance-routes.test.ts __tests__/api/professional-portal/documents.route.test.ts __tests__/api/professional-portal/certificates.route.test.ts __tests__/api/professional-portal/licenses.route.test.ts --maxWorkers=1` (pass, 6 files and 48 tests passed); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all categories `0`); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, exit code `0`).
+- Guardrail outcomes delivered:
+  1. High-risk route registry now covers omitted user-rights and payout mutation surfaces with actor-scoped throttling enforcement.
+  2. Finance and escrow recent-auth windows are now aligned to 180 seconds for high-value financial mutation paths.
+  3. Verification adapter asset-related alias passthrough paths now use static client-safe mapping; adapter passthrough detector now catches `err.message` and `error.message` alias forms in scoped adapter surfaces.
+- Deferred items: remaining open autopsy items continue in the next tranche (for example actor-context enrichment and idempotency payload summary projection).
+
+### [CHECKPOINT] High Fix 1 - Onboarding Idempotency Completion Safety - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed onboarding completion-safety hardening by making `submitOnboarding` idempotency replay persistence failures non-fatal after successful domain completion and Clerk finalization.
+- Actual files changed: `apps/client/app/actions/onboarding.ts`; `apps/client/__tests__/actions/onboarding-tier3-guards.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/actions/onboarding-tier3-guards.test.ts --maxWorkers=1` (pass, 1 file and 4 tests passed); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all categories `0`); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, exit code `0`).
+- Regression guard added: onboarding Tier-3 guard tests now assert successful `submitOnboarding` response when `IdempotencyService.complete(...)` throws after finalization, and assert no `IdempotencyService.fail(...)` call in that path.
+- Regressions avoided: preserved existing conflict, validation, and finalization failure behavior while removing completion-persistence induced post-success failure risk.
+- Deferred items: remaining High autopsy items (registry coverage parity, recent-auth tightening, verification alias passthrough cleanup, actor context enrichment, and payload-summary idempotency keys) remain pending.
+
+### [CHECKPOINT] Critical Fix 2 - Messaging Adapter Error Hardening + Drift Scope Expansion - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed the second critical autopsy remediation by removing domain-message passthrough from messaging adapters and expanding strict `adapterMessagePassthrough` drift coverage to include messaging route families.
+- Actual files changed: `apps/client/app/api/messaging/**`; `apps/client/scripts/security-lint-checks.mjs`; `apps/client/__tests__/api/messaging/route-auth-mapping.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/messaging/route-auth-mapping.test.ts --maxWorkers=1` (pass, 1 file and 31 tests passed); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all categories `0`, including `adapterMessagePassthrough`); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `TSC_EXIT:0`).
+- Regression guard added: messaging auth-mapping tests now assert static adapter-safe non-ok responses (`"Invalid request"`) for formerly passthrough paths.
+- Regressions avoided: preserved existing HTTP status mappings, idempotency flow behavior, and successful-response payload contracts while removing domain text passthrough.
+- Deferred items: onboarding idempotency completion safety and remaining High autopsy items remain pending.
+
+### [CHECKPOINT] Critical Fix 1 - Finance Idempotency Completion Safety - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed the first critical autopsy remediation by making withdrawal action completion-persistence failures non-fatal after successful domain mutation, preventing a post-success 500 response in finance flows.
+- Actual files changed: `apps/client/app/actions/finance.ts`; `apps/client/__tests__/actions/finance.test.ts`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/actions/finance.test.ts --maxWorkers=1` (pass, 1 file and 8 tests passed); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `TSC_EXIT:0`).
+- Regression guard added: finance action test now asserts success is returned when `IdempotencyService.complete(...)` throws after a successful withdrawal mutation, and that `IdempotencyService.fail(...)` is not called in that path.
+- Regressions avoided: preserved existing structured failure mapping for genuine domain failures while eliminating a completion-persistence induced retry hazard.
+- Deferred items: remaining critical autopsy blocker for messaging passthrough and drift coverage expansion.
+
+### [AUTOPSY] ASVS Remediation Pass Defect Review (Pre-Staff Implementation) - Completed
+
+- Date: 2026-04-11
+- Scope: Phases 0 through 9 of ASVS-GAP-CLOSURE-REVISED-V2.md, reviewed against current code evidence in high-risk registry, rate-limit backend, verification adapters, messaging adapter tests, onboarding and finance actions, shared request helpers, and env boundary wiring.
+- Classification model: Defects rated as Critical, High, Medium, or Minor. Critical and High findings block posture promotion.
+- Outcome summary: The remediation pass delivered substantive improvements (Redis sliding-window backend, actor-scoped throttling, registry consolidation, DELETE semantics hardening, and stronger drift categories), but the autopsy identified unresolved defects and drift blind spots that must be fixed before claiming strengthened audit posture.
+- Evidence surfaces reviewed: `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/app/lib/api/rate-limit.ts`; `packages/redis/src/rate-limit.ts`; `apps/client/__tests__/lib/rate-limit-redis.test.ts`; `apps/client/app/lib/domains/*/contracts.ts`; `apps/client/app/api/properties/shared.ts`; `apps/client/app/api/professional-portal/certificates/route.ts`; `apps/client/app/api/professional-portal/certificates/[id]/route.ts`; `apps/client/app/api/professional-portal/documents/route.ts`; `apps/client/app/api/properties/[id]/documents/route.ts`; `apps/client/app/actions/finance.ts`; `apps/client/app/actions/onboarding.ts`; `apps/client/__tests__/actions/tier3-high-value-guard-policy.test.ts`; `apps/client/__tests__/api/messaging/route-auth-mapping.test.ts`; `apps/client/app/lib/infrastructure/env.ts`.
+- Critical defects:
+  1. `apps/client/app/actions/finance.ts`: `IdempotencyService.complete(...)` errors are rethrown via outer catch, causing 500 after successful domain mutation and creating retry safety risk for financial operations.
+  2. Messaging adapter message passthrough remains behaviorally present in `apps/client/__tests__/api/messaging/route-auth-mapping.test.ts` assertions, while `adapterMessagePassthrough` drift coverage does not currently catch this route family.
+- High defects:
+  1. `apps/client/app/lib/security/high-risk-registry.ts` omits user-rights and payout routes from high-value guard policy coverage (`/api/user/export`, `/api/user/deletion`, `/api/user/rectification`, payout initiation and cancel).
+  2. Finance and escrow recent-auth windows are enforced at 300 seconds where the stricter 180-second requirement was expected for financial operations.
+  3. `apps/client/app/actions/onboarding.ts` still has an unguarded `IdempotencyService.complete(...)` path in `submitOnboarding`.
+  4. `apps/client/app/api/professional-portal/certificates/route.ts` and `apps/client/app/api/professional-portal/documents/route.ts` still include `err.message ?? ...` passthrough in POST error mapping; current lint pattern misses this alias form.
+  5. Verification and messaging actors are not consistently forwarding `clerkId` into domain calls where actor context enrichment is expected.
+  6. Idempotency key generation for certificate and document POST paths still spreads full payload objects instead of a Class C and D projection summary.
+- Medium defects:
+  1. `apps/client/app/lib/infrastructure/env.ts` does not validate Redis group readiness at startup for rate-limit backend modes that require Redis.
+  2. `apps/client/app/api/properties/shared.ts` still exposes a helper with body-version fallback (`extractExpectedVersion`), creating future regression risk if reused in DELETE paths.
+  3. Certificates route family has inconsistent rate-limit namespace tokens (plural and singular forms).
+  4. Finance transaction list contracts still use `Date` fields across potential HTTP boundaries and should be normalized to string DTOs.
+  5. Messaging auth-mapping tests still mock a non-canonical `userEmail` field in auth context fixtures.
+- Minor defects:
+  1. Registry snippet checks can validate option symbol usage without validating intended numeric values.
+  2. Redis URL and password reads in env builder use direct `process.env` access instead of helper accessors.
+  3. Drift script is missing an explicit `idempotencyCompletionSafety` category.
+  4. GET route entries with empty auth-option requirements lack an explicit rationale marker.
+- Proposed remediation sequence (blocking first):
+  1. Fix finance idempotency completion rethrow behavior.
+  2. Extend message-passthrough drift coverage to messaging routes and align tests to static client-safe adapter errors.
+  3. Wrap onboarding completion persistence in fail-safe completion handling.
+  4. Add user-rights and payout route entries to high-risk registry and guard tests.
+  5. Tighten financial recent-auth windows to 180 seconds and synchronize route plus registry expectations.
+  6. Remove aliased domain-message passthrough (`err.message`) in verification POST handlers and widen lint patterns.
+  7. Propagate `clerkId` through actor contexts where contracts require enriched identity context.
+  8. Replace idempotency key payload spreading with Class C and D summary projection.
+  9. Add Redis startup validation gating in env boundary for required backend modes.
+  10. Deprecate DELETE-incompatible fallback helper usage and add drift check for DELETE handlers calling fallback extractor.
+  11. Standardize certificate route limiter namespace keys.
+  12. Normalize finance HTTP-boundary date contracts to string DTOs.
+  13. Align auth-context test fixtures with canonical runtime shape.
+  14. Implement `idempotencyCompletionSafety` drift category.
+- Audit status corrections required before posture promotion:
+  1. `GAP-004` remains Strengthen pending recent-auth and registry parity fixes.
+  2. `GAP-015` remains Strengthen pending full actor-scoped route coverage for omitted high-risk surfaces.
+  3. Phase 6 is partial until passthrough and idempotency completion safety defects are closed in all targeted handlers.
+  4. `ADD-001` remains Strengthen until registry and guard parity is complete for unresolved high-risk paths.
+- Statuses that remain correctly represented: `GAP-017`, `GAP-013`, `ADD-003`, and `DRIFT-001` remain aligned with current evidence.
+- Deferred items: none in this autopsy entry; this is a pre-implementation defect accounting checkpoint.
+- Next-phase handoff: begin staff-level implementation by resolving Critical and High defects first, then re-run strict drift and targeted risk suites before promoting any additional closure status.
+
+### [CHECKPOINT] Consolidated API Evidence Sweep - Completed
+
+- Date: 2026-04-11
+- Outcome summary: Completed a consolidated evidence sweep for the properties or stores or messaging API trio with fresh coverage, strict drift, and typecheck confirmation; baseline remained clean without runtime-code changes.
+- Actual files changed: `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`; generated artifacts `apps/client/tmp/coverage-trio8/coverage-summary.json` and `apps/client/tmp-security-drift-report.json`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/properties/property-id.route.test.ts __tests__/api/stores/store-id.route.test.ts __tests__/api/messaging/route-auth-mapping.test.ts --maxWorkers=1` (pass, 3 files and 52 tests passed); `pnpm -C apps/client exec vitest run __tests__/api/properties/property-id.route.test.ts __tests__/api/stores/store-id.route.test.ts __tests__/api/messaging/route-auth-mapping.test.ts --maxWorkers=1 --coverage --coverage.reporter=json-summary --coverage.reportsDirectory=tmp/coverage-trio8 --coverage.thresholds.statements=0 --coverage.thresholds.branches=0 --coverage.thresholds.functions=0 --coverage.thresholds.lines=0` (pass, 3 files and 52 tests passed); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all categories `0`); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `EXIT:0`).
+- Coverage artifact snapshot: `apps/client/tmp/coverage-trio8/coverage-summary.json` reports `app/api/messaging/messages/[id]/route.ts` at lines `93.58%`, statements `92.4%`, functions `100%`, branches `75.86%`; and `app/api/messaging/conversations/[id]/route.ts` at lines `84.94%`, statements `84.04%`, functions `63.63%`, branches `71.42%`.
+- Drift or security results: strict drift stayed fully clean with all reported categories at `0`, including `sensitiveAnnotationCoverage`, `actorScopedThrottling`, and `deleteMethodSemanticsDrift`.
+- Regressions avoided: preserved current API runtime behavior; this checkpoint refreshed evidence only.
+- Deferred items: none for this checkpoint entry.
+
+### [CHECKPOINT] Messaging or Properties or Stores API Regression and Coverage Refresh - Completed
+
+- Date: 2026-04-10
+- Outcome summary: Captured a docs-only verification checkpoint after messaging route test-surface expansion; targeted trio API suites remained green and route-focused coverage artifacts were refreshed without runtime behavior changes.
+- Actual files changed: `apps/client/__tests__/api/messaging/route-auth-mapping.test.ts`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/properties/property-id.route.test.ts __tests__/api/stores/store-id.route.test.ts __tests__/api/messaging/route-auth-mapping.test.ts --maxWorkers=1` (pass, 3 files and 52 tests passed); `pnpm -C apps/client exec vitest run __tests__/api/properties/property-id.route.test.ts __tests__/api/stores/store-id.route.test.ts __tests__/api/messaging/route-auth-mapping.test.ts --maxWorkers=1 --coverage --coverage.reporter=json-summary --coverage.reportsDirectory=tmp/coverage-trio7 --coverage.thresholds.statements=0 --coverage.thresholds.branches=0 --coverage.thresholds.functions=0 --coverage.thresholds.lines=0` (pass, 3 files and 52 tests passed); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all categories `0`); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, exit code `0`).
+- Coverage artifact snapshot: `apps/client/tmp/coverage-trio7/coverage-summary.json` reports `app/api/messaging/messages/[id]/route.ts` at lines `93.58%`, statements `92.4%`, functions `100%`, branches `75.86%`; and `app/api/messaging/conversations/[id]/route.ts` at lines `84.94%`, statements `84.04%`, functions `63.63%`, branches `71.42%`.
+- Drift or security results: strict drift baseline remained fully clean, including `sensitiveAnnotationCoverage` and `deleteMethodSemanticsDrift` at zero.
+- Regressions avoided: retained route runtime behavior while increasing adapter branch coverage through test-only expansion.
+- Deferred items: none for this checkpoint entry.
+
+### [PHASE 8] ADR-006 Sensitive Annotation Coverage + Drift Gate - Planned
+
+- Date: 2026-04-09
+- Scope: Add ADR-006 boundary annotations to priority high-sensitivity adapters, actions, and domain contracts, and introduce strict drift enforcement that flags sensitive paths lacking ADR-006 annotations unless explicitly allowlisted.
+- Risk level: High
+- Target files: `apps/client/app/api/user/export/route.ts`; `apps/client/app/api/user/deletion/route.ts`; `apps/client/app/api/user/rectification/route.ts`; `apps/client/app/api/professional-portal/documents/route.ts`; `apps/client/app/api/professional-portal/documents/[id]/route.ts`; `apps/client/app/api/professional-portal/certificates/route.ts`; `apps/client/app/api/professional-portal/certificates/[id]/route.ts`; `apps/client/app/api/professional-portal/licenses/route.ts`; `apps/client/app/api/professional-portal/licenses/[id]/route.ts`; `apps/client/app/actions/onboarding.ts`; `apps/client/app/actions/finance.ts`; `apps/client/app/lib/domains/documents/contracts.ts`; `apps/client/app/lib/domains/licenses/contracts.ts`; `apps/client/app/lib/domains/certificates/contracts.ts`; `apps/client/app/lib/domains/finance/contracts.ts`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/scripts/adr006-annotation-exceptions.json`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands (planned): `pnpm -C apps/client exec vitest run __tests__/api/professional-portal/documents.route.test.ts __tests__/api/professional-portal/certificates.route.test.ts __tests__/api/professional-portal/licenses.route.test.ts --maxWorkers=1`; `pnpm run client:report-security-drift:strict`; `pnpm run client:tsc-noemit`.
+- Entry criteria: Phase 7 completed and documented with strict drift and client typecheck baseline green.
+- Exit criteria (expected): Priority sensitive boundaries include `ADR-006 classification:` markers, strict drift emits `sensitiveAnnotationCoverage`, and strict runs fail if non-allowlisted sensitive files lack annotations.
+- Known risks and mitigations: Broad sensitive-path scanning can create noisy findings; mitigate with an explicit exception registry for reviewed non-sensitive files and keep annotations focused on files crossing Class A/B boundaries.
+
+### [PHASE 9] Expanded DELETE Semantics Enforcement Scope - Planned
+
+- Date: 2026-04-09
+- Scope: Extend GAP-017 DELETE semantics enforcement beyond the initial versioned-route registry by hardening additional version-aware item DELETE adapters and broadening static drift detection to scan all API route DELETE handlers for body-version fallback patterns.
+- Risk level: High
+- Target files: `apps/client/app/api/messaging/conversations/[id]/route.ts`; `apps/client/app/api/messaging/messages/[id]/route.ts`; `apps/client/__tests__/api/messaging/route-auth-mapping.test.ts`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/scripts/gap017-delete-exceptions.json`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands (planned): `pnpm -C apps/client exec vitest run __tests__/api/messaging/route-auth-mapping.test.ts __tests__/api/properties/property-id.route.test.ts __tests__/api/stores/store-id.route.test.ts --maxWorkers=1`; `pnpm run client:report-security-drift:strict`; `pnpm run client:tsc-noemit`.
+- Entry criteria: Phase 8 completion updates are documented, and strict drift baseline remains green.
+- Exit criteria (expected): Additional version-aware item DELETE handlers enforce `If-Match` header-only semantics with explicit `428/400` mapping, and `deleteMethodSemanticsDrift` evaluates the broader API route surface.
+- Known risks and mitigations: Existing clients may still rely on body-carried version values on legacy DELETE endpoints; mitigate with explicit error guidance and focused route tests for missing and invalid `If-Match` behavior.
+
+### [PHASE 9] Expanded DELETE Semantics Enforcement Scope - Completed
+
+- Date: 2026-04-09
+- Outcome summary: Extended DELETE semantics hardening to messaging item routes by enforcing header-only `If-Match` checks with explicit `428` missing-header and `400` invalid-header mapping, broadened strict drift scanning to the full API route DELETE surface for version-aware handlers, and kept the delete semantics strict baseline clean.
+- Actual files changed: `apps/client/app/api/messaging/conversations/[id]/route.ts`; `apps/client/app/api/messaging/messages/[id]/route.ts`; `apps/client/__tests__/api/messaging/route-auth-mapping.test.ts`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/messaging/route-auth-mapping.test.ts` (pass, 1 file and 10 tests passed); `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all categories `0`, including `deleteMethodSemanticsDrift`); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `EXIT:0`).
+- Drift/security results: strict drift now evaluates version-aware DELETE semantics from route-source scanning rather than a narrow static route registry and remained fully clean.
+- Regressions avoided: preserved existing PATCH compatibility semantics and domain delete orchestration while tightening only DELETE adapter boundary requirements.
+- Deferred items: none in Phase 9 scope.
+- Next-phase handoff: continue remaining ASVS closure work from the plan with the same strict drift and typecheck evidence cadence.
+
+### [PHASE 8] ADR-006 Sensitive Annotation Coverage + Drift Gate - Completed
+
+- Date: 2026-04-09
+- Outcome summary: Added explicit `ADR-006 classification:` annotations to priority sensitive adapters, actions, and domain contracts, introduced strict `sensitiveAnnotationCoverage` drift enforcement with reviewed exceptions support, and kept strict policy baseline green.
+- Actual files changed: `apps/client/app/api/user/export/route.ts`; `apps/client/app/api/user/deletion/route.ts`; `apps/client/app/api/user/rectification/route.ts`; `apps/client/app/api/professional-portal/documents/route.ts`; `apps/client/app/api/professional-portal/documents/[id]/route.ts`; `apps/client/app/api/professional-portal/certificates/route.ts`; `apps/client/app/api/professional-portal/certificates/[id]/route.ts`; `apps/client/app/api/professional-portal/licenses/route.ts`; `apps/client/app/api/professional-portal/licenses/[id]/route.ts`; `apps/client/app/actions/onboarding.ts`; `apps/client/app/actions/finance.ts`; `apps/client/app/lib/domains/documents/contracts.ts`; `apps/client/app/lib/domains/licenses/contracts.ts`; `apps/client/app/lib/domains/certificates/contracts.ts`; `apps/client/app/lib/domains/finance/contracts.ts`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/scripts/adr006-annotation-exceptions.json`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results: `pnpm -C apps/client exec node scripts/report-security-drift.mjs --strict` (pass, all categories `0`, including `sensitiveAnnotationCoverage`); `pnpm -C apps/client exec tsc --noEmit --pretty false` (pass, `EXIT:0`).
+- Drift/security results: strict drift now fails on unannotated sensitive-path files unless covered by a reviewed ADR-006 exception entry; current strict baseline remained clean.
+- Regressions avoided: annotations were additive and did not alter domain/service execution semantics on the covered adapter and action surfaces.
+- Deferred items: none in Phase 8 scope.
+- Next-phase handoff: proceed with broader DELETE semantics expansion and policy-depth closure tasks.
+
+### [PHASE 7] Versioned DELETE If-Match Exclusivity + Drift Guard - Planned
+
+- Date: 2026-04-09
+- Scope: Remove legacy body-version fallback from versioned item DELETE handlers, require strict `If-Match` header semantics for optimistic locking on those routes, and add a dedicated drift category that blocks DELETE-method version-fallback regressions.
+- Risk level: High
+- Target files: `apps/client/app/api/properties/[id]/route.ts`; `apps/client/app/api/properties/shared.ts`; `apps/client/app/api/stores/[id]/route.ts`; `apps/client/app/lib/api/request-utils.ts`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/scripts/gap017-delete-exceptions.json`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands (planned): `pnpm -C apps/client exec vitest run __tests__/api/properties/property-id.route.test.ts __tests__/api/stores/store-id.route.test.ts --maxWorkers=1`; `pnpm run client:report-security-drift:strict`; `pnpm run client:tsc-noemit`.
+- Entry criteria: Phase 6 completed and documented with strict drift and client typecheck baseline green.
+- Exit criteria (expected): Versioned item DELETE handlers no longer parse request-body versions, missing `If-Match` returns `428`, invalid `If-Match` returns `400`, and strict drift reports zero findings for `deleteMethodSemanticsDrift`.
+- Known risks and mitigations: Existing callers that still send body-based version values may begin failing with `428`; mitigate by preserving clear adapter error messaging, documenting explicit header-only semantics, and validating with focused route tests plus strict drift.
+
+### [PHASE 7] Versioned DELETE If-Match Exclusivity + Drift Guard - Completed
+
+- Date: 2026-04-09
+- Outcome summary: Enforced header-only optimistic locking semantics for versioned property and store DELETE adapters by removing legacy body-version fallback, added explicit `428` (missing `If-Match`) and `400` (invalid `If-Match`) mapping, and introduced strict drift enforcement for DELETE method semantics with a reviewed GAP-017 exceptions registry.
+- Actual files changed: `apps/client/app/lib/api/request-utils.ts`; `apps/client/app/api/properties/shared.ts`; `apps/client/app/api/stores/[id]/route.ts`; `apps/client/app/api/properties/[id]/route.ts`; `apps/client/app/api/properties/[id]/documents/route.ts`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/scripts/gap017-delete-exceptions.json`; `apps/client/__tests__/api/stores/store-id.route.test.ts`; `apps/client/__tests__/api/properties/property-id.route.test.ts`; `apps/client/tmp-security-drift-report.json`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/properties/property-id.route.test.ts __tests__/api/stores/store-id.route.test.ts --maxWorkers=1` (pass, 2 files and 18 tests passed); `pnpm run client:report-security-drift:strict` (pass, all categories `0`, including `deleteMethodSemanticsDrift`); `pnpm run client:tsc-noemit` (pass, `EXIT_CODE:0`).
+- Drift/security results: strict drift now emits `deleteMethodSemanticsDrift` as a blocking category and the baseline run remained fully clean at zero findings.
+- Regressions avoided: preserved existing PATCH legacy behavior and existing domain optimistic-lock execution while constraining the semantic change to versioned DELETE adapter boundaries.
+- Deferred items: Full ADR-006 sensitive-surface annotation coverage remains in the next policy-depth tranche.
+- Next-phase handoff: proceed to the annotation coverage tranche and extend strict drift with sensitive-surface annotation checks.
+
+### [PHASE 0] Baseline Gate Integrity - Planned
+
+- Date: 2026-04-09
+- Scope: Align Tier-3 transition sequencing checks to the canonical onboarding finalizer, make spread-review findings blocking in strict drift mode, and migrate browser persistence allowlisting from file-level to callsite-level marker checks.
+- Risk level: High
+- Target files: `apps/client/__tests__/actions/tier3-high-value-guard-policy.test.ts`, `apps/client/scripts/report-security-drift.mjs`, `apps/client/scripts/security-lint-checks.mjs`, `apps/client/scripts/check-browser-persistence.mjs`, and allowlisted browser-persistence callsite files under `apps/client/components/**`, `apps/client/app/onboarding/**`, and `apps/client/hooks/useABTest.ts`.
+- Verification commands (planned): `pnpm run client:report-security-drift:strict`; `pnpm run client:test:tier3-transition-policy`; `pnpm run client:tsc-noemit`.
+- Entry criteria: Baseline branch is green enough to run targeted drift and policy checks, and no unresolved blockers remain from previous closure tranches.
+- Exit criteria (expected): Tier-3 transition policy test references the canonical runtime symbol, strict drift fails when spread-review findings exist, and browser persistence checks enforce callsite-level allowlisting with relocated markers.
+- Known risks and mitigations: Marker relocation could create false negatives or noisy failures; mitigate by adding marker comments directly adjacent to each approved storage callsite and validating with strict drift plus targeted policy test.
+
+### [PHASE 0] Baseline Gate Integrity - Completed
+
+- Date: 2026-04-09
+- Outcome summary: Completed Tier-3 sequencing symbol parity updates, enabled strict fail gating for spread-review drift findings, and migrated browser persistence allowlisting to callsite-level marker checks across drift and lint scanners.
+- Actual files changed: `apps/client/__tests__/actions/tier3-high-value-guard-policy.test.ts`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/scripts/security-lint-checks.mjs`; `apps/client/scripts/check-browser-persistence.mjs`; `apps/client/components/forms/HomeownerForm.tsx`; `apps/client/components/forms/ProfessionalForm.tsx`; `apps/client/components/forms/PropertyForm.tsx`; `apps/client/components/shared/ProfileCompletionWidget.tsx`; `apps/client/components/providers/CookieConsentProvider.tsx`; `apps/client/app/onboarding/_hooks/useOnboarding.ts`; `apps/client/hooks/useABTest.ts`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results: `pnpm run client:report-security-drift:strict` (pass, all categories `0`); `pnpm run client:test:tier3-transition-policy` (pass, 2 files and 9 tests passed); `pnpm run client:tsc-noemit` (pass, exit `0`); `pnpm -C apps/client exec node scripts/check-browser-persistence.mjs` (pass); `pnpm -C apps/client exec node scripts/check-security-lint.mjs` (pass).
+- Drift/security results: strict drift now blocks `logSafetySpreadReview` findings and reports remained clean; browser persistence and security-lint checks passed with callsite-level allowlist markers enforced.
+- Regressions avoided: kept runtime route, domain, and action behavior unchanged while tightening only policy-test and scanner enforcement plus marker placement.
+- Deferred items: none in Phase 0 scope.
+- Next-phase handoff: start Phase 1 by introducing the canonical high-risk registry source and wiring both drift scripts and Tier-3 policy tests to the shared registry artifact.
+
+### [PHASE 1] Canonical High-Risk Registry + Drift/Test Parity - Planned
+
+- Date: 2026-04-09
+- Scope: Create a canonical high-risk registry source in `app/lib/security`, add a narrow compile step to emit `scripts/high-risk-registry.mjs`, refactor drift and Tier-3 policy checks to consume the shared registry, expand verification sequencing coverage for certificates and licenses create/update adapters, and add parser-regression tests for `withAuth` extraction.
+- Risk level: High
+- Target files: `apps/client/app/lib/security/high-risk-registry.ts`, `apps/client/scripts/build-high-risk-registry.mjs`, `apps/client/scripts/high-risk-registry.mjs`, `apps/client/scripts/report-security-drift.mjs`, `apps/client/__tests__/actions/tier3-high-value-guard-policy.test.ts`, and `apps/client/package.json`.
+- Verification commands (planned): `pnpm -C apps/client run build:high-risk-registry`; `pnpm run client:test:tier3-transition-policy`; `pnpm run client:report-security-drift:strict`; `pnpm run client:tsc-noemit`.
+- Entry criteria: Phase 0 complete with strict drift and Tier-3 policy baseline green, and both tracking docs contain Phase 1 planned entries.
+- Exit criteria (expected): Drift script and Tier-3 policy test consume one shared registry source of truth, verification sequencing checks cover documents/certificates/licenses create and update flows, and parser regressions prevent false-positive route guard passes.
+- Known risks and mitigations: Registry compile drift or parser regressions could create false positives/negatives; mitigate by auto-building registry artifact in drift script commands and adding focused parser-regression unit assertions.
+
+### [PHASE 1] Canonical High-Risk Registry + Drift/Test Parity - Completed
+
+- Date: 2026-04-09
+- Outcome summary: Implemented a canonical high-risk registry source and generated script artifact, removed duplicated high-risk rule arrays from drift/test surfaces, expanded verification sequencing coverage to documents/certificates/licenses create and update adapters, and hardened withAuth parser checks to avoid false-positive guard passes.
+- Actual files changed: `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/scripts/build-high-risk-registry.mjs`; `apps/client/scripts/high-risk-registry.mjs`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/__tests__/actions/tier3-high-value-guard-policy.test.ts`; `apps/client/package.json`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results: `pnpm -C apps/client run build:high-risk-registry` (pass, artifact generated); `pnpm run client:test:tier3-transition-policy` (pass, 2 files and 11 tests passed); `pnpm run client:report-security-drift:strict` (pass, all categories `0`); `pnpm run client:tsc-noemit` (pass, exit `0`).
+- Drift/security results: strict drift consumes the generated high-risk registry artifact and remained clean; high-value guard and critical-transition sequencing checks reported zero findings after registry consolidation.
+- Regressions avoided: preserved existing high-risk policy behavior while eliminating duplicated rule definitions and tightening parser scoping to matched exports only.
+- Deferred items: none in Phase 1 scope.
+- Next-phase handoff: begin Phase 2 Redis sliding-window limiter migration and keep high-risk anti-automation checks wired to registry-driven policy expectations.
+
+### [PHASE 2] Redis Sliding-Window Rate Limiter Migration - Planned
+
+- Date: 2026-04-09
+- Scope: Replace the process-local in-memory rate-limit backend with a Redis-backed sliding-window primitive exposed from `@build/redis`, split client rate-limit implementations into explicit dev and Redis modules, and route backend selection through the canonical env boundary while preserving the `checkRateLimit(identifier, limit, window)` adapter contract.
+- Risk level: High
+- Target files: `packages/redis/src/rate-limit.ts`, `packages/redis/src/index.ts`, `apps/client/app/lib/api/rate-limit.ts`, `apps/client/app/lib/api/rate-limit.dev.ts`, `apps/client/app/lib/api/rate-limit.redis.ts`, `apps/client/app/lib/infrastructure/env.ts`, `apps/client/.env.example`, `apps/client/__tests__/lib/rate-limit-redis.test.ts`, `apps/client/docs/CHANGELOG.md`, and `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands (planned): `pnpm -C apps/client exec vitest run __tests__/lib/rate-limit-redis.test.ts`; `pnpm -C packages/redis run check-types`; `pnpm run client:report-security-drift:strict`; `pnpm run client:tsc-noemit`.
+- Entry criteria: Phase 1 completed and documented in both tracking docs, with strict drift and Tier-3 policy baseline still green.
+- Exit criteria (expected): Redis-backed sliding-window limiting is available through `@build/redis`, `apps/client` rate limiting selects backend via env boundary with isolated dev fallback module, and targeted rate-limit regressions plus strict drift and typecheck verification pass.
+- Known risks and mitigations: Redis backend or env-selection regressions could degrade availability or silently route to the wrong backend; mitigate with explicit backend-resolution logic, deterministic fallback behavior, and focused unit coverage for backend selection and window semantics.
+
+### [PHASE 2] Redis Sliding-Window Rate Limiter Migration - Completed
+
+- Date: 2026-04-09
+- Outcome summary: Landed a shared Redis sliding-window rate-limiter primitive in `@build/redis`, split the client limiter into explicit Redis and in-memory backends, and wired env-driven backend resolution through the canonical env boundary while preserving all existing `checkRateLimit(identifier, limit, window)` call contracts.
+- Actual files changed: `packages/redis/src/rate-limit.ts`; `packages/redis/src/rate-limit.js`; `packages/redis/src/index.ts`; `apps/client/app/lib/api/rate-limit.ts`; `apps/client/app/lib/api/rate-limit.dev.ts`; `apps/client/app/lib/api/rate-limit.redis.ts`; `apps/client/app/lib/infrastructure/env.ts`; `apps/client/.env.example`; `apps/client/__tests__/lib/rate-limit-redis.test.ts`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results: `pnpm -C packages/redis run check-types` (pass); `pnpm -C apps/client exec vitest run __tests__/lib/rate-limit-redis.test.ts` (pass, 1 file and 5 tests passed); `pnpm run client:report-security-drift:strict` (pass, all categories `0`); `pnpm run client:tsc-noemit` (pass, exit `0`).
+- Drift/security results: strict drift remained clean at zero findings while rate-limiter internals moved to Redis sliding-window enforcement; production-mode Redis backend failures now fail closed in the client rate-limit facade instead of silently passing writes.
+- Regressions avoided: retained the existing adapter contract and route call patterns, and added deterministic in-memory fallback behavior for non-production Redis failures to keep local/test workflows stable.
+- Deferred items: actor-scoped key migration and `actorScopedThrottling` drift-category enforcement remain queued for the next phase.
+- Next-phase handoff: apply actor-scoped identifiers to all high-risk registry routes and add drift enforcement that blocks IP-scoped throttling on authenticated high-risk handlers.
+
+### [PHASE 3] Actor-Scoped High-Risk Throttling + Drift Gate - Planned
+
+- Date: 2026-04-09
+- Scope: Migrate high-risk authenticated escrow mutation routes from IP-scoped rate-limit keys to actor-scoped identifiers, add a shared actor-identifier helper in the rate-limit facade, and introduce a blocking strict-drift category that flags high-risk routes still using IP-scoped throttling.
+- Risk level: High
+- Target files: `apps/client/app/lib/api/rate-limit.ts`, `apps/client/app/lib/security/high-risk-registry.ts`, `apps/client/app/api/projects/[id]/escrow/[escrowId]/fund/route.ts`, `apps/client/app/api/projects/[id]/escrow/[escrowId]/release/route.ts`, `apps/client/app/api/projects/[id]/escrow/[escrowId]/dispute/route.ts`, `apps/client/scripts/report-security-drift.mjs`, `apps/client/__tests__/actions/tier3-high-value-guard-policy.test.ts`, `apps/client/docs/CHANGELOG.md`, and `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands (planned): `pnpm run client:test:tier3-transition-policy`; `pnpm run client:report-security-drift:strict`; `pnpm run client:tsc-noemit`.
+- Entry criteria: Phase 2 completed and documented in both tracking docs with strict drift still green.
+- Exit criteria (expected): High-risk escrow mutations use actor-scoped rate-limit identifiers, drift reporting includes actor-scoped throttling findings as a strict blocking category, and all planned verification commands pass.
+- Known risks and mitigations: Actor identifier wiring errors can cause false throttling or missed enforcement; mitigate by centralizing key construction helper usage, enforcing registry-aligned snippets, and validating with strict drift plus Tier-3 policy tests.
+
+### [PHASE 3] Actor-Scoped High-Risk Throttling + Drift Gate - Completed
+
+- Date: 2026-04-09
+- Outcome summary: Migrated high-risk authenticated escrow mutations to actor-scoped rate-limit identifiers via a shared helper, tightened canonical high-risk registry route snippets to require actor-scoped key usage, and added a strict drift category that blocks IP-scoped throttling keys on authenticated high-risk routes.
+- Actual files changed: `apps/client/app/lib/api/rate-limit.ts`; `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/app/api/projects/[id]/escrow/[escrowId]/fund/route.ts`; `apps/client/app/api/projects/[id]/escrow/[escrowId]/release/route.ts`; `apps/client/app/api/projects/[id]/escrow/[escrowId]/dispute/route.ts`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results: `pnpm run client:test:tier3-transition-policy` (pass, 2 files and 11 tests passed); `pnpm run client:report-security-drift:strict` (pass, all categories `0`, including `actorScopedThrottling`); `pnpm run client:tsc-noemit` (pass, completed with no TypeScript diagnostics).
+- Drift/security results: strict drift now emits and enforces `actorScopedThrottling` as a blocking category, and the current strict run remained clean at zero findings across all categories.
+- Regressions avoided: preserved existing high-risk route authz and rate-limit envelopes while only changing key scoping from IP-derived to actor-derived identifiers.
+- Deferred items: none in Phase 3 scope.
+- Next-phase handoff: continue ASVS closure phases by extending actor-scoped throttling checks to any additional authenticated high-risk routes added to the registry.
+
+### [PHASE 4] High-Risk Escrow CSRF Guardrails + Registry Parity - Planned
+
+- Date: 2026-04-09
+- Scope: Enforce trusted-origin CSRF checks on high-risk authenticated escrow mutation adapters, and extend canonical high-risk registry guard requirements so Tier-3 policy and strict drift block missing `withAuth.csrf` on those routes.
+- Risk level: High
+- Target files: `apps/client/app/api/projects/[id]/escrow/[escrowId]/fund/route.ts`; `apps/client/app/api/projects/[id]/escrow/[escrowId]/release/route.ts`; `apps/client/app/api/projects/[id]/escrow/[escrowId]/dispute/route.ts`; `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands (planned): `pnpm run client:test:tier3-transition-policy`; `pnpm run client:report-security-drift:strict`; `pnpm run client:tsc-noemit`.
+- Entry criteria: Phase 3 completed and documented in both tracking docs with strict drift baseline green.
+- Exit criteria (expected): Escrow high-risk mutation adapters enforce CSRF via `withAuth.csrf`, registry-driven guard checks require both `recentAuth` and `csrf`, and planned verification commands pass.
+- Known risks and mitigations: CSRF enforcement can reject legacy clients missing trusted origin headers; mitigate by relying on canonical trusted-origin middleware behavior and validating through strict drift plus Tier-3 policy tests.
+
+### [PHASE 4] High-Risk Escrow CSRF Guardrails + Registry Parity - Completed
+
+- Date: 2026-04-09
+- Outcome summary: Enforced trusted-origin CSRF checks on all high-risk authenticated escrow mutation routes and aligned canonical registry route-guard requirements so policy and strict drift now require both `recentAuth` and `csrf` for this escrow mutation surface.
+- Actual files changed: `apps/client/app/api/projects/[id]/escrow/[escrowId]/fund/route.ts`; `apps/client/app/api/projects/[id]/escrow/[escrowId]/release/route.ts`; `apps/client/app/api/projects/[id]/escrow/[escrowId]/dispute/route.ts`; `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/scripts/high-risk-registry.mjs`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results: `pnpm run client:test:tier3-transition-policy` (pass, 2 files and 11 tests passed, exit `0`); `pnpm run client:report-security-drift:strict` (pass, all categories `0`, exit `0`); `pnpm run client:tsc-noemit` (pass, exit `0`).
+- Drift/security results: strict drift remained fully clean and now evaluates escrow route guard parity with CSRF-required registry expectations without introducing new findings.
+- Regressions avoided: preserved existing escrow mutation business behavior, actor-scoped throttling enforcement, and recent-auth constraints while adding CSRF trusted-origin protection.
+- Deferred items: none in Phase 4 scope.
+- Next-phase handoff: continue ASVS closure sequencing by extending registry-driven high-risk guard checks to any newly introduced authenticated mutation routes.
+
+### [PHASE 5] Verification High-Risk Guardrail Expansion - Planned
+
+- Date: 2026-04-09
+- Scope: Extend high-risk registry coverage from escrow into the professional verification adapter family (documents, certificates, licenses), migrate those authenticated handlers from IP-scoped to actor-scoped rate-limit keys, and require explicit `withAuth` guard options (`recentAuth` and `csrf`) on high-risk verification mutations.
+- Risk level: High
+- Target files: `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/scripts/high-risk-registry.mjs`; `apps/client/app/api/professional-portal/documents/route.ts`; `apps/client/app/api/professional-portal/documents/[id]/route.ts`; `apps/client/app/api/professional-portal/certificates/route.ts`; `apps/client/app/api/professional-portal/certificates/[id]/route.ts`; `apps/client/app/api/professional-portal/licenses/route.ts`; `apps/client/app/api/professional-portal/licenses/[id]/route.ts`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands (planned): `pnpm run client:test:tier3-transition-policy`; `pnpm run client:report-security-drift:strict`; `pnpm run client:tsc-noemit`.
+- Entry criteria: Phase 4 completed and documented in both tracking docs with strict drift baseline green.
+- Exit criteria (expected): Registry-driven checks include the verification high-risk routes, authenticated verification handlers use actor-scoped throttling keys, high-risk verification mutation handlers enforce `recentAuth` and `csrf`, and planned verification commands pass.
+- Known risks and mitigations: Additional trusted-origin and freshness constraints can reject stale or cross-origin callers; mitigate by relying on canonical `withAuth` enforcement and validating parity through strict drift and Tier-3 policy checks.
+
+### [PHASE 5] Verification High-Risk Guardrail Expansion - Completed
+
+- Date: 2026-04-09
+- Outcome summary: Expanded canonical high-risk route guard coverage to the verification adapter family (documents, certificates, and licenses), migrated their authenticated read and write throttling from IP-derived identifiers to actor-scoped keys, and enforced explicit `withAuth` mutation guard options (`recentAuth` + `csrf`) on verification write handlers.
+- Actual files changed: `apps/client/app/lib/security/high-risk-registry.ts`; `apps/client/scripts/high-risk-registry.mjs`; `apps/client/app/api/professional-portal/documents/route.ts`; `apps/client/app/api/professional-portal/documents/[id]/route.ts`; `apps/client/app/api/professional-portal/certificates/route.ts`; `apps/client/app/api/professional-portal/certificates/[id]/route.ts`; `apps/client/app/api/professional-portal/licenses/route.ts`; `apps/client/app/api/professional-portal/licenses/[id]/route.ts`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/actions/tier3-high-value-guard-policy.test.ts __tests__/actions/onboarding-tier3-guards.test.ts --maxWorkers=1` (pass, 2 files and 11 tests passed, `EXIT_CODE:0`); `pnpm run client:report-security-drift:strict` (pass, all drift categories `0`, `EXIT_CODE:0`); `pnpm run client:tsc-noemit` (pass, `EXIT_CODE:0`).
+- Drift/security results: strict drift remained fully clean while `HIGH_VALUE_ROUTE_GUARD_RULES` now includes verification route entries and actor-scoped throttling checks cover those handlers.
+- Regressions avoided: preserved verification domain orchestration and idempotency flow behavior while tightening only auth-option enforcement and anti-automation key scoping.
+- Deferred items: none in Phase 5 scope.
+- Next-phase handoff: continue closure work by addressing additional high-risk route parity and policy-depth items from the ASVS closure plan (for example, annotation coverage, delete semantics drift, and remaining verification logging/idempotency hardening).
+
+### [PHASE 6] Verification Adapter Log + Idempotency Safety Hardening - Planned
+
+- Date: 2026-04-09
+- Scope: Remove opaque adapter log payload bags from the professional verification route family, eliminate domain-message passthrough in client-facing adapter errors, harden idempotency completion handling so replay-persistence failures do not strand successful mutations, and tighten compliance audit action semantics for certificate deletion paths.
+- Risk level: High
+- Target files: `apps/client/app/api/professional-portal/documents/route.ts`; `apps/client/app/api/professional-portal/documents/[id]/route.ts`; `apps/client/app/api/professional-portal/certificates/route.ts`; `apps/client/app/api/professional-portal/certificates/[id]/route.ts`; `apps/client/app/api/professional-portal/licenses/route.ts`; `apps/client/app/api/professional-portal/licenses/[id]/route.ts`; `apps/client/scripts/security-lint-checks.mjs`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/__tests__/api/professional-portal/documents.route.test.ts`; `apps/client/__tests__/api/professional-portal/certificates.route.test.ts`; `apps/client/__tests__/api/professional-portal/licenses.route.test.ts`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands (planned): `pnpm -C apps/client exec vitest run __tests__/api/professional-portal/documents.route.test.ts __tests__/api/professional-portal/certificates.route.test.ts __tests__/api/professional-portal/licenses.route.test.ts --maxWorkers=1`; `pnpm run client:report-security-drift:strict`; `pnpm run client:tsc-noemit`.
+- Entry criteria: Phase 5 completed and documented in both tracking docs with strict drift baseline green.
+- Exit criteria (expected): Verification adapters no longer emit opaque `additionalContext` log bags, sensitive domain messages are not surfaced through `apiError(...)`, idempotency completion errors are fail-safe for successful domain mutations, and planned verification commands pass.
+- Known risks and mitigations: Safer adapter error and logging contracts can shift existing test expectations and observability payload shapes; mitigate by updating route-level tests alongside runtime changes and validating strict drift output plus typecheck before closure.
+
+### [PHASE 6] Verification Adapter Log + Idempotency Safety Hardening - Completed
+
+- Date: 2026-04-09
+- Outcome summary: Removed opaque `additionalContext` log payload bags from verification adapters by switching to explicit safe log fields, replaced verification list-route domain-message passthrough with fixed client-safe adapter messages, and made idempotency completion fail-safe across verification write flows so successful mutations still return success when replay persistence fails.
+- Actual files changed: `apps/client/app/api/professional-portal/documents/route.ts`; `apps/client/app/api/professional-portal/documents/[id]/route.ts`; `apps/client/app/api/professional-portal/certificates/route.ts`; `apps/client/app/api/professional-portal/certificates/[id]/route.ts`; `apps/client/app/api/professional-portal/licenses/route.ts`; `apps/client/app/api/professional-portal/licenses/[id]/route.ts`; `apps/client/scripts/security-lint-checks.mjs`; `apps/client/scripts/report-security-drift.mjs`; `apps/client/scripts/high-risk-registry.mjs`; `apps/client/__tests__/api/professional-portal/documents.route.test.ts`; `apps/client/__tests__/api/professional-portal/certificates.route.test.ts`; `apps/client/__tests__/api/professional-portal/licenses.route.test.ts`; `apps/client/docs/CHANGELOG.md`; `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification commands run and results: `pnpm -C apps/client exec vitest run __tests__/api/professional-portal/documents.route.test.ts --maxWorkers=1` (pass, 1 file and 9 tests passed); `pnpm -C apps/client exec vitest run __tests__/api/professional-portal/certificates.route.test.ts --maxWorkers=1` (pass, 1 file and 9 tests passed); `pnpm -C apps/client exec vitest run __tests__/api/professional-portal/licenses.route.test.ts --maxWorkers=1` (pass, 1 file and 9 tests passed); `pnpm run client:report-security-drift:strict` (pass, all categories `0`, including `additionalContextInLogs` and `adapterMessagePassthrough`); `pnpm run client:tsc-noemit` (pass).
+- Drift/security results: strict drift remained fully clean after adding `additionalContextInLogs` and `adapterMessagePassthrough` categories, confirming zero opaque verification log-bag usage and zero verification adapter domain-message passthrough regressions.
+- Regressions avoided: preserved verification domain orchestration, status mapping, and existing mutation success behavior while tightening adapter observability and replay-persistence safety.
+- Deferred items: none in Phase 6 scope.
+- Next-phase handoff: continue closure work with the remaining policy-depth items from the plan (for example ADR-006 annotation coverage and DELETE semantics drift hardening).
+
+- **2026-04-09 Tier 2 closure-first replay policy hardening:** replaced best-effort idempotency replay redaction with a scope-aware replay-policy registry in `IdempotencyService`; unknown replay scopes now fail closed, replay payloads must serialize from reviewed public-contract DTOs, and default replay storage is limited to ADR-006 Class C/D data with explicit per-scope Class B exceptions where existing client contracts require them; aligned the architecture guide, repo-wide instructions, ADR-006, and the ASVS audit status table to the now-green Tier 2 baseline; added focused replay-policy regressions plus representative route/action replay coverage.
+- **2026-04-09 Next config env decoupling for production-style lint:** added `next-config-env.ts` as a lightweight reader for the small set of environment values needed by `next.config.ts` (`NODE_ENV`, app/API URLs, Clerk frontend API, and PostHog host); cut `next.config.ts` over from the full runtime env graph so config-time imports no longer execute server-only upload-processing invariants; kept the `UPLOAD_PROCESS_INLINE` production invariant strict in the runtime env module; verified with client typecheck and `NODE_ENV=production` lint.
+- **2026-04-08 ASVS closure tranche (role-transition consistency, upload worker isolation, safe client errors):** replaced the onboarding Clerk metadata helper with a shared fail-closed transition finalizer so onboarding submit/skip flows now return retryable `503` responses when Clerk sync cannot be confirmed and never complete idempotent success before metadata finalization; added a shared Clerk claim-refresh helper used by the onboarding flow and `/auth-callback`, removing silent dashboard fallback after onboarding success; made `/api/uploads` worker-only in production by blocking prod inline processing at config time and returning `503` plus failed pending-upload status when queue enqueue fails; migrated remaining legacy raw `error.message` pass-through sites in idea-books, notifications, calendar, properties, and finance to fixed client-safe error contracts; expanded the blocking security lint to catch `apiError(error.message || ...)`, `apiError(error.message ?? ...)`, and equivalent `createActionFailure(...)` patterns; documented the Clerk webhook `.passthrough()` allowance as the signed-provider exception; verified with focused onboarding, upload, and safe-error regressions plus the strict security-drift baseline.
+- **2026-04-04 ADR-007 section-5 mutation-time enforcement (projects + finance):** added `app/lib/domains/user-profile/client-type-policy.ts` as the owning-domain policy gate for project-creation and payment-initiation routes; wired `projectsService.createProject` and `projectsService.fundEscrow` to block `GOVERNMENT_ENTITY` mutations when procurement compliance requirements remain pending; wired `financeService.createWithdrawal` through the same payment-initiation policy gate; aligned finance actor-role normalization with canonical uppercase role output (`PROFESSIONAL`, `ADMIN`) so mutation-time policy checks execute consistently; verified with focused domain tests (`10/10`) and client typecheck.
+- **2026-04-04 ADR-007 admin baseline stabilization (second pass):** completed the admin compile-baseline cleanup by removing the final `@ts-nocheck` suppression in `apps/admin/src/actions/admin/leads.ts`, fixing Lead filter typing to canonical Prisma enums (`LeadStatus`, `LeadSource`, `ProjectType`), and normalizing lead budget `Decimal` values to explicit string DTO fields in admin outputs; `pnpm run admin:check-types` now passes cleanly.
+- **2026-04-04 ADR-007 section-5 onboarding domain implementation:** added `app/lib/domains/user-profile/client-type-compliance.ts` to centralize ClientType normalization, onboarding branching, and compliance-routing policy derivation; updated `app/lib/domains/user-profile/onboarding.ts` so client onboarding stores canonical `ClientProfile.type`, persists company registration and KRA fields used for procurement policy checks, and writes dedicated compliance-routing metadata (project-creation and payment-initiation policy routes) into profile preferences; updated client skip onboarding to seed deterministic default client-type routing metadata instead of empty preferences; verified with focused domain tests (`5/5`), onboarding adapter suites (`28/28`), and client typecheck.
+- **2026-04-04 onboarding risk-tranche closure:** completed compliance transaction semantics and completion `Result<T, DomainError>` propagation in the user-profile onboarding surfaces; hardened onboarding trust boundaries by removing client-provided `clerkId` from submit payload paths and limiting validation logging to safe field-path arrays; added structured terminal-outcome logging contract coverage across `/api/onboarding`, `/api/onboarding/professional/complete`, `/api/onboarding/skip`, and `/api/onboarding/skip-professional`; added middleware onboarding-resolver fallback and resolution telemetry (`operationName`, `outcome`, `reason`, `source`, `state`, `confidence`, `mode`, `httpStatus`, `durationMs`); verified with focused Vitest (`32/32`) and client typecheck (`pnpm -C apps/client exec tsc --noEmit`).
+- Added `docs/adr/ADR-008-http-surface-security.md` and aligned ADR lists to include the consolidated HTTP surface security decision (CORS, CSRF, anti-caching, security headers, and webhook/callback integrity).
+- Added `docs/adr/ADR-007-role-model-admin-sub-roles-and-actor-context-shape.md` and aligned ADR cross-references in instruction and architecture documentation surfaces.
+- Added `docs/adr/ADR-008-http-surface-security.md` and aligned ADR lists to include the consolidated HTTP surface security decision (CORS, CSRF, anti-caching, security headers, and webhook/callback integrity).
+- Added `docs/adr/ADR-007-role-model-admin-sub-roles-and-actor-context-shape.md` and aligned ADR cross-references in instruction and architecture documentation surfaces.
 - **Onboarding wizard UI refinement:** Token migration for remaining hardcoded colors in DetailsStep, DocumentsStep, ReviewStep, and ProfessionStep — replaced `emerald-*`, `red-*`, `amber-*` with `--color-success`, `--color-error`, and `--color-warning` design tokens; added `--color-warning` to globals.css for incomplete/warning states. OnboardingForm deprecated and removed (legacy stub with no labels/ARIA; main flow uses HomeownerForm and ProfessionalForm). Analytics provider wired for production: PostHog implementation (`PostHogOnboardingAnalytics`) forwards `onboarding_step_completed`, `onboarding_field_abandonment`, `onboarding_validation_error`, `onboarding_async_validation_failure`, and `onboarding_draft_restore_failed` events; used when `NODE_ENV=production` and `NEXT_PUBLIC_POSTHOG_KEY` is set; NullAnalytics in test/dev.
 - **Onboarding UI refinement:** Staff-level audit implementation per API-TO-FRONTEND-ARCHITECTURE.md: added design tokens (`--color-error`, `--color-success`, `--color-focus-ring`) and migrated hardcoded emerald/red/zinc/amber to tokens; URL-encoded step/role (`?step=2&role=professional`); sessionStorage for drafts with versioned keys (`onboarding_homeowner_draft_v1`, `professional_onboarding_draft_v1`); Zod validate-on-restore with `trackDraftRestoreFailed`; draft cleared on submit success, retained on failure, cleared on logout via `clearOnboardingDrafts()`; `useAsyncFieldValidation` hook; `jumpToStep` in useOnboarding; FormMessage `aria-live="polite"`; HomeownerForm FormField htmlFor/id, aria-invalid, aria-describedby; MultiPropertyForm/MultiStoreForm accordion div→button with aria-expanded/aria-controls; RoleCard aria-label; focus management on step transition; `OnboardingAnalytics` context and instrumentation wiring; active state on button/checkbox/select/toggle/radio-group; `loading.tsx` and `error.tsx` for onboarding route.
 - **Legal segment refinement:** Added route-level `loading.tsx` and `error.tsx` for `app/legal` aligned with the legal layout; wrapped footer copyright year in `suppressHydrationWarning` to avoid hydration mismatch; extracted `Toggle`, `CookieCategoryCard`, and `CATEGORIES` from `cookie-settings/page.tsx` into `cookie-settings/_components/` to reduce inline page size and align with UI refinement checklist.
@@ -124,22 +1440,64 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Security
 
+- **A/B test anonymous assignment randomness hardening (2026-04-08):** replaced `Math.random()`-based anonymous ID generation in `hooks/useABTest.ts` with Web Crypto (`crypto.randomUUID()` with `crypto.getRandomValues()` fallback) to remove insecure randomness in a security-sensitive flow.
+- **Redis audit output redaction hardening (2026-04-08):** refactored `scripts/redis-path-audit.mjs` to build and log only sanitized configuration flags, removing clear-text output of environment-derived Redis connection details and password-presence fields.
+- **Admin client API timeout exhaustion guard (2026-04-08):** hardened `apps/admin/src/actions/admin/shared.ts` by normalizing and bounding `callClientApi` timeout values before `setTimeout` usage (default `30_000`, min `1_000`, max `60_000`) to prevent timer creation with uncontrolled durations.
+- **ADD-009 structured server-action validation hardening (2026-04-04):** completed the next enforcement sweep in `app/actions/search.ts`, `app/actions/professionals.ts`, and `app/actions/stores.ts` by removing remaining `safeParse()` plus raw-throw validation branches and standardizing on structured failure mapping (`throwActionFailure(createActionFailure(...))` and `unwrapResultOrThrow(...)`) so adapters now return canonical validation and domain outcomes without opaque runtime throws.
+- **ADD-007 idempotency replay data-class policy hardening (2026-04-04):** strengthened `app/lib/services/idempotency.service.ts` to sanitize replay payloads before persistence and replay (sensitive-key redaction and JSON-safe normalization), and added expired-record rollover on `checkOrCreate` so stale keys are rotated to fresh processing records; added focused regression coverage in `__tests__/lib/idempotency.service.test.ts` for redaction, normalization, replay shape safety, and expired-key recovery behavior.
+- **ASVS rendering and browser-storage lint enforcement (2026-04-04):** expanded `scripts/check-security-lint.mjs` and `scripts/security-lint-checks.mjs` with blocking checks for `SEC-LINT-003` (`dangerouslySetInnerHTML` requires sanitizer/review annotation or explicit allowlisting) and `SEC-LINT-007` (sensitive-flow `localStorage`/`sessionStorage` writes require `SECURITY_PERSISTENCE_ALLOWLIST`), and annotated the safe chart style injection path in `components/ui/chart.tsx` with `SECURITY_XSS_ALLOWLIST`.
+- **Tier-3 high-value action guardrails (2026-04-04):** extended `app/lib/actions/secure-action.ts` with first-class `recentAuth` and per-action `rateLimit` options, then applied both controls to `requestWithdrawalAction` in `app/actions/finance.ts` for step-up authentication and per-actor anti-automation hardening; extended `scripts/report-security-drift.mjs` with `highValueServerActionGuards` drift detection so strict CI mode fails if required guard options are removed from designated high-value server actions.
+- **Tier-3 high-value guardrail expansion and sequencing pass (2026-04-04):** expanded `highValueServerActionGuards` drift enforcement to include escrow route mutations (`fund`, `release`, `dispute`) and verification-role transition onboarding actions (`submitOnboarding`, `skipOnboarding`, `skipProfessionalOnboarding`), added a second Tier-3 drift category `criticalTransitionStepSequencing` to enforce canonical server-side ordering on onboarding transition steps and verification adapter mutations (`professional-portal/documents` and `professional-portal/licenses`), and added focused policy and action tests in `__tests__/actions/tier3-high-value-guard-policy.test.ts` and `__tests__/actions/onboarding-tier3-guards.test.ts` with runnable aliases `test:tier3-transition-policy` (client) and `client:test:tier3-transition-policy` (root).
+- **ADD-009 policy regression suite (2026-04-04):** added focused action-policy tests in `__tests__/actions/add-009-server-action-validation-policy.test.ts` covering explicit regression cases for Zod `.parse()` detection, `safeParse()` followed by `throw new Error(...)` detection, compliant structured-failure paths, and a workspace-wide `app/actions/**` drift assertion; added runnable aliases `test:add-009-policy` (client) and `client:test:add-009-policy` (root).
+- **ASVS ADD-009 server-action validation policy enforcement (2026-04-04):** extended `scripts/report-security-drift.mjs` with `serverActionValidationPolicy` checks over `app/actions/**` to flag Zod `.parse()` usage and `safeParse()` flows that still throw `new Error(...)`; remediated existing action validation throw patterns by switching to structured `throwActionFailure(createActionFailure(...))` handling in `actions/leads.ts`, `actions/inquiries.ts`, `actions/properties.ts`, `actions/stores.ts`, `actions/professionals.ts`, and `actions/calendar.ts`.
+- **ASVS Tier-1 upload hardening drift enforcement (2026-04-04):** extended `scripts/report-security-drift.mjs` with `uploadProductionRisk` coverage for production local-provider and same-origin upload-delivery guardrails plus required regression-test presence (`__tests__/lib/storage-config.test.ts`); added `report-security-drift:strict` script alias in `apps/client/package.json` and aligned root/CI execution to `pnpm run client:report-security-drift:strict` so drift categories are blocking in CI.
+- **ASVS machine-enforcement expansion (2026-04-04):** implemented a shared security-lint module and blocking check script for `SEC-LINT-002`, `SEC-LINT-004`, and `SEC-LINT-006`; wired `check-security-lint` into `check-security-drift`; extended `scripts/report-security-drift.mjs` summary and findings with mutation-schema `.passthrough()` drift, unsafe `apiError(error.message|error.stack)` drift, and `req.json()` usage inside exported `GET` handlers.
+- **Onboarding identity and log-safety hardening (2026-04-04):** removed client-supplied `clerkId` from onboarding browser submit payloads so identity remains session-derived in adapters, and constrained onboarding validation logs to field-path arrays instead of raw validation payloads.
 - **Environment and auth-bypass hardening (Phase 2/3):** tightened `BYPASS_AUTH` handling in `app/lib/api/api-middleware.ts` so bypass is constrained to safe local-development conditions and blocked in CI and non-local contexts; added focused middleware regression coverage in `__tests__/lib/api-middleware.test.ts` for both allowed and blocked bypass flows.
 - **Env contract checker hardening:** tightened `apps/client/scripts/check-env-contract.mjs` to fail on high-risk unused template keys (not only missing keys), added env-definition key detection (`name: "KEY"`) to avoid false positives for centralized env schemas, and narrowed high-risk NATS matching to credential-like keys.
 
-### Fixed
+### Fixed (General)
+
+- **Tailwind utility warning cleanup in shared chart UI (2026-04-08):** normalized the tooltip minimum-width class in `apps/admin/src/components/ui/chart.tsx` from `min-w-[8rem]` to `min-w-32` to remove arbitrary-value utility warnings without changing rendered layout.
+- **Tailwind warning cleanup in chat and professional forms (2026-04-08):** resolved Tailwind lint and utility-class warnings in `components/chat/ConversationsList.tsx`, `components/forms/MultiPropertyForm.tsx`, `components/forms/MultiStoreForm.tsx`, and `components/forms/ProfessionalForm.tsx` without changing runtime behavior.
+- **Static-analysis remediation sweep (2026-04-08):** resolved analyzer-reported null-safety, constant-condition, and identical-branch issues across client and companion admin surfaces touched by this pass, including professional/profile pages, leads adapters, chart and form utilities, multi-form themes, chat conversation rendering, and Clerk verification-flag typing; this pass also tightened type narrowing and removed redundant guard branches without changing runtime behavior.
+- **PropertyForm snapshot normalization no-op fix (2026-04-08):** fixed `__tests__/components/forms/PropertyForm.test.tsx` snapshot markup normalization by replacing dynamic `radix-*` IDs with `radix-__ID__` instead of a self-replacement no-op.
+- **Onboarding compliance and completion semantics (2026-04-04):** aligned user-profile consent and completion flows to transaction-safe and explicit `Result<T, DomainError>` semantics so onboarding/profile-complete callers no longer depend on partial-success branching or implicit completion fallback behavior.
+- **Canonical env-boundary test alignment:** updated middleware resolver regression coverage to override `env.services.internalApiSecret` directly instead of mutating `process.env.INTERNAL_API_SECRET` at runtime, matching the canonical env singleton behavior in resolver modules.
+
+### Fixed (Staff-level onboarding and user-profile)
 
 - **Staff-level onboarding and user-profile fixes:** GDPR consent records now create one `ConsentRecord` per changed type (MARKETING_EMAIL, MARKETING_SMS, ANALYTICS_COOKIES) in `service.ts`, `profile-complete.ts`, and `onboarding.ts` — previously a ternary picked a single type and dropped the others. Clerk metadata update now runs before `IdempotencyService.complete()` in all onboarding routes so retries re-attempt the Clerk update. Replaced duplicated `ClerkMetadataClient` type cast in `actions/onboarding.ts` with shared `updateClerkOnboardingMetadata` from `clerk-metadata.ts`. `skipClientOnboarding` no longer hardcodes county (uses null). `skipProfessionalOnboarding` uses `companyName: ""` instead of fabricated strings. Document materialization runs before `prisma.$transaction` in `completeOnboarding` and `completeProfessionalOnboarding`. `completeOnboarding` now guards against already-onboarded users (returns conflict). Property fields use `z.nativeEnum(PropertyType|Category|Status)` and removed `as never` casts. `syncUserProfileCompletionStatus` runs after transaction commit. Upload route uses `isOk()` and correct Result field access instead of fragile discriminant union.
 
 ### Changed
+
+- **Turbo workspace alignment and install-warning cleanup (2026-04-08):** aligned `turbo` to `^2.9.5` across root and client package manifests, and removed unused direct `ts-node` dependencies from `apps/client` and `packages/db` to eliminate recurring pnpm Windows bin-link ENOENT warnings during install.
+- **Dependency and peer-alignment cleanup (2026-04-08):** upgraded `react-day-picker` to `^9.14.0` in admin and client to remove React/date-fns peer-range mismatches under React 19 and current `date-fns`.
+- **Cypress component test dependency cleanup (2026-04-08):** removed deprecated `@cypress/react18` from `apps/client` and kept `@cypress/react` as the active component-testing adapter.
+- **Clerk middleware modernization (2026-04-08):** upgraded `@clerk/nextjs` (admin and payment-service) and `@clerk/express` (project-service), then replaced `@hono/clerk-auth` in payment-service with a local Clerk backend adapter (`src/lib/clerkAuth.ts`) built on `@clerk/backend` to eliminate deprecated Clerk transitive dependency paths.
+- **CI action/runtime alignment (2026-04-08):** updated `.github/workflows/ci.yml` to use `actions/github-script@v8` (Node 24 runtime) and removed redundant pnpm version pinning from `pnpm/action-setup`, relying on root `packageManager` (`pnpm@10.29.2`) as the single pnpm version source.
+- **ADR-007 admin-path migration (phase 2 baseline closure):** completed the final type-baseline cleanup pass in admin actions by replacing string-based lead filter typing with canonical enum-safe contracts and removing suppression-based compilation masking from the leads action surface.
+- **ADR-007 ClientType onboarding compliance routing (2026-04-04):** domain onboarding now treats `ClientType` as a profile classification (not identity), derives a dedicated `government_entity` onboarding branch for `GOVERNMENT_ENTITY` clients, and persists explicit routing metadata for downstream project-creation and payment-initiation compliance checks in profile preferences.
+- **Onboarding observability contract completion (2026-04-04):** middleware onboarding resolver now emits structured outcomes for internal-secret-missing fallback, non-OK internal API fallback, internal API errors, and successful internal API resolution; onboarding route suites now assert the terminal structured logging contract for success and unauthorized or bad-request terminal outcomes across all onboarding endpoint families.
+- **ADR-007 client-first phase implemented:** added typed onboarding lifecycle statuses (`ONBOARDING`, `PENDING_VERIFICATION`) to the Prisma schema surface, added a dedicated professional pending-verification route (`/professional-portal/pending-verification`) with middleware loop-safe redirect orchestration, propagated status-aware onboarding resolution through internal status and middleware helpers, and normalized client role handling toward the canonical `ADMIN + AdminRole` model (including legacy `SUPPORT` normalization at trust boundaries).
+- **ADR-007 migration scaffold added:** introduced `packages/db/prisma/migrations/20260402120000_adr007_role_model_phase1/migration.sql` to provision `AdminProfile` for migrated support users, normalize `SYSTEM_ADMIN` to `SUPER_ADMIN`, and contract role enums as part of the phased rollout.
+- **ADR-007 next phase scoped:** admin-path migration is intentionally deferred to the next phase and will cover remaining admin route/action/UI role gates and policy coverage alignment (`__tests__/policy/**`) for the consolidated admin capability model.
+- **ADR-007 admin-path migration (phase 2 start):** opened first concrete admin role-gate edits by switching initial admin action and middleware super-role gates from `SYSTEM_ADMIN | SUPER_ADMIN` to `SUPER_ADMIN`, including `apps/admin/src/actions/admin/shared.ts`, `apps/admin/src/actions/admin/users.ts`, verification route families under `apps/admin/src/actions/admin/**`, and `apps/admin/src/lib/api/api-middleware.ts`.
+- **ADR-007 admin-path migration (phase 2 sweep):** completed non-dashboard admin reference sweep and confirmed no remaining `SYSTEM_ADMIN` usages under `apps/admin/src/**`, `apps/admin/__tests__/**`, or `apps/admin/scripts/**` after the first-wave gate updates.
+- **ADR-007 admin-path migration (phase 2 validation):** added and refreshed admin capability policy-matrix assertions in `apps/admin/src/lib/security/__tests__/authorization-policy.test.ts` to lock consolidated role expectations (`admin` vs `verification_admin`) across route and action policy maps.
+- **ADR-007 admin-path migration (phase 2 typecheck cleanup):** resolved enum-casing and strict typing blockers in admin verification tests, scripts, analytics action enums/aggregates, dashboard property detail callbacks, verification tabs queue props, and notification mailer integration; `pnpm run admin:check-types` now passes.
+
+- **Upload observability key normalization (L-1):** normalized upload adapter `operationName` fields to snake_case for stable query joins. Renames: `create-upload-asset` -> `create_upload_asset`, `get-upload-asset-metadata` -> `get_upload_asset_metadata`, `delete-upload-asset` -> `delete_upload_asset`, `onboarding-upload` -> `onboarding_upload`. Coordinated rollout note: update dashboard and log-query filters keyed by the legacy names in the same deployment window.
+- **AuthContext minimization (L-2):** removed `userEmail` from shared API auth context in `app/lib/api/api-middleware.ts`; authenticated route context now carries `clerkId`, `dbUserId`, `userRole`, and optional `adminRole` only, reducing unnecessary PII propagation at adapter boundaries.
+- **Uploads service startup and testability hardening (L-3):** replaced module-load storage provider initialization in `app/lib/domains/uploads/service.ts` with lazy per-call resolution and added `setUploadServiceStorageProviderForTests(...)` override support to keep startup behavior predictable and improve isolated domain testing.
 
 - **Environment contract enforcement and template alignment (Phase 4/6):** expanded `.env.example` to include runtime-consumed env keys, added `apps/client/scripts/check-env-contract.mjs` to detect drift between `process.env` usage and template declarations, wired script entries in `apps/client/package.json` and root `package.json`, and added an env-contract check step to `.github/workflows/ci.yml`.
 - **Deployment/local env hygiene:** updated `apps/client/.gitignore` to ignore `.env.vercel` while preserving `.env.vercel.example`, refreshed `apps/client/.env.local.example` local guidance defaults, sanitized `apps/client/.env.vercel`, and added `apps/client/.env.vercel.example` as the committed deployment template.
 - **Phase 5 central env access plan clarified:** documented canonical env boundary usage under `app/lib/infrastructure/env.ts`, prioritized high-risk direct env-read migration targets (`api-middleware`, `internal-secret`, `infrastructure/storage`, `jobs/asset-cleanup`), and captured validation-group expansion scope in `docs/ENV-FILES-REMEDIATION-WALKTHROUGH.md`.
 - **High-risk template cleanup:** removed stale high-risk unused placeholders from `.env.example` (`SMTP_PASSWORD`, `AFRICASTALKING_API_KEY`) to align with strict checker policy.
 
-- **Onboarding asset migration refinement:** Completed staff-level audit of `app/api/ONBOARDING_ASSET_MIGRATION.md`; removed `fileUrl` from `MaterializedUpload` (assetId-only); stopped writing `fileUrl` when creating `ProfessionalDocument` from staged uploads in `user-profile/onboarding.ts` and `professional-settings/service.ts`; added `uploadRepository.markExpiredStagedUploads()` for TTL cleanup; updated onboarding README with correct `uploadId`/`previewUrl` response format and documents payload; refinement checklist in migration doc.
-- **Onboarding upload cleanup job:** Added BullMQ job `cleanup-expired-staged-uploads` in `app/jobs/onboarding-upload-cleanup.ts` that calls `markExpiredStagedUploads()`; scheduled daily at 3 AM (configurable via `ONBOARDING_UPLOAD_CLEANUP_CRON`); integrated into central job orchestrator with schedule, worker, shutdown, status, manual trigger, and health check.
+- **Onboarding asset migration refinement:** Completed staff-level audit of `app/api/ONBOARDING_ASSET_MIGRATION.md`; removed `fileUrl` from `MaterializedUpload` (assetId-only); stopped writing `fileUrl` when creating `ProfessionalDocument` from staged uploads in `user-profile/onboarding.ts` and `professional-settings/service.ts`; aligned TTL cleanup to `uploadService.cleanupExpiredStagedUploads()` with repository-level `markStagedUploadsExpiredByIds()` status updates; updated onboarding README with correct `uploadId`/`previewUrl` response format and documents payload; refinement checklist in migration doc.
+- **Onboarding upload cleanup job:** Added BullMQ job `cleanup-expired-staged-uploads` in `app/jobs/onboarding-upload-cleanup.ts` that calls `uploadService.cleanupExpiredStagedUploads()`; scheduled daily at 3 AM (configurable via `ONBOARDING_UPLOAD_CLEANUP_CRON`); integrated into central job orchestrator with schedule, worker, shutdown, status, manual trigger, and health check.
 - **Onboarding upload storage cleanup:** Extended cleanup job to delete storage blobs for expired staged uploads: added `uploadRepository.findExpiredStagedUploadsForCleanup()` and `markStagedUploadsExpiredByIds()`; added `uploadService.cleanupExpiredStagedUploads()` (finds expired, deletes via storage provider, marks EXPIRED); job now returns `deletedFromStorage` and `failedDeletions`; tests in `__tests__/jobs/onboarding-upload-cleanup.test.ts` and `__tests__/lib/uploads/service.test.ts`.
 - **Properties settings refinement:** Extracted `PropertyListCard` and `PropertyDocumentsSection` from `properties-settings-page-client.tsx`; updated `MyPropertyListing` to use ISO strings for `createdAt`/`updatedAt` (hydration-safe); wired extracted components into the properties and verification tabs; staff audit in `docs/AUDIT-PROPERTIES.md`.
 - **Documents carry-forward refinement:** Applied staff-level carry-forward rules to the documents slice: added `Result<T, DocumentDomainError>` and `DocumentActor` contracts; refactored service to use `ok`/`err` helpers and actor-based authorization; updated routes to pass full actor context and map domain Result to HTTP (403/404); added explicit DTOs (`DocumentListItem`, `DocumentDetail`); added domain and route adapter tests (`documents.service.test.ts`, `documents.route.test.ts`).
@@ -162,7 +1520,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Added canonical idea-books and seller-insights seams under `app/lib/domains/idea-books/` and `app/lib/domains/seller-insights/`, then migrated the idea-books route family and professional seller read-model adapters (`inventory/alerts`, `orders`, `products/top`) to thin domain-backed adapters.
 - Hardened idea-books route adapter tests for isolation by switching validation-failure schema overrides to one-shot mock behavior, preventing cross-test contamination in route-level error-mapping assertions.
 
-### Docs
+### Docs (Historical)
 
 - Updated `docs/PROGRESS-SUMMARY.md` and `docs/CHANGELOG.md` with recently migrated vertical slices (Reviews, Search, Documents, Licenses, Certificates, Client Dashboard), pending refinement (lib/services cleanup, idea-books comment), and tests implementation status (domain/route tests pending for migrated slices).
 - Added environment hardening documentation artifacts: `docs/ENV-FILES-AUDIT.md` (staff-level audit findings and recommendations) and `docs/ENV-FILES-REMEDIATION-WALKTHROUGH.md` (phased remediation and rollout checks).
@@ -172,7 +1530,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Added focused adapter regression coverage in `__tests__/api/notifications/route.test.ts`, `__tests__/api/notifications/notification-id.route.test.ts`, and `__tests__/api/professional-portal/seller-insights-adapters.route.test.ts` for route-to-domain delegation and status-code mappings.
 - Added focused idea-books adapter regression coverage across the full route family in `__tests__/api/idea-books/route.test.ts`, `__tests__/api/idea-books/book-id.route.test.ts`, `__tests__/api/idea-books/attachments.route.test.ts`, and `__tests__/api/idea-books/attachment-id.route.test.ts`.
 
-### Docs
+### Docs (Historical Architecture Review Checklist)
 
 - Added a staff-level architecture review checklist to `.agent/API-TO-FRONTEND-ARCHITECTURE.md` for data flow, DTO serialization, bundle review, hydration safety, and route-level resilience checks.
 - Added a migrated-slice refinement checklist to `.agent/API-TO-FRONTEND-ARCHITECTURE.md` so completed slices are still reviewed for server-owned DTO mapping, dynamic split opportunities, and App Router error/loading boundaries.
@@ -382,7 +1740,7 @@ Scope-impact criteria used for ranking:
   - `resend`
 - Removed fixed-version workspace declarations from `devDependencies` in favor of `workspace:*`.
 
-### Security
+### Security (Historical)
 
 - Internal endpoints now fail closed if `INTERNAL_API_SECRET` is missing:
   - `app/api/internal/user-status/route.ts`
@@ -428,3 +1786,11 @@ Scope-impact criteria used for ranking:
 
 - ...
 ```
+
+## Format Note (Entries from 2026-04-11 forward)
+
+New entries use the semantic category format with an explicit `**Files changed:**`
+and `**Verification:**` block. Existing checkpoint entries are preserved as-is.
+
+Categories: `Added` - `Changed` - `Deprecated` - `Removed` - `Fixed` -
+`Security` - `Docs`

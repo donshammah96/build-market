@@ -114,6 +114,19 @@ describe("CreatePropertySchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("accepts attachment without title when an asset reference is present", () => {
+    const result = CreatePropertySchema.safeParse({
+      ...validInput,
+      attachments: [
+        {
+          type: "BROCHURE",
+          assetId: "550e8400-e29b-41d4-a716-446655440012",
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("rejects document with invalid date range", () => {
     const result = CreatePropertySchema.safeParse({
       ...validInput,
@@ -284,7 +297,7 @@ describe("generatePropertySlug", () => {
 
   it("handles special characters", () => {
     expect(generatePropertySlug("Luxury Villa / Karen (Phase 2)")).toBe(
-      "luxury-villa--karen-phase-2",
+      "luxury-villa-karen-phase-2",
     );
   });
 

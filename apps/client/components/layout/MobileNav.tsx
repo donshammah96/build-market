@@ -59,7 +59,7 @@ export const MobileNav: React.FC = () => {
   return (
     <div ref={menuRef}>
       <button
-        className="md:hidden p-2 focus:outline-none focus:ring-2 focus:ring-black rounded"
+        className="md:hidden min-h-11 min-w-11 p-2 rounded text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2"
         onClick={toggleMenu}
         aria-label="Toggle mobile menu"
         aria-expanded={isOpen}
@@ -67,14 +67,14 @@ export const MobileNav: React.FC = () => {
         <Bars3Icon className="w-6 h-6" />
       </button>
       <nav
-        className={`fixed inset-0 z-50 bg-white flex flex-col items-center justify-center gap-6 md:hidden transition-transform duration-300 ease-in-out ${
+        className={`fixed inset-0 z-50 bg-background flex flex-col items-center justify-center gap-6 md:hidden transition-transform duration-300 ease-in-out ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         role="navigation"
         aria-label="Mobile navigation"
       >
         <button
-          className="absolute top-4 right-4 p-2 focus:outline-none focus:ring-2 focus:ring-black rounded"
+          className="absolute top-4 right-4 min-h-11 min-w-11 p-2 rounded text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2"
           onClick={closeMenu}
           aria-label="Close mobile menu"
         >
@@ -82,21 +82,21 @@ export const MobileNav: React.FC = () => {
         </button>
         <Link
           href={ROUTES.ideaBooks}
-          className="text-black text-2xl font-medium font-['Inter']"
+          className="min-h-11 py-2 text-2xl font-medium text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
           onClick={closeMenu}
         >
           Idea Books
         </Link>
         <Link
           href={ROUTES.findProfessional}
-          className="text-black text-2xl font-medium font-['Inter']"
+          className="min-h-11 py-2 text-2xl font-medium text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
           onClick={closeMenu}
         >
           Find Professionals
         </Link>
         <Link
           href={ROUTES.speakWithAdvisor}
-          className="text-black text-2xl font-medium font-['Inter']"
+          className="min-h-11 py-2 text-2xl font-medium text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
           onClick={closeMenu}
         >
           Guidance

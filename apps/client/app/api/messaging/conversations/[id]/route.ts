@@ -16,19 +16,37 @@ import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import {
   UpdateThreadSchema,
   MESSAGING_CONFIG,
+  type MessagingActor,
   messagingService,
-} from "@build/messaging-server";
-import { extractExpectedVersion } from "@/app/lib/api/request-utils";
+} from "@/app/lib/domains/messaging";
+import {
+  extractExpectedVersion,
+  extractExpectedVersionFromIfMatch,
+} from "@/app/lib/api/request-utils";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
 type ThreadParams = { id: string };
+
+function toMessagingActor(context: {
+  clerkId: string;
+  dbUserId: string;
+  userRole: unknown;
+}): MessagingActor {
+  return {
+    clerkId: context.clerkId,
+    userId: context.dbUserId,
+    role: normalizeRole(String(context.userRole)) ?? null,
+  };
+}
 
 /**
  * GET /api/messaging/conversations/[id]
  */
 export const GET = withAuth<ThreadParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
 
     if (!params?.id || !isValidId(params.id)) {
       return apiError("Invalid conversation ID", HttpStatus.BAD_REQUEST);
@@ -46,7 +64,7 @@ export const GET = withAuth<ThreadParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => messagingService.getConversation(dbUserId, threadId),
+      () => messagingService.getConversation(actor, threadId),
       { operationName: "get_thread" },
     );
 
@@ -63,7 +81,7 @@ export const GET = withAuth<ThreadParams>(
       const serviceResult = result.data;
       if (!serviceResult || !serviceResult.ok) {
         return apiError(
-          serviceResult?.message ?? "Invalid request",
+          "Invalid request",
           serviceResult?.status ?? HttpStatus.BAD_REQUEST,
         );
       }
@@ -76,8 +94,9 @@ export const GET = withAuth<ThreadParams>(
  * PATCH /api/messaging/conversations/[id]
  */
 export const PATCH = withAuth<ThreadParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
 
     if (!params?.id || !isValidId(params.id))
       return apiError("Invalid conversation ID", HttpStatus.BAD_REQUEST);
@@ -108,7 +127,7 @@ export const PATCH = withAuth<ThreadParams>(
 
     const idempotencyKey =
       req.headers.get("Idempotency-Key") ||
-      IdempotencyService.generateKey(dbUserId, "PATCH", {
+      IdempotencyService.generateKey(actor.userId, "PATCH", {
         domain: "messaging-thread",
         threadId,
         version: expectedVersion,
@@ -118,7 +137,7 @@ export const PATCH = withAuth<ThreadParams>(
     const idempotencyCheck = await IdempotencyService.checkOrCreate(
       idempotencyKey,
       "messaging",
-      dbUserId,
+      actor.userId,
       "PATCH",
     );
     if (!idempotencyCheck)
@@ -144,7 +163,7 @@ export const PATCH = withAuth<ThreadParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => messagingService.updateConversation(dbUserId, threadId, data),
+      () => messagingService.updateConversation(actor, threadId, data),
       { operationName: "update_thread" },
     );
 
@@ -163,13 +182,14 @@ export const PATCH = withAuth<ThreadParams>(
       if (!serviceResult || !serviceResult.ok) {
         await IdempotencyService.fail(idempotencyKey).catch(() => {});
         return apiError(
-          serviceResult?.message ?? "Invalid request",
+          "Invalid request",
           serviceResult?.status ?? HttpStatus.BAD_REQUEST,
         );
       }
-      await IdempotencyService.complete(idempotencyKey, serviceResult.data).catch(
-        () => {},
-      );
+      await IdempotencyService.complete(
+        idempotencyKey,
+        serviceResult.data,
+      ).catch(() => {});
       return apiSuccess(serviceResult.data, HttpStatus.OK);
     }
   },
@@ -179,26 +199,27 @@ export const PATCH = withAuth<ThreadParams>(
  * DELETE /api/messaging/conversations/[id]
  */
 export const DELETE = withAuth<ThreadParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
 
     if (!params?.id || !isValidId(params.id))
       return apiError("Invalid conversation ID", HttpStatus.BAD_REQUEST);
     const threadId = params.id;
 
-    // Safe parse
-    let body: unknown = null;
-    try {
-      body = await req.json().catch(() => null);
-    } catch {
-      // Ignore JSON parse errors and treat as no body
+    const ifMatch = req.headers.get("If-Match");
+    if (!ifMatch) {
+      return apiError(
+        "Missing If-Match header. Provide entity version in If-Match.",
+        HttpStatus.PRECONDITION_REQUIRED,
+      );
     }
 
-    const expectedVersion = extractExpectedVersion(req, body);
+    const expectedVersion = extractExpectedVersionFromIfMatch(req);
     if (expectedVersion === null) {
       return apiError(
-        "Missing or invalid version. Provide If-Match header or version in body.",
-        HttpStatus.PRECONDITION_REQUIRED,
+        "Invalid If-Match header. Provide a numeric version.",
+        HttpStatus.BAD_REQUEST,
       );
     }
 
@@ -213,7 +234,7 @@ export const DELETE = withAuth<ThreadParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => messagingService.deleteConversation(dbUserId, threadId),
+      () => messagingService.deleteConversation(actor, threadId),
       { operationName: "delete_thread" },
     );
 
@@ -230,7 +251,7 @@ export const DELETE = withAuth<ThreadParams>(
       const serviceResult = result.data;
       if (!serviceResult || !serviceResult.ok) {
         return apiError(
-          serviceResult?.message ?? "Invalid request",
+          "Invalid request",
           serviceResult?.status ?? HttpStatus.BAD_REQUEST,
         );
       }

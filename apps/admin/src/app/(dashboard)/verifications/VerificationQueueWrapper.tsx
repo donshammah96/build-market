@@ -21,12 +21,31 @@ import type {
 interface VerificationQueueWrapperProps {
   activeTab: "all" | "professional" | "store" | "property";
   status: string;
+  canVerify: boolean;
   queueData: {
     items: VerificationQueueItem[];
     pagination: PaginationMeta;
     filters: VerificationFilterInput;
   };
 }
+
+const triagePresets = [
+  {
+    label: "Pending Professionals",
+    tab: "professional",
+    status: "PENDING",
+  },
+  {
+    label: "Needs Correction",
+    tab: "all",
+    status: "NEEDS_CORRECTION",
+  },
+  {
+    label: "Rejected Follow-ups",
+    tab: "all",
+    status: "REJECTED",
+  },
+] as const;
 
 const tabs = [
   { value: "all", label: "All", icon: Layers },
@@ -46,6 +65,7 @@ const statusOptions = [
 export function VerificationQueueWrapper({
   activeTab,
   status,
+  canVerify,
   queueData,
 }: VerificationQueueWrapperProps) {
   const router = useRouter();
@@ -65,6 +85,17 @@ export function VerificationQueueWrapper({
     router.push(`/verifications?${params.toString()}`);
   };
 
+  const handlePreset = (preset: {
+    tab: "all" | "professional" | "store" | "property";
+    status: string;
+  }) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", preset.tab);
+    params.set("status", preset.status);
+    params.delete("page");
+    router.push(`/verifications?${params.toString()}`);
+  };
+
   // Count items by type for badges
   const countByType = queueData.items.reduce<Record<string, number>>(
     (acc, item) => {
@@ -72,11 +103,39 @@ export function VerificationQueueWrapper({
       acc["all"] = (acc["all"] ?? 0) + 1;
       return acc;
     },
-    { all: 0, professional: 0, store: 0, property: 0 }
+    { all: 0, professional: 0, store: 0, property: 0 },
   );
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {triagePresets.map((preset) => {
+          const isActive = activeTab === preset.tab && status === preset.status;
+          return (
+            <button
+              key={`${preset.tab}-${preset.status}`}
+              type="button"
+              onClick={() => handlePreset(preset)}
+              className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                isActive
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+              }`}
+            >
+              {preset.label}
+            </button>
+          );
+        })}
+        {!canVerify && (
+          <Badge
+            variant="outline"
+            className="ml-auto text-amber-700 border-amber-300"
+          >
+            Read-only mode
+          </Badge>
+        )}
+      </div>
+
       {/* Filters Row */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
@@ -104,7 +163,7 @@ export function VerificationQueueWrapper({
         </Tabs>
 
         <Select value={status} onValueChange={handleStatusChange}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-45">
             <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
           <SelectContent>
@@ -122,6 +181,7 @@ export function VerificationQueueWrapper({
         items={queueData.items}
         pagination={queueData.pagination}
         filters={queueData.filters}
+        canVerify={canVerify}
       />
     </div>
   );

@@ -3,11 +3,16 @@ import Link from "next/link";
 import { ROUTES } from "@/lib/links";
 import { MobileNav } from "./MobileNav";
 import Image from "next/image";
-import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
+import { SignInButton, useUser } from "@clerk/nextjs";
 import ProfileButton from "../shared/ProfileButton";
 export const Header = () => {
+  const { isSignedIn } = useUser();
+
+  const navLinkClass =
+    "min-h-11 px-2 py-2 text-md font-medium text-foreground leading-loose rounded-sm hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2";
+
   return (
-    <header className="border-b">
+    <header className="border-b border-border bg-background">
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center">
@@ -28,31 +33,21 @@ export const Header = () => {
               role="navigation"
               aria-label="Main navigation"
             >
-              <Link
-                href={ROUTES.ideaBooks}
-                className="text-black text-md font-medium font-['Inter'] leading-loose"
-              >
+              <Link href={ROUTES.ideaBooks} className={navLinkClass}>
                 Idea Books
               </Link>
-              <Link
-                href={ROUTES.findProfessional}
-                className="text-black text-md font-medium font-['Inter'] leading-loose"
-              >
+              <Link href={ROUTES.findProfessional} className={navLinkClass}>
                 Find Professionals
               </Link>
-              <Link
-                href={ROUTES.speakWithAdvisor}
-                className="text-black text-md font-medium font-['Inter'] leading-loose"
-              >
+              <Link href={ROUTES.speakWithAdvisor} className={navLinkClass}>
                 Guidance
               </Link>
               <div className="flex items-center gap-6">
-                <SignedOut>
+                {!isSignedIn ? (
                   <SignInButton forceRedirectUrl={ROUTES.authCallback} />
-                </SignedOut>
-                <SignedIn>
+                ) : (
                   <ProfileButton />
-                </SignedIn>
+                )}
               </div>
             </nav>
           </div>

@@ -6,20 +6,30 @@ User onboarding endpoints for Build Market. Handles initial account setup for bo
 
 All onboarding endpoints use **Clerk authentication directly** (not `withAuth` middleware) because the database user may not exist yet at the time of the request. The endpoints create the user record if needed via `upsert`.
 
-After successful onboarding, Clerk `publicMetadata` is updated with `role` and `isOnboarded` so that middleware can make routing decisions without a database round-trip. The database remains the source of truth — Clerk metadata failures are logged but do not fail the request.
+After successful onboarding, Clerk `publicMetadata` is finalized with `role` and `isOnboarded` before the response is completed so middleware can make routing decisions without a database round-trip. If that Clerk finalization cannot be confirmed, the request now fails closed with a retryable `503` and the idempotency record stays retryable. After a successful transition, the client forces a Clerk claim refresh before redirecting to a role-gated dashboard; `/api/internal/user-status` remains a middleware compatibility fallback only.
+
+## Recent Changes (April 2026)
+
+1. Actor-scoped throttling is now enforced across Clerk-auth onboarding mutation routes using `getActorRateLimitIdentifier(clerkId, namespace)`.
+2. Adapter error mapping is now static-safe for onboarding route handlers, preventing domain/provider message passthrough in client-facing `apiError(...)` responses.
+3. Idempotency completion is fail-safe: if `IdempotencyService.complete(...)` fails after a successful domain mutation, the adapter now marks the key failed, logs the issue, and still returns success.
+4. Internal onboarding remediation routes are now available under `/api/internal/onboarding-remediation/*` for drift reconciliation and stuck-key recovery.
+5. Onboarding server actions are converged on shared orchestration logic so submit/skip flows use one canonical transition contract.
 
 ### Cross-Cutting Concerns
 
-| Concern         | Implementation                                                         |
-| --------------- | ---------------------------------------------------------------------- |
-| Authentication  | Clerk `auth()` / `withAuth` (complete endpoint only)                   |
-| Rate Limiting   | `checkRateLimit` with `RateLimits.AUTH` or `RateLimits.WRITE`          |
-| Idempotency     | `IdempotencyService` (SHA-256 key dedup) on all mutation endpoints     |
-| Resilience      | `getResilientExecutor().execute()` with circuit breaker                |
-| Body Size       | `checkBodySize` guard (1-2 MB for JSON, 10 MB per file for uploads)    |
-| Validation      | Zod schemas (`OnboardingSchema`, `OnboardingCompleteSchema`)           |
-| Response Format | `apiSuccess()` / `apiError()` with correlation IDs                     |
-| GDPR            | Individual `ConsentRecord` per consent type change (complete endpoint) |
+| Concern           | Implementation                                                                                       |
+| ----------------- | ---------------------------------------------------------------------------------------------------- |
+| Authentication    | Clerk `auth()` direct on onboarding mutations; `withAuth` on `/api/onboarding/professional/complete` |
+| Rate Limiting     | `checkRateLimit` with actor-scoped key helper for Clerk-auth routes; `AUTH` / `WRITE` policy tiers   |
+| Idempotency       | `IdempotencyService` dedup on all mutation endpoints, plus non-throw completion fail-safe behavior   |
+| Resilience        | `getResilientExecutor().execute()` with circuit breaker                                              |
+| Body Size         | `checkBodySize` guard (1-2 MB for JSON, 10 MB per file for uploads)                                  |
+| Validation        | Zod schemas (`OnboardingSchema`, `OnboardingCompleteSchema`)                                         |
+| Session Freshness | Clerk metadata finalizer before response completion, plus client-side claim refresh barrier          |
+| Error Safety      | Static-safe adapter error maps (no raw domain/provider message passthrough)                          |
+| Response Format   | `apiSuccess()` / `apiError()` with correlation metadata                                              |
+| GDPR              | Individual `ConsentRecord` per consent type change (complete endpoint)                               |
 
 ## Endpoints
 
@@ -28,9 +38,10 @@ After successful onboarding, Clerk `publicMetadata` is updated with `role` and `
 Complete user onboarding by setting role and creating a profile. This is the primary onboarding endpoint used by the onboarding wizard.
 
 - **Auth**: Clerk (no DB user required)
-- **Rate Limit**: `AUTH` tier
+- **Rate Limit**: `AUTH` tier with actor-scoped key namespace `onboarding-submit`
 - **Idempotency**: Yes (keyed on `clerkId` + role)
 - **Validation**: `OnboardingSchema` (discriminated union from `@build/types`)
+- **Adapter error policy**: static-safe message mapping for domain failures
 
 **Roles handled:**
 
@@ -67,13 +78,15 @@ Complete user onboarding by setting role and creating a profile. This is the pri
   },
   "documents": [
     {
-      "url": "https://...",
-      "type": "EDUCATION_CERT",
+      "uploadId": "uuid-from-upload-endpoint",
+      "previewUrl": "/uploads/...",
+      "category": "EDUCATION_CERT",
       "title": "Degree Certificate"
     },
     {
-      "url": "https://...",
-      "type": "ID_OR_PASSPORT",
+      "uploadId": "uuid-from-upload-endpoint",
+      "previewUrl": "/uploads/...",
+      "category": "ID_OR_PASSPORT",
       "title": "National ID"
     }
   ]
@@ -100,7 +113,7 @@ Complete user onboarding by setting role and creating a profile. This is the pri
 Skip onboarding for homeowners. Creates a minimal `CLIENT` user and an empty `ClientProfile` with defaults. The user is redirected to the dashboard and can complete their profile later.
 
 - **Auth**: Clerk (no DB user required)
-- **Rate Limit**: `AUTH` tier
+- **Rate Limit**: `AUTH` tier with actor-scoped key namespace `onboarding-skip-client`
 - **Idempotency**: Yes (keyed on `clerkId`)
 - **Body**: None required
 
@@ -119,7 +132,7 @@ Skip onboarding for homeowners. Creates a minimal `CLIENT` user and an empty `Cl
     "role": "CLIENT",
     "isProfileComplete": false,
     "skipped": true,
-    "redirectTo": "/dashboard",
+    "redirectTo": "/homeowner-dashboard",
     "message": "Onboarding skipped. You can complete your profile from the dashboard."
   }
 }
@@ -132,7 +145,7 @@ Skip onboarding for homeowners. Creates a minimal `CLIENT` user and an empty `Cl
 Skip onboarding for professionals. Creates a minimal `PROFESSIONAL` user and a `ProfessionalProfile` with `profession: OTHER` and a placeholder company name. The user is redirected to the professional portal dashboard.
 
 - **Auth**: Clerk (no DB user required)
-- **Rate Limit**: `AUTH` tier
+- **Rate Limit**: `AUTH` tier with actor-scoped key namespace `onboarding-skip-professional`
 - **Idempotency**: Yes (keyed on `clerkId`)
 - **Body**: None required
 
@@ -276,18 +289,35 @@ Secure file upload endpoint for the onboarding flow. Accepts images and PDFs for
   "data": {
     "uploaded": {
       "certificates": [
-        { "originalName": "cert.pdf", "url": "/uploads/1707123456-uuid.pdf" }
+        {
+          "uploadId": "uuid",
+          "previewUrl": "/uploads/...",
+          "originalName": "cert.pdf"
+        }
       ],
       "idDocuments": [
         {
-          "originalName": "id-front.jpg",
-          "url": "/uploads/1707123457-uuid.jpg"
+          "uploadId": "uuid",
+          "previewUrl": "/uploads/...",
+          "originalName": "id-front.jpg"
         }
       ]
     }
   }
 }
 ```
+
+Use `uploadId` when submitting documents to the onboarding completion endpoint. `previewUrl` is for UI preview only.
+
+## Related Internal Remediation Endpoints
+
+Operational remediation flows for onboarding state are available under `/api/internal/onboarding-remediation/*`:
+
+- `POST /api/internal/onboarding-remediation/reconcile`
+- `POST /api/internal/onboarding-remediation/clerk-sync`
+- `POST /api/internal/onboarding-remediation/idempotency-reconcile`
+
+See `app/api/internal/README.md` for request/response contracts and guardrails.
 
 ## Error Responses
 
@@ -296,10 +326,8 @@ All endpoints return errors in the standard format:
 ```json
 {
   "success": false,
-  "error": {
-    "message": "Human-readable error message",
-    "details": []
-  }
+  "error": "Human-readable error message",
+  "details": []
 }
 ```
 
@@ -312,6 +340,7 @@ All endpoints return errors in the standard format:
 | `409`  | Onboarding already completed, or request is being processed (idempotency) |
 | `413`  | Request body too large                                                    |
 | `429`  | Rate limit exceeded                                                       |
+| `503`  | Clerk transition finalization could not be confirmed; retry the mutation  |
 | `500`  | Internal server error                                                     |
 
 ## Database Models

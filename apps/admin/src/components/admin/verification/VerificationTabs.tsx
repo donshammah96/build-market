@@ -21,6 +21,7 @@ import type {
 interface VerificationTabsProps {
   activeTab: "all" | "professional" | "store" | "property";
   status: string;
+  canVerify: boolean;
   queueData: {
     items: VerificationQueueItem[];
     pagination: PaginationMeta;
@@ -46,6 +47,7 @@ const statusOptions = [
 export function VerificationTabs({
   activeTab,
   status,
+  canVerify,
   queueData,
 }: VerificationTabsProps) {
   const router = useRouter();
@@ -72,7 +74,7 @@ export function VerificationTabs({
       acc["all"] = (acc["all"] ?? 0) + 1;
       return acc;
     },
-    { all: 0, professional: 0, store: 0, property: 0 }
+    { all: 0, professional: 0, store: 0, property: 0 },
   );
 
   return (
@@ -122,6 +124,7 @@ export function VerificationTabs({
         items={queueData.items}
         pagination={queueData.pagination}
         filters={queueData.filters}
+        canVerify={canVerify}
       />
     </div>
   );

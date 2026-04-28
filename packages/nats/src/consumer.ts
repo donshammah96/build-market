@@ -1,6 +1,5 @@
 import {
   StringCodec,
-  JetStreamClient,
   JsMsg,
   ConsumerConfig,
   DeliverPolicy,
@@ -13,11 +12,19 @@ import type {
   NatsClient,
   NatsConfig,
   TopicConfig,
-  ConsumerOptions,
   MessagePayload,
 } from "./types";
 
 const sc = StringCodec();
+
+function isTimeoutError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const maybeError = error as { code?: string; message?: string };
+  return maybeError.code === "408" || maybeError.message === "TIMEOUT";
+}
 
 /**
  * JetStream Consumer for subscribing to messages
@@ -107,9 +114,14 @@ export class JetStreamConsumer {
    */
   private buildConsumerConfig(topic: TopicConfig): Partial<ConsumerConfig> {
     const opts = topic.consumerOptions || {};
+    const sanitizedSubject = topic.subject
+      .split("")
+      .map((char) =>
+        char === "." || char === ">" || char === "*" ? "-" : char,
+      )
+      .join("");
     const durableName =
-      opts.durableName ||
-      `${this.groupName}-${topic.subject.replace(/[.>*]/g, "-")}`;
+      opts.durableName || `${this.groupName}-${sanitizedSubject}`;
 
     const config: Partial<ConsumerConfig> = {
       durable_name: durableName,
@@ -209,10 +221,16 @@ export class JetStreamConsumer {
 
     // Pattern contains * (single token wildcard)
     if (pattern.includes("*")) {
-      const regex = new RegExp(
-        "^" + pattern.replace(/\./g, "\\.").replace(/\*/g, "[^.]+") + "$",
+      const subjectTokens = subject.split(".");
+      const patternTokens = pattern.split(".");
+
+      if (subjectTokens.length !== patternTokens.length) {
+        return false;
+      }
+
+      return patternTokens.every(
+        (token, index) => token === "*" || token === subjectTokens[index],
       );
-      return regex.test(subject);
     }
 
     return false;
@@ -239,9 +257,9 @@ export class JetStreamConsumer {
         for await (const msg of messages) {
           await this.processMessage(msg, handler, subject);
         }
-      } catch (error: any) {
+      } catch (error) {
         // Ignore timeout errors (normal when no messages)
-        if (error?.code !== "408" && error?.message !== "TIMEOUT") {
+        if (!isTimeoutError(error)) {
           console.error(`[NATS Consumer] Error consuming ${subject}:`, error);
         }
       }

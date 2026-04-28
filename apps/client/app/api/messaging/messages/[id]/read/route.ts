@@ -12,11 +12,27 @@ import {
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { isValidId } from "@/app/lib/api/api-guards";
-import { messagingService } from "@build/messaging-server";
+import {
+  type MessagingActor,
+  messagingService,
+} from "@/app/lib/domains/messaging";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
 
 type MessageParams = { id: string };
+
+function toMessagingActor(context: {
+  clerkId: string;
+  dbUserId: string;
+  userRole: unknown;
+}): MessagingActor {
+  return {
+    clerkId: context.clerkId,
+    userId: context.dbUserId,
+    role: normalizeRole(String(context.userRole)) ?? null,
+  };
+}
 
 /**
  * POST /api/messaging/messages/[id]/read
@@ -24,8 +40,9 @@ type MessageParams = { id: string };
  * The user must be a participant in the message's thread.
  */
 export const POST = withAuth<MessageParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
 
     if (!params?.id || !isValidId(params.id)) {
       return apiError("Invalid message ID", HttpStatus.BAD_REQUEST);
@@ -44,7 +61,7 @@ export const POST = withAuth<MessageParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => messagingService.markMessageAsRead(dbUserId, messageId),
+      () => messagingService.markMessageAsRead(actor, messageId),
       { operationName: "mark_message_read" },
     );
 
@@ -62,7 +79,7 @@ export const POST = withAuth<MessageParams>(
     const serviceResult = result.data;
     if (!serviceResult || !serviceResult.ok) {
       return apiError(
-        serviceResult?.message ?? "Invalid request",
+        "Invalid request",
         serviceResult?.status ?? HttpStatus.BAD_REQUEST,
       );
     }

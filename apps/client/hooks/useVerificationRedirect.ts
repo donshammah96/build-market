@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useMyStores } from "./useStores";
 import { useMyProperties } from "./useProperties";
+import { profileClient } from "@/lib/profile-client";
 
 // ─── Query Keys ─────────────────────────────────────────────────────────
 
@@ -19,8 +20,12 @@ export const verificationKeys = {
 export function useVerificationRedirect() {
   const router = useRouter();
   const { data: stores = [], isLoading: storesLoading } = useMyStores();
-  const { data: properties = [], isLoading: propertiesLoading } =
+  const { data: propertiesPayload, isLoading: propertiesLoading } =
     useMyProperties({ status: "all", limit: 50 });
+  const properties = useMemo(
+    () => propertiesPayload?.properties ?? [],
+    [propertiesPayload],
+  );
 
   // Check professional verification status
   const {
@@ -30,10 +35,9 @@ export function useVerificationRedirect() {
   } = useQuery({
     queryKey: verificationKeys.professionalProfile(),
     queryFn: async () => {
-      const res = await fetch("/api/professional-portal/profile");
-      if (!res.ok) return null;
-      const json = await res.json();
-      return json.data ?? json;
+      const res = await profileClient.getOwnProfile();
+      if (!res.success) return null;
+      return res.data ?? null;
     },
   });
 
@@ -43,8 +47,7 @@ export function useVerificationRedirect() {
     if (isLoading || profileError) return;
     // Check professional verification
     if (professionalProfile) {
-      const status =
-        professionalProfile.verificationStatus ?? professionalProfile.status;
+      const status = professionalProfile.verificationStatus;
       if (status === "REJECTED" || status === "NEEDS_CORRECTION") {
         router.push(
           "/professional-portal/settings/complete-profile?tab=verification&status=rejected",

@@ -12,18 +12,14 @@ import {
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
-import {
-  CreateStoreSchema,
-  BatchCreateStoresSchema,
-  StoreQuerySchema,
-} from "@/app/lib/validation/stores-validation";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import {
-  getStores,
-  createStore,
-  createStoresBatch,
-} from "@/lib/services/stores";
+  storesService,
+  CreateStoreSchema,
+  BatchCreateStoresSchema,
+  StoreQuerySchema,
+} from "@/app/lib/domains/stores";
 
 const logger = getClientLogger();
 
@@ -73,12 +69,12 @@ export async function GET(req: NextRequest) {
 
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
-    async () => getStores(queryValidation.data),
+    async () => storesService.listStores(queryValidation.data),
     { operationName: "get_stores" },
   );
 
-  if (result.success && result.data) {
-    return apiSuccess(result.data, HttpStatus.OK);
+  if (result.success && result.data?.ok) {
+    return apiSuccess(result.data.data, HttpStatus.OK);
   }
 
   logger.error("Failed to fetch stores", result.error, { correlationId });
@@ -185,15 +181,23 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
     const result = await resilientExecutor.execute(
       async () => {
         if (validatedPayload.type === "batch") {
-          return createStoresBatch(dbUserId, validatedPayload.data, {
-            ipAddress,
-            userAgent,
-          });
+          return storesService.createStoresBatch(
+            { userId: dbUserId, role: "professional" },
+            validatedPayload.data,
+            {
+              ipAddress,
+              userAgent,
+            },
+          );
         } else {
-          return createStore(dbUserId, validatedPayload.data, {
-            ipAddress,
-            userAgent,
-          });
+          return storesService.createStore(
+            { userId: dbUserId, role: "professional" },
+            validatedPayload.data,
+            {
+              ipAddress,
+              userAgent,
+            },
+          );
         }
       },
       {
@@ -204,17 +208,25 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       },
     );
 
-    if (result.success && result.data) {
-      const responseData = result.data;
+    if (result.success && result.data?.ok) {
+      const responseData = result.data.data;
       await IdempotencyService.complete(idempotencyKey, responseData);
 
       logger.info(`Store(s) created successfully`, {
         correlationId,
-        userId: dbUserId,
+        actorRole: "professional",
         mode: validatedPayload.type,
       });
 
       return apiSuccess(responseData, HttpStatus.CREATED);
+    }
+
+    if (result.success && result.data && !result.data.ok) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        result.data.message || "Failed to create store(s)",
+        result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
     await IdempotencyService.fail(idempotencyKey);
@@ -237,7 +249,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     logger.error("Store creation failed", err, {
       correlationId,
-      userId: dbUserId,
+      actorRole: "professional",
     });
     return apiError("Failed to create store", HttpStatus.INTERNAL_SERVER_ERROR);
   }

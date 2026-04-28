@@ -9,7 +9,7 @@ Start infrastructure (Docker)
 
 ```bash
 # Start Redis
-docker run --rm -p 6379:6379 redis:7-alpine
+docker run --rm --name build-market-redis -p 6379:6379 redis:7-alpine redis-server --maxmemory-policy noeviction
 
 # Start NATS with JetStream
 docker run --rm -p 4222:4222 -p 8222:8222 nats:latest -js
@@ -51,8 +51,9 @@ Notes
 - Default clients connect to `nats://localhost:4222`. To override, set `NATS_URL`.
 - These scripts use the TypeScript source under `packages/nats/src` and compile to `scripts/dist`.
 - If you prefer not to compile, you can use `pnpm dlx ts-node scripts/producer.ts` and `pnpm dlx ts-node scripts/consumer.ts` (requires `ts-node`)
+- For managed Redis providers that block `CONFIG SET`, configure `maxmemory_policy=noeviction` in the provider control plane.
 
-# Scripts
+## Scripts
 
 This directory contains utility scripts for development and deployment workflows.
 
@@ -93,10 +94,28 @@ Both scripts automate the following workflow:
 
 - Git installed and configured
 - GitHub CLI (`gh`) - Optional, but recommended for automatic PR creation
-  - Install from: https://cli.github.com/
+- Install from: <https://cli.github.com/>
 
 ## Notes
 
 - The scripts include proper error handling at each step
 - Colored output for better visibility
 - Automatically generates descriptive PR descriptions
+
+### invoke-clean.ps1 (PowerShell)
+
+Runs a command in a fresh child process with a fixed working directory, `CI=1`, and optional file-based output capture. Use this when a prior foreground terminal session may be contaminated or when you need stable logs.
+
+**Usage (Windows PowerShell):**
+
+```powershell
+.\scripts\invoke-clean.ps1 -WorkingDirectory . -CommandLine "pnpm run redis:healthcheck"
+.\scripts\invoke-clean.ps1 -WorkingDirectory . -OutputPath .\tmp\admin-check-types.log -CommandLine "pnpm run admin:check-types"
+```
+
+#### Why it exists
+
+- Avoids `Set-Location` and shared shell cwd drift
+- Runs in a fresh process instead of the existing foreground session
+- Writes combined stdout/stderr to a file when you need a durable log
+- Sets CI-style environment defaults so commands fail instead of prompting

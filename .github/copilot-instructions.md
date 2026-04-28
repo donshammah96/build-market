@@ -1,383 +1,361 @@
 # Build Market — Copilot Instructions
 
-> **Agent guideline:** For API-to-frontend architecture (service layer, Server Actions, client facade, hooks) and changelog of bug fixes, see [`.agent/API-TO-FRONTEND-ARCHITECTURE.md`](../.agent/API-TO-FRONTEND-ARCHITECTURE.md).
+> **Agent guideline:** For the detailed API-to-frontend blueprint, migration playbook, and architecture change log, see [`.agent/API-TO-FRONTEND-ARCHITECTURE.md`](../.agent/API-TO-FRONTEND-ARCHITECTURE.md).
+>
+> For the document hierarchy and conflict-resolution algorithm, see [`.agent/DOCUMENT-HIERARCHY.md`](../.agent/DOCUMENT-HIERARCHY.md).
+
+## Instruction Discovery And Precedence
+
+Use the instruction surfaces in this order:
+
+1. `.github/copilot-instructions.md` — repo-wide defaults and hard rules.
+2. `.agent/API-TO-FRONTEND-ARCHITECTURE.md` — when work touches `apps/client` routes, actions, domain services, client facades, hooks, or migration planning. **This is the implementational canon for `apps/client`. Do not duplicate its content here.**
+3. Slice-local docs such as `app/lib/domains/README.md` or route-family READMEs for implementation detail inside a single vertical.
+
+Conflict rules:
+
+- ADRs win over this file on any question they explicitly address.
+- This file wins over `API-TO-FRONTEND-ARCHITECTURE.md` only for cross-package rules that apply outside `apps/client`.
+- Narrower scope beats broader scope when rules are compatible.
+- Stricter architectural boundary beats older permissive guidance when rules overlap.
+- `apps/admin` follows its own section in this file; do not apply the client-app route model there.
+- If this file and the architecture guide ever diverge, follow the stricter rule for the current task and surface the drift for resolution.
+
+Discovery rules:
+
+- Always consult this file first for workspace-wide behavior.
+- Load the architecture guide whenever a task changes API-to-frontend flow in `apps/client`.
+- Do not apply the architecture guide mechanically to unrelated packages or services outside its scope.
+
+## Scoped Instruction Deconstruction
+
+To keep this file canonical while reducing instruction sprawl, repository-scoped instruction files live under `.github/instructions/` and apply to narrow paths.
+
+Deconstructed instruction map:
+
+- `apps-client-api-adapters.instructions.md` for `apps/client/app/api/**`
+- `apps-client-server-actions.instructions.md` for `apps/client/app/actions/**`
+- `apps-client-domain-layer.instructions.md` for `apps/client/app/lib/domains/**`
+- `apps-client-browser-facades.instructions.md` for `apps/client/lib/*-client.ts`
+- `apps-client-hooks-react-query.instructions.md` for `apps/client/hooks/**`
+- `apps-client-env-boundary.instructions.md` for `apps/client/**`
+- `apps-client-testing-risk.instructions.md` for `apps/client/__tests__/**`
+- `apps-client-adr-authoring.instructions.md` for `apps/client/docs/adr/**`
+- `apps-admin-action-boundaries.instructions.md` for `apps/admin/src/actions/admin/**`
+
+Governance:
+
+1. This file remains the canonical repo-wide policy source.
+2. Scoped instruction files operationalize policy for specific paths and should stay concise.
+3. When documents diverge, apply the stricter rule and resolve drift explicitly.
 
 ## Architecture Overview
 
-Turborepo monorepo for a **Kenya-focused construction marketplace** connecting primarily homeowners and related entities with verified professionals, vendors, and suppliers. Two Next.js 15 App Router frontends (`apps/client` on port 3500, `apps/admin` on port 3005) with shared packages under `packages/`. Package manager: **pnpm 10.20**.
+Turborepo monorepo for a Kenya-focused construction marketplace connecting homeowners, professionals, vendors, and suppliers. The main frontends are `apps/client` on port `3500` and `apps/admin` on port `3005`. Package manager: `pnpm 10.20`.
 
-**Shared packages** (imported as `@build/<name>`):
+Shared packages imported as `@build/<name>`:
 
-- `@build/db` — Prisma client + re-exported types/enums (PostgreSQL with `citext`, full-text search)
-- `@build/types` — Zod schemas mirroring Prisma models for client-side validation
-- `@build/resilience` — `ResilientExecutor` (timeout → retry → circuit breaker → cache → fallback)
-- `@build/redis` — `RedisCache<T>` with `getOrSet()` cache-aside pattern
-- `@build/nats` — NATS JetStream event-driven messaging (see [Event Messaging](#event-messaging-nats-jetstream) below)
-- `@build/ui` — Shared UI components (shadcn/ui based)
+- `@build/db` — Prisma client plus shared enums and types
+- `@build/types` — shared Zod schemas and mirrored model contracts
+- `@build/resilience` — resilient execution primitives
+- `@build/redis` — cache helpers and Redis abstractions
+- `@build/nats` — JetStream-based event messaging
+- `@build/ui` — shared UI components
 
 ## Key Commands
 
 ```bash
-pnpm install                          # Install all workspace deps
-pnpm run dev:client                   # Client app only (fastest)
-pnpm run dev:admin                    # Admin app only
-cd packages/db && npx prisma migrate deploy  # Run DB migrations
-cd apps/client && pnpm vitest --run   # Run all tests
-cd apps/client && pnpm vitest --run __tests__/api/stores/route.test.ts  # Single test
+pnpm install
+pnpm run dev:client
+pnpm run dev:admin
+pnpm run db:migrate:deploy
+pnpm run client:test:all
+pnpm run client:tsc-noemit
+pnpm run admin:check-types
 ```
 
-## API Route Pattern (apps/client/app/api/)
+## Canonical Client-App Architecture
 
-Every route handler follows this structure — **do not deviate**:
+> **Implementation patterns, code examples, and layer responsibility details live in `.agent/API-TO-FRONTEND-ARCHITECTURE.md`.** The sections below are navigational summaries only.
 
-```typescript
-import { NextRequest } from "next/server";
-import { prisma } from "@build/db";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api-response";
-import {
-  initializeCorrelationId,
-  getResilientExecutor,
-  getClientLogger,
-} from "@/app/lib/resilient-api";
-import {
-  checkRateLimit,
-  getRateLimitIdentifier,
-  RateLimits,
-} from "@/app/lib/rate-limit";
-import { getRequestMetadata } from "@/app/lib/request-utils";
-// For mutations — import extracted services (do NOT define inline):
-import { IdempotencyService } from "@/app/lib/services/idempotency.service";
-import { checkBodySize, isValidId } from "@/app/lib/api-guards";
-import { STORE_CONFIG } from "@/app/lib/config/store.config"; // or domain-specific config
+For `apps/client`, the canonical server-side business layer is `app/lib/domains/**`.
 
-// Public GET — no withAuth wrapper
-export async function GET(req: NextRequest) {
-  const correlationId = initializeCorrelationId(req);
-  const identifier = getRateLimitIdentifier(req);
-  const rateLimit = await checkRateLimit(
-    identifier,
-    RateLimits.READ.limit,
-    RateLimits.READ.window,
-  );
-  if (!rateLimit.success)
-    return apiError("Rate limit exceeded", HttpStatus.TOO_MANY_REQUESTS);
-  // Zod validation → resilientExecutor.execute(() => prisma.xxx.findMany(...)) → apiSuccess(data)
-}
+Primary dependency flow:
 
-// Protected mutation — withAuth provides { clerkId, dbUserId, userEmail, userRole }
-export const POST = withAuth(async (req, { dbUserId }) => {
-  // Same flow: correlationId → rateLimit → validate → execute → respond
-});
+```text
+UI / hook
+  -> lib/<domain>-client.ts
+  -> app/api/<domain>/**
+  -> app/lib/domains/<domain>/service.ts
+  -> app/lib/domains/<domain>/repository.ts
+  -> @build/db
 ```
 
-- **Response format**: `apiSuccess(data)` → `{ success, data, timestamp, correlationId }`; `apiError(msg, status)` → `{ success, error, timestamp }`
-- **Validation schemas** live in `app/lib/` (e.g., `stores-validation.ts`) — use `z.nativeEnum()` with Prisma enums. Keep schemas pure (no business logic, no service imports)
-- **Dynamic routes** receive `params` as an awaited Promise: `(req, authCtx, params) => { const { id } = await params; }`
-- **Repository pattern** exists in `app/lib/repositories/` for complex data access
-- **Resilience**: Always use `getResilientExecutor().execute(fn, { operationName })` — this is the preferred pattern. `executeResilient(fn)` exists but is legacy; use the executor form for new code. The executor returns `OperationResult<T>` with `{ success, data, fromCache, error, attempts, duration }`
-- **Guards**: Use `checkBodySize()`, `checkImageCount()`, `isValidId()` from `app/lib/api-guards.ts` — do not redefine inline
-- **Idempotency**: For mutations, use `IdempotencyService` from `app/lib/services/idempotency.service.ts` — do not define inline
-- **Constants**: Use `STORE_CONFIG` from `app/lib/config/store.config.ts` — do not define local `CONFIG` objects in route files
+Server-side form or mutation workflows:
 
-## Service Layer vs API Routes
-
-**API routes** (`app/api/`) are thin HTTP adapters — they handle auth, rate limiting, validation, and response formatting. **Domain logic and reusable services** live in `app/lib/services/` and are imported by routes. **Server-only data access** (`lib/services/`) is for server components.
-
-| Use case                      | Pattern                                                                   |
-| ----------------------------- | ------------------------------------------------------------------------- |
-| Client-side data fetching     | React Query hook → `fetch("/api/...")` → API route                        |
-| Server component data         | Direct import from `lib/services/` or Prisma                              |
-| Complex queries in API routes | `app/lib/repositories/` (e.g., `store.repository.ts`)                     |
-| Mutation deduplication        | `IdempotencyService` from `app/lib/services/idempotency.service`          |
-| Optimistic locking / events   | `StoreEventService` + `store-operations.service`                          |
-| Request validation guards     | `checkBodySize`, `checkImageCount`, `isValidId` from `app/lib/api-guards` |
-| Shared constants              | `app/lib/config/store.config.ts` (or domain-specific config)              |
-| Cross-service events          | NATS JetStream producer (see below)                                       |
-
-Service files export plain async functions with typed inputs — see `lib/services/projects.ts`, `lib/services/upload.ts`.
-
-## Extracted API Services (app/lib/services/)
-
-Domain logic is extracted from route handlers into dedicated service files. **Route files should remain thin HTTP adapters** — they compose services, not implement business logic inline.
-
-### Configuration (`app/lib/config/store.config.ts`)
-
-Shared constants for store routes. Import and use `STORE_CONFIG` instead of defining local `CONFIG` objects:
-
-```typescript
-import { STORE_CONFIG } from "@/app/lib/config/store.config";
-// STORE_CONFIG.MAX_BODY_SIZE, STORE_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES, etc.
+```text
+Server Action
+  -> secureAction
+  -> app/lib/domains/<domain>/service.ts
+  -> app/lib/domains/<domain>/repository.ts
 ```
 
-When adding new API domains, create a similar `<domain>.config.ts` file if multiple routes share constants.
+Hard rules:
 
-### Idempotency (`app/lib/services/idempotency.service.ts`)
+1. `app/api/*` and `app/actions/*` are adapters only.
+2. `app/lib/domains/*` is the canonical home for business logic.
+3. Repositories are persistence-only.
+4. Hooks and client components must not import server actions or domain services directly.
+5. Browser facades under `lib/*-client.ts` must use HTTP, not direct server imports.
+6. Authorization-sensitive domain methods should accept full actor context, not bare user IDs.
+7. New business logic should not be added to `lib/services/*` unless the slice is explicitly still in migration.
+8. Domain services must not import other domain services or repositories directly; cross-domain reads go through the owning domain `index.ts`, and multi-domain writes are lifted into a shared orchestration surface.
 
-Mutation deduplication via SHA-256 key hashing and the `IdempotencyKey` Prisma model. **Use for all POST/PATCH/DELETE mutations** that should be safe to retry:
+For full route handler structure, mock patterns, domain examples, and browser facade contracts, see Section 4 of `API-TO-FRONTEND-ARCHITECTURE.md`.
 
-```typescript
-import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+## Domain Layer Rules
 
-// Generate or accept client-provided key
-const key = req.headers.get("Idempotency-Key") ||
-  IdempotencyService.generateKey(userId, "POST", payload);
+`app/lib/domains/**` owns business policy, actor-aware authorization, orchestration, canonical DTO shaping, and structured `Result<T, DomainError>` outcomes.
 
-// Check-or-create (returns "new" | "pending" | "completed")
-const check = await IdempotencyService.checkOrCreate(key, "store", userId, "POST", entityId?);
-if (check?.status === "completed") return apiSuccess(check.response, HttpStatus.OK);
-if (check?.status === "pending") return apiError("Request in progress", HttpStatus.CONFLICT);
+`app/lib/domains/**/repository.ts` owns Prisma reads and writes only. Repositories must not own role checks, response envelopes, action or route semantics, or user-facing error strings.
 
-// After success:
-await IdempotencyService.complete(key, responseData);
-// On failure:
-await IdempotencyService.fail(key);
-```
+Use `app/lib/domains/README.md` as the current service-versus-repository reference.
 
-### Store Event Sourcing (`app/lib/services/store-event.service.ts`)
+## Server Actions
 
-Append-only event log with version-based optimistic locking for the `Store` model:
+In `apps/client`, server actions are not the browser data-fetching layer. Use them for server-only form submissions, mutation flows that need revalidation, and authenticated workflows that should not go through a browser facade.
 
-```typescript
-import { StoreEventService } from "@/app/lib/services/store-event.service";
+Requirements: `secureAction` for validated authenticated action flows; full actor context into the domain when authz matters; cache revalidation in the action layer; explicit DTOs across the action boundary.
 
-// Inside a $transaction:
-const newVersion = await StoreEventService.append(
-  tx,
-  storeId,
-  StoreEventType.STORE_UPDATED,
-  payload,
-  metadata,
-  userId,
-  expectedVersion,
-);
+`secureAction` contract in `app/lib/actions/secure-action.ts`:
 
-// Outside transactions:
-const version = await StoreEventService.getCurrentVersion(storeId);
-const events = await StoreEventService.replay(storeId);
-```
+1. Validates Clerk session and resolves a known DB user.
+2. Constructs and forwards typed `DomainActor` context into the wrapped action.
+3. Emits structured `validation_error` outcomes and returns typed errors for auth resolution failures (does not throw).
 
-### Store Operations (`app/lib/services/store-operations.service.ts`)
+Cache invalidation rule: use `revalidatePath()` when invalidating a full route segment. Prefer `revalidateTag()` for fine-grained invalidation when tags are already instrumented.
 
-Domain logic for store mutations — ownership verification, Prisma update payload building, and transactional optimistic-locking operations:
+Do not import server actions into hooks or `lib/*-client.ts`.
 
-```typescript
-import {
-  type StoreOperationContext,
-  updateStoreWithOptimisticLock,
-  deleteStoreWithOptimisticLock,
-  buildConflictResponse,
-  buildUpdatePayload,
-  verifyStoreOwnership,
-  isOptimisticRetryEnabled,
-} from "@/app/lib/services/store-operations.service";
-```
+## Browser Client Facades and Hooks
 
-Exported types: `StoreOperationContext`, `OptimisticLockResult<T>`, `StoreOperationResult<T>`, `UpdateStoreData`.
+Browser-facing facades under `lib/*-client.ts` must use `fetch` or `apiFetch` against `/api/...`, parse normalized `ApiResponse<T>` envelopes, and define explicit DTOs at the network boundary.
 
-### API Guards (`app/lib/api-guards.ts`)
+Hooks must use React Query, centralize `unwrapApiResponse()` error handling, own query keys and invalidation behavior, preserve caller-provided mutation callbacks after internal invalidation, and follow TanStack Query v5 signatures exactly.
 
-Reusable validation guards that return `null` (pass) or `NextResponse` (fail). Use these instead of defining inline guards in route files:
+Query caching default: prefer a `QueryClient` app-level `staleTime` default (`60_000` for read-heavy, slower-changing data), and override to `staleTime: 0` only for genuinely volatile data (for example messaging and notification counters).
 
-```typescript
-import {
-  checkBodySize,
-  checkImageCount,
-  isValidId,
-} from "@/app/lib/api-guards";
+## Auth Model
 
-const sizeError = checkBodySize(req); // uses STORE_CONFIG.MAX_BODY_SIZE default
-const imgError = checkImageCount(data.images); // uses STORE_CONFIG.MAX_IMAGES_PER_REQUEST default
-if (!isValidId(params?.id))
-  return apiError("Invalid ID", HttpStatus.BAD_REQUEST);
-```
+For `apps/client`, Clerk is the primary runtime identity provider. Authorization is enforced in domain services or policy helpers, not only in middleware. Database role and profile state enriches the actor; it is not an alternate identity provider.
 
-## Auth (Clerk)
+Common auth helpers: `withAuth(handler)` for authenticated API routes; `withRole([...])` when route-level gating is still appropriate.
 
-- **Middleware** (`apps/client/middleware.ts`): Clerk session → role from JWT claims → DB fallback via `/api/internal/user-status` with `INTERNAL_API_SECRET`
-- **API auth**: `withAuth(handler)` calls `auth()` from `@clerk/nextjs/server`, looks up DB user by `clerkId`, returns `AuthContext`
-- **Role gating**: `withRole(["ADMIN"])` composes on top of `withAuth`
-- **Admin app**: All routes require `admin` or `verification_admin` role
-- API routes under `/api/` are public in middleware — they self-authenticate with `withAuth`
+`withAuth` must fail closed. Any failure to resolve Clerk identity (timeout, upstream 5xx, malformed or expired token, or session parsing failure) returns `401` and must not execute the wrapped handler.
 
-## Database (Prisma)
+Fail-open auth fallbacks are prohibited. Adapters must not continue execution as anonymous or best-effort authenticated when Clerk resolution fails.
 
-- Schema: `packages/db/prisma/schema.prisma` (~2900 lines)
-- **All models use UUID PKs** (`@id @default(uuid())`), explicit table mapping (`@@map("table_name")`)
-- **Soft delete**: `deletedAt DateTime?` — always filter with `deletedAt: null`
-- **Enums**: SCREAMING_SNAKE_CASE, Kenya-specific (`County` with 47 counties, `LicenseAuthority` for NCA/EBK/BORAQS)
-- **GDPR**: Consent records on data access, encryption flags, anonymization, data retention fields
-- Import prisma: `import { prisma } from "@build/db"` (or `from "@/lib/db"` in client app)
-- Import types/enums: `import { UserRole, StoreCategory } from "@prisma/client";` (re-exported from `@build/db`)
+Actor context shape: pass `{ userId, clerkId, role }`, where `clerkId` may be absent in service-to-service calls without a Clerk session.
 
-## Testing (Vitest)
+For admin-capability-gated operations, adapters must construct and pass an admin actor with non-null `adminRole` resolved from the DB user record (not from Clerk claims), following ADR-007.
 
-Tests in `apps/client/__tests__/`. Globals enabled — no need to import `describe`/`it`/`expect`.
+Role-mutation operations must synchronize Clerk `publicMetadata.role` before finalizing successful responses so active sessions do not retain stale privilege claims (see ADR-001 and ADR-007).
 
-**Required mocking pattern** (use `vi.hoisted()` for logger):
+Session cookies from Clerk (or future session providers) must be verified to include `HttpOnly`, `Secure` (in production), and at least `SameSite=Lax`. `SameSite=None` requires explicit cross-origin embedding justification.
 
-```typescript
-const mockLogger = vi.hoisted(() => ({
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-}));
+Sensitive mutations must enforce recent-auth or freshness assertions in the adapter layer before domain execution. This is mandatory for financial operations, role or verification transitions, and account-identity mutations.
 
-vi.mock("@/app/lib/api-middleware", () => ({
-  withAuth: (handler: any) => async (req: NextRequest) =>
-    handler(req, {
-      clerkId: "clerk_123",
-      dbUserId: "db_user_123",
-      userEmail: "test@example.com",
-      userRole: "professional",
-    }),
-}));
+## Validation, Idempotency, and Concurrency
 
-vi.mock("@build/db", () => ({
-  prisma: { store: { findMany: vi.fn(), count: vi.fn(), create: vi.fn() } },
-}));
+Use shared helpers: `app/lib/api-guards.ts`, `app/lib/services/idempotency.service.ts`, `app/lib/services/*-operations.service.ts` for optimistic-lock flows, and `app/lib/config/<domain>.config.ts` for shared constants.
 
-vi.mock("@/app/lib/resilient-api", () => ({
-  initializeCorrelationId: vi.fn().mockReturnValue("test-correlation-id"),
-  getResilientExecutor: vi.fn().mockReturnValue({
-    execute: vi.fn(async (fn) => {
-      try {
-        return { success: true, data: await fn() };
-      } catch (error) {
-        return { success: false, error };
-      }
-    }),
-  }),
-  getClientLogger: vi.fn().mockReturnValue(mockLogger),
-}));
+Idempotent replay storage is a governed persistence boundary:
 
-vi.mock("@/app/lib/rate-limit", () => ({
-  checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
-  getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
-  RateLimits: {
-    READ: { limit: 100, window: 60000 },
-    WRITE: { limit: 10, window: 60000 },
-  },
-}));
-```
+1. New idempotent route or action scopes must register an explicit replay policy in `app/lib/services/idempotency.service.ts` before `IdempotencyService.complete()` may persist their success payload.
+2. Replay payloads must be the public DTO or response envelope already exposed to clients, never raw provider payloads, raw Prisma records, or ad-hoc internal objects.
+3. Default replay policy allows only ADR-006 Class C and Class D fields. Any scope that must retain minimum-necessary Class B fields to preserve an existing public contract must opt in explicitly in the registry and remain reviewable there.
+4. Class A data is never allowed in replay persistence.
 
-- Test handlers directly: `const response = await GET(request)` — no HTTP server
-- Dynamic route params: `{ params: Promise.resolve({ id: "store_1" }) }`
-- Naming: `route.test.ts` (collection), `store-id.route.test.ts` (dynamic `[id]`)
+For versioned entities: GET and successful mutation responses return `ETag`; PATCH and DELETE require `If-Match`; route adapters map conflict outcomes to `409`.
+
+## Observability and Operational Readiness
+
+For `apps/client`, observability is part of the adapter contract, not optional debug output.
+
+Hard requirements:
+
+1. Route handlers and server actions must emit structured, machine-readable log events (not ad-hoc `console.log` output).
+2. Structured events should include at least: `correlationId`, `operationName`, `httpMethod`, `routePattern`, `actorRole`, `outcome`, `httpStatus`, and `durationMs`.
+3. Do not log PII: never log `userId`, `clerkId`, `userEmail`, `phone`, `nationalId`, `idNumber`, raw request bodies, or response payload bodies.
+4. Domain services and repositories must not own logging concerns. Domain returns structured `Result<T, DomainError>`; adapter layers log final outcomes.
+5. Treat `operationName` as a stable observability join key. Renaming it is a breaking observability change and requires coordinated dashboard updates.
+6. `durationMs` timing starts at the first adapter statement (before auth, parse, and validation) and ends at response mapping.
+7. Operational metrics are derived from structured logs, so field-name stability is part of the runtime contract.
+
+For admin-gated operations, `actorAdminRole` is an allowed optional structured log field (enum-only, non-PII) per ADR-005 and ADR-007.
+
+Use Section 5.6 in `.agent/API-TO-FRONTEND-ARCHITECTURE.md` and ADR-005 for full contract details and migration guidance.
+
+## DTO Boundary Rules
+
+Do not rely on implicit Prisma or server-action return inference across HTTP or action boundaries. Prefer explicit DTO interfaces, `Date` fields serialized to `string`, explicit `ApiResponse<T>` generics in browser facades, and explicit action return types when crossing the Next.js serialization boundary.
+
+Use the canonical `Result<T, DomainError>` type from the domain layer. Import it; do not re-define a local `Result` union. If import locations vary by slice, use `app/lib/domains/README.md` as the source of truth.
+
+DTOs crossing HTTP or server-action boundaries should classify fields using `ADR-006-data-classification.md`. DTOs carrying Class A or Class B fields require explicit minimum-necessary-surface review notes.
+
+This rule is mandatory for browser-facing hooks and client facades.
+
+## Database and Persistence Rules
+
+- Prisma schema lives in `packages/db/prisma/schema.prisma`
+- Most core models use UUID primary keys and explicit `@@map` table names
+- Soft-deleted models should be queried with `deletedAt: null` unless the use case intentionally includes deleted records
+- Kenya-specific enums and compliance fields are part of the core domain model and should not be bypassed in validation or DTO shaping
+
+## Testing Standards
+
+Tests for `apps/client` live under `apps/client/__tests__/` with Vitest globals enabled.
+
+Testing is risk-centric, not only layer-centric. For material architecture changes, include coverage that addresses boundary, policy, and journey risks as applicable:
+
+1. Direct domain tests for business rules and authorization.
+2. Focused route or action tests for adapter mapping.
+3. Hook or client-facade tests when browser-side contracts change.
+4. Contract tests for boundary shape regressions (`__tests__/contracts/**`) when repository/service or DTO edges change.
+5. Policy matrix tests (`__tests__/policy/**`) for authorization-sensitive operations.
+6. Critical-journey E2E tests for protected-route and high-risk authz flows (blocking CI surface when impacted).
+
+Route test patterns, mock structure, risk matrix expectations, and critical-journey requirements are documented in Section 7 of `.agent/API-TO-FRONTEND-ARCHITECTURE.md`.
+
+Preferred verification commands:
+
+- `pnpm run client:tsc-noemit`
+- targeted `pnpm run client:test:<suite>` commands
+- `pnpm -C apps/client exec vitest run __tests__/contracts __tests__/policy` for fast boundary and policy checks
+- `pnpm run cypress:run --spec "cypress/e2e/critical-journeys/**"` when protected-route or authz behavior is touched
+- `pnpm run admin:check-types` when touching `apps/admin`
+
+Critical-journey E2E tests are a blocking CI surface for high-severity auth and routing regressions. Mandatory journeys include unauthenticated redirect, onboarded professional access, non-professional denial, incomplete onboarding redirect, thread read authz, and thread send authz.
 
 ## Client-Side Patterns
 
-- **Data fetching**: React Query (`@tanstack/react-query`) — all hooks marked `"use client"`
-- **API response unwrap**: `json.data.data` (success envelope wraps actual data array)
-- **Route constants**: `ROUTES` and `API_ROUTES` objects in `lib/links.ts`
-- **Styling**: Tailwind CSS with `cn()` utility (`clsx` + `tailwind-merge`) from `lib/utils.ts`
-- **URL helpers**: `withQueryParams()`, `withPagination()`, `toSlug()`/`fromSlug()` in `lib/links.ts`
+- Use React Query for browser-side fetching and mutations
+- Treat `apiSuccess()` responses as wrapped envelopes and unwrap deliberately
+- Use `lib/links.ts` route constants and URL helpers instead of ad hoc path strings
+- Keep browser code free of server-only imports
+
+## UI And Presentation Standards
+
+For `apps/client`, onboarding and form workflows must follow the Section 3 invariants in `.agent/API-TO-FRONTEND-ARCHITECTURE.md`: progressive profiling, one primary CTA per view, explicit validation state machine (`untouched`, `touched`, `validating`, `valid`, `invalid`), eight interactive component states, WCAG AA accessibility wiring, conversion instrumentation, and desktop and mobile readiness before completion.
+
+## Anti-Patterns Callout
+
+Reject high-risk boundary violations during review, especially:
+
+1. Browser or hook imports of server actions or domain services.
+2. Business logic or Prisma-heavy orchestration embedded in route handlers.
+3. Repository-level authorization checks, HTTP semantics, or user-facing strings.
+4. Direct `process.env` reads outside the canonical env boundary.
+5. Unstructured logging or any log event that includes PII.
+6. `Access-Control-Allow-Origin: *` on authenticated or user-specific routes. Allowed origins must be controlled by shared CORS policy with `envConfig`-driven allowlists.
+7. Webhook or callback handlers that skip signature verification and replay-window enforcement before processing.
+
+The full reject list is maintained in Section 6 of `.agent/API-TO-FRONTEND-ARCHITECTURE.md`.
 
 ## Event Messaging (NATS JetStream)
 
-The `@build/nats` package provides event-driven messaging between services. All cross-service communication should use NATS rather than direct HTTP calls.
+Use `@build/nats` for cross-service communication instead of ad hoc internal HTTP when a workflow is event-oriented.
 
-**Core components** (all in `packages/nats/src/`):
-
-- `JetStreamProducer` — publish typed events with deduplication and delivery guarantees
-- `JetStreamConsumer` — subscribe with durable consumers, explicit ack/nak/term
-- `StreamManager` — create/update streams via `ensureStream(options)`
-- `createServiceClient(name)` — per-service NATS connection
-
-**Predefined streams** (`StreamPresets`):
-| Stream | Subjects | Retention | Max Age |
-|---|---|---|---|
-| `VERIFICATION` | `verification.>` | limits | 7 days |
-| `USERS` | `user.>` | limits | 30 days |
-| `ORDERS` | `order.>` | limits | 90 days |
-| `PROJECTS` | `project.>` | limits | 90 days |
-| `NOTIFICATIONS` | `notification.>` | workqueue | 24 hours |
-
-**Typed event payloads**: `VerificationEvent`, `UserEvent`, `OrderEvent`, `ProjectEvent`, `NotificationEvent` — always use these types when publishing.
-
-**Publishing pattern:**
-
-```typescript
-import { JetStreamProducer } from "@build/nats";
-const producer = new JetStreamProducer("my-service");
-await producer.connect();
-await producer.publish<VerificationEvent>("verification.approved", {
-  entityType: "professional", entityId: "...", newStatus: "APPROVED", ...
-});
-```
-
-**Consuming pattern:**
-
-```typescript
-import { JetStreamConsumer } from "@build/nats";
-const consumer = new JetStreamConsumer("my-service", "my-group");
-await consumer.connect();
-await consumer.subscribe([
-  {
-    subject: "verification.>",
-    handler: async (msg) => {
-      /* process msg.data */ msg.ack();
-    },
-  },
-]);
-```
+Core components: `JetStreamProducer`, `JetStreamConsumer`, `StreamManager`, `createServiceClient(name)`.
 
 ## Admin App (`apps/admin`)
 
-Runs on port 3005 with `src/` directory layout (unlike client app). All routes require `admin` or `verification_admin` role.
+`apps/admin` differs materially from `apps/client`:
 
-**Key architectural differences from client app:**
+- It uses `src/` layout.
+- It primarily uses server actions under `src/actions/admin/`.
+- It does not follow the same resilience, Redis, and NATS patterns as `apps/client`.
+- It uses `safeAction` and `assertAdmin()` instead of the client app's route-first adapter model.
 
-- Uses **Server Actions** (`src/actions/admin/`) instead of API routes for data mutations
-- **No resilience/redis/nats** — simpler stack with direct Prisma access
-- Role sync via `syncUserRole()` from `src/lib/auth-sync.ts` (Clerk metadata → DB)
-
-**Server Actions structure** (`src/actions/admin/`):
-
-- `shared.ts` — `assertAdmin()` middleware, `safeAction(name, fn)` wrapper for error handling
-- Domain files: `users.ts`, `professionals.ts`, `stores.ts`, `projects.ts`, `verification.ts`, `settings.ts`, `analytics.ts`, `audit.ts`, `leads.ts`, `properties.ts`, `services.ts`
-- `types.ts` — `ActionResponse<T>`, pagination schemas, input types (non-"use server" file for Zod schemas)
-
-**Action pattern:**
-
-```typescript
-"use server";
-import { safeAction } from "./shared";
-export async function getUsers(page = 1, limit = 10, search = "") {
-  return safeAction("getUsers", async () => {
-    // Prisma query → return { users, meta: { total, page, ... } }
-  });
-}
-```
-
-**Dashboard sections**: `analytics`, `audit`, `leads`, `professionals`, `projects`, `properties`, `services`, `settings`, `stores`, `users`, `verifications`
-
-**UI stack**: `@tanstack/react-table` for data tables, `recharts` for charts, `lucide-react` icons, `@build/ui` components
+When working in `apps/admin`: preserve the existing action structure, keep role enforcement aligned with `admin` and `verification_admin`, and do not blindly transplant `apps/client` route guidance into admin code.
 
 ## Staff Engineer Mandate
 
-When making **any** architectural or design decision, **always act as a staff-level engineer**:
+When making architectural or design decisions:
 
-- Prioritize **consistency** with existing patterns over local optimizations
-- Apply **idempotency**, **optimistic locking**, and **GDPR consent** to all mutation endpoints
-- Extract domain logic into `app/lib/services/<domain>-operations.service.ts` — never inline
-- Use `getResilientExecutor()` (not legacy `executeResilient`) for all API operations
-- Every new API domain must have: validation schemas, domain config, operations service, README
-- When in doubt, refer to the stores API (`app/api/stores/`) as the canonical reference implementation
+- Prioritize consistency with accepted ADRs and migrated slices over local convenience.
+- Move business logic toward `app/lib/domains/<slice>/` rather than adding adapter-local orchestration.
+- Preserve actor-aware authorization boundaries.
+- Apply idempotency, optimistic locking, and consent or compliance rules where the business flow requires them.
+- Use `getResilientExecutor().execute()` for client-app API operations.
+- Prefer structured result mapping over exception-string parsing.
+- Preserve observability contracts: structured adapter logging, PII exclusions, and stable `operationName` semantics.
+
+Current reference slices for canonical client-app patterns: projects, properties, portfolio, messaging, CRM, user-profile.
+
+Current migration priority queue: professionals, calendar, idea books, notifications, seller dashboard read models (`inventory`, `orders`, `products`), reviews.
 
 ## Project-Specific Conventions
 
-- **Kenya context**: Counties (not states), M-Pesa payments, NCA/EBK/BORAQS license authorities, KRA tax compliance
-- **Admin app uses `src/`** directory; client app does **not**
-- **Env validation**: `lib/env.ts` exports `envConfig` with grouped, validated env vars — use it instead of raw `process.env`
-- **Event sourcing**: `StoreEventService` in `app/lib/services/store-event.service.ts` — append-only events with version-based optimistic locking
-- **Idempotency**: `IdempotencyService` in `app/lib/services/idempotency.service.ts` — SHA-256 key hashing for mutation deduplication; supports `store` and `property` scopes
-- **Store operations**: `app/lib/services/store-operations.service.ts` — ownership checks, payload building, transactional update/delete with optimistic locking
-- **Property operations**: `app/lib/services/property-operations.service.ts` — mirrors store-operations for the property domain (agentId-based ownership, version-based locking)
-- **Validation schemas**: `app/lib/stores-validation.ts` and `app/lib/properties-validation.ts` — Zod schemas using `@prisma/client` enums
-- **Server Action Boundaries**: When Next.js API actions return Prisma generated types across boundaries, do NOT rely on implicit `ReturnType` inference. Next.js serialization strips complex classes (like `Date`). Always explicitly define a Data Transfer Object interface mapping `Date` -> `string` and explicitly assert it in both the action return signature and the client layer context (`bulkhead.run<ApiResponse<DTO>>`). See `.agent/PROPERTY-DTO-TYPE-FIX.md` for the blueprint implementation.
-- **API guards**: `app/lib/api-guards.ts` — reusable `checkBodySize`, `checkImageCount`, `isValidId`
-- **Route config**: `app/lib/config/store.config.ts`, `app/lib/config/property.config.ts` — domain-specific constants; create `<domain>.config.ts` for new API domains
-- **No inline services**: Do not define service classes (e.g., `IdempotencyService`, `EventStore`) inside route files — import from `app/lib/services/`
-- **Onboarding and Form Payloads**: When processing unified arrays (like images or multiselect categories) for service operations, always explicitly extract and map the fields into the strict object formats expected by `Create<Entity>Input` interfaces. See `.agent/ONBOARDING-ACTIONS-BUG-FIX.md` for historical payload mapping pitfalls.
+### Kenya Context
+
+Kenya context matters: counties, M-Pesa, NCA, EBK, BORAQS, and KRA semantics should be reflected in naming and validation.
+
+### Layout and Naming
+
+- `apps/admin` uses `src/`; `apps/client` does not.
+- Do not define inline service classes inside route files.
+- Use `lib/links.ts` for route URL constants and helpers where the repo already provides them.
+
+### Canonical Env Access Boundary
+
+**Canonical module:** `apps/client/app/lib/infrastructure/env.ts`
+
+All environment variable reads in `apps/client` must go through this module. This mirrors the principle that repositories own all Prisma access — env config is an infrastructure concern, not something route handlers or domain services should reach for directly.
+
+Rules:
+
+1. **New code** imports env config from `app/lib/infrastructure/env.ts` only. Direct `process.env.*` reads in routes, services, or UI code are architectural debt.
+2. The canonical module validates env values at startup (Zod or equivalent) and exposes typed accessors. Callers receive typed values, not raw strings.
+3. **Bootstrap-only exceptions** (e.g., `next.config.ts`, `instrumentation.ts`, top-level infra that runs before the module system is ready) may read `process.env` directly. Annotate them:
+   ```ts
+   // env-bootstrap-exception: <reason> — see ADR-002
+   ```
+4. **Refactor strategy:**
+   - New code: import from canonical module, never `process.env` directly.
+   - Existing direct reads: migrate in batches during regular slice work. Tag unmigrated reads with `// env-migration-pending` so they are grep-able.
+   - Bootstrap-only exceptions: document and freeze. Do not let the exception list grow.
+
+See ADR-002 for the full rationale and migration notes.
+
+### Onboarding and Form Payload Hygiene
+
+When handling onboarding or form payload arrays, explicitly map them into strict domain input shapes instead of passing loosely structured UI payloads through.
+
+### Operations Services
+
+If a slice already has an operations service for optimistic locking, use it rather than re-implementing update or delete logic inline.
+
+### Security Headers
+
+`apps/client/next.config.ts` must define a baseline security header set for all route responses:
+
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: SAMEORIGIN`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+- `Content-Security-Policy` with `default-src 'self'`, explicit origin allowlists, no `unsafe-eval`, and no wildcard script origins
+
+CSP source exceptions must be justified inline in config, including whether the source is first-party or third-party and why it is required.
+
+### HTTP Surface Security
+
+ADR-008 is the canonical policy for HTTP surface controls in `apps/client`. Route and webhook adapters must follow consolidated rules for CORS, CSRF, anti-caching, security headers, and callback integrity.
+
+Key requirements:
+
+- CORS allowlists must be `envConfig`-driven and fail closed.
+- Cookie-authenticated unsafe methods must enforce trusted-origin checks (and CSRF tokens where required).
+- Sensitive responses must default to non-cacheable headers.
+- Webhook and callback endpoints must verify signatures and enforce replay protection before business processing.

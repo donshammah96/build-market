@@ -33,10 +33,9 @@ param(
     [switch]$Confirm
 )
 
-# Change to project root
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent $scriptDir
-Set-Location $projectRoot
+$scriptPath = Join-Path $projectRoot "scripts\clear-users.ts"
 
 # Build arguments
 $args = @()
@@ -57,4 +56,4 @@ Write-Host "Arguments: $($args -join ' ')" -ForegroundColor Gray
 Write-Host ""
 
 # Run the TypeScript script
-npx tsx scripts/clear-users.ts @args
+& pnpm -C $projectRoot exec tsx $scriptPath @args

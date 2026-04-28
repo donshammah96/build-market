@@ -25,9 +25,14 @@ const mockEnv = {
 
 // Store original env
 const originalEnv = { ...process.env };
+let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
+let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
 describe("FieldEncryption", () => {
   beforeEach(() => {
+    consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
     // Reset module cache to allow re-importing with new env
     vi.resetModules();
     // Set mock environment
@@ -38,6 +43,8 @@ describe("FieldEncryption", () => {
     // Restore original environment
     process.env = { ...originalEnv };
     vi.resetModules();
+    consoleWarnSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
   });
 
   describe("Key Configuration", () => {

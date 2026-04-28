@@ -15,11 +15,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "default", size = "default", ...props }, ref) => {
     const variants = {
       default:
-        "bg-[#E0C9A6] text-[#142620] hover:bg-white uppercase tracking-widest border border-[#E0C9A6] transition-all duration-500",
+        "bg-primary text-primary-foreground hover:bg-primary/90 uppercase tracking-widest border border-primary transition-all duration-300",
       outline:
-        "bg-transparent text-[#E0C9A6] border border-[#E0C9A6] hover:bg-[#E0C9A6] hover:text-[#142620] transition duration-500 ease-out",
-      ghost: "hover:bg-[#E0C9A6]/10 text-[#E0C9A6]",
-      link: "text-white hover:text-[#E0C9A6] transition gap-2 no-underline p-0",
+        "bg-transparent text-foreground border border-border hover:bg-accent hover:text-accent-foreground transition duration-300 ease-out",
+      ghost: "hover:bg-accent text-foreground",
+      link: "text-primary hover:text-primary/80 transition gap-2 no-underline p-0",
     };
 
     const sizes = {
@@ -33,7 +33,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(
-          "inline-flex items-center justify-center whitespace-nowrap rounded-none ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0C9A6] disabled:opacity-50",
+          "inline-flex items-center justify-center whitespace-nowrap rounded-md ring-offset-background transition-all",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2",
+          "active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed",
           variants[variant],
           sizes[size],
           className ?? "",
@@ -53,7 +55,9 @@ export const Input = React.forwardRef<
     ref={ref}
     type={type}
     className={cn(
-      "flex h-12 w-full rounded-none border border-[#E0C9A6]/30 bg-[#0F1D18] px-4 py-2 text-sm text-[#E0C9A6] placeholder:text-[#E0C9A6]/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#E0C9A6]",
+      "flex h-12 w-full rounded-md border border-input bg-background px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground",
+      "transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2",
+      "disabled:cursor-not-allowed disabled:opacity-50",
       className ?? "",
     )}
     {...props}
@@ -68,7 +72,9 @@ export const Select = React.forwardRef<
   <select
     ref={ref}
     className={cn(
-      "flex h-12 w-full rounded-none border border-[#E0C9A6]/30 bg-[#0F1D18] px-4 py-2 text-sm text-[#E0C9A6] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#E0C9A6] appearance-none",
+      "flex h-12 w-full rounded-md border border-input bg-background px-4 py-2 text-sm text-foreground appearance-none",
+      "transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2",
+      "disabled:cursor-not-allowed disabled:opacity-50",
       className ?? "",
     )}
     {...props}

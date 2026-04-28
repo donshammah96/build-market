@@ -100,7 +100,7 @@ Run Prisma migrations on the test database:
 
 ```bash
 DATABASE_URL="postgresql://testuser:testpass@localhost:5433/buildmarket_test" \
-  pnpm --filter @build/db prisma migrate deploy
+  pnpm run db:migrate:deploy
 ```
 
 Seed with test data:
@@ -514,7 +514,7 @@ jobs:
       - name: Run migrations
         env:
           DATABASE_URL: postgresql://testuser:testpass@localhost:5433/buildmarket_test
-        run: pnpm --filter @build/db prisma migrate deploy
+        run: pnpm run db:migrate:deploy
 
       - name: Run integration tests
         env:

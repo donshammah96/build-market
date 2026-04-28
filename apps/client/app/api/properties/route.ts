@@ -2,35 +2,36 @@ import { NextRequest } from "next/server";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
-  initializeCorrelationId,
   getResilientExecutor,
-  getClientLogger,
+  initializeCorrelationId,
 } from "@/app/lib/api/resilient-api";
+import { checkBodySize } from "@/app/lib/api/api-guards";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
+import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import {
-  CreatePropertySchema,
   BatchCreatePropertiesSchema,
+  CreatePropertySchema,
   PropertyQuerySchema,
   propertiesService,
 } from "@/app/lib/domains/properties";
-import { IdempotencyService } from "@/app/lib/services/idempotency.service";
-import { checkBodySize } from "@/app/lib/api/api-guards";
-import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
+import {
+  actorRoleLabel,
+  domainErrorCodeToStatus,
+  domainResultToErrorResponse,
+  logPropertiesRouteOutcome,
+  now,
+} from "@/app/api/properties/shared";
 
-const logger = getClientLogger();
-
-/**
- * GET /api/properties
- * Get all properties with optional filtering, sorting, and pagination.
- * Public endpoint — no authentication required.
- */
 export async function GET(req: NextRequest) {
+  const startedAt = now();
   const correlationId = initializeCorrelationId(req);
+  const operationName = "list_properties";
 
   const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
@@ -40,18 +41,27 @@ export async function GET(req: NextRequest) {
   );
 
   if (!rateLimitResult.success) {
-    return apiError(
+    const response = apiError(
       "Too many requests. Please try again later.",
       HttpStatus.TOO_MANY_REQUESTS,
       undefined,
       correlationId,
     );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: "anonymous",
+      outcome: "rate_limited",
+      httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+      durationMs: now() - startedAt,
+      domainError: "limit_exceeded",
+      resourceType: "property",
+    });
+    return response;
   }
 
-  // Parse query parameters
   const { searchParams } = new URL(req.url);
   const rawParams = Object.fromEntries(searchParams.entries());
-
   const queryParams = {
     ...rawParams,
     type: rawParams.type || undefined,
@@ -75,257 +85,346 @@ export async function GET(req: NextRequest) {
 
   const queryValidation = PropertyQuerySchema.safeParse(queryParams);
   if (!queryValidation.success) {
-    logger.warn("Property query validation failed", {
-      correlationId,
-      errors: queryValidation.error.issues,
-    });
-    return apiError(
+    const response = apiError(
       "Invalid query parameters",
       HttpStatus.BAD_REQUEST,
       queryValidation.error.issues,
       correlationId,
     );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: "anonymous",
+      outcome: "validation_error",
+      httpStatus: HttpStatus.BAD_REQUEST,
+      durationMs: now() - startedAt,
+      domainError: "invalid_input",
+      resourceType: "property",
+    });
+    return response;
   }
-
-  logger.info("Fetching properties", {
-    correlationId,
-    filters: queryValidation.data,
-  });
 
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
     () => propertiesService.listProperties(queryValidation.data),
-    { operationName: "list_properties" },
+    { operationName },
   );
 
   if (!result.success || !result.data) {
-    logger.error("Failed to fetch properties", result.error, { correlationId });
-    return apiError(
+    const response = apiError(
       "Failed to fetch properties",
       HttpStatus.INTERNAL_SERVER_ERROR,
       undefined,
       correlationId,
     );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: "anonymous",
+      outcome: "internal_error",
+      httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+    });
+    return response;
   }
 
-  if (!result.data.ok) {
-    return apiError(
-      result.data.message,
-      result.data.status,
-      undefined,
+  const domainResult = result.data;
+  if (!domainResult.ok) {
+    const errorResponse = domainResultToErrorResponse(
+      domainResult,
       correlationId,
     );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: "anonymous",
+      outcome: "domain_error",
+      httpStatus: domainErrorCodeToStatus(domainResult.error),
+      durationMs: now() - startedAt,
+      domainError: domainResult.error,
+      resourceType: "property",
+    });
+    return errorResponse!;
   }
 
-  return apiSuccess(result.data.data, HttpStatus.OK, correlationId);
+  const response = apiSuccess(domainResult.data, HttpStatus.OK, correlationId);
+  logPropertiesRouteOutcome({
+    correlationId,
+    operationName,
+    actorRole: "anonymous",
+    outcome: "success",
+    httpStatus: HttpStatus.OK,
+    durationMs: now() - startedAt,
+    resourceType: "property",
+  });
+  return response;
 }
 
-/**
- * POST /api/properties
- * Create one or more properties.
- * Authenticated endpoint — requires professional (agent) role.
- * Supports idempotency via Idempotency-Key header.
- */
-export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
-  const { ipAddress, userAgent } = getRequestMetadata(req);
+export const POST = withAuth(
+  async (req: NextRequest, { dbUserId, userRole }) => {
+    const startedAt = now();
+    const correlationId = initializeCorrelationId(req);
+    const operationName = "create_property";
+    const actorRole = actorRoleLabel(userRole);
+    const { ipAddress, userAgent } = getRequestMetadata(req);
 
-  // Rate limiting
-  const identifier = getRateLimitIdentifier(req);
-  const rateLimitResult = await checkRateLimit(
-    `properties-write:${identifier}`,
-    RateLimits.WRITE.limit,
-    RateLimits.WRITE.window,
-  );
-
-  if (!rateLimitResult.success) {
-    return apiError(
-      "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS,
-      undefined,
-      correlationId,
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `properties-write:${identifier}`,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
     );
-  }
 
-  // Body size guard
-  const sizeError = checkBodySize(req, PROPERTY_CONFIG.MAX_BODY_SIZE);
-  if (sizeError) return sizeError;
-
-  // Parse body
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
-  }
-
-  // Determine structural intent to provide accurate validation errors
-  const isBatchPayload =
-    typeof body === "object" && body != null && "properties" in body;
-
-  let validatedData;
-  if (isBatchPayload) {
-    const validation = BatchCreatePropertiesSchema.safeParse(body);
-    if (!validation.success) {
-      logger.warn("Batch property creation validation failed", {
-        correlationId,
-        errors: validation.error.issues,
-      });
-      return apiError(
-        "Invalid batch property data",
-        HttpStatus.BAD_REQUEST,
-        validation.error.issues,
+    if (!rateLimitResult.success) {
+      const response = apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
         correlationId,
       );
-    }
-    validatedData = {
-      type: "batch" as const,
-      data: validation.data.properties,
-    };
-  } else {
-    const validation = CreatePropertySchema.safeParse(body);
-    if (!validation.success) {
-      logger.warn("Single property creation validation failed", {
+      logPropertiesRouteOutcome({
         correlationId,
-        errors: validation.error.issues,
+        operationName,
+        actorRole,
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+        resourceType: "property",
       });
-      return apiError(
-        "Invalid property data",
+      return response;
+    }
+
+    const sizeError = checkBodySize(req, PROPERTY_CONFIG.MAX_BODY_SIZE);
+    if (sizeError) {
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: sizeError.status,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+      });
+      return sizeError;
+    }
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      const response = apiError(
+        "Invalid JSON body",
         HttpStatus.BAD_REQUEST,
-        validation.error.issues,
+        undefined,
         correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+      });
+      return response;
     }
-    validatedData = { type: "single" as const, data: validation.data };
-  }
 
-  // Idempotency
-  const idempotencyKey =
-    req.headers.get("Idempotency-Key") ||
-    IdempotencyService.generateKey(dbUserId, "POST", body);
+    const isBatchPayload =
+      typeof body === "object" && body !== null && "properties" in body;
 
-  const idempotencyCheck = await IdempotencyService.checkOrCreate(
-    idempotencyKey,
-    "property",
-    dbUserId,
-    "POST",
-    undefined,
-    PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
+    const validatedData = (() => {
+      if (isBatchPayload) {
+        const validation = BatchCreatePropertiesSchema.safeParse(body);
+        if (!validation.success) {
+          return {
+            ok: false as const,
+            response: apiError(
+              "Invalid batch property data",
+              HttpStatus.BAD_REQUEST,
+              validation.error.issues,
+              correlationId,
+            ),
+          };
+        }
+        return {
+          ok: true as const,
+          value: {
+            type: "batch" as const,
+            data: validation.data.properties,
+          },
+        };
+      }
 
-  if (idempotencyCheck?.status === "completed") {
-    logger.info("Returning cached idempotent response", {
-      correlationId,
+      const validation = CreatePropertySchema.safeParse(body);
+      if (!validation.success) {
+        return {
+          ok: false as const,
+          response: apiError(
+            "Invalid property data",
+            HttpStatus.BAD_REQUEST,
+            validation.error.issues,
+            correlationId,
+          ),
+        };
+      }
+
+      return {
+        ok: true as const,
+        value: {
+          type: "single" as const,
+          data: validation.data,
+        },
+      };
+    })();
+
+    if (!validatedData.ok) {
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+      });
+      return validatedData.response;
+    }
+
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      IdempotencyService.generateKey(dbUserId, "POST", body);
+
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
       idempotencyKey,
-    });
-    return apiSuccess(idempotencyCheck.response, HttpStatus.OK, correlationId);
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    return apiError(
-      "A request with this idempotency key is already being processed",
-      HttpStatus.CONFLICT,
+      "property",
+      dbUserId,
+      "POST",
       undefined,
-      correlationId,
+      PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
     );
-  }
 
-  try {
+    if (idempotencyCheck?.status === "completed") {
+      const response = apiSuccess(
+        idempotencyCheck.response,
+        HttpStatus.OK,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "success",
+        httpStatus: HttpStatus.OK,
+        durationMs: now() - startedAt,
+        resourceType: "property",
+      });
+      return response;
+    }
+
+    if (idempotencyCheck?.status === "pending") {
+      const response = apiError(
+        "A request with this idempotency key is already being processed",
+        HttpStatus.CONFLICT,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: HttpStatus.CONFLICT,
+        durationMs: now() - startedAt,
+        domainError: "conflict",
+        resourceType: "property",
+      });
+      return response;
+    }
+
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      () => {
+      async () => {
+        const actor = { userId: dbUserId, role: userRole };
         const options = { ipAddress, userAgent };
-        if (validatedData.type === "batch") {
+
+        if (validatedData.value.type === "batch") {
           return propertiesService.createPropertiesBatch(
-            dbUserId,
-            validatedData.data,
+            actor,
+            validatedData.value.data,
             options,
           );
         }
+
         return propertiesService.createProperty(
-          dbUserId,
-          validatedData.data,
+          actor,
+          validatedData.value.data,
           options,
         );
       },
-      { operationName: "create_property" },
+      { operationName },
     );
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error("Failed to create property", result.error, {
-        correlationId,
-        userId: dbUserId,
-      });
-      return apiError(
+      const response = apiError(
         "Failed to create property",
         HttpStatus.INTERNAL_SERVER_ERROR,
         undefined,
         correlationId,
       );
-    }
-
-    if (!result.data.ok) {
-      await IdempotencyService.fail(idempotencyKey);
-      return apiError(
-        result.data.message,
-        result.data.status,
-        undefined,
+      logPropertiesRouteOutcome({
         correlationId,
-      );
-    }
-
-    const responseData = result.data.data;
-    await IdempotencyService.complete(idempotencyKey, responseData);
-
-    logger.info("Property created successfully", {
-      correlationId,
-      userId: dbUserId,
-      isBatch: validatedData.type === "batch",
-      count: validatedData.type === "batch" ? validatedData.data.length : 1,
-    });
-
-    return apiSuccess(responseData, HttpStatus.CREATED, correlationId);
-  } catch (error) {
-    await IdempotencyService.fail(idempotencyKey);
-
-    const err = error instanceof Error ? error : new Error(String(error));
-    if (
-      err.message.includes("suspended") ||
-      err.message.includes("professionals")
-    ) {
-      return apiError(
-        err.message,
-        HttpStatus.FORBIDDEN,
-        undefined,
-        correlationId,
-      );
-    }
-    if (
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      (error as { code: string }).code === "P2002"
-    ) {
-      logger.warn("Property creation uniqueness conflict", {
-        correlationId,
-        error: err.message,
+        operationName,
+        actorRole,
+        outcome: "internal_error",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: now() - startedAt,
+        resourceType: "property",
       });
-      return apiError(
-        "A property with this slug or title deed number already exists",
-        HttpStatus.CONFLICT,
-        undefined,
-        correlationId,
-      );
+      return response;
     }
 
-    logger.error("Property creation failed", err, { correlationId });
+    const domainResult = result.data;
+    if (!domainResult.ok) {
+      const errorResponse = domainResultToErrorResponse(
+        domainResult,
+        correlationId,
+      );
+      await IdempotencyService.fail(idempotencyKey);
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(domainResult.error),
+        durationMs: now() - startedAt,
+        domainError: domainResult.error,
+        resourceType: "property",
+      });
+      return errorResponse!;
+    }
 
-    return apiError(
-      "Failed to create property",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-      undefined,
+    await IdempotencyService.complete(idempotencyKey, domainResult.data);
+    const response = apiSuccess(
+      domainResult.data,
+      HttpStatus.CREATED,
       correlationId,
     );
-  }
-});
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.CREATED,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+    });
+    return response;
+  },
+);

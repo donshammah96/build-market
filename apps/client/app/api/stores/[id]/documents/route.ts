@@ -1,6 +1,4 @@
 import { NextRequest } from "next/server";
-import { z } from "zod";
-import { StoreDocumentType, AuditAction } from "@prisma/client";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -17,21 +15,12 @@ import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
 import { STORE_CONFIG } from "@/app/lib/config/store.config";
 import {
-  getStoreDocuments,
-  addStoreDocument,
-  removeStoreDocument,
-} from "@/lib/services/stores";
+  storesService,
+  createStoreDocumentSchema,
+} from "@/app/lib/domains/stores";
 
 const logger = getClientLogger();
-
-const StoreDocumentTypeEnum = z.nativeEnum(StoreDocumentType);
-
-// Schema for creating a document (Asset-based)
-const createDocumentSchema = z.object({
-  type: StoreDocumentTypeEnum,
-  assetId: z.string().uuid("Invalid asset ID"),
-  notes: z.string().optional(),
-});
+const AUDIT_ACTION_PROFILE_UPDATED = "PROFILE_UPDATED";
 
 /*
  ** GET /api/stores/[id]/documents
@@ -62,27 +51,33 @@ export const GET = withAuth<{ id: string }>(
     const resilientExecutor = getResilientExecutor();
 
     const result = await resilientExecutor.execute(
-      async () => {
-        const storeDocuments = await getStoreDocuments(id, dbUserId);
-        return { data: storeDocuments };
-      },
+      async () =>
+        storesService.listStoreDocuments(id, {
+          userId: dbUserId,
+          role: "professional",
+        }),
       { operationName: "get_store_documents" },
     );
 
-    if (result.success && result.data) {
-      return apiSuccess(result.data, HttpStatus.OK, correlationId);
+    if (result.success && result.data?.ok) {
+      return apiSuccess(result.data.data, HttpStatus.OK, correlationId);
     }
 
-    const errMsg =
-      result.error instanceof Error ? result.error.message : "Unknown error";
+    const domainError =
+      result.success && result.data && !result.data.ok ? result.data : null;
+
     logger.error("Failed to fetch store documents", result.error, {
       correlationId,
       storeId: id,
     });
-    if (errMsg === "Store not found")
-      return apiError(errMsg, HttpStatus.NOT_FOUND);
-    if (errMsg === "Unauthorized")
-      return apiError(errMsg, HttpStatus.FORBIDDEN);
+
+    if (domainError) {
+      return apiError(
+        domainError.message || "Failed to fetch store documents",
+        domainError.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
     return apiError(
       "Failed to fetch store documents",
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -128,7 +123,7 @@ export const POST = withAuth<{ id: string }>(
       return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
     }
 
-    const validation = createDocumentSchema.safeParse(body);
+    const validation = createStoreDocumentSchema.safeParse(body);
 
     if (!validation.success) {
       return apiError(
@@ -145,98 +140,51 @@ export const POST = withAuth<{ id: string }>(
 
     const result = await resilientExecutor.execute(
       async () => {
-        const newDoc = await addStoreDocument(id, dbUserId, {
-          type,
-          assetId,
-          notes,
-        });
+        const domainResult = await storesService.addStoreDocument(
+          id,
+          { userId: dbUserId, role: "professional" },
+          {
+            type,
+            assetId,
+            notes,
+          },
+        );
+
+        if (!domainResult.ok) {
+          return domainResult;
+        }
+
+        const newDoc = domainResult.data as { id: string };
         ComplianceService.logAdminAction(
           dbUserId,
-          AuditAction.PROFILE_UPDATED,
+          AUDIT_ACTION_PROFILE_UPDATED,
           "StoreDocument",
           newDoc.id,
           { storeId: id, type, assetId },
         ).catch((err) => logger.error("Failed to create audit log", err));
-        return { data: newDoc };
+        return { ok: true as const, data: newDoc };
       },
       { operationName: "create_store_document" },
     );
 
-    if (result.success && result.data) {
-      return apiSuccess(result.data, HttpStatus.CREATED, correlationId);
+    if (result.success && result.data?.ok) {
+      return apiSuccess(result.data.data, HttpStatus.CREATED, correlationId);
     }
 
-    const errMsg =
-      result.error instanceof Error ? result.error.message : "Unknown error";
     logger.error("Failed to create store document", result.error, {
       correlationId,
       storeId: id,
     });
-    if (errMsg === "Store not found")
-      return apiError(errMsg, HttpStatus.NOT_FOUND);
-    if (errMsg === "Unauthorized" || errMsg.includes("Unauthorized"))
-      return apiError(errMsg, HttpStatus.FORBIDDEN);
-    return apiError(
-      "Failed to create store document",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
-  },
-);
 
-/*
- ** DELETE /api/stores/[id]/documents
- *
- * Deletes a store document.
- *
- * /param {string} id - The ID of the store
- * /query {string} documentId - The ID of the document to delete
- */
-export const DELETE = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
-    const correlationId = initializeCorrelationId(req);
-    const { id } = params!;
-    const { searchParams } = new URL(req.url);
-    const documentId = searchParams.get("documentId");
-
-    if (!isValidId(id) || !documentId || !isValidId(documentId)) {
-      return apiError("Invalid IDs provided", HttpStatus.BAD_REQUEST);
-    }
-
-    const resilientExecutor = getResilientExecutor();
-
-    const result = await resilientExecutor.execute(
-      async () => {
-        await removeStoreDocument(id, documentId, dbUserId);
-        ComplianceService.logAdminAction(
-          dbUserId,
-          AuditAction.DATA_RECTIFIED,
-          "StoreDocument",
-          documentId,
-          { storeId: id, action: "DELETE" },
-        ).catch((err) => logger.error("Failed to log deletion", err));
-        return { data: { success: true } };
-      },
-      { operationName: "delete_store_document" },
-    );
-
-    if (result.success) {
-      return apiSuccess(
-        { message: "Document deleted successfully" },
-        HttpStatus.OK,
-        correlationId,
+    if (result.success && result.data && !result.data.ok) {
+      return apiError(
+        result.data.message || "Failed to create store document",
+        result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
 
-    const errMsg =
-      result.error instanceof Error ? result.error.message : "Unknown error";
-    if (errMsg === "Store not found")
-      return apiError(errMsg, HttpStatus.NOT_FOUND);
-    if (errMsg === "Document not found")
-      return apiError(errMsg, HttpStatus.NOT_FOUND);
-    if (errMsg === "Unauthorized")
-      return apiError(errMsg, HttpStatus.FORBIDDEN);
     return apiError(
-      "Failed to delete document",
+      "Failed to create store document",
       HttpStatus.INTERNAL_SERVER_ERROR,
     );
   },

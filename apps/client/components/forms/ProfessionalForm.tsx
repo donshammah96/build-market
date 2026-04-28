@@ -1,18 +1,30 @@
 "use client";
 
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+} from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Award, Loader2 } from "lucide-react";
 
-import { ProfessionalOnboardingData, Profession, County } from "@build/types";
+import {
+  ProfessionalOnboardingData,
+  Profession,
+  County,
+  StoreOnboardingSchema,
+  PropertyOnboardingSchema,
+} from "@build/types";
 import { DocumentCategory } from "@build/enums";
 import {
   StepProgress,
   CompactStepProgress,
 } from "@/components/ui/step-progress";
-import { API_ROUTES } from "@/lib/links";
+import { onboardingClient } from "@/lib/onboarding-client";
 import { getRegulatoryAuthorityCode } from "@/lib/constants/professionOptions";
 import {
   ProfessionStep,
@@ -24,7 +36,11 @@ import {
   ReviewStep,
   getActiveSteps,
   ProfessionalWizardData,
+  professionalDraftSchema,
 } from "./professional-wizard";
+import { useOnboardingAnalytics } from "@/lib/analytics/OnboardingAnalyticsContext";
+
+// SECURITY_PERSISTENCE_ALLOWLIST: Stores non-sensitive onboarding draft state in sessionStorage.
 
 // ============================================================================
 // TYPES
@@ -38,29 +54,33 @@ export type ProfessionalFormVariant = "dark" | "light";
 // ============================================================================
 
 const STORAGE_KEYS = {
-  onboarding: "professional_onboarding_draft",
-  completion: "professional_completion_draft",
+  onboarding: "professional_onboarding_draft_v1",
+  completion: "professional_completion_draft_v1",
 } as const;
 
+const StorePayloadSchema = StoreOnboardingSchema.omit({ role: true });
+const PropertyPayloadSchema = PropertyOnboardingSchema.omit({ role: true });
+
 // Theme-aware styles
-const createTheme = (variant: ProfessionalFormVariant) => {
-  const isDark = variant === "dark";
+const createTheme = (_variant: ProfessionalFormVariant) => {
   return {
-    container: isDark ? "max-w-2xl mx-auto" : "max-w-2xl mx-auto",
-    loadingOverlay: isDark
-      ? "fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-50 flex items-center justify-center"
-      : "fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center",
-    loadingSpinner: isDark ? "text-emerald-500" : "text-emerald-600",
-    loadingText: isDark
-      ? "text-emerald-500 font-medium animate-pulse"
-      : "text-emerald-600 font-medium animate-pulse",
+    container: "max-w-2xl mx-auto",
+    loadingOverlay:
+      "fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center",
+    loadingSpinner: "text-[var(--color-onboarding-primary)]",
+    loadingText:
+      "text-[var(--color-onboarding-primary)] font-medium animate-pulse",
   };
 };
 
-// Animation variants for step transitions
-const stepVariants = {
+// Step transition variants.
+// When the user has enabled "Reduce motion" in their OS/browser,
+// we honour that by eliminating the horizontal slide — only opacity transitions.
+// This is required by WCAG 2.3.3 (Animation from Interactions, AAA) and is
+// good practice for vestibular disorder accessibility even at AA.
+const createStepVariants = (prefersReduced: boolean) => ({
   enter: (direction: number) => ({
-    x: direction > 0 ? 50 : -50,
+    x: prefersReduced ? 0 : direction > 0 ? 50 : -50,
     opacity: 0,
   }),
   center: {
@@ -68,10 +88,10 @@ const stepVariants = {
     opacity: 1,
   },
   exit: (direction: number) => ({
-    x: direction < 0 ? 50 : -50,
+    x: prefersReduced ? 0 : direction < 0 ? 50 : -50,
     opacity: 0,
   }),
-};
+});
 
 interface Props {
   /** Mode determines behavior: onboarding (new user) vs completion (existing profile) */
@@ -118,11 +138,11 @@ const SuccessCard: React.FC<SuccessCardProps> = ({
       animate={{ opacity: 1, scale: 1 }}
       className={
         isDark
-          ? "bg-white/5 backdrop-blur-sm border border-white/20 p-8 max-w-md mx-auto text-center rounded-xl"
-          : "bg-white border border-zinc-200 shadow-lg p-8 max-w-md mx-auto text-center rounded-xl"
+          ? "bg-onboarding-surface/82 backdrop-blur-md border border-onboarding-primary/28 p-8 max-w-md mx-auto text-center rounded-xl"
+          : "bg-white border border-border shadow-lg p-8 max-w-md mx-auto text-center rounded-xl"
       }
     >
-      <div className={isDark ? "mb-4 text-amber-500" : "mb-4 text-emerald-500"}>
+      <div className="mb-4 text-onboarding-primary">
         <Award
           className={`w-12 h-12 inline-block ${isDark ? "drop-shadow-[0_0_15px_rgba(245,158,11,0.5)]" : "drop-shadow-md"}`}
         />
@@ -130,13 +150,17 @@ const SuccessCard: React.FC<SuccessCardProps> = ({
       <h3
         className={
           isDark
-            ? "font-playfair text-2xl text-white mb-2 drop-shadow-lg"
-            : "font-semibold text-2xl text-zinc-900 mb-2"
+            ? "font-['Syne'] text-2xl text-white mb-2 drop-shadow-lg"
+            : "font-semibold text-2xl text-foreground mb-2"
         }
       >
         {isCompletion ? "Profile Updated!" : "Thanks — application received"}
       </h3>
-      <p className={isDark ? "text-slate-200 mb-6" : "text-zinc-600 mb-6"}>
+      <p
+        className={
+          isDark ? "text-onboarding-ink/62 mb-6" : "text-muted-foreground mb-6"
+        }
+      >
         {isCompletion
           ? "Your profile has been updated successfully. You're all set to start connecting with clients!"
           : "Our team will review your documents and contact you within 3 business days for verification."}
@@ -147,8 +171,8 @@ const SuccessCard: React.FC<SuccessCardProps> = ({
           disabled={isNavigating}
           className={
             isDark
-              ? "text-sm border-b border-emerald-400/50 pb-1 text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50 flex items-center gap-2"
-              : "text-sm border-b border-emerald-600/50 pb-1 text-emerald-600 hover:text-emerald-500 transition-colors disabled:opacity-50 flex items-center gap-2"
+              ? "text-sm border-b border-onboarding-primary/50 pb-1 text-onboarding-primary hover:opacity-90 transition-colors disabled:opacity-50 flex items-center gap-2"
+              : "text-sm border-b border-success/50 pb-1 text-success hover:opacity-90 transition-colors disabled:opacity-50 flex items-center gap-2"
           }
         >
           {isNavigating && <Loader2 className="h-3 w-3 animate-spin" />}
@@ -159,8 +183,8 @@ const SuccessCard: React.FC<SuccessCardProps> = ({
           disabled={isNavigating}
           className={
             isDark
-              ? "text-sm text-slate-400 hover:text-white transition-colors disabled:opacity-50"
-              : "text-sm text-zinc-400 hover:text-zinc-900 transition-colors disabled:opacity-50"
+              ? "text-sm text-onboarding-ink/58 hover:text-onboarding-ink transition-colors disabled:opacity-50"
+              : "text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
           }
         >
           {isCompletion ? "Make more changes" : "Edit application"}
@@ -186,6 +210,13 @@ const ProfessionalForm: React.FC<Props> = ({
   const router = useRouter();
   const storageKey = STORAGE_KEYS[mode];
   const theme = createTheme(variant);
+  const analytics = useOnboardingAnalytics();
+  // Respect the user's OS/browser reduced-motion preference for step animations.
+  const prefersReducedMotion = useReducedMotion() ?? false;
+  const stepVariants = useMemo(
+    () => createStepVariants(prefersReducedMotion),
+    [prefersReducedMotion],
+  );
 
   // ========================================
   // STATE
@@ -195,14 +226,12 @@ const ProfessionalForm: React.FC<Props> = ({
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [direction, setDirection] = useState(0); // For animation direction
 
-  // Form data state - merge initialData with localStorage draft
+  // Form data state - base from initialData; draft restore happens in useEffect (hydration-safe)
   const [formData, setFormData] = useState<Partial<ProfessionalWizardData>>(
     () => {
-      // Start with initial data if provided (completion mode)
       const baseData: Partial<ProfessionalWizardData> = initialData
         ? {
             ...initialData,
-            // Don't restore File objects from initialData
             certificates: [],
             idDocuments: [],
           }
@@ -213,28 +242,36 @@ const ProfessionalForm: React.FC<Props> = ({
             certificates: [],
             idDocuments: [],
           };
-
-      // Try to restore from localStorage (may have more recent edits)
-      if (typeof window !== "undefined") {
-        const saved = localStorage.getItem(storageKey);
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            // Merge with base data, localStorage takes precedence for edited fields
-            return {
-              ...baseData,
-              ...parsed,
-              certificates: [],
-              idDocuments: [],
-            };
-          } catch {
-            // Invalid saved data, use base
-          }
-        }
-      }
       return baseData;
     },
   );
+
+  // Restore draft from sessionStorage on mount (hydration-safe; validates with Zod)
+  useEffect(() => {
+    // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive professional onboarding draft state.
+    const saved = sessionStorage.getItem(storageKey);
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved);
+      const result = professionalDraftSchema.safeParse(parsed);
+      if (!result.success) {
+        // SECURITY_PERSISTENCE_ALLOWLIST: Clears invalid non-sensitive professional onboarding draft state.
+        sessionStorage.removeItem(storageKey);
+        analytics.trackDraftRestoreFailed();
+        return;
+      }
+      const data = result.data as Partial<ProfessionalWizardData>;
+      setFormData({
+        ...data,
+        certificates: [],
+        idDocuments: [],
+      });
+    } catch {
+      // SECURITY_PERSISTENCE_ALLOWLIST: Clears malformed non-sensitive professional onboarding draft state.
+      sessionStorage.removeItem(storageKey);
+      analytics.trackDraftRestoreFailed();
+    }
+  }, [storageKey, analytics]);
 
   // UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -251,25 +288,13 @@ const ProfessionalForm: React.FC<Props> = ({
   // Current step
   const currentStep = activeSteps[currentStepIndex];
 
-  // Progress indicator steps (for UI)
-  const progressSteps = useMemo(
-    () =>
-      activeSteps.map((step) => ({
-        id: step.id,
-        label: step.label,
-        description: step.description,
-        optional: step.optional,
-      })),
-    [activeSteps],
-  );
-
   // ========================================
   // PERSISTENCE
   // ========================================
 
-  // Save to localStorage when form data changes (excluding files)
+  // Save to sessionStorage when form data changes (excluding files)
   useEffect(() => {
-    if (typeof window !== "undefined" && formData.profession) {
+    if (formData.profession) {
       const dataToSave = {
         ...formData,
         certificates: undefined,
@@ -277,16 +302,36 @@ const ProfessionalForm: React.FC<Props> = ({
         stores: formData.stores,
         properties: formData.properties,
       };
-      localStorage.setItem(storageKey, JSON.stringify(dataToSave));
+      // SECURITY_PERSISTENCE_ALLOWLIST: Persists non-sensitive professional onboarding draft state.
+      sessionStorage.setItem(storageKey, JSON.stringify(dataToSave));
     }
   }, [formData, storageKey]);
 
-  // Clear localStorage on successful submission
+  // Clear sessionStorage on successful submission
   const clearSavedData = useCallback(() => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(storageKey);
-    }
+    // SECURITY_PERSISTENCE_ALLOWLIST: Removes non-sensitive professional onboarding draft state.
+    sessionStorage.removeItem(storageKey);
   }, [storageKey]);
+
+  // ========================================
+  // FOCUS MANAGEMENT
+  // ========================================
+
+  // When the step changes, move focus to the step heading so keyboard and
+  // screen reader users are oriented in the new step context.
+  // tabIndex={-1} on the heading makes it programmatically focusable without
+  // entering the tab order — WCAG 2.4.3 (Focus Order).
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    // Use a microtask delay to ensure the new step's DOM has rendered
+    // before we attempt to focus. Without this, focus may land on the
+    // previous step's heading if AnimatePresence hasn't completed the swap.
+    const raf = requestAnimationFrame(() => {
+      stepHeadingRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [currentStepIndex]);
 
   // ========================================
   // NAVIGATION
@@ -318,16 +363,6 @@ const ProfessionalForm: React.FC<Props> = ({
       }
     },
     [activeSteps, currentStepIndex],
-  );
-
-  const handleStepClick = useCallback(
-    (stepIndex: number) => {
-      if (stepIndex < currentStepIndex) {
-        setDirection(-1);
-        setCurrentStepIndex(stepIndex);
-      }
-    },
-    [currentStepIndex],
   );
 
   // ========================================
@@ -384,25 +419,18 @@ const ProfessionalForm: React.FC<Props> = ({
 
         onProgress?.(uploadedIndex, totalFiles, file.name);
 
-        const form = new FormData();
-        form.append(fieldName, file);
-
         try {
-          const res = await fetch(API_ROUTES.onboardingUploads, {
-            method: "POST",
-            body: form,
+          const res = await onboardingClient.uploadFiles(
+            [file],
+            fieldName,
             signal,
-          });
+          );
 
-          if (!res.ok) {
-            const errorText = await res.text().catch(() => "");
-            throw new Error(
-              errorText || `Upload failed with status ${res.status}`,
-            );
+          if (!res.success) {
+            throw new Error(res.error || "Upload failed");
           }
 
-          const json = await res.json();
-          const uploadedResult = json.uploaded?.[fieldName]?.[0];
+          const uploadedResult = res.data?.[0];
 
           if (uploadedResult?.uploadId) {
             results.push({
@@ -507,6 +535,30 @@ const ProfessionalForm: React.FC<Props> = ({
       const finalLicenseNumber =
         formData.boardRegistrationNumber || formData.licenseNumber || "PENDING";
 
+      const stores = formData.stores?.length
+        ? formData.stores.map((store, index) => {
+            const parsed = StorePayloadSchema.safeParse(store);
+            if (!parsed.success) {
+              throw new Error(
+                `Store ${index + 1} is invalid: ${parsed.error.issues[0]?.message || "Invalid store data"}`,
+              );
+            }
+            return parsed.data;
+          })
+        : undefined;
+
+      const properties = formData.properties?.length
+        ? formData.properties.map((property, index) => {
+            const parsed = PropertyPayloadSchema.safeParse(property);
+            if (!parsed.success) {
+              throw new Error(
+                `Property ${index + 1} is invalid: ${parsed.error.issues[0]?.message || "Invalid property data"}`,
+              );
+            }
+            return parsed.data;
+          })
+        : undefined;
+
       // 4. Construct Payload
       const payload: ProfessionalOnboardingData = {
         role: "professional",
@@ -524,17 +576,11 @@ const ProfessionalForm: React.FC<Props> = ({
               ?.previewUrl || "",
         },
         documents: uploadedDocuments,
-        ...(formData.stores?.length && {
-          stores: formData.stores.map((s: any) => ({
-            ...s,
-            role: "professional",
-          })),
+        ...(stores && {
+          stores,
         }),
-        ...(formData.properties?.length && {
-          properties: formData.properties.map((p: any) => ({
-            ...p,
-            role: "professional",
-          })),
+        ...(properties && {
+          properties,
         }),
       };
 
@@ -638,6 +684,7 @@ const ProfessionalForm: React.FC<Props> = ({
     isFirstStep: currentStepIndex === 0,
     isLastStep: currentStepIndex === activeSteps.length - 1,
     isSubmitting,
+    stepHeadingRef, // <--- Focus management: each step renders a heading with this ref
   };
 
   const renderStepContent = () => {

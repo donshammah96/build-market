@@ -18,9 +18,29 @@ import {
   CreateIdeaBookSchema,
   IDEA_BOOK_CONFIG,
 } from "@/app/lib/validation/idea-books-validation";
-import { listIdeaBooks, createIdeaBook } from "@/lib/services/idea-books";
+import { ideaBooksService } from "@/app/lib/domains/idea-books";
 
 const logger = getClientLogger();
+
+function mapIdeaBooksError(error: {
+  error: string;
+  status?: number;
+  message?: string;
+}) {
+  switch (error.error) {
+    case "not_found":
+      return apiError("Idea book not found", HttpStatus.NOT_FOUND);
+    case "forbidden":
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    case "asset_not_found":
+      return apiError("Asset not found", HttpStatus.BAD_REQUEST);
+    default:
+      return apiError(
+        "Idea book operation failed",
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+  }
+}
 
 /**
  * GET /api/idea-books
@@ -28,7 +48,7 @@ const logger = getClientLogger();
  * Supports pagination, search, and category filtering.
  */
 export const GET = withAuth(
-  async (req: NextRequest, { dbUserId }): Promise<NextResponse> => {
+  async (req: NextRequest, { dbUserId, userRole }): Promise<NextResponse> => {
     initializeCorrelationId(req);
 
     const identifier = getRateLimitIdentifier(req);
@@ -61,13 +81,17 @@ export const GET = withAuth(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => listIdeaBooks(dbUserId, { page, limit, search, category }),
+      () =>
+        ideaBooksService.list(
+          { userId: dbUserId, role: userRole },
+          { page, limit, search, category },
+        ),
       { operationName: "list_idea_books" },
     );
 
     if (!result.success || !result.data) {
       logger.error("Failed to fetch idea books", result.error, {
-        userId: dbUserId,
+        actorRole: userRole,
       });
       return apiError(
         "Failed to fetch idea books",
@@ -75,7 +99,11 @@ export const GET = withAuth(
       );
     }
 
-    return apiSuccess(result.data, HttpStatus.OK);
+    if (!result.data.ok) {
+      return mapIdeaBooksError(result.data);
+    }
+
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );
 
@@ -84,7 +112,7 @@ export const GET = withAuth(
  * Create a new idea book.
  */
 export const POST = withAuth(
-  async (req: NextRequest, { dbUserId }): Promise<NextResponse> => {
+  async (req: NextRequest, { dbUserId, userRole }): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
 
     const sizeError = checkBodySize(req, IDEA_BOOK_CONFIG.MAX_BODY_SIZE);
@@ -148,7 +176,7 @@ export const POST = withAuth(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => createIdeaBook(dbUserId, data),
+      () => ideaBooksService.create({ userId: dbUserId, role: userRole }, data),
       { operationName: "create_idea_book" },
     );
 
@@ -156,7 +184,7 @@ export const POST = withAuth(
       await IdempotencyService.fail(idempotencyKey);
       logger.error("Failed to create idea book", result.error, {
         correlationId,
-        userId: dbUserId,
+        actorRole: userRole,
       });
       return apiError(
         "Failed to create idea book",
@@ -164,7 +192,12 @@ export const POST = withAuth(
       );
     }
 
-    const ideaBook = (result.data as { data: unknown }).data;
+    if (!result.data.ok) {
+      await IdempotencyService.fail(idempotencyKey);
+      return mapIdeaBooksError(result.data);
+    }
+
+    const ideaBook = result.data.data;
     await IdempotencyService.complete(idempotencyKey, ideaBook);
     return apiSuccess(ideaBook, HttpStatus.CREATED);
   },

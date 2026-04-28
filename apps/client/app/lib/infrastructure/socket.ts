@@ -4,6 +4,7 @@
  */
 
 import { io, Socket } from "socket.io-client";
+import { env } from "@/app/lib/infrastructure/env";
 
 let socket: Socket | null = null;
 
@@ -24,8 +25,7 @@ export function getSocket(token?: string): Socket | null {
   }
 
   // Create new connection
-  const MESSAGING_SERVICE_URL =
-    process.env.NEXT_PUBLIC_MESSAGING_SERVICE_URL || "http://localhost:3010";
+  const MESSAGING_SERVICE_URL = env.services.messagingPublic;
 
   socket = io(MESSAGING_SERVICE_URL, {
     auth: {

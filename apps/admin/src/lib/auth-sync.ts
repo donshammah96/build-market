@@ -15,19 +15,20 @@ export async function syncUserRole() {
   // 2. Get the current user from DB
   const dbUser = await prisma.user.findUnique({
     where: { clerkId: userId },
-    select: { role: true }
+    select: { role: true },
   });
 
   // 3. If they mismatch, update the DB
   if (dbUser && dbUser.role !== clerkRole) {
-    console.log(`Syncing Role: Updating user ${userId} from ${dbUser.role} to ${clerkRole}`);
-    
+    console.log(
+      `Syncing Role: Updating user ${userId} from ${dbUser.role} to ${clerkRole}`,
+    );
+
     await prisma.user.update({
       where: { clerkId: userId },
-      data: { 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        role: clerkRole as any
-      }
+      data: {
+        role: clerkRole as any,
+      },
     });
   }
 }

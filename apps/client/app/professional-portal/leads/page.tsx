@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { useForm } from "react-hook-form";
+import { useForm, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Search,
@@ -53,9 +53,9 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 import { useLeads, useCreateLead, useUpdateLead } from "@/hooks/useLeads";
+import type { LeadListItem } from "@/app/lib/domains/leads/contracts";
 import {
   CreateLeadSchema,
-  type LeadList,
   type CreateLeadInput,
 } from "@/app/lib/validation/leads-validation";
 // Schema for creating a lead is available via forms.
@@ -64,14 +64,10 @@ type LeadFormValues = z.input<typeof CreateLeadSchema>;
 export default function LeadsPage() {
   const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
   const [isUpdateStatusOpen, setIsUpdateStatusOpen] = useState(false);
-  const [selectedLead, setSelectedLead] = useState<LeadList | null>(null);
+  const [selectedLead, setSelectedLead] = useState<LeadListItem | null>(null);
 
   const { data: leadsData, isLoading } = useLeads();
-  const leads: LeadList[] = useMemo(() => {
-    if (!leadsData) return [];
-    if (Array.isArray(leadsData)) return leadsData;
-    return [];
-  }, [leadsData]);
+  const leads: LeadListItem[] = useMemo(() => leadsData ?? [], [leadsData]);
 
   const createLeadMutation = useCreateLead({
     onSuccess: () => {
@@ -107,6 +103,8 @@ export default function LeadsPage() {
       followUpDate: undefined,
     },
   });
+
+  const formControl = form.control as Control<LeadFormValues>;
 
   function onSubmit(data: LeadFormValues) {
     createLeadMutation.mutate(data as CreateLeadInput);
@@ -151,7 +149,7 @@ export default function LeadsPage() {
                   className="space-y-4"
                 >
                   <FormField
-                    control={form.control}
+                    control={formControl}
                     name="clientName"
                     render={({ field }) => (
                       <FormItem>
@@ -165,7 +163,7 @@ export default function LeadsPage() {
                   />
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
-                      control={form.control}
+                      control={formControl}
                       name="clientEmail"
                       render={({ field }) => (
                         <FormItem>
@@ -178,7 +176,7 @@ export default function LeadsPage() {
                       )}
                     />
                     <FormField
-                      control={form.control}
+                      control={formControl}
                       name="clientPhone"
                       render={({ field }) => (
                         <FormItem>
@@ -193,7 +191,7 @@ export default function LeadsPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
-                      control={form.control}
+                      control={formControl}
                       name="projectType"
                       render={({ field }) => (
                         <FormItem>
@@ -206,7 +204,7 @@ export default function LeadsPage() {
                       )}
                     />
                     <FormField
-                      control={form.control}
+                      control={formControl}
                       name="budget"
                       render={({ field }) => (
                         <FormItem>
@@ -220,7 +218,7 @@ export default function LeadsPage() {
                     />
                   </div>
                   <FormField
-                    control={form.control}
+                    control={formControl}
                     name="location"
                     render={({ field }) => (
                       <FormItem>
@@ -233,7 +231,7 @@ export default function LeadsPage() {
                     )}
                   />
                   <FormField
-                    control={form.control}
+                    control={formControl}
                     name="followUpDate"
                     render={({ field }) => (
                       <FormItem>
@@ -297,7 +295,7 @@ export default function LeadsPage() {
                   </td>
                 </tr>
               ) : (
-                leads.map((lead: LeadList) => (
+                leads.map((lead: LeadListItem) => (
                   <tr
                     key={lead.id}
                     className="group hover:bg-zinc-50/50 transition-colors"
@@ -454,7 +452,7 @@ export default function LeadsPage() {
                   onValueChange={(value) =>
                     setSelectedLead({
                       ...selectedLead,
-                      status: value as LeadList["status"],
+                      status: value as LeadListItem["status"],
                     })
                   }
                 >

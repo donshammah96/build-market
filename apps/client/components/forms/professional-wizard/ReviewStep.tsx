@@ -53,8 +53,10 @@ const ReviewSection: React.FC<ReviewSectionProps> = ({
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
     className={cn(
-      "bg-white/5 border rounded-xl p-5",
-      isComplete ? "border-emerald-500/30" : "border-amber-500/30",
+      "bg-white/[0.08] border rounded-xl p-5",
+      isComplete
+        ? "border-[var(--color-onboarding-primary)]/35"
+        : "border-white/[0.18]",
     )}
   >
     <div className="flex items-center justify-between mb-4">
@@ -63,20 +65,22 @@ const ReviewSection: React.FC<ReviewSectionProps> = ({
           className={cn(
             "p-2 rounded-lg",
             isComplete
-              ? "bg-emerald-500/20 text-emerald-400"
-              : "bg-amber-500/20 text-amber-400",
+              ? "bg-[var(--color-onboarding-primary)]/20 text-[var(--color-onboarding-primary)]"
+              : "bg-[var(--color-onboarding-primary)]/16 text-[var(--color-onboarding-primary)]",
           )}
         >
           {icon}
         </div>
         <h3 className="font-medium text-white">{title}</h3>
-        {isComplete && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
+        {isComplete && (
+          <CheckCircle2 className="h-4 w-4 text-[var(--color-onboarding-primary)]" />
+        )}
       </div>
       {onEdit && (
         <button
           type="button"
           onClick={onEdit}
-          className="text-sm text-zinc-400 hover:text-white flex items-center gap-1 transition-colors"
+          className="text-sm text-[var(--color-onboarding-ink)]/62 hover:text-[var(--color-onboarding-ink)] flex items-center gap-1 transition-colors"
         >
           <Edit2 className="h-3.5 w-3.5" /> Edit
         </button>
@@ -100,15 +104,15 @@ const ReviewItem: React.FC<ReviewItemProps> = ({
   highlight,
 }) => (
   <div className="flex items-center justify-between py-1.5">
-    <span className="text-sm text-zinc-400 flex items-center gap-2">
+    <span className="text-sm text-[var(--color-onboarding-ink)]/62 flex items-center gap-2">
       {icon}
       {label}
     </span>
     <span
       className={cn(
         "text-sm font-medium",
-        highlight ? "text-emerald-400" : "text-white",
-        !value && "text-zinc-500 italic",
+        highlight ? "text-[var(--color-onboarding-primary)]" : "text-white",
+        !value && "text-[var(--color-onboarding-ink)]/45 italic",
       )}
     >
       {value || "Not provided"}
@@ -121,32 +125,56 @@ const ReviewItem: React.FC<ReviewItemProps> = ({
 // ============================================================================
 
 interface LegalCheckboxProps {
+  id: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
   children: React.ReactNode;
 }
 
 const LegalCheckbox: React.FC<LegalCheckboxProps> = ({
+  id,
   checked,
   onChange,
   children,
 }) => (
-  <label className="flex items-start gap-3 cursor-pointer group">
-    <div className="relative flex items-center justify-center mt-1">
+  // The full label is the interactive tap target — this meets the 44×44px requirement
+  // because the text content makes the label tall enough.
+  // The native input is visually hidden but remains in the accessibility tree so
+  // screen readers announce it correctly with its label.
+  <div className="flex items-start gap-3">
+    {/* Native input is the true interactive element — do not use sr-only here;
+        use opacity-0 + absolute positioning so it stays in the accessibility tree
+        and can receive focus, while the visual affordance is the styled div. */}
+    <div className="relative flex items-center justify-center mt-1 min-w-[20px]">
       <input
+        id={id}
         type="checkbox"
-        className="peer sr-only"
+        className="peer absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
       />
-      <div className="w-5 h-5 border-2 border-zinc-600 rounded bg-transparent peer-checked:bg-emerald-500 peer-checked:border-emerald-500 transition-all flex items-center justify-center">
+      {/* Visual checkbox — pointer-events-none so all clicks hit the native input above */}
+      <div
+        className={cn(
+          "w-5 h-5 border-2 rounded pointer-events-none transition-all flex items-center justify-center",
+          checked
+            ? "bg-[var(--color-onboarding-primary)] border-[var(--color-onboarding-primary)]"
+            : "bg-transparent border-white/35",
+          // Focus ring is rendered via the peer-focus-visible selector on the native input
+          "peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--color-focus-ring)] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background",
+        )}
+        aria-hidden="true"
+      >
         {checked && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
       </div>
     </div>
-    <span className="text-sm text-zinc-400 group-hover:text-zinc-300 transition-colors">
+    <label
+      htmlFor={id}
+      className="text-sm text-[var(--color-onboarding-ink)]/62 hover:text-[var(--color-onboarding-ink)]/92 transition-colors cursor-pointer leading-relaxed"
+    >
       {children}
-    </span>
-  </label>
+    </label>
+  </div>
 );
 
 export default function ReviewStep({
@@ -191,7 +219,7 @@ export default function ReviewStep({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-7">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -199,18 +227,18 @@ export default function ReviewStep({
         className="text-center"
       >
         <div className="inline-flex items-center justify-center gap-2 mb-4">
-          <CheckCircle2 className="h-8 w-8 text-emerald-500" />
-          <Sparkles className="h-5 w-5 text-amber-400 animate-pulse" />
+          <CheckCircle2 className="h-8 w-8 text-[var(--color-onboarding-primary)]" />
+          <Sparkles className="h-5 w-5 text-[var(--color-onboarding-primary)]/80 animate-pulse" />
         </div>
-        <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">
+        <h2 className="font-['Syne'] text-2xl md:text-3xl font-bold leading-[1.1] text-white mb-2 tracking-tight">
           Review Your Application
         </h2>
-        <p className="text-zinc-400 max-w-md mx-auto">
+        <p className="text-[var(--color-onboarding-ink)]/62 max-w-md mx-auto">
           Please review your information before submitting.
         </p>
       </motion.div>
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         {/* Profession Section */}
         <ReviewSection
           title="Profession"
@@ -249,8 +277,10 @@ export default function ReviewStep({
             icon={<Globe className="h-3.5 w-3.5" />}
           />
           {data.bio && (
-            <div className="pt-2 mt-2 border-t border-white/10">
-              <p className="text-sm text-zinc-400 mb-1">Bio</p>
+            <div className="pt-2 mt-2 border-t border-white/[0.16]">
+              <p className="text-sm text-[var(--color-onboarding-ink)]/62 mb-1">
+                Bio
+              </p>
               <p className="text-sm text-white line-clamp-3">{data.bio}</p>
             </div>
           )}
@@ -284,23 +314,25 @@ export default function ReviewStep({
             {/* ... (Kept exactly as your original) ... */}
             {data.stores && data.stores.length > 0 ? (
               <div className="space-y-3">
-                <p className="text-sm text-zinc-400 mb-2">
+                <p className="text-sm text-white/62 mb-2">
                   {data.stores.length} Store(s) Configured
                 </p>
                 {data.stores.map((store, index) => (
                   <div
                     key={index}
-                    className="p-3 bg-white/5 rounded-lg border border-white/10 flex justify-between items-center"
+                    className="p-3 bg-white/[0.08] rounded-lg border border-white/[0.16] flex justify-between items-center"
                   >
-                    <span className="text-emerald-400 font-medium text-sm">
+                    <span className="text-[var(--color-onboarding-primary)] font-medium text-sm">
                       {store.name}
                     </span>
-                    <span className="text-xs text-zinc-500">{store.city}</span>
+                    <span className="text-xs text-[var(--color-onboarding-ink)]/55">
+                      {store.city}
+                    </span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-amber-400 italic">
+              <p className="text-sm text-white/58 italic">
                 No stores added — you can add them from your dashboard
               </p>
             )}
@@ -318,25 +350,25 @@ export default function ReviewStep({
             {/* ... (Kept exactly as your original) ... */}
             {data.properties && data.properties.length > 0 ? (
               <div className="space-y-3">
-                <p className="text-sm text-zinc-400 mb-2">
+                <p className="text-sm text-white/62 mb-2">
                   {data.properties.length} Property Listed
                 </p>
                 {data.properties.map((prop, index) => (
                   <div
                     key={index}
-                    className="p-3 bg-white/5 rounded-lg border border-white/10 flex justify-between items-center"
+                    className="p-3 bg-white/[0.08] rounded-lg border border-white/[0.16] flex justify-between items-center"
                   >
-                    <span className="text-emerald-400 font-medium text-sm">
+                    <span className="text-[var(--color-onboarding-primary)] font-medium text-sm">
                       {prop.title}
                     </span>
-                    <span className="text-xs text-emerald-500 font-bold">
+                    <span className="text-xs text-[var(--color-onboarding-primary)] font-bold">
                       {prop.currency} {prop.price.toLocaleString()}
                     </span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-zinc-500 italic">
+              <p className="text-sm text-white/58 italic">
                 No properties added yet — you can add them later
               </p>
             )}
@@ -376,15 +408,15 @@ export default function ReviewStep({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.3 }}
-        className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4"
+        className="bg-[var(--color-onboarding-primary)]/10 border border-[var(--color-onboarding-primary)]/30 rounded-xl p-4"
       >
         <div className="flex items-start gap-3">
-          <ShieldCheck className="h-5 w-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+          <ShieldCheck className="h-5 w-5 text-[var(--color-onboarding-primary)] flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm text-emerald-400 font-medium">
+            <p className="text-sm text-[var(--color-onboarding-primary)] font-medium">
               What happens next?
             </p>
-            <p className="text-xs text-zinc-400 mt-1">
+            <p className="text-xs text-[var(--color-onboarding-ink)]/65 mt-1">
               After submitting, our team will review your application and
               documents. You&apos;ll receive an email notification once your
               profile is verified.
@@ -398,21 +430,29 @@ export default function ReviewStep({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.35 }}
-        className="space-y-4 pt-4 border-t border-white/10"
+        className="space-y-3 pt-3 border-t border-white/[0.16]"
       >
-        <LegalCheckbox checked={agreedToTruth} onChange={setAgreedToTruth}>
+        <LegalCheckbox
+          id="agree-truth"
+          checked={agreedToTruth}
+          onChange={setAgreedToTruth}
+        >
           I declare that the information provided, including my{" "}
           {authCode || "professional"} credentials, is true and accurate. I
           understand that misrepresentation may result in account termination
           and legal action.
         </LegalCheckbox>
 
-        <LegalCheckbox checked={agreedToTos} onChange={setAgreedToTos}>
+        <LegalCheckbox
+          id="agree-tos"
+          checked={agreedToTos}
+          onChange={setAgreedToTos}
+        >
           I agree to the Build Market{" "}
           <a
             href="/legal/professional-terms"
             target="_blank"
-            className="text-emerald-400 hover:underline"
+            className="text-[var(--color-onboarding-primary)] hover:underline"
           >
             Professional Services Agreement
           </a>{" "}
@@ -420,7 +460,7 @@ export default function ReviewStep({
           <a
             href="/legal/privacy"
             target="_blank"
-            className="text-emerald-400 hover:underline"
+            className="text-[var(--color-onboarding-primary)] hover:underline"
           >
             Privacy Policy
           </a>
@@ -433,7 +473,7 @@ export default function ReviewStep({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.4 }}
-        className="flex items-center justify-between pt-4"
+        className="flex items-center justify-between pt-3"
       >
         <button
           type="button"
@@ -452,9 +492,9 @@ export default function ReviewStep({
           onClick={handleSubmit}
           disabled={isSubmitting || !canSubmit}
           className={cn(
-            "font-bold py-3.5 px-8 rounded-lg text-white bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600",
-            "hover:from-amber-400 hover:via-yellow-400 hover:to-amber-500",
-            "transition-all duration-200 shadow-lg hover:shadow-amber-500/30 hover:scale-[1.02]",
+            WIZARD_STYLES.primaryButton,
+            "px-8",
+            "transition-all duration-200 hover:scale-[1.02]",
             "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2",
           )}
         >

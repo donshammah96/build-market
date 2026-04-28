@@ -11,7 +11,7 @@ import {
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { isValidId } from "@/app/lib/api/api-guards";
-import { getPublicLeadStatus } from "@/lib/services/public-leads";
+import { leadsService } from "@/app/lib/domains/leads";
 
 const logger = getClientLogger();
 
@@ -43,9 +43,12 @@ export async function GET(
   }
 
   const executor = getResilientExecutor();
-  const result = await executor.execute(() => getPublicLeadStatus(id), {
-    operationName: "get_public_lead_status",
-  });
+  const result = await executor.execute(
+    () => leadsService.getPublicLeadStatus(id),
+    {
+      operationName: "get_public_lead_status",
+    },
+  );
 
   if (!result.success || !result.data) {
     logger.error("Failed to fetch lead status", result.error, {
@@ -58,10 +61,8 @@ export async function GET(
     );
   }
 
-  const serviceResult = result.data as
-    | { data: unknown }
-    | { error: "not_found" };
-  if ("error" in serviceResult) {
+  const serviceResult = result.data;
+  if (!serviceResult.ok) {
     return apiError("Lead not found", HttpStatus.NOT_FOUND);
   }
 

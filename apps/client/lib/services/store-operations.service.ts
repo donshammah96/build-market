@@ -1,1 +1,1 @@
-export * from "@/app/lib/services/store-operations.service";
+export * from "@/app/lib/domains/stores/operations";

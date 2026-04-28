@@ -11,12 +11,7 @@
 // UserRole
 // -------------------------------------------------------------------------
 
-export const USER_ROLES = [
-  "CLIENT",
-  "PROFESSIONAL",
-  "ADMIN",
-  "SUPPORT",
-] as const;
+export const USER_ROLES = ["CLIENT", "PROFESSIONAL", "ADMIN"] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
 
@@ -24,7 +19,6 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
   CLIENT: "Client (Homeowner)",
   PROFESSIONAL: "Professional / Business",
   ADMIN: "Administrator",
-  SUPPORT: "Support Agent",
 };
 
 export function isUserRole(value: unknown): value is UserRole {
@@ -39,6 +33,8 @@ export function isUserRole(value: unknown): value is UserRole {
 // -------------------------------------------------------------------------
 
 export const USER_STATUSES = [
+  "ONBOARDING",
+  "PENDING_VERIFICATION",
   "ACTIVE",
   "SUSPENDED",
   "BANNED",
@@ -49,6 +45,8 @@ export const USER_STATUSES = [
 export type UserStatus = (typeof USER_STATUSES)[number];
 
 export const USER_STATUS_LABELS: Record<UserStatus, string> = {
+  ONBOARDING: "Onboarding",
+  PENDING_VERIFICATION: "Pending Verification",
   ACTIVE: "Active",
   SUSPENDED: "Suspended",
   BANNED: "Banned",
@@ -102,7 +100,6 @@ export const ADMIN_ROLES = [
   "SUPPORT_AGENT",
   "FINANCE_MANAGER",
   "AUDITOR",
-  "SYSTEM_ADMIN",
 ] as const;
 
 export type AdminRole = (typeof ADMIN_ROLES)[number];
@@ -113,7 +110,6 @@ export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
   SUPPORT_AGENT: "Support Agent",
   FINANCE_MANAGER: "Finance Manager",
   AUDITOR: "Auditor",
-  SYSTEM_ADMIN: "System Admin",
 };
 
 export function isAdminRole(value: unknown): value is AdminRole {

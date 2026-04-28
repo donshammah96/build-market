@@ -1,5 +1,5 @@
 import { prisma } from "@build/db";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, ParticipantRole } from "@prisma/client";
 import {
   messageDetailSelect,
   messageListSelect,
@@ -48,7 +48,10 @@ export const messagingRepository = {
     });
   },
 
-  async updateThread(threadId: string, data: { subject?: string; isArchived?: boolean }) {
+  async updateThread(
+    threadId: string,
+    data: { subject?: string; isArchived?: boolean },
+  ) {
     return prisma.messageThread.update({
       where: { id: threadId },
       data,
@@ -66,6 +69,13 @@ export const messagingRepository = {
   async findUsersByIds(userIds: string[]) {
     return prisma.user.findMany({
       where: { id: { in: userIds } },
+      select: { id: true },
+    });
+  },
+
+  async findUserById(userId: string) {
+    return prisma.user.findUnique({
+      where: { id: userId },
       select: { id: true },
     });
   },
@@ -94,7 +104,11 @@ export const messagingRepository = {
   async createThread(
     creatorId: string,
     participantIds: string[],
-    data: { type: "DIRECT" | "GROUP" | "PROJECT" | "SUPPORT"; subject?: string; projectId?: string },
+    data: {
+      type: "DIRECT" | "GROUP" | "PROJECT" | "SUPPORT";
+      subject?: string;
+      projectId?: string;
+    },
   ) {
     return prisma.messageThread.create({
       data: {
@@ -261,6 +275,38 @@ export const messagingRepository = {
     });
   },
 
+  async markThreadAsRead(threadId: string, userId: string) {
+    return prisma.$transaction(async (tx) => {
+      const unreadMessages = await tx.message.findMany({
+        where: {
+          threadId,
+          deletedAt: null,
+          readReceipts: {
+            none: { userId },
+          },
+        },
+        select: { id: true },
+      });
+
+      if (unreadMessages.length > 0) {
+        await tx.readReceipt.createMany({
+          data: unreadMessages.map((message) => ({
+            messageId: message.id,
+            userId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      await tx.threadParticipant.update({
+        where: { threadId_userId: { threadId, userId } },
+        data: { unreadCount: 0, lastReadAt: new Date() },
+      });
+
+      return { markedCount: unreadMessages.length };
+    });
+  },
+
   async createReaction(messageId: string, userId: string, emoji: string) {
     return prisma.messageReaction.create({
       data: { messageId, userId, emoji },
@@ -285,5 +331,81 @@ export const messagingRepository = {
 
   async countActiveMessages() {
     return prisma.message.count({ where: { deletedAt: null } });
+  },
+
+  async listParticipants(threadId: string) {
+    return prisma.threadParticipant.findMany({
+      where: { threadId },
+      select: {
+        id: true,
+        userId: true,
+        role: true,
+        nickname: true,
+        isMuted: true,
+        isArchived: true,
+        isPinned: true,
+        unreadCount: true,
+        lastReadAt: true,
+        joinedAt: true,
+      },
+      orderBy: { joinedAt: "asc" },
+    });
+  },
+
+  async createParticipant(
+    threadId: string,
+    userId: string,
+    role: ParticipantRole,
+  ) {
+    return prisma.threadParticipant.create({
+      data: {
+        threadId,
+        userId,
+        role,
+      },
+      select: {
+        id: true,
+        userId: true,
+        role: true,
+        nickname: true,
+      },
+    });
+  },
+
+  async updateParticipant(
+    threadId: string,
+    userId: string,
+    data: {
+      role?: ParticipantRole;
+      isMuted?: boolean;
+      isArchived?: boolean;
+      isPinned?: boolean;
+      nickname?: string | null;
+    },
+  ) {
+    return prisma.threadParticipant.update({
+      where: { threadId_userId: { threadId, userId } },
+      data,
+      select: {
+        id: true,
+        userId: true,
+        role: true,
+        nickname: true,
+        isMuted: true,
+        isArchived: true,
+        isPinned: true,
+      },
+    });
+  },
+
+  async deleteParticipant(threadId: string, userId: string) {
+    return prisma.threadParticipant.delete({
+      where: { threadId_userId: { threadId, userId } },
+      select: {
+        id: true,
+        userId: true,
+        role: true,
+      },
+    });
   },
 };

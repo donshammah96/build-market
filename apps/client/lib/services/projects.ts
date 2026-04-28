@@ -2,7 +2,7 @@
  * Projects Service Layer
  *
  * Core business logic for project operations. Used by both Server Actions
- * and API routes. Delegates update/delete to project-operations.service
+ * and API routes. Delegates update/delete to app/lib/domains/projects/operations
  * for optimistic locking (If-Match).
  */
 import { prisma } from "../db";
@@ -27,7 +27,7 @@ import {
   deleteMilestoneWithOptimisticLock,
   verifyProjectOwnership,
   type ProjectOperationContext,
-} from "@/lib/services/project-operations.service";
+} from "@/app/lib/domains/projects/operations";
 import { PROJECT_CONFIG } from "@/lib/config/project.config";
 import { ConsentType, Prisma } from "@prisma/client";
 

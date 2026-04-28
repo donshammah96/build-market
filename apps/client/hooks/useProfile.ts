@@ -9,7 +9,7 @@ import { unwrapApiResponse } from "@/lib/api-client-utils";
 import type {
   OwnProfessionalProfile,
   PublicProfessionalProfile,
-} from "@/lib/profile-client";
+} from "@/lib/profile-contracts";
 
 // ─── Query Keys ────────────────────────────────────────────────────────────
 

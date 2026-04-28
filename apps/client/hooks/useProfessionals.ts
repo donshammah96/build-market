@@ -10,6 +10,22 @@ import {
   type ProfessionalQueryInput,
 } from "@/lib/professionals-client";
 
+function unwrapApiResponse<T>(response: {
+  success: boolean;
+  data?: T;
+  error?: string;
+}): T {
+  if (!response.success) {
+    throw new Error(response.error ?? "Professionals request failed");
+  }
+
+  if (response.data === undefined) {
+    throw new Error("Professionals response was empty");
+  }
+
+  return response.data;
+}
+
 // ─── Query Keys ─────────────────────────────────────────────────────────────
 
 export const professionalKeys = {
@@ -26,11 +42,8 @@ export const professionalKeys = {
 export function useProfessionals(filters?: Partial<ProfessionalQueryInput>) {
   return useQuery({
     queryKey: professionalKeys.list(filters),
-    queryFn: async () => {
-      const res = await professionalsClient.getProfessionals(filters);
-      if (!res.success) throw new Error(res.error);
-      return res.data;
-    },
+    queryFn: async () =>
+      unwrapApiResponse(await professionalsClient.getProfessionals(filters)),
     staleTime: 30_000, // 30s - public listing data
   });
 }
@@ -41,11 +54,8 @@ export function useProfessional(
 ) {
   return useQuery({
     queryKey: professionalKeys.detail(userId ?? ""),
-    queryFn: async () => {
-      const res = await professionalsClient.getProfessional(userId!);
-      if (!res.success) throw new Error(res.error);
-      return res.data;
-    },
+    queryFn: async () =>
+      unwrapApiResponse(await professionalsClient.getProfessional(userId!)),
     enabled: !!userId && enabled,
     staleTime: 30_000, // 30s
   });

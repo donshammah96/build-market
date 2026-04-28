@@ -1,6 +1,18 @@
+/**
+ * POST /api/onboarding/skip-professional
+ * app/api/onboarding/skip-professional/route.ts
+ *
+ * KEY CHANGES FROM ORIGINAL:
+ *
+ * 1. CLERK UPDATE ORDERING FIX (critical)
+ *    Original: domain logic → IdempotencyService.complete() → Clerk update
+ *    Fixed:    domain logic → Clerk update → IdempotencyService.complete()
+ *
+ * 2. SHARED CLERK HELPER replaces (await clerkClient()) as unknown as ClerkMetadataClient
+ */
+
 import { NextRequest, NextResponse } from "next/server";
-import { auth, currentUser, clerkClient } from "@clerk/nextjs/server";
-import { prisma } from "@build/db";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { apiError, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
@@ -10,49 +22,98 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import {
+  type ClerkUserProfile,
+  userProfileOnboardingService,
+} from "@/app/lib/domains/user-profile";
+import {
+  CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
+  finalizeClerkOnboardingTransition,
+} from "@/app/lib/domains/user-profile/clerk-metadata";
+import { normalizeRole, type AppRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
+const ROUTE_PATTERN = "/api/onboarding/skip-professional";
+const OPERATION_NAME = "skip_professional_onboarding";
 
-/**
- * POST /api/onboarding/skip-professional
- * Skip onboarding for professionals — creates minimal professional profile.
- *
- * This allows professionals to go directly to their dashboard without completing
- * the full verification form. They can complete their profile later from the portal.
- *
- * This endpoint uses Clerk auth directly (not withAuth middleware) because
- * the user may not exist in the database yet. It will create the user if needed.
- */
+const SKIP_PROFESSIONAL_ONBOARDING_ERROR_MESSAGE_MAP: Partial<
+  Record<string, string>
+> = {
+  conflict: "Onboarding already completed",
+  forbidden: "Forbidden",
+  not_found: "User not found",
+  invalid_state: "Invalid onboarding state",
+  invalid_input: "Invalid onboarding input",
+  internal: "Skip onboarding failed",
+};
+
+function mapOutcomeFromStatus(status: number): string {
+  if (status === HttpStatus.BAD_REQUEST) return "bad_request";
+  if (status === HttpStatus.UNAUTHORIZED) return "unauthorized";
+  if (status === HttpStatus.FORBIDDEN) return "forbidden";
+  if (status === HttpStatus.CONFLICT) return "conflict";
+  if (status === HttpStatus.TOO_MANY_REQUESTS) return "rate_limited";
+  return "failed";
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const startedAt = Date.now();
   const correlationId = initializeCorrelationId(req);
+  let actorRole: "unknown" | AppRole = "unknown";
 
-  // Get Clerk user ID
+  type LogOutcomeFields = {
+    reason?: string;
+    source?: string;
+    domainError?: string;
+    skipped?: boolean;
+  };
+
+  const logOutcome = (
+    outcome: string,
+    httpStatus: number,
+    fields?: LogOutcomeFields,
+  ) => {
+    logger.info("Onboarding adapter outcome", {
+      correlationId,
+      operationName: OPERATION_NAME,
+      httpMethod: req.method,
+      routePattern: ROUTE_PATTERN,
+      actorRole,
+      outcome,
+      httpStatus,
+      durationMs: Date.now() - startedAt,
+      ...(fields?.reason ? { reason: fields.reason } : {}),
+      ...(fields?.source ? { source: fields.source } : {}),
+      ...(fields?.domainError ? { domainError: fields.domainError } : {}),
+      ...(typeof fields?.skipped === "boolean"
+        ? { skipped: fields.skipped }
+        : {}),
+    });
+  };
+
   const { userId: clerkId } = await auth();
-
   if (!clerkId) {
+    logOutcome("unauthorized", HttpStatus.UNAUTHORIZED);
     return apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED);
   }
 
-  // Rate limiting
-  const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
-    `onboarding-skip-professional:${identifier}`,
+    getActorRateLimitIdentifier(clerkId, "onboarding-skip-professional"),
     RateLimits.AUTH.limit,
     RateLimits.AUTH.window,
   );
-
   if (!rateLimitResult.success) {
+    logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
     return apiError(
       "Too many requests. Please try again later.",
       HttpStatus.TOO_MANY_REQUESTS,
     );
   }
 
-  // Idempotency — prevent duplicate skip actions
   const idempotencyKey =
     req.headers.get("Idempotency-Key") ||
     IdempotencyService.generateKey(clerkId, "POST", {
@@ -66,159 +127,151 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     "POST",
   );
   if (!idempotencyCheck) {
+    logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
+      reason: "idempotency_check_failed",
+    });
     return apiError(
       "Failed to process idempotency key",
       HttpStatus.INTERNAL_SERVER_ERROR,
     );
   }
   if (idempotencyCheck.status === "completed") {
+    logOutcome("succeeded", HttpStatus.OK, {
+      source: "idempotency_cache",
+    });
     return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
   }
   if (idempotencyCheck.status === "pending") {
+    logOutcome("conflict", HttpStatus.CONFLICT, {
+      reason: "idempotency_pending",
+    });
     return apiError(
       "Request is being processed. Please wait.",
       HttpStatus.CONFLICT,
     );
   }
 
-  logger.info("Processing skip professional onboarding request", {
-    correlationId,
-    clerkId,
-  });
-
-  // Get Clerk user data to create/update database user
-  const clerkUserData = await currentUser();
+  const clerkUserData = (await currentUser()) as ClerkUserProfile | null;
   if (!clerkUserData) {
     await IdempotencyService.fail(idempotencyKey);
+    logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
+      reason: "clerk_user_unavailable",
+    });
     return apiError(
       "Could not retrieve user data from Clerk",
       HttpStatus.INTERNAL_SERVER_ERROR,
     );
   }
 
+  const metadataRole = normalizeRole(
+    (clerkUserData as { publicMetadata?: { role?: unknown } }).publicMetadata
+      ?.role,
+  );
+  const resolvedActorRole = metadataRole ?? "PROFESSIONAL";
+  actorRole = resolvedActorRole;
+
+  if (resolvedActorRole !== "PROFESSIONAL" && resolvedActorRole !== "ADMIN") {
+    logOutcome("forbidden", HttpStatus.FORBIDDEN, {
+      reason: "invalid_actor_role",
+    });
+    return apiError("Forbidden", HttpStatus.FORBIDDEN);
+  }
+
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
-    async () => {
-      // Pre-transaction guard: check business rules
-      const existingUser = await prisma.user.findUnique({
-        where: { clerkId },
-        select: {
-          id: true,
-          isProfileComplete: true,
-          professionalProfile: { select: { userId: true } },
-        },
-      });
-
-      // Already completed full onboarding
-      if (existingUser?.isProfileComplete && existingUser.professionalProfile) {
-        return {
-          _error: true as const,
-          message: "Onboarding already completed",
-          status: HttpStatus.CONFLICT,
-        };
-      }
-
-      // Create user and professional profile in a transaction
-      const txResult = await prisma.$transaction(
-        async (tx) => {
-          const user = await tx.user.upsert({
-            where: { clerkId },
-            create: {
-              clerkId,
-              email: clerkUserData.emailAddresses[0]?.emailAddress || "",
-              firstName: clerkUserData.firstName || null,
-              lastName: clerkUserData.lastName || null,
-              phone: clerkUserData.phoneNumbers?.[0]?.phoneNumber || null,
-              role: "PROFESSIONAL",
-              isProfileComplete: false,
-            },
-            update: {
-              role: "PROFESSIONAL",
-              isProfileComplete: false,
-            },
-            select: { id: true, role: true, isProfileComplete: true },
-          });
-
-          // Create minimal professional profile with required defaults
-          await tx.professionalProfile.upsert({
-            where: { userId: user.id },
-            update: {},
-            create: {
-              userId: user.id,
-              profession: "OTHER",
-              companyName: clerkUserData.firstName
-                ? `${clerkUserData.firstName}'s Company`
-                : "My Company",
-              yearsExperience: 0,
-              verified: false,
-            },
-          });
-
-          return user;
-        },
-        { maxWait: 10000, timeout: 30000 },
-      );
-
-      return {
-        userId: txResult.id,
-        role: txResult.role,
-        isProfileComplete: txResult.isProfileComplete,
-        skipped: true,
-        redirectTo: "/professional-portal/dashboard",
-        message:
-          "Professional onboarding skipped. Complete your verification from the dashboard.",
-      };
-    },
-    { operationName: "skip_professional_onboarding" },
+    async () =>
+      userProfileOnboardingService.skipProfessionalOnboarding({
+        actor: { clerkId, correlationId, role: resolvedActorRole },
+        clerkUser: clerkUserData,
+      }),
+    { operationName: OPERATION_NAME },
   );
 
   if (!result.success || !result.data) {
     await IdempotencyService.fail(idempotencyKey);
-    logger.error("Skip professional onboarding failed", result.error, {
-      correlationId,
-      clerkId,
-    });
+    logger.error(
+      "Onboarding adapter outcome",
+      result.error instanceof Error
+        ? result.error
+        : new Error("Skip professional onboarding execution failed"),
+      {
+        correlationId,
+        operationName: OPERATION_NAME,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: Date.now() - startedAt,
+        reason: "executor_failure",
+      },
+    );
     return apiError("Skip onboarding failed", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
-  // Handle business-rule errors returned from the executor
-  if ("_error" in result.data && result.data._error) {
+  if (!result.data.ok) {
     await IdempotencyService.fail(idempotencyKey);
-    return apiError(
-      (result.data as { message: string }).message,
-      (result.data as { status: number }).status,
-    );
+    const status = result.data.status || HttpStatus.INTERNAL_SERVER_ERROR;
+    const safeMessage =
+      SKIP_PROFESSIONAL_ONBOARDING_ERROR_MESSAGE_MAP[result.data.error ?? ""] ||
+      "Skip onboarding failed";
+
+    logOutcome(mapOutcomeFromStatus(status), status, {
+      reason: "domain_error",
+      domainError: result.data.error || "unknown",
+    });
+    return apiError(safeMessage, status);
   }
 
-  // Update Clerk metadata so middleware can detect onboarding is complete
+  const responseData = result.data.data;
+
+  // ORDERING INVARIANT: Clerk update BEFORE IdempotencyService.complete().
   try {
-    const client = await clerkClient();
-    await client.users.updateUserMetadata(clerkId, {
-      publicMetadata: {
+    await finalizeClerkOnboardingTransition({
+      clerkId,
+      metadata: {
         role: "PROFESSIONAL",
         isOnboarded: true,
+        status: "PENDING_VERIFICATION",
       },
+      context: { correlationId, operation: OPERATION_NAME },
+      onFailure: () => IdempotencyService.fail(idempotencyKey),
     });
-    logger.info("Clerk metadata updated for skipped professional onboarding", {
-      correlationId,
-      clerkId,
+  } catch {
+    logOutcome("failed", HttpStatus.SERVICE_UNAVAILABLE, {
+      reason: "clerk_metadata_sync_failed",
     });
-  } catch (clerkError) {
-    // Log but don't fail — DB is source of truth
-    logger.error(
-      "Failed to update Clerk metadata during skip professional",
-      clerkError instanceof Error ? clerkError : new Error(String(clerkError)),
-      { correlationId, clerkId },
+    return apiError(
+      CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
+      HttpStatus.SERVICE_UNAVAILABLE,
     );
   }
 
-  logger.info("Skip professional onboarding completed successfully", {
-    correlationId,
-    userId: (result.data as { userId: string }).userId,
-    role: "PROFESSIONAL",
+  try {
+    await IdempotencyService.complete(idempotencyKey, responseData);
+  } catch (completionError) {
+    await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+    logger.error(
+      "Failed to complete onboarding professional skip idempotency replay",
+      completionError instanceof Error
+        ? completionError
+        : new Error("Idempotency completion failed"),
+      {
+        correlationId,
+        operationName: OPERATION_NAME,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "idempotency_complete_failed",
+        httpStatus: HttpStatus.OK,
+        durationMs: Date.now() - startedAt,
+      },
+    );
+  }
+
+  logOutcome("succeeded", HttpStatus.OK, {
     skipped: true,
   });
 
-  await IdempotencyService.complete(idempotencyKey, result.data);
-  return apiSuccess(result.data, HttpStatus.OK);
+  return apiSuccess(responseData, HttpStatus.OK);
 }

@@ -87,17 +87,34 @@ vi.mock("@/app/lib/api/resilient-api", () => ({
   getClientLogger: vi.fn().mockReturnValue(mockLogger),
 }));
 
-vi.mock("@/lib/services/stores", () => ({
-  getStores: vi.fn().mockResolvedValue({
-    stores: [{ id: "store_1" }],
-    pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
-  }),
-  createStore: vi.fn().mockResolvedValue({ id: "store_1", name: "Test Store" }),
-  createStoresBatch: vi.fn().mockResolvedValue({
-    stores: [{ id: "store_1" }, { id: "store_2" }],
-    count: 2,
-  }),
-}));
+vi.mock("@/app/lib/domains/stores", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/app/lib/domains/stores")>();
+  return {
+    ...actual,
+    storesService: {
+      ...actual.storesService,
+      listStores: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          stores: [{ id: "store_1" }],
+          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        },
+      }),
+      createStore: vi.fn().mockResolvedValue({
+        ok: true,
+        data: { id: "store_1", name: "Test Store" },
+      }),
+      createStoresBatch: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          stores: [{ id: "store_1" }, { id: "store_2" }],
+          count: 2,
+        },
+      }),
+    },
+  };
+});
 
 const buildValidStorePayload = () => ({
   name: "Test Store",
@@ -126,7 +143,17 @@ describe("Stores API routes", () => {
   it("POST returns cached response when idempotency is completed", async () => {
     vi.mocked(prisma.idempotencyKey.findUnique).mockResolvedValue({
       status: IdempotencyStatus.COMPLETED,
-      response: { stores: [], count: 0 },
+      response: {
+        stores: [
+          {
+            id: "store_1",
+            name: "Replay Store",
+            email: "sales@example.com",
+            address: "Nairobi",
+          },
+        ],
+        count: 1,
+      },
     } as any);
 
     const request = new NextRequest("http://localhost:3500/api/stores", {
@@ -139,7 +166,17 @@ describe("Stores API routes", () => {
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
-    expect(data.data).toEqual({ stores: [], count: 0 });
+    expect(data.data).toEqual({
+      stores: [
+        {
+          id: "store_1",
+          name: "Replay Store",
+          email: "sales@example.com",
+          address: "Nairobi",
+        },
+      ],
+      count: 1,
+    });
   });
 
   it("POST returns conflict when idempotency is pending", async () => {
@@ -178,7 +215,7 @@ describe("Stores API routes", () => {
   });
 
   it("POST creates store successfully and logs completion", async () => {
-    const { createStore } = await import("@/lib/services/stores");
+    const { storesService } = await import("@/app/lib/domains/stores");
     vi.mocked(prisma.idempotencyKey.findUnique).mockResolvedValue(null as any);
     vi.mocked(prisma.idempotencyKey.create).mockResolvedValue({} as any);
     vi.mocked(prisma.idempotencyKey.update).mockResolvedValue({} as any);
@@ -193,7 +230,7 @@ describe("Stores API routes", () => {
 
     expect(response.status).toBe(201);
     expect(data.success).toBe(true);
-    expect(createStore).toHaveBeenCalledTimes(1);
+    expect(storesService.createStore).toHaveBeenCalledTimes(1);
     expect(prisma.idempotencyKey.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -204,7 +241,7 @@ describe("Stores API routes", () => {
   });
 
   it("POST batch-create succeeds and records consent", async () => {
-    const { createStoresBatch } = await import("@/lib/services/stores");
+    const { storesService } = await import("@/app/lib/domains/stores");
     vi.mocked(prisma.idempotencyKey.findUnique).mockResolvedValue(null as any);
     vi.mocked(prisma.idempotencyKey.create).mockResolvedValue({} as any);
     vi.mocked(prisma.idempotencyKey.update).mockResolvedValue({} as any);
@@ -222,7 +259,7 @@ describe("Stores API routes", () => {
     expect(response.status).toBe(201);
     expect(data.success).toBe(true);
     expect(data.data.stores).toHaveLength(2);
-    expect(createStoresBatch).toHaveBeenCalledTimes(1);
+    expect(storesService.createStoresBatch).toHaveBeenCalledTimes(1);
     expect(prisma.idempotencyKey.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -233,10 +270,13 @@ describe("Stores API routes", () => {
   });
 
   it("POST batch-create failure returns error and marks idempotency failed", async () => {
-    const { createStoresBatch } = await import("@/lib/services/stores");
-    vi.mocked(createStoresBatch).mockRejectedValueOnce(
-      new Error("Database transaction failed"),
-    );
+    const { storesService } = await import("@/app/lib/domains/stores");
+    vi.mocked(storesService.createStoresBatch).mockResolvedValueOnce({
+      ok: false,
+      error: "internal",
+      message: "Database transaction failed",
+      status: 500,
+    } as any);
     vi.mocked(prisma.idempotencyKey.findUnique).mockResolvedValue(null as any);
     vi.mocked(prisma.idempotencyKey.create).mockResolvedValue({} as any);
     vi.mocked(prisma.idempotencyKey.update).mockResolvedValue({} as any);
@@ -253,7 +293,7 @@ describe("Stores API routes", () => {
 
     expect(response.status).toBe(500);
     expect(data.success).toBe(false);
-    expect(data.error).toContain("Failed to create stores");
+    expect(data.error).toContain("Database transaction failed");
     expect(prisma.idempotencyKey.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -287,12 +327,6 @@ describe("Stores API routes", () => {
     expect(response.status).toBe(429);
     expect(data.success).toBe(false);
     expect(data.error).toContain("Too many requests");
-    expect(prisma.idempotencyKey.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          status: IdempotencyStatus.FAILED,
-        }),
-      }),
-    );
+    expect(prisma.idempotencyKey.update).not.toHaveBeenCalled();
   });
 });

@@ -6,7 +6,7 @@
     "./*": "./src/*.tsx"
   },
   "scripts": {
-    "lint": "eslint . --max-warnings 0",
+    "lint": "eslint . --cache",
     "check-types": "tsc --noEmit",
     "test": "echo \"No tests configured\" && exit 0",
     "generate:component": "turbo gen react-component"

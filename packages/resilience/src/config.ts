@@ -181,12 +181,12 @@ export function getResilienceConfig(): ResilienceEnvConfig {
         60000,
       ),
       enabled: parseBoolEnv(process.env.CACHE_ENABLED, true),
-      redisEnabled: parseBoolEnv(process.env.CACHE_REDIS_ENABLED, false),
-      redisNamespace: process.env.CACHE_REDIS_NAMESPACE || "resilience",
+      redisEnabled: parseBoolEnv(process.env.REDIS_ENABLED, false),
+      redisNamespace: process.env.REDIS_NAMESPACE || "resilience",
       redis: {
-        enabled: parseBoolEnv(process.env.CACHE_REDIS_ENABLED, false),
-        namespace: process.env.CACHE_REDIS_NAMESPACE || "resilience",
-        ttlSeconds: parseIntEnv(process.env.CACHE_REDIS_TTL_SECONDS, 300),
+        enabled: parseBoolEnv(process.env.REDIS_ENABLED, false),
+        namespace: process.env.REDIS_NAMESPACE || "resilience",
+        ttlSeconds: parseIntEnv(process.env.REDIS_TTL_SECONDS, 300),
       },
     },
 

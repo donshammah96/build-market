@@ -6,35 +6,52 @@
  * - Data retention enforcement (schedules deletions for expired accounts)
  * - Anonymization batch processing (processes pending anonymizations)
  * - Asset cleanup (deletes orphaned assets after grace period)
+ * - Onboarding upload cleanup (marks expired staged uploads as EXPIRED)
  *
  * Usage:
- *   import { initializeAllSchedulers, shutdownAllSchedulers } from '@/app/jobs';
- *   await initializeAllSchedulers();
- *   // On shutdown:
- *   await shutdownAllSchedulers();
+ * import { initializeAllSchedulers, shutdownAllSchedulers } from '@/app/jobs';
+ * await initializeAllSchedulers();
+ * // On shutdown:
+ * await shutdownAllSchedulers();
  */
 
-import { scheduleExportCleanup, createCleanupWorker } from "./export-cleanup";
+import { envConfig } from "@/app/lib/infrastructure/env";
+import {
+  scheduleExportCleanup,
+  createCleanupWorker,
+  getCleanupQueue,
+} from "./export-cleanup";
+import {
+  type ExportJobData,
+  getExportQueue,
+  addExportJob,
+} from "./export-queue";
 import {
   scheduleDataRetentionEnforcement,
   createDataRetentionWorker,
-  retentionQueue,
+  getRetentionQueue,
 } from "./data-retention";
 import {
   scheduleAnonymizationBatch,
   createAnonymizationBatchWorker,
-  anonymizationQueue,
+  getAnonymizationQueue,
 } from "./anonymization-batch";
 import {
   scheduleAssetCleanup,
   createAssetCleanupWorker,
-  assetCleanupQueue,
+  getAssetCleanupQueue,
 } from "./asset-cleanup";
+import {
+  scheduleOnboardingUploadCleanup,
+  createOnboardingUploadCleanupWorker,
+  getOnboardingUploadCleanupQueue,
+} from "./onboarding-upload-cleanup";
 import { Worker } from "bullmq";
 
 // Track all workers for graceful shutdown
 let workers: Worker[] = [];
 let isInitialized = false;
+let startedAt: Date | undefined;
 
 export interface SchedulerStatus {
   name: string;
@@ -54,6 +71,24 @@ export interface GDPRJobOrchestrator {
  * Initialize all GDPR schedulers and workers
  */
 export async function initializeAllSchedulers(): Promise<void> {
+  // Guard 1: BullMQ requires a Redis TCP endpoint. Skip entirely when
+  // REDIS_URL is not configured (local dev without Redis, CI smoke gate).
+  if (!envConfig.redis.url) {
+    console.info(
+      "[JobOrchestrator] REDIS_URL not set — background job queues disabled.",
+    );
+    return;
+  }
+
+  // Guard 2: Belt-and-suspenders for CI environments that set
+  // DISABLE_BACKGROUND_JOBS=true explicitly.
+  if (envConfig.isCI && envConfig.jobs.disableBackgroundJobs) {
+    console.info(
+      "[JobOrchestrator] DISABLE_BACKGROUND_JOBS=true — skipping queue initialisation in CI.",
+    );
+    return;
+  }
+
   if (isInitialized) {
     console.log("[JobOrchestrator] Already initialized, skipping");
     return;
@@ -68,21 +103,26 @@ export async function initializeAllSchedulers(): Promise<void> {
       scheduleDataRetentionEnforcement(),
       scheduleAnonymizationBatch(),
       scheduleAssetCleanup(),
+      scheduleOnboardingUploadCleanup(),
     ]);
 
     console.log("[JobOrchestrator] All jobs scheduled");
 
-    // 2. Create workers
+    // 2. Create workers — order must match the workerNames tuple in
+    //    healthCheck() and getSchedulerStatus() so index-based lookups remain
+    //    correct.
     workers = [
       createCleanupWorker(),
       createDataRetentionWorker(),
       createAnonymizationBatchWorker(),
       createAssetCleanupWorker(),
+      createOnboardingUploadCleanupWorker(),
     ];
 
     console.log("[JobOrchestrator] All workers created");
 
     isInitialized = true;
+    startedAt = new Date();
 
     console.log(
       "[JobOrchestrator] GDPR job orchestrator initialized successfully",
@@ -118,13 +158,17 @@ export async function shutdownAllSchedulers(): Promise<void> {
 
     // Close all queues
     await Promise.all([
-      retentionQueue.close(),
-      anonymizationQueue.close(),
-      assetCleanupQueue.close(),
+      getCleanupQueue().close(),
+      getRetentionQueue().close(),
+      getAnonymizationQueue().close(),
+      getAssetCleanupQueue().close(),
+      getOnboardingUploadCleanupQueue().close(),
+      getExportQueue().close(),
     ]);
 
     workers = [];
     isInitialized = false;
+    startedAt = undefined;
 
     console.log("[JobOrchestrator] All schedulers shut down");
   } catch (error) {
@@ -141,29 +185,26 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
 
   // Get job info from each queue
   const queues = [
-    { name: "Export Cleanup", queue: null as any }, // cleanupQueue is not exported
-    { name: "Data Retention", queue: retentionQueue },
-    { name: "Anonymization Batch", queue: anonymizationQueue },
-    { name: "Asset Cleanup", queue: assetCleanupQueue },
+    { name: "Export Cleanup", queue: getCleanupQueue() },
+    { name: "Data Retention", queue: getRetentionQueue() },
+    { name: "Anonymization Batch", queue: getAnonymizationQueue() },
+    { name: "Asset Cleanup", queue: getAssetCleanupQueue() },
+    {
+      name: "Onboarding Upload Cleanup",
+      queue: getOnboardingUploadCleanupQueue(),
+    },
   ];
 
   for (const { name, queue } of queues) {
     try {
-      if (queue) {
-        const repeatableJobs = await queue.getRepeatableJobs();
-        const job = repeatableJobs[0];
+      const repeatableJobs = await queue.getRepeatableJobs();
+      const job = repeatableJobs[0];
 
-        schedulers.push({
-          name,
-          isRunning: workers.some((w) => w.isRunning()),
-          nextRun: job?.next ? new Date(job.next) : undefined,
-        });
-      } else {
-        schedulers.push({
-          name,
-          isRunning: false,
-        });
-      }
+      schedulers.push({
+        name,
+        isRunning: workers.some((w) => w.isRunning()),
+        nextRun: job?.next ? new Date(job.next) : undefined,
+      });
     } catch (error) {
       schedulers.push({
         name,
@@ -176,7 +217,7 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
   return {
     isInitialized,
     schedulers,
-    startedAt: isInitialized ? new Date() : undefined,
+    startedAt,
   };
 }
 
@@ -188,32 +229,34 @@ export async function triggerJob(
     | "export-cleanup"
     | "data-retention"
     | "anonymization-batch"
-    | "asset-cleanup",
+    | "asset-cleanup"
+    | "onboarding-upload-cleanup",
 ): Promise<{ success: boolean; jobId?: string; error?: string }> {
   try {
     let queue;
     let jobName;
 
     switch (jobType) {
+      case "export-cleanup":
+        queue = getCleanupQueue();
+        jobName = "cleanup-expired-exports";
+        break;
       case "data-retention":
-        queue = retentionQueue;
+        queue = getRetentionQueue();
         jobName = "enforce-data-retention";
         break;
       case "anonymization-batch":
-        queue = anonymizationQueue;
+        queue = getAnonymizationQueue();
         jobName = "process-pending-anonymizations";
         break;
       case "asset-cleanup":
-        queue = assetCleanupQueue;
+        queue = getAssetCleanupQueue();
         jobName = "cleanup-expired-assets";
         break;
-      case "export-cleanup":
-        // Note: cleanupQueue is not exported from export-cleanup.ts
-        // Would need to export it for this to work
-        return {
-          success: false,
-          error: "Export cleanup manual trigger not available",
-        };
+      case "onboarding-upload-cleanup":
+        queue = getOnboardingUploadCleanupQueue();
+        jobName = "cleanup-expired-staged-uploads";
+        break;
       default:
         return { success: false, error: `Unknown job type: ${jobType}` };
     }
@@ -242,7 +285,11 @@ export async function triggerJob(
 }
 
 /**
- * Health check for all schedulers
+ * Health check for all schedulers.
+ *
+ * Worker names must match the order in which workers are created in
+ * initializeAllSchedulers(). If you add or reorder workers there, update
+ * this tuple accordingly.
  */
 export async function healthCheck(): Promise<{
   healthy: boolean;
@@ -260,21 +307,33 @@ export async function healthCheck(): Promise<{
     };
   }
 
-  // Check each worker
+  // Worker names must stay in sync with the workers[] creation order.
   const workerNames = [
     "export-cleanup",
     "data-retention",
     "anonymization",
     "asset-cleanup",
+    "onboarding-upload-cleanup",
   ] as const;
-  for (let i = 0; i < workers.length; i++) {
-    const worker = workers[i];
-    const name = workerNames[i];
 
-    if (!name) continue;
+  for (let i = 0; i < workerNames.length; i++) {
+    const name = workerNames[i];
+    const worker = workers[i];
+
+    if (!name) {
+      continue;
+    }
+
+    if (!worker) {
+      details[name] = {
+        healthy: false,
+        message: "Worker not found",
+      };
+      continue;
+    }
 
     try {
-      const running = worker!.isRunning();
+      const running = worker.isRunning();
       details[name] = {
         healthy: running,
         message: running ? "Worker running" : "Worker stopped",
@@ -292,10 +351,14 @@ export async function healthCheck(): Promise<{
   return { healthy, details };
 }
 
-// Re-export individual schedulers for flexibility
+// Re-export individual schedulers and queue functions for flexibility
 export {
   scheduleExportCleanup,
   scheduleDataRetentionEnforcement,
   scheduleAnonymizationBatch,
   scheduleAssetCleanup,
+  scheduleOnboardingUploadCleanup,
+  getExportQueue,
+  addExportJob,
+  type ExportJobData,
 };

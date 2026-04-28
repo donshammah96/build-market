@@ -5,24 +5,24 @@ import "@testing-library/jest-dom/vitest";
 import { useImageUploader } from "@/hooks/useImageUploader";
 import type { ImageField } from "@/hooks/useImageUploader";
 
-// Mock sonner toast
-const mockToast = {
-  loading: vi.fn(() => "loading-toast-id"),
-  success: vi.fn(),
-  error: vi.fn(),
-  dismiss: vi.fn(),
-  warning: vi.fn(),
-};
+// vi.mock factories are hoisted; use vi.hoisted() so mock refs exist at hoist time
+const { mockToast, mockUploadFiles, mockValidateFiles } = vi.hoisted(() => ({
+  mockToast: {
+    loading: vi.fn(() => "loading-toast-id"),
+    success: vi.fn(),
+    error: vi.fn(),
+    dismiss: vi.fn(),
+    warning: vi.fn(),
+  },
+  mockUploadFiles: vi.fn(),
+  mockValidateFiles: vi.fn(),
+}));
 
 vi.mock("sonner", () => ({
   toast: mockToast,
 }));
 
-// Mock the upload service
-const mockUploadFiles = vi.fn();
-const mockValidateFiles = vi.fn();
-
-vi.mock("@/lib/services/upload", () => ({
+vi.mock("@/lib/upload-client", () => ({
   uploadFiles: (...args: unknown[]) => mockUploadFiles(...args),
   validateFiles: (...args: unknown[]) => mockValidateFiles(...args),
   UploadError: class UploadError extends Error {
@@ -65,6 +65,7 @@ describe("useImageUploader", () => {
     vi.clearAllMocks();
     mockUploadFiles.mockResolvedValue({
       urls: ["https://example.com/new.jpg"],
+      assetIds: ["00000000-0000-0000-0000-000000000001"],
     });
     mockValidateFiles.mockImplementation(() => {});
   });
@@ -184,7 +185,9 @@ describe("useImageUploader", () => {
       });
 
       expect(mockAppendImage).not.toHaveBeenCalled();
-      expect(mockToast.error).toHaveBeenCalledWith("Invalid URL format");
+      expect(mockToast.error).toHaveBeenCalledWith(
+        "Image URL must start with https:// or be a local path",
+      );
     });
 
     it("rejects non-HTTPS URL", () => {
@@ -350,6 +353,7 @@ describe("useImageUploader", () => {
       await waitFor(() => {
         expect(mockAppendImage).toHaveBeenCalled();
         expect(mockUpdateImage).toHaveBeenCalledWith(0, {
+          assetId: "00000000-0000-0000-0000-000000000001",
           value: "https://example.com/new.jpg",
         });
         expect(mockToast.success).toHaveBeenCalledWith("Added 1 image(s)");

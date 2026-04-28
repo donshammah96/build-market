@@ -2,6 +2,14 @@ import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import { createHash } from "crypto";
+import { env } from "@/app/lib/infrastructure/env";
+import {
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+  S3ServiceException,
+} from "@aws-sdk/client-s3";
 
 /**
  * Storage abstraction layer for file uploads
@@ -38,6 +46,60 @@ export interface StorageProvider {
   ): Promise<{ size: number; mimeType: string; createdAt: Date }>;
 }
 
+function isAbsoluteHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function isSameOrigin(candidateUrl: string, comparisonUrl: string): boolean {
+  try {
+    return new URL(candidateUrl).origin === new URL(comparisonUrl).origin;
+  } catch {
+    return false;
+  }
+}
+
+function joinCdnUrl(baseUrl: string, key: string): string {
+  return `${baseUrl.replace(/\/+$/, "")}/${key}`;
+}
+
+function buildUploadObjectKey(filename: string): string {
+  const now = new Date();
+  const ext = path.extname(filename).toLowerCase();
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  return `uploads/${year}/${month}/${randomUUID()}${ext}`;
+}
+
+function assertProductionStorageConfig(config: StorageConfig): void {
+  if (!env.isProd) {
+    return;
+  }
+
+  if (config.provider === "local") {
+    throw new Error(
+      "Unsafe production storage configuration: local storage provider is prohibited in production.",
+    );
+  }
+
+  const cdnUrl = config.cdnUrl;
+  if (!cdnUrl || !isAbsoluteHttpUrl(cdnUrl)) {
+    throw new Error(
+      "Unsafe production storage configuration: CDN URL must be an absolute remote origin in production.",
+    );
+  }
+
+  if (isSameOrigin(cdnUrl, env.appUrl) || isSameOrigin(cdnUrl, env.apiUrl)) {
+    throw new Error(
+      "Unsafe production storage configuration: uploaded content must not be served from the application origin.",
+    );
+  }
+}
+
 /**
  * Local filesystem storage provider
  * WARNING: Only suitable for development. Use S3/GCS in production.
@@ -48,7 +110,8 @@ class LocalStorageProvider implements StorageProvider {
 
   constructor(config: StorageConfig) {
     this.uploadDir =
-      config.localPath || path.join(process.cwd(), "public", "uploads");
+      config.localPath ||
+      path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "uploads");
     this.publicUrl = config.cdnUrl || "/uploads";
 
     // Ensure upload directory exists
@@ -144,36 +207,124 @@ class LocalStorageProvider implements StorageProvider {
  * TODO: Implement using AWS SDK or MinIO client
  */
 class S3StorageProvider implements StorageProvider {
-  /* eslint-disable /typescript-eslint/no-unused-vars */
-  constructor(_config: StorageConfig) {
-    // TODO: Initialize S3 client
-    throw new Error(
-      "S3 storage provider not yet implemented. Use local storage for development.",
-    );
+  private readonly client: S3Client;
+  private readonly bucket: string;
+  private readonly region: string;
+  private readonly publicUrl: string;
+
+  constructor(config: StorageConfig) {
+    if (!config.bucket) {
+      throw new Error(
+        "S3 storage configuration requires STORAGE_BUCKET for remote uploads.",
+      );
+    }
+
+    if (!config.cdnUrl || !isAbsoluteHttpUrl(config.cdnUrl)) {
+      throw new Error("S3 storage configuration requires an absolute CDN_URL.");
+    }
+
+    this.bucket = config.bucket;
+    this.region = config.region || env.storage.region || "af-south-1";
+    this.publicUrl = config.cdnUrl.replace(/\/+$/, "");
+
+    const credentials =
+      env.storage.accessKeyId && env.storage.secretAccessKey
+        ? {
+            accessKeyId: env.storage.accessKeyId,
+            secretAccessKey: env.storage.secretAccessKey,
+          }
+        : undefined;
+
+    this.client = new S3Client({
+      region: this.region,
+      ...(credentials ? { credentials } : {}),
+    });
   }
 
   async upload(
-    _buffer: Buffer,
-    _filename: string,
-    _mimeType: string,
+    buffer: Buffer,
+    filename: string,
+    mimeType: string,
   ): Promise<UploadedFile> {
-    throw new Error("Not implemented");
+    const checksum = createHash("sha256").update(buffer).digest("hex");
+    const key = buildUploadObjectKey(filename);
+
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: mimeType,
+        ContentDisposition: "attachment",
+        Metadata: {
+          originalFilename: path.basename(filename),
+          checksum,
+        },
+      }),
+    );
+
+    const url = joinCdnUrl(this.publicUrl, key);
+
+    return {
+      key,
+      url,
+      cdnUrl: url,
+      checksum,
+      size: buffer.length,
+      bucket: this.bucket,
+    };
   }
 
-  async delete(_key: string): Promise<void> {
-    throw new Error("Not implemented");
+  async delete(key: string): Promise<void> {
+    await this.client.send(
+      new DeleteObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }),
+    );
   }
 
-  async exists(_key: string): Promise<boolean> {
-    throw new Error("Not implemented");
+  async exists(key: string): Promise<boolean> {
+    try {
+      await this.client.send(
+        new HeadObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+        }),
+      );
+      return true;
+    } catch (error) {
+      // Only treat a 404 as "does not exist". Any other error (403 Forbidden,
+      // network failure, throttling) means we genuinely don't know whether the
+      // object exists and should propagate the failure rather than silently
+      // returning false, which could lead to orphaned objects never being
+      // cleaned up or double-writes on top of existing objects.
+      if (
+        error instanceof S3ServiceException &&
+        error.$metadata.httpStatusCode === 404
+      ) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   async getMetadata(
-    _key: string,
+    key: string,
   ): Promise<{ size: number; mimeType: string; createdAt: Date }> {
-    throw new Error("Not implemented");
+    const result = await this.client.send(
+      new HeadObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }),
+    );
+
+    return {
+      size: result.ContentLength ?? 0,
+      mimeType: result.ContentType || "application/octet-stream",
+      createdAt: result.LastModified || new Date(),
+    };
   }
-  /* eslint-enable /typescript-eslint/no-unused-vars */
 }
 
 /**
@@ -183,25 +334,34 @@ export function createStorageProvider(
   config?: Partial<StorageConfig>,
 ): StorageProvider {
   const defaultConfig: StorageConfig = {
-    provider:
-      (process.env.STORAGE_PROVIDER as "local" | "s3" | "gcs") || "local",
-    localPath:
-      process.env.UPLOAD_DIR || path.join(process.cwd(), "public", "uploads"),
-    bucket: process.env.STORAGE_BUCKET,
-    region: process.env.STORAGE_REGION,
-    cdnUrl: process.env.CDN_URL || "/uploads",
+    provider: env.storage.provider,
+    localPath: env.storage.localPath.startsWith(".")
+      ? path.join(
+          /*turbopackIgnore: true*/ process.cwd(),
+          env.storage.localPath,
+        )
+      : env.storage.localPath,
+    bucket: env.storage.bucket || env.storage.assetBucket,
+    region: env.storage.region,
+    cdnUrl: env.storage.cdnUrl,
   };
 
   const finalConfig = { ...defaultConfig, ...config };
+  assertProductionStorageConfig(finalConfig);
 
   switch (finalConfig.provider) {
     case "local":
       return new LocalStorageProvider(finalConfig);
     case "s3":
-    case "gcs":
       return new S3StorageProvider(finalConfig);
+    case "gcs":
+      throw new Error(
+        `Unsupported storage provider: ${String(finalConfig.provider)}`,
+      );
     default:
-      return new LocalStorageProvider(finalConfig);
+      throw new Error(
+        `Unsupported storage provider: ${String(finalConfig.provider)}`,
+      );
   }
 }
 

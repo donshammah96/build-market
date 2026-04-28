@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 import { usePipelineSummary } from "@/hooks/usePipeline";
 import { useInquiries } from "@/hooks/useInquiries";
-import type { PropertyInquiryList } from "@/lib/inquiries-client";
+import type { InquiryListItem } from "@/app/lib/domains/inquiries/contracts";
 
 // ─── Static stage config ───────────────────────────────────────────────────
 
@@ -30,7 +30,7 @@ interface PipelineStageConfig {
   icon: React.ComponentType<{ className?: string }>;
   color: string;
   bgColor: string;
-  status: "viewing_scheduled" | "offer_made" | "closed";
+  status: "VIEWING_SCHEDULED" | "OFFER_MADE" | "CLOSED";
 }
 
 const STAGES: PipelineStageConfig[] = [
@@ -40,7 +40,7 @@ const STAGES: PipelineStageConfig[] = [
     icon: Eye,
     color: "text-blue-600",
     bgColor: "bg-blue-50",
-    status: "viewing_scheduled",
+    status: "VIEWING_SCHEDULED",
   },
   {
     id: "offer",
@@ -48,7 +48,7 @@ const STAGES: PipelineStageConfig[] = [
     icon: FileText,
     color: "text-amber-600",
     bgColor: "bg-amber-50",
-    status: "offer_made",
+    status: "OFFER_MADE",
   },
   {
     id: "closing",
@@ -56,7 +56,7 @@ const STAGES: PipelineStageConfig[] = [
     icon: CheckCircle2,
     color: "text-emerald-600",
     bgColor: "bg-emerald-50",
-    status: "closed",
+    status: "CLOSED",
   },
 ];
 
@@ -85,9 +85,9 @@ export default function PipelinePage() {
 
   // Request up to 100 inquiries to populate pipeline stages.
   // InquiriesQuerySchema.limit is a string-coercing field (z.string → transform → number).
-  const { data: inquiries = [], isLoading: isLoadingInquiries } = useInquiries({
-    limit: "100",
-  } as unknown as Parameters<typeof useInquiries>[0]);
+  const { data: inquiriesPage, isLoading: isLoadingInquiries } = useInquiries({
+    limit: 100,
+  });
 
   const isLoading = isLoadingPipeline || isLoadingInquiries;
   const totalValue = pipelineSummary?.totalValue ?? 0;
@@ -110,25 +110,26 @@ export default function PipelinePage() {
 
   /** Group inquiries by pipeline status key. */
   const inquiriesByStage = useMemo(() => {
-    const grouped: Record<string, PropertyInquiryList[]> = {
-      viewing_scheduled: [],
-      offer_made: [],
-      closed: [],
+    const inquiries = inquiriesPage?.data ?? [];
+    const grouped: Record<string, InquiryListItem[]> = {
+      VIEWING_SCHEDULED: [],
+      OFFER_MADE: [],
+      CLOSED: [],
     };
 
     inquiries.forEach((inquiry) => {
       const status = inquiry.status as string;
       if (
-        status === "viewing_scheduled" ||
-        status === "offer_made" ||
-        status === "closed"
+        status === "VIEWING_SCHEDULED" ||
+        status === "OFFER_MADE" ||
+        status === "CLOSED"
       ) {
         grouped[status]?.push(inquiry);
       }
     });
 
     return grouped;
-  }, [inquiries]);
+  }, [inquiriesPage]);
 
   return (
     <div className="space-y-8 max-w-[1600px] mx-auto pb-10">
@@ -250,7 +251,7 @@ function InquiryCard({
   inquiry,
   stageColor,
 }: {
-  inquiry: PropertyInquiryList;
+  inquiry: InquiryListItem;
   stageColor: string;
 }) {
   return (
@@ -260,7 +261,7 @@ function InquiryCard({
           <div className="flex items-start justify-between gap-2 mb-2">
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-zinc-900 text-sm line-clamp-1 group-hover:text-emerald-600 transition-colors">
-                {inquiry.propertyTitle ?? "Untitled Inquiry"}
+                {inquiry.property.title || "Untitled Inquiry"}
               </h3>
               <div className="flex items-center gap-1 mt-1">
                 <Building2 className="h-3 w-3 text-zinc-400" />

@@ -11,7 +11,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Eye, Trash2, Mail, Phone } from "lucide-react";
+import {
+  MoreHorizontal,
+  Eye,
+  Trash2,
+  Mail,
+  Phone,
+  ArrowUpDown,
+} from "lucide-react";
 import Link from "next/link";
 import type { LeadListItem } from "@/actions/admin/leads";
 
@@ -29,7 +36,18 @@ const statusColors: Record<string, string> = {
 export const columns: ColumnDef<LeadData>[] = [
   {
     accessorKey: "clientName",
-    header: "Client",
+    header: ({ column }) => {
+      return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="-ml-4 hover:bg-transparent"
+        >
+          Client
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      );
+    },
     cell: ({ row }) => {
       const lead = row.original;
       return (
@@ -64,7 +82,9 @@ export const columns: ColumnDef<LeadData>[] = [
       const professional = row.original.professional;
       return (
         <div className="flex flex-col">
-          <span className="font-medium text-sm">{professional.companyName}</span>
+          <span className="font-medium text-sm">
+            {professional.companyName}
+          </span>
           <span className="text-xs text-zinc-500">{professional.email}</span>
         </div>
       );
@@ -101,9 +121,7 @@ export const columns: ColumnDef<LeadData>[] = [
     accessorKey: "budget",
     header: "Budget",
     cell: ({ row }) => (
-      <span className="text-sm font-medium">
-        {row.original.budget || "-"}
-      </span>
+      <span className="text-sm font-medium">{row.original.budget || "-"}</span>
     ),
   },
   {

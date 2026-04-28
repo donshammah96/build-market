@@ -1,36 +1,57 @@
 import { NextRequest } from "next/server";
-import { z } from "zod";
-import { AuditAction } from "@prisma/client";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
+import { checkBodySize, isValidId } from "@/app/lib/api/api-guards";
 import {
-  initializeCorrelationId,
-  getClientLogger,
   getResilientExecutor,
+  initializeCorrelationId,
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
-import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
 import { propertiesService } from "@/app/lib/domains/properties";
+import { createAttachmentSchema } from "@/app/lib/domains/properties/contracts";
 import {
-  createAttachmentSchema,
-  updateAttachmentSchema,
-} from "@/app/lib/domains/properties/contracts";
+  actorRoleLabel,
+  domainErrorCodeToStatus,
+  domainResultToErrorResponse,
+  logPropertiesRouteOutcome,
+  now,
+} from "@/app/api/properties/shared";
 
-const logger = getClientLogger();
+const AUDIT_ACTION_PROFILE_UPDATED = "PROFILE_UPDATED";
 
 export const GET = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
+  async (req: NextRequest, { dbUserId, userRole }, params) => {
+    const startedAt = now();
     const correlationId = initializeCorrelationId(req);
-    const { id } = params!;
+    const operationName = "get_property_attachments";
+    const actorRole = actorRoleLabel(userRole);
+    const propertyId = params!.id;
 
-    if (!isValidId(id)) {
-      return apiError("Invalid property ID", HttpStatus.BAD_REQUEST);
+    if (!isValidId(propertyId)) {
+      const response = apiError(
+        "Invalid property ID",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "propertyAttachment",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
     const identifier = getRateLimitIdentifier(req);
@@ -40,47 +61,123 @@ export const GET = withAuth<{ id: string }>(
       RateLimits.READ.window,
     );
     if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+      const response = apiError(
+        "Too many requests",
+        HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+        resourceType: "propertyAttachment",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      () => propertiesService.getPropertyAttachments(id, dbUserId),
-      { operationName: "get_property_attachments" },
+      () =>
+        propertiesService.getPropertyAttachments(propertyId, {
+          userId: dbUserId,
+          role: userRole,
+        }),
+      { operationName },
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch property attachments", result.error, {
-        correlationId,
-        propertyId: id,
-      });
-      return apiError(
+      const response = apiError(
         "Failed to fetch property attachments",
         HttpStatus.INTERNAL_SERVER_ERROR,
-        correlationId,
-      );
-    }
-
-    if (!result.data.ok) {
-      return apiError(
-        result.data.message,
-        result.data.status,
         undefined,
         correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "internal_error",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: now() - startedAt,
+        resourceType: "propertyAttachment",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
-    return apiSuccess(result.data.data, HttpStatus.OK, correlationId);
+    const domainResult = result.data;
+
+    if (!domainResult.ok) {
+      const errorResponse = domainResultToErrorResponse(
+        domainResult,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(domainResult.error),
+        durationMs: now() - startedAt,
+        domainError: domainResult.error,
+        resourceType: "propertyAttachment",
+        resourceId: propertyId,
+      });
+      return errorResponse!;
+    }
+
+    const response = apiSuccess(
+      domainResult.data,
+      HttpStatus.OK,
+      correlationId,
+    );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "propertyAttachment",
+      resourceId: propertyId,
+    });
+    return response;
   },
 );
 
 export const POST = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
+  async (req: NextRequest, { dbUserId, userRole }, params) => {
+    const startedAt = now();
     const correlationId = initializeCorrelationId(req);
-    const { id } = params!;
+    const operationName = "create_property_attachment";
+    const actorRole = actorRoleLabel(userRole);
+    const propertyId = params!.id;
 
-    if (!isValidId(id)) {
-      return apiError("Invalid property ID", HttpStatus.BAD_REQUEST);
+    if (!isValidId(propertyId)) {
+      const response = apiError(
+        "Invalid property ID",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "propertyAttachment",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
     const identifier = getRateLimitIdentifier(req);
@@ -90,237 +187,174 @@ export const POST = withAuth<{ id: string }>(
       RateLimits.WRITE.window,
     );
     if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+      const response = apiError(
+        "Too many requests",
+        HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+        resourceType: "propertyAttachment",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
     const bodyError = checkBodySize(req, PROPERTY_CONFIG.MAX_BODY_SIZE);
-    if (bodyError) return bodyError;
+    if (bodyError) {
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: bodyError.status,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "propertyAttachment",
+        resourceId: propertyId,
+      });
+      return bodyError;
+    }
 
     let body: unknown;
     try {
       body = await req.json();
     } catch {
-      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+      const response = apiError(
+        "Invalid JSON body",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "propertyAttachment",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
     const validation = createAttachmentSchema.safeParse(body);
     if (!validation.success) {
-      return apiError(
+      const response = apiError(
         validation.error.message,
         HttpStatus.BAD_REQUEST,
         validation.error.issues,
         correlationId,
       );
-    }
-
-    const resilientExecutor = getResilientExecutor();
-    const result = await resilientExecutor.execute(
-      () =>
-        propertiesService.addPropertyAttachment(id, dbUserId, validation.data),
-      { operationName: "create_property_attachment" },
-    );
-
-    if (!result.success || !result.data) {
-      logger.error("Failed to create property attachment", result.error, {
+      logPropertiesRouteOutcome({
         correlationId,
-        propertyId: id,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "propertyAttachment",
+        resourceId: propertyId,
       });
-      return apiError(
-        "Failed to create property attachment",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        correlationId,
-      );
-    }
-
-    if (!result.data.ok) {
-      return apiError(
-        result.data.message,
-        result.data.status,
-        undefined,
-        correlationId,
-      );
-    }
-
-    const attachment = result.data.data as { id: string };
-    ComplianceService.logAdminAction(
-      dbUserId,
-      AuditAction.PROFILE_UPDATED,
-      "PropertyAttachment",
-      attachment.id,
-      {
-        propertyId: id,
-        type: validation.data.type,
-        assetId: validation.data.assetId,
-      },
-    ).catch((err) => logger.error("Failed to create audit log", err));
-
-    return apiSuccess(attachment, HttpStatus.CREATED, correlationId);
-  },
-);
-
-export const PATCH = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
-    const correlationId = initializeCorrelationId(req);
-    const { id } = params!;
-
-    if (!isValidId(id)) {
-      return apiError("Invalid property ID", HttpStatus.BAD_REQUEST);
-    }
-
-    const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window,
-    );
-    if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-    }
-
-    const bodyError = checkBodySize(req, PROPERTY_CONFIG.MAX_BODY_SIZE);
-    if (bodyError) return bodyError;
-
-    let body: unknown;
-    try {
-      body = await req.json();
-    } catch {
-      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
-    }
-
-    const validation = updateAttachmentSchema.safeParse(body);
-    if (!validation.success) {
-      return apiError(
-        "Invalid input",
-        HttpStatus.BAD_REQUEST,
-        validation.error.issues,
-        correlationId,
-      );
+      return response;
     }
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
       () =>
-        propertiesService.updatePropertyAttachment(
-          id,
-          dbUserId,
+        propertiesService.addPropertyAttachment(
+          propertyId,
+          { userId: dbUserId, role: userRole },
           validation.data,
         ),
-      { operationName: "update_property_attachment" },
+      { operationName },
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to update property attachment", result.error, {
-        correlationId,
-        propertyId: id,
-      });
-      return apiError(
-        "Failed to update property attachment",
+      const response = apiError(
+        "Failed to create property attachment",
         HttpStatus.INTERNAL_SERVER_ERROR,
-        correlationId,
-      );
-    }
-
-    if (!result.data.ok) {
-      return apiError(
-        result.data.message,
-        result.data.status,
         undefined,
         correlationId,
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "internal_error",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: now() - startedAt,
+        resourceType: "propertyAttachment",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
-    const attachment = result.data.data as { id: string };
-    ComplianceService.logAdminAction(
-      dbUserId,
-      AuditAction.PROFILE_UPDATED,
-      "PropertyAttachment",
-      attachment.id,
-      {
-        propertyId: id,
-        action: "UPDATE",
-        changes: {
-          title: validation.data.title,
+    const domainResult = result.data;
+
+    if (!domainResult.ok) {
+      const errorResponse = domainResultToErrorResponse(
+        domainResult,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(domainResult.error),
+        durationMs: now() - startedAt,
+        domainError: domainResult.error,
+        resourceType: "propertyAttachment",
+        resourceId: propertyId,
+      });
+      return errorResponse!;
+    }
+
+    const attachmentId =
+      "id" in domainResult.data && typeof domainResult.data.id === "string"
+        ? domainResult.data.id
+        : undefined;
+
+    if (attachmentId) {
+      ComplianceService.logAdminAction(
+        dbUserId,
+        AUDIT_ACTION_PROFILE_UPDATED,
+        "PropertyAttachment",
+        attachmentId,
+        {
+          propertyId,
           type: validation.data.type,
           assetId: validation.data.assetId,
         },
-      },
-    ).catch((err) => logger.error("Failed to create audit log", err));
-
-    return apiSuccess(attachment, HttpStatus.OK, correlationId);
-  },
-);
-
-export const DELETE = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
-    const correlationId = initializeCorrelationId(req);
-    const { id } = params!;
-
-    if (!isValidId(id)) {
-      return apiError("Invalid property ID", HttpStatus.BAD_REQUEST);
+      ).catch(() => {});
     }
 
-    const { searchParams } = new URL(req.url);
-    const attachmentId = searchParams.get("attachmentId");
-    if (!attachmentId) {
-      return apiError("Attachment ID is required", HttpStatus.BAD_REQUEST);
-    }
-
-    const attachmentIdValidation = z.string().uuid().safeParse(attachmentId);
-    if (!attachmentIdValidation.success) {
-      return apiError("Invalid attachment ID format", HttpStatus.BAD_REQUEST);
-    }
-
-    const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window,
-    );
-    if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-    }
-
-    const resilientExecutor = getResilientExecutor();
-    const result = await resilientExecutor.execute(
-      () =>
-        propertiesService.removePropertyAttachment(id, attachmentId, dbUserId),
-      { operationName: "delete_property_attachment" },
-    );
-
-    if (!result.success || !result.data) {
-      logger.error("Failed to delete property attachment", result.error, {
-        correlationId,
-        propertyId: id,
-        attachmentId,
-      });
-      return apiError(
-        "Failed to delete property attachment",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        correlationId,
-      );
-    }
-
-    if (!result.data.ok) {
-      return apiError(
-        result.data.message,
-        result.data.status,
-        undefined,
-        correlationId,
-      );
-    }
-
-    ComplianceService.logAdminAction(
-      dbUserId,
-      AuditAction.DATA_RECTIFIED,
-      "PropertyAttachment",
-      attachmentId,
-      { propertyId: id, action: "DELETE" },
-    ).catch((err) => logger.error("Failed to log deletion", err));
-
-    return apiSuccess(
-      { message: "Attachment deleted successfully" },
-      HttpStatus.OK,
+    const response = apiSuccess(
+      domainResult.data,
+      HttpStatus.CREATED,
       correlationId,
     );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.CREATED,
+      durationMs: now() - startedAt,
+      resourceType: "propertyAttachment",
+      resourceId: attachmentId ?? propertyId,
+    });
+    return response;
   },
 );

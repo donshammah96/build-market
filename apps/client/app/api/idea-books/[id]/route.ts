@@ -17,23 +17,44 @@ import {
   AddAttachmentSchema,
   IDEA_BOOK_CONFIG,
 } from "@/app/lib/validation/idea-books-validation";
-import {
-  getIdeaBookById,
-  updateIdeaBook,
-  deleteIdeaBook,
-  addAttachment,
-} from "@/lib/services/idea-books";
+import { ideaBooksService } from "@/app/lib/domains/idea-books";
 
 const logger = getClientLogger();
 
 type IdeaBookParams = { id: string };
+
+function mapIdeaBooksError(error: {
+  error: string;
+  status?: number;
+  message?: string;
+}) {
+  switch (error.error) {
+    case "not_found":
+      return apiError("Idea book not found", HttpStatus.NOT_FOUND);
+    case "forbidden":
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    case "asset_not_found":
+      return apiError("Asset not found", HttpStatus.BAD_REQUEST);
+    case "invalid_input":
+      return apiError("Invalid input", HttpStatus.BAD_REQUEST);
+    default:
+      return apiError(
+        "Idea book operation failed",
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+  }
+}
 
 /**
  * GET /api/idea-books/[id]
  * Get a specific idea book with all attachments and collaborators.
  */
 export const GET = withAuth<IdeaBookParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     initializeCorrelationId(req);
 
     if (!params?.id || !isValidId(params.id)) {
@@ -53,7 +74,8 @@ export const GET = withAuth<IdeaBookParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => getIdeaBookById(dbUserId, bookId),
+      () =>
+        ideaBooksService.getById({ userId: dbUserId, role: userRole }, bookId),
       { operationName: "get_idea_book" },
     );
 
@@ -64,17 +86,11 @@ export const GET = withAuth<IdeaBookParams>(
       );
     }
 
-    const serviceResult = result.data as
-      | { data: unknown }
-      | { error: "not_found" | "forbidden" };
-    if ("error" in serviceResult) {
-      if (serviceResult.error === "not_found") {
-        return apiError("Idea book not found", HttpStatus.NOT_FOUND);
-      }
-      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    if (!result.data.ok) {
+      return mapIdeaBooksError(result.data);
     }
 
-    return apiSuccess(serviceResult.data, HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );
 
@@ -83,7 +99,11 @@ export const GET = withAuth<IdeaBookParams>(
  * Update idea book title, description, category, or privacy.
  */
 export const PATCH = withAuth<IdeaBookParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
 
     if (!params?.id || !isValidId(params.id)) {
@@ -127,7 +147,12 @@ export const PATCH = withAuth<IdeaBookParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => updateIdeaBook(dbUserId, bookId, data),
+      () =>
+        ideaBooksService.update(
+          { userId: dbUserId, role: userRole },
+          bookId,
+          data,
+        ),
       { operationName: "update_idea_book" },
     );
 
@@ -142,17 +167,11 @@ export const PATCH = withAuth<IdeaBookParams>(
       );
     }
 
-    const serviceResult = result.data as
-      | { data: unknown }
-      | { error: "not_found" | "forbidden" };
-    if ("error" in serviceResult) {
-      if (serviceResult.error === "not_found") {
-        return apiError("Idea book not found", HttpStatus.NOT_FOUND);
-      }
-      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    if (!result.data.ok) {
+      return mapIdeaBooksError(result.data);
     }
 
-    return apiSuccess(serviceResult.data, HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );
 
@@ -161,7 +180,11 @@ export const PATCH = withAuth<IdeaBookParams>(
  * Delete an idea book (cascades to attachments, saved items, collaborators).
  */
 export const DELETE = withAuth<IdeaBookParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
 
     if (!params?.id || !isValidId(params.id)) {
@@ -181,7 +204,8 @@ export const DELETE = withAuth<IdeaBookParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => deleteIdeaBook(dbUserId, bookId),
+      () =>
+        ideaBooksService.delete({ userId: dbUserId, role: userRole }, bookId),
       { operationName: "delete_idea_book" },
     );
 
@@ -196,17 +220,11 @@ export const DELETE = withAuth<IdeaBookParams>(
       );
     }
 
-    const serviceResult = result.data as
-      | { data: unknown }
-      | { error: "not_found" | "forbidden" };
-    if ("error" in serviceResult) {
-      if (serviceResult.error === "not_found") {
-        return apiError("Idea book not found", HttpStatus.NOT_FOUND);
-      }
-      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    if (!result.data.ok) {
+      return mapIdeaBooksError(result.data);
     }
 
-    return apiSuccess(serviceResult.data, HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );
 
@@ -216,7 +234,11 @@ export const DELETE = withAuth<IdeaBookParams>(
  * Supports Asset-based (assetId) or legacy file fields (fileUrl + fileKey).
  */
 export const POST = withAuth<IdeaBookParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
 
     if (!params?.id || !isValidId(params.id)) {
@@ -257,7 +279,12 @@ export const POST = withAuth<IdeaBookParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => addAttachment(dbUserId, bookId, data),
+      () =>
+        ideaBooksService.addAttachment(
+          { userId: dbUserId, role: userRole },
+          bookId,
+          data,
+        ),
       { operationName: "add_idea_book_attachment" },
     );
 
@@ -272,19 +299,10 @@ export const POST = withAuth<IdeaBookParams>(
       );
     }
 
-    const serviceResult = result.data as
-      | { data: unknown }
-      | { error: "not_found" | "forbidden" | "asset_not_found" };
-    if ("error" in serviceResult) {
-      if (serviceResult.error === "not_found") {
-        return apiError("Idea book not found", HttpStatus.NOT_FOUND);
-      }
-      if (serviceResult.error === "forbidden") {
-        return apiError("Forbidden", HttpStatus.FORBIDDEN);
-      }
-      return apiError("Asset not found", HttpStatus.BAD_REQUEST);
+    if (!result.data.ok) {
+      return mapIdeaBooksError(result.data);
     }
 
-    return apiSuccess(serviceResult.data, HttpStatus.CREATED);
+    return apiSuccess(result.data.data, HttpStatus.CREATED);
   },
 );

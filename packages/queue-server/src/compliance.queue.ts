@@ -1,9 +1,27 @@
 import { Queue } from "bullmq";
-import { redisConnection } from "./redis-connection";
-import { AuditAction, IncidentSeverity } from "@prisma/client";
+import { createRedisConnection } from "./redis-connection";
+import { AuditAction, IncidentSeverity } from "@build/db";
 
-export const incidentQueue = new Queue<IncidentJobData>("security-incidents", {
-  connection: redisConnection as any,
+export const ComplianceJobs = {
+  TRIGGER_EMERGENCY: "trigger-emergency",
+  NOTIFY_ODPC: "notify-odpc",
+  NOTIFY_USERS_BATCH: "notify-users-batch",
+  LOG_AUDIT: "log-audit",
+  ESCALATE_INCIDENT: "escalate-incident",
+} as const;
+
+type ComplianceJobName = (typeof ComplianceJobs)[keyof typeof ComplianceJobs];
+
+/**
+ * BullMQ requires a dedicated ioredis connection per Queue instance.
+ * Each queue below gets its own connection — do not share across constructs.
+ */
+export const incidentQueue = new Queue<
+  IncidentJobData,
+  unknown,
+  ComplianceJobName
+>("security-incidents", {
+  connection: createRedisConnection(),
   defaultJobOptions: {
     attempts: 5,
     backoff: { type: "exponential", delay: 5000 },
@@ -12,25 +30,29 @@ export const incidentQueue = new Queue<IncidentJobData>("security-incidents", {
   },
 });
 
-export const userNotificationQueue = new Queue<UserNotificationJobData>(
-  "compliance-notifications",
+export const userNotificationQueue = new Queue<
+  UserNotificationJobData,
+  unknown,
+  ComplianceJobName
+>("compliance-notifications", {
+  connection: createRedisConnection(),
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: "fixed", delay: 60000 },
+    removeOnComplete: { count: 1000 },
+  },
+});
+
+export const auditQueue = new Queue<AuditJobData, unknown, ComplianceJobName>(
+  "audit-logs",
   {
-    connection: redisConnection as any,
+    connection: createRedisConnection(),
     defaultJobOptions: {
       attempts: 3,
-      backoff: { type: "fixed", delay: 60000 },
-      removeOnComplete: { count: 1000 },
+      removeOnComplete: { age: 7 * 24 * 3600 },
     },
   },
 );
-
-export const auditQueue = new Queue<AuditJobData>("audit-logs", {
-  connection: redisConnection as any,
-  defaultJobOptions: {
-    attempts: 3,
-    removeOnComplete: { age: 7 * 24 * 3600 },
-  },
-});
 
 export interface IncidentJobData {
   incidentId: string;
@@ -77,14 +99,6 @@ export interface AuditJobData {
     | "LEGITIMATE_INTEREST";
   timestamp: string;
 }
-
-export const ComplianceJobs = {
-  TRIGGER_EMERGENCY: "trigger-emergency",
-  NOTIFY_ODPC: "notify-odpc",
-  NOTIFY_USERS_BATCH: "notify-users-batch",
-  LOG_AUDIT: "log-audit",
-  ESCALATE_INCIDENT: "escalate-incident",
-} as const;
 
 export async function queueEmergencyProtocol(
   incidentId: string,

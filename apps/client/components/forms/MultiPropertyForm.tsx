@@ -61,37 +61,33 @@ const createMultiPropertyTheme = (variant: PropertyFormVariant) => {
     // Header
     headerBorder: isDark
       ? "border-b border-white/10 pb-6"
-      : "border-b border-zinc-200 pb-6",
-    headerTitle: isDark
-      ? "text-2xl font-bold text-white tracking-tight"
-      : "text-2xl font-bold text-zinc-900 tracking-tight",
-    headerDescription: isDark
-      ? "text-zinc-400 mt-1 max-w-xl"
-      : "text-zinc-500 mt-1 max-w-xl",
+      : "border-b border-border pb-6",
+    headerTitle: "text-2xl font-bold text-foreground tracking-tight",
+    headerDescription: "text-muted-foreground mt-1 max-w-xl",
 
     // Add button
     addButton: isDark
-      ? "bg-white/5 hover:bg-white/10 text-white border border-white/20 shadow-sm transition-all"
-      : "bg-white hover:bg-zinc-50 text-zinc-900 border border-zinc-200 shadow-sm transition-all",
-    addButtonIcon: isDark ? "text-emerald-400" : "text-emerald-600",
+      ? "bg-white/5 hover:bg-white/10 text-foreground border border-border shadow-sm transition-all"
+      : "bg-background hover:bg-muted text-foreground border border-border shadow-sm transition-all",
+    addButtonIcon: "text-[var(--color-success)]",
 
     // Error banner
     errorBanner: isDark
-      ? "bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl flex items-center gap-2 text-sm"
-      : "bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg flex items-center gap-2 text-sm",
+      ? "bg-[var(--color-error)]/10 border border-[var(--color-error)]/30 text-[var(--color-error)] px-4 py-3 rounded-xl flex items-center gap-2 text-sm"
+      : "bg-[var(--color-error)]/10 border border-[var(--color-error)]/30 text-[var(--color-error)] px-4 py-3 rounded-lg flex items-center gap-2 text-sm",
 
     // Property card
     propertyCard: isDark
       ? "group rounded-xl border transition-all duration-300 overflow-hidden bg-white/5 backdrop-blur-sm"
-      : "group rounded-xl border transition-all duration-300 overflow-hidden bg-white",
+      : "group rounded-xl border transition-all duration-300 overflow-hidden bg-background",
 
     propertyCardExpanded: isDark
-      ? "ring-1 ring-emerald-500/30 shadow-lg border-emerald-500/30"
-      : "ring-1 ring-zinc-200 shadow-lg border-zinc-300",
+      ? "ring-1 ring-[var(--color-success)]/30 shadow-lg border-[var(--color-success)]/30"
+      : "ring-1 ring-border shadow-lg border-border",
 
     propertyCardCollapsed: isDark
       ? "hover:border-white/20 hover:shadow-md border-white/10 shadow-sm"
-      : "hover:border-zinc-300 hover:shadow-md border-zinc-200 shadow-sm",
+      : "hover:border-border hover:shadow-md border-border shadow-sm",
 
     // Card header
     cardHeader: isDark
@@ -100,60 +96,53 @@ const createMultiPropertyTheme = (variant: PropertyFormVariant) => {
 
     // Status indicator
     statusIndicatorValid: isDark
-      ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
-      : "bg-emerald-50 border-emerald-100 text-emerald-600",
+      ? "bg-[var(--color-success)]/20 border-[var(--color-success)]/30 text-[var(--color-success)]"
+      : "bg-[var(--color-success)]/10 border-[var(--color-success)]/30 text-[var(--color-success)]",
 
     statusIndicatorInvalid: isDark
-      ? "bg-white/5 border-white/10 text-zinc-500 group-hover:bg-white/10"
-      : "bg-zinc-50 border-zinc-100 text-zinc-400 group-hover:bg-zinc-100",
+      ? "bg-white/5 border-white/10 text-muted-foreground group-hover:bg-white/10"
+      : "bg-muted border-muted text-muted-foreground group-hover:bg-muted",
 
     // Property name
-    propertyName: isDark ? "text-white" : "text-zinc-900",
-    propertyNameEmpty: isDark ? "text-zinc-500 italic" : "text-zinc-400 italic",
+    propertyName: "text-foreground",
+    propertyNameEmpty: "text-muted-foreground italic",
 
     // Status text
-    statusValid: isDark
-      ? "text-emerald-400 font-medium"
-      : "text-emerald-600 font-medium",
-    statusInvalid: isDark ? "text-amber-400" : "text-amber-600",
-    statusMeta: isDark ? "text-zinc-500" : "text-zinc-500",
-    statusDot: isDark ? "bg-zinc-600" : "bg-zinc-300",
+    statusValid: "text-[var(--color-success)] font-medium",
+    statusInvalid: "text-[var(--color-error)]",
+    statusMeta: "text-muted-foreground",
+    statusDot: "bg-muted-foreground",
 
     // Remove button
-    removeButton: isDark
-      ? "text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-      : "text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors",
+    removeButton:
+      "text-muted-foreground hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors",
 
     // Chevron
-    chevron: isDark ? "text-zinc-500" : "text-zinc-400",
+    chevron: "text-muted-foreground",
 
     // Accordion content
     accordionContent: isDark
       ? "border-t border-white/10 bg-white/5 p-6 md:p-8"
-      : "border-t border-zinc-100 bg-zinc-50/30 p-6 md:p-8",
+      : "border-t border-border bg-muted/30 p-6 md:p-8",
 
     // Empty state
     emptyState: isDark
       ? "text-center py-16 border-2 border-dashed border-white/10 rounded-xl bg-white/5"
-      : "text-center py-16 border-2 border-dashed border-zinc-200 rounded-xl bg-zinc-50/50",
+      : "text-center py-16 border-2 border-dashed border-border rounded-xl bg-muted/50",
 
-    emptyStateIcon: isDark ? "text-zinc-600" : "text-zinc-300",
-    emptyStateTitle: isDark
-      ? "text-lg font-medium text-white"
-      : "text-lg font-medium text-zinc-900",
-    emptyStateDescription: isDark
-      ? "text-zinc-500 mb-6 max-w-sm mx-auto"
-      : "text-zinc-500 mb-6 max-w-sm mx-auto",
+    emptyStateIcon: "text-muted-foreground",
+    emptyStateTitle: "text-lg font-medium text-foreground",
+    emptyStateDescription: "text-muted-foreground mb-6 max-w-sm mx-auto",
     emptyStateButton: isDark
-      ? "bg-emerald-600 text-white hover:bg-emerald-500"
-      : "bg-zinc-900 text-white hover:bg-zinc-800",
+      ? "bg-[var(--color-success)] text-primary-foreground hover:opacity-90"
+      : "bg-primary text-primary-foreground hover:opacity-90",
 
     // Footer
     footer: isDark
       ? "sticky bottom-0 z-10 bg-zinc-900/80 backdrop-blur-md border-t border-white/10 p-4 -mx-4 md:mx-0 md:rounded-xl md:border md:shadow-lg flex items-center justify-between mt-8"
       : "sticky bottom-0 z-10 bg-white/80 backdrop-blur-md border-t border-zinc-200 p-4 -mx-4 md:mx-0 md:rounded-xl md:border md:shadow-lg flex items-center justify-between mt-8",
 
-    footerMeta: isDark ? "text-sm text-zinc-500" : "text-sm text-zinc-500",
+    footerMeta: "text-sm text-zinc-500",
 
     // Footer buttons
     skipButton: isDark
@@ -161,8 +150,8 @@ const createMultiPropertyTheme = (variant: PropertyFormVariant) => {
       : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100",
 
     submitButtonValid: isDark
-      ? "bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white shadow-lg shadow-emerald-500/20"
-      : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-200",
+      ? "bg-gradient-to-r from-[var(--color-success)] to-[var(--color-success)] hover:opacity-90 text-white shadow-lg shadow-[var(--color-success)]/20"
+      : "bg-[var(--color-success)] hover:opacity-90 text-white shadow-md",
 
     submitButtonInvalid: isDark
       ? "bg-white/10 text-zinc-500 cursor-not-allowed"
@@ -332,9 +321,13 @@ export function MultiPropertyForm({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
+            // role="alert" is an implicit aria-live="assertive" region.
+            // Validation errors on submit warrant assertive — the user needs
+            // to know immediately that they cannot proceed.
+            role="alert"
             className={theme.errorBanner}
           >
-            <AlertCircle className="h-4 w-4 shrink-0" />
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
             {error}
           </motion.div>
         )}
@@ -358,10 +351,13 @@ export function MultiPropertyForm({
                   : theme.propertyCardCollapsed,
               )}
             >
-              {/* Card Header (Clickable) */}
-              <div
+              {/* Card Header (Accordion trigger - native button for a11y) */}
+              <button
+                type="button"
                 onClick={() => handleToggleProperty(property.id)}
-                className={theme.cardHeader}
+                className={cn(theme.cardHeader, "w-full text-left")}
+                aria-expanded={property.isExpanded}
+                aria-controls={`property-content-${property.id}`}
               >
                 <div className="flex items-center gap-4">
                   {/* Status Indicator Icon */}
@@ -457,8 +453,11 @@ export function MultiPropertyForm({
                       e.stopPropagation();
                       handleRemoveProperty(property.id);
                     }}
+                    // aria-label required: icon-only buttons are announced as
+                    // unlabelled by screen readers without it.
+                    aria-label={`Remove ${property.data.title || `Property Listing ${index + 1}`}`}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
                   </Button>
                   <div
                     className={cn(
@@ -470,12 +469,13 @@ export function MultiPropertyForm({
                     <ChevronDown className="h-5 w-5" />
                   </div>
                 </div>
-              </div>
+              </button>
 
               {/* Accordion Content */}
               <AnimatePresence>
                 {property.isExpanded && (
                   <motion.div
+                    id={`property-content-${property.id}`}
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
@@ -547,7 +547,7 @@ export function MultiPropertyForm({
             onClick={handleSubmit}
             disabled={isSubmitting || !allValid}
             className={cn(
-              "min-w-[140px] transition-all",
+              "min-w-35 transition-all",
               allValid ? theme.submitButtonValid : theme.submitButtonInvalid,
             )}
           >

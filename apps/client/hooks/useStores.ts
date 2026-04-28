@@ -19,7 +19,14 @@ import {
   type UpdateStoreClientInput,
   type DeleteStoreClientInput,
   type AddStoreDocumentClientInput,
+  type StoreBatchCreatePayload,
 } from "@/lib/stores-client";
+import type {
+  StoreDetail,
+  StoreDocumentItem,
+  StoreUpdateResultEnvelope,
+  StoreDeleteResultEnvelope,
+} from "@/app/lib/domains/stores/contracts";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -81,11 +88,7 @@ export function useStoreDocuments(
 }
 
 export function useCreateStore(
-  options?: UseMutationOptions<
-    NonNullable<Awaited<ReturnType<typeof storesClient.createStore>>["data"]>,
-    Error,
-    CreateStoreClientInput
-  >,
+  options?: UseMutationOptions<StoreDetail, Error, CreateStoreClientInput>,
 ) {
   const queryClient = useQueryClient();
 
@@ -103,9 +106,7 @@ export function useCreateStore(
 
 export function useCreateStoresBatch(
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<ReturnType<typeof storesClient.createStoresBatch>>["data"]
-    >,
+    StoreBatchCreatePayload,
     Error,
     CreateStoresBatchClientInput
   >,
@@ -126,7 +127,7 @@ export function useCreateStoresBatch(
 
 export function useUpdateStore(
   options?: UseMutationOptions<
-    NonNullable<Awaited<ReturnType<typeof storesClient.updateStore>>["data"]>,
+    StoreUpdateResultEnvelope,
     Error,
     UpdateStoreClientInput
   >,
@@ -150,7 +151,7 @@ export function useUpdateStore(
 
 export function useDeleteStore(
   options?: UseMutationOptions<
-    NonNullable<Awaited<ReturnType<typeof storesClient.deleteStore>>["data"]>,
+    StoreDeleteResultEnvelope,
     Error,
     DeleteStoreClientInput
   >,
@@ -175,9 +176,7 @@ export function useDeleteStore(
 export function useAddStoreDocument(
   storeId: string,
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<ReturnType<typeof storesClient.addStoreDocument>>["data"]
-    >,
+    StoreDocumentItem,
     Error,
     Omit<AddStoreDocumentClientInput, "storeId">
   >,
@@ -201,9 +200,7 @@ export function useAddStoreDocument(
 export function useRemoveStoreDocument(
   storeId: string,
   options?: UseMutationOptions<
-    NonNullable<
-      Awaited<ReturnType<typeof storesClient.removeStoreDocument>>["data"]
-    >,
+    { success: true },
     Error,
     { documentId: string }
   >,

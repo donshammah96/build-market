@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "react-toastify";
@@ -38,10 +37,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialogue";
-import { API_ROUTES } from "@/lib/links";
+import { onboardingClient } from "@/lib/onboarding-client";
 
 export default function Onboarding() {
-  const { user } = useUser();
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [role, setRole] = useState("professional");
@@ -68,28 +66,12 @@ export default function Onboarding() {
   const handleProfessionalSubmit = async (data: OnboardingData) => {
     setSubmitting(true);
     try {
-      const response = await fetch(API_ROUTES.onboarding, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clerkId: user?.id, ...data }),
-      });
+      const response = await onboardingClient.submit(data);
 
-      if (!response.ok)
-        throw new Error("Failed to create professional profile");
-
-      // If store data was collected, create the store
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const storeData = (data as any).storeData;
-      if (storeData) {
-        try {
-          const { createStoreAction } = await import("@/app/actions/stores");
-          await createStoreAction(storeData);
-        } catch (storeError) {
-          console.error(
-            "Failed to create store, but professional profile was created",
-            storeError,
-          );
-        }
+      if (!response.success) {
+        throw new Error(
+          response.error || "Failed to create professional profile",
+        );
       }
 
       toast.success("Professional account verified!");
@@ -105,11 +87,11 @@ export default function Onboarding() {
     <div className="min-h-screen relative flex items-center justify-center bg-zinc-950 overflow-hidden px-4 py-12">
       {/* --- 1. Architectural Background --- */}
       <div className="absolute inset-0 z-0">
-        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/20 via-zinc-950 to-zinc-950" />
+        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,var(--tw-gradient-stops))] from-emerald-900/20 via-zinc-950 to-zinc-950" />
         <div className="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
         <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
         {/* Grid Pattern Overlay */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-size-[24px_24px]" />
       </div>
 
       <div className="w-full max-w-5xl relative z-10">

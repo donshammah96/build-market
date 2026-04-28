@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { redisConnection, ExportJobData } from "@build/queue-server";
+import { createRedisConnection, ExportJobData } from "@build/queue-server";
 import { ExportProcessor } from "./processor";
 import { prisma } from "@build/db";
 import { sendExportReadyEmail } from "@/app/lib/notifications/email.service";
@@ -11,9 +11,7 @@ export const exportWorker = new Worker<ExportJobData>(
   async (job: Job<ExportJobData>) => {
     const { exportId, userId } = job.data;
 
-    console.log(
-      `[ExportWorker] Starting export ${exportId} for user ${userId}`,
-    );
+    console.log(`[ExportWorker] Starting export ${exportId}`);
 
     try {
       await job.updateProgress(10);
@@ -76,7 +74,7 @@ export const exportWorker = new Worker<ExportJobData>(
       } catch (emailError) {
         // Don't fail the job if email fails - export is still successful
         console.error(
-          `[ExportWorker] Failed to send export ready email:`,
+          "[ExportWorker] Export-ready notification send failed",
           emailError,
         );
       }
@@ -109,7 +107,7 @@ export const exportWorker = new Worker<ExportJobData>(
     }
   },
   {
-    connection: redisConnection as any,
+    connection: createRedisConnection(),
     concurrency: 2, // Process 2 exports simultaneously (adjust based on memory/CPU)
     limiter: {
       max: 10, // Max 10 exports per minute (prevent DDOS via exports)

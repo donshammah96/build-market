@@ -1,17 +1,12 @@
 "use server";
 
+import { z } from "zod";
 import {
-  getProfessionalLeads,
-  getProfessionalLeadById,
-  createProfessionalLead,
-  updateProfessionalLead,
-  deleteProfessionalLead,
-} from "@/lib/services/leads";
-import type {
-  LeadQueryInput,
-  CreateLeadInput,
-  UpdateLeadInput,
-} from "@/lib/services/leads";
+  leadsService,
+  type LeadQueryInput,
+  type CreateLeadInput,
+  type UpdateLeadInput,
+} from "@/app/lib/domains/leads";
 import {
   LeadQuerySchema,
   CreateLeadSchema,
@@ -19,51 +14,126 @@ import {
 } from "@/app/lib/validation/leads-validation";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { LEAD_CONFIG } from "@/app/lib/config/lead.config";
-import { isValidId } from "@/app/lib/utils/validators";
-import { auth } from "@clerk/nextjs/server";
-import { prisma } from "@build/db";
+import {
+  createActionFailure,
+  secureAction,
+  SecureActionError,
+  throwActionFailure,
+  unwrapResultOrThrow,
+  type ActionResult,
+} from "@/app/lib/actions/secure-action";
+import { normalizeRole } from "@/app/lib/security/roles";
 import { revalidatePath } from "next/cache";
 
-async function resolveDbUserId(): Promise<string> {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) throw new Error("Unauthorized");
+const LeadIdActionSchema = z.object({
+  leadId: z.string().uuid("Invalid lead ID"),
+});
 
-  const user = await prisma.user.findUnique({
-    where: { clerkId },
-    select: { id: true },
-  });
-  if (!user) throw new Error("User not found");
+const CreateLeadActionSchema = CreateLeadSchema.extend({
+  idempotencyKey: z.string().optional(),
+});
 
-  return user.id;
+const UpdateLeadActionSchema = z.object({
+  leadId: z.string().uuid("Invalid lead ID"),
+  data: UpdateLeadSchema,
+  idempotencyKey: z.string().optional(),
+});
+
+const DeleteLeadActionSchema = z.object({
+  leadId: z.string().uuid("Invalid lead ID"),
+  idempotencyKey: z.string().optional(),
+});
+
+function createLeadsActionErrorMapper(message: string) {
+  return (error: unknown) => {
+    if (error instanceof SecureActionError) {
+      return undefined;
+    }
+
+    if (error instanceof z.ZodError) {
+      return createActionFailure(
+        "validation_error",
+        error.issues[0]?.message ?? "Validation failed",
+        400,
+        error.issues,
+      );
+    }
+
+    return createActionFailure("internal", message, 500);
+  };
+}
+
+function ensureProfessionalLeadActor(role: string | null | undefined) {
+  const normalizedRole = normalizeRole(role);
+  if (normalizedRole !== "PROFESSIONAL" && normalizedRole !== "ADMIN") {
+    return createActionFailure("forbidden", "Forbidden", 403);
+  }
+
+  return true;
 }
 
 export async function getProfessionalLeadsAction(
   filters?: Partial<LeadQueryInput>,
-) {
-  const dbUserId = await resolveDbUserId();
-  const merged = {
-    page: 1,
-    limit: LEAD_CONFIG.DEFAULT_LIMIT,
-    ...filters,
-  };
-  const parsed = LeadQuerySchema.safeParse(merged);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid query parameters");
-  }
-  return getProfessionalLeads(dbUserId, parsed.data);
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input: filters,
+    schema: LeadQuerySchema.partial().optional(),
+    policy: ({ actor }) => ensureProfessionalLeadActor(actor?.role),
+    handler: async ({ actor, input }) => {
+      const parsedResult = LeadQuerySchema.safeParse({
+        page: 1,
+        limit: LEAD_CONFIG.DEFAULT_LIMIT,
+        ...input,
+      });
+
+      if (!parsedResult.success) {
+        throwActionFailure(
+          createActionFailure(
+            "validation_error",
+            parsedResult.error.issues[0]?.message ?? "Invalid query parameters",
+            400,
+            parsedResult.error.issues,
+          ),
+        );
+      }
+
+      const parsed = parsedResult.data;
+
+      return unwrapResultOrThrow(
+        await leadsService.listProfessionalLeads(
+          {
+            userId: actor!.dbUserId,
+            role: actor!.role,
+          },
+          parsed,
+        ),
+        "Failed to fetch leads",
+      );
+    },
+    mapError: createLeadsActionErrorMapper("Failed to fetch leads"),
+  });
 }
 
-export async function getProfessionalLeadByIdAction(leadId: string) {
-  const dbUserId = await resolveDbUserId();
-  if (!isValidId(leadId)) throw new Error("Invalid lead ID");
-
-  const result = await getProfessionalLeadById(dbUserId, leadId);
-  if (result.success === false) {
-    if (result.error === "not_found") throw new Error("Lead not found");
-    throw new Error("Forbidden");
-  }
-  return result.data;
+export async function getProfessionalLeadByIdAction(
+  leadId: string,
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input: { leadId },
+    schema: LeadIdActionSchema,
+    policy: ({ actor }) => ensureProfessionalLeadActor(actor?.role),
+    handler: async ({ actor, input }) =>
+      unwrapResultOrThrow(
+        await leadsService.getProfessionalLeadById(
+          {
+            userId: actor!.dbUserId,
+            role: actor!.role,
+          },
+          input.leadId,
+        ),
+        "Failed to fetch lead",
+      ),
+    mapError: createLeadsActionErrorMapper("Failed to fetch lead"),
+  });
 }
 
 export type CreateLeadActionInput = CreateLeadInput & {
@@ -72,52 +142,69 @@ export type CreateLeadActionInput = CreateLeadInput & {
 
 export async function createProfessionalLeadAction(
   data: CreateLeadActionInput,
-) {
-  const dbUserId = await resolveDbUserId();
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input: data,
+    schema: CreateLeadActionSchema,
+    policy: ({ actor }) => ensureProfessionalLeadActor(actor?.role),
+    handler: async ({ actor, input }) => {
+      const { idempotencyKey: clientKey, ...payload } = input;
+      const idempotencyKey =
+        clientKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "POST", {
+          domain: "lead",
+          clientName: payload.clientName,
+          title: payload.title,
+        });
 
-  const { idempotencyKey: clientKey, ...rest } = data;
-  const parsed = CreateLeadSchema.safeParse(rest);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid lead data");
-  }
+      const idempotencyCheck = await IdempotencyService.checkOrCreate(
+        idempotencyKey,
+        "lead",
+        actor!.dbUserId,
+        "POST",
+        undefined,
+        LEAD_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      );
 
-  const payload = parsed.data;
-  const idempotencyKey =
-    clientKey ??
-    IdempotencyService.generateKey(dbUserId, "POST", {
-      domain: "lead",
-      clientName: payload.clientName,
-      title: payload.title,
-    });
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
+        revalidatePath("/professional-portal/leads");
+        return idempotencyCheck.response;
+      }
 
-  const idempotencyCheck = await IdempotencyService.checkOrCreate(
-    idempotencyKey,
-    "lead",
-    dbUserId,
-    "POST",
-    undefined,
-    LEAD_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
+          ),
+        );
+      }
 
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath("/professional-portal/leads");
-    return idempotencyCheck.response;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  try {
-    const lead = await createProfessionalLead(dbUserId, payload);
-    await IdempotencyService.complete(idempotencyKey, lead);
-    revalidatePath("/professional-portal/leads");
-    return lead;
-  } catch (err) {
-    await IdempotencyService.fail(idempotencyKey);
-    throw err;
-  }
+      try {
+        const createdLead = unwrapResultOrThrow(
+          await leadsService.createProfessionalLead(
+            {
+              userId: actor!.dbUserId,
+              role: actor!.role,
+            },
+            payload,
+          ),
+          "Failed to create lead",
+        );
+        await IdempotencyService.complete(idempotencyKey, createdLead);
+        revalidatePath("/professional-portal/leads");
+        return createdLead;
+      } catch (error) {
+        await IdempotencyService.fail(idempotencyKey);
+        throw error;
+      }
+    },
+    mapError: createLeadsActionErrorMapper("Failed to create lead"),
+  });
 }
 
 export type UpdateLeadActionInput = {
@@ -133,61 +220,70 @@ export type UpdateLeadResult = Awaited<
 
 export async function updateProfessionalLeadAction(
   input: UpdateLeadActionInput,
-) {
-  const dbUserId = await resolveDbUserId();
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input,
+    schema: UpdateLeadActionSchema,
+    policy: ({ actor }) => ensureProfessionalLeadActor(actor?.role),
+    handler: async ({ actor, input: validatedInput }) => {
+      const idempotencyKey =
+        validatedInput.idempotencyKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "PATCH", {
+          leadId: validatedInput.leadId,
+          ...validatedInput.data,
+        });
 
-  if (!isValidId(input.leadId)) throw new Error("Invalid lead ID");
-  const parsed = UpdateLeadSchema.safeParse(input.data);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid update data");
-  }
+      const idempotencyCheck = await IdempotencyService.checkOrCreate(
+        idempotencyKey,
+        "lead",
+        actor!.dbUserId,
+        "PATCH",
+        validatedInput.leadId,
+        LEAD_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      );
 
-  const idempotencyKey =
-    input.idempotencyKey ??
-    IdempotencyService.generateKey(dbUserId, "PATCH", {
-      leadId: input.leadId,
-      ...input.data,
-    });
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
+        revalidatePath("/professional-portal/leads");
+        revalidatePath(`/professional-portal/leads/${validatedInput.leadId}`);
+        return idempotencyCheck.response;
+      }
 
-  const idempotencyCheck = await IdempotencyService.checkOrCreate(
-    idempotencyKey,
-    "lead",
-    dbUserId,
-    "PATCH",
-    input.leadId,
-    LEAD_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
+          ),
+        );
+      }
 
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath("/professional-portal/leads");
-    revalidatePath(`/professional-portal/leads/${input.leadId}`);
-    return idempotencyCheck.response;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  try {
-    const result = await updateProfessionalLead(
-      dbUserId,
-      input.leadId,
-      parsed.data,
-    );
-    if (result.success === false) {
-      await IdempotencyService.fail(idempotencyKey);
-      if (result.error === "not_found") throw new Error("Lead not found");
-      throw new Error("Forbidden");
-    }
-    await IdempotencyService.complete(idempotencyKey, result.data);
-    revalidatePath("/professional-portal/leads");
-    revalidatePath(`/professional-portal/leads/${input.leadId}`);
-    return result.data;
-  } catch (err) {
-    await IdempotencyService.fail(idempotencyKey);
-    throw err;
-  }
+      try {
+        const updatedLead = unwrapResultOrThrow(
+          await leadsService.updateProfessionalLead(
+            {
+              userId: actor!.dbUserId,
+              role: actor!.role,
+            },
+            validatedInput.leadId,
+            validatedInput.data,
+          ),
+          "Failed to update lead",
+        );
+        await IdempotencyService.complete(idempotencyKey, updatedLead);
+        revalidatePath("/professional-portal/leads");
+        revalidatePath(`/professional-portal/leads/${validatedInput.leadId}`);
+        return updatedLead;
+      } catch (error) {
+        await IdempotencyService.fail(idempotencyKey);
+        throw error;
+      }
+    },
+    mapError: createLeadsActionErrorMapper("Failed to update lead"),
+  });
 }
 
 export type DeleteLeadActionInput = {
@@ -197,47 +293,64 @@ export type DeleteLeadActionInput = {
 
 export async function deleteProfessionalLeadAction(
   input: DeleteLeadActionInput,
-) {
-  const dbUserId = await resolveDbUserId();
+): Promise<ActionResult<unknown>> {
+  return secureAction({
+    input,
+    schema: DeleteLeadActionSchema,
+    policy: ({ actor }) => ensureProfessionalLeadActor(actor?.role),
+    handler: async ({ actor, input: validatedInput }) => {
+      const idempotencyKey =
+        validatedInput.idempotencyKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "DELETE", {
+          leadId: validatedInput.leadId,
+        });
 
-  if (!isValidId(input.leadId)) throw new Error("Invalid lead ID");
+      const idempotencyCheck = await IdempotencyService.checkOrCreate(
+        idempotencyKey,
+        "lead",
+        actor!.dbUserId,
+        "DELETE",
+        validatedInput.leadId,
+        LEAD_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      );
 
-  const idempotencyKey =
-    input.idempotencyKey ??
-    IdempotencyService.generateKey(dbUserId, "DELETE", {
-      leadId: input.leadId,
-    });
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
+        revalidatePath("/professional-portal/leads");
+        return idempotencyCheck.response;
+      }
 
-  const idempotencyCheck = await IdempotencyService.checkOrCreate(
-    idempotencyKey,
-    "lead",
-    dbUserId,
-    "DELETE",
-    input.leadId,
-    LEAD_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
+          ),
+        );
+      }
 
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath("/professional-portal/leads");
-    return idempotencyCheck.response;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  try {
-    const result = await deleteProfessionalLead(dbUserId, input.leadId);
-    if (result.success === false) {
-      await IdempotencyService.fail(idempotencyKey);
-      if (result.error === "not_found") throw new Error("Lead not found");
-      throw new Error("Forbidden");
-    }
-    await IdempotencyService.complete(idempotencyKey, result.data);
-    revalidatePath("/professional-portal/leads");
-    return result.data;
-  } catch (err) {
-    await IdempotencyService.fail(idempotencyKey);
-    throw err;
-  }
+      try {
+        const deletedLead = unwrapResultOrThrow(
+          await leadsService.deleteProfessionalLead(
+            {
+              userId: actor!.dbUserId,
+              role: actor!.role,
+            },
+            validatedInput.leadId,
+          ),
+          "Failed to delete lead",
+        );
+        await IdempotencyService.complete(idempotencyKey, deletedLead);
+        revalidatePath("/professional-portal/leads");
+        return deletedLead;
+      } catch (error) {
+        await IdempotencyService.fail(idempotencyKey);
+        throw error;
+      }
+    },
+    mapError: createLeadsActionErrorMapper("Failed to delete lead"),
+  });
 }

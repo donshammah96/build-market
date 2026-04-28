@@ -10,7 +10,7 @@ import {
   getClientLogger,
 } from "@/app/lib/api/resilient-api";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
-import { getProfessionals } from "@/lib/services/professionals";
+import { professionalsService } from "@/app/lib/domains/professionals";
 import {
   ProfessionalQuerySchema,
   type ProfessionalQueryInput,
@@ -76,11 +76,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
-    () => getProfessionals(filters),
+    () => professionalsService.listProfessionals(filters),
     { operationName: "fetch_professionals" },
   );
 
-  if (!result.success) {
+  if (!result.success || !result.data) {
     logger.error("Failed to fetch professionals", result.error);
     return apiSuccess(
       { professionals: [], total: 0, hasMore: false },
@@ -88,7 +88,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  return apiSuccess(result.data, HttpStatus.OK);
+  if (!result.data.ok) {
+    logger.error(
+      "Professionals domain returned failure",
+      new Error(result.data.message ?? "Professionals domain failure"),
+      { filters, error: result.data.error },
+    );
+    return apiSuccess(
+      { professionals: [], total: 0, hasMore: false },
+      HttpStatus.OK,
+    );
+  }
+
+  return apiSuccess(result.data.data, HttpStatus.OK);
 }
 
 export function HEAD(): NextResponse {

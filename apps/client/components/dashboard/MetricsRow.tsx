@@ -108,7 +108,7 @@ const METRIC_CONFIGS: Record<MetricId, MetricDisplayConfig> = {
   store_views: {
     title: "Store Views",
     icon: Eye,
-    format: (v) => (v ? v.toLocaleString() : "0"),
+    format: (v) => (v ? v.toLocaleString("en-KE") : "0"),
     trendKey: "viewsChange",
     formatTrend: (v) => (v ? `${v > 0 ? "+" : ""}${v}%` : "0%"),
     chart: [25, 30, 35, 40, 55, 60, 80],
@@ -133,7 +133,7 @@ const METRIC_CONFIGS: Record<MetricId, MetricDisplayConfig> = {
   property_views: {
     title: "Property Views",
     icon: Eye,
-    format: (v) => (v ? v.toLocaleString() : "0"),
+    format: (v) => (v ? v.toLocaleString("en-KE") : "0"),
     formatTrend: () => "This month",
     chart: [50, 55, 60, 70, 75, 85, 90],
   },

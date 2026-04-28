@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { prisma } from "@build/db";
+import { UserRole } from "@build/db";
+import type { AuthContext } from "@/app/lib/api/api-middleware";
 
 const mockLogger = vi.hoisted(() => ({
   info: vi.fn(),
@@ -9,35 +10,25 @@ const mockLogger = vi.hoisted(() => ({
   debug: vi.fn(),
 }));
 
-vi.mock("@build/db", () => ({
-  prisma: {
-    property: {
-      findUnique: vi.fn(),
-      update: vi.fn(),
-    },
-    propertyAttachment: {
-      findMany: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-      findFirst: vi.fn(),
-    },
-  },
-}));
+const mockAuthContext: AuthContext = {
+  clerkId: "clerk_123",
+  dbUserId: "db_user_123",
+  userRole: UserRole.PROFESSIONAL,
+};
 
 vi.mock("@/app/lib/api/api-middleware", () => ({
-  withAuth: (handler: any) => {
-    return async (req: NextRequest, ctx: any) =>
-      handler(
-        req,
-        {
-          clerkId: "clerk_123",
-          dbUserId: "db_user_123",
-          userEmail: "test/example.com",
-          userRole: "professional",
-        },
-        ctx,
-      );
+  withAuth: (
+    handler: (
+      req: NextRequest,
+      actor: AuthContext,
+      params: Record<string, unknown>,
+    ) => Promise<unknown>,
+  ) => {
+    return async (
+      req: NextRequest,
+      _ctx: unknown,
+      params: Record<string, unknown>,
+    ) => handler(req, mockAuthContext, params);
   },
 }));
 
@@ -52,24 +43,12 @@ vi.mock("@/app/lib/api/rate-limit", () => ({
 
 vi.mock("@/app/lib/api/resilient-api", () => ({
   initializeCorrelationId: vi.fn().mockReturnValue("test-correlation-id"),
-  executeResilient: vi.fn(
-    async (
-      fn: () => Promise<unknown>,
-      options?: { successStatus?: number },
-    ) => {
-      const result = await fn();
-      // If the callback returned a NextResponse (e.g. from apiError), pass it through
-      if (result instanceof Response) {
-        return result;
-      }
-      // Otherwise wrap in a success JSON response like the real implementation
-      const status = options?.successStatus ?? 200;
-      return new Response(JSON.stringify({ success: true, data: result }), {
-        status,
-        headers: { "Content-Type": "application/json" },
-      });
-    },
-  ),
+  getResilientExecutor: vi.fn().mockReturnValue({
+    execute: vi.fn(async (fn: () => Promise<unknown>) => ({
+      success: true,
+      data: await fn(),
+    })),
+  }),
   getClientLogger: vi.fn().mockReturnValue(mockLogger),
 }));
 
@@ -81,95 +60,275 @@ vi.mock("@/app/lib/api/api-guards", () => ({
 vi.mock("@/app/lib/config/property.config", () => ({
   PROPERTY_CONFIG: {
     MAX_BODY_SIZE: 1024 * 1024,
-    MAX_IMAGES_PER_REQUEST: 20,
     IDEMPOTENCY_KEY_TTL_HOURS: 24,
     OPTIMISTIC_LOCK_MAX_RETRIES: 3,
     OPTIMISTIC_LOCK_RETRY_DELAY_MS: 50,
-    MAX_BATCH_SIZE: 5,
   },
 }));
 
-// The documents route uses withAuth<{ id: string }> pattern — import after mocks
-const { GET } = await import("@/app/api/properties/[id]/attachments/route");
+vi.mock("@/app/lib/gdpr/services/compliance.service", () => ({
+  ComplianceService: {
+    logAdminAction: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
+vi.mock("@/app/lib/security/roles", () => ({
+  normalizeRole: vi.fn((role: string) => role.toLowerCase()),
+}));
+
+vi.mock("@/app/lib/domains/properties", () => ({
+  propertiesService: {
+    getPropertyDocuments: vi.fn(),
+    addPropertyDocument: vi.fn(),
+    removePropertyDocument: vi.fn(),
+  },
+}));
+
+vi.mock("@/app/lib/domains/properties/contracts", () => ({
+  createDocumentSchema: {
+    safeParse: vi.fn((value: unknown) => ({ success: true, data: value })),
+  },
+}));
+
+const documentsCollectionRoute =
+  await import("@/app/api/properties/[id]/documents/route");
+const documentsItemRoute =
+  await import("@/app/api/properties/[id]/documents/[documentId]/route");
+const { GET, POST } = documentsCollectionRoute;
+const { DELETE: DELETE_ITEM } = documentsItemRoute;
+const { propertiesService } = await import("@/app/lib/domains/properties");
 
 describe("GET /api/properties/[id]/documents", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => vi.clearAllMocks());
 
-  it("returns attachments for property owner", async () => {
-    vi.mocked(prisma.property.findUnique).mockResolvedValue({
-      id: "prop_1",
-      agentId: "db_user_123",
-    } as any);
-
-    vi.mocked(prisma.propertyAttachment.findMany).mockResolvedValue([
-      {
-        id: "att_1",
-        title: "Title Deed",
-        type: "TITLE_DEED",
-        fileUrl: "https://cdn.example.com/deed.pdf",
-        propertyId: "prop_1",
-      },
-    ] as any);
+  it("returns 200 with document list for the owner", async () => {
+    vi.mocked(propertiesService.getPropertyDocuments).mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: "doc_1",
+          type: "TITLE_DEED",
+          assetId: "asset_1",
+          notes: null,
+          status: "PENDING",
+          createdAt: "2026-03-10T08:00:00.000Z",
+          updatedAt: "2026-03-10T08:00:00.000Z",
+          asset: { id: "asset_1", cdnUrl: "https://cdn.example.com/deed.pdf" },
+        },
+      ],
+    });
 
     const request = new NextRequest(
       "http://localhost:3500/api/properties/prop_1/documents",
     );
-    const response = await GET(
-      request,
+    const response = await GET(request, {}, { id: "prop_1" });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.data[0].id).toBe("doc_1");
+  });
+
+  it("returns 403 for a non-owner", async () => {
+    vi.mocked(propertiesService.getPropertyDocuments).mockResolvedValue({
+      ok: false,
+      error: "forbidden",
+      status: 403,
+      message: "You do not have permission to access this property",
+    });
+
+    const request = new NextRequest(
+      "http://localhost:3500/api/properties/prop_1/documents",
+    );
+    const response = await GET(request, {}, { id: "prop_1" });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("returns 404 when the property is missing", async () => {
+    vi.mocked(propertiesService.getPropertyDocuments).mockResolvedValue({
+      ok: false,
+      error: "not_found",
+      status: 404,
+      message: "Property not found",
+    });
+
+    const request = new NextRequest(
+      "http://localhost:3500/api/properties/nonexistent/documents",
+    );
+    const response = await GET(request, {}, { id: "nonexistent" });
+
+    expect(response.status).toBe(404);
+  });
+
+  it("returns 500 when the resilient executor fails", async () => {
+    const { getResilientExecutor } =
+      await import("@/app/lib/api/resilient-api");
+    vi.mocked(getResilientExecutor).mockReturnValueOnce({
+      execute: vi
+        .fn()
+        .mockResolvedValue({ success: false, error: new Error("db down") }),
+    } as unknown as ReturnType<typeof getResilientExecutor>);
+
+    const request = new NextRequest(
+      "http://localhost:3500/api/properties/prop_1/documents",
+    );
+    const response = await GET(request, {}, { id: "prop_1" });
+
+    expect(response.status).toBe(500);
+  });
+});
+
+describe("POST /api/properties/[id]/documents", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns 201 when a document is created", async () => {
+    vi.mocked(propertiesService.addPropertyDocument).mockResolvedValue({
+      ok: true,
+      data: { id: "doc_new" },
+    });
+
+    const request = new NextRequest(
+      "http://localhost:3500/api/properties/prop_1/documents",
       {
-        clerkId: "clerk_123",
-        dbUserId: "db_user_123",
-        userEmail: "test/example.com",
-        userRole: "professional",
+        method: "POST",
+        body: JSON.stringify({ type: "TITLE_DEED", assetId: "asset_1" }),
+        headers: { "Content-Type": "application/json" },
       },
-      { id: "prop_1" },
+    );
+    const response = await POST(request, {}, { id: "prop_1" });
+
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.data.id).toBe("doc_new");
+  });
+
+  it("returns 403 when the actor does not own the property", async () => {
+    vi.mocked(propertiesService.addPropertyDocument).mockResolvedValue({
+      ok: false,
+      error: "forbidden",
+      status: 403,
+      message: "You do not have permission to access this property",
+    });
+
+    const request = new NextRequest(
+      "http://localhost:3500/api/properties/prop_1/documents",
+      {
+        method: "POST",
+        body: JSON.stringify({ type: "TITLE_DEED", assetId: "asset_1" }),
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    const response = await POST(request, {}, { id: "prop_1" });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("returns 404 when the asset is not found", async () => {
+    vi.mocked(propertiesService.addPropertyDocument).mockResolvedValue({
+      ok: false,
+      error: "asset_not_found",
+      status: 404,
+      message: "Asset not found",
+    });
+
+    const request = new NextRequest(
+      "http://localhost:3500/api/properties/prop_1/documents",
+      {
+        method: "POST",
+        body: JSON.stringify({ type: "TITLE_DEED", assetId: "missing_asset" }),
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    const response = await POST(request, {}, { id: "prop_1" });
+
+    expect(response.status).toBe(404);
+  });
+});
+
+describe("DELETE /api/properties/[id]/documents/[documentId]", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns 200 when the owner deletes a document", async () => {
+    vi.mocked(propertiesService.removePropertyDocument).mockResolvedValue({
+      ok: true,
+      data: { success: true },
+    });
+
+    const request = new NextRequest(
+      "http://localhost:3500/api/properties/prop_1/documents/doc_1",
+    );
+    const response = await DELETE_ITEM(
+      request,
+      {},
+      {
+        id: "prop_1",
+        documentId: "doc_1",
+      },
     );
 
     expect(response.status).toBe(200);
+    expect(propertiesService.removePropertyDocument).toHaveBeenCalledWith(
+      "prop_1",
+      "doc_1",
+      {
+        userId: "db_user_123",
+        role: UserRole.PROFESSIONAL,
+      },
+    );
   });
 
   it("returns 403 for non-owner", async () => {
-    vi.mocked(prisma.property.findUnique).mockResolvedValue({
-      id: "prop_1",
-      agentId: "other_user",
-    } as any);
+    vi.mocked(propertiesService.removePropertyDocument).mockResolvedValue({
+      ok: false,
+      error: "forbidden",
+      status: 403,
+      message: "You do not have permission to access this property",
+    });
 
     const request = new NextRequest(
-      "http://localhost:3500/api/properties/prop_1/documents",
+      "http://localhost:3500/api/properties/prop_1/documents/doc_1",
     );
-    const response = await GET(
+    const response = await DELETE_ITEM(
       request,
+      {},
       {
-        clerkId: "clerk_123",
-        dbUserId: "db_user_123",
-        userEmail: "test/example.com",
-        userRole: "professional",
+        id: "prop_1",
+        documentId: "doc_1",
       },
-      { id: "prop_1" },
     );
 
     expect(response.status).toBe(403);
   });
 
-  it("returns 404 for non-existent property", async () => {
-    vi.mocked(prisma.property.findUnique).mockResolvedValue(null);
+  it("returns 404 when document does not exist", async () => {
+    vi.mocked(propertiesService.removePropertyDocument).mockResolvedValue({
+      ok: false,
+      error: "document_not_found",
+      status: 404,
+      message: "Document not found",
+    });
 
     const request = new NextRequest(
-      "http://localhost:3500/api/properties/prop_1/documents",
+      "http://localhost:3500/api/properties/prop_1/documents/missing",
     );
-    const response = await GET(
+    const response = await DELETE_ITEM(
       request,
+      {},
       {
-        clerkId: "clerk_123",
-        dbUserId: "db_user_123",
-        userEmail: "test/example.com",
-        userRole: "professional",
+        id: "prop_1",
+        documentId: "missing",
       },
-      { id: "nonexistent" },
     );
 
     expect(response.status).toBe(404);
+  });
+});
+
+describe("collection route surface", () => {
+  it("does not expose legacy collection delete handler", () => {
+    expect(
+      (documentsCollectionRoute as { DELETE?: unknown }).DELETE,
+    ).toBeUndefined();
   });
 });

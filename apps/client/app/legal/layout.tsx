@@ -60,7 +60,9 @@ export default function LegalLayout({
       <footer className="relative z-10 border-t border-white/5 mt-20">
         <div className="max-w-4xl mx-auto px-6 py-8 text-center text-sm text-zinc-500">
           <p>
-            &copy; {new Date().getFullYear()} Build Market. All rights reserved.
+            &copy;{" "}
+            <span suppressHydrationWarning>{new Date().getFullYear()}</span>{" "}
+            Build Market. All rights reserved.
           </p>
           <p className="mt-1">
             Questions? Reach us at{" "}

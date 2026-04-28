@@ -50,14 +50,16 @@ export function DataTable<TData, TValue>({
     : 10;
 
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [searchValue, setSearchValue] = useState(searchParams?.get("search") || "");
+  const [searchValue, setSearchValue] = useState(
+    searchParams?.get("search") || "",
+  );
 
   // Local pagination state
   const [{ pageIndex, pageSize }, setPagination] = useState<PaginationState>({
     pageIndex: page - 1,
     pageSize: per_page,
   });
-  
+
   // Sync with URL changes
   useEffect(() => {
     setPagination({ pageIndex: page - 1, pageSize: per_page });
@@ -80,13 +82,13 @@ export function DataTable<TData, TValue>({
       }
       return newSearchParams.toString();
     },
-    [searchParams]
+    [searchParams],
   );
 
   // Debounced Search Effect
   useEffect(() => {
     if (pageCount === undefined) return;
-    
+
     const timeoutId = setTimeout(() => {
       const currentSearch = searchParams?.get("search") || "";
       if (searchValue !== currentSearch) {
@@ -95,13 +97,20 @@ export function DataTable<TData, TValue>({
             page: 1, // Reset to first page on search
             search: searchValue || null,
           })}`,
-          { scroll: false } // Prevent scroll jump
+          { scroll: false }, // Prevent scroll jump
         );
       }
     }, 400); // 400ms debounce
-    
+
     return () => clearTimeout(timeoutId);
-  }, [searchValue, pageCount, router, pathname, createQueryString, searchParams]);
+  }, [
+    searchValue,
+    pageCount,
+    router,
+    pathname,
+    createQueryString,
+    searchParams,
+  ]);
 
   const table = useReactTable({
     data,
@@ -113,13 +122,16 @@ export function DataTable<TData, TValue>({
     },
     manualPagination: pageCount !== undefined,
     onPaginationChange: (updater) => {
-      const nextState = typeof updater === "function" ? updater({ pageIndex, pageSize }) : updater;
+      const nextState =
+        typeof updater === "function"
+          ? updater({ pageIndex, pageSize })
+          : updater;
       setPagination(nextState);
       router.push(
         `${pathname}?${createQueryString({
           page: nextState.pageIndex + 1,
           limit: nextState.pageSize,
-        })}`
+        })}`,
       );
     },
     onSortingChange: setSorting,
@@ -170,12 +182,21 @@ export function DataTable<TData, TValue>({
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="hover:bg-transparent border-zinc-100">
+              <TableRow
+                key={headerGroup.id}
+                className="hover:bg-transparent border-zinc-100"
+              >
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} className="h-10 px-4 text-xs font-medium uppercase tracking-wider text-zinc-500 bg-zinc-50/50">
+                  <TableHead
+                    key={header.id}
+                    className="h-10 px-4 text-xs font-medium uppercase tracking-wider text-zinc-500 bg-zinc-50/50"
+                  >
                     {header.isPlaceholder
                       ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
                   </TableHead>
                 ))}
               </TableRow>
@@ -191,14 +212,20 @@ export function DataTable<TData, TValue>({
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id} className="px-4 py-3">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
                     </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center text-zinc-500">
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center text-zinc-500"
+                >
                   No projects found.
                 </TableCell>
               </TableRow>
@@ -206,7 +233,7 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      
+
       {/* Footer / Pagination */}
       <div className="border-t border-zinc-100 bg-zinc-50/30 p-4">
         <DataTablePagination table={table} />

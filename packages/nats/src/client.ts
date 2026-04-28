@@ -56,7 +56,6 @@ let verboseLogging = false;
  */
 function getDefaultConfig(): NatsConfig {
   const env = process.env.NODE_ENV || "development";
-  const isDev = env === "development";
   const isProd = env === "production";
 
   return {
@@ -96,7 +95,11 @@ function mergeConfig(config?: Partial<NatsConfig>): NatsConfig {
 /**
  * Log helper with verbose mode support
  */
-function log(level: "info" | "warn" | "error", message: string, data?: any) {
+function log(
+  level: "info" | "warn" | "error",
+  message: string,
+  data?: unknown,
+) {
   const timestamp = new Date().toISOString();
   const prefix = `[NATS ${timestamp}]`;
 
@@ -114,7 +117,16 @@ function log(level: "info" | "warn" | "error", message: string, data?: any) {
       // Track errors in metrics (keep last 50)
       connectionMetrics.errors.push({
         timestamp: new Date(),
-        error: typeof data === "string" ? data : JSON.stringify(data),
+        error:
+          typeof data === "string"
+            ? data
+            : (() => {
+                try {
+                  return JSON.stringify(data);
+                } catch {
+                  return String(data);
+                }
+              })(),
       });
       if (connectionMetrics.errors.length > 50) {
         connectionMetrics.errors.shift();

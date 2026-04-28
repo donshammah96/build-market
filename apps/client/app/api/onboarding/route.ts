@@ -1,7 +1,25 @@
+/**
+ * POST /api/onboarding
+ * app/api/onboarding/route.ts
+ *
+ * KEY CHANGES FROM ORIGINAL:
+ *
+ * 1. CLERK UPDATE ORDERING FIX (critical)
+ *    Original: domain logic → IdempotencyService.complete() → Clerk update
+ *    Fixed:    domain logic → Clerk update → IdempotencyService.complete()
+ *
+ *    If Clerk update ran after complete() and failed silently, any retry
+ *    returned the cached "completed" response without re-attempting the Clerk
+ *    update. The user ended up with DB isOnboarded=true but stale Clerk
+ *    metadata, breaking every middleware auth check on next page load.
+ *
+ * 2. SHARED CLERK HELPER replaces the duplicated:
+ *    (await clerkClient()) as unknown as ClerkMetadataClient
+ *    That double cast bypassed TypeScript completely. All five routes had it.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { prisma } from "@build/db";
-import { County, Profession } from "@prisma/client";
 import { OnboardingSchema } from "@build/types";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -11,91 +29,158 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
-import { clerkClient } from "@clerk/nextjs/server";
+import {
+  type ClerkUserProfile,
+  userProfileOnboardingService,
+} from "@/app/lib/domains/user-profile";
+import {
+  CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
+  finalizeClerkOnboardingTransition,
+} from "@/app/lib/domains/user-profile/clerk-metadata";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
-
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
+const ROUTE_PATTERN = "/api/onboarding";
+const OPERATION_NAME = "complete_onboarding";
 
-/**
- * POST /api/onboarding
- * Complete user onboarding by setting role and creating profile.
- *
- * This endpoint uses Clerk auth directly (not withAuth middleware) because
- * the user may not exist in the database yet. It will create the user if needed.
- *
- * Handles two primary roles:
- * - "client" → creates User + ClientProfile
- * - "professional" → creates User + ProfessionalProfile + ProfessionalDocuments
- */
+const ONBOARDING_ERROR_MESSAGE_MAP: Partial<Record<string, string>> = {
+  conflict: "Onboarding already completed",
+  invalid_input: "Invalid or expired document uploads",
+  invalid_state: "Invalid onboarding state",
+  forbidden: "Forbidden",
+  not_found: "User not found",
+  internal: "Onboarding failed",
+};
+
+function mapOutcomeFromStatus(status: number): string {
+  if (status === HttpStatus.BAD_REQUEST) return "bad_request";
+  if (status === HttpStatus.UNAUTHORIZED) return "unauthorized";
+  if (status === HttpStatus.FORBIDDEN) return "forbidden";
+  if (status === HttpStatus.CONFLICT) return "conflict";
+  if (status === HttpStatus.TOO_MANY_REQUESTS) return "rate_limited";
+  return "failed";
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const startedAt = Date.now();
   const correlationId = initializeCorrelationId(req);
+  let actorRole: "unknown" | "CLIENT" | "PROFESSIONAL" = "unknown";
 
-  // Get Clerk user ID
+  type LogOutcomeFields = {
+    reason?: string;
+    source?: string;
+    domainError?: string;
+    completedRole?: string;
+    errors?: string[];
+  };
+
+  const logOutcome = (
+    outcome: string,
+    httpStatus: number,
+    fields?: LogOutcomeFields,
+  ) => {
+    logger.info("Onboarding adapter outcome", {
+      correlationId,
+      operationName: OPERATION_NAME,
+      httpMethod: req.method,
+      routePattern: ROUTE_PATTERN,
+      actorRole,
+      outcome,
+      httpStatus,
+      durationMs: Date.now() - startedAt,
+      ...(fields?.reason ? { reason: fields.reason } : {}),
+      ...(fields?.source ? { source: fields.source } : {}),
+      ...(fields?.domainError ? { domainError: fields.domainError } : {}),
+      ...(fields?.completedRole ? { completedRole: fields.completedRole } : {}),
+      ...(fields?.errors ? { errors: fields.errors } : {}),
+    });
+  };
+
   const { userId: clerkId } = await auth();
-
   if (!clerkId) {
+    logOutcome("unauthorized", HttpStatus.UNAUTHORIZED);
     return apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED);
   }
 
-  // Rate limiting
-  const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
-    `onboarding:${identifier}`,
+    getActorRateLimitIdentifier(clerkId, "onboarding-submit"),
     RateLimits.AUTH.limit,
     RateLimits.AUTH.window,
   );
-
   if (!rateLimitResult.success) {
+    logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
     return apiError(
       "Too many requests. Please try again later.",
       HttpStatus.TOO_MANY_REQUESTS,
     );
   }
 
-  // Body size guard
   const sizeError = checkBodySize(req, MAX_BODY_SIZE);
-  if (sizeError) return sizeError;
+  if (sizeError) {
+    logOutcome("bad_request", 413, {
+      reason: "body_too_large",
+    });
+    return sizeError;
+  }
 
-  // Parse and validate request body
   let body: unknown;
   try {
     body = await req.json();
   } catch {
+    logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
+      reason: "invalid_json",
+    });
     return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
   }
 
   const validation = OnboardingSchema.safeParse(body);
   if (!validation.success) {
+    const validationErrorFields = validation.error.issues.map((issue) =>
+      issue.path.join("."),
+    );
+
     logger.warn("Onboarding validation failed", {
       correlationId,
-      clerkId,
-      errors: validation.error.issues,
+      actorRole: "unknown",
+      errors: validationErrorFields,
+    });
+    logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
+      reason: "validation_failed",
+      errors: validationErrorFields,
     });
     return apiError(
       "Validation failed",
       HttpStatus.BAD_REQUEST,
-      validation.error.issues,
+      validationErrorFields,
     );
   }
 
   const validatedData = validation.data;
   const { role } = validatedData;
+  const resolvedActorRole = normalizeRole(role);
 
-  // Map role to UserRole enum (schema uses lowercase, enum is uppercase)
-  const userRole = role.toUpperCase() as "CLIENT" | "PROFESSIONAL";
+  if (
+    !resolvedActorRole ||
+    (resolvedActorRole !== "CLIENT" && resolvedActorRole !== "PROFESSIONAL")
+  ) {
+    logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
+      reason: "invalid_role",
+    });
+    return apiError("Invalid onboarding role", HttpStatus.BAD_REQUEST);
+  }
+  actorRole = resolvedActorRole;
 
-  // Idempotency — prevent duplicate onboarding
   const idempotencyKey =
     req.headers.get("Idempotency-Key") ||
     IdempotencyService.generateKey(clerkId, "POST", {
       domain: "onboarding",
-      role: userRole,
+      role: resolvedActorRole,
     });
 
   const idempotencyCheck = await IdempotencyService.checkOrCreate(
@@ -105,27 +190,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     "POST",
   );
   if (!idempotencyCheck) {
+    logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
+      reason: "idempotency_check_failed",
+    });
     return apiError(
       "Failed to process idempotency key",
       HttpStatus.INTERNAL_SERVER_ERROR,
     );
   }
   if (idempotencyCheck.status === "completed") {
+    logOutcome("succeeded", HttpStatus.OK, {
+      source: "idempotency_cache",
+    });
     return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
   }
   if (idempotencyCheck.status === "pending") {
+    logOutcome("conflict", HttpStatus.CONFLICT, {
+      reason: "idempotency_pending",
+    });
     return apiError(
       "Onboarding is being processed. Please wait.",
       HttpStatus.CONFLICT,
     );
   }
 
-  logger.info("Processing onboarding", { correlationId, clerkId, role });
-
-  // Get Clerk user data to create/update database user
-  const clerkUserData = await currentUser();
+  const clerkUserData = (await currentUser()) as ClerkUserProfile | null;
   if (!clerkUserData) {
     await IdempotencyService.fail(idempotencyKey);
+    logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
+      reason: "clerk_user_unavailable",
+    });
     return apiError(
       "Could not retrieve user data from Clerk",
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -134,305 +228,104 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
-    async () => {
-      const user = await prisma.$transaction(
-        async (tx) => {
-          // Create or update user — handles the case where webhook didn't fire
-          const dbUser = await tx.user.upsert({
-            where: { clerkId },
-            create: {
-              clerkId,
-              email: clerkUserData.emailAddresses[0]?.emailAddress || "",
-              firstName: clerkUserData.firstName || null,
-              lastName: clerkUserData.lastName || null,
-              phone: clerkUserData.phoneNumbers?.[0]?.phoneNumber || null,
-              role: userRole,
-              isProfileComplete: true,
-            },
-            update: {
-              role: userRole,
-              isProfileComplete: true,
-            },
-            select: {
-              id: true,
-              role: true,
-              isProfileComplete: true,
-            },
-          });
-
-          // Create profile based on role
-          if (role === "client") {
-            const clientData = validatedData as Extract<
-              typeof validatedData,
-              { role: "client" }
-            >;
-
-            await tx.clientProfile.upsert({
-              where: { userId: dbUser.id },
-              update: {
-                county: clientData.county as County,
-                city: clientData.city || null,
-                address: clientData.address || null,
-                zipCode: clientData.zipCode || null,
-                budgetRangeMin: clientData.budgetRangeMin ?? null,
-                budgetRangeMax: clientData.budgetRangeMax ?? null,
-                interests: clientData.interests || [],
-                type:
-                  (clientData.type as
-                    | "HOMEOWNER"
-                    | "CORPORATE_DEVELOPER"
-                    | "INTERIOR_DESIGN_FIRM"
-                    | "GOVERNMENT_ENTITY") || "HOMEOWNER",
-              },
-              create: {
-                userId: dbUser.id,
-                county: clientData.county as County,
-                city: clientData.city || null,
-                address: clientData.address || null,
-                zipCode: clientData.zipCode || null,
-                budgetRangeMin: clientData.budgetRangeMin ?? null,
-                budgetRangeMax: clientData.budgetRangeMax ?? null,
-                interests: clientData.interests || [],
-                type:
-                  (clientData.type as
-                    | "HOMEOWNER"
-                    | "CORPORATE_DEVELOPER"
-                    | "INTERIOR_DESIGN_FIRM"
-                    | "GOVERNMENT_ENTITY") || "HOMEOWNER",
-              },
-            });
-          } else if (role === "professional") {
-            const proData = validatedData as Extract<
-              typeof validatedData,
-              { role: "professional" }
-            >;
-
-            // Type guard: ProfessionalOnboardingSchema has "profession" field
-            const profession =
-              "profession" in proData
-                ? (proData.profession as Profession)
-                : ("OTHER" as Profession);
-            const companyName =
-              "companyName" in proData ? (proData.companyName as string) : "";
-
-            const professionalProfile = await tx.professionalProfile.upsert({
-              where: { userId: dbUser.id },
-              update: {
-                profession,
-                companyName,
-                yearsExperience:
-                  "yearsExperience" in proData
-                    ? ((proData.yearsExperience as number | undefined) ?? null)
-                    : null,
-                website:
-                  "website" in proData
-                    ? (proData.website as string) || null
-                    : null,
-                bio: "bio" in proData ? (proData.bio as string) || null : null,
-                portfolioUrl:
-                  "portfolioUrl" in proData
-                    ? (proData.portfolioUrl as string) || null
-                    : null,
-                county:
-                  "county" in proData ? (proData.county as County) : undefined,
-                city:
-                  "city" in proData ? (proData.city as string) || null : null,
-                serviceRadiusKm:
-                  "serviceRadiusKm" in proData
-                    ? ((proData.serviceRadiusKm as number | undefined) ?? null)
-                    : null,
-                verified: false,
-              },
-              create: {
-                userId: dbUser.id,
-                profession,
-                companyName: companyName || "",
-                yearsExperience:
-                  "yearsExperience" in proData
-                    ? ((proData.yearsExperience as number | undefined) ?? null)
-                    : null,
-                website:
-                  "website" in proData
-                    ? (proData.website as string) || null
-                    : null,
-                bio: "bio" in proData ? (proData.bio as string) || null : null,
-                portfolioUrl:
-                  "portfolioUrl" in proData
-                    ? (proData.portfolioUrl as string) || null
-                    : null,
-                county:
-                  "county" in proData ? (proData.county as County) : undefined,
-                city:
-                  "city" in proData ? (proData.city as string) || null : null,
-                serviceRadiusKm:
-                  "serviceRadiusKm" in proData
-                    ? ((proData.serviceRadiusKm as number | undefined) ?? null)
-                    : null,
-                verified: false,
-              },
-            });
-
-            // Handle license from the OnboardingSchema license object
-            if ("license" in proData && proData.license) {
-              const license = proData.license as {
-                authority?: string;
-                licenseNumber?: string;
-              };
-              if (license.authority && license.licenseNumber) {
-                await tx.professionalLicense.upsert({
-                  where: {
-                    professionalId_authority_licenseNumber: {
-                      professionalId: dbUser.id,
-                      authority:
-                        license.authority as import("@prisma/client").LicenseAuthority,
-                      licenseNumber: license.licenseNumber,
-                    },
-                  },
-                  update: { validFrom: new Date(), status: "PENDING" },
-                  create: {
-                    professionalId: dbUser.id,
-                    authority:
-                      license.authority as import("@prisma/client").LicenseAuthority,
-                    licenseNumber: license.licenseNumber,
-                    validFrom: new Date(),
-                    status: "PENDING",
-                  },
-                });
-              }
-            }
-
-            // Handle documents
-            if (
-              "documents" in proData &&
-              Array.isArray((proData as any).documents)
-            ) {
-              const docs = (proData as any).documents;
-
-              const uploadIds = docs
-                .map((d: any) => d.uploadId)
-                .filter(Boolean);
-              const stagedUploads = await tx.onboardingUpload.findMany({
-                where: {
-                  id: { in: uploadIds },
-                  clerkId,
-                  status: "STAGED",
-                },
-              });
-
-              if (
-                uploadIds.length > 0 &&
-                stagedUploads.length !== uploadIds.length
-              ) {
-                throw new Error("Invalid or expired document uploads");
-              }
-
-              for (let i = 0; i < docs.length; i++) {
-                const docData = docs[i];
-                const staged = stagedUploads.find(
-                  (s) => s.id === docData.uploadId,
-                );
-
-                let assetId: string | undefined = undefined;
-
-                if (staged) {
-                  // Avoid constraint errors by checking existing asset
-                  let asset = await tx.asset.findUnique({
-                    where: { checksum: staged.checksum },
-                  });
-                  if (!asset) {
-                    asset = await tx.asset.create({
-                      data: {
-                        uploaderId: dbUser.id,
-                        originalName: staged.originalName,
-                        mimeType: staged.mimeType,
-                        size: staged.size,
-                        checksum: staged.checksum,
-                        bucket: staged.storageBucket,
-                        key: staged.storageKey,
-                        cdnUrl: staged.tempUrl,
-                      },
-                    });
-                  }
-
-                  assetId = asset.id;
-
-                  // Mark staged upload as consumed
-                  await tx.onboardingUpload.update({
-                    where: { id: staged.id },
-                    data: {
-                      status: "CONSUMED",
-                      consumedAt: new Date(),
-                      consumedByUserId: dbUser.id,
-                    },
-                  });
-                }
-
-                await tx.professionalDocument.create({
-                  data: {
-                    professionalId: professionalProfile.userId,
-                    category:
-                      docData.category as import("@prisma/client").DocumentCategory,
-                    title: docData.title || `Document ${i + 1}`,
-                    issuer:
-                      docData.category === "ID_OR_PASSPORT"
-                        ? "Government/Official"
-                        : "Self-reported",
-                    assetId, // Store reference to modernized Asset, fileUrl falls back if needed
-                    fileUrl: docData.previewUrl || staged?.tempUrl || null, // Keeping for backward compatibility temporarily
-                    status: "PENDING",
-                  },
-                });
-              }
-            }
-          }
-
-          return dbUser;
-        },
-        { maxWait: 10000, timeout: 30000 },
-      );
-
-      return {
-        userId: user.id,
-        role: user.role,
-        isProfileComplete: user.isProfileComplete,
-      };
-    },
-    { operationName: "complete_onboarding" },
+    async () =>
+      userProfileOnboardingService.completeOnboarding({
+        actor: { clerkId, correlationId, role: resolvedActorRole },
+        clerkUser: clerkUserData,
+        data: validatedData,
+      }),
+    { operationName: OPERATION_NAME },
   );
 
   if (!result.success || !result.data) {
     await IdempotencyService.fail(idempotencyKey);
-    logger.error("Onboarding failed", result.error, {
-      correlationId,
-      clerkId,
-    });
+    logger.error(
+      "Onboarding adapter outcome",
+      result.error instanceof Error
+        ? result.error
+        : new Error("Onboarding execution failed"),
+      {
+        correlationId,
+        operationName: OPERATION_NAME,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: Date.now() - startedAt,
+        reason: "executor_failure",
+      },
+    );
     return apiError("Onboarding failed", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
-  // Update Clerk publicMetadata so middleware can access role without DB calls
-  try {
-    const client = await clerkClient();
-    await client.users.updateUserMetadata(clerkId, {
-      publicMetadata: {
-        role: result.data.role,
-        isOnboarded: true,
-      },
+  if (!result.data.ok) {
+    await IdempotencyService.fail(idempotencyKey);
+    const status = result.data.status || HttpStatus.INTERNAL_SERVER_ERROR;
+    const safeMessage =
+      ONBOARDING_ERROR_MESSAGE_MAP[result.data.error ?? ""] ||
+      "Onboarding failed";
+
+    logOutcome(mapOutcomeFromStatus(status), status, {
+      reason: "domain_error",
+      domainError: result.data.error || "unknown",
     });
-  } catch (clerkError) {
-    // Log but don't fail — DB is the source of truth
-    logger.error(
-      "Failed to update Clerk metadata",
-      clerkError instanceof Error ? clerkError : new Error(String(clerkError)),
-      { correlationId, clerkId },
+    return apiError(safeMessage, status);
+  }
+
+  const responseData = result.data.data;
+  const clerkRole = responseData.role as string;
+
+  // ORDERING INVARIANT: Clerk update BEFORE IdempotencyService.complete().
+  // If Clerk ran after and failed, any retry returns cached success and
+  // permanently skips the Clerk update, leaving the middleware token stale.
+  try {
+    await finalizeClerkOnboardingTransition({
+      clerkId,
+      metadata: {
+        role: clerkRole,
+        isOnboarded: true,
+        status:
+          clerkRole === "PROFESSIONAL" ? "PENDING_VERIFICATION" : "ACTIVE",
+      },
+      context: { correlationId, operation: OPERATION_NAME },
+      onFailure: () => IdempotencyService.fail(idempotencyKey),
+    });
+  } catch {
+    logOutcome("failed", HttpStatus.SERVICE_UNAVAILABLE, {
+      reason: "clerk_metadata_sync_failed",
+    });
+    return apiError(
+      CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
+      HttpStatus.SERVICE_UNAVAILABLE,
     );
   }
 
-  logger.info("Onboarding completed successfully", {
-    correlationId,
-    userId: result.data.userId,
-    role: result.data.role,
+  try {
+    await IdempotencyService.complete(idempotencyKey, responseData);
+  } catch (completionError) {
+    await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+    logger.error(
+      "Failed to complete onboarding idempotency replay",
+      completionError instanceof Error
+        ? completionError
+        : new Error("Idempotency completion failed"),
+      {
+        correlationId,
+        operationName: OPERATION_NAME,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "idempotency_complete_failed",
+        httpStatus: HttpStatus.OK,
+        durationMs: Date.now() - startedAt,
+      },
+    );
+  }
+
+  logOutcome("succeeded", HttpStatus.OK, {
+    completedRole: responseData.role,
   });
 
-  await IdempotencyService.complete(idempotencyKey, result.data);
-  return apiSuccess(result.data, HttpStatus.OK);
+  return apiSuccess(responseData, HttpStatus.OK);
 }

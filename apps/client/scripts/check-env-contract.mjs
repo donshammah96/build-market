@@ -15,7 +15,12 @@ const SCAN_PATHS = [
 
 const FILE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs"]);
 
-const ALLOWED_UNDECLARED = new Set(["NODE_ENV", "CI"]);
+const ALLOWED_UNDECLARED = new Set([
+  "NODE_ENV",
+  "CI",
+  "NEXT_PHASE",
+  "NEXT_RUNTIME",
+]);
 
 const HIGH_RISK_UNUSED_KEY_PATTERNS = [
   /SECRET/,

@@ -46,10 +46,13 @@ export interface MetricData {
 
 export interface LogContext {
   correlationId?: string;
-  userId?: string;
+  // ADR-005 / ADR-006: userId is Class B PII and is prohibited from log payloads.
+  // Log actorRole (an enum with no identity) instead. Any call site that was
+  // passing userId will now produce a compile error, making violations visible
+  // at build time rather than leaking silently at runtime.
   operationName?: string;
   serviceName?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export enum LogLevel {

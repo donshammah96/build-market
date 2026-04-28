@@ -1,56 +1,59 @@
-# Professional Portal — Projects API
+# Projects API Ownership
 
-Authenticated endpoints for managing professional projects.
+`/api/projects/**` is the canonical shared project resource surface for both homeowners and professionals.
 
-## Endpoints
+`/api/professional-portal/projects/**` is retained for professional dashboard UX compatibility and now aliases the shared handlers for the full project route tree:
 
-### GET /api/professional-portal/projects
+- `/api/professional-portal/projects` -> `/api/projects`
+- `/api/professional-portal/projects/[id]` -> `/api/projects/[id]`
+- `/api/professional-portal/projects/[id]/milestones/**` -> `/api/projects/[id]/milestones/**`
+- `/api/professional-portal/projects/[id]/documents/**` -> `/api/projects/[id]/documents/**`
+- `/api/professional-portal/projects/[id]/images/**` -> `/api/projects/[id]/images/**`
+- `/api/professional-portal/projects/[id]/escrow/**` -> `/api/projects/[id]/escrow/**`
 
-List projects for the authenticated professional.
+## Canonical Shared Routes
 
-**Query parameters:**
+- `GET /api/projects` — actor-scoped project list.
+- `POST /api/projects` — project creation (policy: professional/admin only).
+- `GET /api/projects/[id]` — resource read for project participants.
+- `PATCH /api/projects/[id]` — project mutation with optimistic lock (`If-Match`) and idempotency.
+- `DELETE /api/projects/[id]` — soft delete with optimistic lock (`If-Match`) and idempotency.
+- `GET /api/projects/[id]/milestones` — list milestones for project participants.
+- `POST /api/projects/[id]/milestones` — create milestone (professional owner only).
+- `GET/PATCH/DELETE /api/projects/[id]/milestones/[milestoneId]` — milestone detail and mutation flows.
+- `POST /api/projects/[id]/milestones/[milestoneId]/approve` — milestone approval flow.
+- `GET/POST /api/projects/[id]/documents` and `GET/DELETE /api/projects/[id]/documents/[documentId]`.
+- `GET/POST /api/projects/[id]/images` and `GET/DELETE /api/projects/[id]/images/[imageId]`.
+- `GET /api/projects/[id]/escrow` and `GET /api/projects/[id]/escrow/[escrowId]`.
+- `POST /api/projects/[id]/escrow/[escrowId]/fund|release|dispute` — escrow lifecycle actions.
 
-- `page` (int, min 1, default: 1)
-- `limit` (int, 1–50, default: 20)
-- `status` — `PLANNING` | `IN_PROGRESS` | `PAUSED` | `COMPLETED` | `ARCHIVED` | `CANCELLED` | `active` (maps to PLANNING + IN_PROGRESS)
+## Ownership Matrix
 
-**Response:** `{ success, data: { projects, pagination } }`
+| Resource          | Action                           | Professional (owner) | Homeowner (client participant) | Admin                         |
+| ----------------- | -------------------------------- | -------------------- | ------------------------------ | ----------------------------- |
+| Project           | Read (`GET`)                     | Allow                | Allow                          | Allow                         |
+| Project           | Create (`POST`)                  | Allow                | Deny                           | Allow                         |
+| Project           | Update/Delete (`PATCH`/`DELETE`) | Allow                | Deny                           | Deny (current implementation) |
+| Documents/Images  | Read                             | Allow                | Allow                          | Allow                         |
+| Documents/Images  | Upload/Delete                    | Allow                | Deny                           | Allow                         |
+| Milestone approve | Approve flow                     | Deny                 | Allow                          | Deny                          |
 
-### POST /api/professional-portal/projects
+## Route Adapter Responsibilities
 
-Create a new project.
+Routes stay thin and only handle:
 
-**Body:** `CreateProjectSchema` — title, clientId, type, contractType, budget, dates, location, county, status.
+- auth context extraction (`withAuth`)
+- rate limiting
+- zod input validation
+- idempotency header processing
+- resilient execution + response mapping
 
-**Response:** `{ success, data: Project }` (201)
+Business logic and authorization decisions belong in:
 
-### GET /api/professional-portal/projects/[id]
+- `app/lib/domains/projects/service.ts`
+- `app/lib/domains/projects/repository.ts`
 
-Get a single project by ID (owner only).
+## Validation + Configuration
 
-**Response:** `{ success, data: ProjectDetail }`
-
-### PATCH /api/professional-portal/projects/[id]
-
-Update a project (owner only).
-
-**Body:** `UpdateProjectSchema` — all fields optional.
-
-**Response:** `{ success, data: ProjectDetail }`
-
-### DELETE /api/professional-portal/projects/[id]
-
-Soft-delete a project (owner only, sets `deletedAt`).
-
-**Response:** `{ success, data: { message, projectId, deletedAt } }`
-
-## Schema alignment
-
-- **Project** — UUID PK, `deletedAt` for soft delete, `professionalId` for ownership.
-- Queries always include `deletedAt: null`.
-- Idempotency via `IdempotencyService` (scope: `"project"`).
-
-## Validation
-
-- `app/lib/projects-validation.ts` — `CreateProjectSchema`, `UpdateProjectSchema`, `ProjectQuerySchema`, select objects.
-- `app/lib/config/project.config.ts` — Domain constants.
+- `app/lib/validation/projects-validation.ts`
+- `app/lib/config/project.config.ts`

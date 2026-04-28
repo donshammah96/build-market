@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { UserRole, UserStatus } from "@build/db";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 // ─── Clerk Webhook Payload Types ─────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ export interface ClerkPublicMetadata {
   role?: string;
   isOnboarded?: boolean;
   isVerified?: boolean;
+  status?: string;
   [key: string]: unknown;
 }
 
@@ -116,7 +118,11 @@ export const ClerkUserPayloadSchema = z.object({
       role: z.string().optional(),
       isOnboarded: z.boolean().optional(),
       isVerified: z.boolean().optional(),
+      status: z.string().optional(),
     })
+    // SECURITY_ZOD_PASSTHROUGH_ALLOWLIST: Clerk webhook payloads are signed
+    // provider envelopes and public_metadata may legitimately include
+    // additional provider-owned keys outside our mutation-body schemas.
     .passthrough()
     .optional(),
   last_sign_in_at: z.number().nullish(),
@@ -130,20 +136,18 @@ export const ClerkSessionPayloadSchema = z.object({
 
 // ─── Role Resolution ─────────────────────────────────────────────────────────
 
-const VALID_ROLES: Record<string, UserRole> = {
-  CLIENT: UserRole.CLIENT,
-  PROFESSIONAL: UserRole.PROFESSIONAL,
-  ADMIN: UserRole.ADMIN,
-  SUPPORT: UserRole.SUPPORT,
-};
-
 /**
  * Resolves a Clerk metadata role string to a Prisma UserRole enum.
  * Returns undefined if the role string is not recognized.
  */
 export function resolveUserRole(roleStr?: string): UserRole | undefined {
   if (!roleStr) return undefined;
-  return VALID_ROLES[roleStr.toUpperCase()];
+  const normalized = normalizeRole(roleStr);
+  if (!normalized) {
+    return undefined;
+  }
+
+  return (UserRole as Record<string, UserRole>)[normalized];
 }
 
 // ─── Display Name ────────────────────────────────────────────────────────────

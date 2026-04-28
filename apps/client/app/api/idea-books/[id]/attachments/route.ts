@@ -13,18 +13,40 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { isValidId } from "@/app/lib/api/api-guards";
 import { AttachmentQuerySchema } from "@/app/lib/validation/idea-books-validation";
-import { listAttachments } from "@/lib/services/idea-books";
+import { ideaBooksService } from "@/app/lib/domains/idea-books";
 
 const logger = getClientLogger();
 
 type IdeaBookParams = { id: string };
+
+function mapIdeaBooksError(error: {
+  error: string;
+  status?: number;
+  message?: string;
+}) {
+  switch (error.error) {
+    case "not_found":
+      return apiError("Idea book not found", HttpStatus.NOT_FOUND);
+    case "forbidden":
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    default:
+      return apiError(
+        "Idea book operation failed",
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+  }
+}
 
 /**
  * GET /api/idea-books/[id]/attachments
  * List all attachments for an idea book with pagination.
  */
 export const GET = withAuth<IdeaBookParams>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     initializeCorrelationId(req);
 
     if (!params?.id || !isValidId(params.id)) {
@@ -60,7 +82,12 @@ export const GET = withAuth<IdeaBookParams>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      () => listAttachments(dbUserId, bookId, { page, limit }),
+      () =>
+        ideaBooksService.listAttachments(
+          { userId: dbUserId, role: userRole },
+          bookId,
+          { page, limit },
+        ),
       { operationName: "list_idea_book_attachments" },
     );
 
@@ -72,16 +99,10 @@ export const GET = withAuth<IdeaBookParams>(
       );
     }
 
-    const serviceResult = result.data as
-      | { data: { data: unknown; pagination: unknown } }
-      | { error: "not_found" | "forbidden" };
-    if ("error" in serviceResult) {
-      if (serviceResult.error === "not_found") {
-        return apiError("Idea book not found", HttpStatus.NOT_FOUND);
-      }
-      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    if (!result.data.ok) {
+      return mapIdeaBooksError(result.data);
     }
 
-    return apiSuccess(serviceResult.data, HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );

@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { randomUUID } from "crypto";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -12,20 +13,33 @@ import {
   getResilientExecutor,
 } from "@/app/lib/api/resilient-api";
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
-import { getStorageProvider } from "@/app/lib/infrastructure/storage";
 import {
   validateFile,
   sanitizeFilename,
   isImageFile,
   getValidationConfig,
 } from "@/app/lib/validation/file-validation";
-import { processImage } from "@/app/lib/media/image-processing";
-import { prisma } from "@build/db";
+import { uploadService } from "@/app/lib/domains/uploads";
+import { env } from "@/app/lib/infrastructure/env";
+import {
+  shouldProcessUploadsInline,
+  UPLOAD_PROCESSING_UNAVAILABLE_MESSAGE,
+} from "@/app/lib/infrastructure/upload-processing-mode";
+import {
+  createPendingUploadStatus,
+  markUploadFailed,
+} from "@/app/lib/infrastructure/upload-processing-status";
+import {
+  enqueueImageUploadProcessingJob,
+  type ImageUploadProcessingJobData,
+} from "@/app/lib/queues/upload-processing.queue";
+import { processImageUploadJob } from "@/app/workers/uploads/processor";
 import { z } from "zod";
 
 const logger = getClientLogger();
 const executor = getResilientExecutor();
-const storage = getStorageProvider();
+const ROUTE_PATTERN = "/api/uploads";
+const OPERATION_NAME = "create_upload_asset";
 
 /**
  * Upload context schema for validation profile selection
@@ -87,366 +101,499 @@ const UploadContextSchema = z.object({
  * /security Requires authentication
  * /rateLimit WRITE tier (10 requests/minute)
  */
-export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
-  const { ipAddress, userAgent } = getRequestMetadata(req);
-
-  // Rate limiting for uploads
-  const identifier = getRateLimitIdentifier(req);
-  const rateLimitResult = await checkRateLimit(
-    `uploads:${identifier}`,
-    RateLimits.WRITE.limit,
-    RateLimits.WRITE.window,
-  );
-
-  if (!rateLimitResult.success) {
-    return apiError(
-      `Rate limit exceeded. Try again in ${Math.ceil((rateLimitResult.reset - Date.now()) / 1000)} seconds`,
-      HttpStatus.TOO_MANY_REQUESTS,
-    );
-  }
-
-  logger.info("Upload request received", {
-    correlationId,
-    userId: dbUserId,
-    ipAddress,
-  });
-
-  try {
-    const form = await req.formData();
-
-    // Parse metadata if provided
-    let uploadOptions = {
-      context: "default" as "image" | "document" | "avatar" | "default",
-      generateThumbnail: true,
-      temporary: false,
-      tempExpiryHours: 24,
-    };
-
-    const metadataField = form.get("_metadata");
-    if (metadataField && typeof metadataField === "string") {
-      try {
-        const parsed = JSON.parse(metadataField);
-        const validated = UploadContextSchema.parse(parsed);
-        uploadOptions = validated;
-      } catch (error) {
-        logger.warn("Invalid upload metadata, using defaults", {
-          correlationId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    const validationConfig = getValidationConfig(uploadOptions.context);
-
-    // Process files
-    const uploadResults: Array<{
-      fieldName: string;
-      originalName: string;
-      assetId: string;
-      url: string;
-      cdnUrl: string;
-      thumbnailUrl: string | null;
-      size: number;
-      mimeType: string;
-      width: number | null;
-      height: number | null;
-      checksum: string;
-      blurHash: string | null;
-      temporary: boolean;
-      expiresAt?: string;
-      deduplicated: boolean;
-    }> = [];
-    const errors: Array<{ fieldName: string; error: string }> = [];
-    let deduplicatedCount = 0;
-
-    for (const [fieldName, value] of form.entries()) {
-      // Skip metadata field
-      if (fieldName === "_metadata") continue;
-
-      // Skip non-file fields
-      if (
-        typeof value === "object" &&
-        "arrayBuffer" in value &&
-        typeof (value as File).name === "string"
-      ) {
-        const file = value as File;
-
-        try {
-          // Get file buffer
-          const arrayBuffer = await file.arrayBuffer();
-          const buffer = Buffer.from(arrayBuffer);
-
-          // Validate file
-          const validation = validateFile(
-            { name: file.name, size: file.size, type: file.type },
-            buffer,
-            validationConfig,
-          );
-
-          if (!validation.valid) {
-            errors.push({
-              fieldName,
-              error: validation.error || "Validation failed",
-            });
-            logger.warn("File validation failed", {
-              correlationId,
-              fieldName,
-              fileName: file.name,
-              error: validation.error,
-            });
-            continue;
-          }
-
-          // Virus scan hook (placeholder)
-          // TODO: Integrate with ClamAV or cloud virus scanning service
-          // const scanResult = await scanForVirus(buffer);
-          // if (!scanResult.clean) { ... }
-
-          // Process image if applicable
-          let processedData: {
-            optimizedBuffer: Buffer;
-            thumbnailBuffer?: Buffer;
-            blurHash?: string;
-            width?: number;
-            height?: number;
-          } = {
-            optimizedBuffer: buffer,
-          };
-
-          if (isImageFile(file.type)) {
-            const processed = await processImage(buffer, {
-              generateThumbnail: uploadOptions.generateThumbnail,
-              thumbnailSize: uploadOptions.context === "avatar" ? 200 : 300,
-              maxWidth: uploadOptions.context === "avatar" ? 500 : 2048,
-              maxHeight: uploadOptions.context === "avatar" ? 500 : 2048,
-              quality: 85,
-              generateBlurHash: true,
-            });
-
-            processedData = {
-              optimizedBuffer: processed.optimized.buffer,
-              thumbnailBuffer: processed.thumbnail?.buffer,
-              blurHash: processed.blurHash,
-              width: processed.metadata.width,
-              height: processed.metadata.height,
-            };
-
-            logger.info("Image processed", {
-              correlationId,
-              fieldName,
-              originalSize: buffer.length,
-              optimizedSize: processed.optimized.size,
-              compressionRatio: Math.round(
-                ((buffer.length - processed.optimized.size) / buffer.length) *
-                  100,
-              ),
-            });
-          }
-
-          // Upload to storage
-          const sanitized = sanitizeFilename(file.name);
-          const uploaded = await storage.upload(
-            processedData.optimizedBuffer,
-            sanitized,
-            file.type,
-          );
-
-          // Upload thumbnail if generated
-          let thumbnailUrl: string | undefined;
-          if (processedData.thumbnailBuffer) {
-            const thumbFilename = `thumb-${sanitized}`;
-            const thumbUploaded = await storage.upload(
-              processedData.thumbnailBuffer,
-              thumbFilename,
-              "image/jpeg",
-            );
-            thumbnailUrl = thumbUploaded.url;
-          }
-
-          // Calculate delete time for temporary uploads
-          const deleteAfter = uploadOptions.temporary
-            ? new Date(
-                Date.now() + uploadOptions.tempExpiryHours * 60 * 60 * 1000,
-              )
-            : null;
-
-          // Save to database with resilient execution
-          const result = await executor.execute(
-            async () => {
-              // Check for existing asset with same checksum (deduplication)
-              const existingAsset = await prisma.asset.findUnique({
-                where: { checksum: uploaded.checksum },
-                select: {
-                  id: true,
-                  key: true,
-                  cdnUrl: true,
-                  thumbnailUrl: true,
-                  size: true,
-                  mimeType: true,
-                  width: true,
-                  height: true,
-                  blurHash: true,
-                },
-              });
-
-              if (existingAsset) {
-                // File already exists, return existing asset
-                deduplicatedCount++;
-                logger.info("File deduplicated", {
-                  correlationId,
-                  fieldName,
-                  checksum: uploaded.checksum,
-                  existingAssetId: existingAsset.id,
-                });
-
-                return {
-                  asset: existingAsset,
-                  wasDeduped: true,
-                };
-              }
-
-              // Create new asset record
-              const asset = await prisma.asset.create({
-                data: {
-                  uploaderId: dbUserId,
-                  originalName: file.name,
-                  mimeType: file.type,
-                  size: uploaded.size,
-                  checksum: uploaded.checksum,
-                  bucket: uploaded.bucket,
-                  key: uploaded.key,
-                  cdnUrl: uploaded.cdnUrl || uploaded.url,
-                  thumbnailUrl: thumbnailUrl || null,
-                  width: processedData.width || null,
-                  height: processedData.height || null,
-                  blurHash: processedData.blurHash || null,
-                  deleteAfter: deleteAfter,
-                },
-              });
-
-              // Create consent record for GDPR compliance
-              await prisma.consentRecord.create({
-                data: {
-                  userId: dbUserId,
-                  type: "ANALYTICS_COOKIES", // Using ANALYTICS_COOKIES as proxy for file storage consent
-                  granted: true,
-                  grantedAt: new Date(),
-                  documentVersion: "v1.0",
-                  ipAddress,
-                  metadata: {
-                    source: "file_upload",
-                    correlationId,
-                    userAgent,
-                    fileName: file.name,
-                    fileSize: file.size,
-                    mimeType: file.type,
-                    temporary: uploadOptions.temporary,
-                    context: uploadOptions.context,
-                  },
-                },
-              });
-
-              return {
-                asset,
-                wasDeduped: false,
-              };
-            },
-            {
-              timeout: "normal",
-              retry: { maxAttempts: 3 },
-              circuitBreaker: true,
-              operationName: "create-upload-asset",
-            },
-          );
-
-          if (!result.success || !result.data) {
-            throw new Error(
-              result.error?.message || "Failed to save asset to database",
-            );
-          }
-
-          const { asset, wasDeduped } = result.data;
-
-          uploadResults.push({
-            fieldName,
-            originalName: file.name,
-            assetId: asset.id,
-            url: uploaded.url,
-            cdnUrl: asset.cdnUrl,
-            thumbnailUrl: asset.thumbnailUrl,
-            size: asset.size,
-            mimeType: asset.mimeType,
-            width: asset.width,
-            height: asset.height,
-            checksum: uploaded.checksum,
-            blurHash: asset.blurHash,
-            temporary: uploadOptions.temporary,
-            expiresAt: deleteAfter?.toISOString(),
-            deduplicated: wasDeduped,
-          });
-
-          logger.info("File uploaded successfully", {
-            correlationId,
-            userId: dbUserId,
-            fieldName,
-            assetId: asset.id,
-            size: asset.size,
-            deduplicated: wasDeduped,
-          });
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : "Upload processing failed";
-          errors.push({ fieldName, error: errorMessage });
-          logger.error(
-            "File upload error",
-            error instanceof Error ? error : new Error(String(error)),
-            {
-              correlationId,
-              fieldName,
-              fileName: file.name,
-            },
-          );
-        }
-      }
-    }
-
-    // Return results
-    if (uploadResults.length === 0 && errors.length > 0) {
-      return apiError("All uploads failed", HttpStatus.BAD_REQUEST, errors);
-    }
-
-    logger.info("Upload batch completed", {
-      correlationId,
-      userId: dbUserId,
-      successCount: uploadResults.length,
-      errorCount: errors.length,
-      deduplicatedCount,
+export const POST = withAuth(
+  async (req: NextRequest, { dbUserId, userRole }) => {
+    const requestStartedAt = Date.now();
+    const correlationId = initializeCorrelationId(req);
+    const { ipAddress, userAgent } = getRequestMetadata(req);
+    const inlineProcessingEnabled = shouldProcessUploadsInline({
+      isProd: env.isProd,
+      uploadProcessInline: env.jobs.uploadProcessInline,
     });
 
-    return apiSuccess(
-      {
-        uploaded: uploadResults,
-        errors: errors.length > 0 ? errors : undefined,
-        deduplicatedCount,
-        stats: {
-          total: uploadResults.length + errors.length,
-          successful: uploadResults.length,
-          failed: errors.length,
-          deduplicated: deduplicatedCount,
-        },
-      },
-      HttpStatus.OK,
-    );
-  } catch (err) {
-    logger.error(
-      "Upload error",
-      err instanceof Error ? err : new Error(String(err)),
-      {
+    const logOutcome = (
+      outcome:
+        | "started"
+        | "accepted"
+        | "succeeded"
+        | "failed"
+        | "rate_limited"
+        | "bad_request",
+      httpStatus: number,
+      additional: Record<string, unknown> = {},
+    ) => {
+      logger.info("Upload adapter outcome", {
         correlationId,
-        userId: dbUserId,
-      },
+        operationName: OPERATION_NAME,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole: userRole,
+        outcome,
+        httpStatus,
+        durationMs: Date.now() - requestStartedAt,
+        additionalContext: additional,
+      });
+    };
+
+    const failPendingUploadForUnavailableProcessing = async (params: {
+      uploadId: string;
+      fieldName: string;
+      queueError: unknown;
+    }) => {
+      try {
+        await markUploadFailed(
+          params.uploadId,
+          UPLOAD_PROCESSING_UNAVAILABLE_MESSAGE,
+        );
+      } catch (statusError) {
+        logger.error(
+          "Failed to mark pending upload as failed",
+          statusError instanceof Error
+            ? statusError
+            : new Error(String(statusError)),
+          {
+            correlationId,
+            uploadId: params.uploadId,
+            fieldName: params.fieldName,
+            operationName: OPERATION_NAME,
+          },
+        );
+      }
+
+      logger.error(
+        env.isProd
+          ? "Image upload queue unavailable in production"
+          : "Image upload queue unavailable and inline processing disabled",
+        params.queueError instanceof Error
+          ? params.queueError
+          : new Error(String(params.queueError)),
+        {
+          correlationId,
+          uploadId: params.uploadId,
+          fieldName: params.fieldName,
+          actorRole: userRole,
+          operationName: OPERATION_NAME,
+        },
+      );
+
+      logOutcome("failed", HttpStatus.SERVICE_UNAVAILABLE, {
+        reason: "upload_processing_unavailable",
+        uploadId: params.uploadId,
+        fieldName: params.fieldName,
+      });
+
+      return apiError(
+        UPLOAD_PROCESSING_UNAVAILABLE_MESSAGE,
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    };
+
+    // Rate limiting for uploads
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `uploads:${identifier}`,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
     );
-    return apiError("File upload failed", HttpStatus.INTERNAL_SERVER_ERROR);
-  }
-});
+
+    if (!rateLimitResult.success) {
+      logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
+      return apiError(
+        `Rate limit exceeded. Try again in ${Math.ceil((rateLimitResult.reset - Date.now()) / 1000)} seconds`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    logOutcome("started", HttpStatus.OK);
+
+    try {
+      const form = await req.formData();
+
+      // Parse metadata if provided
+      let uploadOptions = {
+        context: "default" as "image" | "document" | "avatar" | "default",
+        generateThumbnail: true,
+        temporary: false,
+        tempExpiryHours: 24,
+      };
+
+      const metadataField = form.get("_metadata");
+      if (metadataField && typeof metadataField === "string") {
+        try {
+          const parsed = JSON.parse(metadataField);
+          const validated = UploadContextSchema.parse(parsed);
+          uploadOptions = validated;
+        } catch (error) {
+          logger.warn("Invalid upload metadata, using defaults", {
+            correlationId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      const validationConfig = getValidationConfig(uploadOptions.context);
+
+      // Process files
+      const uploadResults: Array<{
+        fieldName: string;
+        originalName: string;
+        assetId?: string;
+        uploadId?: string;
+        status?: "pending" | "processing" | "ready" | "failed";
+        statusUrl?: string;
+        url?: string;
+        cdnUrl?: string;
+        thumbnailUrl?: string | null;
+        size: number;
+        mimeType: string;
+        width?: number | null;
+        height?: number | null;
+        checksum?: string;
+        blurHash?: string | null;
+        temporary: boolean;
+        expiresAt?: string;
+        deduplicated?: boolean;
+      }> = [];
+      const errors: Array<{ fieldName: string; error: string }> = [];
+      let pendingCount = 0;
+      let deduplicatedCount = 0;
+
+      for (const [fieldName, value] of form.entries()) {
+        // Skip metadata field
+        if (fieldName === "_metadata") continue;
+
+        // Skip non-file fields
+        if (
+          typeof value === "object" &&
+          "arrayBuffer" in value &&
+          typeof (value as File).name === "string"
+        ) {
+          const file = value as File;
+
+          try {
+            // Get file buffer
+            const arrayBuffer = await file.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+
+            // Validate file
+            const validation = validateFile(
+              { name: file.name, size: file.size, type: file.type },
+              buffer,
+              validationConfig,
+            );
+
+            if (!validation.valid) {
+              errors.push({
+                fieldName,
+                error: validation.error || "Validation failed",
+              });
+              logger.warn("File validation failed", {
+                correlationId,
+                fieldName,
+                fileName: file.name,
+                error: validation.error,
+              });
+              continue;
+            }
+
+            if (isImageFile(file.type)) {
+              const uploadId = randomUUID();
+              const pending = await createPendingUploadStatus({
+                uploadId,
+                ownerUserId: dbUserId,
+                fieldName,
+                originalName: file.name,
+                mimeType: file.type,
+                size: file.size,
+              });
+
+              const imageJobData: ImageUploadProcessingJobData = {
+                uploadId,
+                fieldName,
+                actor: {
+                  userId: dbUserId,
+                  correlationId,
+                },
+                file: {
+                  originalName: file.name,
+                  mimeType: file.type,
+                  size: file.size,
+                  bufferBase64: buffer.toString("base64"),
+                },
+                options: {
+                  context: uploadOptions.context,
+                  generateThumbnail: uploadOptions.generateThumbnail,
+                  temporary: uploadOptions.temporary,
+                  tempExpiryHours: uploadOptions.tempExpiryHours,
+                },
+                consent: {
+                  ipAddress,
+                  userAgent,
+                },
+              };
+
+              let processingMode: "inline" | "queued" = "queued";
+
+              if (inlineProcessingEnabled) {
+                processingMode = "inline";
+                void processImageUploadJob(imageJobData).catch(
+                  async (jobError) => {
+                    const message =
+                      jobError instanceof Error
+                        ? jobError.message
+                        : "Image processing failed";
+
+                    await markUploadFailed(uploadId, message);
+
+                    logger.error(
+                      "Inline image upload processing failed",
+                      jobError instanceof Error
+                        ? jobError
+                        : new Error(String(jobError)),
+                      {
+                        correlationId,
+                        uploadId,
+                        fieldName,
+                        operationName: OPERATION_NAME,
+                        outcome: "failed",
+                      },
+                    );
+                  },
+                );
+              } else {
+                try {
+                  await enqueueImageUploadProcessingJob(imageJobData);
+                } catch (queueError) {
+                  return failPendingUploadForUnavailableProcessing({
+                    uploadId,
+                    fieldName,
+                    queueError,
+                  });
+                }
+              }
+
+              pendingCount++;
+              uploadResults.push({
+                fieldName,
+                originalName: file.name,
+                uploadId,
+                status: pending.status,
+                statusUrl: pending.statusUrl,
+                size: file.size,
+                mimeType: file.type,
+                temporary: uploadOptions.temporary,
+                expiresAt: pending.createdAt,
+              });
+
+              logger.info("Image upload accepted for async processing", {
+                correlationId,
+                fieldName,
+                uploadId,
+                processingMode,
+                operationName: OPERATION_NAME,
+                outcome: "accepted",
+              });
+
+              continue;
+            }
+
+            const sanitized = sanitizeFilename(file.name);
+            const prepared =
+              await uploadService.prepareUploadedAssetPersistence({
+                actor: {
+                  userId: dbUserId,
+                  correlationId,
+                },
+                originalName: file.name,
+                mimeType: file.type,
+                originalSize: file.size,
+                storedFilename: sanitized,
+                storedBuffer: buffer,
+                temporary: uploadOptions.temporary,
+                tempExpiryHours: uploadOptions.tempExpiryHours,
+                consent: {
+                  ipAddress,
+                  userAgent,
+                  context: uploadOptions.context,
+                },
+              });
+
+            if (!prepared.ok) {
+              throw new Error(prepared.message || "Failed to save asset");
+            }
+
+            const preparedPayload =
+              prepared.data.kind === "prepared"
+                ? prepared.data.prepared
+                : undefined;
+
+            const persisted =
+              prepared.data.kind === "deduplicated"
+                ? prepared.data.response
+                : await (async () => {
+                    const persistResult = await executor.execute(
+                      () =>
+                        uploadService.persistPreparedUploadedAsset({
+                          actor: {
+                            userId: dbUserId,
+                            correlationId,
+                          },
+                          originalName: file.name,
+                          mimeType: file.type,
+                          originalSize: file.size,
+                          temporary: uploadOptions.temporary,
+                          consent: {
+                            ipAddress,
+                            userAgent,
+                            context: uploadOptions.context,
+                          },
+                          prepared: preparedPayload!,
+                        }),
+                      {
+                        timeout: "normal",
+                        retry: { maxAttempts: 3 },
+                        circuitBreaker: true,
+                        operationName: OPERATION_NAME,
+                      },
+                    );
+
+                    if (
+                      !persistResult.success ||
+                      !persistResult.data ||
+                      !persistResult.data.ok
+                    ) {
+                      await uploadService.cleanupPreparedUploadedAssetArtifacts(
+                        preparedPayload!,
+                      );
+
+                      throw new Error(
+                        persistResult.data && !persistResult.data.ok
+                          ? persistResult.data.message ||
+                              "Failed to save asset to database"
+                          : persistResult.error?.message ||
+                              "Failed to save asset to database",
+                      );
+                    }
+
+                    return persistResult.data.data;
+                  })();
+
+            const { asset, deduplicated, storedChecksum, expiresAt } =
+              persisted;
+
+            if (deduplicated) {
+              deduplicatedCount++;
+              logger.info("File deduplicated before storage write", {
+                correlationId,
+                fieldName,
+                checksum: storedChecksum,
+                existingAssetId: asset.id,
+              });
+            }
+
+            uploadResults.push({
+              fieldName,
+              originalName: file.name,
+              assetId: asset.id,
+              url: asset.cdnUrl,
+              cdnUrl: asset.cdnUrl,
+              thumbnailUrl: asset.thumbnailUrl,
+              size: asset.size,
+              mimeType: asset.mimeType,
+              width: asset.width,
+              height: asset.height,
+              checksum: storedChecksum,
+              blurHash: asset.blurHash,
+              temporary: uploadOptions.temporary,
+              expiresAt,
+              deduplicated,
+            });
+
+            logger.info("File uploaded successfully", {
+              correlationId,
+              fieldName,
+              assetId: asset.id,
+              size: asset.size,
+              deduplicated,
+              operationName: OPERATION_NAME,
+              outcome: "succeeded",
+            });
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error
+                ? error.message
+                : "Upload processing failed";
+            errors.push({ fieldName, error: errorMessage });
+            logger.error(
+              "File upload error",
+              error instanceof Error ? error : new Error(String(error)),
+              {
+                correlationId,
+                fieldName,
+                fileName: file.name,
+              },
+            );
+          }
+        }
+      }
+
+      // Return results
+      if (uploadResults.length === 0 && errors.length > 0) {
+        logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
+          errorCount: errors.length,
+        });
+        return apiError("All uploads failed", HttpStatus.BAD_REQUEST, errors);
+      }
+
+      logger.info("Upload batch completed", {
+        correlationId,
+        successCount: uploadResults.length,
+        errorCount: errors.length,
+        pendingCount,
+        deduplicatedCount,
+        operationName: OPERATION_NAME,
+        outcome: "completed",
+      });
+
+      const statusCode = pendingCount > 0 ? HttpStatus.ACCEPTED : HttpStatus.OK;
+      logOutcome(pendingCount > 0 ? "accepted" : "succeeded", statusCode, {
+        successCount: uploadResults.length,
+        errorCount: errors.length,
+        pendingCount,
+        deduplicatedCount,
+      });
+
+      return apiSuccess(
+        {
+          uploaded: uploadResults,
+          errors: errors.length > 0 ? errors : undefined,
+          deduplicatedCount,
+          stats: {
+            total: uploadResults.length + errors.length,
+            successful: uploadResults.length,
+            failed: errors.length,
+            pending: pendingCount,
+            deduplicated: deduplicatedCount,
+          },
+        },
+        statusCode,
+      );
+    } catch (err) {
+      logger.error(
+        "Upload error",
+        err instanceof Error ? err : new Error(String(err)),
+        {
+          correlationId,
+          operationName: OPERATION_NAME,
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          actorRole: userRole,
+          outcome: "failed",
+          httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+          durationMs: Date.now() - requestStartedAt,
+        },
+      );
+      return apiError("File upload failed", HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  },
+);

@@ -13,7 +13,7 @@ GET /api/client/dashboard
      │
      └─ getResilientExecutor().execute()
           │
-          └─ ClientRepository.getDashboardData(userId)
+          └─ clientDashboardService.getDashboardData(userId)
                │
                ├─ Promise.all([
                │    count(total projects),

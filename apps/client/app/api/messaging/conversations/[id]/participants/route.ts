@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@build/db";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -15,18 +14,34 @@ import {
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import {
   AddParticipantSchema,
+  type MessagingActor,
+  messagingService,
   UpdateParticipantSchema,
-} from "@/app/lib/validation/messaging-validation";
+} from "@/app/lib/domains/messaging";
+import { normalizeRole } from "@/app/lib/security/roles";
 
 const logger = getClientLogger();
 type Params = { id: string };
+
+function toMessagingActor(context: {
+  clerkId: string;
+  dbUserId: string;
+  userRole: unknown;
+}): MessagingActor {
+  return {
+    clerkId: context.clerkId,
+    userId: context.dbUserId,
+    role: normalizeRole(String(context.userRole)) ?? null,
+  };
+}
 
 /**
  * POST /api/messaging/conversations/[id]/participants
  */
 export const POST = withAuth<Params>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
     if (!params?.id || !isValidId(params.id))
       return apiError("Invalid conversation ID", HttpStatus.BAD_REQUEST);
     const threadId = params.id;
@@ -60,37 +75,7 @@ export const POST = withAuth<Params>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      async () => {
-        const thread = await prisma.messageThread.findFirst({
-          where: { id: threadId, deletedAt: null },
-          select: { id: true },
-        });
-        if (!thread)
-          return {
-            _error: true as const,
-            message: "Conversation not found",
-            status: HttpStatus.NOT_FOUND,
-          };
-
-        const existing = await prisma.threadParticipant.findFirst({
-          where: { threadId, userId: parsed.data.userId },
-        });
-        if (existing)
-          return {
-            _error: true as const,
-            message: "Participant already exists",
-            status: HttpStatus.CONFLICT,
-          };
-
-        return prisma.threadParticipant.create({
-          data: {
-            threadId,
-            userId: parsed.data.userId,
-            role: parsed.data.role,
-          },
-          select: { id: true, userId: true, role: true },
-        });
-      },
+      () => messagingService.addParticipant(actor, threadId, parsed.data),
       { operationName: "add_participant" },
     );
 
@@ -103,12 +88,17 @@ export const POST = withAuth<Params>(
         "Failed to add participant",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
-    } else {
-      const data = result.data;
-      if (data && "_error" in (data as any) && (data as any)._error)
-        return apiError((data as any).message, (data as any).status);
-      return apiSuccess(data, HttpStatus.CREATED);
     }
+
+    const serviceResult = result.data;
+    if (!serviceResult || !serviceResult.ok) {
+      return apiError(
+        "Invalid request",
+        serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return apiSuccess(serviceResult.data, HttpStatus.CREATED);
   },
 );
 
@@ -116,8 +106,9 @@ export const POST = withAuth<Params>(
  * GET /api/messaging/conversations/[id]/participants
  */
 export const GET = withAuth<Params>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
     if (!params?.id || !isValidId(params.id))
       return apiError("Invalid conversation ID", HttpStatus.BAD_REQUEST);
     const threadId = params.id;
@@ -133,13 +124,7 @@ export const GET = withAuth<Params>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      async () => {
-        const participants = await prisma.threadParticipant.findMany({
-          where: { threadId },
-          select: { id: true, userId: true, role: true, nickname: true },
-        });
-        return participants;
-      },
+      () => messagingService.listParticipants(actor, threadId),
       { operationName: "list_participants" },
     );
 
@@ -152,12 +137,17 @@ export const GET = withAuth<Params>(
         "Failed to list participants",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
-    } else {
-      const data = result.data;
-      if (data && "_error" in (data as any) && (data as any)._error)
-        return apiError((data as any).message, (data as any).status);
-      return apiSuccess(data, HttpStatus.OK);
     }
+
+    const serviceResult = result.data;
+    if (!serviceResult || !serviceResult.ok) {
+      return apiError(
+        "Invalid request",
+        serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return apiSuccess(serviceResult.data, HttpStatus.OK);
   },
 );
 
@@ -165,8 +155,9 @@ export const GET = withAuth<Params>(
  * PATCH /api/messaging/conversations/[id]/participants
  */
 export const PATCH = withAuth<Params>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
     if (!params?.id || !isValidId(params.id))
       return apiError("Invalid conversation ID", HttpStatus.BAD_REQUEST);
     const threadId = params.id;
@@ -179,6 +170,16 @@ export const PATCH = withAuth<Params>(
       body = await req.json();
     } catch {
       return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+    }
+
+    const bodyObj = body as Record<string, unknown>;
+    const userId =
+      typeof bodyObj.userId === "string" ? bodyObj.userId : undefined;
+    if (!userId || !isValidId(userId)) {
+      return apiError(
+        "Missing or invalid userId in body",
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     const parsed = UpdateParticipantSchema.safeParse(body);
@@ -200,32 +201,13 @@ export const PATCH = withAuth<Params>(
 
     const executor = getResilientExecutor();
     const result = await executor.execute(
-      async () => {
-        // Extract userId from body (UpdateParticipantSchema does not include userId)
-        const bodyObj = body as Record<string, unknown>;
-        const userId =
-          typeof bodyObj.userId === "string" ? bodyObj.userId : undefined;
-        if (!userId || !isValidId(userId)) {
-          return {
-            _error: true as const,
-            message: "Missing or invalid userId in body",
-            status: HttpStatus.BAD_REQUEST,
-          };
-        }
-
-        // Update participant record
-        const updated = await prisma.threadParticipant.updateMany({
-          where: { threadId, userId },
-          data: parsed.data,
-        });
-        if (updated.count === 0)
-          return {
-            _error: true as const,
-            message: "Participant not found",
-            status: HttpStatus.NOT_FOUND,
-          };
-        return { updated: true };
-      },
+      () =>
+        messagingService.updateParticipant(
+          actor,
+          threadId,
+          userId,
+          parsed.data,
+        ),
       { operationName: "update_participant" },
     );
 
@@ -238,12 +220,17 @@ export const PATCH = withAuth<Params>(
         "Failed to update participant",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
-    } else {
-      const data = result.data;
-      if (data && "_error" in (data as any) && (data as any)._error)
-        return apiError((data as any).message, (data as any).status);
-      return apiSuccess(data, HttpStatus.OK);
     }
+
+    const serviceResult = result.data;
+    if (!serviceResult || !serviceResult.ok) {
+      return apiError(
+        "Invalid request",
+        serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return apiSuccess(serviceResult.data, HttpStatus.OK);
   },
 );
 
@@ -251,8 +238,9 @@ export const PATCH = withAuth<Params>(
  * DELETE /api/messaging/conversations/[id]/participants
  */
 export const DELETE = withAuth<Params>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
     if (!params?.id || !isValidId(params.id))
       return apiError("Invalid conversation ID", HttpStatus.BAD_REQUEST);
     const threadId = params.id;
@@ -276,26 +264,27 @@ export const DELETE = withAuth<Params>(
     const executor = getResilientExecutor();
     const result = await executor.execute(
       async () => {
-        // Expect body to contain { userId: string }
-        if (!body || typeof body !== "object" || !("userId" in (body as any))) {
+        if (!body || typeof body !== "object" || !("userId" in body)) {
           return {
-            _error: true as const,
+            ok: false as const,
+            error: "invalid_input" as const,
             message: "Missing userId in body",
             status: HttpStatus.BAD_REQUEST,
           };
         }
-        const userId = (body as any).userId;
-        const existing = await prisma.threadParticipant.findFirst({
-          where: { threadId, userId },
-        });
-        if (!existing)
+
+        const userId =
+          typeof body.userId === "string" ? body.userId : undefined;
+        if (!userId || !isValidId(userId)) {
           return {
-            _error: true as const,
-            message: "Participant not found",
-            status: HttpStatus.NOT_FOUND,
+            ok: false as const,
+            error: "invalid_input" as const,
+            message: "Missing or invalid userId in body",
+            status: HttpStatus.BAD_REQUEST,
           };
-        await prisma.threadParticipant.delete({ where: { id: existing.id } });
-        return { id: existing.id, deleted: true };
+        }
+
+        return messagingService.removeParticipant(actor, threadId, userId);
       },
       { operationName: "delete_participant" },
     );
@@ -309,11 +298,16 @@ export const DELETE = withAuth<Params>(
         "Failed to delete participant",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
-    } else {
-      const data = result.data;
-      if (data && "_error" in (data as any) && (data as any)._error)
-        return apiError((data as any).message, (data as any).status);
-      return apiSuccess(data, HttpStatus.OK);
     }
+
+    const serviceResult = result.data;
+    if (!serviceResult || !serviceResult.ok) {
+      return apiError(
+        "Invalid request",
+        serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return apiSuccess(serviceResult.data, HttpStatus.OK);
   },
 );

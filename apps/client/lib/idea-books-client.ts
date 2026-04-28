@@ -6,12 +6,22 @@
  *
  *   ideaBooksClient (this file)
  *     └── API Routes (/api/idea-books)
- *           └── Service Layer (lib/services/idea-books.ts)
- *                 └── Prisma (IdeaBook, IdeaBookAttachment)
+ *           └── idea-books domain (app/lib/domains/idea-books)
  */
 import { API_ROUTES, withQueryParams } from "@/lib/links";
 import { apiFetch } from "@/lib/api-client-utils";
 import type { ApiResponse } from "@build/types";
+import type {
+  IdeaBookAttachmentDto,
+  IdeaBookAttachmentDeleteResultDto,
+  IdeaBookAttachmentListResultDto,
+  IdeaBookAttachmentPreviewDto,
+  IdeaBookCollaboratorDto,
+  IdeaBookDeleteResultDto,
+  IdeaBookDetailDto,
+  IdeaBookListItemDto,
+  IdeaBookListResultDto,
+} from "@/app/lib/domains/idea-books/contracts";
 import type {
   IdeaBookQueryInput,
   AttachmentQueryInput,
@@ -32,71 +42,24 @@ export type {
 
 // ─── Types (aligned with API) ───────────────────────────────────────────────
 
-export interface IdeaBookAttachment {
-  id: string;
-  sourceUrl: string | null;
-  fileUrl: string | null;
-  fileKey: string | null;
-  mimeType: string | null;
-  size: number | null;
-  width: number | null;
-  height: number | null;
-  caption: string | null;
-  createdAt: string;
-  updatedAt: string;
-  asset?: {
-    id: string;
-    cdnUrl: string | null;
-    thumbnailUrl: string | null;
-    originalName: string | null;
-    mimeType: string | null;
-    size: number | null;
-  } | null;
-}
+type SerializeDates<T> = T extends Date
+  ? string
+  : T extends Array<infer U>
+    ? SerializeDates<U>[]
+    : T extends object
+      ? { [K in keyof T]: SerializeDates<T[K]> }
+      : T;
 
-export interface IdeaBookListItem {
-  id: string;
-  title: string;
-  slug: string;
-  description: string | null;
-  category: string;
-  privacy: string;
-  viewCount: number;
-  likes: number;
-  coverImage: string | null;
-  attachments: IdeaBookAttachment[];
-  collaboratorCount: number;
-  attachmentCount: number;
-  savedProductCount: number;
-  savedProjectCount: number;
-  savedImageCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface IdeaBookDetail extends IdeaBookListItem {
-  collaborators?: unknown[];
-}
-
-export interface IdeaBookListResult {
-  data: IdeaBookListItem[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-}
-
-export interface AttachmentListResult {
-  data: IdeaBookAttachment[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-}
+export type IdeaBookAttachment = SerializeDates<IdeaBookAttachmentDto>;
+export type IdeaBookAttachmentPreview = IdeaBookAttachmentPreviewDto;
+export type IdeaBookCollaborator = SerializeDates<IdeaBookCollaboratorDto>;
+export type IdeaBookListItem = SerializeDates<IdeaBookListItemDto>;
+export type IdeaBookDetail = SerializeDates<IdeaBookDetailDto>;
+export type IdeaBookListResult = SerializeDates<IdeaBookListResultDto>;
+export type AttachmentListResult =
+  SerializeDates<IdeaBookAttachmentListResultDto>;
+export type IdeaBookDeleteResult = IdeaBookDeleteResultDto;
+export type IdeaBookAttachmentDeleteResult = IdeaBookAttachmentDeleteResultDto;
 
 // ─── Client API ─────────────────────────────────────────────────────────────
 
@@ -141,14 +104,7 @@ export const ideaBooksClient = {
     });
   },
 
-  async delete(id: string): Promise<
-    ApiResponse<{
-      message: string;
-      id: string;
-      deletedStorageKeys?: string[];
-      attachmentsDeleted?: number;
-    }>
-  > {
+  async delete(id: string): Promise<ApiResponse<IdeaBookDeleteResult>> {
     return apiFetch(API_ROUTES.ideaBookDetail(id), { method: "DELETE" });
   },
 
@@ -197,9 +153,7 @@ export const ideaBooksClient = {
   async deleteAttachment(
     bookId: string,
     attachmentId: string,
-  ): Promise<
-    ApiResponse<{ message: string; id: string; deletedKey?: string | null }>
-  > {
+  ): Promise<ApiResponse<IdeaBookAttachmentDeleteResult>> {
     return apiFetch(API_ROUTES.ideaBookAttachmentDetail(bookId, attachmentId), {
       method: "DELETE",
     });

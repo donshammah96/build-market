@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Developer Workflow**: Added a terminal hardening toolchain for deterministic command execution. Introduced the repo runbook in `docs/TERMINAL_RUNBOOK.md`, the clean PowerShell wrapper in `scripts/invoke-clean.ps1`, wrapper usage notes in `scripts/README.md`, stable root scripts in `package.json` (`redis:healthcheck`, `redis:audit`, `admin:check-types`, `queue-server:check-types`, `client:tsc-noemit`, `client:test:*`, `db:migrate:deploy`, `db:generate`, `db:seed`), and a reduced task surface in `.vscode/tasks.json` so recurring validation no longer depends on shared-shell cwd state, duplicate task variants, or inline shell logic.
+
 - **Security/Governance Tests**: Added focused store mutation governance coverage in `stores-actions.test.ts` for strict idempotency key enforcement, replay behavior, and immutable-audit-backed mutation paths.
 - **Security/Governance Tests**: Added focused verification mutation coverage in `verification-actions.test.ts` to assert high-risk admin actions emit audit logs and reject invalid reject-without-reason payloads before logging.
 - **Security/Governance**: Added centralized admin authorization policy utilities with route policy and action policy maps in `src/lib/security/authorization-policy.ts`.
@@ -33,6 +35,26 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Documentation/Runbooks**: Replaced ad hoc terminal command examples with root-script or root-relative forms across `.github/copilot-instructions.md`, `apps/client/MESSAGING_API_SETUP.md`, `README.md`, `apps/client/__tests__/setup-integration.md`, and `packages/db/SETUP_DATABASE.md`; updated `.github/prompts/plan-gitBranchSplit.prompt.md` to use `Push-Location`/`Pop-Location`; and aligned `docs/TERMINAL_RUNBOOK.md` plus `scripts/README.md` with the canonical wrapper invocation pattern so workflow docs no longer teach `cd ... && ...` or other stateful shell usage.
+
+- **Env Templates/Utility Scripts**: Added `REDIS_FAMILY=4` guidance to `apps/client/.env.local.example` and `apps/client/.env.example` so local Redis overrides can force IPv4 when needed, and updated `scripts/clear-users.ps1` to run `clear-users.ts` via `pnpm -C <repo-root>` instead of mutating the caller's working directory with `Set-Location`.
+
+- **Projects API (Phase 2)**: Expanded canonical shared `/api/projects/**` route coverage for nested resources: milestones, milestone approval, documents, images, and escrow transaction endpoints (including fund/release/dispute paths).
+- **Projects API (Milestones)**: Migrated milestone collection handler behavior to domain service delegation (`projectsService.listMilestones`, `projectsService.createMilestone`) while preserving thin-adapter concerns (auth, validation, rate limiting, idempotency, resilient execution).
+- **Projects API (Compatibility Layer)**: Completed nested route ownership inversion by turning `app/api/professional-portal/projects/[id]/**` handlers into compatibility re-exports of canonical `app/api/projects/[id]/**` handlers.
+- **Projects API (Parity Tests)**: Added nested route alias parity coverage (`project-alias-parity.test.ts`) and moved nested route behavior tests to canonical shared route imports to validate `/api/projects/[id]/**` directly.
+- **Projects Client (Controlled Rollout)**: Introduced read/write split gates for generic projects client (`NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API`, `NEXT_PUBLIC_ENABLE_GENERIC_PROJECTS_API_MUTATIONS`) and enabled development read-only rollout with mutation paths still disabled.
+- **Projects Client (Rollout Progression)**: Enabled generic projects mutation gate outside development defaults (`apps/client/.env.test`, `apps/client/.env.example`) while keeping development read-only mode.
+- **Projects Docs**: Updated projects API ownership/progression documentation to reflect shared canonical route expansion and compatibility alias behavior.
+- **Projects Docs**: Added staged production rollout runbook for generic projects API gate progression (`apps/client/docs/PROJECTS-GENERIC-API-ROLLOUT.md`).
+- **Onboarding Types/Contracts**: Hardened onboarding schema contracts in `packages/types/src/auth.ts` by correcting `StoreTypeEnum` source (`STORE_TYPES`), fixing store category parsing to use canonical enum values, and restructuring nested `stores`/`properties` payload schemas to remove duplicate role discriminators.
+- **Onboarding Types/Contracts**: Simplified `OnboardingSchema` discriminator shape to unique role variants (`client`, `professional`) while keeping standalone `StoreOnboardingSchema` and `PropertyOnboardingSchema` exports for role-scoped use cases.
+- **Onboarding Action**: Refined onboarding payload mapping in `apps/client/app/actions/onboarding.ts` to consume typed nested store/property payloads directly (without `any`/extraneous enum casts) and maintain explicit defaults for required property/store creation fields.
+- **Stores Vertical**: Canonicalized stores domain ownership under `apps/client/app/lib/domains/stores/*` (`contracts`, `repository`, `service`, `index`) and migrated stores business/persistence logic out of route handlers and legacy service internals.
+- **Stores API**: Refactored stores routes to thin adapters over `storesService` (`/api/stores`, `/api/stores/[id]`, `/api/stores/[id]/documents`) and normalized authenticated owned-stores contract to `GET /api/stores/me`.
+- **Stores API**: Normalized store document deletion contract to nested resource path `DELETE /api/stores/[id]/documents/[documentId]` and removed query-parameter delete shape from collection route.
+- **Stores Callers**: Hard-cut stores callers (`app/actions/stores.ts`, onboarding/profile-complete/settings flows) to canonical domain imports and removed app usage of legacy `@/lib/services/stores` implementations.
+- **Stores Tests**: Updated stores API route tests to mock canonical domain boundaries and added a new domain-focused stores service test suite for policy and optimistic-lock mapping behavior.
 - **Security/Governance**: Extracted duplicated admin action idempotency execution into a reusable helper at `apps/admin/src/actions/admin/idempotency.ts` and migrated `users`, `verification`, and `stores` high-risk mutation flows to use the shared implementation.
 - **Security/Governance**: Enforced strict client-provided idempotency keys for high-risk store mutations (`toggleStoreFeatured`, `verifyStore`, `rejectStore`, `deleteStore`) with scoped deduplication and replay semantics in `apps/admin/src/actions/admin/stores.ts`.
 - **Security/Governance**: Updated store detail high-risk mutation forms to pass explicit idempotency keys for `verifyStore` and `toggleStoreFeatured` actions.
@@ -57,6 +79,8 @@ All notable changes to this project will be documented in this file.
 - **API (Onboarding)**: Relaxed the Zod schema validation for professional document categories in `POST /api/onboarding/professional/complete` to structurally accept generic strings rather than strict enums.
 
 ### Fixed
+
+- **Redis/Terminal Diagnostics**: Fixed the Redis healthcheck investigation path by separating shell contamination from runtime failure. Updated `packages/redis/src/types.ts`, `packages/redis/src/client.ts`, and `packages/redis/src/healthcheck.ts` to support `REDIS_FAMILY=4|6` and report the selected address family in connection status output. This mitigates the observed timeout against `redis-11708.c341.af-south-1-1.ec2.cloud.redislabs.com` on hosts where dual-stack DNS resolution prefers an unreachable IPv6/NAT64 path; with `REDIS_FAMILY=4`, the healthcheck succeeds.
 
 - **Architecture/Frontend**: Removed `@prisma/client` from the client-facing `ProfessionalForm.tsx` component, replacing it with the central `@build/enums` package to prevent leaking server bundles into the client context.
 - **API (Onboarding & Settings)**: Fixed a bug in the `PATCH /api/onboarding/professional/complete` route where `documents` mapping was skipping the Asset creation phase. Implemented the correct two-phase Asset materialization loop across that route, `POST /api/onboarding/professional/complete`, and `settings/actions.ts`, successfully transforming staged `uploadId`s into permanent `Asset` records linked to the new `ProfessionalDocument` schema.

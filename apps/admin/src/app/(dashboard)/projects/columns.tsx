@@ -2,13 +2,13 @@
 
 import { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger 
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal, Eye, Copy, ArrowUpDown, Calendar } from "lucide-react";
 import Link from "next/link";
@@ -42,24 +42,27 @@ export const columns: ColumnDef<ProjectData>[] = [
     accessorKey: "title",
     header: "Project Details",
     cell: ({ row }) => {
-        return (
-            <div className="flex flex-col py-1">
-                <span className="font-semibold text-zinc-900 truncate max-w-[200px]">
-                  {row.getValue("title")}
-                </span>
-                <span className="text-[10px] text-zinc-400 font-mono">
-                  ID: {row.original.id.slice(0,8)}...
-                </span>
-            </div>
-        )
-    }
+      return (
+        <div className="flex flex-col py-1">
+          <span className="font-semibold text-zinc-900 truncate max-w-50">
+            {row.getValue("title")}
+          </span>
+          <span className="text-[10px] text-zinc-400 font-mono">
+            ID: {row.original.id.slice(0, 8)}...
+          </span>
+        </div>
+      );
+    },
   },
   {
     accessorKey: "client",
     header: "Client",
     cell: ({ row }) => {
       const client = row.original.client;
-      if (!client) return <span className="text-zinc-400 italic text-xs">Deleted User</span>
+      if (!client)
+        return (
+          <span className="text-zinc-400 italic text-xs">Deleted User</span>
+        );
 
       return (
         <div className="flex items-center gap-3">
@@ -84,11 +87,15 @@ export const columns: ColumnDef<ProjectData>[] = [
     header: "Professional",
     cell: ({ row }) => {
       const pro = row.original.professional;
-      if (!pro) return (
-        <Badge variant="outline" className="border-dashed text-zinc-400 font-normal">
-          Unassigned
-        </Badge>
-      );
+      if (!pro)
+        return (
+          <Badge
+            variant="outline"
+            className="border-dashed text-zinc-400 font-normal"
+          >
+            Unassigned
+          </Badge>
+        );
 
       return (
         <div className="flex items-center gap-3">
@@ -99,7 +106,7 @@ export const columns: ColumnDef<ProjectData>[] = [
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
-            <span className="text-sm font-medium text-zinc-700 max-w-[140px] truncate">
+            <span className="text-sm font-medium text-zinc-700 max-w-35 truncate">
               {pro.companyName}
             </span>
           </div>
@@ -112,20 +119,24 @@ export const columns: ColumnDef<ProjectData>[] = [
     header: "Status",
     cell: ({ row }) => {
       const status = row.getValue("status") as string;
-      
+
       const styles: Record<string, string> = {
-          planning: "bg-blue-50 text-blue-700 border-blue-200",
-          in_progress: "bg-amber-50 text-amber-700 border-amber-200 animate-pulse",
-          completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
-          cancelled: "bg-zinc-100 text-zinc-500 border-zinc-200"
+        planning: "bg-blue-50 text-blue-700 border-blue-200",
+        in_progress:
+          "bg-amber-50 text-amber-700 border-amber-200 animate-pulse",
+        completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        cancelled: "bg-zinc-100 text-zinc-500 border-zinc-200",
       };
 
       return (
-        <Badge 
-          variant="secondary" 
-          className={cn("capitalize border px-2.5 py-0.5 shadow-none", styles[status] || styles.cancelled)}
+        <Badge
+          variant="secondary"
+          className={cn(
+            "capitalize border px-2.5 py-0.5 shadow-none",
+            styles[status] || styles.cancelled,
+          )}
         >
-            {status.replace("_", " ")}
+          {status.replace("_", " ")}
         </Badge>
       );
     },
@@ -142,18 +153,18 @@ export const columns: ColumnDef<ProjectData>[] = [
           <span>Budget</span>
           <ArrowUpDown className="ml-2 h-3 w-3" />
         </Button>
-      )
+      );
     },
     cell: ({ row }) => {
       const budget = parseFloat(row.getValue("budget") as string);
-      if (!budget) return <span className="text-zinc-300">-</span>
-      
+      if (!budget) return <span className="text-zinc-300">-</span>;
+
       return (
         <div className="font-mono text-sm font-medium text-zinc-700">
           {new Intl.NumberFormat("en-KE", {
             style: "currency",
             currency: "KES",
-            maximumFractionDigits: 0
+            maximumFractionDigits: 0,
           }).format(budget)}
         </div>
       );
@@ -168,8 +179,8 @@ export const columns: ColumnDef<ProjectData>[] = [
           <Calendar className="mr-2 h-3 w-3" />
           {new Date(row.original.createdAt).toLocaleDateString()}
         </div>
-      )
-    }
+      );
+    },
   },
   {
     id: "actions",
@@ -184,17 +195,23 @@ export const columns: ColumnDef<ProjectData>[] = [
                 <MoreHorizontal className="h-4 w-4 text-zinc-500" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[160px]">
+            <DropdownMenuContent align="end" className="w-40">
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => navigator.clipboard.writeText(project.id)}>
+              <DropdownMenuItem
+                onClick={() => navigator.clipboard.writeText(project.id)}
+              >
                 <Copy className="mr-2 h-3.5 w-3.5 text-zinc-400" />
                 Copy ID
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                  <Link href={`/projects/${project.id}`} className="flex items-center cursor-pointer font-medium">
-                      <Eye className="mr-2 h-3.5 w-3.5 text-emerald-600" /> View Details
-                  </Link>
+                <Link
+                  href={`/projects/${project.id}`}
+                  className="flex items-center cursor-pointer font-medium"
+                >
+                  <Eye className="mr-2 h-3.5 w-3.5 text-emerald-600" /> View
+                  Details
+                </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

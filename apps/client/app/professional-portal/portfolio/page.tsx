@@ -503,11 +503,21 @@ function PortfolioItemCard({ item }: { item: PortfolioItem }) {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   const mainImage = useMemo(() => {
-    if (Array.isArray(item.images)) {
+    if (Array.isArray(item.images) && item.images.length > 0) {
       const first = item.images[0];
       if (typeof first === "string") return first;
-      if (first && typeof first === "object" && "asset" in first) {
-        return first.asset?.cdnUrl ?? first.asset?.thumbnailUrl ?? null;
+      if (first && typeof first === "object") {
+        if (
+          "url" in first &&
+          typeof (first as { url?: string }).url === "string"
+        )
+          return (first as { url: string }).url;
+        if ("asset" in first) {
+          const a = (
+            first as { asset?: { cdnUrl?: string; thumbnailUrl?: string } }
+          ).asset;
+          return a?.cdnUrl ?? a?.thumbnailUrl ?? null;
+        }
       }
       return null;
     }

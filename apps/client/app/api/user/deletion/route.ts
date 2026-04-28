@@ -28,8 +28,10 @@
  * GET /api/user/deletion - Check deletion status
  */
 
+// ADR-006 classification: Class A/B - deletion workflows process identity and account-lifecycle sensitive fields.
+// Reviewed: 2026-04-09 by @copilot
+
 import { NextRequest } from "next/server";
-import { AnonymizationService } from "@/app/lib/gdpr/services/anonymization.service";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -41,6 +43,7 @@ import {
 } from "@/app/lib/api/resilient-api";
 import {
   RateLimits,
+  getActorRateLimitIdentifier,
   getRateLimitIdentifier,
   checkRateLimit,
 } from "@/app/lib/api/rate-limit";
@@ -50,7 +53,7 @@ import {
   safeParseJsonBody,
   TimeoutConfig,
 } from "@/app/lib/api/request-utils";
-import { prisma } from "@build/db";
+import { userProfileComplianceService } from "@/app/lib/domains/user-profile";
 
 const logger = getClientLogger();
 const executor = getResilientExecutor();
@@ -88,197 +91,152 @@ const DeletionRequestSchema = z.object({
  * Rate Limited: 5 requests per hour per user (prevent abuse)
  */
 
-export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
+export const POST = withAuth(
+  async (req: NextRequest, { dbUserId }) => {
+    const correlationId = initializeCorrelationId(req);
 
-  try {
-    const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window,
-    );
-
-    if (!success) {
-      logger.warn("Rate limit exceeded for deletion request", {
-        userId: dbUserId,
-        identifier,
-        correlationId,
-      });
-      return apiError(
-        "Rate limit exceeded. Please try again later.",
-        HttpStatus.TOO_MANY_REQUESTS,
+    try {
+      const rateLimitKey = getActorRateLimitIdentifier(
+        dbUserId,
+        "user-deletion",
       );
-    }
-
-    // Safely parse JSON body
-    const bodyResult = await safeParseJsonBody(req);
-    if (!bodyResult.success) {
-      logger.warn("Failed to parse deletion request body", {
-        userId: dbUserId,
-        error: bodyResult.error,
-        correlationId,
-      });
-      return apiError(bodyResult.error, HttpStatus.BAD_REQUEST);
-    }
-
-    const validationResult = DeletionRequestSchema.safeParse(bodyResult.data);
-
-    if (!validationResult.success) {
-      logger.warn("Deletion request validation failed", {
-        userId: dbUserId,
-        errors: validationResult.error.issues,
-        correlationId,
-      });
-      return apiError(
-        "Validation failed",
-        HttpStatus.BAD_REQUEST,
-        validationResult.error.issues,
+      const { success } = await checkRateLimit(
+        rateLimitKey,
+        RateLimits.WRITE.limit,
+        RateLimits.WRITE.window,
       );
-    }
 
-    const { reason, confirmEmail } = validationResult.data;
-
-    // Verify confirmEmail matches user's actual email if provided
-    if (confirmEmail) {
-      const user = await prisma.user.findUnique({
-        where: { id: dbUserId },
-        select: { email: true },
-      });
-
-      if (!user) {
-        logger.error("User not found during deletion request", undefined, {
-          userId: dbUserId,
+      if (!success) {
+        logger.warn("Rate limit exceeded for deletion request", {
+          rateLimitKey,
           correlationId,
-        });
-        return apiError("User not found", HttpStatus.NOT_FOUND);
-      }
-
-      if (user.email.toLowerCase() !== confirmEmail.toLowerCase()) {
-        logger.warn("Email confirmation mismatch", {
-          userId: dbUserId,
-          correlationId,
+          operationName: "request_account_deletion",
         });
         return apiError(
-          "Email confirmation does not match your account email",
+          "Rate limit exceeded. Please try again later.",
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+
+      // Safely parse JSON body
+      const bodyResult = await safeParseJsonBody(req);
+      if (!bodyResult.success) {
+        logger.warn("Failed to parse deletion request body", {
+          error: bodyResult.error,
+          correlationId,
+          operationName: "request_account_deletion",
+        });
+        return apiError(bodyResult.error, HttpStatus.BAD_REQUEST);
+      }
+
+      const validationResult = DeletionRequestSchema.safeParse(bodyResult.data);
+
+      if (!validationResult.success) {
+        logger.warn("Deletion request validation failed", {
+          errors: validationResult.error.issues,
+          correlationId,
+          operationName: "request_account_deletion",
+        });
+        return apiError(
+          "Validation failed",
           HttpStatus.BAD_REQUEST,
-        );
-      }
-    }
-
-    // Capture request metadata for audit
-    const { ipAddress, userAgent } = getRequestMetadata(req);
-
-    logger.info("Processing account deletion request", {
-      userId: dbUserId,
-      hasReason: !!reason,
-      hasEmailConfirmation: !!confirmEmail,
-      ipAddress,
-      correlationId,
-    });
-
-    // Execute with resilience patterns
-    const result = await executor.execute(
-      async () => {
-        return await AnonymizationService.deactivateUser(
-          dbUserId,
-          reason,
-          ipAddress,
-          userAgent,
-        );
-      },
-      {
-        timeout: TimeoutConfig.BACKGROUND,
-        retry: { maxAttempts: 2 },
-        circuitBreaker: true,
-        operationName: "request-account-deletion",
-      },
-    );
-
-    if (!result.success) {
-      const error = result.error;
-
-      // Handle specific business errors
-      if (error?.message?.includes("active projects")) {
-        logger.warn("Deletion blocked due to active projects", {
-          userId: dbUserId,
-          correlationId,
-        });
-        return apiError(
-          "Cannot delete account with active projects. Please complete or cancel all projects first.",
-          HttpStatus.CONFLICT,
+          validationResult.error.issues,
         );
       }
 
-      if (error?.message?.includes("active escrow")) {
-        logger.warn("Deletion blocked due to active escrow", {
-          userId: dbUserId,
-          correlationId,
-        });
-        return apiError(
-          "Cannot delete account with active escrow transactions. Please resolve all payments first.",
-          HttpStatus.CONFLICT,
-        );
-      }
+      const { reason, confirmEmail } = validationResult.data;
 
-      logger.error(
-        "Deletion request failed",
-        error || new Error("Unknown error"),
-        { userId: dbUserId, correlationId },
+      // Capture request metadata for audit
+      const { ipAddress, userAgent } = getRequestMetadata(req);
+
+      logger.info("Processing account deletion request", {
+        hasReason: !!reason,
+        hasEmailConfirmation: !!confirmEmail,
+        ipAddress,
+        correlationId,
+        operationName: "request_account_deletion",
+      });
+
+      // Execute with resilience patterns
+      const result = await executor.execute(
+        async () =>
+          userProfileComplianceService.requestDeletion({
+            actor: { userId: dbUserId, correlationId },
+            reason,
+            confirmEmail,
+            ipAddress,
+            userAgent,
+          }),
+        {
+          timeout: TimeoutConfig.BACKGROUND,
+          retry: { maxAttempts: 2 },
+          circuitBreaker: true,
+          operationName: "request_account_deletion",
+        },
       );
+
+      if (!result.success || !result.data) {
+        logger.error(
+          "Deletion request failed",
+          result.error || new Error("Unknown error"),
+          {
+            correlationId,
+            operationName: "request_account_deletion",
+            outcome: "failed",
+          },
+        );
+        return apiError(
+          "Failed to process deletion request",
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      if (!result.data.ok) {
+        return apiError(
+          result.data.message || "Failed to process deletion request",
+          result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      logger.info("Account deletion scheduled successfully", {
+        scheduledDate: result.data.data.scheduledDeletionAt,
+        correlationId,
+        operationName: "request_account_deletion",
+        outcome: "scheduled",
+      });
+
+      return apiSuccess(result.data.data, HttpStatus.OK);
+    } catch (error) {
+      logger.error(
+        "Deletion request error",
+        error instanceof Error ? error : new Error(String(error)),
+        {
+          correlationId,
+          operationName: "request_account_deletion",
+          outcome: "failed",
+        },
+      );
+
+      if (error instanceof z.ZodError) {
+        return apiError(
+          "Validation failed",
+          HttpStatus.BAD_REQUEST,
+          error.issues,
+        );
+      }
+
       return apiError(
-        "Failed to process deletion request",
+        "Failed to process deletion request. Please contact support if the issue persists.",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-
-    const deletionData = result.data!;
-
-    logger.info("Account deletion scheduled successfully", {
-      userId: dbUserId,
-      scheduledDate: deletionData.scheduledDeletionAt,
-      correlationId,
-    });
-
-    return apiSuccess(
-      {
-        success: true,
-        message:
-          "Your account has been deactivated and will be permanently deleted in 30 days.",
-        scheduledDeletionAt: deletionData.scheduledDeletionAt,
-        gracePeriodDays: 30,
-        canCancelUntil: deletionData.scheduledDeletionAt,
-        nextSteps: [
-          "Your account is now deactivated",
-          "You can still log in to cancel deletion within 30 days",
-          "After 30 days, your personal data will be permanently anonymized",
-          "Transaction history will be retained for 7 years (legal requirement)",
-        ],
-        supportEmail: "privacy/buildmarket.co.ke",
-      },
-      HttpStatus.OK,
-    );
-  } catch (error) {
-    logger.error(
-      "Deletion request error",
-      error instanceof Error ? error : new Error(String(error)),
-      { userId: dbUserId, correlationId },
-    );
-
-    if (error instanceof z.ZodError) {
-      return apiError(
-        "Validation failed",
-        HttpStatus.BAD_REQUEST,
-        error.issues,
-      );
-    }
-
-    return apiError(
-      "Failed to process deletion request. Please contact support if the issue persists.",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
-  }
-});
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+  },
+);
 
 /**
  * DELETE /api/user/deletion
@@ -312,9 +270,9 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     if (!success) {
       logger.warn("Rate limit exceeded for deletion status check", {
-        userId: dbUserId,
         identifier,
         correlationId,
+        operationName: "fetch_deletion_status",
       });
       return apiError(
         "Rate limit exceeded. Please try again later.",
@@ -323,20 +281,22 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     }
 
     logger.info("Fetching deletion status", {
-      userId: dbUserId,
       correlationId,
+      operationName: "fetch_deletion_status",
     });
 
     // Execute with resilience
     const result = await executor.execute(
-      async () => {
-        return await AnonymizationService.getDeletionStatus(dbUserId);
-      },
+      async () =>
+        userProfileComplianceService.getDeletionStatus({
+          userId: dbUserId,
+          correlationId,
+        }),
       {
         timeout: TimeoutConfig.NORMAL,
         retry: { maxAttempts: 2 },
         circuitBreaker: true,
-        operationName: "fetch-deletion-status",
+        operationName: "fetch_deletion_status",
       },
     );
 
@@ -344,7 +304,11 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       logger.error(
         "Failed to fetch deletion status",
         result.error || new Error("Unknown error"),
-        { userId: dbUserId, correlationId },
+        {
+          correlationId,
+          operationName: "fetch_deletion_status",
+          outcome: "failed",
+        },
       );
       return apiError(
         "Failed to fetch deletion status",
@@ -352,26 +316,37 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
       );
     }
 
-    const status = result.data!;
+    const status = result.data;
+    if (!status) {
+      return apiError(
+        "Failed to fetch deletion status",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    if (!status.ok) {
+      return apiError(
+        status.message || "Failed to fetch deletion status",
+        status.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
 
     logger.info("Deletion status fetched", {
-      userId: dbUserId,
-      isDeletionScheduled: status.isDeletionScheduled,
+      isDeletionScheduled: status.data.isDeletionScheduled,
       correlationId,
+      operationName: "fetch_deletion_status",
+      outcome: "succeeded",
     });
 
-    return apiSuccess(
-      {
-        success: true,
-        ...status,
-      },
-      HttpStatus.OK,
-    );
+    return apiSuccess(status.data, HttpStatus.OK);
   } catch (error) {
     logger.error(
       "Deletion status fetch error",
       error instanceof Error ? error : new Error(String(error)),
-      { userId: dbUserId, correlationId },
+      {
+        correlationId,
+        operationName: "fetch_deletion_status",
+        outcome: "failed",
+      },
     );
     return apiError(
       "Failed to fetch deletion status. Please try again.",
@@ -393,139 +368,104 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
  *
  * Rate Limited: 5 requests per hour (prevent abuse)
  */
-export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
+export const PATCH = withAuth(
+  async (req: NextRequest, { dbUserId }) => {
+    const correlationId = initializeCorrelationId(req);
 
-  try {
-    const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window,
-    );
-
-    if (!success) {
-      logger.warn("Rate limit exceeded for deletion cancellation", {
-        userId: dbUserId,
-        identifier,
-        correlationId,
-      });
-      return apiError(
-        "Rate limit exceeded. Please try again later.",
-        HttpStatus.TOO_MANY_REQUESTS,
+    try {
+      const rateLimitKey = getActorRateLimitIdentifier(
+        dbUserId,
+        "user-deletion-cancel",
       );
-    }
-
-    logger.info("Processing deletion cancellation request", {
-      userId: dbUserId,
-      correlationId,
-    });
-
-    // Check if deletion is scheduled
-    const user = await prisma.user.findUnique({
-      where: { id: dbUserId },
-      select: {
-        status: true,
-        scheduledDeletionAt: true,
-        deletionRequestedAt: true,
-      },
-    });
-
-    if (!user) {
-      return apiError("User not found", HttpStatus.NOT_FOUND);
-    }
-
-    if (user.status !== "DEACTIVATED" || !user.scheduledDeletionAt) {
-      logger.warn("No active deletion to cancel", {
-        userId: dbUserId,
-        status: user.status,
-        correlationId,
-      });
-      return apiError(
-        "No scheduled deletion to cancel",
-        HttpStatus.BAD_REQUEST,
+      const { success } = await checkRateLimit(
+        rateLimitKey,
+        RateLimits.WRITE.limit,
+        RateLimits.WRITE.window,
       );
-    }
 
-    // Check if still within grace period
-    if (new Date() > user.scheduledDeletionAt) {
-      logger.warn("Grace period expired", {
-        userId: dbUserId,
-        scheduledDeletionAt: user.scheduledDeletionAt,
+      if (!success) {
+        logger.warn("Rate limit exceeded for deletion cancellation", {
+          rateLimitKey,
+          correlationId,
+          operationName: "cancel_account_deletion",
+        });
+        return apiError(
+          "Rate limit exceeded. Please try again later.",
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+
+      logger.info("Processing deletion cancellation request", {
         correlationId,
+        operationName: "cancel_account_deletion",
       });
-      return apiError(
-        "Grace period has expired. Account deletion cannot be cancelled.",
-        HttpStatus.GONE,
+
+      const { ipAddress, userAgent } = getRequestMetadata(req);
+
+      const result = await executor.execute(
+        async () =>
+          userProfileComplianceService.cancelDeletion({
+            actor: { userId: dbUserId, correlationId },
+            ipAddress,
+            userAgent,
+          }),
+        {
+          timeout: TimeoutConfig.NORMAL,
+          retry: { maxAttempts: 2 },
+          circuitBreaker: true,
+          operationName: "cancel_account_deletion",
+        },
       );
-    }
 
-    // Execute reactivation with resilience
-    const result = await executor.execute(
-      async () => {
-        return await AnonymizationService.reactivateUser(dbUserId);
-      },
-      {
-        timeout: TimeoutConfig.NORMAL,
-        retry: { maxAttempts: 2 },
-        circuitBreaker: true,
-        operationName: "cancel-account-deletion",
-      },
-    );
+      if (!result.success || !result.data) {
+        logger.error(
+          "Failed to cancel deletion",
+          result.error || new Error("Unknown error"),
+          {
+            correlationId,
+            operationName: "cancel_account_deletion",
+            outcome: "failed",
+          },
+        );
+        return apiError(
+          "Failed to cancel deletion",
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
 
-    if (!result.success) {
+      if (!result.data.ok) {
+        return apiError(
+          result.data.message || "Failed to cancel deletion",
+          result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      logger.info("Deletion cancelled successfully", {
+        correlationId,
+        operationName: "cancel_account_deletion",
+        outcome: "succeeded",
+      });
+
+      return apiSuccess(result.data.data, HttpStatus.OK);
+    } catch (error) {
       logger.error(
-        "Failed to cancel deletion",
-        result.error || new Error("Unknown error"),
-        { userId: dbUserId, correlationId },
+        "Deletion cancellation error",
+        error instanceof Error ? error : new Error(String(error)),
+        {
+          correlationId,
+          operationName: "cancel_account_deletion",
+          outcome: "failed",
+        },
       );
       return apiError(
-        "Failed to cancel deletion",
+        "Failed to cancel deletion. Please try again.",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-
-    // Create audit log - use PROFILE_UPDATED with metadata indicating cancellation
-    const { ipAddress, userAgent } = getRequestMetadata(req);
-    await prisma.auditLog.create({
-      data: {
-        actorId: dbUserId,
-        actorType: "USER",
-        action: "PROFILE_UPDATED",
-        entityType: "User",
-        entityId: dbUserId,
-        metadata: {
-          ipAddress,
-          userAgent,
-          actionType: "DELETION_CANCELLED",
-          description: "User cancelled scheduled account deletion",
-        },
-      },
-    });
-
-    logger.info("Deletion cancelled successfully", {
-      userId: dbUserId,
-      correlationId,
-    });
-
-    return apiSuccess(
-      {
-        success: true,
-        message:
-          "Account deletion has been cancelled. Your account is now active.",
-        status: "ACTIVE",
-      },
-      HttpStatus.OK,
-    );
-  } catch (error) {
-    logger.error(
-      "Deletion cancellation error",
-      error instanceof Error ? error : new Error(String(error)),
-      { userId: dbUserId, correlationId },
-    );
-    return apiError(
-      "Failed to cancel deletion. Please try again.",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
-  }
-});
+  },
+  {
+    recentAuth: {
+      maxAgeSeconds: 300,
+    },
+  },
+);

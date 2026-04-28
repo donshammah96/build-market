@@ -17,11 +17,7 @@ import {
   CalendarQuerySchema,
   CreateCalendarEventSchema,
 } from "@/app/lib/validation/calendar-validation";
-import { createProfessionalPortalGet } from "@/app/lib/api/professional-portal-handler";
-import {
-  getCalendarEvents,
-  createCalendarEvent,
-} from "@/lib/services/calendar";
+import { calendarService } from "@/app/lib/domains/calendar/service";
 
 const logger = getClientLogger();
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
@@ -36,24 +32,97 @@ function parseCalendarQuery(req: NextRequest) {
   };
 }
 
+function mapCalendarError(error: {
+  error: string;
+  message?: string;
+  status?: number;
+}) {
+  switch (error.error) {
+    case "forbidden":
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    case "client_not_found":
+      return apiError("Client not found", HttpStatus.NOT_FOUND);
+    case "project_not_found":
+      return apiError("Project not found", HttpStatus.NOT_FOUND);
+    case "invalid_date_range":
+      return apiError(
+        "End date must be after start date",
+        HttpStatus.BAD_REQUEST,
+      );
+    default:
+      return apiError(
+        "Calendar request failed",
+        error.status ?? HttpStatus.BAD_REQUEST,
+      );
+  }
+}
+
 /**
  * GET /api/professional-portal/calendar
  * List calendar events for the authenticated professional.
  */
-export const GET = createProfessionalPortalGet({
-  rateLimitKey: "calendar-read",
-  querySchema: CalendarQuerySchema,
-  parseQuery: parseCalendarQuery,
-  handler: async ({ dbUserId, query }) => getCalendarEvents(dbUserId, query),
-  operationName: "get_calendar_events",
-  errorMessage: "Failed to fetch calendar events",
+export const GET = withAuth(async (req: NextRequest, authCtx) => {
+  const correlationId = initializeCorrelationId(req);
+
+  const identifier = getRateLimitIdentifier(req);
+  const rateLimitResult = await checkRateLimit(
+    `calendar-read:${identifier}`,
+    RateLimits.READ.limit,
+    RateLimits.READ.window,
+  );
+
+  if (!rateLimitResult.success) {
+    return apiError(
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
+  const validation = CalendarQuerySchema.safeParse(parseCalendarQuery(req));
+  if (!validation.success) {
+    return apiError(
+      "Invalid query parameters",
+      HttpStatus.BAD_REQUEST,
+      validation.error.issues,
+    );
+  }
+
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    () =>
+      calendarService.listEvents(
+        {
+          userId: authCtx.dbUserId,
+          role: authCtx.userRole,
+        },
+        validation.data,
+      ),
+    { operationName: "get_calendar_events" },
+  );
+
+  if (!result.success || !result.data) {
+    logger.error("Failed to fetch calendar events", result.error, {
+      correlationId,
+      actorRole: authCtx.userRole,
+    });
+    return apiError(
+      "Failed to fetch calendar events",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  if (!result.data.ok) {
+    return mapCalendarError(result.data);
+  }
+
+  return apiSuccess(result.data.data, HttpStatus.OK, correlationId);
 });
 
 /**
  * POST /api/professional-portal/calendar
  * Create a new calendar event.
  */
-export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
+export const POST = withAuth(async (req: NextRequest, authCtx) => {
   const correlationId = initializeCorrelationId(req);
 
   const sizeError = checkBodySize(req, MAX_BODY_SIZE);
@@ -86,7 +155,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
 
   const idempotencyKey =
     req.headers.get("Idempotency-Key") ||
-    IdempotencyService.generateKey(dbUserId, "POST", {
+    IdempotencyService.generateKey(authCtx.dbUserId, "POST", {
       domain: "calendar_event",
       title: eventData.title,
       startDate: eventData.startDate,
@@ -95,7 +164,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
   const idempotencyCheck = await IdempotencyService.checkOrCreate(
     idempotencyKey,
     "calendar_event",
-    dbUserId,
+    authCtx.dbUserId,
     "POST",
   );
   if (!idempotencyCheck) {
@@ -130,14 +199,21 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
 
   logger.info("Creating calendar event", {
     correlationId,
-    userId: dbUserId,
+    actorRole: authCtx.userRole,
     title: eventData.title,
     startDate: eventData.startDate,
   });
 
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
-    () => createCalendarEvent(dbUserId, eventData),
+    () =>
+      calendarService.createEvent(
+        {
+          userId: authCtx.dbUserId,
+          role: authCtx.userRole,
+        },
+        eventData,
+      ),
     { operationName: "create_calendar_event" },
   );
 
@@ -150,13 +226,11 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
   }
 
   const data = result.data;
-  if ("error" in data) {
+  if (!data.ok) {
     await IdempotencyService.fail(idempotencyKey);
-    if (data.error === "client_not_found")
-      return apiError("Client not found", HttpStatus.NOT_FOUND);
-    return apiError("Project not found", HttpStatus.NOT_FOUND);
+    return mapCalendarError(data);
   }
 
   await IdempotencyService.complete(idempotencyKey, data.data);
-  return apiSuccess(data.data, HttpStatus.CREATED);
+  return apiSuccess(data.data, HttpStatus.CREATED, correlationId);
 });

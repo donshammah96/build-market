@@ -1,3 +1,5 @@
+import { normalizeRole, type AppRole } from "@/app/lib/security/roles";
+
 export const ROUTES = {
   // Public Routes
   home: "/",
@@ -8,7 +10,7 @@ export const ROUTES = {
 
   // Client / Homeowner Routes
   client: "/client",
-  userDashboard: "/dashboard",
+  userDashboard: "/homeowner-dashboard",
   userProfile: "/profile",
   userProfileComplete: "/profile/complete",
   userSettings: "/profile", // mapped to profile for now
@@ -40,8 +42,10 @@ export const ROUTES = {
   professionalSettings: "/professional-portal/settings",
   professionalProfileComplete: "/professional-portal/settings/complete-profile",
   professionalCalendar: "/professional-portal/calendar",
+  professionalPendingVerification: "/professional-portal/pending-verification",
 
   // Categories & Search
+  search: "/search",
   findProfessional: "/professionals",
   speakWithAdvisor: "/speak-with-an-advisor",
 
@@ -144,6 +148,12 @@ export const ROUTES = {
 
 export type RouteKey = keyof typeof ROUTES;
 
+export function dashboardForRole(role?: AppRole | string): string {
+  return normalizeRole(role) === "PROFESSIONAL"
+    ? ROUTES.professionalDashboard
+    : ROUTES.userDashboard;
+}
+
 // Helper to generate dynamic routes
 export const getProfessionalUrl = (id: string) => `/professionals/${id}`;
 export const getProjectUrl = (id: string) => `/projects/${id}`;
@@ -206,6 +216,9 @@ export const API_ROUTES = {
   // Users
   users: "/api/users",
   userDetail: (id: string) => `/api/users/${id}`,
+  userProfileStatus: "/api/user/profile",
+  userProfileCompleteApi: "/api/user/profile/complete",
+  userConsent: "/api/user/consent",
 
   // Onboarding
   onboarding: "/api/onboarding",
@@ -226,31 +239,87 @@ export const API_ROUTES = {
     `/api/professional-portal/leads/${id}`,
   professionalPortalQuotes: "/api/professional-portal/quotes",
   professionalPortalCertificates: "/api/professional-portal/certificates",
+  professionalPortalCertificateDetail: (id: string) =>
+    `/api/professional-portal/certificates/${id}`,
+  professionalPortalDocuments: "/api/professional-portal/documents",
+  professionalPortalDocumentDetail: (id: string) =>
+    `/api/professional-portal/documents/${id}`,
+  professionalPortalLicenses: "/api/professional-portal/licenses",
+  professionalPortalLicenseDetail: (id: string) =>
+    `/api/professional-portal/licenses/${id}`,
   professionalPortalMessages: "/api/professional-portal/messages",
   professionalPortalFinance: "/api/professional-portal/finance",
+  professionalPortalFinanceStats: "/api/professional-portal/finance/stats",
+  professionalPortalFinanceTransactions:
+    "/api/professional-portal/finance/transactions",
+  professionalPortalFinanceTransactionDetail: (id: string) =>
+    `/api/professional-portal/finance/transactions/${id}`,
+  professionalPortalFinanceWithdraw:
+    "/api/professional-portal/finance/withdraw",
   professionalPortalClients: "/api/professional-portal/clients",
   professionalPortalInquiries: "/api/professional-portal/inquiries",
   professionalPortalInquiryDetail: (id: string) =>
     `/api/professional-portal/inquiries/${id}`,
+  professionalPortalDashboardMetrics:
+    "/api/professional-portal/dashboard/metrics",
+  professionalPortalOrders: "/api/professional-portal/orders",
+  professionalPortalInventoryAlerts:
+    "/api/professional-portal/inventory/alerts",
   professionalPortalPortfolio: "/api/professional-portal/portfolio",
   professionalPortalPortfolioDetail: (id: string) =>
     `/api/professional-portal/portfolio/${id}`,
   professionalPortalPortfolioImages: (id: string) =>
     `/api/professional-portal/portfolio/${id}/images`,
   professionalPortalPipeline: "/api/professional-portal/pipeline",
+  professionalPortalTopProducts: "/api/professional-portal/products/top",
   professionalPortalProfile: "/api/professional-portal/profile",
   professionalPortalProfileDetail: (id: string) =>
     `/api/professional-portal/profile/${id}`,
   professionalPortalProjects: "/api/professional-portal/projects",
   professionalPortalProjectDetail: (id: string) =>
     `/api/professional-portal/projects/${id}`,
+  professionalPortalProjectMilestones: (projectId: string) =>
+    `/api/professional-portal/projects/${projectId}/milestones`,
+  professionalPortalProjectMilestoneApprove: (
+    projectId: string,
+    milestoneId: string,
+  ) =>
+    `/api/professional-portal/projects/${projectId}/milestones/${milestoneId}/approve`,
+  professionalPortalProjectEscrowFund: (projectId: string, escrowId: string) =>
+    `/api/professional-portal/projects/${projectId}/escrow/${escrowId}/fund`,
+  professionalPortalProjectEscrowRelease: (
+    projectId: string,
+    escrowId: string,
+  ) =>
+    `/api/professional-portal/projects/${projectId}/escrow/${escrowId}/release`,
 
   // Reviews (public)
   reviews: "/api/reviews",
 
+  // Search (public)
+  searchProfessionals: "/api/search/professionals",
+
   // Stores
   stores: "/api/stores",
+  storesMe: "/api/stores/me",
   storeDetail: (id: string) => `/api/stores/${id}`,
+  storeDocuments: (storeId: string) => `/api/stores/${storeId}/documents`,
+  storeDocumentDetail: (storeId: string, documentId: string) =>
+    `/api/stores/${storeId}/documents/${documentId}`,
+
+  // Properties
+  properties: "/api/properties",
+  propertyDetail: (id: string) => `/api/properties/${id}`,
+  propertyMyListings: "/api/properties/my-listings",
+  propertySimilar: (id: string) => `/api/properties/${id}/similar`,
+  propertyAttachments: (propertyId: string) =>
+    `/api/properties/${propertyId}/attachments`,
+  propertyAttachmentDetail: (propertyId: string, attachmentId: string) =>
+    `/api/properties/${propertyId}/attachments/${attachmentId}`,
+  propertyDocuments: (propertyId: string) =>
+    `/api/properties/${propertyId}/documents`,
+  propertyDocumentDetail: (propertyId: string, documentId: string) =>
+    `/api/properties/${propertyId}/documents/${documentId}`,
 
   // Uploads
   uploads: "/api/uploads",

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ArrowLeft,
@@ -56,9 +56,9 @@ import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 
 import { useLead, useUpdateLead, useDeleteLead } from "@/hooks/useLeads";
+import type { LeadDetailResult } from "@/app/lib/domains/leads/contracts";
 import {
   UpdateLeadSchema,
-  type Lead,
   type UpdateLeadInput,
 } from "@/app/lib/validation/leads-validation";
 
@@ -102,7 +102,7 @@ export default function LeadDetailPage() {
   const [isEditOpen, setIsEditOpen] = useState(false);
 
   const { data: leadData, isLoading, error } = useLead(id);
-  const lead = leadData as Lead | undefined;
+  const lead = leadData as LeadDetailResult | undefined;
 
   const updateLeadMutation = useUpdateLead({
     onSuccess: () => {
@@ -130,10 +130,11 @@ export default function LeadDetailPage() {
       clientName: lead?.clientName || "",
       clientEmail: lead?.clientEmail || "",
       clientPhone: lead?.clientPhone || "",
-      projectType: lead?.projectType || "RESIDENTIAL",
+      projectType: (lead?.projectType ||
+        "RESIDENTIAL") as UpdateLeadFormValues["projectType"],
       location: lead?.location || "",
       budget: undefined,
-      status: lead?.status || "NEW",
+      status: (lead?.status || "NEW") as UpdateLeadFormValues["status"],
       notes: lead?.notes || "",
       followUpDate: lead?.followUpDate
         ? new Date(lead.followUpDate).toISOString().split("T")[0]
@@ -141,16 +142,18 @@ export default function LeadDetailPage() {
     },
   });
 
+  const formControl = form.control as Control<UpdateLeadFormValues>;
+
   // Update form when lead data loads
   if (lead && form.getValues().clientName === "") {
     form.reset({
       clientName: lead.clientName,
       clientEmail: lead.clientEmail || "",
       clientPhone: lead.clientPhone || "",
-      projectType: lead.projectType,
+      projectType: lead.projectType as UpdateLeadFormValues["projectType"],
       location: lead.location || "",
       budget: undefined,
-      status: lead.status,
+      status: lead.status as UpdateLeadFormValues["status"],
       notes: lead.notes || "",
       followUpDate: lead.followUpDate
         ? new Date(lead.followUpDate).toISOString().split("T")[0]
@@ -577,7 +580,7 @@ export default function LeadDetailPage() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
-                control={form.control}
+                control={formControl}
                 name="clientName"
                 render={({ field }) => (
                   <FormItem>
@@ -591,7 +594,7 @@ export default function LeadDetailPage() {
               />
               <div className="grid grid-cols-2 gap-4">
                 <FormField
-                  control={form.control}
+                  control={formControl}
                   name="clientEmail"
                   render={({ field }) => (
                     <FormItem>
@@ -604,7 +607,7 @@ export default function LeadDetailPage() {
                   )}
                 />
                 <FormField
-                  control={form.control}
+                  control={formControl}
                   name="clientPhone"
                   render={({ field }) => (
                     <FormItem>
@@ -619,7 +622,7 @@ export default function LeadDetailPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <FormField
-                  control={form.control}
+                  control={formControl}
                   name="projectType"
                   render={({ field }) => (
                     <FormItem>
@@ -632,7 +635,7 @@ export default function LeadDetailPage() {
                   )}
                 />
                 <FormField
-                  control={form.control}
+                  control={formControl}
                   name="budget"
                   render={({ field }) => (
                     <FormItem>
@@ -646,7 +649,7 @@ export default function LeadDetailPage() {
                 />
               </div>
               <FormField
-                control={form.control}
+                control={formControl}
                 name="location"
                 render={({ field }) => (
                   <FormItem>
@@ -659,7 +662,7 @@ export default function LeadDetailPage() {
                 )}
               />
               <FormField
-                control={form.control}
+                control={formControl}
                 name="status"
                 render={({ field }) => (
                   <FormItem>
@@ -686,7 +689,7 @@ export default function LeadDetailPage() {
                 )}
               />
               <FormField
-                control={form.control}
+                control={formControl}
                 name="followUpDate"
                 render={({ field }) => (
                   <FormItem>
@@ -699,7 +702,7 @@ export default function LeadDetailPage() {
                 )}
               />
               <FormField
-                control={form.control}
+                control={formControl}
                 name="notes"
                 render={({ field }) => (
                   <FormItem>

@@ -1,11 +1,16 @@
 import { prisma } from "@build/db";
 import archiver from "archiver";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import fs from "fs";
 import path from "path";
 import { Upload } from "@aws-sdk/lib-storage";
-import { S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createReadStream } from "fs";
-import { envConfig } from "@/lib/env";
+import { env } from "@/app/lib/infrastructure/env";
 
 export class ExportProcessor {
   private s3Client: S3Client | null = null;
@@ -14,13 +19,13 @@ export class ExportProcessor {
   private readonly s3Disabled: boolean;
 
   constructor() {
-    this.s3Disabled = envConfig.s3.disabled;
-    this.bucketName = envConfig.s3.exportBucket;
-    this.exportDir = path.join(process.cwd(), envConfig.s3.localDir);
+    this.s3Disabled = env.s3.disabled;
+    this.bucketName = env.s3.exportBucket;
+    this.exportDir = path.join(process.cwd(), env.s3.localDir);
 
     // Initialize S3 client only if not disabled
     if (!this.s3Disabled) {
-      const { accessKeyId, secretAccessKey } = envConfig.s3;
+      const { accessKeyId, secretAccessKey } = env.s3;
 
       if (!accessKeyId || !secretAccessKey) {
         console.warn(
@@ -31,7 +36,7 @@ export class ExportProcessor {
         this.s3Disabled = true;
       } else {
         this.s3Client = new S3Client({
-          region: envConfig.s3.region,
+          region: env.s3.region,
           credentials: { accessKeyId, secretAccessKey },
         });
       }
@@ -305,9 +310,6 @@ export class ExportProcessor {
     await onProgress?.(95);
 
     // Generate signed URL (valid for 7 days to match expiresAt)
-    const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
-    const { GetObjectCommand } = await import("@aws-sdk/client-s3");
-
     const command = new GetObjectCommand({
       Bucket: this.bucketName,
       Key: s3Key,
@@ -345,7 +347,6 @@ export class ExportProcessor {
     }
 
     try {
-      const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
       await this.s3Client.send(
         new DeleteObjectCommand({
           Bucket: this.bucketName,

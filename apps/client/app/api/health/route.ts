@@ -9,6 +9,7 @@ import {
   checkRateLimit,
   getRateLimitIdentifier,
 } from "@/app/lib/api/rate-limit";
+import { env } from "@/app/lib/infrastructure/env";
 
 const logger = getClientLogger();
 
@@ -174,8 +175,8 @@ async function checkClerkAuth(): Promise<DependencyResult> {
     // External calls in health checks introduce latency and false negatives
     // from transient network issues. Clerk connectivity is implicitly validated
     // by the auth middleware on every authenticated request.
-    const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-    const secretKey = process.env.CLERK_SECRET_KEY;
+    const publishableKey = env.clerk.publishableKey;
+    const secretKey = env.clerk.secretKey;
 
     if (!publishableKey) {
       throw new Error("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY not configured");
@@ -286,8 +287,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const response: HealthResponse = {
     status: overallStatus,
-    version: process.env.npm_package_version || "0.1.0",
-    environment: process.env.NODE_ENV || "development",
+    version: env.appVersion,
+    environment: env.nodeEnv,
     uptime: {
       seconds: Math.floor(uptimeMs / 1000),
       human: formatUptime(uptimeMs),

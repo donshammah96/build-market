@@ -7,6 +7,11 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { consentClient } from "@/lib/consent-client";
+
+export const SECURITY_PERSISTENCE_ALLOWLIST = [
+  "cookie-consent-preferences",
+] as const;
 
 // =============================================================================
 // TYPES
@@ -71,6 +76,7 @@ export const CookieConsentContext = createContext<CookieConsentState | null>(
 function readStoredConsent(): StoredConsent | null {
   if (typeof window === "undefined") return null;
   try {
+    // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive cookie-consent preferences.
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredConsent;
@@ -89,6 +95,7 @@ function writeStoredConsent(consent: CookieConsent): void {
     necessary: true, // enforce
     timestamp: new Date().toISOString(),
   };
+  // SECURITY_PERSISTENCE_ALLOWLIST: Persists non-sensitive cookie-consent preferences.
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
 }
 
@@ -134,11 +141,12 @@ export function CookieConsentProvider({
       if (!isSignedIn) return;
       setIsSyncing(true);
       try {
-        await fetch("/api/user/consent", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ consents: toApiPayload(newConsent) }),
+        const result = await consentClient.updateConsents({
+          consents: toApiPayload(newConsent),
         });
+        if (!result.success) {
+          throw new Error(result.error);
+        }
       } catch (err) {
         console.error("[CookieConsent] Failed to sync to backend:", err);
       } finally {

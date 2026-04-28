@@ -24,7 +24,14 @@ Upload image(s) linked to pre-uploaded Assets.
 - **Validations**: Asset ownership verified for all images
 - **GDPR**: Consent record created
 
-### DELETE `/projects/[id]/images?imageId=xxx`
+### GET `/projects/[id]/images/[imageId]`
+
+Get a single project image by ID.
+
+- **Auth**: Professional (project owner)
+- **Rate limit**: READ
+
+### DELETE `/projects/[id]/images/[imageId]`
 
 Delete a project image. Asset soft-deleted via cleanup job.
 

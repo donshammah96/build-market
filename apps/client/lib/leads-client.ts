@@ -3,22 +3,25 @@
  *
  * Client-side facade for the professional-portal leads subsystem.
  * Uses browser-safe REST APIs with client-side concurrency control.
+ * Types aligned to domain DTOs.
  */
 import type { ApiResponse } from "@build/types";
 import { apiFetch, ConcurrencyLimiter } from "@/lib/api-client-utils";
 import { LEADS_CLIENT_CONFIG } from "@/lib/config/lead.config";
 import { isValidId } from "@/lib/utils/validators";
 import type { z } from "zod";
-import type { Lead, LeadList } from "@/lib/validation/leads-validation";
 import {
   LeadQuerySchema,
   CreateLeadSchema,
   UpdateLeadSchema,
 } from "@/lib/validation/leads-validation";
+import type {
+  LeadDetailResult,
+  LeadListResult,
+  LeadListItem,
+} from "@/app/lib/domains/leads/contracts";
 
 const { BULKHEAD_CONCURRENCY } = LEADS_CLIENT_CONFIG;
-
-// ─── Input Types (Derived locally to avoid server imports) ──────────────────
 
 export type LeadQueryInput = z.infer<typeof LeadQuerySchema>;
 export type CreateLeadInput = z.infer<typeof CreateLeadSchema>;
@@ -37,20 +40,12 @@ export type DeleteLeadClientInput = {
   idempotencyKey?: string;
 };
 
-export type LeadListResponse = {
-  leads: LeadList[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-};
-
 export type DeleteLeadResponse = {
   message: string;
   leadId: string;
 };
+
+export type { LeadListResult, LeadDetailResult, LeadListItem };
 
 // ─── Leads Client ──────────────────────────────────────────────────────────
 
@@ -63,7 +58,7 @@ class LeadsClient {
 
   async getLeads(
     filters?: Partial<LeadQueryInput>,
-  ): Promise<ApiResponse<LeadListResponse>> {
+  ): Promise<ApiResponse<LeadListResult>> {
     return this.bulkhead.run(async () => {
       const searchParams = new URLSearchParams();
       if (filters) {
@@ -71,27 +66,27 @@ class LeadsClient {
           if (value !== undefined) searchParams.append(key, String(value));
         });
       }
-      return apiFetch<LeadListResponse>(
+      return apiFetch<LeadListResult>(
         `/api/professional-portal/leads?${searchParams.toString()}`,
       );
     });
   }
 
-  async getLead(leadId: string): Promise<ApiResponse<Lead>> {
+  async getLead(leadId: string): Promise<ApiResponse<LeadDetailResult>> {
     if (!isValidId(leadId)) {
       return { success: false, error: "Invalid lead ID" };
     }
     return this.bulkhead.run(() =>
-      apiFetch<Lead>(`/api/professional-portal/leads/${leadId}`),
+      apiFetch<LeadDetailResult>(`/api/professional-portal/leads/${leadId}`),
     );
   }
 
   async createLead(
     data: CreateLeadClientInput,
-  ): Promise<ApiResponse<LeadList>> {
+  ): Promise<ApiResponse<LeadListItem>> {
     const { idempotencyKey, ...payload } = data;
     return this.bulkhead.run(() =>
-      apiFetch<LeadList>("/api/professional-portal/leads", {
+      apiFetch<LeadListItem>("/api/professional-portal/leads", {
         method: "POST",
         body: JSON.stringify(payload),
         headers: idempotencyKey
@@ -103,12 +98,12 @@ class LeadsClient {
 
   async updateLead(
     input: UpdateLeadClientInput,
-  ): Promise<ApiResponse<Lead>> {
+  ): Promise<ApiResponse<LeadDetailResult>> {
     if (!isValidId(input.leadId)) {
       return { success: false, error: "Invalid lead ID" };
     }
     return this.bulkhead.run(() =>
-      apiFetch<Lead>(
+      apiFetch<LeadDetailResult>(
         `/api/professional-portal/leads/${input.leadId}`,
         {
           method: "PATCH",

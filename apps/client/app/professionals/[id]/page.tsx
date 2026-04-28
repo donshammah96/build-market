@@ -35,7 +35,7 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Navbar } from "@/components/layout/NavBar";
 import { Footer } from "@/components/layout/Footer";
-import type { ProfessionalDetailResult } from "@/lib/services/professionals";
+import type { ProfessionalDetailResult } from "@/app/lib/domains/professionals";
 import type { Portfolio, ProfessionalReview } from "@/types/professional";
 import {
   Dialog,
@@ -157,7 +157,7 @@ const ProfileHeader = memo(function ProfileHeader({
         <CardContent className="p-8">
           <div className="flex flex-col md:flex-row gap-8">
             {/* Profile Image */}
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               <Avatar className="h-32 w-32 rounded-lg">
                 <AvatarImage
                   src={
@@ -308,8 +308,8 @@ const PortfolioCard = memo(function PortfolioCard({
       <Card className="overflow-hidden hover-lift h-full">
         <div className="aspect-video overflow-hidden bg-slate-200">
           <ImageWithFallback
-            src={portfolio?.images?.[0]?.url ?? ""}
-            alt={portfolio.title}
+            src={portfolio.images?.[0]?.url ?? ""}
+            alt={portfolio.title ?? "Portfolio image"}
             className="w-full h-full object-cover img-zoom transition-transform duration-300"
           />
         </div>
@@ -492,7 +492,7 @@ const ContactDialog = memo(function ContactDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-125 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Contact {professional.companyName}</DialogTitle>
           <DialogDescription>
@@ -613,7 +613,7 @@ const ContactDialog = memo(function ContactDialog({
                   <FormControl>
                     <Textarea
                       placeholder="Describe your project..."
-                      className="min-h-[100px]"
+                      className="min-h-25"
                       {...field}
                     />
                   </FormControl>
@@ -664,7 +664,7 @@ const ProfileTabs = memo(function ProfileTabs({
       style={{ animationDelay: "200ms" }}
     >
       <Tabs defaultValue="about" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+        <TabsList className="grid w-full grid-cols-3 lg:w-100">
           <TabsTrigger value="about">About</TabsTrigger>
           <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
           <TabsTrigger value="reviews">Reviews</TabsTrigger>

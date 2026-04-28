@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 import { useInquiries } from "@/hooks/useInquiries";
-import type { PropertyInquiryList } from "@/lib/inquiries-client";
+import type { InquiryListItem } from "@/app/lib/domains/inquiries/contracts";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,8 +36,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-
-// We import PropertyInquiryList instead of redefining it locally
 
 const statusConfig: Record<string, { color: string; label: string }> = {
   new: {
@@ -94,12 +92,7 @@ export default function InquiriesPage() {
       : {},
   );
 
-  // Ensure inquiries is always an array
-  const inquiries: PropertyInquiryList[] = useMemo(() => {
-    if (!inquiriesData) return [];
-    if (Array.isArray(inquiriesData)) return inquiriesData;
-    return [];
-  }, [inquiriesData]);
+  const inquiries = useMemo(() => inquiriesData?.data ?? [], [inquiriesData]);
 
   // Filter inquiries by search query
   const filteredInquiries = useMemo(() => {
@@ -108,7 +101,7 @@ export default function InquiriesPage() {
     return inquiries.filter(
       (inq) =>
         inq.clientName.toLowerCase().includes(query) ||
-        inq.propertyTitle.toLowerCase().includes(query) ||
+        inq.property.title.toLowerCase().includes(query) ||
         inq.message?.toLowerCase().includes(query) ||
         inq.clientPhone?.includes(query),
     );
@@ -275,7 +268,7 @@ export default function InquiriesPage() {
   );
 }
 
-function InquiryCard({ inquiry }: { inquiry: PropertyInquiryList }) {
+function InquiryCard({ inquiry }: { inquiry: InquiryListItem }) {
   const status = (statusConfig[inquiry.status.toLowerCase()] ??
     statusConfig.new) as {
     color: string;
@@ -306,7 +299,7 @@ function InquiryCard({ inquiry }: { inquiry: PropertyInquiryList }) {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-zinc-900 text-lg">
-                  {inquiry.propertyTitle}
+                  {inquiry.property.title}
                 </h3>
                 <div className="flex items-center gap-2 mt-1">
                   <Building2 className="h-3.5 w-3.5 text-zinc-400" />

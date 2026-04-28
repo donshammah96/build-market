@@ -1,110 +1,42 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  userProfileClient,
+  type ProfileCompletion,
+  type UserProfile,
+  type ClientProfileData,
+  type ProfessionalProfileData,
+  type ProfileStatusResponse,
+  type ProfileUpdateData,
+} from "@/lib/user-profile-client";
 
 /**
  * Profile completion data structure returned from API
  */
-export interface ProfileCompletion {
-  percentage: number;
-  isComplete: boolean;
-  missingRequired: string[];
-  missingRequiredLabels: string[];
-  missingOptional: string[];
-  filledFields: string[];
-  requiredPercentage?: number;
-  optionalPercentage?: number;
-}
-
-export interface UserProfile {
-  id: string;
-  clerkId: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  phone: string | null;
-  avatar: string | null;
-  bio?: string | null;
-  role: "client" | "professional" | "admin";
-  isProfileComplete: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ClientProfileData {
-  userId: string;
-  address: string | null;
-  city: string | null;
-  county: string | null;
-  zipCode: string | null;
-  preferences: Record<string, unknown> | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ProfessionalProfileData {
-  userId: string;
-  companyName: string;
-  profession: string | null;
-  licenseNumber: string | null;
-  earbNumber?: string | null;
-  storeData?: any | null;
-  yearsExperience: number | null;
-  servicesOffered: string[];
-  portfolioUrl: string | null;
-  website: string | null;
-  bio: string | null;
-  city: string | null;
-  county: string | null;
-  country: string | null;
-  verified: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ProfileStatusResponse {
-  user: UserProfile;
-  profile: ClientProfileData | ProfessionalProfileData | null;
-  completion: ProfileCompletion;
-}
-
-interface ProfileUpdateData {
-  firstName?: string;
-  lastName?: string;
-  phone?: string;
-  avatar?: string | null;
-  // Client-specific
-  address?: string | null;
-  city?: string | null;
-  county?: string | null;
-  zipCode?: string | null;
-  // Professional-specific
-  companyName?: string | null;
-  licenseNumber?: string | null;
-  yearsExperience?: number | null;
-  servicesOffered?: string[] | null;
-  bio?: string | null;
-  website?: string | null;
-  portfolioUrl?: string | null;
-}
+export type {
+  ProfileCompletion,
+  UserProfile,
+  ClientProfileData,
+  ProfessionalProfileData,
+  ProfileStatusResponse,
+};
 
 /**
  * Fetch profile status from API
  */
 async function fetchProfileStatus(): Promise<ProfileStatusResponse | null> {
-  const response = await fetch("/api/user/profile");
+  const result = await userProfileClient.getProfileStatus();
 
-  if (response.status === 404) {
-    // User not in database - needs onboarding
+  if (result.kind === "error") {
+    throw new Error(result.error);
+  }
+
+  if (result.kind === "empty") {
     return null;
   }
 
-  if (!response.ok) {
-    throw new Error("Failed to fetch profile status");
-  }
-
-  const data = await response.json();
-  return data.data;
+  return result.data;
 }
 
 /**
@@ -113,21 +45,12 @@ async function fetchProfileStatus(): Promise<ProfileStatusResponse | null> {
 async function updateProfile(
   data: ProfileUpdateData,
 ): Promise<ProfileStatusResponse> {
-  const response = await fetch("/api/user/profile/complete", {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || "Failed to update profile");
+  const response = await userProfileClient.updateProfile(data);
+  if (!response.success || response.data === undefined) {
+    throw new Error(response.error || "Failed to update profile");
   }
 
-  const result = await response.json();
-  return result.data;
+  return response.data;
 }
 
 /**
@@ -219,7 +142,7 @@ export interface CompletionCategory {
  * Useful for showing completion progress across different sections
  */
 export function useDetailedCompletion() {
-  const { completion, profile, user, isLoading } = useProfileStatus();
+  const { completion, user, isLoading } = useProfileStatus();
 
   // Define categories with their fields
   const getProfessionalCategories = (): CompletionCategory[] => {

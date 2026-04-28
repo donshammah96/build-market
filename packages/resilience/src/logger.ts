@@ -5,6 +5,7 @@
 import { LogContext, LogLevel } from "./types";
 import type { Logger } from "./types";
 import { getConfig } from "./config";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 export interface LogEntry {
   level: LogLevel;
@@ -83,15 +84,26 @@ export class StructuredLogger implements Logger {
     if (!this.shouldLog(level)) return;
 
     const config = getConfig();
+
+    // FIX: Dynamically fetch the current correlation ID at the moment of logging
+    const currentCorrelationId = CorrelationIdManager.get();
+    const dynamicContext = config.logging.includeContext
+      ? {
+          ...this.defaultContext,
+          ...(currentCorrelationId
+            ? { correlationId: currentCorrelationId }
+            : {}),
+          ...context,
+        }
+      : undefined;
+
     const entry: LogEntry = {
       level,
       message,
       timestamp: config.logging.includeTimestamp
         ? new Date().toISOString()
         : "",
-      context: config.logging.includeContext
-        ? { ...this.defaultContext, ...context }
-        : undefined,
+      context: dynamicContext,
     };
 
     if (error) {
@@ -108,14 +120,6 @@ export class StructuredLogger implements Logger {
     } else {
       this.logFormatted(entry);
     }
-  }
-
-  /**
-   * Check if we should use JSON logging
-   * @deprecated Use config.logging.format instead
-   */
-  private shouldLogJson(): boolean {
-    return getConfig().logging.format === "json";
   }
 
   /**
@@ -191,59 +195,64 @@ export class StructuredLogger implements Logger {
 
 /**
  * Correlation ID utilities
+ * FIX: Replaced Map with true Node.js AsyncLocalStorage for thread-safety
  */
-export class CorrelationIdManager {
-  private static storage = new Map<string, string>();
+const asyncLocalStorage = new AsyncLocalStorage<string>();
 
+export class CorrelationIdManager {
   /**
    * Generate a new correlation ID
    */
   static generate(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 
   /**
-   * Set correlation ID for current context
+   * Execute a function within an isolated correlation context.
+   * THIS IS THE PREFERRED METHOD FOR NEXT.JS API ROUTES AND MIDDLEWARE.
+   */
+  static run<T>(correlationId: string, callback: () => T): T {
+    return asyncLocalStorage.run(correlationId, callback);
+  }
+
+  /**
+   * Set correlation ID for current context via enterWith.
+   * Use this for flat contexts (like isolated BullMQ worker threads)
+   * where a wrapper function (.run) is difficult to implement.
    */
   static set(correlationId: string): void {
-    // In Node.js, we'd typically use AsyncLocalStorage
-    // For simplicity, we're using a Map (not thread-safe in true async contexts)
-    const contextId = this.getContextId();
-    this.storage.set(contextId, correlationId);
+    asyncLocalStorage.enterWith(correlationId);
   }
 
   /**
-   * Get correlation ID for current context
+   * Get correlation ID for current context.
+   * Returns undefined when no correlation ID is set — including when clear()
+   * has been called, which stores "" as a sentinel. Callers never see the
+   * empty-string sentinel; they only ever receive a real ID or undefined.
    */
   static get(): string | undefined {
-    const contextId = this.getContextId();
-    return this.storage.get(contextId);
+    const value = asyncLocalStorage.getStore();
+    return value === "" ? undefined : value;
   }
 
   /**
-   * Clear correlation ID for current context
+   * Clear correlation ID for the current async context.
+   *
+   * AsyncLocalStorage requires a value of the declared type (string here).
+   * We use an empty string as the "cleared" sentinel; callers that read the
+   * store should treat both undefined and "" as "no correlation ID set".
    */
   static clear(): void {
-    const contextId = this.getContextId();
-    this.storage.delete(contextId);
-  }
-
-  /**
-   * Get a unique context identifier
-   * In production, use AsyncLocalStorage or similar
-   */
-  private static getContextId(): string {
-    return "global"; // Simplified for demo
+    asyncLocalStorage.enterWith("");
   }
 }
 
 /**
- * Create a logger with correlation ID support
+ * Create a logger.
+ * FIX: Removed eager CorrelationId fetching. The class now handles it dynamically.
  */
 export function createLogger(serviceName: string): Logger {
-  return new StructuredLogger(serviceName, {
-    correlationId: CorrelationIdManager.get(),
-  });
+  return new StructuredLogger(serviceName);
 }
 
 /**

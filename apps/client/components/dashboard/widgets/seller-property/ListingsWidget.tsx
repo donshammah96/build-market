@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
 import {
   Eye,
   MessageSquare,
@@ -36,19 +38,19 @@ export interface ListingsWidgetProps {
 const STATUS_CONFIG = {
   active: {
     label: "Active",
-    color: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    color: "bg-primary/10 text-primary border-primary/30",
   },
   pending: {
     label: "Pending",
-    color: "bg-amber-50 text-amber-700 border-amber-200",
+    color: "bg-muted text-muted-foreground border-border",
   },
   sold: {
     label: "Sold",
-    color: "bg-blue-50 text-blue-700 border-blue-200",
+    color: "bg-secondary text-secondary-foreground border-border",
   },
   rented: {
     label: "Rented",
-    color: "bg-purple-50 text-purple-700 border-purple-200",
+    color: "bg-accent text-accent-foreground border-border",
   },
 } as const;
 
@@ -75,19 +77,19 @@ function PropertyCard({ property }: PropertyCardProps) {
   };
 
   return (
-    <Card className="border border-zinc-200 shadow-sm bg-white overflow-hidden group hover:shadow-md transition-shadow">
+    <Card className="border border-border shadow-sm bg-card overflow-hidden group hover:shadow-md motion-safe:transition-shadow">
       {/* Image */}
-      <div className="relative aspect-[4/3] bg-zinc-100 overflow-hidden">
+      <div className="relative aspect-[4/3] bg-muted overflow-hidden">
         {property.images[0] ? (
           <Image
             src={property.images[0]}
             alt={property.title}
             fill
-            className="object-cover group-hover:scale-105 transition-transform duration-300"
+            className="object-cover group-hover:scale-105 motion-safe:transition-transform duration-300"
           />
         ) : (
           <div className="h-full w-full flex items-center justify-center">
-            <Home className="h-12 w-12 text-zinc-200" />
+            <Home className="h-12 w-12 text-muted-foreground/40" />
           </div>
         )}
         <Badge
@@ -104,20 +106,20 @@ function PropertyCard({ property }: PropertyCardProps) {
       {/* Content */}
       <CardContent className="p-4">
         <div className="mb-2">
-          <h4 className="text-sm font-semibold text-zinc-900 truncate">
+          <h4 className="text-sm font-semibold text-foreground truncate">
             {property.title}
           </h4>
-          <p className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
+          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
             <MapPin className="h-3 w-3" />
             {property.location}
           </p>
         </div>
 
         <div className="flex items-center justify-between">
-          <span className="text-base font-bold text-zinc-900">
+          <span className="text-base font-bold text-foreground">
             {formatPrice(property.price)}
           </span>
-          <div className="flex items-center gap-3 text-zinc-400">
+          <div className="flex items-center gap-3 text-muted-foreground">
             <span className="flex items-center gap-1 text-xs">
               <Eye className="h-3.5 w-3.5" />
               {property.views}
@@ -141,20 +143,20 @@ function ListingsWidgetSkeleton() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="h-5 w-32 bg-zinc-200 rounded animate-pulse" />
-        <div className="h-4 w-20 bg-zinc-200 rounded animate-pulse" />
+        <div className="h-5 w-32 bg-muted rounded motion-safe:animate-pulse" />
+        <div className="h-4 w-20 bg-muted rounded motion-safe:animate-pulse" />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {[1, 2].map((i) => (
           <Card
             key={i}
-            className="border border-zinc-200 shadow-sm bg-white overflow-hidden"
+            className="border border-border shadow-sm bg-card overflow-hidden"
           >
-            <div className="aspect-[4/3] bg-zinc-200 animate-pulse" />
-            <CardContent className="p-4 animate-pulse space-y-2">
-              <div className="h-4 w-3/4 bg-zinc-200 rounded" />
-              <div className="h-3 w-1/2 bg-zinc-200 rounded" />
-              <div className="h-4 w-1/4 bg-zinc-200 rounded" />
+            <div className="aspect-[4/3] bg-muted motion-safe:animate-pulse" />
+            <CardContent className="p-4 motion-safe:animate-pulse space-y-2">
+              <div className="h-4 w-3/4 bg-muted rounded" />
+              <div className="h-3 w-1/2 bg-muted rounded" />
+              <div className="h-4 w-1/4 bg-muted rounded" />
             </CardContent>
           </Card>
         ))}
@@ -172,6 +174,16 @@ export function ListingsWidget({
   isLoading = false,
   className,
 }: ListingsWidgetProps) {
+  const router = useRouter();
+  const [isCreateListingPending, startCreateListingTransition] =
+    useTransition();
+
+  const handleCreateListing = () => {
+    startCreateListingTransition(() => {
+      router.push("/professional-portal/properties/new");
+    });
+  };
+
   if (isLoading) {
     return <ListingsWidgetSkeleton />;
   }
@@ -180,29 +192,36 @@ export function ListingsWidget({
     <div className={cn("space-y-4", className)}>
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-base font-bold text-zinc-900">Active Listings</h3>
+        <h3 className="text-base font-bold text-foreground">Active Listings</h3>
         <Link
           href="/professional-portal/properties"
-          className="text-xs font-medium text-zinc-500 hover:text-zinc-900 flex items-center gap-1 group"
+          className="text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded-sm min-h-11 px-2 py-1.5 inline-flex items-center gap-1 group motion-safe:transition-colors motion-safe:active:scale-[0.98]"
         >
           View All{" "}
-          <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+          <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 motion-safe:transition-transform" />
         </Link>
       </div>
 
       {properties.length === 0 ? (
-        <Card className="border border-zinc-200 shadow-sm bg-white">
+        <Card className="border border-border shadow-sm bg-card">
           <CardContent className="p-12 text-center">
-            <Home className="h-12 w-12 text-zinc-200 mx-auto mb-3" />
-            <p className="text-sm text-zinc-500">No property listings</p>
-            <p className="text-xs text-zinc-400 mt-1">
+            <Home className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">
+              No property listings
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
               Add properties to start attracting buyers
             </p>
-            <Button variant="outline" size="sm" className="mt-4" asChild>
-              <Link href="/professional-portal/properties/new">
-                <Plus className="h-4 w-4 mr-1" />
-                Add Listing
-              </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4 min-h-11 motion-safe:active:scale-[0.98]"
+              isLoading={isCreateListingPending}
+              loadingText="Opening..."
+              onClick={handleCreateListing}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add Listing
             </Button>
           </CardContent>
         </Card>

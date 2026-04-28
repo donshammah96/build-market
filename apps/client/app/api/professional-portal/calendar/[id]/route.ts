@@ -14,22 +14,45 @@ import {
 import { checkBodySize, isValidId } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { UpdateCalendarEventSchema } from "@/app/lib/validation/calendar-validation";
-import {
-  getCalendarEventById,
-  updateCalendarEvent,
-  deleteCalendarEvent,
-} from "@/lib/services/calendar";
+import { calendarService } from "@/app/lib/domains/calendar/service";
 
 const logger = getClientLogger();
 
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
+
+function mapCalendarError(error: {
+  error: string;
+  message?: string;
+  status?: number;
+}) {
+  switch (error.error) {
+    case "forbidden":
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    case "not_found":
+      return apiError("Event not found", HttpStatus.NOT_FOUND);
+    case "client_not_found":
+      return apiError("Client not found", HttpStatus.NOT_FOUND);
+    case "project_not_found":
+      return apiError("Project not found", HttpStatus.NOT_FOUND);
+    case "invalid_date_range":
+      return apiError(
+        "End date must be after start date",
+        HttpStatus.BAD_REQUEST,
+      );
+    default:
+      return apiError(
+        "Calendar request failed",
+        error.status ?? HttpStatus.BAD_REQUEST,
+      );
+  }
+}
 
 /**
  * GET /api/professional-portal/calendar/[id]
  * Get a specific calendar event by ID.
  */
 export const GET = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
+  async (req: NextRequest, authCtx, params) => {
     initializeCorrelationId(req);
     const { id } = params!;
 
@@ -52,7 +75,14 @@ export const GET = withAuth<{ id: string }>(
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      () => getCalendarEventById(dbUserId, id),
+      () =>
+        calendarService.getEventById(
+          {
+            userId: authCtx.dbUserId,
+            role: authCtx.userRole,
+          },
+          id,
+        ),
       { operationName: "get_calendar_event" },
     );
 
@@ -70,8 +100,8 @@ export const GET = withAuth<{ id: string }>(
     if (!data) {
       return apiError("Event not found", HttpStatus.NOT_FOUND);
     }
-    if (data.success === false) {
-      return apiError("Event not found", HttpStatus.NOT_FOUND);
+    if (!data.ok) {
+      return mapCalendarError(data);
     }
 
     return apiSuccess(data.data, HttpStatus.OK);
@@ -83,7 +113,7 @@ export const GET = withAuth<{ id: string }>(
  * Update a specific calendar event.
  */
 export const PATCH = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
+  async (req: NextRequest, authCtx, params) => {
     const correlationId = initializeCorrelationId(req);
     const { id } = params!;
 
@@ -125,7 +155,7 @@ export const PATCH = withAuth<{ id: string }>(
     // Idempotency
     const idempotencyKey =
       req.headers.get("Idempotency-Key") ||
-      IdempotencyService.generateKey(dbUserId, "PATCH", {
+      IdempotencyService.generateKey(authCtx.dbUserId, "PATCH", {
         domain: "calendar_event",
         eventId: id,
         ...updateData,
@@ -134,7 +164,7 @@ export const PATCH = withAuth<{ id: string }>(
     const idempotencyCheck = await IdempotencyService.checkOrCreate(
       idempotencyKey,
       "calendar_event",
-      dbUserId,
+      authCtx.dbUserId,
       "PATCH",
     );
     if (!idempotencyCheck) {
@@ -170,12 +200,20 @@ export const PATCH = withAuth<{ id: string }>(
     logger.info("Updating calendar event", {
       correlationId,
       eventId: id,
-      userId: dbUserId,
+      actorRole: authCtx.userRole,
     });
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      () => updateCalendarEvent(dbUserId, id, updateData),
+      () =>
+        calendarService.updateEvent(
+          {
+            userId: authCtx.dbUserId,
+            role: authCtx.userRole,
+          },
+          id,
+          updateData,
+        ),
       { operationName: "update_calendar_event" },
     );
 
@@ -188,22 +226,13 @@ export const PATCH = withAuth<{ id: string }>(
     }
 
     const data = result.data;
-    if ("error" in data) {
+    if (!data.ok) {
       await IdempotencyService.fail(idempotencyKey);
-      if (data.error === "not_found")
-        return apiError("Event not found", HttpStatus.NOT_FOUND);
-      if (data.error === "start_after_end" || data.error === "end_before_start")
-        return apiError(
-          "End date must be after start date",
-          HttpStatus.BAD_REQUEST,
-        );
-      if (data.error === "client_not_found")
-        return apiError("Client not found", HttpStatus.NOT_FOUND);
-      return apiError("Project not found", HttpStatus.NOT_FOUND);
+      return mapCalendarError(data);
     }
 
     await IdempotencyService.complete(idempotencyKey, data.data);
-    return apiSuccess(data.data, HttpStatus.OK);
+    return apiSuccess(data.data, HttpStatus.OK, correlationId);
   },
 );
 
@@ -212,7 +241,7 @@ export const PATCH = withAuth<{ id: string }>(
  * Delete a specific calendar event (hard delete).
  */
 export const DELETE = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
+  async (req: NextRequest, authCtx, params) => {
     const correlationId = initializeCorrelationId(req);
     const { id } = params!;
 
@@ -236,12 +265,19 @@ export const DELETE = withAuth<{ id: string }>(
     logger.info("Deleting calendar event", {
       correlationId,
       eventId: id,
-      userId: dbUserId,
+      actorRole: authCtx.userRole,
     });
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      () => deleteCalendarEvent(dbUserId, id),
+      () =>
+        calendarService.deleteEvent(
+          {
+            userId: authCtx.dbUserId,
+            role: authCtx.userRole,
+          },
+          id,
+        ),
       { operationName: "delete_calendar_event" },
     );
 
@@ -253,10 +289,10 @@ export const DELETE = withAuth<{ id: string }>(
     }
 
     const data = result.data;
-    if ("error" in data) {
-      return apiError("Event not found", HttpStatus.NOT_FOUND);
+    if (!data.ok) {
+      return mapCalendarError(data);
     }
 
-    return apiSuccess({ message: "Event deleted successfully" }, HttpStatus.OK);
+    return apiSuccess(data.data, HttpStatus.OK, correlationId);
   },
 );

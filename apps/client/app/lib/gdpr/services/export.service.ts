@@ -1,9 +1,14 @@
-// src/services/export.service.ts
 import { prisma } from "@build/db";
-import { addExportJob, ExportJobData, exportQueue } from "@build/queue-server";
-import { ExportStatus } from "@prisma/client";
+import {
+  addExportJob,
+  getExportQueue, // FIX: Changed from direct exportQueue import to lazy getter
+} from "@/app/jobs/export-queue";
+import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import path from "path";
 import fs from "fs";
+
+const logger = new StructuredLogger("export-service");
+const OPERATION_NAME = "data_export_service";
 
 export class ExportService {
   static async requestExport(
@@ -11,6 +16,14 @@ export class ExportService {
     ipAddress: string,
     userAgent: string,
   ) {
+    const correlationId =
+      CorrelationIdManager.get() || CorrelationIdManager.generate();
+
+    logger.info("Processing data export request", {
+      correlationId,
+      operationName: OPERATION_NAME,
+    });
+
     // Check for existing pending/processing exports
     const existing = await prisma.dataExport.findFirst({
       where: {
@@ -22,6 +35,12 @@ export class ExportService {
     });
 
     if (existing) {
+      logger.warn("Export request rejected: existing export in progress", {
+        correlationId,
+        operationName: OPERATION_NAME,
+        existingExportId: existing.id,
+      });
+
       return {
         success: false,
         message: "Export already in progress",
@@ -41,6 +60,12 @@ export class ExportService {
     });
 
     if (recentCompleted) {
+      logger.warn("Export request rejected: rate limited (1 per day)", {
+        correlationId,
+        operationName: OPERATION_NAME,
+        recentExportId: recentCompleted.id,
+      });
+
       return {
         success: false,
         message:
@@ -51,33 +76,52 @@ export class ExportService {
       };
     }
 
-    // Create export record
-    const exportRecord = await prisma.dataExport.create({
-      data: {
+    try {
+      // Create export record
+      const exportRecord = await prisma.dataExport.create({
+        data: {
+          userId,
+          status: "PENDING",
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          ipAddress,
+          userAgent,
+        },
+      });
+
+      // Add to BullMQ queue
+      const job = await addExportJob({
+        exportId: exportRecord.id,
         userId,
-        status: "PENDING",
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         ipAddress,
         userAgent,
-      },
-    });
+      });
 
-    // Add to BullMQ queue
-    const job = await addExportJob({
-      exportId: exportRecord.id,
-      userId,
-      ipAddress,
-      userAgent,
-    });
+      logger.info("Data export queued successfully", {
+        correlationId,
+        operationName: OPERATION_NAME,
+        exportId: exportRecord.id,
+        jobId: job?.id,
+      });
 
-    return {
-      success: true,
-      exportId: exportRecord.id,
-      status: "PENDING",
-      message:
-        "Your data export is being prepared. You will receive an email when ready.",
-      jobId: job.id,
-    };
+      return {
+        success: true,
+        exportId: exportRecord.id,
+        status: "PENDING",
+        message:
+          "Your data export is being prepared. You will receive an email when ready.",
+        jobId: job?.id ?? undefined,
+      };
+    } catch (error) {
+      logger.error(
+        "Failed to enqueue data export request",
+        error instanceof Error ? error : new Error(String(error)),
+        {
+          correlationId,
+          operationName: OPERATION_NAME,
+        },
+      );
+      throw error;
+    }
   }
 
   static async getExportStatus(exportId: string, userId: string) {
@@ -99,7 +143,7 @@ export class ExportService {
       return null;
     }
 
-    // If expired, update status
+    // If expired, update status lazily on read
     if (
       new Date() > exportRecord.expiresAt &&
       exportRecord.status === "READY"
@@ -109,12 +153,20 @@ export class ExportService {
         data: { status: "EXPIRED" },
       });
       exportRecord.status = "EXPIRED";
+
+      logger.info("Lazy-expired data export on status check", {
+        operationName: OPERATION_NAME,
+        exportId,
+      });
     }
 
     return exportRecord;
   }
 
   static async cancelExport(exportId: string, userId: string) {
+    const correlationId =
+      CorrelationIdManager.get() || CorrelationIdManager.generate();
+
     const exportRecord = await prisma.dataExport.findFirst({
       where: { id: exportId, userId },
     });
@@ -123,18 +175,47 @@ export class ExportService {
       throw new Error("Export not found");
     }
 
-    if (exportRecord.status === "PROCESSING") {
-      // Attempt to remove from queue if not started
-      const job = await exportQueue.getJob(exportId);
-      if (job && (await job.isWaiting())) {
-        await job.remove();
-      }
-    }
-
     if (["PENDING", "PROCESSING"].includes(exportRecord.status)) {
+      try {
+        // Always call getJob for test coverage and contract
+        const queue = getExportQueue();
+        const job = await queue.getJob(exportId);
+
+        // Also check isDelayed in case the queue is backed off
+        if (job && ((await job.isWaiting()) || (await job.isDelayed()))) {
+          await job.remove();
+          logger.info("Removed pending export job from queue", {
+            correlationId,
+            operationName: OPERATION_NAME,
+            exportId,
+            jobId: job.id,
+          });
+        }
+      } catch (queueError) {
+        // We log but do not throw here; we still want to mark the DB record cancelled
+        logger.warn(
+          "Failed to remove export job from queue during cancellation",
+          {
+            correlationId,
+            operationName: OPERATION_NAME,
+            exportId,
+            error:
+              queueError instanceof Error
+                ? queueError.message
+                : String(queueError),
+          },
+        );
+      }
+
       await prisma.dataExport.update({
         where: { id: exportId },
         data: { status: "CANCELLED" },
+      });
+
+      logger.info("Export cancelled successfully", {
+        correlationId,
+        operationName: OPERATION_NAME,
+        exportId,
       });
 
       return { success: true, message: "Export cancelled" };
@@ -195,6 +276,11 @@ export class ExportService {
         downloadedAt: new Date(),
         downloadCount: { increment: 1 },
       },
+    });
+
+    logger.info("Data export downloaded", {
+      operationName: OPERATION_NAME,
+      exportId,
     });
 
     return { success: true };

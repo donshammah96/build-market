@@ -6,6 +6,14 @@ import {
 } from "@/app/lib/api/api-middleware";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@build/db";
+import { env } from "@/app/lib/infrastructure/env";
+
+const mockLogger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
 
 // Mock dependencies
 vi.mock("@clerk/nextjs/server", () => ({
@@ -25,9 +33,10 @@ vi.mock("@build/db", () => ({
     CLIENT: "CLIENT",
     PROFESSIONAL: "PROFESSIONAL",
     ADMIN: "ADMIN",
-    SUPPORT: "SUPPORT",
   },
   UserStatus: {
+    ONBOARDING: "ONBOARDING",
+    PENDING_VERIFICATION: "PENDING_VERIFICATION",
     ACTIVE: "ACTIVE",
     SUSPENDED: "SUSPENDED",
     BANNED: "BANNED",
@@ -40,7 +49,6 @@ vi.mock("@build/db", () => ({
     SUPPORT_AGENT: "SUPPORT_AGENT",
     FINANCE_MANAGER: "FINANCE_MANAGER",
     AUDITOR: "AUDITOR",
-    SYSTEM_ADMIN: "SYSTEM_ADMIN",
   },
 }));
 
@@ -66,12 +74,7 @@ vi.mock("@/app/lib/api/api-response", () => ({
 
 vi.mock("@/app/lib/api/resilient-api", () => ({
   initializeCorrelationId: vi.fn().mockReturnValue("test-correlation-id"),
-  getClientLogger: vi.fn().mockReturnValue({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  }),
+  getClientLogger: vi.fn().mockReturnValue(mockLogger),
 }));
 
 vi.mock("@build/resilience", () => ({
@@ -104,16 +107,45 @@ function mockActiveUser(overrides: Record<string, unknown> = {}) {
 async function setupAuthMocks(
   clerkId: string | null,
   user: Record<string, unknown> | null = null,
+  sessionClaims: Record<string, unknown> | null = null,
 ) {
   const { auth } = await import("@clerk/nextjs/server");
-  vi.mocked(auth).mockResolvedValue({ userId: clerkId } as any);
+  vi.mocked(auth).mockResolvedValue({ userId: clerkId, sessionClaims } as any);
   vi.mocked(prisma.user.findUnique).mockResolvedValue(user as any);
 }
 
+function expectNoIdentityMetadataInLogs() {
+  const bannedKeys = ["userId", "clerkId", "userEmail"];
+  const calls = [
+    ...mockLogger.info.mock.calls,
+    ...mockLogger.warn.mock.calls,
+    ...mockLogger.error.mock.calls,
+    ...mockLogger.debug.mock.calls,
+  ];
+
+  for (const call of calls) {
+    for (const arg of call) {
+      if (!arg || typeof arg !== "object" || arg instanceof Error) {
+        continue;
+      }
+
+      for (const bannedKey of bannedKeys) {
+        expect(arg).not.toHaveProperty(bannedKey);
+      }
+    }
+  }
+}
+
 describe("API Middleware", () => {
+  const runtimeEnv = env as any;
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+    runtimeEnv.auth.bypassEnabled = false;
+    runtimeEnv.isDev = false;
+    runtimeEnv.isCI = false;
+    runtimeEnv.appUrl = "http://localhost:3500";
   });
 
   // =========================================================================
@@ -121,9 +153,10 @@ describe("API Middleware", () => {
   // =========================================================================
   describe("withAuth", () => {
     it("should allow local development BYPASS_AUTH on localhost", async () => {
-      vi.stubEnv("BYPASS_AUTH", "true");
-      vi.stubEnv("NODE_ENV", "development");
-      vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3500");
+      runtimeEnv.auth.bypassEnabled = true;
+      runtimeEnv.isDev = true;
+      runtimeEnv.isCI = false;
+      runtimeEnv.appUrl = "http://localhost:3500";
 
       const mockHandler = vi
         .fn()
@@ -144,13 +177,14 @@ describe("API Middleware", () => {
         }),
         undefined,
       );
+      expectNoIdentityMetadataInLogs();
     });
 
     it("should block BYPASS_AUTH in CI", async () => {
-      vi.stubEnv("BYPASS_AUTH", "true");
-      vi.stubEnv("NODE_ENV", "development");
-      vi.stubEnv("CI", "true");
-      vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3500");
+      runtimeEnv.auth.bypassEnabled = true;
+      runtimeEnv.isDev = true;
+      runtimeEnv.isCI = true;
+      runtimeEnv.appUrl = "http://localhost:3500";
 
       const mockHandler = vi.fn();
       const wrappedHandler = withAuth(mockHandler);
@@ -165,9 +199,10 @@ describe("API Middleware", () => {
     });
 
     it("should block BYPASS_AUTH for non-local request hosts", async () => {
-      vi.stubEnv("BYPASS_AUTH", "true");
-      vi.stubEnv("NODE_ENV", "development");
-      vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3500");
+      runtimeEnv.auth.bypassEnabled = true;
+      runtimeEnv.isDev = true;
+      runtimeEnv.isCI = false;
+      runtimeEnv.appUrl = "http://localhost:3500";
 
       const mockHandler = vi.fn();
       const wrappedHandler = withAuth(mockHandler);
@@ -192,19 +227,160 @@ describe("API Middleware", () => {
       const wrappedHandler = withAuth(mockHandler);
       const request = new NextRequest("http://localhost:3500/test");
 
-      await wrappedHandler(request);
+      const response = await wrappedHandler(request);
 
       expect(mockHandler).toHaveBeenCalledWith(
         request,
         expect.objectContaining({
           clerkId: "clerk_123",
           dbUserId: "db_user_123",
-          userEmail: "test@example.com",
           userRole: "CLIENT",
           adminRole: undefined,
         }),
         undefined,
       );
+      expect(response.headers.get("Cache-Control")).toBe("no-store, private");
+      expect(response.headers.get("Pragma")).toBe("no-cache");
+      expect(response.headers.get("Expires")).toBe("0");
+    });
+
+    it("blocks requests requiring recent authentication when claims are stale", async () => {
+      const user = mockActiveUser();
+      const nowSeconds = Math.floor(Date.now() / 1000);
+
+      await setupAuthMocks("clerk_123", user, {
+        iat: nowSeconds - 900,
+      });
+
+      const mockHandler = vi.fn();
+      const wrappedHandler = withAuth(mockHandler, {
+        recentAuth: { maxAgeSeconds: 300 },
+      });
+      const request = new NextRequest("http://localhost:3500/test", {
+        method: "POST",
+      });
+
+      const response = await wrappedHandler(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.error).toContain("Recent authentication required");
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it("blocks requests requiring recent authentication when token freshness claim is missing", async () => {
+      const user = mockActiveUser();
+
+      await setupAuthMocks("clerk_123", user, {});
+
+      const mockHandler = vi.fn();
+      const wrappedHandler = withAuth(mockHandler, {
+        recentAuth: { maxAgeSeconds: 300 },
+      });
+      const request = new NextRequest("http://localhost:3500/test", {
+        method: "POST",
+      });
+
+      const response = await wrappedHandler(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.error).toContain("Recent authentication required");
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it("allows requests requiring recent authentication when token is fresh", async () => {
+      const user = mockActiveUser();
+      const nowSeconds = Math.floor(Date.now() / 1000);
+
+      await setupAuthMocks("clerk_123", user, {
+        auth_time: nowSeconds - 120,
+      });
+
+      const mockHandler = vi
+        .fn()
+        .mockResolvedValue(NextResponse.json({ success: true }));
+      const wrappedHandler = withAuth(mockHandler, {
+        recentAuth: { maxAgeSeconds: 300 },
+      });
+      const request = new NextRequest("http://localhost:3500/test", {
+        method: "POST",
+      });
+
+      const response = await wrappedHandler(request);
+
+      expect(response.status).toBe(200);
+      expect(mockHandler).toHaveBeenCalled();
+    });
+
+    it("blocks authenticated unsafe mutations from untrusted origins", async () => {
+      const user = mockActiveUser();
+      await setupAuthMocks("clerk_123", user);
+      vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3500");
+      vi.stubEnv("NEXT_PUBLIC_API_URL", "http://localhost:3500/api");
+
+      const mockHandler = vi.fn();
+      const wrappedHandler = withAuth(mockHandler);
+      const request = new NextRequest("http://localhost:3500/test", {
+        method: "POST",
+        headers: {
+          origin: "https://evil.example",
+          cookie: "__session=test",
+        },
+      });
+
+      const response = await wrappedHandler(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.error).toContain("Cross-site authenticated mutation blocked");
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it("blocks authenticated unsafe mutations without origin when cookies are present", async () => {
+      const user = mockActiveUser();
+      await setupAuthMocks("clerk_123", user);
+
+      const mockHandler = vi.fn();
+      const wrappedHandler = withAuth(mockHandler);
+      const request = new NextRequest("http://localhost:3500/test", {
+        method: "PATCH",
+        headers: {
+          cookie: "__session=test",
+        },
+      });
+
+      const response = await wrappedHandler(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.error).toContain("Origin header required");
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it("allows authenticated unsafe mutations from trusted origins", async () => {
+      const user = mockActiveUser();
+      await setupAuthMocks("clerk_123", user);
+      vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3500");
+      vi.stubEnv("NEXT_PUBLIC_API_URL", "http://localhost:3500/api");
+
+      const mockHandler = vi
+        .fn()
+        .mockResolvedValue(NextResponse.json({ success: true }));
+      const wrappedHandler = withAuth(mockHandler);
+      const request = new NextRequest("http://localhost:3500/test", {
+        method: "POST",
+        headers: {
+          origin: "http://localhost:3500",
+          cookie: "__session=test",
+        },
+      });
+
+      const response = await wrappedHandler(request);
+
+      expect(response.status).toBe(200);
+      expect(mockHandler).toHaveBeenCalled();
+      expect(response.headers.get("Cache-Control")).toBe("no-store, private");
     });
 
     it("should return 401 when not authenticated", async () => {
@@ -459,12 +635,15 @@ describe("API Middleware", () => {
         .fn()
         .mockResolvedValue(NextResponse.json({ success: true }));
 
-      const wrappedHandler = withRole(["ADMIN", "SUPPORT"] as any)(mockHandler);
+      const wrappedHandler = withRole(["ADMIN", "PROFESSIONAL"] as any)(
+        mockHandler,
+      );
       const request = new NextRequest("http://localhost:3500/test");
 
       const response = await wrappedHandler(request);
       expect(response.status).toBe(200);
       expect(mockHandler).toHaveBeenCalled();
+      expectNoIdentityMetadataInLogs();
     });
   });
 
@@ -507,20 +686,6 @@ describe("API Middleware", () => {
       const wrappedHandler = withAdminRole(["FINANCE_MANAGER"] as any)(
         mockHandler,
       );
-      const request = new NextRequest("http://localhost:3500/test");
-
-      const response = await wrappedHandler(request);
-      expect(response.status).toBe(200);
-      expect(mockHandler).toHaveBeenCalled();
-    });
-
-    it("should allow SYSTEM_ADMIN to bypass any admin role check", async () => {
-      await setupAdmin("SYSTEM_ADMIN");
-
-      const mockHandler = vi
-        .fn()
-        .mockResolvedValue(NextResponse.json({ success: true }));
-      const wrappedHandler = withAdminRole(["AUDITOR"] as any)(mockHandler);
       const request = new NextRequest("http://localhost:3500/test");
 
       const response = await wrappedHandler(request);

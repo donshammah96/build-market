@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { env } from "@/app/lib/infrastructure/env";
 
 export function ensureValidInternalSecret(receivedSecret: string | null) {
-  const expectedSecret = process.env.INTERNAL_API_SECRET;
+  const expectedSecret = env.services.internalApiSecret;
   if (!expectedSecret) {
     return NextResponse.json(
       { error: "Internal API secret is not configured" },

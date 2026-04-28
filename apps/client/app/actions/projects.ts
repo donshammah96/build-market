@@ -1,26 +1,14 @@
 "use server";
 
-import {
-  createProject,
-  getProject,
-  getUserProjects,
-  getProfessionalProjects,
-  getProjectById,
-  createProfessionalProject,
-  updateProject,
-  deleteProject,
-  getMilestones,
-  createMilestone,
-  updateMilestone,
-  deleteMilestone,
-} from "@/lib/services/projects";
+import { z } from "zod";
 import type {
   CreateProjectInput,
   UpdateProjectInput,
   ProjectQueryInput,
   CreateMilestoneInput,
   UpdateMilestoneInput,
-} from "@/lib/services/projects";
+} from "@/app/lib/validation/projects-validation";
+import { projectsService, type ProjectActor } from "@/app/lib/domains/projects";
 import {
   CreateProjectSchema,
   UpdateProjectSchema,
@@ -30,104 +18,169 @@ import {
 } from "@/app/lib/validation/projects-validation";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
 import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
-import { isValidId } from "@/app/lib/utils/validators";
-import { auth } from "@clerk/nextjs/server";
+import {
+  createActionFailure,
+  executeThrowingSecureAction,
+  resolveRequiredActionActor,
+  throwActionFailure,
+  unwrapResultOrThrow,
+} from "@/app/lib/actions/secure-action";
 import { prisma } from "@build/db";
 import { revalidatePath } from "next/cache";
-import { canManageProject } from "@/app/lib/security/policies";
-
-/**
- * Resolve Clerk userId to database user ID.
- */
-async function resolveDbUserId(): Promise<string> {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) throw new Error("Unauthorized");
-
-  const user = await prisma.user.findUnique({
-    where: { clerkId },
-    select: { id: true },
-  });
-  if (!user) throw new Error("User not found");
-
-  return user.id;
-}
 
 // ─── Client-side (existing) ─────────────────────────────────────────────────
 
 /** Action input: CreateProjectSchema without clientId (injected from auth) */
 const CreateProjectActionSchema = CreateProjectSchema.omit({ clientId: true });
+const CreateProjectActionEnvelopeSchema = CreateProjectActionSchema.extend({
+  idempotencyKey: z.string().optional(),
+});
+const CreateProfessionalProjectActionSchema = CreateProjectSchema.extend({
+  idempotencyKey: z.string().optional(),
+});
+const ProjectIdActionSchema = z.object({
+  id: z.string().uuid("Invalid project ID"),
+});
+const ProjectFiltersSchema = ProjectQuerySchema.partial();
+const UpdateProjectActionSchema = z.object({
+  projectId: z.string().uuid("Invalid project ID"),
+  data: UpdateProjectSchema,
+  version: z.number().int().min(0),
+  idempotencyKey: z.string().optional(),
+});
+const DeleteProjectActionSchema = z.object({
+  projectId: z.string().uuid("Invalid project ID"),
+  version: z.number().int().min(0),
+  idempotencyKey: z.string().optional(),
+});
+const CreateMilestoneActionSchema = CreateMilestoneSchema.extend({
+  projectId: z.string().uuid("Invalid project ID"),
+  idempotencyKey: z.string().optional(),
+});
+const UpdateMilestoneActionSchema = z.object({
+  projectId: z.string().uuid("Invalid project ID"),
+  milestoneId: z.string().uuid("Invalid milestone ID"),
+  data: UpdateMilestoneSchema,
+  version: z.number().int().min(0),
+  idempotencyKey: z.string().optional(),
+});
+const DeleteMilestoneActionSchema = z.object({
+  projectId: z.string().uuid("Invalid project ID"),
+  milestoneId: z.string().uuid("Invalid milestone ID"),
+  version: z.number().int().min(0),
+  idempotencyKey: z.string().optional(),
+});
+const UserProjectsActionSchema = z.object({
+  role: z.enum(["CLIENT", "PROFESSIONAL"]).default("CLIENT"),
+});
+
+function toProjectActor(
+  actor: Awaited<ReturnType<typeof resolveRequiredActionActor>>,
+): ProjectActor {
+  return {
+    userId: actor.dbUserId,
+    role:
+      actor.role === "CLIENT" || actor.role === "ADMIN"
+        ? actor.role
+        : "PROFESSIONAL",
+  };
+}
 
 export type CreateProjectActionInput = Omit<CreateProjectInput, "clientId"> & {
   idempotencyKey?: string;
 };
 
 export async function createProjectAction(data: CreateProjectActionInput) {
-  const dbUserId = await resolveDbUserId();
+  return executeThrowingSecureAction({
+    input: data,
+    schema: CreateProjectActionEnvelopeSchema,
+    handler: async ({ actor, input }) => {
+      const { idempotencyKey: clientKey, ...rest } = input;
+      const payload = { ...rest, clientId: actor!.dbUserId };
+      const idempotencyKey =
+        clientKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "POST", payload);
 
-  const { idempotencyKey: clientKey, ...rest } = data;
-  const parsed = CreateProjectActionSchema.safeParse(rest);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid project data");
-  }
+      const idempotencyCheck = await IdempotencyService.checkOrCreate<unknown>(
+        idempotencyKey,
+        "project",
+        actor!.dbUserId,
+        "POST",
+        undefined,
+        PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      );
 
-  const payload = { ...parsed.data, clientId: dbUserId };
-  const idempotencyKey =
-    clientKey ?? IdempotencyService.generateKey(dbUserId, "POST", payload);
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
+        revalidatePath("/projects");
+        return idempotencyCheck.response;
+      }
 
-  const idempotencyCheck = await IdempotencyService.checkOrCreate<any>(
-    idempotencyKey,
-    "project",
-    dbUserId,
-    "POST",
-    undefined,
-    PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
+          ),
+        );
+      }
 
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath("/projects");
-    return idempotencyCheck.response;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  try {
-    const project = await createProject(payload);
-    await IdempotencyService.complete(idempotencyKey, project);
-    revalidatePath("/projects");
-    return project;
-  } catch (err) {
-    await IdempotencyService.fail(idempotencyKey);
-    throw err;
-  }
+      try {
+        const project = unwrapResultOrThrow(
+          await projectsService.createProject({
+            actor: toProjectActor(actor!),
+            userId: actor!.dbUserId,
+            role: actor!.role ?? "CLIENT",
+            data: payload,
+          }),
+          "Failed to create project",
+        );
+        await IdempotencyService.complete(idempotencyKey, project);
+        revalidatePath("/projects");
+        return project;
+      } catch (error) {
+        await IdempotencyService.fail(idempotencyKey);
+        throw error;
+      }
+    },
+  });
 }
 
 export async function getProjectAction(id: string) {
-  const dbUserId = await resolveDbUserId();
-  if (!isValidId(id)) throw new Error("Invalid project ID");
-
-  const project = await getProject(id);
-  if (!project) throw new Error("Project not found");
-
-  const isClient = project.clientId === dbUserId;
-  const isProfessional = canManageProject({
-    actorId: dbUserId,
-    projectProfessionalId: project.professionalId,
+  return executeThrowingSecureAction({
+    input: { id },
+    schema: ProjectIdActionSchema,
+    handler: async ({ actor, input }) => {
+      return unwrapResultOrThrow(
+        await projectsService.getProjectDetail(
+          input.id,
+          toProjectActor(actor!),
+        ),
+        "Project not found",
+      );
+    },
   });
-  if (!isClient && !isProfessional) {
-    throw new Error("Not authorized to view this project");
-  }
-
-  return project;
 }
 
 export async function getUserProjectsAction(
-  role: "client" | "professional" = "client",
+  role: "CLIENT" | "PROFESSIONAL" = "CLIENT",
 ) {
-  const dbUserId = await resolveDbUserId();
-  return await getUserProjects(dbUserId, role);
+  return executeThrowingSecureAction({
+    input: { role },
+    schema: UserProjectsActionSchema,
+    handler: async ({ actor, input }) =>
+      unwrapResultOrThrow(
+        await projectsService.listUserProjects({
+          actor: toProjectActor(actor!),
+          userId: actor!.dbUserId,
+          role: input.role,
+        }),
+        "Failed to fetch projects",
+      ),
+  });
 }
 
 // ─── Professional Portal ────────────────────────────────────────────────────
@@ -135,27 +188,36 @@ export async function getUserProjectsAction(
 export async function getProfessionalProjectsAction(
   filters?: Partial<ProjectQueryInput>,
 ) {
-  const dbUserId = await resolveDbUserId();
-  const defaultFilters: ProjectQueryInput = {
-    page: 1,
-    limit: PROJECT_CONFIG.DEFAULT_LIMIT,
-    ...filters,
-  };
-  const parsed = ProjectQuerySchema.safeParse(defaultFilters);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid query parameters");
-  }
-  return getProfessionalProjects(dbUserId, parsed.data);
+  return executeThrowingSecureAction({
+    input: filters,
+    schema: ProjectFiltersSchema.optional(),
+    handler: async ({ actor, input }) =>
+      unwrapResultOrThrow(
+        await projectsService.listProjects({
+          actor: toProjectActor(actor!),
+          userId: actor!.dbUserId,
+          page: input?.page ?? 1,
+          limit: input?.limit ?? PROJECT_CONFIG.DEFAULT_LIMIT,
+          status: input?.status,
+        }),
+        "Failed to fetch projects",
+      ),
+  });
 }
 
 export async function getProjectByIdAction(projectId: string) {
-  const dbUserId = await resolveDbUserId();
-  if (!isValidId(projectId)) throw new Error("Invalid project ID");
-
-  const project = await getProjectById(projectId, dbUserId);
-  if (!project) throw new Error("Project not found");
-  return project;
+  return executeThrowingSecureAction({
+    input: { id: projectId },
+    schema: ProjectIdActionSchema,
+    handler: async ({ actor, input }) =>
+      unwrapResultOrThrow(
+        await projectsService.getProjectDetail(
+          input.id,
+          toProjectActor(actor!),
+        ),
+        "Project not found",
+      ),
+  });
 }
 
 export type CreateProfessionalProjectActionInput = CreateProjectInput & {
@@ -165,46 +227,61 @@ export type CreateProfessionalProjectActionInput = CreateProjectInput & {
 export async function createProfessionalProjectAction(
   data: CreateProfessionalProjectActionInput,
 ) {
-  const dbUserId = await resolveDbUserId();
+  return executeThrowingSecureAction({
+    input: data,
+    schema: CreateProfessionalProjectActionSchema,
+    handler: async ({ actor, input }) => {
+      const { idempotencyKey: clientKey, ...payload } = input;
+      const idempotencyKey =
+        clientKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "POST", payload);
 
-  const { idempotencyKey: clientKey, ...rest } = data;
-  const parsed = CreateProjectSchema.safeParse(rest);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid project data");
-  }
+      const idempotencyCheck = await IdempotencyService.checkOrCreate<unknown>(
+        idempotencyKey,
+        "project",
+        actor!.dbUserId,
+        "POST",
+        undefined,
+        PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      );
 
-  const payload = parsed.data;
-  const idempotencyKey =
-    clientKey ?? IdempotencyService.generateKey(dbUserId, "POST", payload);
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
+        revalidatePath("/professional-portal/projects");
+        return idempotencyCheck.response;
+      }
 
-  const idempotencyCheck = await IdempotencyService.checkOrCreate<any>(
-    idempotencyKey,
-    "project",
-    dbUserId,
-    "POST",
-    undefined,
-    PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
+          ),
+        );
+      }
 
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath("/professional-portal/projects");
-    return idempotencyCheck.response;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  try {
-    const project = await createProfessionalProject(dbUserId, payload);
-    await IdempotencyService.complete(idempotencyKey, project);
-    revalidatePath("/professional-portal/projects");
-    return project;
-  } catch (err) {
-    await IdempotencyService.fail(idempotencyKey);
-    throw err;
-  }
+      try {
+        const project = unwrapResultOrThrow(
+          await projectsService.createProject({
+            actor: toProjectActor(actor!),
+            userId: actor!.dbUserId,
+            role: actor!.role ?? "professional",
+            data: payload,
+          }),
+          "Failed to create project",
+        );
+        await IdempotencyService.complete(idempotencyKey, project);
+        revalidatePath("/professional-portal/projects");
+        return project;
+      } catch (error) {
+        await IdempotencyService.fail(idempotencyKey);
+        throw error;
+      }
+    },
+  });
 }
 
 export type UpdateProjectActionInput = {
@@ -220,112 +297,124 @@ export type UpdateProjectResult = Awaited<
 >;
 
 export async function updateProjectAction(input: UpdateProjectActionInput) {
-  const dbUserId = await resolveDbUserId();
+  return executeThrowingSecureAction({
+    input,
+    schema: UpdateProjectActionSchema,
+    handler: async ({ actor, input }) => {
+      const projectActor = toProjectActor(actor!);
+      const idempotencyKey =
+        input.idempotencyKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "PATCH", {
+          projectId: input.projectId,
+          ...input.data,
+        });
 
-  if (!isValidId(input.projectId)) throw new Error("Invalid project ID");
-  const parsed = UpdateProjectSchema.safeParse(input.data);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid update data");
-  }
-
-  const idempotencyKey =
-    input.idempotencyKey ??
-    IdempotencyService.generateKey(dbUserId, "PATCH", {
-      projectId: input.projectId,
-      ...input.data,
-    });
-
-  const idempotencyCheck = await IdempotencyService.checkOrCreate<{
-    project: any;
-    version: number;
-  }>(
-    idempotencyKey,
-    "project",
-    dbUserId,
-    "PATCH",
-    input.projectId,
-    PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
-
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath("/professional-portal/projects");
-    revalidatePath(`/professional-portal/projects/${input.projectId}`);
-    return idempotencyCheck.response;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  const context = {
-    correlationId: "",
-    userId: dbUserId,
-    projectId: input.projectId,
-    ipAddress: "",
-    userAgent: "",
-    idempotencyKey,
-  };
-
-  let lastError: Error | undefined;
-  let effectiveVersion = input.version;
-
-  for (
-    let attempt = 0;
-    attempt < PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES;
-    attempt++
-  ) {
-    try {
-      const result = await updateProject(
+      const idempotencyCheck = await IdempotencyService.checkOrCreate<{
+        project: unknown;
+        version: number;
+      }>(
+        idempotencyKey,
+        "project",
+        actor!.dbUserId,
+        "PATCH",
         input.projectId,
-        dbUserId,
-        parsed.data,
-        context,
-        effectiveVersion,
+        PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
       );
 
-      if (result.success && result.data) {
-        const response = {
-          project: result.data.project,
-          version: result.newVersion,
-        };
-        await IdempotencyService.complete(idempotencyKey, response);
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
         revalidatePath("/professional-portal/projects");
         revalidatePath(`/professional-portal/projects/${input.projectId}`);
-        return response;
+        return idempotencyCheck.response;
       }
 
-      if (!result.success && result.error === "not_found")
-        throw new Error("Project not found");
-      if (!result.success && result.error === "forbidden")
-        throw new Error("Forbidden");
-      if (!result.success && result.error === "conflict") {
-        if (attempt >= PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) {
-          throw new Error(
-            "Project was modified by another request. Please refresh and try again.",
-          );
-        }
-        const current = await prisma.project.findUnique({
-          where: { id: input.projectId },
-          select: { version: true },
-        });
-        effectiveVersion = current?.version ?? effectiveVersion + 1;
-        await new Promise((r) =>
-          setTimeout(
-            r,
-            PROJECT_CONFIG.OPTIMISTIC_LOCK_RETRY_DELAY_MS * (attempt + 1),
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
           ),
         );
-        continue;
       }
-    } catch (err) {
-      lastError = err as Error;
-      if (attempt === PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) break;
-    }
-  }
 
-  await IdempotencyService.fail(idempotencyKey);
-  throw lastError ?? new Error("Failed to update project");
+      const context = {
+        correlationId: "",
+        userId: actor!.dbUserId,
+        projectId: input.projectId,
+        ipAddress: "",
+        userAgent: "",
+        idempotencyKey,
+      };
+
+      let lastError: Error | undefined;
+      let effectiveVersion = input.version;
+
+      for (
+        let attempt = 0;
+        attempt < PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES;
+        attempt++
+      ) {
+        const result = await projectsService.updateProject({
+          actor: projectActor,
+          userId: actor!.dbUserId,
+          projectId: input.projectId,
+          data: input.data,
+          context,
+          expectedVersion: effectiveVersion,
+        });
+
+        if (result.ok) {
+          const response = {
+            project: result.data.item,
+            version: result.data.item.version ?? 0,
+          };
+          await IdempotencyService.complete(idempotencyKey, response);
+          revalidatePath("/professional-portal/projects");
+          revalidatePath(`/professional-portal/projects/${input.projectId}`);
+          return response;
+        }
+
+        if (result.error === "conflict") {
+          lastError = new Error(
+            "Project was modified by another request. Please refresh and try again.",
+          );
+          if (attempt >= PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) {
+            break;
+          }
+          const current = await prisma.project.findUnique({
+            where: { id: input.projectId },
+            select: { version: true },
+          });
+          effectiveVersion = current?.version ?? effectiveVersion + 1;
+          await new Promise((resolve) =>
+            setTimeout(
+              resolve,
+              PROJECT_CONFIG.OPTIMISTIC_LOCK_RETRY_DELAY_MS * (attempt + 1),
+            ),
+          );
+          continue;
+        }
+
+        await IdempotencyService.fail(idempotencyKey);
+        throwActionFailure(
+          createActionFailure(
+            result.error === "not_found" ? "not_found" : "forbidden",
+            result.message ??
+              (result.error === "not_found"
+                ? "Project not found"
+                : "Forbidden"),
+            result.error === "not_found" ? 404 : 403,
+          ),
+        );
+      }
+
+      await IdempotencyService.fail(idempotencyKey);
+      throw lastError ?? new Error("Failed to update project");
+    },
+  });
 }
 
 export type DeleteProjectActionInput = {
@@ -335,114 +424,134 @@ export type DeleteProjectActionInput = {
 };
 
 export async function deleteProjectAction(input: DeleteProjectActionInput) {
-  const dbUserId = await resolveDbUserId();
+  return executeThrowingSecureAction({
+    input,
+    schema: DeleteProjectActionSchema,
+    handler: async ({ actor, input }) => {
+      const projectActor = toProjectActor(actor!);
+      const idempotencyKey =
+        input.idempotencyKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "DELETE", {
+          projectId: input.projectId,
+        });
 
-  if (!isValidId(input.projectId)) throw new Error("Invalid project ID");
-
-  const idempotencyKey =
-    input.idempotencyKey ??
-    IdempotencyService.generateKey(dbUserId, "DELETE", {
-      projectId: input.projectId,
-    });
-
-  const idempotencyCheck = await IdempotencyService.checkOrCreate<{
-    message: string;
-    projectId: string;
-    deletedAt: string;
-  }>(
-    idempotencyKey,
-    "project",
-    dbUserId,
-    "DELETE",
-    input.projectId,
-    PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
-
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath("/professional-portal/projects");
-    return idempotencyCheck.response;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  const context = {
-    correlationId: "",
-    userId: dbUserId,
-    projectId: input.projectId,
-    ipAddress: "",
-    userAgent: "",
-    idempotencyKey,
-  };
-
-  let lastError: Error | undefined;
-  let effectiveVersion = input.version;
-
-  for (
-    let attempt = 0;
-    attempt < PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES;
-    attempt++
-  ) {
-    try {
-      const result = await deleteProject(
+      const idempotencyCheck = await IdempotencyService.checkOrCreate<{
+        message: string;
+        projectId: string;
+        deletedAt: string;
+      }>(
+        idempotencyKey,
+        "project",
+        actor!.dbUserId,
+        "DELETE",
         input.projectId,
-        dbUserId,
-        context,
-        effectiveVersion,
+        PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
       );
 
-      if (result.success && result.data) {
-        const response = {
-          message: "Project deleted successfully",
-          projectId: result.data.projectId,
-          deletedAt: new Date().toISOString(),
-        };
-        await IdempotencyService.complete(idempotencyKey, response);
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
         revalidatePath("/professional-portal/projects");
-        return response;
+        return idempotencyCheck.response;
       }
 
-      if (!result.success && result.error === "not_found")
-        throw new Error("Project not found");
-      if (!result.success && result.error === "forbidden")
-        throw new Error("Forbidden");
-      if (!result.success && result.error === "conflict") {
-        if (attempt >= PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) {
-          throw new Error(
-            "Project was modified by another request. Please refresh and try again.",
-          );
-        }
-        const current = await prisma.project.findUnique({
-          where: { id: input.projectId },
-          select: { version: true },
-        });
-        effectiveVersion = current?.version ?? effectiveVersion + 1;
-        await new Promise((r) =>
-          setTimeout(
-            r,
-            PROJECT_CONFIG.OPTIMISTIC_LOCK_RETRY_DELAY_MS * (attempt + 1),
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
           ),
         );
-        continue;
       }
-    } catch (err) {
-      lastError = err as Error;
-      if (attempt === PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) break;
-    }
-  }
 
-  await IdempotencyService.fail(idempotencyKey);
-  throw lastError ?? new Error("Failed to delete project");
+      const context = {
+        correlationId: "",
+        userId: actor!.dbUserId,
+        projectId: input.projectId,
+        ipAddress: "",
+        userAgent: "",
+        idempotencyKey,
+      };
+
+      let lastError: Error | undefined;
+      let effectiveVersion = input.version;
+
+      for (
+        let attempt = 0;
+        attempt < PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES;
+        attempt++
+      ) {
+        const result = await projectsService.deleteProject({
+          actor: projectActor,
+          userId: actor!.dbUserId,
+          projectId: input.projectId,
+          context,
+          expectedVersion: effectiveVersion,
+        });
+
+        if (result.ok) {
+          const response = {
+            message: "Project deleted successfully",
+            projectId: result.data.projectId,
+            deletedAt: new Date().toISOString(),
+          };
+          await IdempotencyService.complete(idempotencyKey, response);
+          revalidatePath("/professional-portal/projects");
+          return response;
+        }
+
+        if (result.error === "conflict") {
+          lastError = new Error(
+            "Project was modified by another request. Please refresh and try again.",
+          );
+          if (attempt >= PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) {
+            break;
+          }
+          const current = await prisma.project.findUnique({
+            where: { id: input.projectId },
+            select: { version: true },
+          });
+          effectiveVersion = current?.version ?? effectiveVersion + 1;
+          await new Promise((resolve) =>
+            setTimeout(
+              resolve,
+              PROJECT_CONFIG.OPTIMISTIC_LOCK_RETRY_DELAY_MS * (attempt + 1),
+            ),
+          );
+          continue;
+        }
+
+        await IdempotencyService.fail(idempotencyKey);
+        throwActionFailure(
+          createActionFailure(
+            result.error === "not_found" ? "not_found" : "forbidden",
+            result.message ??
+              (result.error === "not_found"
+                ? "Project not found"
+                : "Forbidden"),
+            result.error === "not_found" ? 404 : 403,
+          ),
+        );
+      }
+
+      await IdempotencyService.fail(idempotencyKey);
+      throw lastError ?? new Error("Failed to delete project");
+    },
+  });
 }
 
 export async function getMilestonesAction(projectId: string) {
-  const dbUserId = await resolveDbUserId();
-  if (!isValidId(projectId)) throw new Error("Invalid project ID");
-
-  const milestones = await getMilestones(projectId, dbUserId);
-  if (!milestones) throw new Error("Project not found");
-  return milestones;
+  return executeThrowingSecureAction({
+    input: { id: projectId },
+    schema: ProjectIdActionSchema,
+    handler: async ({ actor, input }) =>
+      unwrapResultOrThrow(
+        await projectsService.listMilestones(input.id, toProjectActor(actor!)),
+        "Project not found",
+      ),
+  });
 }
 
 export type CreateMilestoneActionInput = CreateMilestoneInput & {
@@ -451,61 +560,65 @@ export type CreateMilestoneActionInput = CreateMilestoneInput & {
 };
 
 export async function createMilestoneAction(input: CreateMilestoneActionInput) {
-  const dbUserId = await resolveDbUserId();
+  return executeThrowingSecureAction({
+    input,
+    schema: CreateMilestoneActionSchema,
+    handler: async ({ actor, input }) => {
+      const { projectId, idempotencyKey: clientKey, ...data } = input;
+      const projectActor = toProjectActor(actor!);
+      const idempotencyKey =
+        clientKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "POST", {
+          projectId,
+          ...data,
+        });
 
-  if (!isValidId(input.projectId)) throw new Error("Invalid project ID");
+      const idempotencyCheck = await IdempotencyService.checkOrCreate<unknown>(
+        idempotencyKey,
+        "project_milestone",
+        actor!.dbUserId,
+        "POST",
+        undefined,
+        PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      );
 
-  const { projectId, idempotencyKey: clientKey, ...rest } = input;
-  const parsed = CreateMilestoneSchema.safeParse(rest);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid milestone data");
-  }
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
+        revalidatePath(`/professional-portal/projects/${projectId}`);
+        return idempotencyCheck.response;
+      }
 
-  const idempotencyKey =
-    clientKey ??
-    IdempotencyService.generateKey(dbUserId, "POST", {
-      projectId,
-      ...parsed.data,
-    });
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
+          ),
+        );
+      }
 
-  const idempotencyCheck = await IdempotencyService.checkOrCreate<any>(
-    idempotencyKey,
-    "project_milestone",
-    dbUserId,
-    "POST",
-    undefined,
-    PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
-
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath(`/professional-portal/projects/${projectId}`);
-    return idempotencyCheck.response;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  try {
-    const result = await createMilestone(projectId, dbUserId, parsed.data);
-    if (result.error) {
-      if (result.error === "not_found") throw new Error("Project not found");
-      if (result.error === "forbidden") throw new Error("Forbidden");
-      if (result.error === "limit_exceeded")
-        throw new Error(
+      try {
+        const result = unwrapResultOrThrow(
+          await projectsService.createMilestone({
+            actor: projectActor,
+            userId: actor!.dbUserId,
+            projectId,
+            data,
+          }),
           `Maximum ${PROJECT_CONFIG.MAX_MILESTONES_PER_PROJECT} milestones per project`,
         );
-    }
-    if (!result.data) throw new Error("Failed to create milestone");
-
-    await IdempotencyService.complete(idempotencyKey, result.data);
-    revalidatePath(`/professional-portal/projects/${projectId}`);
-    return result.data;
-  } catch (err) {
-    await IdempotencyService.fail(idempotencyKey);
-    throw err;
-  }
+        await IdempotencyService.complete(idempotencyKey, result);
+        revalidatePath(`/professional-portal/projects/${projectId}`);
+        return result;
+      } catch (error) {
+        await IdempotencyService.fail(idempotencyKey);
+        throw error;
+      }
+    },
+  });
 }
 
 export type UpdateMilestoneActionInput = {
@@ -522,115 +635,124 @@ export type UpdateMilestoneResult = Awaited<
 >;
 
 export async function updateMilestoneAction(input: UpdateMilestoneActionInput) {
-  const dbUserId = await resolveDbUserId();
+  return executeThrowingSecureAction({
+    input,
+    schema: UpdateMilestoneActionSchema,
+    handler: async ({ actor, input }) => {
+      const projectActor = toProjectActor(actor!);
+      const idempotencyKey =
+        input.idempotencyKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "PATCH", {
+          projectId: input.projectId,
+          milestoneId: input.milestoneId,
+          ...input.data,
+        });
 
-  if (!isValidId(input.projectId) || !isValidId(input.milestoneId)) {
-    throw new Error("Invalid project or milestone ID");
-  }
-
-  const parsed = UpdateMilestoneSchema.safeParse(input.data);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    throw new Error(first?.message ?? "Invalid update data");
-  }
-
-  const idempotencyKey =
-    input.idempotencyKey ??
-    IdempotencyService.generateKey(dbUserId, "PATCH", {
-      projectId: input.projectId,
-      milestoneId: input.milestoneId,
-      ...input.data,
-    });
-
-  const idempotencyCheck = await IdempotencyService.checkOrCreate<{
-    milestone: any;
-    version: number;
-  }>(
-    idempotencyKey,
-    "project_milestone",
-    dbUserId,
-    "PATCH",
-    input.milestoneId,
-    PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
-
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath(`/professional-portal/projects/${input.projectId}`);
-    return idempotencyCheck.response;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  const context = {
-    correlationId: "",
-    userId: dbUserId,
-    projectId: input.projectId,
-    ipAddress: "",
-    userAgent: "",
-    idempotencyKey,
-  };
-
-  let lastError: Error | undefined;
-  let effectiveVersion = input.version;
-
-  for (
-    let attempt = 0;
-    attempt < PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES;
-    attempt++
-  ) {
-    try {
-      const result = await updateMilestone(
+      const idempotencyCheck = await IdempotencyService.checkOrCreate<{
+        milestone: unknown;
+        version: number;
+      }>(
+        idempotencyKey,
+        "project_milestone",
+        actor!.dbUserId,
+        "PATCH",
         input.milestoneId,
-        input.projectId,
-        dbUserId,
-        parsed.data,
-        context,
-        effectiveVersion,
+        PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
       );
 
-      if (result.success && result.data) {
-        const response = {
-          milestone: result.data.milestone,
-          version: result.newVersion,
-        };
-        await IdempotencyService.complete(idempotencyKey, response);
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
         revalidatePath(`/professional-portal/projects/${input.projectId}`);
-        return response;
+        return idempotencyCheck.response;
       }
 
-      if (!result.success && result.error === "not_found")
-        throw new Error("Milestone not found");
-      if (!result.success && result.error === "forbidden")
-        throw new Error("Forbidden or invalid status transition");
-      if (!result.success && result.error === "conflict") {
-        if (attempt >= PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) {
-          throw new Error(
-            "Milestone was modified by another request. Please refresh and try again.",
-          );
-        }
-        const current = await prisma.projectMilestone.findUnique({
-          where: { id: input.milestoneId },
-          select: { version: true },
-        });
-        effectiveVersion = current?.version ?? effectiveVersion + 1;
-        await new Promise((r) =>
-          setTimeout(
-            r,
-            PROJECT_CONFIG.OPTIMISTIC_LOCK_RETRY_DELAY_MS * (attempt + 1),
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
           ),
         );
-        continue;
       }
-    } catch (err) {
-      lastError = err as Error;
-      if (attempt === PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) break;
-    }
-  }
 
-  await IdempotencyService.fail(idempotencyKey);
-  throw lastError ?? new Error("Failed to update milestone");
+      const context = {
+        correlationId: "",
+        userId: actor!.dbUserId,
+        projectId: input.projectId,
+        ipAddress: "",
+        userAgent: "",
+        idempotencyKey,
+      };
+
+      let lastError: Error | undefined;
+      let effectiveVersion = input.version;
+
+      for (
+        let attempt = 0;
+        attempt < PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES;
+        attempt++
+      ) {
+        const result = await projectsService.updateMilestone({
+          actor: projectActor,
+          userId: actor!.dbUserId,
+          projectId: input.projectId,
+          milestoneId: input.milestoneId,
+          data: input.data,
+          context,
+          expectedVersion: effectiveVersion,
+        });
+
+        if (result.ok) {
+          const response = {
+            milestone: result.data.milestone,
+            version: result.data.newVersion,
+          };
+          await IdempotencyService.complete(idempotencyKey, response);
+          revalidatePath(`/professional-portal/projects/${input.projectId}`);
+          return response;
+        }
+
+        if (result.error === "conflict") {
+          lastError = new Error(
+            "Milestone was modified by another request. Please refresh and try again.",
+          );
+          if (attempt >= PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) {
+            break;
+          }
+          const current = await prisma.projectMilestone.findUnique({
+            where: { id: input.milestoneId },
+            select: { version: true },
+          });
+          effectiveVersion = current?.version ?? effectiveVersion + 1;
+          await new Promise((resolve) =>
+            setTimeout(
+              resolve,
+              PROJECT_CONFIG.OPTIMISTIC_LOCK_RETRY_DELAY_MS * (attempt + 1),
+            ),
+          );
+          continue;
+        }
+
+        await IdempotencyService.fail(idempotencyKey);
+        throwActionFailure(
+          createActionFailure(
+            result.error === "not_found" ? "not_found" : "forbidden",
+            result.message ??
+              (result.error === "not_found"
+                ? "Milestone not found"
+                : "Forbidden or invalid status transition"),
+            result.error === "not_found" ? 404 : 403,
+          ),
+        );
+      }
+
+      await IdempotencyService.fail(idempotencyKey);
+      throw lastError ?? new Error("Failed to update milestone");
+    },
+  });
 }
 
 export type DeleteMilestoneActionInput = {
@@ -641,107 +763,120 @@ export type DeleteMilestoneActionInput = {
 };
 
 export async function deleteMilestoneAction(input: DeleteMilestoneActionInput) {
-  const dbUserId = await resolveDbUserId();
+  return executeThrowingSecureAction({
+    input,
+    schema: DeleteMilestoneActionSchema,
+    handler: async ({ actor, input }) => {
+      const projectActor = toProjectActor(actor!);
+      const idempotencyKey =
+        input.idempotencyKey ??
+        IdempotencyService.generateKey(actor!.dbUserId, "DELETE", {
+          projectId: input.projectId,
+          milestoneId: input.milestoneId,
+        });
 
-  if (!isValidId(input.projectId) || !isValidId(input.milestoneId)) {
-    throw new Error("Invalid project or milestone ID");
-  }
-
-  const idempotencyKey =
-    input.idempotencyKey ??
-    IdempotencyService.generateKey(dbUserId, "DELETE", {
-      projectId: input.projectId,
-      milestoneId: input.milestoneId,
-    });
-
-  const idempotencyCheck = await IdempotencyService.checkOrCreate<{
-    message: string;
-    milestoneId: string;
-  }>(
-    idempotencyKey,
-    "project_milestone",
-    dbUserId,
-    "DELETE",
-    input.milestoneId,
-    PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  );
-
-  if (idempotencyCheck?.status === "completed" && idempotencyCheck.response) {
-    revalidatePath(`/professional-portal/projects/${input.projectId}`);
-    return idempotencyCheck.response;
-  }
-
-  if (idempotencyCheck?.status === "pending") {
-    throw new Error("Request is being processed. Please wait.");
-  }
-
-  const context = {
-    correlationId: "",
-    userId: dbUserId,
-    projectId: input.projectId,
-    ipAddress: "",
-    userAgent: "",
-    idempotencyKey,
-  };
-
-  let lastError: Error | undefined;
-  let effectiveVersion = input.version;
-
-  for (
-    let attempt = 0;
-    attempt < PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES;
-    attempt++
-  ) {
-    try {
-      const result = await deleteMilestone(
+      const idempotencyCheck = await IdempotencyService.checkOrCreate<{
+        message: string;
+        milestoneId: string;
+      }>(
+        idempotencyKey,
+        "project_milestone",
+        actor!.dbUserId,
+        "DELETE",
         input.milestoneId,
-        input.projectId,
-        dbUserId,
-        context,
-        effectiveVersion,
+        PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
       );
 
-      if (result.success && result.data) {
-        const response = {
-          message: "Milestone deleted successfully",
-          milestoneId: result.data.milestoneId,
-        };
-        await IdempotencyService.complete(idempotencyKey, response);
+      if (
+        idempotencyCheck?.status === "completed" &&
+        idempotencyCheck.response
+      ) {
         revalidatePath(`/professional-portal/projects/${input.projectId}`);
-        return response;
+        return idempotencyCheck.response;
       }
 
-      if (!result.success && result.error === "not_found")
-        throw new Error("Milestone not found");
-      if (!result.success && result.error === "forbidden")
-        throw new Error(
-          "Cannot delete milestone with linked escrow transaction",
-        );
-      if (!result.success && result.error === "conflict") {
-        if (attempt >= PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) {
-          throw new Error(
-            "Milestone was modified by another request. Please refresh and try again.",
-          );
-        }
-        const current = await prisma.projectMilestone.findUnique({
-          where: { id: input.milestoneId },
-          select: { version: true },
-        });
-        effectiveVersion = current?.version ?? effectiveVersion + 1;
-        await new Promise((r) =>
-          setTimeout(
-            r,
-            PROJECT_CONFIG.OPTIMISTIC_LOCK_RETRY_DELAY_MS * (attempt + 1),
+      if (idempotencyCheck?.status === "pending") {
+        throwActionFailure(
+          createActionFailure(
+            "conflict",
+            "Request is being processed. Please wait.",
+            409,
           ),
         );
-        continue;
       }
-    } catch (err) {
-      lastError = err as Error;
-      if (attempt === PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) break;
-    }
-  }
 
-  await IdempotencyService.fail(idempotencyKey);
-  throw lastError ?? new Error("Failed to delete milestone");
+      const context = {
+        correlationId: "",
+        userId: actor!.dbUserId,
+        projectId: input.projectId,
+        ipAddress: "",
+        userAgent: "",
+        idempotencyKey,
+      };
+
+      let lastError: Error | undefined;
+      let effectiveVersion = input.version;
+
+      for (
+        let attempt = 0;
+        attempt < PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES;
+        attempt++
+      ) {
+        const result = await projectsService.deleteMilestone({
+          actor: projectActor,
+          userId: actor!.dbUserId,
+          projectId: input.projectId,
+          milestoneId: input.milestoneId,
+          context,
+          expectedVersion: effectiveVersion,
+        });
+
+        if (result.ok) {
+          const response = {
+            message: "Milestone deleted successfully",
+            milestoneId: result.data.milestoneId,
+          };
+          await IdempotencyService.complete(idempotencyKey, response);
+          revalidatePath(`/professional-portal/projects/${input.projectId}`);
+          return response;
+        }
+
+        if (result.error === "conflict") {
+          lastError = new Error(
+            "Milestone was modified by another request. Please refresh and try again.",
+          );
+          if (attempt >= PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) {
+            break;
+          }
+          const current = await prisma.projectMilestone.findUnique({
+            where: { id: input.milestoneId },
+            select: { version: true },
+          });
+          effectiveVersion = current?.version ?? effectiveVersion + 1;
+          await new Promise((resolve) =>
+            setTimeout(
+              resolve,
+              PROJECT_CONFIG.OPTIMISTIC_LOCK_RETRY_DELAY_MS * (attempt + 1),
+            ),
+          );
+          continue;
+        }
+
+        await IdempotencyService.fail(idempotencyKey);
+        throwActionFailure(
+          createActionFailure(
+            result.error === "not_found" ? "not_found" : "forbidden",
+            result.message ??
+              (result.error === "not_found"
+                ? "Milestone not found"
+                : "Cannot delete milestone with linked escrow transaction"),
+            result.error === "not_found" ? 404 : 403,
+          ),
+        );
+      }
+
+      await IdempotencyService.fail(idempotencyKey);
+      throw lastError ?? new Error("Failed to delete milestone");
+    },
+  });
 }

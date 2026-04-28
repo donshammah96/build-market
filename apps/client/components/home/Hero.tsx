@@ -24,13 +24,22 @@ export const Hero: FC = memo(function Hero() {
 
   return (
     <section
-      className="relative min-h-[95vh] flex flex-col justify-center items-center overflow-hidden bg-zinc-900"
+      className="relative min-h-[95vh] flex flex-col justify-center items-center overflow-hidden bg-background"
       aria-label="Hero section"
     >
       {/* Background Layer */}
-      <div className="absolute inset-0 z-0 bg-zinc-900">
+      <div className="absolute inset-0 z-0 bg-background">
         {/* Fallback gradient (shown immediately or on image error) */}
-        <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-black z-0" />
+        <div className="absolute inset-0 bg-gradient-to-br from-foreground via-foreground/95 to-primary z-0" />
+
+        <div
+          className="absolute -left-28 top-20 h-80 w-80 rounded-full bg-primary/30 blur-3xl z-10"
+          aria-hidden="true"
+        />
+        <div
+          className="absolute -right-24 bottom-16 h-96 w-96 rounded-full bg-chart-2/30 blur-3xl z-10"
+          aria-hidden="true"
+        />
 
         {/* Hero image with proper loading optimization */}
         {!imageError && (
@@ -58,7 +67,7 @@ export const Hero: FC = memo(function Hero() {
 
         {/* Overlay gradient for text readability */}
         <div
-          className="absolute inset-0 z-20 bg-black/60 bg-gradient-to-r from-black/80 via-black/40 to-transparent"
+          className="absolute inset-0 z-20 bg-gradient-to-r from-black/80 via-black/55 to-black/15"
           aria-hidden="true"
         />
       </div>
@@ -70,18 +79,18 @@ export const Hero: FC = memo(function Hero() {
           <div
             className={cn(
               "max-w-2xl text-center lg:text-left space-y-8",
-              shouldAnimate && "animate-fade-in-up",
+              shouldAnimate && "motion-safe:animate-fade-in-up",
             )}
           >
             <h1
               className={cn(
                 "text-5xl sm:text-6xl md:text-7xl font-bold text-white tracking-tight leading-[1.1]",
-                shouldAnimate && "animate-fade-in-up",
+                shouldAnimate && "motion-safe:animate-fade-in-up",
               )}
               style={{ animationDelay: shouldAnimate ? "100ms" : "0ms" }}
             >
               Build with <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-chart-2">
                 Confidence.
               </span>
             </h1>
@@ -89,7 +98,7 @@ export const Hero: FC = memo(function Hero() {
             <p
               className={cn(
                 "text-lg sm:text-xl text-zinc-300 font-light leading-relaxed max-w-xl mx-auto lg:mx-0",
-                shouldAnimate && "animate-fade-in-up",
+                shouldAnimate && "motion-safe:animate-fade-in-up",
               )}
               style={{ animationDelay: shouldAnimate ? "200ms" : "0ms" }}
             >
@@ -100,14 +109,14 @@ export const Hero: FC = memo(function Hero() {
             <div
               className={cn(
                 "flex flex-col sm:flex-row gap-4 justify-center lg:justify-start",
-                shouldAnimate && "animate-fade-in-up",
+                shouldAnimate && "motion-safe:animate-fade-in-up",
               )}
               style={{ animationDelay: shouldAnimate ? "300ms" : "0ms" }}
             >
               <Button
                 size="lg"
                 asChild
-                className="bg-emerald-600 hover:bg-emerald-700 text-white h-14 px-8 text-lg rounded-full shadow-lg shadow-emerald-900/20 transition-transform hover:scale-[1.02] active:scale-95"
+                className="h-14 px-8 text-lg rounded-full shadow-lg bg-primary text-primary-foreground hover:bg-primary/90 motion-safe:hover:scale-[1.02] active:scale-95"
               >
                 <Link href={ROUTES.findProfessional}>Find a Professional</Link>
               </Button>
@@ -115,7 +124,7 @@ export const Hero: FC = memo(function Hero() {
                 variant="outline"
                 size="lg"
                 asChild
-                className="bg-white/5 border-white/10 text-white hover:bg-white/10 h-14 px-8 text-lg rounded-full backdrop-blur-sm transition-transform hover:scale-[1.02] active:scale-95"
+                className="bg-white/10 border-white/25 text-white hover:bg-white/20 h-14 px-8 text-lg rounded-full backdrop-blur-sm motion-safe:hover:scale-[1.02] active:scale-95"
               >
                 <Link href={ROUTES.ideaBooks}>View Projects</Link>
               </Button>
@@ -126,17 +135,17 @@ export const Hero: FC = memo(function Hero() {
           <div
             className={cn(
               "w-full max-w-md",
-              shouldAnimate && "animate-slide-in-right",
+              shouldAnimate && "motion-safe:animate-slide-in-right",
             )}
             style={{ animationDelay: shouldAnimate ? "400ms" : "0ms" }}
           >
-            <div className="bg-white/95 backdrop-blur-xl p-1 rounded-2xl shadow-2xl border border-white/20">
-              <div className="bg-white/60 p-6 sm:p-8 rounded-xl">
+            <div className="bg-white/90 backdrop-blur-xl p-1 rounded-2xl shadow-2xl border border-white/25">
+              <div className="bg-background/95 p-6 sm:p-8 rounded-xl">
                 <div className="mb-6 space-y-1">
-                  <h2 className="text-xl font-bold text-zinc-900 tracking-tight">
+                  <h2 className="text-xl font-bold text-foreground tracking-tight">
                     Get Started
                   </h2>
-                  <p className="text-zinc-500 text-sm">
+                  <p className="text-muted-foreground text-sm">
                     Join the marketplace today
                   </p>
                 </div>
@@ -166,17 +175,17 @@ const FormSkeleton: FC = () => (
     role="status"
     aria-label="Loading registration form"
   >
-    <div className="h-10 bg-zinc-200 rounded-md w-full animate-pulse" />
+    <div className="h-10 bg-muted rounded-md w-full motion-safe:animate-pulse" />
     <div
-      className="h-10 bg-zinc-200 rounded-md w-full animate-pulse"
+      className="h-10 bg-muted rounded-md w-full motion-safe:animate-pulse"
       style={{ animationDelay: "75ms" }}
     />
     <div
-      className="h-12 bg-zinc-300 rounded-md w-full mt-4 animate-pulse"
+      className="h-12 bg-muted/80 rounded-md w-full mt-4 motion-safe:animate-pulse"
       style={{ animationDelay: "150ms" }}
     />
     <div
-      className="h-4 bg-zinc-100 rounded-md w-2/3 mx-auto mt-4 animate-pulse"
+      className="h-4 bg-muted/60 rounded-md w-2/3 mx-auto mt-4 motion-safe:animate-pulse"
       style={{ animationDelay: "225ms" }}
     />
     <span className="sr-only">Loading...</span>

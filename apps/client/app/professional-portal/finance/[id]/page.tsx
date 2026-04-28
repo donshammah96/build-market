@@ -42,39 +42,14 @@ import {
 } from "@/components/ui/form";
 import { DialogClose } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/text-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-
-// Transaction interface matching API response
-interface Transaction {
-  id: string;
-  description: string;
-  amount: number;
-  type: "INCOME" | "WITHDRAWAL" | "EXPENSE";
-  status: "PENDING" | "COMPLETED" | "FAILED" | "CANCELLED";
-  date: string;
-  reference?: string | null;
-  createdAt: string;
-  updatedAt: string;
-  projectId?: string | null;
-  project?: {
-    id: string;
-    title: string;
-  } | null;
-}
+import { financeClient, type FinanceTransaction } from "@/lib/finance-client";
 
 // Schema for updating a transaction
 const updateTransactionSchema = z.object({
   description: z.string().min(1, "Description is required"),
-  status: z.enum(["PENDING", "COMPLETED", "FAILED", "CANCELLED"]),
 });
 
 type UpdateTransactionFormValues = z.infer<typeof updateTransactionSchema>;
@@ -139,19 +114,14 @@ export default function TransactionDetailPage() {
     data: transaction,
     isLoading,
     error,
-  } = useQuery({
+  } = useQuery<FinanceTransaction>({
     queryKey: ["transaction", id],
     queryFn: async () => {
-      const res = await fetch(
-        `/api/professional-portal/finance/transactions/${id}`,
-      );
-      if (!res.ok) {
-        if (res.status === 404) {
-          throw new Error("Transaction not found");
-        }
-        throw new Error("Failed to fetch transaction");
+      const res = await financeClient.getTransaction(id);
+      if (!res.success || res.data === undefined) {
+        throw new Error(res.error || "Failed to fetch transaction");
       }
-      return res.json() as Promise<Transaction>;
+      return res.data;
     },
     enabled: !!id,
   });
@@ -159,19 +129,16 @@ export default function TransactionDetailPage() {
   // Update Transaction Mutation
   const updateTransactionMutation = useMutation({
     mutationFn: async (data: UpdateTransactionFormValues) => {
-      const res = await fetch(
-        `/api/professional-portal/finance/transactions/${id}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
+      const res = await financeClient.updateTransaction({
+        transactionId: id,
+        data: {
+          description: data.description,
         },
-      );
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to update transaction");
+      });
+      if (!res.success) {
+        throw new Error(res.error || "Failed to update transaction");
       }
-      return res.json();
+      return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transaction", id] });
@@ -188,17 +155,13 @@ export default function TransactionDetailPage() {
   // Delete Transaction Mutation
   const deleteTransactionMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(
-        `/api/professional-portal/finance/transactions/${id}`,
-        {
-          method: "DELETE",
-        },
-      );
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to delete transaction");
+      const res = await financeClient.deleteTransaction({
+        transactionId: id,
+      });
+      if (!res.success) {
+        throw new Error(res.error || "Failed to delete transaction");
       }
-      return res.json();
+      return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
@@ -215,7 +178,6 @@ export default function TransactionDetailPage() {
     resolver: zodResolver(updateTransactionSchema),
     defaultValues: {
       description: transaction?.description || "",
-      status: transaction?.status || "PENDING",
     },
   });
 
@@ -223,7 +185,6 @@ export default function TransactionDetailPage() {
   if (transaction && form.getValues().description === "") {
     form.reset({
       description: transaction.description,
-      status: transaction.status,
     });
   }
 
@@ -237,7 +198,7 @@ export default function TransactionDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6 max-w-[1600px] mx-auto">
+      <div className="space-y-6 max-w-400 mx-auto">
         <div className="flex items-center gap-4">
           <div className="h-10 w-10 bg-zinc-200 animate-pulse rounded" />
           <div className="space-y-2">
@@ -257,7 +218,7 @@ export default function TransactionDetailPage() {
 
   if (error || !transaction) {
     return (
-      <div className="space-y-6 max-w-[1600px] mx-auto">
+      <div className="space-y-6 max-w-400 mx-auto">
         <Button variant="ghost" asChild>
           <Link href="/professional-portal/finance">
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Finance
@@ -299,7 +260,7 @@ export default function TransactionDetailPage() {
   const canDelete = ["PENDING", "CANCELLED"].includes(transaction.status);
 
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto">
+    <div className="space-y-6 max-w-400 mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between gap-4 items-start border-b border-zinc-100 pb-6">
         <div className="flex items-center gap-4">
@@ -375,7 +336,7 @@ export default function TransactionDetailPage() {
             <div className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
+                  <label className="text-sm font-medium text-zinc-500 mb-2 flex items-center gap-1">
                     <DollarSign className="h-3 w-3" />
                     Amount
                   </label>
@@ -385,7 +346,7 @@ export default function TransactionDetailPage() {
                   </p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
+                  <label className="text-sm font-medium text-zinc-500 mb-2 flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
                     Transaction Date
                   </label>
@@ -426,7 +387,7 @@ export default function TransactionDetailPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
+                  <label className="text-sm font-medium text-zinc-500 mb-2 flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
                     Created
                   </label>
@@ -444,7 +405,7 @@ export default function TransactionDetailPage() {
                   </p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-zinc-500 mb-2 block flex items-center gap-1">
+                  <label className="text-sm font-medium text-zinc-500 mb-2 flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
                     Last Updated
                   </label>
@@ -534,7 +495,7 @@ export default function TransactionDetailPage() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-125">
           <DialogHeader>
             <DialogTitle>Edit Transaction</DialogTitle>
             <DialogDescription>
@@ -561,32 +522,6 @@ export default function TransactionDetailPage() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="PENDING">Pending</SelectItem>
-                        <SelectItem value="COMPLETED">Completed</SelectItem>
-                        <SelectItem value="FAILED">Failed</SelectItem>
-                        <SelectItem value="CANCELLED">Cancelled</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               <DialogFooter>
                 <DialogClose asChild>
                   <Button variant="outline">Cancel</Button>
@@ -608,7 +543,7 @@ export default function TransactionDetailPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-106.25">
           <DialogHeader>
             <DialogTitle>Delete Transaction</DialogTitle>
             <DialogDescription>

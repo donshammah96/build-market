@@ -11,8 +11,6 @@ import {
   ExternalLink,
   Calendar,
   CheckCircle,
-  Loader2,
-  AlertCircle,
   MapPin,
   Globe,
   FileText,
@@ -25,12 +23,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
+import { ProfilePageHeader } from "../shared-header";
+import {
+  ProfileDetailsCard,
+  ProfileHeroCard,
+  ProfileStatsCard,
+} from "../shared-panels";
+import { ProfileErrorState, ProfileLoadingState } from "../shared-states";
 
 import { usePublicProfile } from "@/hooks/useProfile";
+import {
+  formatProfileDate,
+  formatProfileRating,
+  getProfileDisplayName,
+  getProfileInitials,
+  getProfileLocation,
+} from "../view-helpers";
 
 export default function ProfessionalProfileDetailPage() {
   const params = useParams();
@@ -51,173 +63,169 @@ export default function ProfessionalProfileDetailPage() {
   const mainImage = images.find((img) => img.isMain) || images[0];
 
   if (isLoading) {
-    return (
-      <div className="space-y-6 max-w-[1600px] mx-auto">
-        <div className="flex items-center gap-4">
-          <div className="h-10 w-10 bg-zinc-200 animate-pulse rounded" />
-          <div className="space-y-2">
-            <div className="h-8 w-64 bg-zinc-200 animate-pulse rounded" />
-            <div className="h-4 w-32 bg-zinc-200 animate-pulse rounded" />
-          </div>
-        </div>
-        <Card className="p-8">
-          <div className="flex items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
-            <span className="ml-3 text-zinc-500">Loading profile...</span>
-          </div>
-        </Card>
-      </div>
-    );
+    return <ProfileLoadingState variant="detail" />;
   }
 
   if (error || !professional) {
     return (
-      <div className="space-y-6 max-w-[1600px] mx-auto">
-        <Button variant="ghost" asChild>
-          <Link href="/professional-portal/profile">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Profile
-          </Link>
-        </Button>
-        <Card className="p-8">
-          <div className="text-center">
-            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-zinc-900 mb-2">
-              Profile Not Found
-            </h2>
-            <p className="text-zinc-500 mb-4">
-              {error instanceof Error
-                ? error.message
-                : "The professional profile you're looking for doesn't exist."}
-            </p>
-            <Button onClick={() => router.back()}>Go Back</Button>
-          </div>
-        </Card>
-      </div>
+      <ProfileErrorState
+        message={
+          error instanceof Error
+            ? error.message
+            : "The professional profile you're looking for doesn't exist."
+        }
+        actionLabel="Go Back"
+        onAction={() => router.back()}
+        leading={
+          <Button variant="ghost" asChild>
+            <Link href="/professional-portal/profile">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Profile
+            </Link>
+          </Button>
+        }
+      />
     );
   }
 
-  const fullName = `${professional.user.firstName} ${professional.user.lastName}`;
-  const averageRating = professional.avgRating
-    ? professional.avgRating.toFixed(1)
-    : null;
+  const fullName = getProfileDisplayName(professional);
+  const initials = getProfileInitials(professional);
+  const location = getProfileLocation(professional);
+  const averageRating = formatProfileRating(professional.avgRating);
+  const detailItems = [
+    {
+      label: "Company Name",
+      value: (
+        <p className="text-zinc-900 font-medium">{professional.companyName}</p>
+      ),
+    },
+    ...(professional.licenseNumber
+      ? [
+          {
+            label: "License Number",
+            value: (
+              <p className="text-zinc-900">{professional.licenseNumber}</p>
+            ),
+          },
+        ]
+      : []),
+    ...(location
+      ? [
+          {
+            label: "Location",
+            icon: MapPin,
+            value: <p className="text-zinc-900">{location}</p>,
+          },
+        ]
+      : []),
+    ...(professional.yearsExperience
+      ? [
+          {
+            label: "Years of Experience",
+            icon: Briefcase,
+            value: (
+              <p className="text-zinc-900">
+                {professional.yearsExperience} years
+              </p>
+            ),
+          },
+        ]
+      : []),
+    {
+      label: "Member Since",
+      icon: Calendar,
+      value: (
+        <p className="text-zinc-900">
+          {formatProfileDate(professional.createdAt)}
+        </p>
+      ),
+    },
+  ];
+  const statItems = [
+    {
+      label: "Projects Completed",
+      value: professional._count?.projects || 0,
+    },
+    {
+      label: "Portfolio Items",
+      value: professional._count?.portfolios || 0,
+    },
+    {
+      label: "Reviews",
+      value: professional._count?.reviews || 0,
+    },
+  ];
+  const heroStats = [
+    ...(professional.yearsExperience
+      ? [
+          {
+            label: "Experience",
+            icon: Briefcase,
+            value: `${professional.yearsExperience}+ years`,
+          },
+        ]
+      : []),
+    {
+      label: "Projects",
+      icon: CheckCircle,
+      value: `${professional._count?.projects || 0} completed`,
+    },
+    ...(averageRating
+      ? [
+          {
+            label: "Rating",
+            icon: Star,
+            value: `${averageRating} / 5.0`,
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between gap-4 items-start border-b border-zinc-100 pb-6">
-        <div className="flex items-center gap-4">
+    <div className="space-y-6 max-w-400 mx-auto">
+      <ProfilePageHeader
+        leading={
           <Button variant="ghost" size="icon" asChild>
             <Link href="/professional-portal/profile">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">
-                {fullName}
-              </h1>
-              {professional.verified && (
-                <Badge className="bg-emerald-600 text-white">
-                  <Award className="mr-1 h-3 w-3" />
-                  Verified
-                </Badge>
-              )}
-            </div>
-            <p className="text-zinc-500 mt-1">
-              {professional.companyName} • Profile #
-              {professional.id.substring(0, 8).toUpperCase()}
-            </p>
-          </div>
-        </div>
-      </div>
+        }
+        title={
+          <>
+            <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">
+              {fullName}
+            </h1>
+            {professional.verified ? (
+              <Badge className="bg-emerald-600 text-white">Verified</Badge>
+            ) : null}
+          </>
+        }
+        subtitle={`${professional.companyName} • Profile #${professional.id.substring(0, 8).toUpperCase()}`}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Profile Header Card */}
-          <Card className="border border-zinc-200 shadow-sm bg-white">
-            <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row gap-6">
-                {/* Profile Image */}
-                <div className="flex-shrink-0">
-                  <Avatar className="h-32 w-32 rounded-lg border-2 border-zinc-100">
-                    <AvatarImage
-                      src={mainImage?.url || professional.user.avatar || ""}
-                      alt={fullName}
-                    />
-                    <AvatarFallback className="rounded-lg text-3xl bg-zinc-100">
-                      {professional.user.firstName?.[0]}
-                      {professional.user.lastName?.[0]}
-                    </AvatarFallback>
-                  </Avatar>
+          <ProfileHeroCard
+            initials={initials}
+            avatarUrl={mainImage?.url || professional.user.avatar || ""}
+            companyName={professional.companyName}
+            licenseNumber={professional.licenseNumber}
+            highlight={
+              averageRating ? (
+                <div className="flex items-center gap-2 bg-amber-50 px-4 py-2 rounded-lg">
+                  <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+                  <span className="text-lg font-bold">{averageRating}</span>
+                  <span className="text-sm text-zinc-600">
+                    ({professional._count?.reviews || 0} reviews)
+                  </span>
                 </div>
-
-                {/* Profile Info */}
-                <div className="flex-1">
-                  <div className="flex items-start justify-between flex-wrap gap-4 mb-4">
-                    <div>
-                      <p className="text-xl text-zinc-600 font-medium mb-2">
-                        {professional.companyName}
-                      </p>
-                      {professional.licenseNumber && (
-                        <p className="text-sm text-zinc-500">
-                          License: {professional.licenseNumber}
-                        </p>
-                      )}
-                    </div>
-
-                    {averageRating && (
-                      <div className="flex items-center gap-2 bg-amber-50 px-4 py-2 rounded-lg">
-                        <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
-                        <span className="text-lg font-bold">
-                          {averageRating}
-                        </span>
-                        <span className="text-sm text-zinc-600">
-                          ({professional._count?.reviews || 0} reviews)
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  <Separator className="my-4" />
-
-                  {/* Quick Stats */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {professional.yearsExperience && (
-                      <div className="flex items-center gap-2">
-                        <Briefcase className="h-5 w-5 text-zinc-400" />
-                        <div>
-                          <p className="text-sm text-zinc-600">Experience</p>
-                          <p className="font-semibold">
-                            {professional.yearsExperience}+ years
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-5 w-5 text-zinc-400" />
-                      <div>
-                        <p className="text-sm text-zinc-600">Projects</p>
-                        <p className="font-semibold">
-                          {professional._count?.projects || 0} completed
-                        </p>
-                      </div>
-                    </div>
-                    {averageRating && (
-                      <div className="flex items-center gap-2">
-                        <Star className="h-5 w-5 text-zinc-400" />
-                        <div>
-                          <p className="text-sm text-zinc-600">Rating</p>
-                          <p className="font-semibold">{averageRating} / 5.0</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              ) : null
+            }
+            stats={heroStats}
+          />
 
           {/* Tabs */}
           <Tabs defaultValue="overview" className="w-full">
@@ -281,14 +289,10 @@ export default function ProfessionalProfileDetailPage() {
                       </span>
                     </div>
                   )}
-                  {(professional.city || professional.county) && (
+                  {location && (
                     <div className="flex items-center gap-3">
                       <MapPin className="h-5 w-5 text-zinc-400" />
-                      <span className="text-zinc-600">
-                        {[professional.city, professional.county]
-                          .filter(Boolean)
-                          .join(", ")}
-                      </span>
+                      <span className="text-zinc-600">{location}</span>
                     </div>
                   )}
                   {professional.website && (
@@ -400,9 +404,11 @@ export default function ProfessionalProfileDetailPage() {
                             <div className="flex items-center gap-2 text-sm text-zinc-500">
                               <Calendar className="h-4 w-4" />
                               Completed{" "}
-                              {new Date(
-                                portfolio.completedAt,
-                              ).toLocaleDateString()}
+                              {formatProfileDate(portfolio.completedAt, {
+                                year: "numeric",
+                                month: "numeric",
+                                day: "numeric",
+                              })}
                             </div>
                           </CardContent>
                         )}
@@ -448,9 +454,11 @@ export default function ProfessionalProfileDetailPage() {
                                   {review.reviewer.lastName}
                                 </p>
                                 <p className="text-sm text-zinc-500">
-                                  {new Date(
-                                    review.createdAt,
-                                  ).toLocaleDateString()}
+                                  {formatProfileDate(review.createdAt, {
+                                    year: "numeric",
+                                    month: "numeric",
+                                    day: "numeric",
+                                  })}
                                 </p>
                               </div>
                               <div className="flex items-center gap-1">
@@ -513,13 +521,21 @@ export default function ProfessionalProfileDetailPage() {
                             {cert.issueDate && (
                               <span>
                                 Issued:{" "}
-                                {new Date(cert.issueDate).toLocaleDateString()}
+                                {formatProfileDate(cert.issueDate, {
+                                  year: "numeric",
+                                  month: "numeric",
+                                  day: "numeric",
+                                })}
                               </span>
                             )}
                             {cert.expiryDate && (
                               <span>
                                 Expires:{" "}
-                                {new Date(cert.expiryDate).toLocaleDateString()}
+                                {formatProfileDate(cert.expiryDate, {
+                                  year: "numeric",
+                                  month: "numeric",
+                                  day: "numeric",
+                                })}
                               </span>
                             )}
                           </div>
@@ -542,115 +558,14 @@ export default function ProfessionalProfileDetailPage() {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Professional Info */}
-          <Card className="border border-zinc-200 shadow-sm bg-white">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Professional Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-zinc-500 mb-1 block">
-                  Company Name
-                </label>
-                <p className="text-zinc-900 font-medium">
-                  {professional.companyName}
-                </p>
-              </div>
-              {professional.licenseNumber && (
-                <>
-                  <Separator />
-                  <div>
-                    <label className="text-sm font-medium text-zinc-500 mb-1 block">
-                      License Number
-                    </label>
-                    <p className="text-zinc-900">
-                      {professional.licenseNumber}
-                    </p>
-                  </div>
-                </>
-              )}
-              {(professional.city || professional.county) && (
-                <>
-                  <Separator />
-                  <div>
-                    <label className="text-sm font-medium text-zinc-500 mb-1 block flex items-center gap-1">
-                      <MapPin className="h-3 w-3" />
-                      Location
-                    </label>
-                    <p className="text-zinc-900">
-                      {[professional.city, professional.county]
-                        .filter(Boolean)
-                        .join(", ")}
-                    </p>
-                  </div>
-                </>
-              )}
-              {professional.yearsExperience && (
-                <>
-                  <Separator />
-                  <div>
-                    <label className="text-sm font-medium text-zinc-500 mb-1 block flex items-center gap-1">
-                      <Briefcase className="h-3 w-3" />
-                      Years of Experience
-                    </label>
-                    <p className="text-zinc-900">
-                      {professional.yearsExperience} years
-                    </p>
-                  </div>
-                </>
-              )}
-              <Separator />
-              <div>
-                <label className="text-sm font-medium text-zinc-500 mb-1 block flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  Member Since
-                </label>
-                <p className="text-zinc-900">
-                  {new Date(professional.createdAt).toLocaleDateString(
-                    "en-US",
-                    {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    },
-                  )}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <ProfileDetailsCard
+            title="Professional Details"
+            titleIcon={Building2}
+            items={detailItems}
+          />
 
           {/* Stats */}
-          <Card className="border border-zinc-200 shadow-sm bg-white">
-            <CardHeader>
-              <CardTitle>Statistics</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-zinc-600">
-                  Projects Completed
-                </span>
-                <span className="font-semibold text-zinc-900">
-                  {professional._count?.projects || 0}
-                </span>
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-zinc-600">Portfolio Items</span>
-                <span className="font-semibold text-zinc-900">
-                  {professional._count?.portfolios || 0}
-                </span>
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-zinc-600">Reviews</span>
-                <span className="font-semibold text-zinc-900">
-                  {professional._count?.reviews || 0}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+          <ProfileStatsCard items={statItems} />
         </div>
       </div>
     </div>

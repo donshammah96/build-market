@@ -1,12 +1,32 @@
 import type { NextConfig } from "next";
+import bundleAnalyzer from "@next/bundle-analyzer";
+// bootstrap-only: Next.js config runs before the module graph is initialized.
+// Direct env reads via next-config-env.ts are intentional per ADR-004.
+// Variables accessed here are inventoried in app/lib/infrastructure/env.ts.
+import { readNextConfigEnv } from "./next-config-env";
+import { buildCspValue } from "./next-config-csp";
+
+const toOrigin = (value?: string): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+};
 
 const nextConfig: NextConfig = {
-  // Disable linting during build since turbo will handle it separately
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-
-  // Disable type checking during build since turbo will handle it separately
+  // ---------------------------------------------------------------------------
+  // TypeScript
+  // Type checking is performed by the Turbo `check-types` pipeline task
+  // (turbo.json → "check-types"). This flag suppresses duplicate checking
+  // during `next build` when invoked through Turbo.
+  // INVARIANT: `pnpm turbo check-types` MUST run before any production deploy.
+  // Running `next build` directly without Turbo will silently skip type errors.
+  // ---------------------------------------------------------------------------
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -31,53 +51,30 @@ const nextConfig: NextConfig = {
 
   // Turbopack configuration (used in dev mode with --turbopack flag)
   turbopack: {
-    // Turbopack will handle optimizations automatically
-    // If you need custom loaders in the future (e.g., for SVGs), you can configure them here:
-    // rules: {
-    //   "*.svg": {
-    //     loaders: ["@svgr/webpack"],
-    //     as: "*.js",
-    //   }
-    // }
+    // Turbopack handles optimizations automatically.
+    // Custom loaders (e.g. SVGs via @svgr/webpack) can be added here when needed.
+    // rules: { "*.svg": { loaders: ["@svgr/webpack"], as: "*.js" } }
   },
 
   // Optimize images for faster loading
   images: {
     remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "img.clerk.com",
-      },
-      {
-        protocol: "https",
-        hostname: "res.cloudinary.com",
-      },
-      {
-        protocol: "https",
-        hostname: "images.unsplash.com",
-      },
-      {
-        protocol: "https",
-        hostname: "unsplash.com",
-      },
-      {
-        protocol: "https",
-        hostname: "i.pravatar.cc",
-      },
+      { protocol: "https", hostname: "img.clerk.com" },
+      { protocol: "https", hostname: "res.cloudinary.com" },
+      { protocol: "https", hostname: "images.unsplash.com" },
+      { protocol: "https", hostname: "unsplash.com" },
+      { protocol: "https", hostname: "i.pravatar.cc" },
     ],
     // Use modern image formats for better compression
     formats: ["image/avif", "image/webp"],
-    // Optimize images at build time
-    minimumCacheTTL: 60 * 60 * 24 * 30, // 30 days
-    // Device sizes for responsive images
+    // 30-day CDN TTL for optimized images
+    minimumCacheTTL: 60 * 60 * 24 * 30,
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048],
-    // Image sizes for different layouts
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
 
-  // Enable experimental features for better performance
+  // Optimize package imports to reduce bundle size (experimental)
   experimental: {
-    // Optimize package imports to reduce bundle size
     optimizePackageImports: [
       "lucide-react",
       "@clerk/nextjs",
@@ -90,33 +87,71 @@ const nextConfig: NextConfig = {
 
   // Compiler options for production optimization
   compiler: {
-    // Remove console.log in production (except errors)
+    // Remove console.log statements in production (keep error + warn for observability)
     removeConsole:
-      process.env.NODE_ENV === "production"
-        ? {
-            exclude: ["error", "warn"],
-          }
+      readNextConfigEnv().nodeEnv === "production"
+        ? { exclude: ["error", "warn"] }
         : false,
   },
 
-  // Headers for performance and security
+  // ---------------------------------------------------------------------------
+  // Security & performance headers (ADR-008 §4 baseline)
+  // CSP is assembled inside this function — not at module-load/build time — so
+  // origin values reflect the deployment's runtime env, not the build snapshot.
+  // ---------------------------------------------------------------------------
   async headers() {
+    // bootstrap-only: env access is intentional per ADR-004
+    const configEnv = readNextConfigEnv();
+    const appOrigin = toOrigin(configEnv.appUrl) ?? "http://localhost:3500";
+    const apiOrigin = toOrigin(configEnv.apiUrl) ?? `${appOrigin}/api`;
+
+    const cspValue = buildCspValue({
+      appOrigin,
+      apiOrigin,
+      clerkFrontendApiOrigin: toOrigin(configEnv.clerkFrontendApi),
+      analyticsOrigin: toOrigin(configEnv.analyticsPosthogHost),
+      isDev: configEnv.nodeEnv === "development",
+    });
+
     return [
       {
+        // ADR-008 §4 security header baseline — applied to all routes.
         source: "/:path*",
         headers: [
-          {
-            key: "X-DNS-Prefetch-Control",
-            value: "on",
-          },
           {
             key: "X-Content-Type-Options",
             value: "nosniff",
           },
+          {
+            key: "X-Frame-Options",
+            value: "SAMEORIGIN",
+          },
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
+          {
+            // Deny all high-risk browser capabilities not needed by this app.
+            key: "Permissions-Policy",
+            value:
+              "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()",
+          },
+          {
+            // HSTS: 2-year max-age with subdomains.
+            // To add preload, submit buildmarket.live to hstspreload.org first.
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains",
+          },
+          {
+            // CSP: assembled at config-evaluation time from env-derived origins.
+            // Exception justifications are co-located in next-config-csp.ts.
+            key: "Content-Security-Policy",
+            value: cspValue,
+          },
         ],
       },
       {
-        // Cache static assets aggressively
+        // Immutable cache for fingerprinted static assets.
         source: "/(.*)\\.(ico|png|jpg|jpeg|gif|webp|avif|svg|woff|woff2)",
         headers: [
           {
@@ -128,10 +163,9 @@ const nextConfig: NextConfig = {
     ];
   },
 
-  // Redirects for SEO
+  // SEO redirects
   async redirects() {
     return [
-      // Example redirect for old URLs
       {
         source: "/home",
         destination: "/",
@@ -140,20 +174,22 @@ const nextConfig: NextConfig = {
     ];
   },
 
-  // Webpack optimization for production builds (not used with Turbopack in dev)
-  webpack: (config) => {
-    // Let Next.js and optimizePackageImports handle framer-motion optimization
-    return config;
-  },
-
-  // Enable source maps in production for debugging (optional)
+  // Source maps: disabled in production browser bundle.
+  // If using Sentry or another error tracker, upload maps at build time instead.
   productionBrowserSourceMaps: false,
 
-  // Powered by header (can disable for security)
+  // Remove X-Powered-By header (minor security hardening)
   poweredByHeader: false,
 
-  // Compression is handled by Vercel, but enable for other deployments
+  // Gzip compression — Vercel handles this natively; retained for other deployments.
   compress: true,
 };
 
-export default nextConfig;
+// ---------------------------------------------------------------------------
+// Bundle analyzer — conditional wrapper (dev tool, not part of runtime config)
+// Apply only when ANALYZE=true so the base config remains directly inspectable.
+// Usage: ANALYZE=true pnpm --filter client build
+// ---------------------------------------------------------------------------
+export default process.env.ANALYZE === "true"
+  ? bundleAnalyzer({ enabled: true })(nextConfig)
+  : nextConfig;
