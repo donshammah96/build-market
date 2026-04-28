@@ -465,7 +465,7 @@ export const PUT = withAuth(async (req: NextRequest, { dbUserId }) => {
       );
     }
 
-    if (result.data.data && result.data.data.success === false) {
+    if (result.data.data.success === false) {
       logger.warn("Bulk consent update domain error (partial failure)", {
         correlationId,
         operationName: "bulk_update_user_consents",

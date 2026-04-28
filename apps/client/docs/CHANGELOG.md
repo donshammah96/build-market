@@ -47,8 +47,13 @@ This format is based on Keep a Changelog and uses semantic categories:
   2. **`user/consent/route.ts`**: A combined conditional `if (!ok || (data && !data.success))` broke TypeScript's discriminated union narrowing for `DomainResult`, causing TS2339 property access errors. Fixed by splitting the checks into separate `if` blocks.
      Files: `apps/client/app/api/properties/route.ts`; `apps/client/app/api/user/consent/route.ts`.
 
+- **Vitest ESM resolution failures for `@build/enums`.**
+  Running Vitest suites resulted in `Error: Cannot find module '.../enums/src/user' imported from .../enums/src/index.ts`. The `@build/enums` package incorrectly pointed its `main` and `exports` fields to `./src/index.ts`. When Vitest externalized the package, Node's native ESM resolution failed on the extensionless relative imports inside the source files.
+  Fix: Updated `packages/enums/package.json` to correctly expose the built `./dist/index.js` and `./dist/index.d.ts` artifacts, matching the monorepo standard (e.g. `@build/types`, `@build/resilience`).
+  Files: `packages/enums/package.json`; `packages/enums/src/index.ts`.
+
 **Files changed:**
-`turbo.json`; `packages/queue-server/src/redis-connection.ts`; `apps/client/app/api/properties/route.ts`; `apps/client/app/api/user/consent/route.ts`
+`turbo.json`; `packages/queue-server/src/redis-connection.ts`; `apps/client/app/api/properties/route.ts`; `apps/client/app/api/user/consent/route.ts`; `packages/enums/package.json`; `packages/enums/src/index.ts`
 
 **Verification:**
 
