@@ -13,6 +13,8 @@
   "scripts": {
     "lint": "echo \"No lint configured\" && exit 0",
     "check-types": "tsc --noEmit",
+    "build": "tsc",
+    "clean": "rm -rf dist",
     "test": "echo \"No tests configured\" && exit 0"
   },
   "dependencies": {
