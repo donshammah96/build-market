@@ -277,7 +277,19 @@ jobs:
         run: |
           set -euo pipefail
 
-          pnpm -C apps/client run start --hostname 127.0.0.1 --port 3500 > /tmp/client-preview-smoke.log 2>&1 &
+          # ---------------------------------------------------------------
+          # Start the production server.
+          #
+          # PORT env var: avoids passing --port through pnpm's argument
+          # forwarding, which can silently drop or reorder flags.
+          #
+          # No --hostname: Next.js 16 defaults to 0.0.0.0 (all interfaces).
+          # Passing --hostname 127.0.0.1 caused a binding mismatch where
+          # the server reported "Ready" but curl could not establish a TCP
+          # connection on the GitHub Actions runner. Letting Next.js bind
+          # to 0.0.0.0 avoids this entirely.
+          # ---------------------------------------------------------------
+          PORT=3500 pnpm -C apps/client run start > /tmp/client-preview-smoke.log 2>&1 &
           APP_PID=$!
 
           cleanup() {
@@ -321,16 +333,24 @@ jobs:
             exit 1
           fi
 
+          # Brief settle time — the "Ready" log line can race slightly
+          # ahead of the kernel completing the listen() backlog setup.
+          sleep 2
+
           # ---------------------------------------------------------------
           # Phase 2: HTTP health probe.
           #
           # The server is confirmed ready.  A small number of retries with a
           # generous per-request timeout handles any remaining TCP warmup or
           # first-request JIT compilation in Turbopack.
+          #
+          # curl -4: force IPv4 to avoid IPv6 resolution delays on runners
+          # that have ::1 configured but the server bound to 0.0.0.0 (IPv4).
           # ---------------------------------------------------------------
           STATUS="000"
-          for _ in {1..5}; do
-            STATUS="$(curl --silent --show-error --max-time 10 --output /tmp/client-preview-body.txt --write-out "%{http_code}" http://127.0.0.1:3500/ || true)"
+          for attempt in {1..5}; do
+            STATUS="$(curl -4 --silent --show-error --max-time 10 --output /tmp/client-preview-body.txt --write-out "%{http_code}" http://localhost:3500/ || true)"
+            echo "  probe ${attempt}: HTTP $STATUS"
             if [ "$STATUS" != "000" ] && [ -n "$STATUS" ]; then
               break
             fi
@@ -341,6 +361,9 @@ jobs:
 
           if [ -z "$STATUS" ] || [ "$STATUS" = "000" ]; then
             echo "Smoke gate failed: client preview root was unreachable."
+            echo "--- Network diagnostics ---"
+            ss -tlnp 2>/dev/null | grep 3500 || netstat -tlnp 2>/dev/null | grep 3500 || echo "(no listeners found on port 3500)"
+            echo "--- Server log ---"
             cat /tmp/client-preview-smoke.log || true
             exit 1
           fi
