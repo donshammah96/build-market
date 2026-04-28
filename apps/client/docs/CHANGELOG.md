@@ -30,6 +30,16 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Fixed (CI Pipeline — `client-preview-smoke-gate`)
 
+- **Next.js 16 hostname binding mismatch caused curl timeouts.**
+  The server successfully logged "Ready in 149ms" on `127.0.0.1:3500`, but curl timed out on every probe. Passing `--hostname 127.0.0.1` to the Next.js 16 standalone server causes a binding mismatch on GitHub Actions `ubuntu-latest` runners, where the loopback interface does not identically match 0.0.0.0 for TCP connections.
+  Fix: Dropped the `--hostname` flag to let Next.js default to `0.0.0.0` (all interfaces), replaced the `--port 3500` CLI flag with a `PORT=3500` env var to avoid `pnpm` argument dropping, and forced IPv4 resolution on the curl probes (`curl -4 http://localhost:3500/`).
+  Files: `.github/workflows/ci.yml`.
+
+- **`pnpm` workspace startup overhead exhausted curl retries.**
+  The previous smoke gate polled with curl immediately, but `pnpm -C apps/client run start` incurs significant overhead (workspace graph resolution, lifecycle hooks, child process spawning) before the actual `next start` listener binds. On cold CI runners, this delay often exceeded the entire 45-iteration curl polling window.
+  Fix: Restructured the smoke gate into two decoupled phases: (1) wait up to 180s for the "Ready" log marker while checking process liveness, then (2) execute 5 curl retries with a generous timeout to verify the HTTP route.
+  Files: `.github/workflows/ci.yml`.
+
 - **BullMQ eager-connect crash prevented Next.js server from binding port.**
   The `client-preview-smoke-gate` CI step was timing out on all 45 curl retries because the Next.js server never started. BullMQ/ioredis entered an infinite reconnect loop against the unresolvable `dummy.upstash.io` hostname, flooding stderr and preventing the HTTP listener from accepting connections.
   Two compounding defects:
