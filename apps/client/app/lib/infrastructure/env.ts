@@ -161,6 +161,8 @@ const envGroups: EnvGroup[] = [
         name: "SUPABASE_SERVICE_ROLE_KEY",
         required: false,
       },
+      // POSTGRES_URL is an optional alias (e.g., Vercel Postgres injects this automatically).
+      { name: "POSTGRES_URL", required: false },
     ],
   },
   {
