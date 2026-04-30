@@ -87,7 +87,8 @@
     "SUPABASE_URL",
     "SUPABASE_ANON_KEY",
     "SUPABASE_SERVICE_ROLE_KEY",
-    "DIRECT_URL"
+    "DIRECT_URL",
+    "DISABLE_BACKGROUND_JOBS"
   ],
   "tasks": {
     "build": {

@@ -36,6 +36,7 @@ This format is based on Keep a Changelog and uses semantic categories:
   2. Added `https://*.clerk.accounts.dev` as a static fallback pattern to `scriptOrigins` to handle cases where `NEXT_PUBLIC_CLERK_FRONTEND_API` is not set in the environment.
   3. Added `https://cdn.jsdelivr.net` to `fontOrigins` to allow OpenDyslexic `.woff` fonts.
   4. Added `worker-src 'self' blob:` to prevent future breakages from service workers.
+  5. Added `https://*.clerk.accounts.dev` and `https://clerk-telemetry.com` to `connectOrigins` to allow Clerk's API and telemetry requests.
 
 **Files changed:**
 `apps/client/next-config-csp.ts`
