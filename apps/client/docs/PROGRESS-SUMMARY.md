@@ -182,9 +182,22 @@ pnpm -C apps/client run report:projects-mutation-health -- --input <file.ndjson>
 
 ## Progress Summary
 
-Last updated: 2026-04-22
+Last updated: 2026-04-30
 
 ## Snapshot
+
+### [PLANNED] CSP Nonce Strategy Implementation
+
+- Phase: Future Work (Follow-up)
+- Scope: Migrate from `'unsafe-inline'` for `script-src-elem` to a cryptographic nonce strategy to support Clerk's authentication bootstrap.
+- Required Action: Generate a per-request cryptographic nonce in Next.js middleware, inject it into the CSP header via `NextResponse`, and pass it to Clerk via `clerkMiddleware`'s `nonce` option. Documented in ADR-008 §4.
+
+### [CHECKPOINT] Content Security Policy (CSP) Remediation - Completed
+
+- Date: 2026-04-30
+- Outcome summary: Addressed three distinct CSP failures blocking the homepage by adding missing `script-src-elem`, Clerk CDN fallbacks, and OpenDyslexic font origins to `next-config-csp.ts`.
+- Actual files changed: `apps/client/next-config-csp.ts`.
+- Verification: Deploy and verify resolution of 17 `script-src-elem` and 4 `font-src` console errors.
 
 ### [CHECKPOINT] Dashboard Path Standardization — /dashboard → /homeowner-dashboard
 

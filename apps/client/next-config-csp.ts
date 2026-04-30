@@ -49,6 +49,8 @@ export function buildCspValue(sources: CspSources): string {
     // Third-party (identity): Clerk JS assets. Derived from NEXT_PUBLIC_CLERK_FRONTEND_API
     // so the origin tracks env config rather than a hardcoded hostname.
     clerkFrontendApiOrigin,
+    // Fallback for Clerk CDN when NEXT_PUBLIC_CLERK_FRONTEND_API is unset.
+    "https://*.clerk.accounts.dev",
     // Third-party (CDN): jsdelivr used by some Clerk-adjacent widgets.
     "https://cdn.jsdelivr.net",
     // Third-party (identity avatars): Clerk image CDN — scripts loaded by Clerk widgets.
@@ -84,6 +86,8 @@ export function buildCspValue(sources: CspSources): string {
   const fontOrigins = [
     "'self'",
     "data:",
+    // Third-party (CDN): jsdelivr for OpenDyslexic font
+    "https://cdn.jsdelivr.net",
     // Third-party (typography): Google Fonts file host.
     "https://fonts.gstatic.com",
   ];
@@ -93,10 +97,13 @@ export function buildCspValue(sources: CspSources): string {
   return [
     "default-src 'self'",
     `script-src ${dedup(scriptOrigins).join(" ")}`,
+    // Clerk requires 'unsafe-inline' for its inline bootstrap scripts in modern browsers
+    `script-src-elem 'unsafe-inline' ${dedup(scriptOrigins).join(" ")}`,
     `style-src ${dedup(styleOrigins).join(" ")}`,
     `img-src ${dedup(imgOrigins).join(" ")}`,
     `font-src ${dedup(fontOrigins).join(" ")}`,
     `connect-src ${dedup(connectOrigins).join(" ")}`,
+    "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
