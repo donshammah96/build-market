@@ -113,7 +113,11 @@ jobs:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
           CLERK_SECRET_KEY: sk_test_ci_placeholder
           CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
-          DATABASE_URL: postgresql://ci:ci@localhost:5432/build_market_ci
+          # Lint/type-check/unit-tests never open a real DB connection.
+          # A well-formed placeholder satisfies the env validator (postgresql:// prefix check)
+          # without requiring a live Supabase connection in the validate job.
+          DATABASE_URL: "postgresql://ci:stub@localhost:5432/build_market_ci"
+          DIRECT_URL: "postgresql://ci:stub@localhost:5432/build_market_ci"
           NEXT_PUBLIC_APP_URL: http://localhost:3500
           NEXT_PUBLIC_API_URL: http://localhost:3500/api
           ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -168,7 +172,27 @@ jobs:
       CLERK_SECRET_KEY: ${{ secrets.CLERK_CI_SECRET_KEY }}
       CLERK_WEBHOOK_SECRET: ${{ secrets.CLERK_CI_WEBHOOK_SECRET }}
 
-      DATABASE_URL: postgresql://ci:ci@localhost:5432/build_market_ci
+      # -----------------------------------------------------------------------
+      # Database — Supabase Supavisor session-mode pooler
+      #
+      # FIX: Previously pointed to localhost:5432/build_market_ci — a Postgres
+      # instance that does not exist on GitHub Actions runners. The Next.js server
+      # started with a broken DATABASE_URL, causing Prisma's PrismaClient
+      # constructor to fail or emit P1001 on first query, which surfaced as a
+      # 500 on the smoke gate root route.
+      #
+      # Both secrets must be set in GitHub Repository Settings → Secrets:
+      #   SUPABASE_DATABASE_URL  — Supabase Supavisor session-mode pooler URL
+      #   SUPABASE_DIRECT_URL    — Direct connection URL (for migrate deploy)
+      # See docs/CI-SECRETS.md for setup instructions.
+      # -----------------------------------------------------------------------
+      DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+
+      # Supabase project metadata (satisfies envConfig.supabase validation)
+      SUPABASE_URL: "https://ewbnznoprzlqtcoxvjai.supabase.co"
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_CI_ANON_KEY }}
+
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3500
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3500/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -190,23 +214,10 @@ jobs:
       # -----------------------------------------------------------------------
       # BullMQ / background jobs — intentionally absent: REDIS_URL
       #
-      # FIX: The previous config set
-      #   REDIS_URL: rediss://:stub_token_for_ci_only@stub.upstash.io:6379
-      #
-      # BullMQ/ioredis eagerly opens a TCP connection to the hostname in
-      # REDIS_URL at job-orchestrator startup. `stub.upstash.io` does not
-      # resolve in public DNS, so every connection attempt produces:
-      #   Error: getaddrinfo ENOTFOUND stub.upstash.io
-      # ioredis enters a reconnect loop ([Redis:BullMQ] Reconnect attempt N),
-      # which floods stdout and can destabilise the process.
-      #
-      # When REDIS_URL is absent, envConfig.redis.url is undefined. The job
-      # orchestrator must guard its BullMQ initialisation with:
-      #   if (!envConfig.redis.url || envConfig.isCI) return;
-      # See docs/CI-SECRETS.md § Code-Side Guard for the required pattern.
-      #
-      # DISABLE_BACKGROUND_JOBS provides belt-and-suspenders defence so the
-      # smoke gate is not broken if that guard has not yet been applied.
+      # BullMQ/ioredis eagerly opens a TCP connection on startup. Stub hostnames
+      # do not resolve in public DNS and cause ioredis reconnect storms that
+      # flood stdout and can destabilise the smoke gate process.
+      # DISABLE_BACKGROUND_JOBS=true provides belt-and-suspenders defence.
       # -----------------------------------------------------------------------
       DISABLE_BACKGROUND_JOBS: "true"
 
@@ -254,6 +265,14 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Run Prisma migrations
+        # Deploy any pending migrations to Supabase before building.
+        # This catches schema drift before a Vercel deployment would.
+        # Uses DATABASE_URL (pooler) since DIRECT_URL (direct TCP) is blocked
+        # on the Supabase free tier without the IPv4 add-on.
+        # prisma.config.ts datasource.url resolves DATABASE_URL at runtime.
+        run: pnpm -C packages/db exec prisma migrate deploy
 
       - name: Build workspace dependencies then client
         # The trailing `...` in the filter is load-bearing.

@@ -26,6 +26,157 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
+## [2026-04-30] Turborepo Environment Variable Passthrough Fix
+
+### Fixed
+
+- **Vercel Build Warnings (`turbo.json`).**
+  Vercel reported 18 environment variables that were set in the project dashboard but missing from `turbo.json`, causing them to be unavailable during the build phase (`@build/queue-server#build`, etc.). Added all flagged variables (e.g., `CORS_ALLOWED_ORIGINS`, `ENCRYPTION_KEY_V1`, `RATE_LIMIT_BACKEND`) to `globalEnv` and `build.env` arrays. Also preemptively added the new Supabase variables (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DIRECT_URL`) to ensure they pass through without triggering strict-mode warnings.
+
+**Files changed:**
+`turbo.json`
+
+## [2026-04-30] Env Boundary Hardening — Supabase Group & `DIRECT_URL`
+
+### Changed
+
+- **`apps/client/app/lib/infrastructure/env.ts` — four targeted improvements.**
+  1. **`DIRECT_URL` added to the `database` envGroup.**
+     The Prisma CLI now reads `DIRECT_URL` from `prisma.config.ts`; without a matching declaration in `envGroups` the `check-env-contract` script would flag it as an undeclared runtime key. Declared as `required: false` (the Supabase free-tier CLI falls back to `DATABASE_URL` since session-mode pooler supports DDL without the IPv4 add-on). Includes the same `postgresql://` prefix validator as `DATABASE_URL`.
+
+  2. **New `supabase` envGroup.**
+     Registers `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in the validator. `SUPABASE_URL` includes an `https://` prefix validator. `SUPABASE_SERVICE_ROLE_KEY` carries an inline comment: _server-side only — bypasses Row Level Security, never prefix `NEXT_PUBLIC_`_. All three are `required: false` since Supabase SDK / Realtime is not yet in use; the current data access path is Prisma-only.
+
+  3. **`buildEnvConfig()` — `directUrl` and `supabase` fields added.**
+     `envConfig.directUrl` exposes the Prisma CLI connection string through the ADR-004 boundary (no direct `process.env` access outside this module). `envConfig.supabase.{ url, anonKey, serviceRoleKey }` is the canonical accessor for Supabase SDK credentials in any future server-side module that needs them.
+
+  4. **`DIRECT_URL` added to `BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS`.**
+     Like `DATABASE_URL`, `DIRECT_URL` is runtime-injected by the platform and not available during `NEXT_PHASE=phase-production-build`. Deferring prevents spurious build-phase validation errors.
+
+  5. **`supabase` added to startup validation groups.**
+     The `supabase` envGroup is now included in the server-runtime auto-validate call so a malformed `SUPABASE_URL` (e.g. `http://` instead of `https://`) is caught at process startup rather than at first use.
+
+  6. **`DATABASE_URL` error message updated.**
+     Now includes the Supabase Supavisor pooler URL format as an example, making the error actionable for operators setting up a new deployment.
+
+**Files changed:**
+`apps/client/app/lib/infrastructure/env.ts`
+
+**Verification:**
+
+```bash
+pnpm run client:check-env-contract
+# → [env-contract] OK: .env.example covers all process.env keys.
+# → Exit code: 0
+```
+
+## [2026-04-30] Supabase Integration & CI Hardening
+
+### Added
+
+- **Supabase as production PostgreSQL provider (`packages/db`).**
+  Migrated from a local/Neon Postgres target to Supabase Supavisor (managed, serverless-safe pooler). All 25 existing Prisma migration files were applied to the Supabase project (`ewbnznoprzlqtcoxvjai`) via `prisma migrate deploy` with zero schema changes.
+
+- **Two-URL Prisma architecture for Supabase (`packages/db/prisma.config.ts`).**
+  `DATABASE_URL` now points to the Supabase Supavisor **session-mode pooler** (port 5432, `aws-1-us-west-2.pooler.supabase.com`) for all runtime queries. `DIRECT_URL` holds the direct connection string (`db.*.supabase.co:5432`) for future use when the Supabase IPv4 add-on is enabled. The Prisma 7 CLI reads `datasource.url` from `prisma.config.ts` exclusively — `url`/`directUrl` fields in `schema.prisma` were removed as they are no longer supported in Prisma 7.
+
+- **Prisma client hardened for serverless (`packages/db/lib/prisma.ts`).**
+  - Replaced silent `postgresql://undefined` pool construction (template literal on potentially-`undefined` `process.env.DATABASE_URL`) with an explicit fail-fast guard that throws at module load time if `DATABASE_URL` is absent.
+  - Set `pool.max = 1` — correct for Vercel serverless where each function invocation is ephemeral; Supabase Supavisor manages the actual Postgres connection pool.
+
+- **Canonical Supabase env variable naming across all env files.**
+  Renamed `SUPABASE_PROJECT_URL` → `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` → `SUPABASE_ANON_KEY`, `DIRECT_CONNECTION_STRING` → `DIRECT_URL`. Added `SUPABASE_SERVICE_ROLE_KEY` placeholder (server-side only, commented). All four env boundary files updated:
+  - `apps/client/.env.example` — committed template with sanitized placeholders
+  - `apps/client/.env` — local secrets (gitignored), real Supabase + Upstash credentials
+  - `apps/client/.env.test` — committed stubs only; real credentials that had leaked in were scrubbed and replaced with `localhost:5432/buildmarket_test` stubs (Prisma is mocked in tests — no real DB connection is made)
+  - `apps/client/.env.vercel.example` — complete rewrite: Supabase two-URL pattern, Upstash-only Redis section (removed stale Options A/B/C noise), all secrets remain commented with `[SECRET]` annotations
+  - `apps/client/.env.vercel` — complete rewrite with live credentials (gitignored)
+
+### Changed (Supabase Integration & CI Hardening)
+
+- **CI workflow — `validate` job (`DATABASE_URL`).**
+  Previously `postgresql://ci:ci@localhost:5432/build_market_ci`. Lint, type-check, and unit tests never open a real DB connection; the localhost placeholder is intentionally kept here but the comment now documents that explicitly. Added `DIRECT_URL` stub so the env boundary does not warn on the newly-declared variable.
+
+- **CI workflow — `client-preview-smoke-gate` job (critical fix).**
+  Previously `DATABASE_URL: postgresql://ci:ci@localhost:5432/build_market_ci` — a Postgres instance that does not exist on GitHub Actions runners. The Next.js production server started with a broken `DATABASE_URL`, causing `PrismaClient` pool construction to target a nonexistent host and surfacing as P1001/500 errors on smoke gate probes.
+  - `DATABASE_URL` and `DIRECT_URL` now resolve from GitHub repository secrets (`SUPABASE_DATABASE_URL`, `SUPABASE_DIRECT_URL`) pointing to the real Supabase pooler.
+  - `SUPABASE_URL` and `SUPABASE_ANON_KEY` added (non-secret and secret respectively).
+  - New **"Run Prisma migrations" step** inserted before the Next.js build — runs `prisma migrate deploy` against Supabase so schema drift is caught in CI before a Vercel deployment would fail. Uses `DATABASE_URL` (pooler) since direct TCP is blocked on the free Supabase plan.
+
+**Files changed:**
+`packages/db/.env` (gitignored);
+`packages/db/lib/prisma.ts`;
+`packages/db/prisma.config.ts`;
+`packages/db/prisma/schema.prisma`;
+`apps/client/.env` (gitignored);
+`apps/client/.env.example`;
+`apps/client/.env.test`;
+`apps/client/.env.vercel` (gitignored);
+`apps/client/.env.vercel.example`;
+`.github/workflows/ci.yml`
+
+**Required GitHub Secrets (add in Repository Settings → Secrets → Actions):**
+
+| Secret name             | Value                                                                                                                              |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `SUPABASE_DATABASE_URL` | Supabase Supavisor pooler URL (`postgresql://postgres.ewbnznoprzlqtcoxvjai:...@aws-1-us-west-2.pooler.supabase.com:5432/postgres`) |
+| `SUPABASE_DIRECT_URL`   | Direct URL (`postgresql://postgres:...@db.ewbnznoprzlqtcoxvjai.supabase.co:5432/postgres`)                                         |
+| `SUPABASE_CI_ANON_KEY`  | Supabase anon/publishable key                                                                                                      |
+
+**Verification:**
+
+```bash
+# Confirm all migrations applied
+pnpm -C packages/db exec prisma migrate status
+# → All migrations: Applied ✓
+
+# Confirm Prisma client generates cleanly
+pnpm -C packages/db exec prisma generate
+# → ✔ Generated Prisma Client
+
+# Env contract check
+pnpm run client:check-env-contract
+```
+
+## [2026-04-30] SystemSettings DB-Failure Observability Hardening
+
+### Fixed (SystemSettings DB-Failure Observability Hardening)
+
+- **`GET /api/internal/system-settings` — Prisma P1001 "Can't reach database server" swallowed silently (Vercel incident `znkpf-1777355323537-8ea418e36d4b`).**
+  `SystemSettingsService.getSettings()` caught all Prisma errors (including `P1001` network-unreachable faults) and returned hardcoded `DEFAULT_PUBLIC_SETTINGS` — correctly fail-open, but the failure was emitted only as an unstructured `console.error(string, error)` blob that Vercel's log pipeline cannot index or alert on. The route returned `200` with `maintenanceMode: false` (correct), but there was no observable signal distinguishing a live DB read from a degraded-default read, making the incident invisible until a manual log review.
+
+  **Root defect — broken reproduction test:** The existing `system-settings-db-failure.test.ts` mocked `getPublicSettings()` to _succeed_ (never triggering the catch branch), then asserted `maintenanceMode === true` — an assertion that can never fire when `getPublicSettings` succeeds. The DB-failure code path had zero effective test coverage.
+
+  **Fixes applied (three files):**
+  1. **`packages/db/lib/system-settings.ts`**
+     - Added `fromFallback: boolean` to the in-memory cache entry shape, set to `false` on successful DB fetch and `true` on catch-path fallback.
+     - Replaced `console.error("Critical Settings Failure, falling back to defaults:", error)` with a structured JSON log object (`{ event: "system_settings_db_failure", severity: "CRITICAL", prismaCode, message }`) so Vercel's log pipeline can index and alert on it by event name.
+     - Exposed `isServingFallback(): boolean` as both a service method and a module-level export, allowing callers to detect degraded-default responses without parsing JSON bodies.
+
+  2. **`apps/client/app/api/internal/system-settings/route.ts`**
+     - Imports `isServingFallback` from `@build/db/system-settings`.
+     - Emits `X-Settings-Source: "fallback" | "db"` response header so the degraded path is observable in Vercel request logs and any upstream caller without changing the JSON response shape.
+     - Logs a structured `warn` event (`system-settings serving DB-failure fallback defaults`) when the fallback path is active, keeping the error-rate signal clean (DB connectivity issues are infrastructure alerts, not application-level errors).
+
+  3. **`apps/client/__tests__/api/internal/system-settings-db-failure.test.ts`** _(rewritten)_
+     - Mocks `prisma.systemSettings.findUnique` to reject with an exact P1001 error, exercising the real `SystemSettingsService` catch branch end-to-end.
+     - Asserts three contracts: `200` status (fail-open), `maintenanceMode: false` (safe default), and `X-Settings-Source: fallback` header.
+     - Adds a fourth case asserting `X-Settings-Source: db` when Prisma resolves successfully.
+     - All 14 tests in `__tests__/api/internal/` pass with zero regressions.
+
+**Files changed:**
+`packages/db/lib/system-settings.ts`;
+`apps/client/app/api/internal/system-settings/route.ts`;
+`apps/client/__tests__/api/internal/system-settings-db-failure.test.ts`
+
+**Verification:**
+
+```bash
+# Reproduction test + full internal API regression suite
+pnpm -C apps/client exec vitest run __tests__/api/internal/ --reporter=verbose
+# Expected: 3 files, 14 tests — all pass
+```
+
 ## [2026-04-28] CI Smoke Gate Stabilization & Build Graph Completion
 
 ### Fixed (CI Pipeline — `client-preview-smoke-gate`)
@@ -338,7 +489,7 @@ pnpm -C apps/client exec vitest run \
 
 ## [2026-04-26] Staff Audit — GDPR Job Orchestrator Hardening
 
-### Fixed
+### Fixed (Staff Audit — GDPR Job Orchestrator Hardening)
 
 - **`anonymization-batch.ts`**: Replaced `process.on` with `process.once` for SIGTERM/SIGINT handlers. Worker factories are called once per process but `process.on` accumulates listeners on repeated calls, producing `MaxListenersExceededWarning`. `process.once` fires at most once and self-removes. Added missing `correlationId` to per-user log events inside the candidate loop. Removed stale `now` variable that was computed but never used after the gracePeriodCutoff refactor. Improved log messages to be more precise ("User already anonymized, skipping" vs "User already anonymized").
 
@@ -1469,7 +1620,7 @@ CHANGELOG history - all Critical/High autopsy defects confirmed closed.
 
 - **Staff-level onboarding and user-profile fixes:** GDPR consent records now create one `ConsentRecord` per changed type (MARKETING_EMAIL, MARKETING_SMS, ANALYTICS_COOKIES) in `service.ts`, `profile-complete.ts`, and `onboarding.ts` — previously a ternary picked a single type and dropped the others. Clerk metadata update now runs before `IdempotencyService.complete()` in all onboarding routes so retries re-attempt the Clerk update. Replaced duplicated `ClerkMetadataClient` type cast in `actions/onboarding.ts` with shared `updateClerkOnboardingMetadata` from `clerk-metadata.ts`. `skipClientOnboarding` no longer hardcodes county (uses null). `skipProfessionalOnboarding` uses `companyName: ""` instead of fabricated strings. Document materialization runs before `prisma.$transaction` in `completeOnboarding` and `completeProfessionalOnboarding`. `completeOnboarding` now guards against already-onboarded users (returns conflict). Property fields use `z.nativeEnum(PropertyType|Category|Status)` and removed `as never` casts. `syncUserProfileCompletionStatus` runs after transaction commit. Upload route uses `isOk()` and correct Result field access instead of fragile discriminant union.
 
-### Changed
+### Changed (Unreleased)
 
 - **Turbo workspace alignment and install-warning cleanup (2026-04-08):** aligned `turbo` to `^2.9.5` across root and client package manifests, and removed unused direct `ts-node` dependencies from `apps/client` and `packages/db` to eliminate recurring pnpm Windows bin-link ENOENT warnings during install.
 - **Dependency and peer-alignment cleanup (2026-04-08):** upgraded `react-day-picker` to `^9.14.0` in admin and client to remove React/date-fns peer-range mismatches under React 19 and current `date-fns`.
@@ -1578,7 +1729,7 @@ Scope-impact criteria used for ranking:
 - **Consent and Finance Adapter Coverage**: Added focused adapter and route regression tests for `/api/user/consent` and the professional finance routes, covering bulk partial-success consent handling, shared professional-portal GET wrapper composition, transaction query parsing, and withdrawal plus transaction mutation mappings.
 - **CRM Follow-Through Coverage**: Added direct domain-level regression suites for leads, inquiries, and pipeline, then extended dashboard consumer and browser-client coverage so the CRM path is now verified at the service, facade, and hook layers.
 
-### Added
+### Added (Unreleased)
 
 - Added shared client server-action hardening primitives:
   - `app/lib/actions/secure-action.ts`

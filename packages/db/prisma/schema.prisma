@@ -5,8 +5,6 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  // Enable PostGIS for location queries if needed, else use cube/earthdistance
-  // extensions = [postgis] // Commented out - PostGIS not installed
   extensions = [citext]
 }
 

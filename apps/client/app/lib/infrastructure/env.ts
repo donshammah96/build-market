@@ -116,10 +116,51 @@ const envGroups: EnvGroup[] = [
         required: true,
         validate: (v) =>
           v.startsWith("postgresql://") || v.startsWith("postgres://"),
-        errorMessage: "Must be a valid PostgreSQL connection string",
+        errorMessage:
+          "Must be a valid PostgreSQL connection string. " +
+          "Use the Supabase Supavisor session-mode pooler URL " +
+          "(postgresql://postgres.PROJECT_REF:PASSWORD@aws-REGION.pooler.supabase.com:5432/postgres).",
+      },
+      {
+        // Used by: prisma migrate deploy / prisma migrate dev (CLI only, never at Next.js runtime).
+        // Points to the Supabase direct connection (requires IPv4 add-on on free tier).
+        // Optional here because the Prisma CLI on free tier falls back to DATABASE_URL
+        // (pooler supports DDL in session mode).
+        name: "DIRECT_URL",
+        required: false,
+        validate: (v) =>
+          v.startsWith("postgresql://") || v.startsWith("postgres://"),
+        errorMessage:
+          "Must be a valid PostgreSQL connection string (Supabase direct URL)",
       },
       // POSTGRES_URL is an optional alias (e.g., Vercel Postgres injects this automatically).
       { name: "POSTGRES_URL", required: false },
+    ],
+  },
+  {
+    name: "supabase",
+    description: "Supabase project credentials",
+    variables: [
+      {
+        // Non-secret: the project URL is safe to commit and expose to clients.
+        name: "SUPABASE_URL",
+        required: false,
+        validate: (v) => v.startsWith("https://"),
+        errorMessage:
+          "Must be a valid HTTPS Supabase project URL (https://PROJECT_REF.supabase.co)",
+      },
+      {
+        // The anon/publishable key — safe to expose to the browser.
+        // Required if using Supabase SDK / Realtime directly; optional for Prisma-only use.
+        name: "SUPABASE_ANON_KEY",
+        required: false,
+      },
+      {
+        // Server-side only — bypasses Row Level Security.
+        // NEVER prefix with NEXT_PUBLIC_. Optional: only needed for admin/service operations.
+        name: "SUPABASE_SERVICE_ROLE_KEY",
+        required: false,
+      },
     ],
   },
   {
@@ -430,6 +471,9 @@ const BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS = new Set<string>([
   "CLERK_SECRET_KEY",
   "CLERK_WEBHOOK_SECRET",
   "DATABASE_URL",
+  // DIRECT_URL is consumed only by the Prisma CLI (prisma migrate deploy / dev).
+  // It is never read at Next.js runtime, so it is deferred like DATABASE_URL.
+  "DIRECT_URL",
   "ENCRYPTION_KEY_V1",
   // Upstash credentials are runtime-injected by Vercel; not available at build time.
   "UPSTASH_REDIS_REST_URL",
@@ -770,10 +814,22 @@ function buildEnvConfig() {
 
     // Database
     databaseUrl: getOptionalStringEnv("DATABASE_URL"),
+    // DIRECT_URL is used only by the Prisma CLI — never at Next.js runtime.
+    // Exposed here so callers can inspect it without violating the ADR-004 boundary.
+    directUrl: getOptionalStringEnv("DIRECT_URL"),
     // FIX: POSTGRES_URL is now declared in envGroups. It's an alias Vercel Postgres injects.
     postgresUrl:
       getOptionalStringEnv("POSTGRES_URL") ??
       getOptionalStringEnv("DATABASE_URL"),
+
+    // Supabase project credentials
+    // url and anonKey are safe for server-side use. serviceRoleKey bypasses RLS
+    // and must never be passed to client components or prefixed NEXT_PUBLIC_.
+    supabase: {
+      url: getOptionalStringEnv("SUPABASE_URL"),
+      anonKey: getOptionalStringEnv("SUPABASE_ANON_KEY"),
+      serviceRoleKey: getOptionalStringEnv("SUPABASE_SERVICE_ROLE_KEY"),
+    },
 
     // Redis / Upstash
     // upstashRestUrl and upstashRestToken are the primary credentials for the
@@ -956,7 +1012,7 @@ if (
   process.env.NODE_ENV !== "test" &&
   !isEdgeRuntime()
 ) {
-  const startupGroups = ["clerk", "database", "urls", "encryption"];
+  const startupGroups = ["clerk", "database", "supabase", "urls", "encryption"];
 
   // Always validate Upstash credentials in production — the REST client and
   // rate limiter require them regardless of RATE_LIMIT_BACKEND setting.

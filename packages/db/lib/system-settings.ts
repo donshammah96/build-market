@@ -336,6 +336,8 @@ class SystemSettingsService {
     publicParsed: PublicSettings;
     financialParsed: FinancialSettings;
     timestamp: number;
+    /** True when the entry was populated from hardcoded defaults due to a DB failure. */
+    fromFallback: boolean;
   } | null = null;
 
   private readonly CACHE_TTL_MS = 60_000; // 60 seconds
@@ -352,6 +354,14 @@ class SystemSettingsService {
 
   public invalidateCache(): void {
     this.cache = null;
+  }
+
+  /**
+   * Returns true when the last successful settings fetch fell back to
+   * hardcoded defaults due to a database connectivity failure.
+   */
+  public isServingFallback(): boolean {
+    return this.cache?.fromFallback ?? false;
   }
 
   public async getSettings(): Promise<SystemSettings> {
@@ -383,12 +393,27 @@ class SystemSettingsService {
           publicParsed,
           financialParsed,
           timestamp: Date.now(),
+          fromFallback: false,
         };
         return parsed;
       } catch (error) {
+        // Emit a structured JSON log so Vercel's log pipeline can index this
+        // as a distinct event rather than an unstructured string blob.
+        // Do NOT expose error.message in any API response — logged internally only.
+        const prismaCode =
+          error instanceof Error &&
+          "code" in error &&
+          typeof (error as Record<string, unknown>)["code"] === "string"
+            ? (error as Record<string, unknown>)["code"]
+            : "UNKNOWN";
         console.error(
-          "Critical Settings Failure, falling back to defaults:",
-          error,
+          JSON.stringify({
+            event: "system_settings_db_failure",
+            severity: "CRITICAL",
+            prismaCode,
+            message:
+              "SystemSettings DB fetch failed — serving hardcoded defaults",
+          }),
         );
         const fallback = SystemSettingsSchema.parse({
           ...DEFAULT_PUBLIC_SETTINGS,
@@ -402,6 +427,7 @@ class SystemSettingsService {
           publicParsed,
           financialParsed,
           timestamp: Date.now(),
+          fromFallback: true,
         };
         return fallback;
       } finally {
@@ -443,6 +469,15 @@ export async function getFinancialSettings(): Promise<FinancialSettings> {
 
 export function invalidateCache(): void {
   systemSettingsService.invalidateCache();
+}
+
+/**
+ * Returns true when the service last fell back to hardcoded defaults due to a
+ * database connectivity failure. Callers can use this to emit observability
+ * headers (e.g. X-Settings-Source: fallback) without changing response shape.
+ */
+export function isServingFallback(): boolean {
+  return systemSettingsService.isServingFallback();
 }
 
 /**
