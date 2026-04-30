@@ -8,9 +8,22 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const connectionString = `${process.env.DATABASE_URL}`;
+// Use the pooled DATABASE_URL at runtime.
+// DIRECT_URL is consumed only by `prisma migrate deploy` — never at runtime.
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error(
+    "[db] DATABASE_URL is not set. " +
+      "Set it to the Supabase Supavisor session-mode pooler URL.",
+  );
+}
 
-const pool = new Pool({ connectionString });
+const pool = new Pool({
+  connectionString,
+  // Serverless: one connection per invocation is optimal.
+  // Supabase Supavisor manages the actual Postgres connection pool.
+  max: 1,
+});
 const adapter = new PrismaPg(pool);
 
 export const prisma =

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPublicSettings } from "@build/db/system-settings";
+import {
+  getPublicSettings,
+  isServingFallback,
+} from "@build/db/system-settings";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
@@ -17,6 +20,12 @@ const logger = getClientLogger();
  * Returns minimal settings for maintenance mode and signup blocking.
  *
  * Returns: { maintenanceMode, maintenanceMessage, publicSignup, allowProfessionalSignup }
+ *
+ * Response headers:
+ *   X-Settings-Source: "db" | "fallback"
+ *     - "fallback" means the DB was unreachable and hardcoded safe-defaults are
+ *       being served. Middleware resolver treats 200 + defaults as non-maintenance,
+ *       which is the intended fail-open behaviour for this endpoint.
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const secretError = ensureValidInternalSecret(
@@ -38,14 +47,34 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   const settings = await getPublicSettings();
+  const servingFallback = isServingFallback();
 
-  return NextResponse.json({
-    maintenanceMode: settings.maintenanceMode,
-    maintenanceMessage: settings.maintenanceMessage,
-    publicSignup: settings.publicSignup,
-    allowProfessionalSignup: settings.allowProfessionalSignup,
-    allowedIPs: settings.allowedIPs,
-  });
+  if (servingFallback) {
+    // Structured warn so Vercel log pipeline surfaces this without noise in
+    // error-rate dashboards (DB connectivity issues are infrastructure alerts,
+    // not application errors at the route layer).
+    logger.warn("system-settings serving DB-failure fallback defaults", {
+      operationName: "get_system_settings",
+      settingsSource: "fallback",
+    });
+  }
+
+  return NextResponse.json(
+    {
+      maintenanceMode: settings.maintenanceMode,
+      maintenanceMessage: settings.maintenanceMessage,
+      publicSignup: settings.publicSignup,
+      allowProfessionalSignup: settings.allowProfessionalSignup,
+      allowedIPs: settings.allowedIPs,
+    },
+    {
+      headers: {
+        // Allows callers and Vercel log queries to distinguish a live DB read
+        // from a degraded-default response without changing the JSON shape.
+        "X-Settings-Source": servingFallback ? "fallback" : "db",
+      },
+    },
+  );
 }
 
 export const dynamic = "force-dynamic";
