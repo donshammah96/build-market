@@ -26,6 +26,25 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
+## [2026-04-30] Content Security Policy (CSP) Remediation
+
+### Fixed (CSP Remediation)
+
+- **Homepage breakage caused by missing CSP directives and origins.**
+  Addressed three distinct CSP failures in `next-config-csp.ts` that blocked the homepage from loading fully:
+  1. Added `script-src-elem` directive with `'unsafe-inline'` to mirror `script-src`, fixing the blocking of Clerk's inline bootstrap scripts (Chrome 90+ / Firefox 105+ treat `script-src-elem` separately).
+  2. Added `https://*.clerk.accounts.dev` as a static fallback pattern to `scriptOrigins` to handle cases where `NEXT_PUBLIC_CLERK_FRONTEND_API` is not set in the environment.
+  3. Added `https://cdn.jsdelivr.net` to `fontOrigins` to allow OpenDyslexic `.woff` fonts.
+  4. Added `worker-src 'self' blob:` to prevent future breakages from service workers.
+
+**Files changed:**
+`apps/client/next-config-csp.ts`
+`apps/client/docs/adr/ADR-008-http-surface-security.md`
+
+### Future Work (Phased Follow-up)
+
+- **CSP `script-src-elem` Nonce Strategy:** As documented in ADR-008 §4, the proper long-term architectural fix for `script-src-elem` is to generate a per-request cryptographic nonce in Next.js middleware, inject it into the CSP header via `NextResponse`, and pass it to Clerk via `clerkMiddleware`'s `nonce` option. This will eliminate the need for the `'unsafe-inline'` fallback.
+
 ## [2026-04-30] Turborepo Environment Variable Passthrough Fix
 
 ### Fixed
