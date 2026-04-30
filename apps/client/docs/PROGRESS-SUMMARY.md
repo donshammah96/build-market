@@ -195,9 +195,9 @@ Last updated: 2026-04-30
 ### [CHECKPOINT] Content Security Policy (CSP) Remediation - Completed
 
 - Date: 2026-04-30
-- Outcome summary: Addressed three distinct CSP failures blocking the homepage by adding missing `script-src-elem`, Clerk CDN fallbacks, and OpenDyslexic font origins to `next-config-csp.ts`.
+- Outcome summary: Addressed CSP failures blocking the homepage by adding missing `script-src-elem`, `connect-src` origins (Clerk telemetry and API), Clerk CDN fallbacks, and OpenDyslexic font origins to `next-config-csp.ts`.
 - Actual files changed: `apps/client/next-config-csp.ts`.
-- Verification: Deploy and verify resolution of 17 `script-src-elem` and 4 `font-src` console errors.
+- Verification: Deploy and verify resolution of 17 `script-src-elem`, 4 `font-src`, and 6 `connect-src` console errors.
 
 ### [CHECKPOINT] Dashboard Path Standardization — /dashboard → /homeowner-dashboard
 

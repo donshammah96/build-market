@@ -38,6 +38,10 @@ export function buildCspValue(sources: CspSources): string {
     ...selfAndFirstParty,
     // Third-party (identity): Clerk frontend API for auth/session operations.
     clerkFrontendApiOrigin,
+    // Fallback for Clerk CDN when NEXT_PUBLIC_CLERK_FRONTEND_API is unset.
+    "https://*.clerk.accounts.dev",
+    // Third-party (identity): Clerk telemetry.
+    "https://clerk-telemetry.com",
     // Third-party (analytics): PostHog ingestion/query endpoint.
     analyticsOrigin,
     // Dev-only HMR websocket endpoint; no wildcard host.
