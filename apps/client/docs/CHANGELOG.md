@@ -43,6 +43,10 @@ This format is based on Keep a Changelog and uses semantic categories:
   `script-src` now includes the nonce, and CSP directive coverage tests include
   critical directives (`object-src`, `base-uri`, `frame-ancestors`, `form-action`,
   `worker-src`).
+  Forward CSP Headers to SSR Context: Modified `applyDocumentCspHeaders` in `middleware.ts` to inject both `x-nonce` and `Content-Security-Policy` into `requestHeaders` before passing them to `NextResponse.next()`. This ensures the Next.js render context is perfectly synchronized with the enforced response policy.
+  Enforce Origin-Only CSP Sources: Updated the `apiOrigin` fallback in middleware to use an origin-only value (`appOrigin`) instead of appending the `/api` path.
+  Fail-Fast Nonce Validation: Updated `RootLayout` to throw a loud error in non-production environments if the `x-nonce` header is missing, preventing silent middleware misconfigurations. For production, the fallback is now `undefined` to prevent invalid `nonce=""` attributes in the DOM.
+  ADR-004 Compliance: Replaced raw `process.env.NODE_ENV` access in `RootLayout` with the validated `env.isProd` property from `app/lib/infrastructure/env.ts`.
 
 ### Docs (CSP Nonce Rollout)
 

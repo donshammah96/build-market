@@ -10,6 +10,7 @@ import { PostHogProvider } from "@/app/providers/PostHogProvider";
 import { CookieBanner } from "@/components/gdpr/CookieBanner";
 import { AccessibilityProvider } from "@/components/accessibility";
 import { RouteFocusManager } from "@/components/layout/RouteFocusManager";
+import { env } from "@/app/lib/infrastructure/env"; // Added env import
 
 // Single, distinctive font with multiple weights for better performance
 // DM Sans is modern, geometric, and works well for both headings and body
@@ -35,7 +36,8 @@ export const metadata: Metadata = {
     template: "%s | Build Market",
   },
   description: "Find the best professionals for your building project in Kenya",
-  metadataBase: new URL("https://build-market.vercel.app"),
+
+  metadataBase: new URL(env.appUrl ?? "http://localhost:3500"), // Added metadataBase for correct URL resolution
   icons: {
     icon: "/favicon.ico",
     apple: "/apple-touch-icon.png",
@@ -44,7 +46,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Build Market",
     description: "Find the best professionals for your building project",
-    url: "https://build-market.vercel.app",
+    url: env.appUrl ?? "http://localhost:3500",
     siteName: "Build Market",
     images: [
       {
@@ -83,7 +85,18 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const headersList = await headers();
-  const nonce = headersList.get("x-nonce") ?? "";
+  const rawNonce = headersList.get("x-nonce");
+
+  // Fail fast in non-prod if the nonce is missing using envConfig properties
+  if (!rawNonce && !env.isProd) {
+    throw new Error(
+      "Missing 'x-nonce' header. Ensure middleware is correctly setting and forwarding the nonce to the request headers.",
+    );
+  }
+
+  // Fallback to undefined instead of an empty string to prevent invalid CSP attributes
+  const nonce = rawNonce || undefined;
+
   const { auth } = await import("@clerk/nextjs/server");
   const { userId } = await auth();
   const isSignedIn = !!userId;
