@@ -10,8 +10,8 @@
     "test": "echo \"No tests configured\" && exit 0"
   },
   "dependencies": {
-    "@clerk/backend": "^3.2.7",
-    "@clerk/nextjs": "^7.2.1",
+    "@clerk/backend": "^3.2.14",
+    "@clerk/nextjs": "^7.2.4",
     "@hono/node-server": "^1.19.13",
     "hono": "^4.12.14"
   },

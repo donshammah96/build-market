@@ -119,15 +119,16 @@
       "picomatch@^4.0.0": "4.0.4",
       "qs": ">=6.14.2",
       "rollup@^4.0.0": "4.60.1",
-      "socket.io-parser": ">=4.2.6",
-      "vite@^7.0.0": "7.3.2",
+      "@clerk/backend": ">=3.2.14",
+      "@clerk/express": ">=2.1.6",
+      "@clerk/nextjs": ">=7.2.4",
+      "@clerk/react": ">=6.4.3",
+      "@clerk/shared": ">=4.8.3",
       "yaml": ">=2.8.3",
       "next": ">=15.5.15",
-      "@clerk/nextjs": ">=7.2.1",
       "dompurify": ">=3.4.0",
       "axios": ">=1.15.0",
       "protobufjs": ">=7.5.5",
-      "@clerk/shared": ">=4.8.1",
       "postcss": ">=8.5.10"
     }
   }

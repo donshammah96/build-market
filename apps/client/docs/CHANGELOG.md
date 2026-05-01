@@ -26,6 +26,39 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
+## [2026-05-01] CSP Nonce Rollout (Phase 2 Prep)
+
+### Security (CSP Nonce Rollout)
+
+- **Per-request CSP nonce generation and propagation.**
+  Middleware now generates a cryptographic nonce per request, injects a nonce-bearing
+  `Content-Security-Policy`, and passes the nonce to Clerk via `ClerkProvider`.
+  Inline script authorization moves from `'unsafe-inline'` to `'nonce-<value>'` for
+  document responses, while redirects emit no CSP.
+
+### Fixed (CSP Nonce Rollout)
+
+- **Nonce entropy and CSP directive coverage hardening.**
+  Nonce generation uses `crypto.getRandomValues` with base64 encoding of raw bytes,
+  `script-src` now includes the nonce, and CSP directive coverage tests include
+  critical directives (`object-src`, `base-uri`, `frame-ancestors`, `form-action`,
+  `worker-src`).
+
+### Docs (CSP Nonce Rollout)
+
+- **Updated CSP fallback guidance.**
+  The static CSP fallback retains `script-src-elem 'unsafe-inline'` while production
+  confirms zero CSP violations; removal remains gated by the rollout checklist.
+
+**Files changed:**
+`apps/client/app/lib/security/middleware/csp-nonce.ts`
+`apps/client/middleware.ts`
+`apps/client/app/layout.tsx`
+`apps/client/next-config-csp.ts`
+`apps/client/__tests__/middleware/csp-nonce.test.ts`
+`apps/client/__tests__/middleware/route-guards.test.ts`
+`apps/client/docs/AUDIT-CSP-NONCE-ROUND2.md`
+
 ## [2026-04-30] Content Security Policy (CSP) Remediation
 
 ### Fixed (CSP Remediation)

@@ -1,36 +1,42 @@
-// bootstrap-only: executed at Next.js config / header evaluation time.
-// The module graph (app/lib/infrastructure/env.ts) is not initialized here.
-// Direct env access via next-config-env.ts is intentional per ADR-004.
-// See also: ADR-008 §4 (Security Header Baseline).
-
-export type CspSources = {
+export type CspNonceOptions = {
+  nonce: string;
   appOrigin: string;
   apiOrigin: string;
-  /** Derived from NEXT_PUBLIC_CLERK_FRONTEND_API. Null when not configured. */
   clerkFrontendApiOrigin: string | null;
-  /** Derived from NEXT_PUBLIC_POSTHOG_HOST. Null when not configured. */
   analyticsOrigin: string | null;
   isDev: boolean;
 };
 
-/**
- * Assembles the Content-Security-Policy header value from runtime-resolved origins.
- *
- * Design notes:
- * - Called inside `headers()` so values reflect each deployment's env, not the build.
- * - All third-party entries carry an inline justification (ADR-008 §4 governance rule).
- * - `unsafe-inline` in style-src is required by Next.js runtime style injection and
- *   several UI libraries. Removing it without a nonce/hash strategy breaks the UI.
- * - `unsafe-eval` is deliberately absent — no dynamic code execution is permitted.
- */
-export function buildCspValue(sources: CspSources): string {
+export function generateCspNonce(): string {
+  if (!globalThis.crypto?.getRandomValues) {
+    throw new Error("CSP nonce generation requires crypto.getRandomValues");
+  }
+
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+
+  if (typeof btoa === "function") {
+    let binary = "";
+    for (const byte of bytes) {
+      binary += String.fromCharCode(byte);
+    }
+    return btoa(binary);
+  }
+
+  return Buffer.from(bytes).toString("base64");
+}
+
+const dedup = (arr: string[]) => [...new Set(arr)];
+
+export function buildCspWithNonce(opts: CspNonceOptions): string {
   const {
+    nonce,
     appOrigin,
     apiOrigin,
     clerkFrontendApiOrigin,
     analyticsOrigin,
     isDev,
-  } = sources;
+  } = opts;
 
   const selfAndFirstParty = ["'self'", appOrigin, apiOrigin];
 
@@ -46,7 +52,7 @@ export function buildCspValue(sources: CspSources): string {
     analyticsOrigin,
     // Dev-only HMR websocket endpoint; no wildcard host.
     isDev ? appOrigin.replace(/^http/, "ws") : null,
-  ].filter((v): v is string => Boolean(v));
+  ].filter((value): value is string => Boolean(value));
 
   const scriptOrigins = [
     ...selfAndFirstParty,
@@ -61,7 +67,7 @@ export function buildCspValue(sources: CspSources): string {
     "https://img.clerk.com",
     // Third-party (analytics): PostHog web SDK assets.
     analyticsOrigin,
-  ].filter((v): v is string => Boolean(v));
+  ].filter((value): value is string => Boolean(value));
 
   const styleOrigins = [
     "'self'",
@@ -96,14 +102,12 @@ export function buildCspValue(sources: CspSources): string {
     "https://fonts.gstatic.com",
   ];
 
-  const dedup = (arr: string[]) => [...new Set(arr)];
-
   return [
     "default-src 'self'",
-    `script-src ${dedup(scriptOrigins).join(" ")}`,
-    // FALLBACK: Middleware injects a per-request nonce-based CSP for browser routes.
-    // Keep unsafe-inline here until production confirms zero CSP violations.
-    `script-src-elem 'unsafe-inline' ${dedup(scriptOrigins).join(" ")}`,
+    `script-src 'nonce-${nonce}' 'strict-dynamic' ${dedup(scriptOrigins).join(" ")}`,
+    // 'strict-dynamic' delegates trust to scripts loaded by nonce-authorized scripts.
+    // Origin allowlists are retained as fallbacks for browsers without strict-dynamic support.
+    `script-src-elem 'nonce-${nonce}' 'strict-dynamic' ${dedup(scriptOrigins).join(" ")}`,
     `style-src ${dedup(styleOrigins).join(" ")}`,
     `img-src ${dedup(imgOrigins).join(" ")}`,
     `font-src ${dedup(fontOrigins).join(" ")}`,
