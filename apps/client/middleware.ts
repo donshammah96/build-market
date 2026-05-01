@@ -23,22 +23,62 @@ import {
 import { resolveSystemSettings } from "@/app/lib/security/middleware/system-settings-resolver";
 import { logMiddlewareDecision } from "@/app/lib/security/middleware/decision-log";
 import { env } from "@/app/lib/infrastructure/env";
+import {
+  buildCspWithNonce,
+  generateCspNonce,
+} from "@/app/lib/security/middleware/csp-nonce";
 import { ROUTES } from "@/lib/links";
 
 // =============================================================================
 // Middleware
 // =============================================================================
 
+const toOrigin = (value?: string | null): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+};
+
+const applyDocumentCspHeaders = (
+  req: NextRequest,
+  nonce: string,
+  cspValue: string,
+): NextResponse => {
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", nonce);
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("Content-Security-Policy", cspValue);
+  return response;
+};
+
 export default clerkMiddleware(async (auth, req: Request) => {
   const nextReq = req as NextRequest;
   const { pathname } = nextReq.nextUrl;
   const baseUrl = nextReq.nextUrl.origin;
+  const nonce = generateCspNonce();
+  const appOrigin = toOrigin(env.appUrl) ?? "http://localhost:3500";
+  const apiOrigin = toOrigin(env.apiUrl) ?? `${appOrigin}/api`;
+  const cspValue = buildCspWithNonce({
+    nonce,
+    appOrigin,
+    apiOrigin,
+    clerkFrontendApiOrigin: toOrigin(env.clerk.frontendApi),
+    analyticsOrigin: toOrigin(env.analytics.posthogHost),
+    isDev: env.isDev,
+  });
 
   // --- DEV AUTH BYPASS ---
   // Allow all routes during local offline development without triggering Clerk checks
   if (env.auth.bypassEnabled && env.isDev) {
     logMiddlewareDecision(nextReq, "mw_dev_bypass");
-    return NextResponse.next();
+    return applyDocumentCspHeaders(nextReq, nonce, cspValue);
   }
   // --- END DEV AUTH BYPASS ---
 
@@ -95,7 +135,7 @@ export default clerkMiddleware(async (auth, req: Request) => {
   // 1. Public routes - allow access without any checks
   if (isPublicRoute(nextReq)) {
     logMiddlewareDecision(nextReq, "mw_allow_public");
-    return NextResponse.next();
+    return applyDocumentCspHeaders(nextReq, nonce, cspValue);
   }
 
   // 2. Onboarding routes - require auth but have special logic
@@ -164,7 +204,7 @@ export default clerkMiddleware(async (auth, req: Request) => {
       source: status.source,
       reason: status.reason,
     });
-    return NextResponse.next();
+    return applyDocumentCspHeaders(nextReq, nonce, cspValue);
   }
 
   // 3. Protected routes - require authentication AND completed onboarding
@@ -230,7 +270,7 @@ export default clerkMiddleware(async (auth, req: Request) => {
           status: status.status,
         },
       );
-      return NextResponse.next();
+      return applyDocumentCspHeaders(nextReq, nonce, cspValue);
     }
 
     if (isPendingVerificationRoute && status.role === "PROFESSIONAL") {
@@ -265,11 +305,12 @@ export default clerkMiddleware(async (auth, req: Request) => {
       source: status.source,
       role: status.role,
     });
+    return applyDocumentCspHeaders(nextReq, nonce, cspValue);
   }
 
   // 4. All other routes - allow access
   logMiddlewareDecision(nextReq, "mw_allow_default");
-  return NextResponse.next();
+  return applyDocumentCspHeaders(nextReq, nonce, cspValue);
 });
 
 export const config = {

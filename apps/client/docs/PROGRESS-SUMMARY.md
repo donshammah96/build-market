@@ -186,11 +186,12 @@ Last updated: 2026-04-30
 
 ## Snapshot
 
-### [PLANNED] CSP Nonce Strategy Implementation
+### [CHECKPOINT] CSP Nonce Strategy Implementation - Completed (Phase 1)
 
-- Phase: Future Work (Follow-up)
-- Scope: Migrate from `'unsafe-inline'` for `script-src-elem` to a cryptographic nonce strategy to support Clerk's authentication bootstrap.
-- Required Action: Generate a per-request cryptographic nonce in Next.js middleware, inject it into the CSP header via `NextResponse`, and pass it to Clerk via `clerkMiddleware`'s `nonce` option. Documented in ADR-008 §4.
+- Date: 2026-05-01
+- Outcome summary: Middleware now generates and injects per-request CSP nonces for document responses and passes the nonce to `ClerkProvider`. Redirects emit no CSP. Static fallback retains `script-src-elem 'unsafe-inline'` pending production violation-free confirmation.
+- Actual files changed: `apps/client/app/lib/security/middleware/csp-nonce.ts`, `apps/client/middleware.ts`, `apps/client/app/layout.tsx`, `apps/client/next-config-csp.ts`, `apps/client/__tests__/middleware/csp-nonce.test.ts`, `apps/client/__tests__/middleware/route-guards.test.ts`.
+- Phase 2 follow-up: consolidate duplicated CSP origin arrays between `csp-nonce.ts` and `next-config-csp.ts` (R2-04).
 
 ### [CHECKPOINT] Content Security Policy (CSP) Remediation - Completed
 

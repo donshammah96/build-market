@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { DM_Sans } from "next/font/google";
@@ -81,12 +82,14 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headersList = await headers();
+  const nonce = headersList.get("x-nonce") ?? "";
   const { auth } = await import("@clerk/nextjs/server");
   const { userId } = await auth();
   const isSignedIn = !!userId;
 
   return (
-    <ClerkProvider>
+    <ClerkProvider nonce={nonce} dynamic>
       <html lang="en" className={dmSans.variable}>
         <head>
           {/* Preconnect to critical third-party origins */}
@@ -100,7 +103,7 @@ export default async function RootLayout({
         >
           <a
             href="#main-content"
-            className="sr-only z-[100] focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:shadow-lg"
+            className="sr-only z-100 focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:shadow-lg"
           >
             Skip to main content
           </a>

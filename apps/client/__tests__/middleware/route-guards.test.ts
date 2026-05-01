@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { NextRequest, type NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { ROUTES } from "@/lib/links";
 
 const mockAuth = vi.fn();
@@ -39,6 +39,33 @@ vi.mock("@/app/lib/security/middleware/decision-log", () => ({
   logMiddlewareDecision: vi.fn(),
 }));
 
+vi.mock("@/app/lib/security/middleware/csp-nonce", () => ({
+  generateCspNonce: () => "test-nonce-stable",
+  buildCspWithNonce: ({ nonce }: { nonce: string }) =>
+    `default-src 'self'; script-src 'nonce-${nonce}'; script-src-elem 'nonce-${nonce}'`,
+}));
+
+vi.mock("@/app/lib/security/middleware/redirect-policy", () => ({
+  redirectToSignIn: (req: NextRequest, pathname: string) =>
+    NextResponse.redirect(
+      new URL(`/sign-in?redirect_url=${encodeURIComponent(pathname)}`, req.url),
+    ),
+  redirectToDashboardForRole: (req: NextRequest) =>
+    NextResponse.redirect(new URL("/homeowner-dashboard", req.url)),
+  redirectToOnboarding: (req: NextRequest) =>
+    NextResponse.redirect(new URL("/onboarding", req.url)),
+  redirectToProfessionalPendingVerification: (req: NextRequest) =>
+    NextResponse.redirect(
+      new URL("/professional-portal/pending-verification", req.url),
+    ),
+  redirectToMaintenance: (req: NextRequest) =>
+    NextResponse.redirect(new URL("/maintenance", req.url)),
+  redirectToRegistrationClosed: (req: NextRequest) =>
+    NextResponse.redirect(new URL("/?registration=closed", req.url)),
+  redirectToProfessionalSignupClosed: (req: NextRequest) =>
+    NextResponse.redirect(new URL("/sign-up?pro=closed", req.url)),
+}));
+
 import middleware from "@/middleware";
 
 function assertResponse(
@@ -47,6 +74,21 @@ function assertResponse(
   if (!(res instanceof Response)) {
     throw new Error("Expected middleware to return a response");
   }
+}
+
+function expectDocumentCspHeaders(res: Response | NextResponse) {
+  const csp = res.headers.get("Content-Security-Policy");
+
+  expect(csp).toBeTruthy();
+  expect(csp).toContain("script-src 'nonce-test-nonce-stable'");
+  expect(csp).toContain("script-src-elem 'nonce-test-nonce-stable'");
+  expect(csp).not.toContain("script-src-elem 'unsafe-inline'");
+}
+
+function expectRedirectNoCsp(res: Response | NextResponse) {
+  const csp = res.headers.get("Content-Security-Policy");
+
+  expect(csp).toBeNull();
 }
 
 describe("middleware route guards", () => {
@@ -84,6 +126,7 @@ describe("middleware route guards", () => {
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
+    expectRedirectNoCsp(res);
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toContain("/sign-in");
     expect(res.headers.get("location")).toContain(
@@ -110,6 +153,7 @@ describe("middleware route guards", () => {
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
+    expectDocumentCspHeaders(res);
     expect(res.status).toBe(200);
     expect(res.headers.get("location")).toBeNull();
   });
@@ -133,6 +177,7 @@ describe("middleware route guards", () => {
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
+    expectRedirectNoCsp(res);
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toContain(ROUTES.userDashboard);
   });
@@ -148,6 +193,7 @@ describe("middleware route guards", () => {
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
+    expectRedirectNoCsp(res);
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toContain("/onboarding");
   });
@@ -174,6 +220,7 @@ describe("middleware route guards", () => {
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
+    expectRedirectNoCsp(res);
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toContain("/maintenance");
   });
@@ -208,6 +255,7 @@ describe("middleware route guards", () => {
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
+    expectDocumentCspHeaders(res);
     expect(res.status).toBe(200);
   });
 
@@ -229,6 +277,7 @@ describe("middleware route guards", () => {
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
+    expectRedirectNoCsp(res);
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toContain("registration=closed");
   });
@@ -251,6 +300,7 @@ describe("middleware route guards", () => {
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
+    expectRedirectNoCsp(res);
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toContain("pro=closed");
   });
@@ -272,6 +322,7 @@ describe("middleware route guards", () => {
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
+    expectDocumentCspHeaders(res);
     expect(res.status).toBe(200);
   });
 
@@ -292,6 +343,7 @@ describe("middleware route guards", () => {
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
+    expectRedirectNoCsp(res);
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toContain("/onboarding");
   });
@@ -318,6 +370,7 @@ describe("middleware route guards", () => {
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
+    expectRedirectNoCsp(res);
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toContain(
       "/professional-portal/pending-verification",
@@ -346,6 +399,7 @@ describe("middleware route guards", () => {
 
     const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
     assertResponse(res);
+    expectDocumentCspHeaders(res);
     expect(res.status).toBe(200);
   });
 });
