@@ -52,7 +52,7 @@ const applyDocumentCspHeaders = (
 ): NextResponse => {
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-nonce", nonce);
-
+  requestHeaders.set("Content-Security-Policy", cspValue);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", cspValue);
   return response;
@@ -63,8 +63,12 @@ export default clerkMiddleware(async (auth, req: Request) => {
   const { pathname } = nextReq.nextUrl;
   const baseUrl = nextReq.nextUrl.origin;
   const nonce = generateCspNonce();
+
   const appOrigin = toOrigin(env.appUrl) ?? "http://localhost:3500";
-  const apiOrigin = toOrigin(env.apiUrl) ?? `${appOrigin}/api`;
+
+  // FIX: Fall back to an origin-only value (appOrigin) instead of appending a path
+  const apiOrigin = toOrigin(env.apiUrl) ?? appOrigin;
+
   const cspValue = buildCspWithNonce({
     nonce,
     appOrigin,
