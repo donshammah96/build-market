@@ -235,14 +235,27 @@ const envGroups: EnvGroup[] = [
     description: "Upload and storage configuration",
     variables: [
       { name: "S3_DISABLED", required: false, default: "true" },
+      // Canonical R2 credentials/config
+      { name: "R2_ENDPOINT", required: false },
+      { name: "R2_ACCESS_KEY_ID", required: false },
+      { name: "R2_SECRET_ACCESS_KEY", required: false },
+      { name: "R2_REGION", required: false, default: "auto" },
+      { name: "R2_ASSET_BUCKET", required: false },
+      { name: "R2_PUBLIC_BASE_URL", required: false },
+      // Legacy aliases kept for one release
       { name: "AWS_ACCESS_KEY_ID", required: false },
       { name: "AWS_SECRET_ACCESS_KEY", required: false },
       { name: "AWS_REGION", required: false, default: "af-south-1" },
+      { name: "S3_ACCESS_KEY_ID", required: false },
+      { name: "S3_SECRET_ACCESS_KEY", required: false },
+      { name: "S3_REGION", required: false, default: "af-south-1" },
+      { name: "S3_URL", required: false },
+      { name: "S3_EU_URL", required: false },
       { name: "S3_ASSET_BUCKET", required: false },
       { name: "STORAGE_PROVIDER", required: false, default: "local" },
       { name: "UPLOAD_DIR", required: false, default: "./public/uploads" },
       { name: "STORAGE_BUCKET", required: false },
-      { name: "STORAGE_REGION", required: false, default: "af-south-1" },
+      { name: "STORAGE_REGION", required: false, default: "eu" },
       { name: "CDN_URL", required: false, default: "/uploads" },
     ],
   },
@@ -371,6 +384,7 @@ const envGroups: EnvGroup[] = [
     name: "s3exports",
     description: "S3 Export Buckets",
     variables: [
+      { name: "R2_EXPORT_BUCKET", required: false },
       { name: "S3_EXPORT_BUCKET", required: false },
       { name: "EXPORTS_BUCKET_NAME", required: false },
       { name: "EXPORT_LOCAL_DIR", required: false, default: "./temp-exports" },
@@ -567,6 +581,13 @@ export function validateEnv(
     validateRedisRateLimitReadiness(result);
   }
 
+  const validatesStorageGroup = groupsToValidate.some(
+    (group) => group.name === "storage" || group.name === "s3exports",
+  );
+  if (validatesStorageGroup) {
+    validateStorageRemoteReadiness(result);
+  }
+
   // Log results
   if (result.errors.length > 0) {
     console.error("\n❌ Environment validation errors:");
@@ -703,6 +724,91 @@ function parseOriginList(raw?: string): string[] {
     .filter(Boolean);
 }
 
+function isAbsoluteHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Enforces a fail-closed production posture for remote storage when the S3-compatible
+ * provider path is enabled (AWS S3 or Cloudflare R2 via AWS SDK).
+ */
+function validateStorageRemoteReadiness(result: ValidationResult): void {
+  const nodeEnv = getStringEnv("NODE_ENV", "development");
+  const isProd = nodeEnv === "production";
+  const storageProvider = getStringEnv("STORAGE_PROVIDER", "local");
+  const s3Disabled = getBooleanEnv("S3_DISABLED", true);
+  const remoteStorageEnabled = storageProvider === "s3" || !s3Disabled;
+
+  if (!isProd || !remoteStorageEnabled) {
+    return;
+  }
+
+  if (shouldDeferServerOnlyValidationForBuild()) {
+    result.warnings.push(
+      "[storage] Deferring remote storage credential checks until runtime.",
+    );
+    return;
+  }
+
+  const endpoint =
+    getOptionalStringEnv("R2_ENDPOINT") ?? getOptionalStringEnv("S3_URL");
+  const accessKeyId =
+    getOptionalStringEnv("R2_ACCESS_KEY_ID") ??
+    getOptionalStringEnv("AWS_ACCESS_KEY_ID") ??
+    getOptionalStringEnv("S3_ACCESS_KEY_ID");
+  const secretAccessKey =
+    getOptionalStringEnv("R2_SECRET_ACCESS_KEY") ??
+    getOptionalStringEnv("AWS_SECRET_ACCESS_KEY") ??
+    getOptionalStringEnv("S3_SECRET_ACCESS_KEY");
+  const assetBucket =
+    getOptionalStringEnv("R2_ASSET_BUCKET") ??
+    getOptionalStringEnv("STORAGE_BUCKET") ??
+    getOptionalStringEnv("S3_ASSET_BUCKET");
+  const publicBaseUrl =
+    getOptionalStringEnv("R2_PUBLIC_BASE_URL") ??
+    getOptionalStringEnv("CDN_URL");
+
+  if (!endpoint || !isAbsoluteHttpUrl(endpoint)) {
+    result.valid = false;
+    result.errors.push(
+      "[storage] R2_ENDPOINT (or S3_URL alias) must be an absolute HTTP(S) URL when remote storage is enabled in production.",
+    );
+  }
+
+  if (!accessKeyId) {
+    result.valid = false;
+    result.errors.push(
+      "[storage] R2_ACCESS_KEY_ID (or AWS_ACCESS_KEY_ID/S3_ACCESS_KEY_ID alias) is required when remote storage is enabled in production.",
+    );
+  }
+
+  if (!secretAccessKey) {
+    result.valid = false;
+    result.errors.push(
+      "[storage] R2_SECRET_ACCESS_KEY (or AWS_SECRET_ACCESS_KEY/S3_SECRET_ACCESS_KEY alias) is required when remote storage is enabled in production.",
+    );
+  }
+
+  if (!assetBucket) {
+    result.valid = false;
+    result.errors.push(
+      "[storage] R2_ASSET_BUCKET (or STORAGE_BUCKET/S3_ASSET_BUCKET alias) is required when remote storage is enabled in production.",
+    );
+  }
+
+  if (!publicBaseUrl || !isAbsoluteHttpUrl(publicBaseUrl)) {
+    result.valid = false;
+    result.errors.push(
+      "[storage] R2_PUBLIC_BASE_URL (or CDN_URL alias) must be an absolute HTTP(S) URL when remote storage is enabled in production.",
+    );
+  }
+}
+
 // ============================================
 // Config Builder
 // ============================================
@@ -717,6 +823,37 @@ function buildEnvConfig() {
     "UPLOAD_PROCESS_INLINE",
     isDev || isTest,
   );
+
+  const resolvedStorageAccessKeyId =
+    getOptionalStringEnv("R2_ACCESS_KEY_ID") ??
+    getOptionalStringEnv("AWS_ACCESS_KEY_ID") ??
+    getOptionalStringEnv("S3_ACCESS_KEY_ID");
+  const resolvedStorageSecretAccessKey =
+    getOptionalStringEnv("R2_SECRET_ACCESS_KEY") ??
+    getOptionalStringEnv("AWS_SECRET_ACCESS_KEY") ??
+    getOptionalStringEnv("S3_SECRET_ACCESS_KEY");
+  const resolvedStorageEndpoint =
+    getOptionalStringEnv("R2_ENDPOINT") ?? getOptionalStringEnv("S3_URL");
+  const resolvedStorageAssetBucket =
+    getOptionalStringEnv("R2_ASSET_BUCKET") ??
+    getOptionalStringEnv("STORAGE_BUCKET") ??
+    getOptionalStringEnv("S3_ASSET_BUCKET");
+  const resolvedStoragePublicBaseUrl = getStringEnv(
+    "R2_PUBLIC_BASE_URL",
+    getStringEnv("CDN_URL", "/uploads"),
+  );
+  const resolvedStorageRegion = getStringEnv(
+    "R2_REGION",
+    getStringEnv(
+      "STORAGE_REGION",
+      getStringEnv("AWS_REGION", getStringEnv("S3_REGION", "auto")),
+    ),
+  );
+  const resolvedExportBucket =
+    getOptionalStringEnv("R2_EXPORT_BUCKET") ??
+    getOptionalStringEnv("S3_EXPORT_BUCKET") ??
+    getOptionalStringEnv("EXPORTS_BUCKET_NAME") ??
+    "buildmarket-exports";
 
   // Middleware and other edge entry points must not fail import-time on
   // node-only startup invariants. Node runtimes still enforce this strictly.
@@ -865,14 +1002,16 @@ function buildEnvConfig() {
         | "s3"
         | "gcs",
       localPath: getStringEnv("UPLOAD_DIR", "./public/uploads"),
-      bucket: getOptionalStringEnv("STORAGE_BUCKET"),
-      region: getStringEnv("STORAGE_REGION", "af-south-1"),
-      cdnUrl: getStringEnv("CDN_URL", "/uploads"),
+      bucket: resolvedStorageAssetBucket,
+      region: resolvedStorageRegion,
+      endpoint: resolvedStorageEndpoint,
+      cdnUrl: resolvedStoragePublicBaseUrl,
+      publicBaseUrl: resolvedStoragePublicBaseUrl,
       s3Disabled: getBooleanEnv("S3_DISABLED", true),
-      assetBucket: getStringEnv("S3_ASSET_BUCKET", "buildmarket-assets"),
-      awsRegion: getStringEnv("AWS_REGION", "af-south-1"),
-      accessKeyId: getOptionalStringEnv("AWS_ACCESS_KEY_ID"),
-      secretAccessKey: getOptionalStringEnv("AWS_SECRET_ACCESS_KEY"),
+      assetBucket: resolvedStorageAssetBucket ?? "buildmarket-assets",
+      awsRegion: resolvedStorageRegion,
+      accessKeyId: resolvedStorageAccessKeyId,
+      secretAccessKey: resolvedStorageSecretAccessKey,
     },
 
     // Services — FIX: messagingPublic now reads the correct variable name
@@ -927,13 +1066,12 @@ function buildEnvConfig() {
     // S3 exports — FIX: replaced direct process.env access with helpers
     s3: {
       disabled: getBooleanEnv("S3_DISABLED", true),
-      region: getStringEnv("AWS_REGION", "af-south-1"),
-      exportBucket:
-        getStringEnv("S3_EXPORT_BUCKET") ||
-        getStringEnv("EXPORTS_BUCKET_NAME", "buildmarket-exports"),
+      region: resolvedStorageRegion,
+      endpoint: resolvedStorageEndpoint,
+      exportBucket: resolvedExportBucket,
       localDir: getStringEnv("EXPORT_LOCAL_DIR", "./temp-exports"),
-      accessKeyId: getOptionalStringEnv("AWS_ACCESS_KEY_ID"),
-      secretAccessKey: getOptionalStringEnv("AWS_SECRET_ACCESS_KEY"),
+      accessKeyId: resolvedStorageAccessKeyId,
+      secretAccessKey: resolvedStorageSecretAccessKey,
     },
 
     // Encryption
@@ -1015,6 +1153,9 @@ if (
   !isEdgeRuntime()
 ) {
   const startupGroups = ["clerk", "database", "supabase", "urls", "encryption"];
+  const remoteStorageEnabled =
+    getStringEnv("STORAGE_PROVIDER", "local") === "s3" ||
+    !getBooleanEnv("S3_DISABLED", true);
 
   // Always validate Upstash credentials in production — the REST client and
   // rate limiter require them regardless of RATE_LIMIT_BACKEND setting.
@@ -1028,6 +1169,10 @@ if (
     )
   ) {
     startupGroups.push("redis");
+  }
+
+  if (process.env.NODE_ENV === "production" || remoteStorageEnabled) {
+    startupGroups.push("storage", "s3exports");
   }
 
   validateEnv(startupGroups);

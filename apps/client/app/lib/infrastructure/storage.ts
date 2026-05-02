@@ -21,6 +21,7 @@ export interface StorageConfig {
   localPath?: string;
   bucket?: string;
   region?: string;
+  endpoint?: string;
   cdnUrl?: string;
 }
 
@@ -84,6 +85,20 @@ function assertProductionStorageConfig(config: StorageConfig): void {
     throw new Error(
       "Unsafe production storage configuration: local storage provider is prohibited in production.",
     );
+  }
+
+  if (config.provider === "s3") {
+    if (!config.endpoint || !isAbsoluteHttpUrl(config.endpoint)) {
+      throw new Error(
+        "Unsafe production storage configuration: S3-compatible endpoint must be an absolute remote origin in production.",
+      );
+    }
+
+    if (!env.storage.accessKeyId || !env.storage.secretAccessKey) {
+      throw new Error(
+        "Unsafe production storage configuration: remote storage credentials are required in production.",
+      );
+    }
   }
 
   const cdnUrl = config.cdnUrl;
@@ -210,6 +225,7 @@ class S3StorageProvider implements StorageProvider {
   private readonly client: S3Client;
   private readonly bucket: string;
   private readonly region: string;
+  private readonly endpoint: string;
   private readonly publicUrl: string;
 
   constructor(config: StorageConfig) {
@@ -223,8 +239,15 @@ class S3StorageProvider implements StorageProvider {
       throw new Error("S3 storage configuration requires an absolute CDN_URL.");
     }
 
+    if (!config.endpoint || !isAbsoluteHttpUrl(config.endpoint)) {
+      throw new Error(
+        "S3 storage configuration requires an absolute R2 endpoint (R2_ENDPOINT or S3_URL).",
+      );
+    }
+
     this.bucket = config.bucket;
-    this.region = config.region || env.storage.region || "af-south-1";
+    this.region = config.region || env.storage.region || "eu";
+    this.endpoint = config.endpoint;
     this.publicUrl = config.cdnUrl.replace(/\/+$/, "");
 
     const credentials =
@@ -237,6 +260,7 @@ class S3StorageProvider implements StorageProvider {
 
     this.client = new S3Client({
       region: this.region,
+      endpoint: this.endpoint,
       ...(credentials ? { credentials } : {}),
     });
   }
@@ -343,6 +367,7 @@ export function createStorageProvider(
       : env.storage.localPath,
     bucket: env.storage.bucket || env.storage.assetBucket,
     region: env.storage.region,
+    endpoint: env.storage.endpoint,
     cdnUrl: env.storage.cdnUrl,
   };
 

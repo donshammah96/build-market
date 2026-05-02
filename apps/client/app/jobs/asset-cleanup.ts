@@ -52,14 +52,16 @@ function getS3Client(): S3Client | null {
 
   const accessKeyId = env.storage.accessKeyId;
   const secretAccessKey = env.storage.secretAccessKey;
+  const endpoint = env.storage.endpoint;
 
-  if (!accessKeyId || !secretAccessKey) {
+  if (!accessKeyId || !secretAccessKey || !endpoint) {
     s3ClientInstance = null;
     return null;
   }
 
   s3ClientInstance = new S3Client({
     region: env.storage.awsRegion,
+    endpoint,
     credentials: { accessKeyId, secretAccessKey },
   });
 
