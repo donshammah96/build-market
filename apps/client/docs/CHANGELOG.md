@@ -63,6 +63,56 @@ This format is based on Keep a Changelog and uses semantic categories:
 `apps/client/__tests__/middleware/route-guards.test.ts`
 `apps/client/docs/AUDIT-CSP-NONCE-ROUND2.md`
 
+## [2026-05-01] R2-First Storage Cutover (Client + Admin)
+
+### Changed (Storage Contract)
+
+- **R2-first env resolution with production fail-closed validation.**
+  `env.ts` now prioritizes `R2_*` keys with one-release AWS/S3 alias support and
+  enforces stricter production validation when remote storage is enabled.
+
+- **Endpoint-aware S3-compatible client (region=auto supported).**
+  `storage.ts` now builds an endpoint-aware S3-compatible client and applies
+  tighter production guards for remote storage configuration.
+
+### Fixed (Workers + Cleanup)
+
+- **Export workers and cleanup jobs aligned to the endpoint-aware contract.**
+  Client and admin export processors and asset cleanup jobs now use the same
+  R2/S3-compatible config shape and remove the unsupported SSE header. Fixed the
+  `AWS_S3_BUCKET` inconsistency in admin export processing.
+
+### Docs (Env Templates + Turbo)
+
+- **Env templates and Turbo metadata updated for R2 and aliases.**
+  `.env.example` and `.env.vercel.example` document canonical `R2_*` variables
+  with one-release alias notes, and `turbo.json` includes the R2 and alias keys
+  for cache invalidation.
+
+### Testing (R2 Regression)
+
+- **Env and storage config suites expanded.**
+  Added R2 regression coverage in `env.validation.test.ts`,
+  `storage-config.test.ts`, and `export-processor.r2.test.ts`.
+
+### Verification
+
+- `pnpm -C apps/client run check-types`
+
+**Files changed:**
+`apps/client/app/lib/infrastructure/env.ts`
+`apps/client/app/lib/infrastructure/storage.ts`
+`apps/client/app/workers/export/processor.ts`
+`apps/client/app/jobs/asset-cleanup.ts`
+`apps/client/.env.example`
+`apps/client/.env.vercel.example`
+`apps/client/__tests__/lib/env.validation.test.ts`
+`apps/client/__tests__/lib/storage-config.test.ts`
+`apps/client/__tests__/workers/export-processor.r2.test.ts`
+`apps/admin/src/lib/workers/export/processor.ts`
+`apps/admin/src/lib/jobs/asset-cleanup.ts`
+`turbo.json`
+
 ## [2026-04-30] Content Security Policy (CSP) Remediation
 
 ### Fixed (CSP Remediation)

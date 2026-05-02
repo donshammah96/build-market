@@ -29,18 +29,35 @@ const assetCleanupQueue = new Queue("gdpr-asset-cleanup", {
 // Initialize S3 client if enabled
 let s3Client: S3Client | null = null;
 if (!S3_DISABLED) {
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  const accessKeyId =
+    process.env.R2_ACCESS_KEY_ID ||
+    process.env.AWS_ACCESS_KEY_ID ||
+    process.env.S3_ACCESS_KEY_ID;
+  const secretAccessKey =
+    process.env.R2_SECRET_ACCESS_KEY ||
+    process.env.AWS_SECRET_ACCESS_KEY ||
+    process.env.S3_SECRET_ACCESS_KEY;
+  const endpoint = process.env.R2_ENDPOINT || process.env.S3_URL;
+  const region =
+    process.env.R2_REGION ||
+    process.env.AWS_REGION ||
+    process.env.S3_REGION ||
+    "auto";
 
-  if (accessKeyId && secretAccessKey) {
+  if (accessKeyId && secretAccessKey && endpoint) {
     s3Client = new S3Client({
-      region: process.env.AWS_REGION || "af-south-1",
+      region,
+      endpoint,
       credentials: { accessKeyId, secretAccessKey },
     });
   }
 }
 
-const ASSET_BUCKET = process.env.S3_ASSET_BUCKET || "buildmarket-assets";
+const ASSET_BUCKET =
+  process.env.R2_ASSET_BUCKET ||
+  process.env.STORAGE_BUCKET ||
+  process.env.S3_ASSET_BUCKET ||
+  "buildmarket-assets";
 
 interface AssetCleanupMetrics {
   totalExpired: number;

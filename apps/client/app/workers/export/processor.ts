@@ -25,18 +25,19 @@ export class ExportProcessor {
 
     // Initialize S3 client only if not disabled
     if (!this.s3Disabled) {
-      const { accessKeyId, secretAccessKey } = env.s3;
+      const { accessKeyId, secretAccessKey, endpoint } = env.s3;
 
-      if (!accessKeyId || !secretAccessKey) {
+      if (!accessKeyId || !secretAccessKey || !endpoint) {
         console.warn(
-          "[ExportProcessor] AWS credentials not configured. " +
-            "Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or set S3_DISABLED=true for local storage.",
+          "[ExportProcessor] S3-compatible storage configuration missing. " +
+            "Set R2_ENDPOINT/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY (or AWS/S3 aliases), or set S3_DISABLED=true for local storage.",
         );
         // Allow graceful degradation to local storage
         this.s3Disabled = true;
       } else {
         this.s3Client = new S3Client({
           region: env.s3.region,
+          endpoint,
           credentials: { accessKeyId, secretAccessKey },
         });
       }
@@ -289,8 +290,6 @@ export class ExportProcessor {
           "user-id": user.id,
           "generated-at": new Date().toISOString(),
         },
-        // Server-side encryption
-        ServerSideEncryption: "AES256",
       },
       queueSize: 4, // concurrent upload parts
       partSize: 5 * 1024 * 1024, // 5MB parts

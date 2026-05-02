@@ -19,24 +19,41 @@ export class ExportProcessor {
 
   constructor() {
     this.s3Disabled = process.env.S3_DISABLED === "true";
-    this.bucketName = process.env.AWS_S3_BUCKET || "uploads-bucket";
+    this.bucketName =
+      process.env.R2_EXPORT_BUCKET ||
+      process.env.S3_EXPORT_BUCKET ||
+      process.env.EXPORTS_BUCKET_NAME ||
+      "buildmarket-exports";
     this.exportDir = path.join(process.cwd(), "exports");
 
     // Initialize S3 client only if not disabled
     if (!this.s3Disabled) {
-      const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-      const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+      const accessKeyId =
+        process.env.R2_ACCESS_KEY_ID ||
+        process.env.AWS_ACCESS_KEY_ID ||
+        process.env.S3_ACCESS_KEY_ID;
+      const secretAccessKey =
+        process.env.R2_SECRET_ACCESS_KEY ||
+        process.env.AWS_SECRET_ACCESS_KEY ||
+        process.env.S3_SECRET_ACCESS_KEY;
+      const endpoint = process.env.R2_ENDPOINT || process.env.S3_URL;
+      const region =
+        process.env.R2_REGION ||
+        process.env.AWS_REGION ||
+        process.env.S3_REGION ||
+        "auto";
 
-      if (!accessKeyId || !secretAccessKey) {
+      if (!accessKeyId || !secretAccessKey || !endpoint) {
         console.warn(
-          "[ExportProcessor] AWS credentials not configured. " +
-            "Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or set S3_DISABLED=true for local storage.",
+          "[ExportProcessor] S3-compatible storage configuration missing. " +
+            "Set R2_ENDPOINT/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY (or AWS/S3 aliases), or set S3_DISABLED=true for local storage.",
         );
         // Allow graceful degradation to local storage
         this.s3Disabled = true;
       } else {
         this.s3Client = new S3Client({
-          region: process.env.AWS_REGION || "us-east-1",
+          region,
+          endpoint,
           credentials: { accessKeyId, secretAccessKey },
         });
       }
@@ -289,8 +306,6 @@ export class ExportProcessor {
           "user-id": user.id,
           "generated-at": new Date().toISOString(),
         },
-        // Server-side encryption
-        ServerSideEncryption: "AES256",
       },
       queueSize: 4, // concurrent upload parts
       partSize: 5 * 1024 * 1024, // 5MB parts
