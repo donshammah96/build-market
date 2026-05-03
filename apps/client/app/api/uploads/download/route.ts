@@ -11,6 +11,10 @@ function parseVisibility(value: string | null): StorageVisibility | null {
   return null;
 }
 
+function isValidStorageKey(value: string): boolean {
+  return /^[A-Za-z0-9](?:[A-Za-z0-9._/-]{0,510}[A-Za-z0-9])?$/.test(value);
+}
+
 export async function GET(req: NextRequest) {
   const key = req.nextUrl.searchParams.get("key") ?? "";
   const token = req.nextUrl.searchParams.get("token") ?? "";
@@ -20,7 +24,13 @@ export async function GET(req: NextRequest) {
   );
   const filename = req.nextUrl.searchParams.get("filename");
 
-  if (!key || !token || !visibility || !Number.isFinite(expiresAt)) {
+  if (
+    !key ||
+    !isValidStorageKey(key) ||
+    !token ||
+    !visibility ||
+    !Number.isFinite(expiresAt)
+  ) {
     return apiError("Invalid download URL", HttpStatus.BAD_REQUEST);
   }
 
