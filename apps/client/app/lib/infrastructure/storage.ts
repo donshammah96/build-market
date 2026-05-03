@@ -299,8 +299,27 @@ class LocalStorageProvider implements StorageProvider {
       throw new Error("[storage:local] Absolute storage keys are prohibited.");
     }
 
+    if (!key || key.includes("\0") || key.includes("\\")) {
+      throw new Error("[storage:local] Invalid storage key.");
+    }
+
+    const normalizedKey = path.posix.normalize(key);
+    const segments = normalizedKey.split("/");
+    if (
+      normalizedKey.startsWith("/") ||
+      segments.some(
+        (segment) =>
+          !segment ||
+          segment === "." ||
+          segment === ".." ||
+          !/^[A-Za-z0-9._-]+$/.test(segment),
+      )
+    ) {
+      throw new Error("[storage:local] Invalid storage key.");
+    }
+
     const resolvedRoot = path.resolve(this.uploadDir);
-    const resolvedPath = path.resolve(this.uploadDir, path.normalize(key));
+    const resolvedPath = path.resolve(this.uploadDir, normalizedKey);
     if (
       resolvedPath !== resolvedRoot &&
       !resolvedPath.startsWith(`${resolvedRoot}${path.sep}`)
