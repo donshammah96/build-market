@@ -294,7 +294,33 @@ class LocalStorageProvider implements StorageProvider {
     return visibility === "private" ? "local-private" : "local";
   }
 
+  private assertSafeKey(key: string): void {
+    if (!key || key.includes("\0")) {
+      throw new Error("[storage:local] Invalid storage key.");
+    }
+
+    if (!/^[A-Za-z0-9/_\-\.]+$/.test(key)) {
+      throw new Error("[storage:local] Storage key contains invalid characters.");
+    }
+
+    const normalized = path.posix.normalize(key);
+    if (
+      normalized.startsWith("../") ||
+      normalized === ".." ||
+      normalized.includes("/../") ||
+      normalized.includes("\\")
+    ) {
+      throw new Error("[storage:local] Path traversal detected.");
+    }
+  }
+
+  private metadataPathFromObjectPath(filepath: string): string {
+    return `${filepath}.meta.json`;
+  }
+
   private resolvePath(key: string): string {
+    this.assertSafeKey(key);
+
     if (path.isAbsolute(key)) {
       throw new Error("[storage:local] Absolute storage keys are prohibited.");
     }
@@ -403,10 +429,11 @@ class LocalStorageProvider implements StorageProvider {
       key,
       expires: String(expiresAt),
       visibility,
+    const metadataPath = this.metadataPathFromObjectPath(filepath);
       token,
     });
     if (options?.filename) {
-      params.set("filename", options.filename);
+      metadataPath,
     }
 
     return {
@@ -430,7 +457,7 @@ class LocalStorageProvider implements StorageProvider {
         mimeType,
         originalFilename: options?.originalFilename ?? path.basename(key),
         visibility: visibilityFromOption(options?.visibility),
-      }),
+      .unlink(this.metadataPathFromObjectPath(filepath))
     );
   }
 
