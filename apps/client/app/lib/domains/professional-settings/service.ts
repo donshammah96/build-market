@@ -375,8 +375,13 @@ export const professionalSettingsService = {
             let assetId: string | undefined;
 
             if (staged) {
-              let asset = await tx.asset.findUnique({
-                where: { checksum: staged.checksum },
+              let asset = await tx.asset.findFirst({
+                where: {
+                  checksum: staged.checksum,
+                  uploaderId: actor.userId,
+                  visibility: "PUBLIC",
+                  deletedAt: null,
+                },
               });
 
               if (!asset) {
@@ -390,6 +395,7 @@ export const professionalSettingsService = {
                     bucket: staged.storageBucket,
                     key: staged.storageKey,
                     cdnUrl: staged.tempUrl,
+                    visibility: "PUBLIC",
                   },
                 });
               }

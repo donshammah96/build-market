@@ -241,6 +241,7 @@ const envGroups: EnvGroup[] = [
       { name: "R2_SECRET_ACCESS_KEY", required: false },
       { name: "R2_REGION", required: false, default: "auto" },
       { name: "R2_ASSET_BUCKET", required: false },
+      { name: "R2_PRIVATE_BUCKET", required: false },
       { name: "R2_PUBLIC_BASE_URL", required: false },
       // Legacy aliases kept for one release
       { name: "AWS_ACCESS_KEY_ID", required: false },
@@ -252,6 +253,7 @@ const envGroups: EnvGroup[] = [
       { name: "S3_URL", required: false },
       { name: "S3_EU_URL", required: false },
       { name: "S3_ASSET_BUCKET", required: false },
+      { name: "S3_PRIVATE_BUCKET", required: false },
       { name: "STORAGE_PROVIDER", required: false, default: "local" },
       { name: "UPLOAD_DIR", required: false, default: "./public/uploads" },
       { name: "STORAGE_BUCKET", required: false },
@@ -769,6 +771,9 @@ function validateStorageRemoteReadiness(result: ValidationResult): void {
     getOptionalStringEnv("R2_ASSET_BUCKET") ??
     getOptionalStringEnv("STORAGE_BUCKET") ??
     getOptionalStringEnv("S3_ASSET_BUCKET");
+  const privateBucket =
+    getOptionalStringEnv("R2_PRIVATE_BUCKET") ??
+    getOptionalStringEnv("S3_PRIVATE_BUCKET");
   const publicBaseUrl =
     getOptionalStringEnv("R2_PUBLIC_BASE_URL") ??
     getOptionalStringEnv("CDN_URL");
@@ -798,6 +803,13 @@ function validateStorageRemoteReadiness(result: ValidationResult): void {
     result.valid = false;
     result.errors.push(
       "[storage] R2_ASSET_BUCKET (or STORAGE_BUCKET/S3_ASSET_BUCKET alias) is required when remote storage is enabled in production.",
+    );
+  }
+
+  if (!privateBucket) {
+    result.valid = false;
+    result.errors.push(
+      "[storage] R2_PRIVATE_BUCKET (or S3_PRIVATE_BUCKET alias) is required for private document uploads when remote storage is enabled in production.",
     );
   }
 
@@ -838,6 +850,9 @@ function buildEnvConfig() {
     getOptionalStringEnv("R2_ASSET_BUCKET") ??
     getOptionalStringEnv("STORAGE_BUCKET") ??
     getOptionalStringEnv("S3_ASSET_BUCKET");
+  const resolvedStoragePrivateBucket =
+    getOptionalStringEnv("R2_PRIVATE_BUCKET") ??
+    getOptionalStringEnv("S3_PRIVATE_BUCKET");
   const resolvedStoragePublicBaseUrl = getStringEnv(
     "R2_PUBLIC_BASE_URL",
     getStringEnv("CDN_URL", "/uploads"),
@@ -1003,6 +1018,7 @@ function buildEnvConfig() {
         | "gcs",
       localPath: getStringEnv("UPLOAD_DIR", "./public/uploads"),
       bucket: resolvedStorageAssetBucket,
+      privateBucket: resolvedStoragePrivateBucket,
       region: resolvedStorageRegion,
       endpoint: resolvedStorageEndpoint,
       cdnUrl: resolvedStoragePublicBaseUrl,

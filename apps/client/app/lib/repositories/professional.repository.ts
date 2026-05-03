@@ -507,7 +507,7 @@ export class ProfessionalRepository {
         images: p.images.map((img) => ({
           asset: img.asset
             ? {
-                cdnUrl: img.asset.cdnUrl,
+                cdnUrl: img.asset.cdnUrl ?? undefined,
                 thumbnailUrl: img.asset.thumbnailUrl ?? undefined,
               }
             : undefined,

@@ -290,7 +290,6 @@ export const POST = withAuth(
               logger.warn("File validation failed", {
                 correlationId,
                 fieldName,
-                fileName: file.name,
                 error: validation.error,
               });
               continue;
@@ -486,7 +485,6 @@ export const POST = withAuth(
               logger.info("File deduplicated before storage write", {
                 correlationId,
                 fieldName,
-                checksum: storedChecksum,
                 existingAssetId: asset.id,
               });
             }
@@ -495,8 +493,8 @@ export const POST = withAuth(
               fieldName,
               originalName: file.name,
               assetId: asset.id,
-              url: asset.cdnUrl,
-              cdnUrl: asset.cdnUrl,
+              url: asset.cdnUrl ?? undefined,
+              cdnUrl: asset.cdnUrl ?? undefined,
               thumbnailUrl: asset.thumbnailUrl,
               size: asset.size,
               mimeType: asset.mimeType,
@@ -530,7 +528,6 @@ export const POST = withAuth(
               {
                 correlationId,
                 fieldName,
-                fileName: file.name,
               },
             );
           }

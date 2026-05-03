@@ -82,6 +82,9 @@ setup-database.ps1
 create-pr.ps1
 create-pr.sh
 docs
+!apps/client/docs/
+apps/client/docs/*
+!apps/client/docs/STORAGE-INTEGRATION-GUIDE.md
 .agent
 .idea/
 apps/client/public/uploads/

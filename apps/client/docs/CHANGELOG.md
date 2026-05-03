@@ -26,6 +26,48 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
+## [2026-05-03] Storage Direct Upload and Private Asset Hardening
+
+### Added (Storage Direct Upload and Private Asset Hardening)
+
+- Added private document direct-upload APIs: `POST /api/uploads/presign`,
+  `POST /api/uploads/confirm`, and `GET /api/uploads/[id]/download`.
+- Added `DirectUpload` tracking with pending, confirmed, expired, and failed
+  states, plus scheduled cleanup for abandoned direct-upload blobs.
+- Added storage visibility support for public and private buckets, local
+  token-backed direct upload/download proxies, and private presigned downloads.
+
+### Changed (Storage Direct Upload and Private Asset Hardening)
+
+- Made `Asset.cdnUrl` nullable and added `Asset.visibility`, preserving public
+  image behavior while allowing Class B assets to avoid permanent URLs.
+- Scoped asset deduplication by uploader, checksum, and visibility.
+- Updated credential and property document upload clients to persist `assetId`
+  from the direct document flow by default.
+
+### Security (Storage Direct Upload and Private Asset Hardening)
+
+- Direct upload confirmation now verifies owner, pending status, expiry, object
+  existence, exact size, MIME, server-computed SHA-256, and magic bytes before
+  creating a private `Asset`.
+- Private document/license/certificate DTOs no longer expose private `cdnUrl`.
+- Upload logs avoid filenames, checksums, storage keys, and presigned URLs.
+
+### Docs (Storage Direct Upload and Private Asset Hardening)
+
+- Rewrote `STORAGE-INTEGRATION-GUIDE.md` as the canonical end-to-end
+  integration plan, including decision tables, private download flow, env setup,
+  test guidance, operations, cleanup, and failure modes.
+- Updated this changelog and `PROGRESS-SUMMARY.md` for the hardening checkpoint.
+
+### Verification (Storage Direct Upload and Private Asset Hardening)
+
+- `pnpm -C packages/db exec prisma generate`
+- `pnpm -C apps/client exec vitest run __tests__/api/uploads __tests__/lib/uploads __tests__/lib/storage-config.test.ts __tests__/lib/upload-client.test.ts --pool=threads --maxWorkers=1`
+- `pnpm run client:tsc-noemit`
+- `pnpm run client:check-env-contract`
+- `pnpm run client:report-security-drift:strict`
+
 ## [2026-05-01] CSP Nonce Rollout (Phase 2 Prep)
 
 ### Security (CSP Nonce Rollout)

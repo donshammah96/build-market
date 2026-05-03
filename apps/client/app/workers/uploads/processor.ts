@@ -79,6 +79,10 @@ export async function processImageUploadJob(
     }
 
     const { asset } = persisted.data;
+    if (!asset.cdnUrl) {
+      throw new Error("Persisted image asset is missing a public URL");
+    }
+
     await markUploadReady(data.uploadId, {
       assetId: asset.id,
       url: asset.cdnUrl,

@@ -1,9 +1,9 @@
 /**
  * Onboarding Upload Cleanup Scheduler
  *
- * Cleans up expired staged OnboardingUpload records: deletes storage blobs
- * and marks records as EXPIRED. Staged uploads that were never materialized
- * during onboarding completion expire after their TTL.
+ * Cleans up expired staged OnboardingUpload and DirectUpload records: deletes
+ * storage blobs and marks rows as EXPIRED. Direct uploads that were presigned
+ * but never confirmed expire after their short TTL.
  *
  * Runs daily at 3 AM by default (configurable via ONBOARDING_UPLOAD_CLEANUP_CRON).
  */
@@ -87,21 +87,32 @@ export function createOnboardingUploadCleanupWorker() {
       });
 
       try {
-        const result = await uploadService.cleanupExpiredStagedUploads();
+        const stagedResult = await uploadService.cleanupExpiredStagedUploads();
+        const directResult = await uploadService.cleanupExpiredDirectUploads();
 
         const durationMs = Date.now() - startTime;
 
         logger.info("Onboarding upload cleanup job completed", {
           correlationId,
           jobId: job.id,
-          cleanupResult: result,
+          operationNames: [
+            "cleanup_expired_staged_uploads",
+            "cleanup_expired_direct_uploads",
+          ],
+          cleanupResult: {
+            staged: stagedResult,
+            direct: directResult,
+          },
           durationMs,
         });
 
         return {
-          count: result.count,
-          deletedFromStorage: result.deletedFromStorage,
-          failedDeletions: result.failedDeletions.length,
+          count: stagedResult.count + directResult.count,
+          deletedFromStorage:
+            stagedResult.deletedFromStorage + directResult.deletedFromStorage,
+          failedDeletions:
+            stagedResult.failedDeletions.length +
+            directResult.failedDeletions.length,
           durationMs,
         };
       } catch (error) {
