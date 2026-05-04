@@ -407,19 +407,25 @@ class LocalStorageProvider implements StorageProvider {
     }
   }
 
-  /** Returns the path of the metadata sidecar for a given object path. */
-  private metadataPath(objectPath: string): string {
+  private resolveContainedPath(relativePath: string): string {
     const resolvedRoot = path.resolve(this.uploadDir);
-    const resolvedMetaPath = path.resolve(`${objectPath}.meta.json`);
-
+    const resolvedPath = path.resolve(this.uploadDir, relativePath);
     if (
-      resolvedMetaPath !== resolvedRoot &&
-      !resolvedMetaPath.startsWith(`${resolvedRoot}${path.sep}`)
+      resolvedPath !== resolvedRoot &&
+      !resolvedPath.startsWith(`${resolvedRoot}${path.sep}`)
     ) {
-      throw new Error("[storage:local] Metadata path traversal detected.");
+      throw new Error("[storage:local] Path traversal detected.");
     }
+    return resolvedPath;
+  }
 
-    return resolvedMetaPath;
+  /** Returns the path of the metadata sidecar for a given object key. */
+  private metadataPath(key: string): string {
+    this.assertSafeKey(key);
+    if (path.isAbsolute(key)) {
+      throw new Error("[storage:local] Absolute storage keys are prohibited.");
+    }
+    return this.resolveContainedPath(`${key}.meta.json`);
   }
 
   private resolvePath(key: string): string {
@@ -430,18 +436,8 @@ class LocalStorageProvider implements StorageProvider {
       throw new Error("[storage:local] Absolute storage keys are prohibited.");
     }
 
-    // Definitive containment check: path.resolve handles platform differences
-    // (Windows vs. POSIX) correctly whereas path.posix.normalize alone does not.
-    const resolvedRoot = path.resolve(this.uploadDir);
-    const resolvedPath = path.resolve(this.uploadDir, key);
-    if (
-      resolvedPath !== resolvedRoot &&
-      !resolvedPath.startsWith(`${resolvedRoot}${path.sep}`)
-    ) {
-      throw new Error("[storage:local] Path traversal detected.");
-    }
-
-    return resolvedPath;
+    // Definitive containment check centralized in resolveContainedPath.
+    return this.resolveContainedPath(key);
   }
 
   async upload(
@@ -550,7 +546,7 @@ class LocalStorageProvider implements StorageProvider {
     await fs.promises.mkdir(path.dirname(filepath), { recursive: true });
     await fs.promises.writeFile(filepath, buffer);
     await fs.promises.writeFile(
-      this.metadataPath(filepath),
+      this.metadataPath(key),
       JSON.stringify(meta),
     );
   }
@@ -570,7 +566,7 @@ class LocalStorageProvider implements StorageProvider {
     });
 
     await fs.promises
-      .unlink(this.metadataPath(filepath))
+      .unlink(this.metadataPath(key))
       .catch((error: NodeJS.ErrnoException) => {
         if (error.code !== "ENOENT") throw error;
       });
