@@ -5,12 +5,31 @@ import { uploadService } from "@/app/lib/domains/uploads";
 import type { StorageVisibility } from "@/app/lib/infrastructure/storage";
 
 const DIRECT_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
+const STORAGE_KEY_PATTERN = /^[A-Za-z0-9/_.-]+$/;
 
 function parseVisibility(value: string | null): StorageVisibility | null {
   if (value === "public" || value === "private") {
     return value;
   }
   return null;
+}
+
+function isSafeStorageKey(key: string): boolean {
+  if (!key || key.includes("\0") || key.includes("\\") || key.startsWith("/")) {
+    return false;
+  }
+  if (!STORAGE_KEY_PATTERN.test(key)) {
+    return false;
+  }
+  const normalized = key
+    .split("/")
+    .filter((segment) => segment.length > 0 && segment !== ".")
+    .join("/");
+  return (
+    normalized !== ".." &&
+    !normalized.startsWith("../") &&
+    !normalized.includes("/../")
+  );
 }
 
 export async function PUT(req: NextRequest) {
@@ -24,6 +43,7 @@ export async function PUT(req: NextRequest) {
 
   if (
     !key ||
+    !isSafeStorageKey(key) ||
     !token ||
     !visibility ||
     !mimeType ||

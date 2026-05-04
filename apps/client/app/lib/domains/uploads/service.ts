@@ -26,6 +26,25 @@ import {
 import { prisma, type Prisma } from "@build/db";
 
 let storageProviderOverride: StorageProvider | null = null;
+const STORAGE_KEY_PATTERN = /^[A-Za-z0-9/_.-]+$/;
+
+function isSafeStorageKey(key: string): boolean {
+  if (!key || key.includes("\0") || key.includes("\\") || key.startsWith("/")) {
+    return false;
+  }
+  if (!STORAGE_KEY_PATTERN.test(key)) {
+    return false;
+  }
+  const normalized = key
+    .split("/")
+    .filter((segment) => segment.length > 0 && segment !== ".")
+    .join("/");
+  return (
+    normalized !== ".." &&
+    !normalized.startsWith("../") &&
+    !normalized.includes("/../")
+  );
+}
 
 export function setUploadServiceStorageProviderForTests(
   provider: StorageProvider | null,
@@ -789,6 +808,10 @@ export const uploadService = {
   async putLocalDirectUploadObject(
     input: PutLocalDirectUploadObjectInput,
   ): Promise<UploadServiceResult<{ key: string }>> {
+    if (!isSafeStorageKey(input.key)) {
+      return fail("forbidden", "Invalid or expired upload URL");
+    }
+
     if (
       !verifyLocalPresignedStorageToken({
         key: input.key,
@@ -816,6 +839,10 @@ export const uploadService = {
   async getLocalDirectDownloadObject(
     input: LocalDirectDownloadObjectInput,
   ): Promise<UploadServiceResult<LocalDirectDownloadObject>> {
+    if (!isSafeStorageKey(input.key)) {
+      return fail("forbidden", "Invalid or expired download URL");
+    }
+
     if (
       !verifyLocalPresignedStorageToken({
         key: input.key,
