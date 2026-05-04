@@ -409,7 +409,17 @@ class LocalStorageProvider implements StorageProvider {
 
   /** Returns the path of the metadata sidecar for a given object path. */
   private metadataPath(objectPath: string): string {
-    return `${objectPath}.meta.json`;
+    const resolvedRoot = path.resolve(this.uploadDir);
+    const resolvedMetaPath = path.resolve(`${objectPath}.meta.json`);
+
+    if (
+      resolvedMetaPath !== resolvedRoot &&
+      !resolvedMetaPath.startsWith(`${resolvedRoot}${path.sep}`)
+    ) {
+      throw new Error("[storage:local] Metadata path traversal detected.");
+    }
+
+    return resolvedMetaPath;
   }
 
   private resolvePath(key: string): string {
