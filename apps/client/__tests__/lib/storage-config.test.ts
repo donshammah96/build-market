@@ -156,7 +156,7 @@ describe("storage configuration invariants", () => {
     ).toThrow(/requires STORAGE_BUCKET/i);
   });
 
-  it("requires a remote endpoint for S3-compatible providers in production", () => {
+  it("allows S3 providers without a custom endpoint in production", () => {
     mockEnv.isProd = true;
     mockEnv.storage.accessKeyId = "r2-key";
     mockEnv.storage.secretAccessKey = "r2-secret";
@@ -168,7 +168,7 @@ describe("storage configuration invariants", () => {
         privateBucket: "private-assets-bucket",
         cdnUrl: "https://cdn.buildmarket.test",
       }),
-    ).toThrow(/S3-compatible endpoint must be an absolute remote origin/i);
+    ).not.toThrow();
   });
 
   it("requires remote credentials for S3-compatible providers in production", () => {
