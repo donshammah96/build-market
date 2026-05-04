@@ -410,9 +410,11 @@ class LocalStorageProvider implements StorageProvider {
   private resolveContainedPath(relativePath: string): string {
     const resolvedRoot = path.resolve(this.uploadDir);
     const resolvedPath = path.resolve(this.uploadDir, relativePath);
+    const relative = path.relative(resolvedRoot, resolvedPath);
     if (
-      resolvedPath !== resolvedRoot &&
-      !resolvedPath.startsWith(`${resolvedRoot}${path.sep}`)
+      relative === ".." ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative)
     ) {
       throw new Error("[storage:local] Path traversal detected.");
     }
