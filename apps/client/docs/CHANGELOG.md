@@ -26,6 +26,57 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
+### [2026-05-05] Storage Infrastructure Correctness Hardening
+
+#### Fixed (Storage Infrastructure Correctness Hardening)
+
+- `LocalStorageProvider.exists()`: replaced blocking `fs.existsSync()` with
+  async `fs.promises.access()` to prevent event-loop stalls on the hot upload
+  path. Same fix applied to the metadata sidecar check in `getMetadata()`.
+  (`app/lib/infrastructure/storage.ts`)
+
+- `LocalStorageProvider.resolvePath()` / `assertSafeKey()`: consolidated
+  duplicated null-byte and backslash checks that existed independently in both
+  methods with slightly different coverage. `assertSafeKey()` now owns all
+  character-level validation; `resolvePath()` owns only the `path.resolve`
+  containment assertion.
+  (`app/lib/infrastructure/storage.ts`)
+
+- `S3StorageProvider.getPresignedUploadUrl()`: `checksumSha256` was declared
+  in the `StorageProvider` interface but silently dropped by the S3
+  implementation. Now forwarded to `PutObjectCommand.ChecksumSHA256` so
+  storage backends can enforce end-to-end integrity on direct client uploads.
+  (`app/lib/infrastructure/storage.ts`)
+
+- `LocalStorageProvider.putObject()`: was appending `.meta.json` directly as
+  a string literal while the class also had a `metadataPath()` helper for the
+  same purpose. Now uses the helper consistently across `putObject`, `delete`,
+  and `getMetadata`.
+  (`app/lib/infrastructure/storage.ts`)
+
+#### Security (Storage Infrastructure Correctness Hardening)
+
+- Added explicit `env.isProd` guard in `localSigningSecret()`: a missing
+  `ENCRYPTION_KEY_V1` now throws at the secret-resolution site rather than
+  relying solely on `assertProductionStorageConfig()` running first. This is
+  a belt-and-suspenders addition; the production config guard remains the
+  primary control.
+  (`app/lib/infrastructure/storage.ts`)
+
+#### Changed (Storage Infrastructure Correctness Hardening)
+
+- Introduced `LocalObjectMeta` typed interface shared by the sidecar write
+  path (`putObject`) and read path (`getMetadata`), replacing the loosely
+  typed `{ mimeType?: unknown }` parse target.
+  (`app/lib/infrastructure/storage.ts`)
+
+**Files changed:** `app/lib/infrastructure/storage.ts`
+**Verification:**
+
+- `pnpm run client:tsc-noemit` → exit 0
+- `pnpm -C apps/client exec vitest run __tests__/lib/storage-config.test.ts --maxWorkers=1` → all tests pass
+- `pnpm run client:report-security-drift:strict` → all categories 0
+
 ## [2026-05-03] Storage Direct Upload and Private Asset Hardening
 
 ### Added (Storage Direct Upload and Private Asset Hardening)
