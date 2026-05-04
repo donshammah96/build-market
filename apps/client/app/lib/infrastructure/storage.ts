@@ -432,6 +432,17 @@ class LocalStorageProvider implements StorageProvider {
     // Fast character-level check first (no I/O).
     this.assertSafeKey(key);
 
+    // Explicit sink-side key allowlist (defense in depth for static analysis
+    // and for any future call-sites that bypass route/domain validation).
+    const STORAGE_KEY_PATTERN = /^[A-Za-z0-9/_.-]+$/;
+    if (!key || !STORAGE_KEY_PATTERN.test(key)) {
+      throw new Error("[storage:local] Invalid storage key.");
+    }
+    const segments = key.split("/");
+    if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
+      throw new Error("[storage:local] Invalid storage key path segments.");
+    }
+
     if (path.isAbsolute(key)) {
       throw new Error("[storage:local] Absolute storage keys are prohibited.");
     }
