@@ -441,7 +441,12 @@ class LocalStorageProvider implements StorageProvider {
       throw new Error("[storage:local] Invalid storage key.");
     }
     const segments = key.split("/");
-    if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
+    if (
+      segments.some(
+        (segment) =>
+          segment.length === 0 || segment === "." || segment === "..",
+      )
+    ) {
       throw new Error("[storage:local] Invalid storage key path segments.");
     }
 
