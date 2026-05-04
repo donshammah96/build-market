@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
+import { checkBodySize } from "@/app/lib/api/api-guards";
 import { uploadService } from "@/app/lib/domains/uploads";
 import type { StorageVisibility } from "@/app/lib/infrastructure/storage";
+
+const DIRECT_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 
 function parseVisibility(value: string | null): StorageVisibility | null {
   if (value === "public" || value === "private") {
@@ -29,6 +32,11 @@ export async function PUT(req: NextRequest) {
     return apiError("Invalid upload URL", HttpStatus.BAD_REQUEST);
   }
 
+  const sizeGuard = checkBodySize(req, DIRECT_UPLOAD_MAX_BYTES);
+  if (sizeGuard) {
+    return sizeGuard;
+  }
+
   const buffer = Buffer.from(await req.arrayBuffer());
   const result = await uploadService.putLocalDirectUploadObject({
     key,
@@ -44,7 +52,7 @@ export async function PUT(req: NextRequest) {
       result.error === "forbidden"
         ? HttpStatus.FORBIDDEN
         : HttpStatus.INTERNAL_SERVER_ERROR;
-    return apiError(result.message || "Upload failed", status);
+    return apiError("Upload failed", status);
   }
 
   return apiSuccess({ uploaded: true }, HttpStatus.OK);

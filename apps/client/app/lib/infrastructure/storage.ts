@@ -244,7 +244,7 @@ function assertProductionStorageConfig(config: StorageConfig): void {
   }
 
   if (config.provider === "s3") {
-    if (!config.endpoint || !isAbsoluteHttpUrl(config.endpoint)) {
+    if (config.endpoint && !isAbsoluteHttpUrl(config.endpoint)) {
       throw new Error(
         "[storage] Unsafe production config: S3-compatible endpoint must be an absolute remote origin.",
       );
@@ -299,8 +299,10 @@ class LocalStorageProvider implements StorageProvider {
       throw new Error("[storage:local] Invalid storage key.");
     }
 
-    if (!/^[A-Za-z0-9/_\-\.]+$/.test(key)) {
-      throw new Error("[storage:local] Storage key contains invalid characters.");
+    if (!/^[A-Za-z0-9/_.-]+$/.test(key)) {
+      throw new Error(
+        "[storage:local] Storage key contains invalid characters.",
+      );
     }
 
     const normalized = path.posix.normalize(key);
@@ -429,11 +431,10 @@ class LocalStorageProvider implements StorageProvider {
       key,
       expires: String(expiresAt),
       visibility,
-    const metadataPath = this.metadataPathFromObjectPath(filepath);
       token,
     });
     if (options?.filename) {
-      metadataPath,
+      params.set("filename", options.filename);
     }
 
     return {
@@ -457,7 +458,7 @@ class LocalStorageProvider implements StorageProvider {
         mimeType,
         originalFilename: options?.originalFilename ?? path.basename(key),
         visibility: visibilityFromOption(options?.visibility),
-      .unlink(this.metadataPathFromObjectPath(filepath))
+      }),
     );
   }
 
@@ -535,7 +536,7 @@ class S3StorageProvider implements StorageProvider {
         "[storage:s3] CDN URL must be an absolute remote origin.",
       );
     }
-    if (!config.endpoint || !isAbsoluteHttpUrl(config.endpoint)) {
+    if (config.endpoint && !isAbsoluteHttpUrl(config.endpoint)) {
       throw new Error(
         "[storage:s3] S3-compatible endpoint must be an absolute remote origin.",
       );
