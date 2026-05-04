@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "crypto";
 import { uploadService } from "@/app/lib/domains/uploads/service";
 import { prisma } from "@build/db";
 
@@ -11,7 +12,15 @@ const mockLogger = vi.hoisted(() => ({
 
 const mockStorageUpload = vi.hoisted(() => vi.fn());
 const mockStorageDelete = vi.hoisted(() => vi.fn());
+const mockStorageGetPresignedUploadUrl = vi.hoisted(() => vi.fn());
+const mockStorageGetPresignedDownloadUrl = vi.hoisted(() => vi.fn());
+const mockStorageExists = vi.hoisted(() => vi.fn());
+const mockStorageGetMetadata = vi.hoisted(() => vi.fn());
+const mockStorageReadObject = vi.hoisted(() => vi.fn());
+const mockStoragePutObject = vi.hoisted(() => vi.fn());
 const mockFindAssetByChecksum = vi.hoisted(() => vi.fn());
+const mockFindOwnedAssetByChecksum = vi.hoisted(() => vi.fn());
+const mockFindAssetById = vi.hoisted(() => vi.fn());
 const mockCreateAsset = vi.hoisted(() => vi.fn());
 const mockCreateConsentRecord = vi.hoisted(() => vi.fn());
 const mockFindOwnedAssetById = vi.hoisted(() => vi.fn());
@@ -24,6 +33,12 @@ const mockMarkStagedUploadConsumed = vi.hoisted(() => vi.fn());
 const mockCreateStagedOnboardingUpload = vi.hoisted(() => vi.fn());
 const mockFindExpiredStagedUploadsForCleanup = vi.hoisted(() => vi.fn());
 const mockMarkStagedUploadsExpiredByIds = vi.hoisted(() => vi.fn());
+const mockCreateDirectUpload = vi.hoisted(() => vi.fn());
+const mockFindDirectUploadById = vi.hoisted(() => vi.fn());
+const mockMarkDirectUploadConfirmed = vi.hoisted(() => vi.fn());
+const mockMarkDirectUploadFailed = vi.hoisted(() => vi.fn());
+const mockFindExpiredDirectUploadsForCleanup = vi.hoisted(() => vi.fn());
+const mockMarkDirectUploadsExpiredByIds = vi.hoisted(() => vi.fn());
 
 vi.mock("@/app/lib/api/resilient-api", () => ({
   getClientLogger: vi.fn().mockReturnValue(mockLogger),
@@ -33,7 +48,14 @@ vi.mock("@/app/lib/infrastructure/storage", () => ({
   getStorageProvider: vi.fn().mockReturnValue({
     upload: mockStorageUpload,
     delete: mockStorageDelete,
+    getPresignedUploadUrl: mockStorageGetPresignedUploadUrl,
+    getPresignedDownloadUrl: mockStorageGetPresignedDownloadUrl,
+    exists: mockStorageExists,
+    getMetadata: mockStorageGetMetadata,
+    readObject: mockStorageReadObject,
+    putObject: mockStoragePutObject,
   }),
+  verifyLocalPresignedStorageToken: vi.fn().mockReturnValue(true),
 }));
 
 vi.mock("@build/db", () => ({
@@ -48,6 +70,8 @@ vi.mock("@/app/lib/domains/uploads/repository", () => ({
   assetDetailSelect: {},
   uploadRepository: {
     findAssetByChecksum: mockFindAssetByChecksum,
+    findOwnedAssetByChecksum: mockFindOwnedAssetByChecksum,
+    findAssetById: mockFindAssetById,
     createAsset: mockCreateAsset,
     createConsentRecord: mockCreateConsentRecord,
     findOwnedAssetById: mockFindOwnedAssetById,
@@ -60,6 +84,12 @@ vi.mock("@/app/lib/domains/uploads/repository", () => ({
     markStagedUploadConsumed: mockMarkStagedUploadConsumed,
     findExpiredStagedUploadsForCleanup: mockFindExpiredStagedUploadsForCleanup,
     markStagedUploadsExpiredByIds: mockMarkStagedUploadsExpiredByIds,
+    createDirectUpload: mockCreateDirectUpload,
+    findDirectUploadById: mockFindDirectUploadById,
+    markDirectUploadConfirmed: mockMarkDirectUploadConfirmed,
+    markDirectUploadFailed: mockMarkDirectUploadFailed,
+    findExpiredDirectUploadsForCleanup: mockFindExpiredDirectUploadsForCleanup,
+    markDirectUploadsExpiredByIds: mockMarkDirectUploadsExpiredByIds,
   },
 }));
 
@@ -77,6 +107,7 @@ describe("uploadService", () => {
         "f4d5f1d31dcf2de4f2f801a2f6a76dd5352f53e5af97f4884de6f9f96fcbec6e",
       size: 2048,
       bucket: "local",
+      visibility: "public",
     });
     mockCreateStagedOnboardingUpload.mockResolvedValue({
       id: "onb_upload_1",
@@ -112,6 +143,7 @@ describe("uploadService", () => {
       expect.any(Buffer),
       "id-document.pdf",
       "application/pdf",
+      { visibility: "public" },
     );
     expect(mockCreateStagedOnboardingUpload).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -124,7 +156,7 @@ describe("uploadService", () => {
   });
 
   it("deduplicates uploads before writing to storage", async () => {
-    mockFindAssetByChecksum.mockResolvedValue({
+    mockFindOwnedAssetByChecksum.mockResolvedValue({
       id: "asset_1",
       uploaderId: "user_1",
       originalName: "existing.jpg",
@@ -135,6 +167,7 @@ describe("uploadService", () => {
       bucket: "assets",
       key: "uploads/existing.jpg",
       cdnUrl: "https://cdn.example.com/existing.jpg",
+      visibility: "PUBLIC",
       thumbnailUrl: null,
       width: 320,
       height: 240,
@@ -165,6 +198,13 @@ describe("uploadService", () => {
     }
     expect(mockStorageUpload).not.toHaveBeenCalled();
     expect(mockCreateAsset).not.toHaveBeenCalled();
+    expect(mockFindOwnedAssetByChecksum).toHaveBeenCalledWith(
+      createHash("sha256")
+        .update(Buffer.from("same-processed-buffer"))
+        .digest("hex"),
+      "user_1",
+      "PUBLIC",
+    );
     expect(mockCreateConsentRecord).toHaveBeenCalledWith(
       expect.objectContaining({
         user: { connect: { id: "user_1" } },
@@ -184,6 +224,8 @@ describe("uploadService", () => {
       id: "asset_2",
       uploaderId: "user_1",
       key: "uploads/referenced.jpg",
+      bucket: "assets",
+      visibility: "PUBLIC",
       originalName: "referenced.jpg",
       deletedAt: null,
       projectImages: [{ id: "project_image_1" }],
@@ -281,11 +323,159 @@ describe("uploadService", () => {
     });
     expect(mockFindExpiredStagedUploadsForCleanup).toHaveBeenCalled();
     expect(mockStorageDelete).toHaveBeenCalledTimes(2);
-    expect(mockStorageDelete).toHaveBeenCalledWith("staged/expired1.pdf");
-    expect(mockStorageDelete).toHaveBeenCalledWith("staged/expired2.jpg");
+    expect(mockStorageDelete).toHaveBeenCalledWith("staged/expired1.pdf", {
+      visibility: "public",
+    });
+    expect(mockStorageDelete).toHaveBeenCalledWith("staged/expired2.jpg", {
+      visibility: "public",
+    });
     expect(mockMarkStagedUploadsExpiredByIds).toHaveBeenCalledWith(
       ["expired_1", "expired_2"],
       expect.anything(),
+    );
+  });
+
+  it("creates private pending direct document uploads", async () => {
+    mockStorageGetPresignedUploadUrl.mockResolvedValue({
+      uploadUrl: "https://storage.example.com/presigned",
+      key: "private/uploads/2026/05/doc.pdf",
+      bucket: "private-assets",
+      visibility: "private",
+      requiredHeaders: { "Content-Type": "application/pdf" },
+      expiresAt: Date.now() + 300_000,
+    });
+    mockCreateDirectUpload.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      uploaderId: "user_1",
+      key: "private/uploads/2026/05/doc.pdf",
+      visibility: "PRIVATE",
+      expiresAt: new Date(Date.now() + 300_000),
+    });
+
+    const result = await uploadService.requestDirectUpload({
+      actor: { userId: "user_1", correlationId: "corr_direct_1" },
+      filename: "license.pdf",
+      mimeType: "application/pdf",
+      size: 16,
+      checksumSha256:
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      context: "document",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.uploadId).toBe("11111111-1111-4111-8111-111111111111");
+      expect(result.data.requiredHeaders).toEqual({
+        "Content-Type": "application/pdf",
+      });
+    }
+    expect(mockStorageGetPresignedUploadUrl).toHaveBeenCalledWith(
+      "license.pdf",
+      "application/pdf",
+      expect.objectContaining({
+        visibility: "private",
+        expiresInSeconds: 300,
+      }),
+    );
+    expect(mockCreateDirectUpload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uploaderId: "user_1",
+        visibility: "PRIVATE",
+        bucket: "private-assets",
+      }),
+    );
+  });
+
+  it("confirms direct uploads after checksum and magic-byte verification", async () => {
+    const buffer = Buffer.from("%PDF-1.7\nfixture");
+    const checksum = createHash("sha256").update(buffer).digest("hex");
+    const directUpload = {
+      id: "22222222-2222-4222-8222-222222222222",
+      uploaderId: "user_1",
+      assetId: null,
+      originalName: "license.pdf",
+      mimeType: "application/pdf",
+      size: buffer.length,
+      checksum,
+      bucket: "private-assets",
+      key: "private/uploads/2026/05/license.pdf",
+      visibility: "PRIVATE",
+      status: "PRESIGNED",
+      expiresAt: new Date(Date.now() + 300_000),
+      confirmedAt: null,
+      failedAt: null,
+      failureReason: null,
+      temporary: false,
+      deleteAfter: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    mockFindDirectUploadById.mockResolvedValue(directUpload);
+    mockStorageExists.mockResolvedValue(true);
+    mockStorageGetMetadata.mockResolvedValue({
+      size: buffer.length,
+      mimeType: "application/pdf",
+      createdAt: new Date(),
+    });
+    mockStorageReadObject.mockResolvedValue(buffer);
+    mockFindOwnedAssetByChecksum.mockResolvedValue(null);
+    mockCreateAsset.mockResolvedValue({
+      id: "asset_private_1",
+      uploaderId: "user_1",
+      originalName: "license.pdf",
+      mimeType: "application/pdf",
+      size: buffer.length,
+      checksum,
+      bucket: "private-assets",
+      key: "private/uploads/2026/05/license.pdf",
+      cdnUrl: null,
+      visibility: "PRIVATE",
+      thumbnailUrl: null,
+      width: null,
+      height: null,
+      blurHash: null,
+      downloadCount: 0,
+      lastAccessed: null,
+      createdAt: new Date(),
+      deletedAt: null,
+      deleteAfter: null,
+    });
+    mockMarkDirectUploadConfirmed.mockResolvedValue({
+      ...directUpload,
+      status: "CONFIRMED",
+      assetId: "asset_private_1",
+    });
+
+    const result = await uploadService.confirmDirectUpload({
+      actor: { userId: "user_1", correlationId: "corr_direct_2" },
+      uploadId: directUpload.id,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data).toEqual({
+        assetId: "asset_private_1",
+        visibility: "PRIVATE",
+      });
+    }
+    expect(mockStorageExists).toHaveBeenCalledWith(directUpload.key, {
+      visibility: "private",
+    });
+    expect(mockStorageReadObject).toHaveBeenCalledWith(directUpload.key, {
+      visibility: "private",
+    });
+    expect(mockCreateAsset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cdnUrl: null,
+        visibility: "PRIVATE",
+      }),
+      expect.any(Object),
+    );
+    expect(mockMarkDirectUploadConfirmed).toHaveBeenCalledWith(
+      directUpload.id,
+      "asset_private_1",
+      expect.any(Object),
     );
   });
 

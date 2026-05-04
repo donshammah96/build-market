@@ -54,7 +54,7 @@ export type LicenseListItem = {
   updatedAt: string;
   asset: {
     id: string;
-    cdnUrl: string | null;
+    visibility: string;
     originalName: string | null;
     mimeType: string | null;
     size: number | null;

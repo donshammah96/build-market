@@ -26,6 +26,99 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
+### [2026-05-05] Storage Infrastructure Correctness Hardening
+
+#### Fixed (Storage Infrastructure Correctness Hardening)
+
+- `LocalStorageProvider.exists()`: replaced blocking `fs.existsSync()` with
+  async `fs.promises.access()` to prevent event-loop stalls on the hot upload
+  path. Same fix applied to the metadata sidecar check in `getMetadata()`.
+  (`app/lib/infrastructure/storage.ts`)
+
+- `LocalStorageProvider.resolvePath()` / `assertSafeKey()`: consolidated
+  duplicated null-byte and backslash checks that existed independently in both
+  methods with slightly different coverage. `assertSafeKey()` now owns all
+  character-level validation; `resolvePath()` owns only the `path.resolve`
+  containment assertion.
+  (`app/lib/infrastructure/storage.ts`)
+
+- `S3StorageProvider.getPresignedUploadUrl()`: `checksumSha256` was declared
+  in the `StorageProvider` interface but silently dropped by the S3
+  implementation. Now forwarded to `PutObjectCommand.ChecksumSHA256` so
+  storage backends can enforce end-to-end integrity on direct client uploads.
+  (`app/lib/infrastructure/storage.ts`)
+
+- `LocalStorageProvider.putObject()`: was appending `.meta.json` directly as
+  a string literal while the class also had a `metadataPath()` helper for the
+  same purpose. Now uses the helper consistently across `putObject`, `delete`,
+  and `getMetadata`.
+  (`app/lib/infrastructure/storage.ts`)
+
+#### Security (Storage Infrastructure Correctness Hardening)
+
+- Added explicit `env.isProd` guard in `localSigningSecret()`: a missing
+  `ENCRYPTION_KEY_V1` now throws at the secret-resolution site rather than
+  relying solely on `assertProductionStorageConfig()` running first. This is
+  a belt-and-suspenders addition; the production config guard remains the
+  primary control.
+  (`app/lib/infrastructure/storage.ts`)
+
+#### Changed (Storage Infrastructure Correctness Hardening)
+
+- Introduced `LocalObjectMeta` typed interface shared by the sidecar write
+  path (`putObject`) and read path (`getMetadata`), replacing the loosely
+  typed `{ mimeType?: unknown }` parse target.
+  (`app/lib/infrastructure/storage.ts`)
+
+**Files changed:** `app/lib/infrastructure/storage.ts`
+**Verification:**
+
+- `pnpm run client:tsc-noemit` → exit 0
+- `pnpm -C apps/client exec vitest run __tests__/lib/storage-config.test.ts --maxWorkers=1` → all tests pass
+- `pnpm run client:report-security-drift:strict` → all categories 0
+
+## [2026-05-03] Storage Direct Upload and Private Asset Hardening
+
+### Added (Storage Direct Upload and Private Asset Hardening)
+
+- Added private document direct-upload APIs: `POST /api/uploads/presign`,
+  `POST /api/uploads/confirm`, and `GET /api/uploads/[id]/download`.
+- Added `DirectUpload` tracking with pending, confirmed, expired, and failed
+  states, plus scheduled cleanup for abandoned direct-upload blobs.
+- Added storage visibility support for public and private buckets, local
+  token-backed direct upload/download proxies, and private presigned downloads.
+
+### Changed (Storage Direct Upload and Private Asset Hardening)
+
+- Made `Asset.cdnUrl` nullable and added `Asset.visibility`, preserving public
+  image behavior while allowing Class B assets to avoid permanent URLs.
+- Scoped asset deduplication by uploader, checksum, and visibility.
+- Updated credential and property document upload clients to persist `assetId`
+  from the direct document flow by default.
+
+### Security (Storage Direct Upload and Private Asset Hardening)
+
+- Direct upload confirmation now verifies owner, pending status, expiry, object
+  existence, exact size, MIME, server-computed SHA-256, and magic bytes before
+  creating a private `Asset`.
+- Private document/license/certificate DTOs no longer expose private `cdnUrl`.
+- Upload logs avoid filenames, checksums, storage keys, and presigned URLs.
+
+### Docs (Storage Direct Upload and Private Asset Hardening)
+
+- Rewrote `STORAGE-INTEGRATION-GUIDE.md` as the canonical end-to-end
+  integration plan, including decision tables, private download flow, env setup,
+  test guidance, operations, cleanup, and failure modes.
+- Updated this changelog and `PROGRESS-SUMMARY.md` for the hardening checkpoint.
+
+### Verification (Storage Direct Upload and Private Asset Hardening)
+
+- `pnpm -C packages/db exec prisma generate`
+- `pnpm -C apps/client exec vitest run __tests__/api/uploads __tests__/lib/uploads __tests__/lib/storage-config.test.ts __tests__/lib/upload-client.test.ts --pool=threads --maxWorkers=1`
+- `pnpm run client:tsc-noemit`
+- `pnpm run client:check-env-contract`
+- `pnpm run client:report-security-drift:strict`
+
 ## [2026-05-01] CSP Nonce Rollout (Phase 2 Prep)
 
 ### Security (CSP Nonce Rollout)

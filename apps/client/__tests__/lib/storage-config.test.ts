@@ -11,6 +11,7 @@ const { mockEnv, s3ClientCtor } = vi.hoisted(() => ({
       localPath: "./tmp/storage-config-test",
       bucket: undefined,
       assetBucket: undefined,
+      privateBucket: undefined as string | undefined,
       region: "af-south-1",
       endpoint: undefined,
       cdnUrl: "/uploads",
@@ -46,6 +47,10 @@ vi.mock("@aws-sdk/client-s3", () => {
     constructor(public input: unknown) {}
   }
 
+  class GetObjectCommand {
+    constructor(public input: unknown) {}
+  }
+
   class S3ServiceException extends Error {
     $metadata?: { httpStatusCode?: number };
 
@@ -60,9 +65,14 @@ vi.mock("@aws-sdk/client-s3", () => {
     PutObjectCommand,
     DeleteObjectCommand,
     HeadObjectCommand,
+    GetObjectCommand,
     S3ServiceException,
   };
 });
+
+vi.mock("@aws-sdk/s3-request-presigner", () => ({
+  getSignedUrl: vi.fn().mockResolvedValue("https://storage.example.com/signed"),
+}));
 
 import { createStorageProvider } from "@/app/lib/infrastructure/storage";
 
@@ -73,6 +83,7 @@ describe("storage configuration invariants", () => {
     mockEnv.apiUrl = "https://api.buildmarket.test";
     mockEnv.storage.accessKeyId = undefined;
     mockEnv.storage.secretAccessKey = undefined;
+    mockEnv.storage.privateBucket = undefined;
     s3ClientCtor.mockReset();
   });
 
@@ -106,6 +117,7 @@ describe("storage configuration invariants", () => {
       createStorageProvider({
         provider: "s3",
         bucket: "assets-bucket",
+        privateBucket: "private-assets-bucket",
         endpoint: "https://account.r2.cloudflarestorage.com",
         cdnUrl: "/uploads",
       }),
@@ -121,6 +133,7 @@ describe("storage configuration invariants", () => {
       createStorageProvider({
         provider: "s3",
         bucket: "assets-bucket",
+        privateBucket: "private-assets-bucket",
         endpoint: "https://account.r2.cloudflarestorage.com",
         cdnUrl: "https://app.buildmarket.test/uploads",
       }),
@@ -136,13 +149,14 @@ describe("storage configuration invariants", () => {
       createStorageProvider({
         provider: "s3",
         bucket: undefined,
+        privateBucket: "private-assets-bucket",
         endpoint: "https://account.r2.cloudflarestorage.com",
         cdnUrl: "https://cdn.buildmarket.test",
       }),
     ).toThrow(/requires STORAGE_BUCKET/i);
   });
 
-  it("requires a remote endpoint for S3-compatible providers in production", () => {
+  it("allows S3 providers without a custom endpoint in production", () => {
     mockEnv.isProd = true;
     mockEnv.storage.accessKeyId = "r2-key";
     mockEnv.storage.secretAccessKey = "r2-secret";
@@ -151,9 +165,10 @@ describe("storage configuration invariants", () => {
       createStorageProvider({
         provider: "s3",
         bucket: "assets-bucket",
+        privateBucket: "private-assets-bucket",
         cdnUrl: "https://cdn.buildmarket.test",
       }),
-    ).toThrow(/S3-compatible endpoint must be an absolute remote origin/i);
+    ).not.toThrow();
   });
 
   it("requires remote credentials for S3-compatible providers in production", () => {
@@ -165,6 +180,7 @@ describe("storage configuration invariants", () => {
       createStorageProvider({
         provider: "s3",
         bucket: "assets-bucket",
+        privateBucket: "private-assets-bucket",
         endpoint: "https://account.r2.cloudflarestorage.com",
         cdnUrl: "https://cdn.buildmarket.test",
       }),
@@ -179,6 +195,7 @@ describe("storage configuration invariants", () => {
     const provider = createStorageProvider({
       provider: "s3",
       bucket: "assets-bucket",
+      privateBucket: "private-assets-bucket",
       endpoint: "https://account.r2.cloudflarestorage.com",
       region: "auto",
       cdnUrl: "https://cdn.buildmarket.test",
@@ -195,6 +212,21 @@ describe("storage configuration invariants", () => {
         },
       }),
     );
+  });
+
+  it("requires a private bucket for remote storage providers in production", () => {
+    mockEnv.isProd = true;
+    mockEnv.storage.accessKeyId = "r2-key";
+    mockEnv.storage.secretAccessKey = "r2-secret";
+
+    expect(() =>
+      createStorageProvider({
+        provider: "s3",
+        bucket: "assets-bucket",
+        endpoint: "https://account.r2.cloudflarestorage.com",
+        cdnUrl: "https://cdn.buildmarket.test",
+      }),
+    ).toThrow(/R2_PRIVATE_BUCKET|S3_PRIVATE_BUCKET/i);
   });
 
   it("blocks inline upload processing in production", () => {

@@ -5,6 +5,7 @@ const mockQueueClose = vi.hoisted(() => vi.fn());
 const mockWorkerClose = vi.hoisted(() => vi.fn());
 const mockWorkerOn = vi.hoisted(() => vi.fn());
 const mockCleanupExpiredStagedUploads = vi.hoisted(() => vi.fn());
+const mockCleanupExpiredDirectUploads = vi.hoisted(() => vi.fn());
 
 let capturedProcessor:
   | ((job: { name: string; id: string }) => Promise<unknown>)
@@ -40,6 +41,7 @@ vi.mock("bullmq", () => ({
 vi.mock("@/app/lib/domains/uploads", () => ({
   uploadService: {
     cleanupExpiredStagedUploads: mockCleanupExpiredStagedUploads,
+    cleanupExpiredDirectUploads: mockCleanupExpiredDirectUploads,
   },
 }));
 
@@ -85,11 +87,16 @@ describe("onboarding-upload-cleanup job", () => {
   });
 
   describe("createOnboardingUploadCleanupWorker processor", () => {
-    it("calls cleanupExpiredStagedUploads and returns metrics", async () => {
+    it("calls staged and direct cleanup and returns metrics", async () => {
       mockCleanupExpiredStagedUploads.mockResolvedValue({
         count: 3,
         deletedFromStorage: 3,
         failedDeletions: [],
+      });
+      mockCleanupExpiredDirectUploads.mockResolvedValue({
+        count: 2,
+        deletedFromStorage: 1,
+        failedDeletions: ["direct-upload-1"],
       });
 
       const { createOnboardingUploadCleanupWorker } =
@@ -107,10 +114,11 @@ describe("onboarding-upload-cleanup job", () => {
       const result = await capturedProcessor!(mockJob);
 
       expect(mockCleanupExpiredStagedUploads).toHaveBeenCalledTimes(1);
+      expect(mockCleanupExpiredDirectUploads).toHaveBeenCalledTimes(1);
       expect(result).toEqual({
-        count: 3,
-        deletedFromStorage: 3,
-        failedDeletions: 0,
+        count: 5,
+        deletedFromStorage: 4,
+        failedDeletions: 1,
         durationMs: expect.any(Number),
       });
     });

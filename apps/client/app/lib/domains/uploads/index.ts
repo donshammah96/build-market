@@ -15,4 +15,13 @@ export type {
   MaterializedUpload,
   StageOnboardingUploadInput,
   StagedOnboardingUpload,
+  RequestDirectUploadInput,
+  RequestedDirectUpload,
+  ConfirmDirectUploadInput,
+  ConfirmedDirectUpload,
+  GetAssetDownloadUrlInput,
+  AssetDownloadUrl,
+  PutLocalDirectUploadObjectInput,
+  LocalDirectDownloadObjectInput,
+  LocalDirectDownloadObject,
 } from "@/app/lib/domains/uploads/service";

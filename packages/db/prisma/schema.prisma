@@ -949,7 +949,8 @@ model User {
   adminProfile        AdminProfile?
 
   // Assets ownership (centralized)
-  uploads Asset[] @relation("Uploader")
+  uploads       Asset[]        @relation("Uploader")
+  directUploads DirectUpload[]
 
   // Auth tokens management
   refreshTokens RefreshToken[]
@@ -1624,6 +1625,11 @@ model LedgerEntry {
 // CENTRALIZED ASSET MANAGEMENT (Deduplication)
 // ========================================================
 
+enum AssetVisibility {
+  PUBLIC
+  PRIVATE
+}
+
 model Asset {
   id String @id @default(uuid())
 
@@ -1635,12 +1641,14 @@ model Asset {
   originalName String
   mimeType     String
   size         Int
-  checksum     String @unique // SHA-256 for deduplication
+  checksum     String // SHA-256 for per-uploader deduplication
 
   // Storage (abstracted)
-  bucket       String // e.g., "buildmarket-prod"
-  key          String  @unique // S3/MinIO key
-  cdnUrl       String
+  bucket     String // e.g., "buildmarket-prod"
+  key        String          @unique // S3/MinIO key
+  cdnUrl     String?
+  visibility AssetVisibility @default(PUBLIC)
+
   thumbnailUrl String? // Generated for images
 
   // Image metadata
@@ -1666,6 +1674,7 @@ model Asset {
   quoteAttachments    QuoteAttachment[]    @relation("QuoteAttachmentAssets")
   reviewImages        ReviewImage[]        @relation("ReviewImageAssets")
   ideaBookAttachments IdeaBookAttachment[] @relation("IdeaBookAttachmentAssets")
+  directUploads        DirectUpload[]
 
   // Usage tracking
   downloadCount Int       @default(0)
@@ -1680,6 +1689,49 @@ model Asset {
   @@index([uploaderId])
   @@index([checksum]) // Deduplication lookup
   @@index([createdAt])
+  @@unique([uploaderId, checksum, visibility])
+}
+
+enum DirectUploadStatus {
+  PRESIGNED
+  CONFIRMED
+  EXPIRED
+  FAILED
+}
+
+model DirectUpload {
+  id String @id @default(uuid())
+
+  uploaderId String
+  uploader   User   @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  assetId String?
+  asset   Asset?  @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  originalName String
+  mimeType     String
+  size         Int
+  checksum     String
+
+  bucket     String
+  key        String          @unique
+  visibility AssetVisibility @default(PRIVATE)
+
+  status        DirectUploadStatus @default(PRESIGNED)
+  expiresAt     DateTime
+  confirmedAt   DateTime?
+  failedAt      DateTime?
+  failureReason String?
+
+  temporary   Boolean @default(false)
+  deleteAfter DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([uploaderId, status])
+  @@index([expiresAt])
+  @@index([checksum])
 }
 
 enum OnboardingUploadStatus {

@@ -14,15 +14,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { uploadFiles } from "@/lib/upload-client";
+import { uploadForCredential } from "@/lib/upload-client";
 
 interface Document {
   id: string;
   asset?: {
     id: string;
-    cdnUrl: string;
+    originalName?: string | null;
   } | null;
-  /** @deprecated prefer asset.cdnUrl */
+  /** @deprecated legacy public URL from pre-asset-backed document uploads */
   fileUrl?: string | null;
   /** @deprecated */
   fileKey?: string | null;
@@ -38,10 +38,10 @@ interface DocumentUploaderProps {
   documents: Document[];
   documentType: string;
   documentTypeLabel: string;
-  onUpload: (fileUrl: string, fileKey?: string) => Promise<void>;
+  onUpload: (assetId: string, fileKey?: string) => Promise<void>;
   onReplace: (
     documentId: string,
-    fileUrl: string,
+    assetId: string,
     fileKey?: string,
   ) => Promise<void>;
   onDelete: (documentId: string) => Promise<void>;
@@ -85,14 +85,8 @@ export function DocumentUploader({
 
     setUploading(true);
     try {
-      const result = await uploadFiles([file], "documents");
-      const fileUrl = result.urls[0];
-
-      if (!fileUrl) {
-        throw new Error("No URL returned from upload");
-      }
-
-      await onUpload(fileUrl);
+      const { assetId } = await uploadForCredential(file, "documents");
+      await onUpload(assetId);
       toast.success(`${documentTypeLabel} uploaded successfully`);
 
       // Reset file input
@@ -131,14 +125,8 @@ export function DocumentUploader({
 
     setReplacingId(documentId);
     try {
-      const result = await uploadFiles([file], "documents");
-      const fileUrl = result.urls[0];
-
-      if (!fileUrl) {
-        throw new Error("No URL returned from upload");
-      }
-
-      await onReplace(documentId, fileUrl);
+      const { assetId } = await uploadForCredential(file, "documents");
+      await onReplace(documentId, assetId);
       toast.success(`${documentTypeLabel} replaced successfully`);
     } catch (error) {
       toast.error(
@@ -165,6 +153,36 @@ export function DocumentUploader({
       toast.error(
         error instanceof Error ? error.message : "Failed to delete document",
       );
+    }
+  };
+
+  const handleDownload = async (doc: Document) => {
+    if (doc.asset?.id) {
+      try {
+        const response = await fetch(`/api/uploads/${doc.asset.id}/download`, {
+          method: "GET",
+        });
+        const payload = (await response.json().catch(() => ({}))) as {
+          data?: { downloadUrl?: string };
+          error?: string;
+        };
+
+        if (!response.ok || !payload.data?.downloadUrl) {
+          throw new Error(payload.error || "Failed to create download link");
+        }
+
+        window.open(payload.data.downloadUrl, "_blank", "noopener,noreferrer");
+        return;
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to open document",
+        );
+        return;
+      }
+    }
+
+    if (doc.fileUrl) {
+      window.open(doc.fileUrl, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -278,14 +296,13 @@ export function DocumentUploader({
                     >
                       <X className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" asChild>
-                      <a
-                        href={doc.asset?.cdnUrl || doc.fileUrl || "#"}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <File className="h-4 w-4" />
-                      </a>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDownload(doc)}
+                      disabled={!doc.asset?.id && !doc.fileUrl}
+                    >
+                      <File className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>

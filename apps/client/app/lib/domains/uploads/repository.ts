@@ -1,4 +1,4 @@
-import { prisma, type Prisma } from "@build/db";
+import { prisma, type AssetVisibility, type Prisma } from "@build/db";
 
 type UploadClient = Prisma.TransactionClient | typeof prisma;
 
@@ -12,6 +12,7 @@ const assetDetailSelect = {
   bucket: true,
   key: true,
   cdnUrl: true,
+  visibility: true,
   thumbnailUrl: true,
   width: true,
   height: true,
@@ -27,6 +28,8 @@ const assetDeletionSelect = {
   id: true,
   uploaderId: true,
   key: true,
+  bucket: true,
+  visibility: true,
   originalName: true,
   deletedAt: true,
   projectImages: { select: { id: true }, take: 1 },
@@ -84,6 +87,32 @@ export type UploadCreatedStagedRecord = Prisma.OnboardingUploadGetPayload<{
   };
 }>;
 
+const directUploadSelect = {
+  id: true,
+  uploaderId: true,
+  assetId: true,
+  originalName: true,
+  mimeType: true,
+  size: true,
+  checksum: true,
+  bucket: true,
+  key: true,
+  visibility: true,
+  status: true,
+  expiresAt: true,
+  confirmedAt: true,
+  failedAt: true,
+  failureReason: true,
+  temporary: true,
+  deleteAfter: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+export type UploadDirectUploadRecord = Prisma.DirectUploadGetPayload<{
+  select: typeof directUploadSelect;
+}>;
+
 export type CreateStagedUploadInput = {
   clerkId: string;
   tempUrl: string;
@@ -96,10 +125,42 @@ export type CreateStagedUploadInput = {
   expiresAt: Date;
 };
 
+export type CreateDirectUploadInput = {
+  uploaderId: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  checksum: string;
+  bucket: string;
+  key: string;
+  visibility: AssetVisibility;
+  expiresAt: Date;
+  temporary: boolean;
+  deleteAfter: Date | null;
+};
+
 export const uploadRepository = {
   async findAssetByChecksum(checksum: string, client: UploadClient = prisma) {
-    return client.asset.findUnique({
-      where: { checksum },
+    return client.asset.findFirst({
+      where: { checksum, deletedAt: null },
+      orderBy: { createdAt: "asc" },
+      select: assetDetailSelect,
+    });
+  },
+
+  async findOwnedAssetByChecksum(
+    checksum: string,
+    userId: string,
+    visibility: AssetVisibility,
+    client: UploadClient = prisma,
+  ) {
+    return client.asset.findFirst({
+      where: {
+        checksum,
+        uploaderId: userId,
+        visibility,
+        deletedAt: null,
+      },
       select: assetDetailSelect,
     });
   },
@@ -130,6 +191,16 @@ export const uploadRepository = {
       where: {
         id: assetId,
         uploaderId: userId,
+        deletedAt: null,
+      },
+      select: assetDetailSelect,
+    });
+  },
+
+  async findAssetById(assetId: string, client: UploadClient = prisma) {
+    return client.asset.findFirst({
+      where: {
+        id: assetId,
         deletedAt: null,
       },
       select: assetDetailSelect,
@@ -270,6 +341,97 @@ export const uploadRepository = {
     if (ids.length === 0) return { count: 0 };
     const result = await client.onboardingUpload.updateMany({
       where: { id: { in: ids } },
+      data: { status: "EXPIRED" },
+    });
+    return { count: result.count };
+  },
+
+  async createDirectUpload(
+    data: CreateDirectUploadInput,
+    client: UploadClient = prisma,
+  ): Promise<UploadDirectUploadRecord> {
+    return client.directUpload.create({
+      data: {
+        uploader: { connect: { id: data.uploaderId } },
+        originalName: data.originalName,
+        mimeType: data.mimeType,
+        size: data.size,
+        checksum: data.checksum,
+        bucket: data.bucket,
+        key: data.key,
+        visibility: data.visibility,
+        expiresAt: data.expiresAt,
+        temporary: data.temporary,
+        deleteAfter: data.deleteAfter,
+      },
+      select: directUploadSelect,
+    });
+  },
+
+  async findDirectUploadById(
+    uploadId: string,
+    client: UploadClient = prisma,
+  ): Promise<UploadDirectUploadRecord | null> {
+    return client.directUpload.findUnique({
+      where: { id: uploadId },
+      select: directUploadSelect,
+    });
+  },
+
+  async markDirectUploadConfirmed(
+    uploadId: string,
+    assetId: string,
+    client: UploadClient = prisma,
+  ): Promise<UploadDirectUploadRecord> {
+    return client.directUpload.update({
+      where: { id: uploadId },
+      data: {
+        status: "CONFIRMED",
+        confirmedAt: new Date(),
+        asset: { connect: { id: assetId } },
+      },
+      select: directUploadSelect,
+    });
+  },
+
+  async markDirectUploadFailed(
+    uploadId: string,
+    failureReason: string,
+    client: UploadClient = prisma,
+  ): Promise<UploadDirectUploadRecord> {
+    return client.directUpload.update({
+      where: { id: uploadId },
+      data: {
+        status: "FAILED",
+        failedAt: new Date(),
+        failureReason,
+      },
+      select: directUploadSelect,
+    });
+  },
+
+  async findExpiredDirectUploadsForCleanup(
+    client: UploadClient = prisma,
+  ): Promise<Array<{ id: string; key: string; visibility: AssetVisibility }>> {
+    return client.directUpload.findMany({
+      where: {
+        status: "PRESIGNED",
+        expiresAt: { lt: new Date() },
+      },
+      select: { id: true, key: true, visibility: true },
+    });
+  },
+
+  async markDirectUploadsExpiredByIds(
+    ids: string[],
+    client: UploadClient = prisma,
+  ): Promise<{ count: number }> {
+    if (ids.length === 0) return { count: 0 };
+    const result = await client.directUpload.updateMany({
+      where: {
+        id: { in: ids },
+        status: "PRESIGNED",
+      },
       data: { status: "EXPIRED" },
     });
     return { count: result.count };

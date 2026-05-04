@@ -63,12 +63,13 @@ export const licensesRepository = {
     if (data.assetId) {
       const asset = await prisma.asset.findUnique({
         where: { id: data.assetId },
-        select: { id: true, uploaderId: true },
+        select: { id: true, uploaderId: true, visibility: true },
       });
       if (!asset) return { error: "asset_not_found" };
       if (
-        asset.uploaderId !== professionalId &&
-        asset.uploaderId !== "system"
+        (asset.uploaderId !== professionalId &&
+          asset.uploaderId !== "system") ||
+        (asset.uploaderId !== "system" && asset.visibility !== "PRIVATE")
       ) {
         return { error: "asset_forbidden" };
       }
@@ -152,12 +153,13 @@ export const licensesRepository = {
     if (updateData.assetId && updateData.assetId !== existing.assetId) {
       const asset = await prisma.asset.findUnique({
         where: { id: updateData.assetId },
-        select: { id: true, uploaderId: true },
+        select: { id: true, uploaderId: true, visibility: true },
       });
       if (!asset) return { error: "asset_not_found" };
       if (
-        asset.uploaderId !== professionalId &&
-        asset.uploaderId !== "system"
+        (asset.uploaderId !== professionalId &&
+          asset.uploaderId !== "system") ||
+        (asset.uploaderId !== "system" && asset.visibility !== "PRIVATE")
       ) {
         return { error: "asset_forbidden" };
       }

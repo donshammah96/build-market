@@ -66,6 +66,8 @@ export interface UploadOptions {
   pollIntervalMs?: number;
   /** Max polling attempts for pending uploads (default: 30) */
   maxPollingAttempts?: number;
+  /** Use the direct private document flow when uploading credentials */
+  directDocuments?: boolean;
 }
 
 export interface UploadResult {
@@ -116,12 +118,35 @@ interface UploadStatusResponse {
   message?: string;
 }
 
+interface DirectPresignResponse {
+  success?: boolean;
+  data?: {
+    uploadId?: string;
+    uploadUrl?: string;
+    key?: string;
+    requiredHeaders?: Record<string, string>;
+    expiresAt?: string;
+  };
+  error?: string;
+  message?: string;
+}
+
+interface DirectConfirmResponse {
+  success?: boolean;
+  data?: {
+    assetId?: string;
+    visibility?: "PRIVATE";
+  };
+  error?: string;
+  message?: string;
+}
+
 // ============================================================================
 // CONSTANTS
 // ============================================================================
 
 const DEFAULT_OPTIONS: Required<
-  Omit<UploadOptions, "authToken" | "headers" | "signal">
+  Omit<UploadOptions, "authToken" | "headers" | "signal" | "directDocuments">
 > = {
   maxRetries: 3,
   retryDelay: 1000,
@@ -150,6 +175,53 @@ export const ALLOWED_FILE_TYPES = {
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+async function sha256Hex(file: File): Promise<string> {
+  if (!globalThis.crypto?.subtle) {
+    throw new UploadError(
+      "Browser crypto is unavailable for direct upload checksum calculation",
+      UploadErrorCode.UNKNOWN,
+    );
+  }
+
+  const digest = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    typeof file.arrayBuffer === "function"
+      ? await file.arrayBuffer()
+      : await new Response(file).arrayBuffer(),
+  );
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function parseJsonOrError<T>(
+  response: Response,
+  fallbackMessage: string,
+): Promise<T> {
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    message?: string;
+  };
+
+  if (!response.ok) {
+    throw new UploadError(
+      payload.error || payload.message || fallbackMessage,
+      UploadErrorCode.SERVER_ERROR,
+      response.status,
+      payload,
+    );
+  }
+
+  return payload as T;
+}
+
+function createLocalPreviewUrl(file: File): string {
+  if (typeof URL !== "undefined" && typeof URL.createObjectURL === "function") {
+    return URL.createObjectURL(file);
+  }
+  return "";
+}
 
 const isRetryableError = (error: unknown): boolean => {
   if (error instanceof UploadError) {
@@ -207,7 +279,9 @@ export const validateFiles = (
 
 async function pollPendingUpload(
   item: UploadedItem,
-  options: Required<Omit<UploadOptions, "authToken" | "headers" | "signal">>,
+  options: Required<
+    Omit<UploadOptions, "authToken" | "headers" | "signal" | "directDocuments">
+  >,
   headers: Record<string, string>,
   signal?: AbortSignal,
 ): Promise<{ url: string; assetId: string }> {
@@ -287,7 +361,9 @@ async function pollPendingUpload(
 async function parseUploadResponse(
   json: ApiUploadResponse,
   fieldName: string,
-  options: Required<Omit<UploadOptions, "authToken" | "headers" | "signal">>,
+  options: Required<
+    Omit<UploadOptions, "authToken" | "headers" | "signal" | "directDocuments">
+  >,
   headers: Record<string, string>,
   signal?: AbortSignal,
 ): Promise<{ urls: string[]; assetIds: string[] }> {
@@ -457,6 +533,110 @@ export async function uploadFiles(
   throw new UploadError("Upload failed", UploadErrorCode.UNKNOWN);
 }
 
+export async function uploadFilesDirect(
+  files: File[],
+  fieldName: string,
+  options: UploadOptions = {},
+): Promise<UploadResult> {
+  validateFiles(files, "documents");
+
+  const headers: Record<string, string> = { ...options.headers };
+  if (options.authToken) {
+    headers["Authorization"] = `Bearer ${options.authToken}`;
+  }
+
+  const urls: string[] = [];
+  const assetIds: string[] = [];
+  const raw: unknown[] = [];
+
+  for (const file of files) {
+    if (options.signal?.aborted) {
+      throw new UploadError("Upload aborted", UploadErrorCode.ABORTED);
+    }
+
+    const checksumSha256 = await sha256Hex(file);
+    const presignResponse = await fetch("/api/uploads/presign", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...headers,
+      },
+      body: JSON.stringify({
+        filename: file.name,
+        mimeType: file.type,
+        size: file.size,
+        checksumSha256,
+        context: "document",
+      }),
+      signal: options.signal,
+    });
+
+    const presign = await parseJsonOrError<DirectPresignResponse>(
+      presignResponse,
+      "Failed to create upload URL",
+    );
+    const upload = presign.data;
+    if (
+      !upload?.uploadId ||
+      !upload.uploadUrl ||
+      !upload.requiredHeaders ||
+      !upload.expiresAt
+    ) {
+      throw new UploadError(
+        "Direct upload presign response was incomplete",
+        UploadErrorCode.INVALID_RESPONSE,
+        presignResponse.status,
+        presign,
+      );
+    }
+
+    const uploadResponse = await fetch(upload.uploadUrl, {
+      method: "PUT",
+      headers: upload.requiredHeaders,
+      body: file,
+      signal: options.signal,
+    });
+
+    if (!uploadResponse.ok) {
+      throw new UploadError(
+        `Direct upload failed with status ${uploadResponse.status}`,
+        UploadErrorCode.SERVER_ERROR,
+        uploadResponse.status,
+      );
+    }
+
+    const confirmResponse = await fetch("/api/uploads/confirm", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...headers,
+      },
+      body: JSON.stringify({ uploadId: upload.uploadId }),
+      signal: options.signal,
+    });
+    const confirmed = await parseJsonOrError<DirectConfirmResponse>(
+      confirmResponse,
+      "Failed to confirm upload",
+    );
+
+    const assetId = confirmed.data?.assetId;
+    if (!assetId) {
+      throw new UploadError(
+        "Direct upload confirmation did not return an asset ID",
+        UploadErrorCode.INVALID_RESPONSE,
+        confirmResponse.status,
+        confirmed,
+      );
+    }
+
+    assetIds.push(assetId);
+    urls.push(createLocalPreviewUrl(file));
+    raw.push({ presign, confirmed });
+  }
+
+  return { urls, assetIds, raw: { fieldName, items: raw } };
+}
+
 export async function uploadFile(
   file: File,
   fieldName: string,
@@ -483,10 +663,13 @@ export async function uploadForCredential(
   options: UploadOptions = {},
 ): Promise<{ assetId: string; url: string }> {
   validateFiles([file], "documents");
-  const result = await uploadFiles([file], fieldName, options);
+  const result =
+    options.directDocuments === false
+      ? await uploadFiles([file], fieldName, options)
+      : await uploadFilesDirect([file], fieldName, options);
   const assetId = result.assetIds[0];
-  const url = result.urls[0];
-  if (!assetId || !url) {
+  const url = result.urls[0] ?? "";
+  if (!assetId) {
     throw new UploadError(
       "Upload did not return asset ID. The upload API may have changed.",
       UploadErrorCode.INVALID_RESPONSE,

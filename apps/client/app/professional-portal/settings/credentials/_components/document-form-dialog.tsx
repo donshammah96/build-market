@@ -85,9 +85,7 @@ export function DocumentFormDialog({
   const [assetId, setAssetId] = useState<string | null>(
     initialData?.asset?.id ?? null,
   );
-  const [previewUrl, setPreviewUrl] = useState<string | null>(
-    initialData?.asset?.cdnUrl ?? null,
-  );
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const form = useForm<CreateFormValues>({
     resolver: zodResolver(formSchema),

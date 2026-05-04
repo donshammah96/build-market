@@ -89,7 +89,7 @@ export const certificateListSelect = {
   asset: {
     select: {
       id: true,
-      cdnUrl: true,
+      visibility: true,
       originalName: true,
       mimeType: true,
       size: true,
