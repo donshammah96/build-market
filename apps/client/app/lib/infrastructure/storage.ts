@@ -548,6 +548,7 @@ class LocalStorageProvider implements StorageProvider {
     options?: StorageObjectOptions & { originalFilename?: string },
   ): Promise<void> {
     const filepath = this.resolvePath(key);
+    const metadataFilepath = `${filepath}.meta.json`;
     const meta: LocalObjectMeta = {
       mimeType,
       originalFilename: options?.originalFilename ?? path.basename(key),
@@ -556,10 +557,7 @@ class LocalStorageProvider implements StorageProvider {
 
     await fs.promises.mkdir(path.dirname(filepath), { recursive: true });
     await fs.promises.writeFile(filepath, buffer);
-    await fs.promises.writeFile(
-      this.metadataPath(key),
-      JSON.stringify(meta),
-    );
+    await fs.promises.writeFile(metadataFilepath, JSON.stringify(meta));
   }
 
   async readObject(
