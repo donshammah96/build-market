@@ -1,287 +1,562 @@
 # API Architecture
 
-## Purpose
+**Last Updated:** May 2026  
+**Canonical authority:** `.agent/API-TO-FRONTEND-ARCHITECTURE.md`  
+**Status:** Aligned with properties domain reference implementation
 
-This document describes the canonical server-side architecture for `apps/client`.
+This document is the staff-level reference for `apps/client` API surfaces. It is derived from `.agent/API-TO-FRONTEND-ARCHITECTURE.md` and the properties domain, which serves as the canonical reference implementation. When this document and the architecture guide disagree, the architecture guide wins.
 
-It is the staff-level reference for how API routes, server actions, domain services, repositories, and shared transport utilities should fit together after the current migration work. If a route, action, or service disagrees with this document, treat the domain-first pattern described here as the target state.
+---
 
 ## Executive Summary
 
-`apps/client` uses a thin-adapter, domain-core architecture.
+`apps/client` uses a **thin-adapter, domain-core** architecture.
 
-- `app/api/**` contains HTTP adapters only.
-- `app/actions/**` contains server-action adapters only.
-- `app/lib/domains/**` contains canonical business logic.
-- repositories inside `app/lib/domains/**` are persistence-only.
-- shared transport and policy utilities live under `app/lib/**`.
-- browser consumers use `lib/*-client.ts` facades and hooks, never server-only modules directly.
+- `app/api/**` — HTTP adapters only. No business logic.
+- `app/actions/**` — Server-action adapters only. No business logic.
+- `app/lib/domains/**` — Canonical business logic, actor-aware authorization, DTO shaping.
+- `app/lib/domains/**/repository.ts` — Persistence only. No authorization or HTTP semantics.
+- `app/lib/infrastructure/env.ts` — **Single canonical boundary** for all `process.env` reads.
+- `lib/*-client.ts` — Browser-safe facades. No server-only imports.
 
-The central rule is simple: adapters own transport concerns, domains own business decisions.
+The central rule: **adapters own transport concerns, domains own business decisions.**
+
+---
 
 ## Canonical Layers
 
-### 1. Transport Adapters
+### 1. Transport Adapters (`app/api/**`, `app/actions/**`)
 
-Folders:
+**Responsibilities:**
 
-- `app/api/**`
-- `app/actions/**`
+- Capture `startedAt = now()` as the absolute first statement (before auth, parsing, validation)
+- Initialize correlation ID via `initializeCorrelationId(req)`
+- Extract actor context from `withAuth` (`dbUserId`, `userRole`, `clerkId`)
+- Apply rate limiting via `checkRateLimit()` or `getActorRateLimitIdentifier()`
+- Validate request shape with `schema.safeParse()` — **never** `.parse()` (a thrown ZodError escapes as 500)
+- Enforce `If-Match` / `ETag` for versioned entities on PATCH and DELETE
+- Call `IdempotencyService.checkOrCreate()` for idempotent mutations
+- Execute via `getResilientExecutor().execute()`
+- Map `Result<T, DomainError>` outcomes to HTTP responses
+- Emit one structured log event per request at the point of response (ADR-005)
+- Trigger cache revalidation in server actions
 
-Responsibilities:
+**Non-responsibilities:**
 
-- extract actor context from Clerk and database identity
-- apply rate limits
-- validate request shape
-- enforce idempotency at the adapter boundary where required
-- call resilient executors for route-side work
-- translate domain `Result<T, DomainError>` outcomes into HTTP or action responses
-- trigger cache revalidation in server actions
+- Prisma query logic for domain behavior
+- Role or ownership policy
+- Resource-specific state transitions
+- Route-local business-rule sentinels
+- Raw `process.env` reads (use `envConfig` from `app/lib/infrastructure/env.ts`)
 
-Non-responsibilities:
+### 2. Domain Layer (`app/lib/domains/**`)
 
-- Prisma query orchestration for domain behavior
-- role or ownership policy logic
-- resource-specific state transitions
-- route-local business-rule sentinels
+**Responsibilities:**
 
-### 2. Domain Layer
+- Actor-aware authorization (role + ownership + admin override)
+- Business rules and invariants
+- Orchestration across repositories and side effects
+- Normalized `Result<T, DomainError>` outcomes for all expected failures
+- Canonical DTO shaping — `Date → string` normalization happens **here**, not in adapters
 
-Folder:
+**Must not:**
 
-- `app/lib/domains/**`
+- Import `HttpStatus`, `NextResponse`, or any route/action semantics
+- Call `getClientLogger()` (logging is the adapter's responsibility)
+- Import from other domain services or repositories directly — cross-domain reads go through the owning domain's `index.ts`
 
-Responsibilities:
-
-- business rules
-- actor and ownership checks
-- domain orchestration across repositories and side effects
-- normalized `Result<T, DomainError>` outcomes
-- DTO shaping for client-safe or public-safe consumers
-
-Patterns already established in migrated slices:
-
-- messaging
-- projects
-- properties
-- stores
-- portfolio
-- CRM (`leads`, `inquiries`, `pipeline`)
-- user-profile and compliance
-
-### 3. Repositories
-
-Usually colocated inside each domain folder.
-
-Responsibilities:
-
-- execute Prisma reads and writes
-- expose persistence-oriented helpers to services
-- keep query composition and transactional primitives out of adapters
-
-Repositories must not:
-
-- enforce role checks
-- encode HTTP semantics
-- shape transport envelopes
-- assume caller authorization already happened unless the service guarantees it
-
-### 4. Shared Cross-Cutting Utilities
-
-Key folders:
-
-- `app/lib/security/**`
-- `app/lib/actions/**`
-- `app/lib/errors/**`
-- `app/lib/api-*`
-- `app/lib/resilient-api.ts`
-- `app/lib/rate-limit.ts`
-
-These modules provide the stable transport and policy primitives used across adapters and domains.
-
-### 5. Browser Facades
-
-Examples:
-
-- `lib/projects-client.ts`
-- `lib/messaging-client.ts`
-- `lib/properties-client.ts`
-
-Responsibilities:
-
-- browser-safe request construction
-- response envelope normalization
-- rollout-gate enforcement where applicable
-- keeping client components and hooks decoupled from server-only runtime code
-
-## Dependency Direction
-
-Preferred flow:
-
-```text
-app/api or app/actions -> app/lib/domains -> repositories / shared infrastructure
-app/api or app/actions -> app/lib/security and transport helpers
-client hooks/components -> lib/*-client facades
-```
-
-Disallowed flow:
-
-```text
-domains -> route handlers
-domains -> server actions
-browser code -> app/api internals or server-only app/lib modules
-repositories -> authorization policy logic
-```
-
-## Canonical Route Pattern
-
-API routes are thin HTTP adapters.
-
-### Public GET
+**Pattern in production (properties slice):**
 
 ```typescript
-export async function GET(req: NextRequest) {
-  const correlationId = initializeCorrelationId(req);
-  const identifier = getRateLimitIdentifier(req);
-
-  const rateLimit = await checkRateLimit(
-    identifier,
-    RateLimits.READ.limit,
-    RateLimits.READ.window,
-  );
-
-  if (!rateLimit.success) {
-    return apiError("Rate limit exceeded", HttpStatus.TOO_MANY_REQUESTS);
+// app/lib/domains/properties/service.ts
+export async function updateProperty(
+  actor: PropertyActor,
+  command: UpdatePropertyInput,
+  context: PropertyOperationContext,
+  expectedVersion: number,
+): Promise<PropertyResult<PropertyUpdateResultDto>> {
+  const property = await propertyRepository.findById(command.id);
+  if (!property) return err({ error: "not_found" });
+  if (property.agentId !== actor.userId && actor.role !== "ADMIN") {
+    return err({ error: "forbidden" });
   }
-
-  const executor = getResilientExecutor();
-  const result = await executor.execute(() => domainService.listSomething(), {
-    operationName: "list-something",
-  });
-
-  if (!result.success || !result.data) {
-    return apiError(
-      "Failed to fetch resources",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
-  }
-
-  return apiSuccess(result.data, HttpStatus.OK);
+  // ... orchestration, optimistic-lock update, DTO mapping
+  return ok(toPropertyUpdateResultDto(updated));
 }
 ```
 
-### Authenticated Mutation
+### 3. Repositories (`app/lib/domains/**/repository.ts`)
+
+**Responsibilities:**
+
+- Execute Prisma reads and writes
+- Expose persistence-oriented helpers
+- Keep soft-delete guards (`deletedAt: null`) in every `findFirst`/`findMany`
+
+**Must not:**
+
+- Enforce role checks
+- Return HTTP-shaped structures or error messages
+- Import from route or action modules
+
+### 4. Mappers (`app/lib/domains/**/mappers.ts`)
+
+Mappers are pure functions responsible for transforming raw Prisma shapes into explicit browser-safe DTOs. They are the canonical place for:
+
+- `Decimal → number` normalization via `toNumber()`
+- `Date → ISO string` normalization via `toIsoString()`
+- Null coalescing for optional fields
+- Nested shape normalization (assets, agents, images)
+
+They take a loose raw input type and return a strict domain DTO. They have no side effects and no imports from infrastructure.
+
+**Pattern (properties slice):**
 
 ```typescript
-export const POST = withAuth(async (req, actor) => {
-  const correlationId = initializeCorrelationId(req);
-  const identifier = getRateLimitIdentifier(req);
+// app/lib/domains/properties/mappers.ts
+export function toPropertyListItemDto(raw: {
+  /* loose Prisma shape */
+}): PropertyListItem {
+  return {
+    id: raw.id,
+    price: toNumber(raw.price), // Decimal → number
+    createdAt: toIsoString(raw.createdAt) ?? new Date(0).toISOString(), // Date → string
+    // ... all fields normalized
+  };
+}
+```
 
-  const rateLimit = await checkRateLimit(
-    identifier,
-    RateLimits.WRITE.limit,
-    RateLimits.WRITE.window,
+### 5. Shared Route Utilities (`app/api/<domain>/shared.ts`)
+
+For domain route families with multiple handlers (collection + item + attachments, etc.), extract shared adapter utilities into a co-located `shared.ts`:
+
+- ADR-005 structured logging helper (`logPropertiesRouteOutcome`)
+- Domain-error-to-HTTP-status mapping (`domainErrorCodeToStatus`)
+- Domain-error-to-response mapping (`domainErrorToResponse`)
+- Client-safe message mapping (`propertyDomainErrorToClientMessage`)
+- Timing and role label helpers (`now()`, `actorRoleLabel()`)
+- Optimistic-lock conflict response builder (`conflictResponse()`)
+
+This keeps handlers thin and ensures error mapping is consistent across all operations on the same resource.
+
+#### `conflictResponse()` — static message contract
+
+`conflictResponse()` must use a hardcoded static message. It does **not** accept a `message` parameter:
+
+```typescript
+// ✅ Correct — no message param, static string inside function
+export function conflictResponse(
+  currentVersion: number | null | undefined,
+  correlationId: string,
+): NextResponse {
+  const response = apiError(
+    "Resource version conflict. Retry with the latest version.",
+    HttpStatus.CONFLICT,
+    undefined,
+    correlationId,
   );
-
-  if (!rateLimit.success) {
-    return apiError("Rate limit exceeded", HttpStatus.TOO_MANY_REQUESTS);
+  if (currentVersion !== null && currentVersion !== undefined) {
+    response.headers.set("X-Property-Version", String(currentVersion));
+    response.headers.set("ETag", `"${currentVersion}"`);
   }
+  return response;
+}
+```
 
-  const payload = await schema.parseAsync(await req.json());
-  const domainResult = await someDomainService.createSomething(actor, payload);
+Callsite — pass only `currentVersion` and `correlationId`:
 
-  if (!domainResult.success) {
-    return mapDomainErrorToResponse(domainResult.error, correlationId);
-  }
+```typescript
+// ✅ Correct
+return conflictResponse(
+  (result.details as { currentVersion?: number } | undefined)?.currentVersion,
+  correlationId,
+);
 
-  return apiSuccess(domainResult.data, HttpStatus.CREATED);
+// ❌ Prohibited — dynamic message parameter (removed in Phase 0A)
+return conflictResponse(
+  result.message ?? "Property has been modified.",
+  currentVersion,
+  correlationId,
+);
+```
+
+This extends the same rule as §9 (`apiError()` first argument must be static): `conflictResponse()` is a convenience wrapper over `apiError()`, so the same static-message constraint applies transitively.
+
+### 6. Browser Facades (`lib/*-client.ts`)
+
+**Responsibilities:**
+
+- Browser-safe HTTP access via `fetch` or `apiFetch` against `/api/...`
+- `ApiResponse<T>` envelope parsing
+- Explicit DTO interfaces — no `ReturnType<>` inference from server-only types
+- Concurrency limiting when appropriate
+
+**Must not:**
+
+- Import `app/actions/**`, `app/lib/domains/**`, or any server-only modules
+- Rely on implicit Prisma or server-action return types across boundaries
+
+---
+
+## Dependency Direction
+
+```
+UI Component / Page
+  → React Query hook  (hooks/use*.ts)
+  → Browser facade    (lib/<domain>-client.ts)
+  → API route         (app/api/<domain>/**)
+  → Domain service    (app/lib/domains/<domain>/service.ts)
+  → Repository        (app/lib/domains/<domain>/repository.ts)
+  → @build/db
+```
+
+Server-side form / mutation:
+
+```
+Server Component / form
+  → Server action     (app/actions/<domain>.ts)
+  → secureAction wrapper
+  → Domain service    (app/lib/domains/<domain>/service.ts)
+  → Repository
+  → @build/db
+```
+
+**Disallowed flows:**
+
+```
+domains → route handlers or server actions
+browser code → app/lib/domains/** or server-only modules
+repositories → authorization policy or HTTP response shaping
+route handlers → process.env directly (use envConfig)
+```
+
+---
+
+## Canonical Route Handler Pattern
+
+The properties `[id]/route.ts` is the reference implementation. Key invariants:
+
+### 1. `startedAt` is always first
+
+```typescript
+export const PATCH = withAuth(async (req, context, params) => {
+  // ✅ First statement — covers full request lifecycle including auth resolution
+  const startedAt = now();
+  const correlationId = initializeCorrelationId(req);
+  // ...
 });
 ```
 
-### Notes
+### 2. Actor context construction
 
-- Use `withAuth` or `withRole` only for identity extraction and coarse entry checks.
-- Keep resource authorization in the domain service.
-- When collection GET routes need precise `403` versus `404` mapping, inline them instead of hiding domain errors behind a generic wrapper.
-
-## Canonical Server Action Pattern
-
-Server actions follow the same adapter rule.
-
-Use `secureAction` for:
-
-- actor resolution
-- input validation
-- structured failure mapping
-
-Server actions should:
-
-- call domain services with full actor context
-- keep `revalidatePath()` in the action layer
-- avoid direct Prisma access unless the slice has not yet been migrated and the work is explicitly transitional
-
-Example shape:
+Destructure `clerkId` and include it for verification/identity-transition routes. For standard property mutations, the minimal actor shape is:
 
 ```typescript
-export const updateThing = secureAction(
-  inputSchema,
-  async ({ actor, input }) => {
-    const result = await thingService.updateThing(actor, input);
+const actor: PropertyActor = {
+  userId: context.dbUserId,
+  role: context.userRole ?? "unknown",
+};
+```
 
-    if (!result.success) {
-      return mapDomainErrorToActionFailure(result.error);
+For verification, onboarding, and identity-transition routes, include `clerkId`:
+
+```typescript
+const actor = {
+  userId: context.dbUserId,
+  clerkId: context.clerkId, // required when domain contract accepts it
+  role: normalizeRole(context.userRole),
+};
+```
+
+### 3. Rate limiting — actor-scoped for authenticated routes
+
+```typescript
+// ✅ For authenticated high-risk routes: actor-scoped
+const rateKey = getActorRateLimitIdentifier(context.dbUserId, "property-write");
+const rateLimitResult = await checkRateLimit(rateKey, limit, window);
+
+// ✅ For public routes: IP-scoped
+const rateKey = getRateLimitIdentifier(req);
+```
+
+### 4. `If-Match` for versioned mutations — header-only
+
+PATCH and DELETE on versioned entities require `If-Match`. Body-version fallback is prohibited (GAP-017).
+
+```typescript
+const ifMatch = req.headers.get("If-Match");
+if (!ifMatch) {
+  return apiError(
+    'Missing If-Match header. Include the property version as: If-Match: "N"',
+    HttpStatus.PRECONDITION_REQUIRED,
+    undefined,
+    correlationId,
+  );
+}
+
+const expectedVersion = extractExpectedVersionFromIfMatch(req);
+if (expectedVersion === null) {
+  return apiError(
+    "Invalid If-Match header value",
+    HttpStatus.BAD_REQUEST,
+    undefined,
+    correlationId,
+  );
+}
+```
+
+### 5. Zod validation — always `safeParse`, never `parse`
+
+```typescript
+const validation = UpdatePropertySchema.safeParse(body);
+if (!validation.success) {
+  logRouteOutcome({ outcome: "validation_error", httpStatus: 400, ... });
+  return apiError("Invalid update data", HttpStatus.BAD_REQUEST, validation.error.issues, correlationId);
+}
+```
+
+### 6. Idempotency — `complete()` must be wrapped
+
+`IdempotencyService.complete()` can throw after a successful domain mutation. The handler must not rethrow — the domain operation succeeded and the client must receive the success response.
+
+```typescript
+// ✅ Correct — isolated try-catch, does NOT rethrow
+try {
+  await IdempotencyService.complete(idempotencyKey, result.data);
+} catch (completionError) {
+  await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+  logger.error(
+    "Idempotency completion failed",
+    completionError instanceof Error
+      ? completionError
+      : new Error(String(completionError)),
+    {
+      correlationId,
+      operationName,
+      outcome: "idempotency_complete_failed",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+    },
+  );
+  // Do NOT rethrow. Mutation succeeded.
+}
+return apiSuccess(result.data, HttpStatus.OK, correlationId);
+```
+
+### 7. ETag on success
+
+```typescript
+const response = apiSuccess(result.data, HttpStatus.OK, correlationId);
+response.headers.set("ETag", `"${result.data.version}"`);
+return response;
+```
+
+### 8. Structured logging — one event per request
+
+Every outcome path emits exactly one structured log event at the point of response. The log function lives in `shared.ts` and is called consistently:
+
+```typescript
+logPropertiesRouteOutcome({
+  correlationId,
+  operationName, // stable snake_case join key, e.g. "update_property"
+  actorRole, // safe enum value — never userId, clerkId, or email
+  outcome: "success", // "success" | "domain_error" | "validation_error" | "rate_limited" | "internal_error"
+  httpStatus: HttpStatus.OK,
+  durationMs: now() - startedAt,
+  resourceType: "property",
+  resourceId: propertyId, // UUID only — never user-controlled slugs
+});
+```
+
+**PII exclusions (hard rules, ADR-005 + ADR-006):**
+
+- Never log `userId`, `clerkId`, `userEmail`, `phone`, or any natural-person identifier
+- Never log request body values or response body content
+- `actorRole` (enum) and `resourceId` (UUID) are safe
+
+### 9. `apiError()` first argument — always a static string
+
+Never pass domain result message fields to `apiError()`. All of these forms are violations:
+
+```typescript
+// ❌ All prohibited — variable name does not matter
+apiError(error.message ?? "fallback", status);
+apiError(err.message ?? "fallback", status);
+apiError(data.message ?? "fallback", status);
+apiError(result.data.message ?? "fallback", status);
+```
+
+Use a static string constant and log the domain error code at `warn` level:
+
+```typescript
+// ✅ Correct
+return apiError("Forbidden", HttpStatus.FORBIDDEN, undefined, correlationId);
+```
+
+### Complete annotated PATCH handler (reference)
+
+```typescript
+export const PATCH = withAuth(
+  async (req: NextRequest, context: { dbUserId: string; userRole?: string }, params?: { id: string }) => {
+    // ① Timing — first statement always
+    const startedAt = now();
+    const correlationId = initializeCorrelationId(req);
+    const operationName = "update_property";
+    const actorRole = actorRoleLabel(context.userRole);
+
+    // ② Input guards
+    if (!params?.id || !isValidId(params.id)) {
+      logRouteOutcome({ correlationId, operationName, actorRole, outcome: "validation_error",
+        httpStatus: 400, durationMs: now() - startedAt, resourceType: "property" });
+      return apiError("Property ID is required", HttpStatus.BAD_REQUEST, undefined, correlationId);
     }
 
-    revalidatePath("/dashboard/things");
-    return { success: true, data: result.data };
+    const propertyId = params.id;
+
+    // ③ Rate limiting
+    const rateLimitResult = await checkPropertyRateLimit(req, "write");
+    if (!rateLimitResult.success) {
+      logRouteOutcome({ ..., outcome: "rate_limited", httpStatus: 429, ... });
+      return apiError("Too many requests. Please try again later.", HttpStatus.TOO_MANY_REQUESTS, undefined, correlationId);
+    }
+
+    // ④ Body size guard
+    const sizeError = checkBodySize(req, PROPERTY_CONFIG.MAX_BODY_SIZE);
+    if (sizeError) { /* log + return */ }
+
+    // ⑤ If-Match (header-only, no body fallback)
+    const ifMatch = req.headers.get("If-Match");
+    if (!ifMatch) { /* 428 + log */ }
+    const expectedVersion = extractExpectedVersionFromIfMatch(req);
+    if (expectedVersion === null) { /* 400 + log */ }
+
+    // ⑥ JSON parse + Zod validation (safeParse — never parse())
+    const validation = UpdatePropertySchema.safeParse(await req.json());
+    if (!validation.success) { /* 400 + log */ }
+
+    // ⑦ Idempotency check
+    const idempotencyKey = req.headers.get("Idempotency-Key")
+      || IdempotencyService.generateKey(context.dbUserId, `PATCH:${propertyId}`, body);
+    const check = await IdempotencyService.checkOrCreate(idempotencyKey, ...);
+    if (check?.status === "completed") { /* return cached response */ }
+    if (check?.status === "pending")   { /* 409 conflict */ }
+
+    // ⑧ Domain call
+    const result = await propertiesService.updatePropertyWithRetry(
+      propertyId,
+      { userId: context.dbUserId, role: context.userRole ?? "unknown" },
+      validation.data, operationContext, expectedVersion, { maxRetries, retryDelayMs },
+    );
+
+    // ⑨ Domain error mapping
+    if (!result.ok) {
+      await IdempotencyService.fail(idempotencyKey);
+      if (result.error === "conflict") {
+        return conflictResponse(
+          (result.details as { currentVersion?: number } | undefined)?.currentVersion,
+          correlationId,
+        );
+      }
+      logRouteOutcome({ ..., outcome: "domain_error", ... });
+      return domainResultToErrorResponse(result, correlationId)!;
+    }
+
+    // ⑩ Idempotency completion — isolated try-catch, never rethrows
+    try {
+      await IdempotencyService.complete(idempotencyKey, result.data);
+    } catch (err) {
+      await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+      logger.error("Idempotency completion failed", err, { correlationId, outcome: "idempotency_complete_failed", ... });
+      // fall through — mutation succeeded
+    }
+
+    // ⑪ Success response + ETag
+    const response = apiSuccess(result.data, HttpStatus.OK, correlationId);
+    response.headers.set("ETag", `"${result.data.version}"`);
+    logRouteOutcome({ ..., outcome: "success", httpStatus: 200, ... });
+    return response;
   },
 );
 ```
 
-## Actor Model
-
-Routes and actions should pass full actor context into the domain, not bare user IDs.
-
-The minimum useful actor shape is:
-
-- `clerkId`
-- `dbUserId`
-- `userEmail`
-- `userRole`
-
-Why:
-
-- role-bearing actors let the domain keep authorization local
-- ownership and admin override rules stay testable inside services
-- detail and collection routes can preserve `forbidden` versus `not_found` semantics without caller discipline
+---
 
 ## Result and Error Contracts
 
-Migrated domains should prefer a shared result contract:
+### Canonical `Result<T, E>` type
+
+Import from `app/lib/errors/result.ts` — do not re-define locally:
 
 ```typescript
-type Result<T, E> = { success: true; data: T } | { success: false; error: E };
+import type { Result, DomainError } from "@/app/lib/errors/result";
+
+// Shape: { ok: true; data: T } | ({ ok: false } & E)
 ```
 
-`DomainError` values should be domain-oriented, not HTTP-oriented.
+Domain errors are domain-oriented, never HTTP-oriented:
 
-Examples:
+```typescript
+export type PropertyDomainErrorCode =
+  | "not_found"
+  | "forbidden"
+  | "conflict"
+  | "invalid_input"
+  | "internal_error"
+  | "suspended_account"
+  | "not_professional"
+  | "slug_conflict"
+  | "asset_not_found"
+  | "asset_unauthorized"
+  | "document_not_found"
+  | "attachment_not_found"
+  | "attachment_mismatch";
 
-- `forbidden`
-- `not_found`
-- `conflict`
-- `validation_error`
-- `rate_limited`
-- `external_dependency_failed`
+export type PropertyDomainError = DomainError<PropertyDomainErrorCode>;
+export type PropertyResult<T> = Result<T, PropertyDomainError>;
+```
 
-Adapters then map those outcomes into:
+Adapters map these codes to HTTP status via a single `domainErrorCodeToStatus()` function in `shared.ts`.
 
-- HTTP status codes for routes
-- structured action failures for server actions
+### `ok()` / `err()` helpers
 
-## Response Contract
+```typescript
+import { ok, err } from "@/app/lib/errors/result";
 
-The canonical route envelope is:
+// In domain service
+if (!property) return err({ error: "not_found" });
+if (!authorized) return err({ error: "forbidden" });
+return ok(toPropertyDetailDto(property));
+```
+
+### Two-level Result unwrap from `getResilientExecutor()`
+
+The resilient executor wraps the domain result in its own success/failure envelope:
+
+```typescript
+// getResilientExecutor().execute() returns Result<DomainResult, InfraError>
+// Two levels of narrowing are required:
+const result = await getResilientExecutor().execute(() => domainService.doThing(...), { operationName });
+
+if (!result.success || !result.data) {
+  // Infrastructure failure (circuit open, timeout, etc.)
+  return apiError("Failed to fetch resource", HttpStatus.INTERNAL_SERVER_ERROR, undefined, correlationId);
+}
+
+const domainResult = result.data;
+if (!domainResult.ok) {
+  // Expected domain failure
+  return domainResultToErrorResponse(domainResult, correlationId);
+}
+
+// domainResult.data is the success payload
+return apiSuccess(domainResult.data, HttpStatus.OK, correlationId);
+```
+
+---
+
+## Response Envelope Contract
+
+All routes use `apiSuccess()` and `apiError()` from `app/lib/api/api-response.ts`.
 
 ### Success
 
@@ -289,8 +564,8 @@ The canonical route envelope is:
 {
   "success": true,
   "data": {},
-  "timestamp": "2026-03-11T00:00:00.000Z",
-  "correlationId": "..."
+  "timestamp": "2026-01-01T00:00:00.000Z",
+  "correlationId": "req_abc123"
 }
 ```
 
@@ -299,437 +574,407 @@ The canonical route envelope is:
 ```json
 {
   "success": false,
-  "error": "Error message",
-  "timestamp": "2026-03-11T00:00:00.000Z",
-  "correlationId": "..."
+  "error": "Property not found",
+  "timestamp": "2026-01-01T00:00:00.000Z",
+  "correlationId": "req_abc123"
 }
 ```
 
-Use `apiSuccess()` and `apiError()` from `resilient-api.ts` as the canonical builders.
+The `error` field must always be a **pre-approved static string**. Never a domain message field.
 
-`api-response.ts` remains important for types and constants, but new route code should not treat its legacy helpers as the primary response layer.
+---
 
-## Resilience and Observability
+## Actor Model
 
-Routes should use `getResilientExecutor().execute(...)` for durable operations.
+The minimum actor shape for authorization-sensitive operations:
 
-Standard expectations:
+```typescript
+type PropertyActor = {
+  userId: string; // dbUserId from withAuth
+  role: AppRole; // normalized role — never raw Clerk claim
+};
+```
 
-- initialize a correlation ID at the start of each request
-- use shared structured logging
-- guard external or slow database work with the resilient executor
-- keep fallback and error mapping in the adapter layer
+For verification and identity-transition routes, forward `clerkId`:
 
-Avoid using route-local retry, cache, or timeout logic when the shared executor already covers the case.
+```typescript
+type VerificationActor = {
+  userId: string;
+  clerkId: string; // required when domain contract accepts it
+  role: AppRole;
+};
+```
+
+**Rules:**
+
+- Construct the actor from `withAuth` context — never from request body or query params
+- Pass the full actor to the domain service — never just `dbUserId`
+- The domain service enforces ownership and role policy using the actor
+
+---
+
+## Observability Contract (ADR-005)
+
+Every adapter layer log event must carry:
+
+| Field           | Description                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------- |
+| `correlationId` | From `initializeCorrelationId(req)`                                                               |
+| `operationName` | Stable `<verb>_<resource>` identifier, e.g. `update_property`                                     |
+| `httpMethod`    | `"PATCH"`, `"GET"`, etc.                                                                          |
+| `routePattern`  | `"/api/properties/[id]"` — never the raw URL (exposes IDs in path params)                         |
+| `actorRole`     | Role enum value — never `userId`, `clerkId`, or email                                             |
+| `outcome`       | `"success"` \| `"domain_error"` \| `"validation_error"` \| `"rate_limited"` \| `"internal_error"` |
+| `httpStatus`    | Actual status code returned                                                                       |
+| `durationMs`    | From `now() - startedAt` — startedAt **must** be the absolute first statement                     |
+
+Optional safe fields: `domainError` (the error code), `resourceType`, `resourceId` (UUID only).
+
+**Log levels follow ADR-005:**
+
+- `info` — success
+- `warn` — domain_error, validation_error, rate_limited
+- `error` — internal_error, infrastructure failures
+
+**`operationName` stability rule:** Renaming an `operationName` is a breaking observability change. It requires a coordinated dashboard/alert update in the same deploy window and a changelog entry.
+
+**Domain services must not call `getClientLogger()`.** They return `Result<T, DomainError>`; the adapter logs the outcome.
+
+---
+
+## Idempotency
+
+`IdempotencyService` lives at `app/lib/services/idempotency.service.ts`. It is an **adapter-layer concern** — never called from domain services or repositories.
+
+```typescript
+// Generate key — use Class C/D fields only (ADR-006)
+const idempotencyKey = req.headers.get("Idempotency-Key")
+  || IdempotencyService.generateKey(dbUserId, `PATCH:${resourceId}`, {
+    domain: "property",
+    resourceId,
+    fieldsUpdated: Object.keys(validationData).length,  // Class C summary, not full payload
+  });
+
+// Check before execution
+const check = await IdempotencyService.checkOrCreate(key, scope, dbUserId, method, resourceId, ttlHours);
+if (check?.status === "completed") return apiSuccess(check.response, HttpStatus.OK, correlationId);
+if (check?.status === "pending")   return apiError("Already processing", HttpStatus.CONFLICT, ...);
+
+// ... domain execution ...
+
+// Complete — always in isolated try-catch
+try {
+  await IdempotencyService.complete(idempotencyKey, result.data);
+} catch (err) {
+  await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+  logger.error("Idempotency completion failed", err, { correlationId, outcome: "idempotency_complete_failed", ... });
+  // Do NOT rethrow
+}
+```
+
+**Replay payload policy (ADR-006):** Default replay storage allows only Class C and Class D data. Class B fields require explicit scope registration in `IdempotencyService`. Class A data is never allowed in replay persistence.
+
+---
+
+## Optimistic Locking
+
+For versioned entities:
+
+- `GET` and successful mutations return `ETag: "N"` where `N` is the version
+- `PATCH` and `DELETE` require `If-Match: "N"`
+- Missing `If-Match` → `428 Precondition Required`
+- Invalid `If-Match` value → `400 Bad Request`
+- Version conflict → `409 Conflict` via `conflictResponse()` (see §5) — sets `X-{Resource}-Version` and `ETag` headers from the current persisted version
+- **DELETE handlers use `extractExpectedVersionFromIfMatch()` exclusively** — `extractExpectedVersion()` body-fallback form is prohibited (GAP-017)
+
+`conflictResponse()` uses a static message and never exposes domain result message fields to the client (see §9). The `currentVersion` is extracted from `result.details` and passed to `conflictResponse()` for header injection only.
+
+---
 
 ## Rate Limiting
 
-Use `rate-limit.ts` consistently.
+Use `app/lib/api/rate-limit.ts`.
 
-Primary tiers:
+```typescript
+// Authenticated routes: actor-scoped (prevents per-IP bypass via proxies)
+const key = getActorRateLimitIdentifier(dbUserId, "property-write");
 
-- `READ`
-- `WRITE`
-- `AUTH`
-- `EXPORT`
-- `WEBHOOK`
+// Public/unauthenticated routes: IP-scoped
+const key = getRateLimitIdentifier(req);
+```
 
-Do not create route-local ad hoc rate buckets when an existing family is sufficient. If a vertical needs a new bucket, add it centrally.
+Standard tiers: `RateLimits.READ`, `RateLimits.WRITE`, `RateLimits.AUTH`, `RateLimits.EXPORT`.
 
-## Generic Projects Surface
+Namespace convention: `{resourceType}-{operation}` — consistent within a resource family (e.g. `property-read`, `property-write`, not mixed singular/plural).
 
-The generic projects API is now always enabled after rollout completion.
+---
 
-Current rule:
+## Contracts and DTO Boundaries
 
-- keep canonical behavior aligned between the domain client (`app/lib/domains/projects/client`) and the public facade (`lib/projects-client.ts`)
-- enforce stability through contract and API suites rather than env-based rollout toggles
+Define explicit DTO types in `app/lib/domains/<domain>/contracts.ts`. Rules:
 
-## What Good Looks Like
+- All `Date` fields are `string` in DTOs (ISO 8601) — normalization happens in mappers
+- All `Decimal`/`Prisma.Decimal` fields are `number` in DTOs — normalization happens in mappers
+- DTOs exposed to browser consumers must be serialization-safe — no raw Prisma types
+- Browser facades use `ApiResponse<T>` with the explicit DTO generic — no `ReturnType<>` inference from server types
 
-Use this checklist before adding or refactoring an API surface.
+```typescript
+// ✅ Correct — explicit DTO in contracts.ts
+export type PropertyCreateResultDto = {
+  id: string;
+  title: string;
+  slug: string;
+  price: number; // not Decimal
+  createdAt: string; // not Date
+  version: number;
+};
 
-- route or action is thin and transport-only
-- domain service owns policy and business rules
-- repository stays persistence-only
-- actor context is full and role-bearing
-- domain returns structured results instead of throwing transport-specific errors for expected control flow
-- adapter maps domain errors explicitly
-- tests cover both boundary and direct domain behavior where risk justifies it
+// ✅ Correct — mapper in mappers.ts normalizes before crossing boundary
+export function toPropertyCreateResultDto(
+  raw: PrismaProperty,
+): PropertyCreateResultDto {
+  return {
+    ...raw,
+    price: toNumber(raw.price),
+    createdAt: toIsoString(raw.createdAt) ?? new Date(0).toISOString(),
+  };
+}
+```
+
+---
+
+## Environment Variable Access (ADR-004)
+
+**All `process.env` reads in `apps/client` go through `app/lib/infrastructure/env.ts`.**
+
+```typescript
+// ✅ Correct
+import { envConfig } from "@/app/lib/infrastructure/env.ts";
+const client = new StripeClient(envConfig.stripeSecretKey);
+
+// ❌ Prohibited in routes, domain services, repositories, config modules
+const client = new StripeClient(process.env.STRIPE_SECRET_KEY!);
+```
+
+Bootstrap-only exceptions (`next.config.ts`, `instrumentation.ts`, `sentry.*.config.ts`) must carry:
+
+```typescript
+// bootstrap-only: module graph not initialized at this callsite
+const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+```
+
+---
+
+## High-Risk Routes and `secureAction`
+
+### Tiered recentAuth windows (ADR-001 Amendment)
+
+| Tier                          | Operations                             | `maxAgeSeconds` |
+| ----------------------------- | -------------------------------------- | --------------- |
+| Tier 1 — Critical financial   | Payout, escrow fund/release/dispute    | `180`           |
+| Tier 1 — Identity destruction | User export, deletion, rectification   | `180`           |
+| Tier 2 — Verification         | Document/license/certificate mutations | `300`           |
+| Tier 2 — Account transitions  | Onboarding submit and skip             | `300`           |
+| Tier 3 — Profile mutations    | Profile and contact updates            | `300` (default) |
+
+```typescript
+// Tier 1 routes must explicitly use 180, not default
+export const POST = withAuth(
+  async (req, auth, params) => { ... },
+  { recentAuth: { maxAgeSeconds: 180 }, csrf: {} }
+);
+```
+
+### `secureAction` for server actions
+
+```typescript
+export const submitOnboarding = secureAction(
+  inputSchema,
+  async ({ actor, input }) => {
+    const result = await onboardingService.submitOnboarding(actor, input);
+    if (!result.ok) return createActionFailure(result.error);
+    revalidatePath("/onboarding");
+    return { success: true, data: result.data };
+  },
+  {
+    recentAuth: { maxAgeSeconds: 300 },
+    rateLimit: { key: (actor) => actor.userId },
+  },
+);
+```
+
+---
+
+## Server Actions
+
+Server actions are not the browser data-fetching layer. Use them for:
+
+- Server component form submissions
+- Mutation flows that need `revalidatePath()` / `revalidateTag()`
+- Authenticated workflows that stay server-side
+
+**Requirements:**
+
+- Wrap with `secureAction` for authenticated flows
+- Validate input with `schema.safeParse()` — never `.parse()`
+- Pass full actor context into domain
+- Keep cache revalidation in the action layer
+- Define explicit serialization-safe return types — no `ReturnType<typeof action>` inference
+
+---
+
+## Hooks
+
+Hooks own cache keys, invalidation, and mutation lifecycle composition.
+
+```typescript
+export function useUpdateProperty(options?: UseMutationOptions<...>) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    ...options,
+    mutationFn: async (input) =>
+      unwrapApiResponse(await propertiesClient.updateProperty(input)),
+    // TanStack Query v5: onSuccess receives (data, variables, context) — 3 args only
+    onSuccess: (data, variables, context) => {
+      queryClient.invalidateQueries({ queryKey: propertyKeys.detail(data.id) });
+      queryClient.invalidateQueries({ queryKey: propertyKeys.lists() });
+      options?.onSuccess?.(data, variables, context);
+    },
+  });
+}
+```
+
+**`staleTime` defaults:**
+
+- Read-heavy, slow-changing data (properties, profiles): `staleTime: 60_000` at `QueryClient` level
+- Real-time data (messaging, notifications): `staleTime: 0` at the query level
+
+---
+
+## Security Boundaries
+
+### Mass assignment protection
+
+All mutation route schemas use `.strict()` or explicit `.pick()`:
+
+```typescript
+// ✅ Correct
+const UpdatePropertySchema = z.object({ title: z.string(), ... }).strict();
+
+// ❌ Prohibited on mutation bodies
+const schema = z.object({ ... }).passthrough();
+```
+
+System-owned fields (`id`, `createdAt`, `updatedAt`, `deletedAt`, `version`, `isVerified`, `role`) must not appear in mutation input schemas.
+
+### CORS
+
+Apply through shared adapter helper only. `Access-Control-Allow-Origin: *` is prohibited on authenticated routes.
+
+### Anti-caching
+
+Authenticated and user-specific responses return `Cache-Control: no-store, private`.
+
+### Rendering safety
+
+`dangerouslySetInnerHTML` is prohibited for user-generated content without documented server-side sanitization.
+
+---
+
+## Testing
+
+Testing is risk-centric, not layer-centric. See Section 7 of `.agent/API-TO-FRONTEND-ARCHITECTURE.md` for full coverage requirements.
+
+### Required test types by change
+
+| Change type               | Contract tests | Policy tests | Layer tests       | Journey E2E                        |
+| ------------------------- | -------------- | ------------ | ----------------- | ---------------------------------- |
+| New domain slice          | Required       | Required     | Required          | Add if new protected route         |
+| Authorization rule change | —              | Required     | Required (route)  | Required if high-traffic auth gate |
+| Repository shape change   | Required       | —            | Required (domain) | —                                  |
+| New protected route       | —              | —            | Required (route)  | **Required**                       |
+
+### `withAuth` mock fidelity
+
+Test mocks must match the **exact** production `AuthContext` shape. Extra fields mask dead code.
+
+```typescript
+import type { AuthContext } from "@/app/lib/api/api-middleware";
+
+const mockAuth: AuthContext = {
+  clerkId: "clerk_123",
+  dbUserId: "db_user_123",
+  userRole: UserRole.PROFESSIONAL,
+  // No userEmail — that field does not exist in AuthContext
+};
+```
+
+### Error response assertions
+
+Assert static strings, never domain message text:
+
+```typescript
+// ✅ Correct — fails when route leaks internals
+expect(payload.error).toBe("Forbidden");
+
+// ❌ Wrong — passes when route leaks internals, fails when fixed
+expect(payload.error).toBe("Not authorized to access this conversation");
+```
+
+---
 
 ## Anti-Patterns
 
-Avoid these patterns in new work:
+Reject these in review:
 
-- route-local Prisma authorization checks
-- server actions that resolve auth, validate input, and persist data manually when `secureAction` is available
-- passing only `dbUserId` into an authorization-sensitive service
-- hiding meaningful domain failures behind generic `500` handling
-- browser code importing `app/lib/domains/**` or other server-only modules directly
-
-## Reference Documents
-
-- `app/api/API.md`
-- `app/api/DESIGN.md`
-- `app/lib/domains/README.md`
-- `docs/adr/ADR-001-auth-model.md`
-- `docs/adr/ADR-002-client-layer-boundaries.md`
-- `docs/adr/ADR-003-domain-structure-and-import-direction.md`
-- `docs/adr/ADR-004-cannonical-env-access-boundary.md`
-- `docs/adr/ADR-005-cannonical-observability-contract.md`
-- `docs/adr/ADR-006-data-classification.md`
-- `docs/adr/ADR-007-role-model-admin-sub-roles-and-actor-context-shape.md`
-- `docs/adr/ADR-008-http-surface-security.md`
-
-## Bottom Line
-
-The target architecture is not "helpers around big route files". It is a domain-centered system where routes and actions are small transport shells over actor-aware services with explicit result contracts. That is now the established pattern across the major migrated slices, and new work should follow it by default.
+1. Route-local Prisma authorization checks or business logic
+2. Domain service imports `HttpStatus`, `NextResponse`, or route/action modules
+3. `apiError(error.message, ...)` or any rebinding: `apiError(data.message ?? ...)`, `apiError(result.data.message ?? ...)`
+4. `IdempotencyService.complete()` called without an isolated try-catch that does not rethrow
+5. `schema.parse()` instead of `schema.safeParse()` in route handlers or server actions
+6. `process.env.*` direct reads in routes, domain services, repositories, or config modules
+7. Browser facades or hooks importing server actions or domain services directly
+8. `extractExpectedVersion()` body-fallback form in DELETE handlers
+9. Mock `AuthContext` with `userEmail` or other non-production fields
+10. Test assertions that assert domain message text in error responses
+11. Actor objects omitting `clerkId` for verification/identity routes when the domain contract accepts it
+12. New Tier 1/Tier 2 sensitive route without a registry entry in `HIGH_VALUE_ROUTE_GUARD_RULES`
+13. IP-scoped rate-limit keys (`getRateLimitIdentifier(req)`) on authenticated high-risk routes
+14. Unstructured `console.log` in route handlers — use `logRouteOutcome` / `getClientLogger()`
+15. Log events containing `userId`, `clerkId`, `userEmail`, or any request/response body content
 
 ---
 
-## Architecture Principles
+## Reference Slice: Properties Domain
 
-### 1. **Separation of Concerns (SoC)**
+The properties domain is the canonical reference implementation. Inspect these files to understand the full pattern:
 
-Each file has a single, well-defined responsibility:
-
-- Authentication ≠ Response formatting ≠ Rate limiting ≠ Resilience
-
-### 2. **Composition Over Inheritance**
-
-```typescript
-// ❌ Bad - tightly coupled
-export const GET = authenticatedRateLimitedHandler(async (req) => { ... });
-
-// ✅ Good - composable
-export const GET = withAuth(async (req, context) => {
-  return withRateLimitedExecution(req, context.dbUserId, options, handler);
-});
-```
-
-### 3. **Single Source of Truth**
-
-- **Response functions:** `resilient-api.ts` (NOT `api-response.ts`)
-- **Logger:** `getClientLogger()` from `resilient-api.ts`
-- **Executor:** `getResilientExecutor()` from `resilient-api.ts`
-
-### 4. **Observability First**
-
-- Every request gets a correlation ID
-- All operations are logged with context
-- Metrics are collected automatically
-- Errors include full context for debugging
+| File                                       | Purpose                                                        |
+| ------------------------------------------ | -------------------------------------------------------------- |
+| `app/lib/domains/properties/contracts.ts`  | Actor type, DTO types, error code union, `PropertyResult<T>`   |
+| `app/lib/domains/properties/mappers.ts`    | `Decimal → number`, `Date → string`, all DTO construction      |
+| `app/lib/domains/properties/repository.ts` | Prisma queries with soft-delete guards                         |
+| `app/lib/domains/properties/service.ts`    | Actor-aware business logic, `ok()`/`err()` outcomes            |
+| `app/lib/domains/properties/operations.ts` | Optimistic-lock update helpers, `buildPropertyUpdatePayload()` |
+| `app/lib/domains/properties/index.ts`      | Public surface — exports contracts, repository, and service    |
+| `app/api/properties/shared.ts`             | Route-level logging, error mapping, client-safe message table  |
+| `app/api/properties/[id]/route.ts`         | Reference PATCH/DELETE with full idempotency + ETag + logging  |
 
 ---
 
-## Common Patterns
-
-### Pattern 1: Simple Authenticated Endpoint
-
-```typescript
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiSuccess, initializeCorrelationId } from "@/app/lib/resilient-api";
-
-export const GET = withAuth(async (req, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
-  const data = await fetchData(dbUserId);
-  return apiSuccess(data);
-});
-```
-
-### Pattern 2: Paginated List with Rate Limiting
-
-```typescript
-import { withAuth } from "@/app/lib/api-middleware";
-import { withRateLimitedExecution } from "@/app/lib/api-utils";
-import {
-  parsePaginationParams,
-  buildPaginationResponse,
-} from "@/app/lib/api-utils";
-
-export const GET = withAuth(async (req, { dbUserId }) => {
-  return withRateLimitedExecution(
-    req,
-    dbUserId,
-    {
-      operationName: "list-items",
-      rateLimit: "read",
-    },
-    async () => {
-      const { page, limit, skip } = parsePaginationParams(
-        req.nextUrl.searchParams,
-      );
-      const [items, total] = await Promise.all([
-        prisma.item.findMany({ skip, take: limit }),
-        prisma.item.count(),
-      ]);
-      return {
-        data: items,
-        pagination: buildPaginationResponse(page, limit, total),
-      };
-    },
-  );
-});
-```
-
-### Pattern 3: Role-Based Write Operation with Resilience
-
-```typescript
-import { withRole } from "@/app/lib/api-middleware";
-import {
-  executeResilient,
-  initializeCorrelationId,
-  getClientLogger,
-} from "@/app/lib/resilient-api";
-import { checkRateLimit, RateLimits } from "@/app/lib/rate-limit";
-
-const logger = getClientLogger();
-
-export const POST = withRole(["ADMIN"])(async (req, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
-
-  // Rate limit
-  const { success } = await checkRateLimit(
-    `admin:${dbUserId}`,
-    RateLimits.WRITE.limit,
-    RateLimits.WRITE.window,
-  );
-  if (!success) return apiError("Rate limited", 429);
-
-  // Execute with resilience
-  return executeResilient(
-    async () => {
-      const body = await req.json();
-      const result = await createResource(body);
-      logger.info("Resource created", { correlationId, resourceId: result.id });
-      return result;
-    },
-    {
-      operationName: "create-resource",
-      timeout: 10000,
-      retry: { maxAttempts: 3 },
-      metrics: true,
-      successStatus: 201,
-    },
-  );
-});
-```
-
----
-
-## Migration Guide
-
-### Eliminating Circular Dependencies
-
-**Old Pattern (Circular Dependency):**
-
-```typescript
-// ❌ api-response.ts re-exported from resilient-api.ts
-export { apiSuccess, apiError } from "./resilient-api";
-```
-
-**New Pattern:**
-
-```typescript
-// ✅ Import directly from resilient-api.ts
-import { apiSuccess, apiError } from "@/app/lib/resilient-api";
-import { HttpStatus, ErrorCodes } from "@/app/lib/api-response"; // Types only
-```
-
-### Standardizing Correlation IDs
-
-**Old Pattern:**
-
-```typescript
-// ❌ Manual correlation ID generation
-import { CorrelationIdManager } from "@build/resilience";
-
-const correlationId = CorrelationIdManager.generate();
-CorrelationIdManager.set(correlationId);
-```
-
-**New Pattern:**
-
-```typescript
-// ✅ Use helper function
-import { initializeCorrelationId } from "@/app/lib/resilient-api";
-
-const correlationId = initializeCorrelationId(req);
-```
-
-### Standardizing Loggers
-
-**Old Pattern:**
-
-```typescript
-// ❌ Multiple logger instances
-import { StructuredLogger } from "@build/resilience";
-const logger = new StructuredLogger("my-service");
-```
-
-**New Pattern:**
-
-```typescript
-// ✅ Shared logger instance
-import { getClientLogger } from "@/app/lib/resilient-api";
-const logger = getClientLogger();
-```
-
----
-
-## Testing Strategies
-
-### Unit Testing Individual Functions
-
-```typescript
-import { parsePaginationParams } from "@/app/lib/api-utils";
-
-describe("parsePaginationParams", () => {
-  it("should parse page and limit", () => {
-    const params = new URLSearchParams("page=2&limit=50");
-    const result = parsePaginationParams(params);
-    expect(result).toEqual({ page: 2, limit: 50, skip: 50 });
-  });
-});
-```
-
-### Integration Testing Middleware
-
-```typescript
-import { withAuth } from "@/app/lib/api-middleware";
-
-describe("withAuth", () => {
-  it("should return 401 for unauthenticated requests", async () => {
-    const handler = withAuth(async (req, context) => {
-      return NextResponse.json({ success: true });
-    });
-
-    const req = new NextRequest("http://localhost/api/test");
-    const res = await handler(req);
-
-    expect(res.status).toBe(401);
-  });
-});
-```
-
----
-
-## Performance Considerations
-
-### 1. **Caching Strategy**
-
-- Use `executeResilient` with `cache: { ttl: 60000 }` for frequently accessed data
-- Cache keys are automatically generated from operation name
-- Stale-while-revalidate pattern for fresh data
-
-### 2. **Circuit Breaker**
-
-- Protects downstream services from cascading failures
-- Automatically opens after 5 consecutive failures
-- Half-open state for gradual recovery
-
-### 3. **Timeout Management**
-
-- Critical operations: 1s timeout
-- Standard operations: 5s timeout
-- Background jobs: 30s timeout
-- Use `withTimeout()` for granular control
-
-### 4. **Rate Limiting**
-
-- In-memory for development (fast, stateless between restarts)
-- Redis-based for production (distributed, persistent)
-- Different limits per operation type (read vs write)
-
----
-
-## Best Practices
-
-### ✅ Do's
-
-- Import `apiSuccess`/`apiError` from `resilient-api.ts`
-- Use `initializeCorrelationId(req)` for correlation tracking
-- Use `getClientLogger()` for consistent logging
-- Compose middleware functions (`withAuth` + `withRateLimitedExecution`)
-- Handle errors gracefully with proper status codes
-- Include correlation IDs in all logs
-
-### ❌ Don'ts
-
-- Don't create multiple `StructuredLogger` instances
-- Don't manually call `CorrelationIdManager.generate()`
-- Don't import response functions from `api-response.ts`
-- Don't skip rate limiting on write operations
-- Don't expose internal error details to clients
-- Don't forget to validate input with Zod schemas
-
----
-
-## Debugging
-
-### Viewing Correlation IDs
-
-All responses include `X-Correlation-ID` header:
-
-```bash
-curl -i https://api.example.com/api/items
-# X-Correlation-ID: abc123-def456
-```
-
-### Viewing Circuit Breaker States
-
-```typescript
-import { getResilientExecutor } from "@/app/lib/resilient-api";
-
-const executor = getResilientExecutor();
-const states = executor.getCircuitBreakerStates();
-console.log("Circuit breakers:", states);
-```
-
-### Viewing Cache Statistics
-
-```typescript
-const cacheStats = executor.getCacheStats();
-console.log("Cache stats:", cacheStats);
-```
-
----
-
-## Future Enhancements
-
-1. **Redis Integration**
-   - Replace in-memory rate limiter with Redis
-   - Distributed caching with Redis
-   - Circuit breaker state sharing
-
-2. **OpenTelemetry**
-   - Trace propagation across services
-   - Distributed tracing visualization
-   - Performance metrics dashboard
-
-3. **GraphQL Support**
-   - Adapt middleware for GraphQL resolvers
-   - Field-level rate limiting
-   - Query complexity analysis
-
-4. **API Versioning**
-   - URL-based versioning (`/v1/`, `/v2/`)
-   - Header-based versioning
-   - Backward compatibility layer
-
----
-
-## Support & Questions
-
-For questions about this architecture:
-
-1. Check this documentation first
-2. Review the inline code comments
-3. Look at existing route examples in `apps/client/app/api/`
-4. Ask in the team chat with correlation ID for specific issues
-
----
-
-**Last Updated:** February 4, 2026  
-**Version:** 2.0.0  
-**Maintainer:** Build Market Engineering Team
+## Related Documentation
+
+- `.agent/API-TO-FRONTEND-ARCHITECTURE.md` — canonical authority; this document is derived from it
+- `.agent/DOCUMENT-HIERARCHY.md` — conflict resolution algorithm
+- `app/lib/domains/README.md` — domain-layer boundaries and CRM reference
+- `docs/adr/ADR-001-auth-model.md` — Clerk-first identity, freshness windows, actor context
+- `docs/adr/ADR-002-client-layer-boundaries.md` — layer ownership and import direction
+- `docs/adr/ADR-003-domain-structure-and-import-direction.md` — canonical domain-first dependency flow
+- `docs/adr/ADR-004-cannonical-env-access-boundary.md` — env module ownership
+- `docs/adr/ADR-005-cannonical-observability-contract.md` — structured log field contract and PII exclusions
+- `docs/adr/ADR-006-data-classification.md` — Class A–D data handling, replay payload policy
+- `docs/adr/ADR-007-role-model-admin-sub-roles-and-actor-context-shape.md` — role model and actor context typing
+- `docs/adr/ADR-008-http-surface-security.md` — CORS, CSRF, anti-caching, webhook integrity
+- `docs/CHANGELOG.md` — recent hardening work (treat as binding precedent)
+- `docs/PROGRESS-SUMMARY.md` — current migration queue and slice status

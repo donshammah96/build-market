@@ -8,6 +8,7 @@ import {
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import {
   checkRateLimit,
+  getActorRateLimitIdentifier,
   getRateLimitIdentifier,
   RateLimits,
 } from "@/app/lib/api/rate-limit";
@@ -169,9 +170,9 @@ export const POST = withAuth(
     const actorRole = actorRoleLabel(userRole);
     const { ipAddress, userAgent } = getRequestMetadata(req);
 
-    const identifier = getRateLimitIdentifier(req);
+    const identifier = getActorRateLimitIdentifier(dbUserId, "property-write");
     const rateLimitResult = await checkRateLimit(
-      `properties-write:${identifier}`,
+      identifier,
       RateLimits.WRITE.limit,
       RateLimits.WRITE.window,
     );
@@ -410,7 +411,22 @@ export const POST = withAuth(
       return errorResponse!;
     }
 
-    await IdempotencyService.complete(idempotencyKey, domainResult.data);
+    try {
+      await IdempotencyService.complete(idempotencyKey, domainResult.data);
+    } catch (completionError) {
+      await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "internal_error",
+        httpStatus: HttpStatus.CREATED,
+        durationMs: now() - startedAt,
+        domainError: "idempotency_complete_failed",
+        resourceType: "property",
+      });
+      // Do NOT rethrow — domain mutation already succeeded
+    }
     const response = apiSuccess(
       domainResult.data,
       HttpStatus.CREATED,
