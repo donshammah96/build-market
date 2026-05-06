@@ -29,7 +29,7 @@ import type {
   UpdateIdeaBookInput,
   AddAttachmentInput,
   UpdateAttachmentInput,
-} from "@/lib/validation/idea-books-validation";
+} from "@/app/lib/validation/idea-books-validation";
 
 export type {
   IdeaBookQueryInput,

@@ -1,12 +1,12 @@
 import type { ApiResponse } from "@build/types";
-import { PROPERTIES_CLIENT_CONFIG } from "@/lib/config/properties.config";
+import { PROPERTIES_CLIENT_CONFIG } from "@/app/lib/config/properties.config";
 import { isValidId } from "@/lib/utils/validators";
 import type { z } from "zod";
 import {
   CreatePropertySchema,
   UpdatePropertySchema,
   PropertyQuerySchema,
-} from "@/lib/validation/properties-validation";
+} from "@/app/lib/validation/properties-validation";
 
 import type {
   PropertyListItem,

@@ -4,7 +4,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useCreatePropertiesBatch, propertyKeys } from "@/hooks/useProperties";
-import { CreatePropertySchema } from "@/lib/validation/properties-validation";
+import { CreatePropertySchema } from "@/app/lib/validation/properties-validation";
 
 const mockPropertiesClient = vi.hoisted(() => ({
   createPropertiesBatch: vi.fn(),

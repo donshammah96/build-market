@@ -3,7 +3,7 @@
  */
 import { apiFetch, ConcurrencyLimiter } from "@/lib/api-client-utils";
 import type { ApiResponse } from "@build/types";
-import { CALENDAR_CLIENT_CONFIG } from "@/lib/config/calendar.config";
+import { CALENDAR_CLIENT_CONFIG } from "@/app/lib/config/calendar.config";
 import { isValidId } from "@/lib/utils/validators";
 import type {
   CalendarDeleteResult,

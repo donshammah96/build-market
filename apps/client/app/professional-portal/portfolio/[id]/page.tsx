@@ -57,7 +57,7 @@ import {
 import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { portfolioClient, type PortfolioDetail } from "@/lib/portfolio-client";
-import { ProjectTypeSchema } from "@/lib/validation/portfolio-validation";
+import { ProjectTypeSchema } from "@/app/lib/validation/portfolio-validation";
 
 // Schema for updating portfolio
 const updatePortfolioSchema = z.object({

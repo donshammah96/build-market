@@ -7,14 +7,14 @@
  */
 import type { ApiResponse } from "@build/types";
 import { apiFetch, ConcurrencyLimiter } from "@/lib/api-client-utils";
-import { LEADS_CLIENT_CONFIG } from "@/lib/config/lead.config";
+import { LEADS_CLIENT_CONFIG } from "@/app/lib/config/lead.config";
 import { isValidId } from "@/lib/utils/validators";
 import type { z } from "zod";
 import {
   LeadQuerySchema,
   CreateLeadSchema,
   UpdateLeadSchema,
-} from "@/lib/validation/leads-validation";
+} from "@/app/lib/validation/leads-validation";
 import type {
   LeadDetailResult,
   LeadListResult,

@@ -13,7 +13,7 @@ import { API_ROUTES } from "@/lib/links";
 import { apiFetch } from "@/lib/api-client-utils";
 import type { ApiResponse } from "@build/types";
 import type { z } from "zod";
-import { CreatePublicLeadSchema } from "@/lib/validation/leads-validation";
+import { CreatePublicLeadSchema } from "@/app/lib/validation/leads-validation";
 
 // ─── Input Types (derived from validation schema) ─────────────────────────
 

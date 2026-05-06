@@ -26,6 +26,27 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
+## [2026-05-06] Client Architecture Clean Up & Legacy Wrapper Removal
+
+### Removed (Client Architecture Clean Up)
+
+- **Deprecated `apps/client/lib` Wrapper Directories:** Deleted entirely unused legacy directories (`lib/infrastructure`, `lib/repositories`, `lib/services`, `lib/security`) that had been superseded by the `app/lib/domains` domain-driven architecture.
+- **Unreferenced Legacy Files:** Purged unused top-level files (`db.ts`, `env.ts`, `generate-keys.ts`, `calendar-client.server.ts`) and associated legacy unit tests (`__tests__/lib/services/finance-withdrawal-limits.test.ts`).
+
+### Changed (Client Architecture Clean Up)
+
+- **Validation Schema Migration:** Migrated 21 legacy schema wrapper files out of `lib/validation/` and globally updated over 25 import references across the `apps/client` workspace to point directly to the canonical `@/app/lib/validation/` module.
+- **Onboarding Schema Relocation:** Moved `lib/schemas/onboarding.ts` directly into `app/lib/validation/onboarding.ts` and updated consumers (e.g., `HomeownerForm.tsx`).
+
+### Docs (Client Architecture Clean Up)
+
+- **Server Actions README:** Updated `app/actions/README.md` to reference the canonical `app/lib/domains/projects/service.ts` instead of the legacy `lib/services/projects`.
+
+**Verification:**
+
+- `pnpm run check-types` → exit 0
+- `pnpm run lint` → exit 0
+
 ### [2026-05-05] Storage Infrastructure Correctness Hardening
 
 #### Fixed (Storage Infrastructure Correctness Hardening)

@@ -12,8 +12,8 @@ import {
   SendMessageSchema,
   MessageQuerySchema,
   UpdateMessageSchema,
-} from "@/lib/validation/messaging-validation";
-import { MESSAGING_CLIENT_CONFIG } from "@/lib/config/messaging.config";
+} from "@/app/lib/validation/messaging-validation";
+import { MESSAGING_CLIENT_CONFIG } from "@/app/lib/config/messaging.config";
 
 export type ThreadQueryInput = z.infer<typeof ThreadQuerySchema>;
 export type CreateThreadInput = z.infer<typeof CreateThreadSchema>;

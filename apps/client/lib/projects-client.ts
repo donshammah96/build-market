@@ -10,7 +10,7 @@
  * - Safe for browser and client-side bundlers (No Server Actions)
  */
 import type { ApiResponse } from "@build/types";
-import { PROJECTS_CLIENT_CONFIG } from "@/lib/config/project.config";
+import { PROJECTS_CLIENT_CONFIG } from "@/app/lib/config/project.config";
 import { isValidId } from "@/lib/utils/validators";
 import { API_ROUTES } from "@/lib/links";
 import { z } from "zod";
@@ -22,7 +22,7 @@ import {
   UpdateMilestoneSchema,
   ApproveMilestoneSchema,
   FundEscrowSchema,
-} from "@/lib/validation/projects-validation";
+} from "@/app/lib/validation/projects-validation";
 import {
   ProjectListResponseSchema,
   ProjectDetailResponseSchema,

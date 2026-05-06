@@ -8,13 +8,13 @@
 import type { ApiResponse } from "@build/types";
 import { apiFetch, ConcurrencyLimiter } from "@/lib/api-client-utils";
 import { API_ROUTES, withQueryParams, type QueryParams } from "@/lib/links";
-import { INQUIRIES_CLIENT_CONFIG } from "@/lib/config/inquiry.config";
+import { INQUIRIES_CLIENT_CONFIG } from "@/app/lib/config/inquiry.config";
 import { isValidId } from "@/lib/utils/validators";
 import type { z } from "zod";
 import {
   InquiriesQuerySchema,
   UpdateInquirySchema,
-} from "@/lib/validation/inquiries-validation";
+} from "@/app/lib/validation/inquiries-validation";
 import type {
   InquiryDetailResult,
   InquiryListResult,

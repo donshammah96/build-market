@@ -10,7 +10,7 @@
  * - Safe for browser and client-side bundlers (No Server Actions)
  */
 import type { ApiResponse } from "@build/types";
-import { STORES_CLIENT_CONFIG } from "@/lib/config/stores.config";
+import { STORES_CLIENT_CONFIG } from "@/app/lib/config/stores.config";
 import { isValidId } from "@/lib/utils/validators";
 import { z } from "zod";
 import {

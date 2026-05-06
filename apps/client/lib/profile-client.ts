@@ -18,7 +18,7 @@ import type {
 import type {
   UpdateProfileInput,
   completeProfileSchema,
-} from "@/lib/validation/profile-validation";
+} from "@/app/lib/validation/profile-validation";
 import type { z } from "zod";
 
 export type CompleteProfileInput = z.infer<typeof completeProfileSchema>;

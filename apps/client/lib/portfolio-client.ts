@@ -18,7 +18,7 @@ import {
   CreatePortfolioSchema,
   UpdatePortfolioSchema,
   ProjectTypeSchema,
-} from "@/lib/validation/portfolio-validation";
+} from "@/app/lib/validation/portfolio-validation";
 import type {
   PortfolioDetailDto,
   PortfolioListItemDto,

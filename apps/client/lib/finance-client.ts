@@ -6,10 +6,10 @@
  */
 import type { ApiResponse } from "@build/types";
 import { apiFetch, ConcurrencyLimiter } from "@/lib/api-client-utils";
-import { FINANCE_CLIENT_CONFIG } from "@/lib/config/finance.config";
+import { FINANCE_CLIENT_CONFIG } from "@/app/lib/config/finance.config";
 import { API_ROUTES, withQueryParams, type QueryParams } from "@/lib/links";
 import type { z } from "zod";
-import { WithdrawSchema } from "@/lib/validation/finance-validation";
+import { WithdrawSchema } from "@/app/lib/validation/finance-validation";
 import type { FinanceStats } from "@/app/lib/domains/finance";
 
 const { BULKHEAD_CONCURRENCY } = FINANCE_CLIENT_CONFIG;

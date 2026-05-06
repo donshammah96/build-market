@@ -15,10 +15,10 @@ import type {
   ProfessionalDetailResult,
   ProfessionalListResult,
 } from "@/app/lib/domains/professionals";
-import { PROFESSIONALS_CLIENT_CONFIG } from "@/lib/config/professional.config";
+import { PROFESSIONALS_CLIENT_CONFIG } from "@/app/lib/config/professional.config";
 import { isValidId } from "@/lib/utils/validators";
 import type { z } from "zod";
-import { ProfessionalQuerySchema } from "@/lib/validation/professionals-validation";
+import { ProfessionalQuerySchema } from "@/app/lib/validation/professionals-validation";
 
 const { BULKHEAD_CONCURRENCY } = PROFESSIONALS_CLIENT_CONFIG;
 
