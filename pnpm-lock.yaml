@@ -35,7 +35,7 @@ overrides:
   dompurify: '>=3.4.0'
   axios: '>=1.15.0'
   protobufjs: '>=7.5.5'
-  postcss: '>=8.5.10'
+  postcss: '>=8.5.14'
   admin>next: 16.2.6
 
 importers:
@@ -364,7 +364,7 @@ importers:
         version: 1.36.2
       autoprefixer:
         specifier: 10.4.20
-        version: 10.4.20(postcss@8.5.10)
+        version: 10.4.20(postcss@8.5.14)
       blurhash:
         specifier: ^2.0.5
         version: 2.0.5
@@ -405,8 +405,8 @@ importers:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       postcss:
-        specifier: '>=8.5.10'
-        version: 8.5.10
+        specifier: '>=8.5.14'
+        version: 8.5.14
       postgres:
         specifier: ^3.4.6
         version: 3.4.8
@@ -630,7 +630,7 @@ importers:
         version: 5.2.0(eslint@9.39.2(jiti@2.6.1))
       eslint-plugin-turbo:
         specifier: ^2.5.0
-        version: 2.8.3(eslint@9.39.2(jiti@2.6.1))(turbo@2.9.5)
+        version: 2.8.3(eslint@9.39.2(jiti@2.6.1))(turbo@2.9.12)
       globals:
         specifier: ^16.3.0
         version: 16.5.0
@@ -3560,9 +3560,19 @@ packages:
   '@tsconfig/node18@1.0.3':
     resolution: {integrity: sha512-RbwvSJQsuN9TB04AQbGULYfOGE/RnSFk/FLQ5b0NmDf5Kx2q/lABZbHQPKCO1vZ6Fiwkplu+yb9pGdLy1iGseQ==}
 
+  '@turbo/darwin-64@2.9.12':
+    resolution: {integrity: sha512-eu3eFRmE9NjgZ0wPdRJ44l+LGSeIky+tz5ZQd8zQkw/Yqi+BM7wq+8nbabeoiVUcICi/IZweMOKl/MCmkrd1+g==}
+    cpu: [x64]
+    os: [darwin]
+
   '@turbo/darwin-64@2.9.5':
     resolution: {integrity: sha512-qPxhKsLMQP+9+dsmPgAGidi5uNifD4AoAOnEnljab3Qgn0QZRR31Hp+/CgW3Ia5AanWj6JuLLTBYvuQj4mqTWg==}
     cpu: [x64]
+    os: [darwin]
+
+  '@turbo/darwin-arm64@2.9.12':
+    resolution: {integrity: sha512-RUkAE404z/J8NsyrUosMcBaXT6M4bRFxTQrmkDQBLQVXaC8Jl0e9bMvYDSX0GW7Ffm2m3j9y7RXgR1foeUAM9w==}
+    cpu: [arm64]
     os: [darwin]
 
   '@turbo/darwin-arm64@2.9.5':
@@ -3570,9 +3580,19 @@ packages:
     cpu: [arm64]
     os: [darwin]
 
+  '@turbo/linux-64@2.9.12':
+    resolution: {integrity: sha512-InIUtH7cw/vqXNX1Gr7QgWfmw3ct08pV5CpfdEOR48z2u2rzdmpIuk00B/Q2xCb0PMWtKgiMQynfuphmEuUyTQ==}
+    cpu: [x64]
+    os: [linux]
+
   '@turbo/linux-64@2.9.5':
     resolution: {integrity: sha512-z/Get5NUaUxm5HSGFqVMICDRjFNsCUhSc4wnFa/PP1QD0NXCjr7bu9a2EM6md/KMCBW0Qe393Ac+UM7/ryDDTw==}
     cpu: [x64]
+    os: [linux]
+
+  '@turbo/linux-arm64@2.9.12':
+    resolution: {integrity: sha512-lC6nD//Xh67fmJM0LKaLsg74Wry0aYrgMklpiNgCbUaMdPIOqj0A00iri3NU7Lb7pZHx8ViisgpeDKlpSgFUCA==}
+    cpu: [arm64]
     os: [linux]
 
   '@turbo/linux-arm64@2.9.5':
@@ -3580,9 +3600,19 @@ packages:
     cpu: [arm64]
     os: [linux]
 
+  '@turbo/windows-64@2.9.12':
+    resolution: {integrity: sha512-conYri8VUl72JOdYnLDPYwzqbPcY5ECoHmo9FWoKznemhaAIilj4maHqs9Uar0aKfNoZIULniy+6iWaLtLO34A==}
+    cpu: [x64]
+    os: [win32]
+
   '@turbo/windows-64@2.9.5':
     resolution: {integrity: sha512-ph24K5uPtvo7UfuyDXnBiB/8XvrO+RQWbbw5zkA/bVNoy9HDiNoIJJj3s62MxT9tjEb6DnPje5PXSz1UR7QAyg==}
     cpu: [x64]
+    os: [win32]
+
+  '@turbo/windows-arm64@2.9.12':
+    resolution: {integrity: sha512-XoR4bsg62/L/esRVcmoMESEiNZ36+YmyjYGLpoqk8nwMgXzzVjNOgX0lRSz5w/U/ajLGv3nhMsS0Q2QOdvp2AQ==}
+    cpu: [arm64]
     os: [win32]
 
   '@turbo/windows-arm64@2.9.5':
@@ -4151,7 +4181,7 @@ packages:
     engines: {node: ^10 || ^12 || >=14}
     hasBin: true
     peerDependencies:
-      postcss: '>=8.5.10'
+      postcss: '>=8.5.14'
 
   available-typed-arrays@1.0.7:
     resolution: {integrity: sha512-wvUjBtSGN7+7SjNpq/9M2Tg350UZD3q62IFZLbRAR1bSMlCo1ZaeW+BJ+D090e4hIIZLBcTDWe4Mh4jvUDajzQ==}
@@ -6033,8 +6063,8 @@ packages:
     resolution: {integrity: sha512-Tz09sEL2EEuv5fFowm419c1+a/jSMiBjI9gHxVLrVdbUkkNUUfjsVYs9pVZu5oCon/kmRh9TfLEObFtkVxmY0w==}
     engines: {node: '>=8.0.0'}
 
-  nanoid@3.3.11:
-    resolution: {integrity: sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==}
+  nanoid@3.3.12:
+    resolution: {integrity: sha512-ZB9RH/39qpq5Vu6Y+NmUaFhQR6pp+M2Xt76XBnEwDaGcVAqhlvxrl3B2bKS5D3NH3QR76v3aSrKaF/Kiy7lEtQ==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
@@ -6051,6 +6081,7 @@ packages:
   nats@2.29.3:
     resolution: {integrity: sha512-tOQCRCwC74DgBTk4pWZ9V45sk4d7peoE2njVprMRCBXrhJ5q5cYM7i6W+Uvw2qUrcfOSnuisrX7bEx3b3Wx4QA==}
     engines: {node: '>= 14.0.0'}
+    deprecated: Package moved. Use @nats-io/transport-node from https://github.com/nats-io/nats.js
 
   natural-compare@1.4.0:
     resolution: {integrity: sha512-OWND8ei3VtNC9h7V60qff3SVobHr996CTwgxubgyQYEpg290h9J0buyECNNJexkFm5sOajh5G116RYA1c8ZMSw==}
@@ -6353,8 +6384,8 @@ packages:
   postcss-value-parser@4.2.0:
     resolution: {integrity: sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ==}
 
-  postcss@8.5.10:
-    resolution: {integrity: sha512-pMMHxBOZKFU6HgAZ4eyGnwXF/EvPGGqUr0MnZ5+99485wwW41kW91A4LOGxSHhgugZmSChL5AlElNdwlNgcnLQ==}
+  postcss@8.5.14:
+    resolution: {integrity: sha512-SoSL4+OSEtR99LHFZQiJLkT59C5B1amGO1NzTwj7TT1qCUgUO6hxOvzkOYxD+vMrXBM3XJIKzokoERdqQq/Zmg==}
     engines: {node: ^10 || ^12 || >=14}
 
   postgres-array@2.0.0:
@@ -7109,6 +7140,10 @@ packages:
 
   tunnel-agent@0.6.0:
     resolution: {integrity: sha512-McnNiV1l8RYeY8tBgEpuodCC1mLUdbSN+CYBL7kJsJNInOP8UjDDEwdk6Mw60vdLLrr5NHKZhMAOSrR2NZuQ+w==}
+
+  turbo@2.9.12:
+    resolution: {integrity: sha512-lCPgus1NuTiBdaITWqzSH/Ff6HVL8HHGBtOXHg1dHRfcshN79XkygSdh0M6g8b0td91ILLG5MTkLOkp5UvyPJw==}
+    hasBin: true
 
   turbo@2.9.5:
     resolution: {integrity: sha512-JXNkRe6H6MjSlk5UQRTjyoKX5YN2zlc2632xcSlSFBao5yvbMWTpv9SNolOZlZmUlcDOHuszPLItbKrvcXnnZA==}
@@ -10747,7 +10782,7 @@ snapshots:
       '@alloc/quick-lru': 5.2.0
       '@tailwindcss/node': 4.1.18
       '@tailwindcss/oxide': 4.1.18
-      postcss: 8.5.10
+      postcss: 8.5.14
       tailwindcss: 4.1.18
 
   '@tanstack/query-core@5.100.6': {}
@@ -10799,19 +10834,37 @@ snapshots:
 
   '@tsconfig/node18@1.0.3': {}
 
+  '@turbo/darwin-64@2.9.12':
+    optional: true
+
   '@turbo/darwin-64@2.9.5':
+    optional: true
+
+  '@turbo/darwin-arm64@2.9.12':
     optional: true
 
   '@turbo/darwin-arm64@2.9.5':
     optional: true
 
+  '@turbo/linux-64@2.9.12':
+    optional: true
+
   '@turbo/linux-64@2.9.5':
+    optional: true
+
+  '@turbo/linux-arm64@2.9.12':
     optional: true
 
   '@turbo/linux-arm64@2.9.5':
     optional: true
 
+  '@turbo/windows-64@2.9.12':
+    optional: true
+
   '@turbo/windows-64@2.9.5':
+    optional: true
+
+  '@turbo/windows-arm64@2.9.12':
     optional: true
 
   '@turbo/windows-arm64@2.9.5':
@@ -11457,14 +11510,14 @@ snapshots:
 
   at-least-node@1.0.0: {}
 
-  autoprefixer@10.4.20(postcss@8.5.10):
+  autoprefixer@10.4.20(postcss@8.5.14):
     dependencies:
       browserslist: 4.28.1
       caniuse-lite: 1.0.30001769
       fraction.js: 4.3.7
       normalize-range: 0.1.2
       picocolors: 1.1.1
-      postcss: 8.5.10
+      postcss: 8.5.14
       postcss-value-parser: 4.2.0
 
   available-typed-arrays@1.0.7:
@@ -12418,11 +12471,11 @@ snapshots:
       string.prototype.matchall: 4.0.12
       string.prototype.repeat: 1.0.0
 
-  eslint-plugin-turbo@2.8.3(eslint@9.39.2(jiti@2.6.1))(turbo@2.9.5):
+  eslint-plugin-turbo@2.8.3(eslint@9.39.2(jiti@2.6.1))(turbo@2.9.12):
     dependencies:
       dotenv: 16.0.3
       eslint: 9.39.2(jiti@2.6.1)
-      turbo: 2.9.5
+      turbo: 2.9.12
 
   eslint-scope@8.4.0:
     dependencies:
@@ -13600,7 +13653,7 @@ snapshots:
     dependencies:
       lru.min: 1.1.4
 
-  nanoid@3.3.11: {}
+  nanoid@3.3.12: {}
 
   nanoid@5.1.6: {}
 
@@ -13625,7 +13678,7 @@ snapshots:
       '@swc/helpers': 0.5.15
       baseline-browser-mapping: 2.9.19
       caniuse-lite: 1.0.30001769
-      postcss: 8.5.10
+      postcss: 8.5.14
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
       styled-jsx: 5.1.6(@babel/core@7.29.0)(react@19.2.4)
@@ -13899,9 +13952,9 @@ snapshots:
 
   postcss-value-parser@4.2.0: {}
 
-  postcss@8.5.10:
+  postcss@8.5.14:
     dependencies:
-      nanoid: 3.3.11
+      nanoid: 3.3.12
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
@@ -14787,6 +14840,15 @@ snapshots:
     dependencies:
       safe-buffer: 5.2.1
 
+  turbo@2.9.12:
+    optionalDependencies:
+      '@turbo/darwin-64': 2.9.12
+      '@turbo/darwin-arm64': 2.9.12
+      '@turbo/linux-64': 2.9.12
+      '@turbo/linux-arm64': 2.9.12
+      '@turbo/windows-64': 2.9.12
+      '@turbo/windows-arm64': 2.9.12
+
   turbo@2.9.5:
     optionalDependencies:
       '@turbo/darwin-64': 2.9.5
@@ -14997,7 +15059,7 @@ snapshots:
       esbuild: 0.27.3
       fdir: 6.5.0(picomatch@4.0.4)
       picomatch: 4.0.4
-      postcss: 8.5.10
+      postcss: 8.5.14
       rollup: 4.60.1
       tinyglobby: 0.2.15
     optionalDependencies:
