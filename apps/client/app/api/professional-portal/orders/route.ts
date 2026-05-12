@@ -15,7 +15,6 @@ import { OrdersQuerySchema } from "@/app/lib/validation/orders-validation";
 import { sellerInsightsService } from "@/app/lib/domains/seller-insights";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/professional-portal/orders";
 
 type SellerInsightsAdapterOutcome =
@@ -38,7 +37,7 @@ function createSellerInsightsOutcomeLogger(
     httpStatus: number,
     details: { domainError?: string } = {},
   ) => {
-    logger.info("Seller insights orders adapter outcome", {
+    getClientLogger().info("Seller insights orders adapter outcome", {
       correlationId,
       operationName,
       httpMethod: req.method,
@@ -120,7 +119,7 @@ export const GET = withAuth(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch orders", result.error, {
+      getClientLogger().error("Failed to fetch orders", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,

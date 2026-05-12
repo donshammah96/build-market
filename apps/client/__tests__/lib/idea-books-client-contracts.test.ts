@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ideaBooksClient } from "@/lib/idea-books-client";
+import { ideaBooksClient } from "@/lib/facades/idea-books-client";
 
 describe("idea-books client contracts", () => {
   afterEach(() => {

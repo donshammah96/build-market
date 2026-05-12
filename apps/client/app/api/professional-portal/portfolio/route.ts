@@ -15,14 +15,13 @@ import {
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   PortfolioQuerySchema,
   CreatePortfolioSchema,
 } from "@/app/lib/validation/portfolio-validation";
 import { PORTFOLIO_CONFIG } from "@/app/lib/config/portfolio.config";
 import { portfolioService } from "@/app/lib/domains/portfolio";
-
-const logger = getClientLogger();
 
 function parsePortfolioQuery(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -128,7 +127,7 @@ export const POST = withAuth(
       );
     }
 
-    logger.info("Creating portfolio item", {
+    getClientLogger().info("Creating portfolio item", {
       correlationId,
       actorRole: userRole,
       title: portfolioData.title,
@@ -175,7 +174,7 @@ export const POST = withAuth(
       );
     }
 
-    await IdempotencyService.complete(idempotencyKey, data.data);
+    await safeIdempotencyComplete(idempotencyKey, data.data);
     return apiSuccess(data.data, HttpStatus.CREATED);
   },
 );

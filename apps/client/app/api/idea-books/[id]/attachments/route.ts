@@ -15,8 +15,6 @@ import { isValidId } from "@/app/lib/api/api-guards";
 import { AttachmentQuerySchema } from "@/app/lib/validation/idea-books-validation";
 import { ideaBooksService } from "@/app/lib/domains/idea-books";
 
-const logger = getClientLogger();
-
 type IdeaBookParams = { id: string };
 
 function mapIdeaBooksError(error: {
@@ -92,7 +90,9 @@ export const GET = withAuth<IdeaBookParams>(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch attachments", result.error, { bookId });
+      getClientLogger().error("Failed to fetch attachments", result.error, {
+        bookId,
+      });
       return apiError(
         "Failed to fetch attachments",
         HttpStatus.INTERNAL_SERVER_ERROR,

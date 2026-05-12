@@ -24,7 +24,7 @@ import {
   StepProgress,
   CompactStepProgress,
 } from "@/components/ui/step-progress";
-import { onboardingClient } from "@/lib/onboarding-client";
+import { onboardingClient } from "@/lib/facades/onboarding-client";
 import { getRegulatoryAuthorityCode } from "@/lib/constants/professionOptions";
 import {
   ProfessionStep,

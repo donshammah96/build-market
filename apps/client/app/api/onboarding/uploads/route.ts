@@ -33,7 +33,6 @@ import { validateFile } from "@/app/lib/validation/file-validation";
 import { uploadService } from "@/app/lib/domains/uploads";
 import { ok, err, isOk, type Result } from "@/app/lib/errors/result";
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/onboarding/uploads";
 const OPERATION_NAME = "onboarding_upload";
 
@@ -109,7 +108,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // ADR-005: log events must carry the minimum stable field set.
     extra?: { errorCode?: string; fileGroupCount?: number },
   ) => {
-    logger.info("Onboarding uploads adapter outcome", {
+    getClientLogger().info("Onboarding uploads adapter outcome", {
       correlationId,
       operationName: OPERATION_NAME,
       httpMethod: req.method,
@@ -187,7 +186,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         }
       }
       if (validationErrors.length > 0) {
-        logger.warn("Upload validation failed", {
+        getClientLogger().warn("Upload validation failed", {
           correlationId,
           actorRole,
           errors: validationErrors,
@@ -229,7 +228,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         });
       }
 
-      logger.info("Onboarding files uploaded successfully", {
+      getClientLogger().info("Onboarding files uploaded successfully", {
         correlationId,
         actorRole,
         fileCount: files.length,
@@ -242,7 +241,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   );
 
   if (!result.success || !result.data) {
-    logger.error("Onboarding upload executor failed", result.error, {
+    getClientLogger().error("Onboarding upload executor failed", result.error, {
       correlationId,
       operationName: OPERATION_NAME,
       httpMethod: req.method,

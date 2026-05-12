@@ -56,7 +56,7 @@ vi.mock("react-toastify", () => ({
   },
 }));
 
-vi.mock("@/lib/onboarding-client", () => ({
+vi.mock("@/lib/facades/onboarding-client", () => ({
   onboardingClient: {
     skipClient: mockSkipClient,
     skipProfessional: mockSkipProfessional,

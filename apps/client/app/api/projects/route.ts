@@ -14,6 +14,7 @@ import {
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   CreateProjectSchema,
   ProjectQuerySchema,
@@ -22,8 +23,12 @@ import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
 import { projectsService } from "@/app/lib/domains/projects/service";
 import type { ProjectActorRole } from "@/app/lib/domains/projects/contracts";
 import { normalizeRole } from "@/app/lib/security/roles";
-
-const logger = getClientLogger();
+import {
+  actorRoleLabel,
+  domainErrorCodeToStatus,
+  logProjectsRouteOutcome,
+  now,
+} from "@/app/api/projects/shared";
 
 function toStatus(error: string): number {
   switch (error) {
@@ -56,7 +61,9 @@ function resolveProjectActorRole(userRole: unknown): ProjectActorRole | null {
 
 export const GET = withAuth(
   async (req: NextRequest, { dbUserId, clerkId, userRole }) => {
+    const startedAt = now();
     const correlationId = initializeCorrelationId(req);
+    const operationName = "get_projects";
 
     const identifier = getRateLimitIdentifier(req);
     const rateLimitResult = await checkRateLimit(
@@ -66,6 +73,15 @@ export const GET = withAuth(
     );
 
     if (!rateLimitResult.success) {
+      logProjectsRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole: actorRoleLabel(userRole),
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+      });
       return apiError(
         "Too many requests. Please try again later.",
         HttpStatus.TOO_MANY_REQUESTS,
@@ -81,10 +97,19 @@ export const GET = withAuth(
 
     const queryValidation = ProjectQuerySchema.safeParse(queryParams);
     if (!queryValidation.success) {
-      logger.warn("Projects query validation failed", {
+      getClientLogger().warn("Projects query validation failed", {
         correlationId,
         actorId: dbUserId,
         errors: queryValidation.error.issues,
+      });
+      logProjectsRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole: actorRoleLabel(userRole),
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
       });
       return apiError(
         "Invalid query parameters",
@@ -95,6 +120,15 @@ export const GET = withAuth(
 
     const actorRole = resolveProjectActorRole(userRole);
     if (!actorRole) {
+      logProjectsRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole: actorRoleLabel(userRole),
+        outcome: "domain_error",
+        httpStatus: HttpStatus.FORBIDDEN,
+        durationMs: now() - startedAt,
+        domainError: "forbidden",
+      });
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
 
@@ -112,13 +146,21 @@ export const GET = withAuth(
           userId: dbUserId,
           ...queryValidation.data,
         }),
-      { operationName: "get_projects" },
+      { operationName },
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch projects", result.error, {
+      getClientLogger().error("Failed to fetch projects", result.error, {
         correlationId,
         actorId: dbUserId,
+      });
+      logProjectsRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "internal_error",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: now() - startedAt,
       });
       return apiError(
         "Failed to fetch projects",
@@ -127,6 +169,15 @@ export const GET = withAuth(
     }
 
     if (!result.data.ok) {
+      logProjectsRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(result.data.error),
+        durationMs: now() - startedAt,
+        domainError: result.data.error,
+      });
       return apiError(
         result.data.message || "Failed to fetch projects",
         toStatus(result.data.error),
@@ -143,12 +194,24 @@ export const GET = withAuth(
       };
     };
 
+    logProjectsRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+    });
     return apiSuccess(payload, HttpStatus.OK);
   },
 );
 
 export const POST = withAuth(
   async (req: NextRequest, { dbUserId, clerkId, userRole }) => {
+    const startedAt = now();
+    const correlationId = initializeCorrelationId(req);
+    const operationName = "create_project";
+    const actorRoleLabelValue = actorRoleLabel(userRole);
     const { ipAddress, userAgent } = getRequestMetadata(req);
 
     const sizeError = checkBodySize(req, PROJECT_CONFIG.MAX_BODY_SIZE);
@@ -239,7 +302,7 @@ export const POST = withAuth(
           ipAddress,
           userAgent,
         }),
-      { operationName: "create_project" },
+      { operationName },
     );
 
     if (!result.success || !result.data) {
@@ -252,6 +315,15 @@ export const POST = withAuth(
 
     if (!result.data.ok) {
       await IdempotencyService.fail(idempotencyKey);
+      logProjectsRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole: actorRoleLabelValue,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(result.data.error),
+        durationMs: now() - startedAt,
+        domainError: result.data.error,
+      });
       return apiError(
         result.data.message || "Create failed",
         toStatus(result.data.error),
@@ -259,7 +331,15 @@ export const POST = withAuth(
     }
 
     const payload = result.data.data;
-    await IdempotencyService.complete(idempotencyKey, payload);
+    await safeIdempotencyComplete(idempotencyKey, payload);
+    logProjectsRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: actorRoleLabelValue,
+      outcome: "success",
+      httpStatus: HttpStatus.CREATED,
+      durationMs: now() - startedAt,
+    });
     return apiSuccess(payload, HttpStatus.CREATED);
   },
 );

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { messagingClient } from "@/lib/messaging-client";
+import { messagingClient } from "@/lib/facades/messaging-client";
 
 describe("messaging client contracts", () => {
   afterEach(() => {

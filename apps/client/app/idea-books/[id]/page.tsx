@@ -30,7 +30,7 @@ import {
   useDeleteIdeaBook,
   useDeleteIdeaBookAttachment,
 } from "@/hooks/useIdeaBooks";
-import type { IdeaBookAttachment } from "@/lib/idea-books-client";
+import type { IdeaBookAttachment } from "@/lib/facades/idea-books-client";
 import { ROUTES } from "@/lib/links";
 
 function getAttachmentUrl(att: IdeaBookAttachment): string | null {

@@ -415,7 +415,7 @@ export const uploadRepository = {
   ): Promise<Array<{ id: string; key: string; visibility: AssetVisibility }>> {
     return client.directUpload.findMany({
       where: {
-        status: "PRESIGNED",
+        status: { in: ["PRESIGNED", "EXPIRED"] },
         expiresAt: { lt: new Date() },
       },
       select: { id: true, key: true, visibility: true },
@@ -430,7 +430,7 @@ export const uploadRepository = {
     const result = await client.directUpload.updateMany({
       where: {
         id: { in: ids },
-        status: "PRESIGNED",
+        status: { in: ["PRESIGNED", "EXPIRED"] },
       },
       data: { status: "EXPIRED" },
     });

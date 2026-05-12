@@ -23,7 +23,7 @@ import {
   homeownerOnboardingSchema,
   type HomeownerOnboardingData,
   type County,
-} from "@/lib/schemas/onboarding";
+} from "@/app/lib/validation/onboarding";
 import { COUNTY_LABELS } from "@/types/store";
 import { useOnboardingAnalytics } from "@/lib/analytics/OnboardingAnalyticsContext";
 import { ROUTES } from "@/lib/links";

@@ -13,7 +13,6 @@ import {
 } from "@/app/lib/api/resilient-api";
 import { uploadService } from "@/app/lib/domains/uploads";
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/uploads/confirm";
 const OPERATION_NAME = "confirm_direct_upload";
 
@@ -48,7 +47,7 @@ export const POST = withAuth(
       httpStatus: number,
       additional: Record<string, unknown> = {},
     ) => {
-      logger.info("Direct upload confirm adapter outcome", {
+      getClientLogger().info("Direct upload confirm adapter outcome", {
         correlationId,
         operationName: OPERATION_NAME,
         httpMethod: req.method,

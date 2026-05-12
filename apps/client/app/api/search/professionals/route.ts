@@ -13,8 +13,6 @@ import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import { searchService } from "@/app/lib/domains/search";
 import { z } from "zod";
 
-const logger = getClientLogger();
-
 const QuerySchema = z.object({
   q: z.string().min(1).max(200),
 });
@@ -61,7 +59,7 @@ export async function GET(request: NextRequest) {
   );
 
   if (!execResult.success || !execResult.data) {
-    logger.error("Failed to search professionals", execResult.error);
+    getClientLogger().error("Failed to search professionals", execResult.error);
     return apiError(
       "Failed to search professionals",
       HttpStatus.INTERNAL_SERVER_ERROR,

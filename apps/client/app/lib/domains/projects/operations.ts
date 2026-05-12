@@ -8,7 +8,6 @@
  *
  * Route handlers become thin HTTP adapters that delegate here.
  */
-import { NextResponse } from "next/server";
 import { prisma } from "@build/db";
 import {
   Prisma,
@@ -16,18 +15,14 @@ import {
   ApprovalStatus,
   EscrowStatus,
 } from "@prisma/client";
-import { getClientLogger } from "@/app/lib/api/resilient-api";
-import { apiError, HttpStatus } from "@/app/lib/api/api-response";
 import {
   projectDetailSelect,
   milestoneDetailSelect,
-} from "@/app/lib/validation/projects-validation";
+} from "@/validation/projects-validation";
 import type {
   UpdateProjectInput,
   UpdateMilestoneInput,
-} from "@/app/lib/validation/projects-validation";
-
-const logger = getClientLogger();
+} from "@/validation/projects-validation";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -321,12 +316,15 @@ export async function transitionEscrowStatus(
   }
 
   if (!isValidEscrowTransition(escrow.status, newStatus)) {
-    logger.warn("Invalid escrow transition attempted", {
-      correlationId: context.correlationId,
-      escrowId,
-      currentStatus: escrow.status,
-      attemptedStatus: newStatus,
-    });
+    console.warn(
+      "Invalid escrow transition attempted",
+      JSON.stringify({
+        correlationId: context.correlationId,
+        escrowId,
+        currentStatus: escrow.status,
+        attemptedStatus: newStatus,
+      }),
+    );
     return {
       success: false,
       error: "invalid_transition",
@@ -468,20 +466,9 @@ export async function deleteProjectWithOptimisticLock(
 
 /**
  * Build 409 Conflict response with current version header.
+ * @deprecated Implementation moved to @/app/lib/api/conflict-response.
  */
-export async function buildProjectConflictResponse(
-  message: string,
-  projectId: string,
-): Promise<NextResponse> {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { version: true },
-  });
-  const currentVersion = project?.version ?? 0;
-  const response = apiError(message, HttpStatus.CONFLICT);
-  response.headers.set("X-Project-Version", String(currentVersion));
-  return response;
-}
+export { buildProjectConflictResponse } from "@/app/lib/api/conflict-response";
 
 // ─── Optimistic Locking: Milestone ───────────────────────────────────
 
@@ -618,17 +605,6 @@ export function isOptimisticRetryEnabled(req: {
 
 /**
  * Build 409 Conflict response for milestone.
+ * @deprecated Implementation moved to @/app/lib/api/conflict-response.
  */
-export async function buildMilestoneConflictResponse(
-  message: string,
-  milestoneId: string,
-): Promise<NextResponse> {
-  const milestone = await prisma.projectMilestone.findUnique({
-    where: { id: milestoneId },
-    select: { version: true },
-  });
-  const currentVersion = milestone?.version ?? 0;
-  const response = apiError(message, HttpStatus.CONFLICT);
-  response.headers.set("X-Milestone-Version", String(currentVersion));
-  return response;
-}
+export { buildMilestoneConflictResponse } from "@/app/lib/api/conflict-response";

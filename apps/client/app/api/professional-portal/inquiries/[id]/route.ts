@@ -13,11 +13,11 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { checkBodySize, isValidId } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { UpdateInquirySchema } from "@/app/lib/validation/inquiries-validation";
 import { inquiriesService } from "@/app/lib/domains/inquiries";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 
 type InquiryParams = { id: string };
@@ -168,7 +168,7 @@ export const PATCH = withAuth<InquiryParams>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Updating property inquiry", {
+    getClientLogger().info("Updating property inquiry", {
       correlationId,
       inquiryId,
       actorRole: normalizeRole(String(userRole)),
@@ -203,7 +203,7 @@ export const PATCH = withAuth<InquiryParams>(
         return apiError("Inquiry not found", HttpStatus.NOT_FOUND);
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
-    await IdempotencyService.complete(idempotencyKey, data.data);
+    await safeIdempotencyComplete(idempotencyKey, data.data);
     return apiSuccess(data.data, HttpStatus.OK);
   },
 );
@@ -262,7 +262,7 @@ export const DELETE = withAuth<InquiryParams>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Deleting property inquiry", {
+    getClientLogger().info("Deleting property inquiry", {
       correlationId,
       inquiryId,
       actorRole: normalizeRole(String(userRole)),
@@ -297,7 +297,7 @@ export const DELETE = withAuth<InquiryParams>(
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
 
-    await IdempotencyService.complete(idempotencyKey, data.data);
+    await safeIdempotencyComplete(idempotencyKey, data.data);
     return apiSuccess(data.data, HttpStatus.OK);
   },
 );

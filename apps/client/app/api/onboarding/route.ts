@@ -5,8 +5,8 @@
  * KEY CHANGES FROM ORIGINAL:
  *
  * 1. CLERK UPDATE ORDERING FIX (critical)
- *    Original: domain logic → IdempotencyService.complete() → Clerk update
- *    Fixed:    domain logic → Clerk update → IdempotencyService.complete()
+ *    Original: domain logic → safeIdempotencyComplete() → Clerk update
+ *    Fixed:    domain logic → Clerk update → safeIdempotencyComplete()
  *
  *    If Clerk update ran after complete() and failed silently, any retry
  *    returned the cached "completed" response without re-attempting the Clerk
@@ -34,6 +34,7 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   type ClerkUserProfile,
   userProfileOnboardingService,
@@ -42,9 +43,9 @@ import {
   CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
   finalizeClerkOnboardingTransition,
 } from "@/app/lib/domains/user-profile/clerk-metadata";
+import { logOnboardingRouteOutcome, now } from "@/app/api/onboarding/shared";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 const ROUTE_PATTERN = "/api/onboarding";
 const OPERATION_NAME = "complete_onboarding";
@@ -68,7 +69,7 @@ function mapOutcomeFromStatus(status: number): string {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const startedAt = Date.now();
+  const startedAt = now();
   const correlationId = initializeCorrelationId(req);
   let actorRole: "unknown" | "CLIENT" | "PROFESSIONAL" = "unknown";
 
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     httpStatus: number,
     fields?: LogOutcomeFields,
   ) => {
-    logger.info("Onboarding adapter outcome", {
+    getClientLogger().info("Onboarding adapter outcome", {
       correlationId,
       operationName: OPERATION_NAME,
       httpMethod: req.method,
@@ -93,12 +94,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       actorRole,
       outcome,
       httpStatus,
-      durationMs: Date.now() - startedAt,
+      durationMs: now() - startedAt,
       ...(fields?.reason ? { reason: fields.reason } : {}),
       ...(fields?.source ? { source: fields.source } : {}),
       ...(fields?.domainError ? { domainError: fields.domainError } : {}),
       ...(fields?.completedRole ? { completedRole: fields.completedRole } : {}),
       ...(fields?.errors ? { errors: fields.errors } : {}),
+    });
+    logOnboardingRouteOutcome({
+      correlationId,
+      operationName: OPERATION_NAME,
+      actorRole,
+      outcome:
+        httpStatus >= 500
+          ? "internal_error"
+          : httpStatus === HttpStatus.TOO_MANY_REQUESTS
+            ? "rate_limited"
+            : httpStatus >= 400
+              ? "domain_error"
+              : "success",
+      httpStatus,
+      durationMs: now() - startedAt,
+      domainError: fields?.domainError,
     });
   };
 
@@ -145,7 +162,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       issue.path.join("."),
     );
 
-    logger.warn("Onboarding validation failed", {
+    getClientLogger().warn("Onboarding validation failed", {
       correlationId,
       actorRole: "unknown",
       errors: validationErrorFields,
@@ -239,7 +256,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (!result.success || !result.data) {
     await IdempotencyService.fail(idempotencyKey);
-    logger.error(
+    getClientLogger().error(
       "Onboarding adapter outcome",
       result.error instanceof Error
         ? result.error
@@ -252,7 +269,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         actorRole,
         outcome: "failed",
         httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
-        durationMs: Date.now() - startedAt,
+        durationMs: now() - startedAt,
         reason: "executor_failure",
       },
     );
@@ -276,7 +293,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const responseData = result.data.data;
   const clerkRole = responseData.role as string;
 
-  // ORDERING INVARIANT: Clerk update BEFORE IdempotencyService.complete().
+  // ORDERING INVARIANT: Clerk update BEFORE safeIdempotencyComplete().
   // If Clerk ran after and failed, any retry returns cached success and
   // permanently skips the Clerk update, leaving the middleware token stale.
   try {
@@ -301,27 +318,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  try {
-    await IdempotencyService.complete(idempotencyKey, responseData);
-  } catch (completionError) {
-    await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
-    logger.error(
-      "Failed to complete onboarding idempotency replay",
-      completionError instanceof Error
-        ? completionError
-        : new Error("Idempotency completion failed"),
-      {
-        correlationId,
-        operationName: OPERATION_NAME,
-        httpMethod: req.method,
-        routePattern: ROUTE_PATTERN,
-        actorRole,
-        outcome: "idempotency_complete_failed",
-        httpStatus: HttpStatus.OK,
-        durationMs: Date.now() - startedAt,
-      },
-    );
-  }
+  await safeIdempotencyComplete(idempotencyKey, responseData, {
+    correlationId,
+    operationName: OPERATION_NAME,
+    httpMethod: req.method,
+    routePattern: ROUTE_PATTERN,
+    actorRole,
+    httpStatus: HttpStatus.OK,
+    durationMs: now() - startedAt,
+    resourceType: "onboarding",
+  });
 
   logOutcome("succeeded", HttpStatus.OK, {
     completedRole: responseData.role,

@@ -37,7 +37,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialogue";
-import { onboardingClient } from "@/lib/onboarding-client";
+import { onboardingClient } from "@/lib/facades/onboarding-client";
 
 export default function Onboarding() {
   const router = useRouter();

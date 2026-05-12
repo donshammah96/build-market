@@ -13,6 +13,7 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   SendMessageSchema,
   MESSAGING_CONFIG,
@@ -20,8 +21,6 @@ import {
   messagingService,
 } from "@/app/lib/domains/messaging";
 import { normalizeRole } from "@/app/lib/security/roles";
-
-const logger = getClientLogger();
 
 function toMessagingActor(context: {
   clerkId: string;
@@ -106,7 +105,7 @@ export const POST = withAuth(
 
     if (!result.success) {
       await IdempotencyService.fail(idempotencyKey).catch(() => {});
-      logger.error("Failed to send message", result.error, {
+      getClientLogger().error("Failed to send message", result.error, {
         correlationId,
         actorRole: actor.role,
         threadId: data.threadId,
@@ -124,10 +123,9 @@ export const POST = withAuth(
           serviceResult?.status ?? HttpStatus.BAD_REQUEST,
         );
       }
-      await IdempotencyService.complete(
-        idempotencyKey,
-        serviceResult.data,
-      ).catch(() => {});
+      await safeIdempotencyComplete(idempotencyKey, serviceResult.data).catch(
+        () => {},
+      );
       return apiSuccess(serviceResult.data, HttpStatus.CREATED);
     }
   },

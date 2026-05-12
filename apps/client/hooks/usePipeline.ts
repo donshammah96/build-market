@@ -1,26 +1,6 @@
-/**
- * usePipeline — Custom React Query hook for the Pipeline summary.
+﻿/**
+ * @deprecated Import from "@/lib/facades/pipeline/usePipeline" instead.
+ * This file is a backward-compat re-export stub maintained during the Phase 5 migration.
+ * @see @/lib/facades/pipeline/usePipeline
  */
-import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
-import {
-  pipelineClient,
-  unwrapApiResponse,
-  type PipelineSummary,
-} from "@/lib/pipeline-client";
-
-export const pipelineKeys = {
-  all: ["pipeline"] as const,
-  summary: () => [...pipelineKeys.all, "summary"] as const,
-} as const;
-
-export function usePipelineSummary(
-  options?: Omit<UseQueryOptions<PipelineSummary>, "queryKey" | "queryFn">,
-) {
-  return useQuery<PipelineSummary>({
-    queryKey: pipelineKeys.summary(),
-    queryFn: () => pipelineClient.getPipelineSummary().then(unwrapApiResponse),
-    staleTime: 30_000,
-    retry: 2,
-    ...options,
-  });
-}
+export * from "@/lib/facades/pipeline/usePipeline";

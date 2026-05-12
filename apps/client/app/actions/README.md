@@ -39,7 +39,7 @@ Creates a project for the authenticated user (as client).
 
 **Auth**: Resolves Clerk → DB user; uses resolved ID as `clientId`.
 
-**Service**: `createProject` from `@/lib/services/projects`
+**Service**: `createProject` from `@/app/lib/domains/projects/service`
 
 **Schema alignment**: Fields map to Prisma Project model:
 
@@ -62,7 +62,7 @@ Returns a project if the authenticated user is the client or professional.
 
 **Ownership**: User must be `clientId` or `professionalId`. Throws "Not authorized to view this project" otherwise.
 
-**Service**: `getProject` from `@/lib/services/projects`
+**Service**: `getProject` from `@/app/lib/domains/projects/service`
 
 ---
 
@@ -76,7 +76,7 @@ Returns projects for the authenticated user.
 
 **Auth**: Resolves Clerk → DB user; filters by `clientId` (client) or `professionalId` (professional).
 
-**Service**: `getUserProjects` from `@/lib/services/projects`
+**Service**: `getUserProjects` from `@/app/lib/domains/projects/service`
 
 ---
 
@@ -124,5 +124,5 @@ From `@/app/lib/validation/projects-validation`:
 
 - **Validation schemas**: `@/app/lib/validation/projects-validation`
 - **Config**: `@/app/lib/config/project.config` (PROJECT_CONFIG)
-- **Service**: `@/lib/services/projects`
+- **Service**: `@/app/lib/domains/projects/service`
 - **Project operations** (ownership, milestones): `@/app/lib/domains/projects/operations`

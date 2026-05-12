@@ -10,7 +10,16 @@
     ],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@/domains/*": ["./app/lib/domains/*"],
+      "@/infra/*": ["./app/lib/infrastructure/*"],
+      "@/security/*": ["./app/lib/security/*"],
+      "@/config/*": ["./app/lib/config/*"],
+      "@/validation/*": ["./app/lib/validation/*"],
+      "@/ui/*": ["./components/*"],
+      "@/facades/*": ["./lib/facades/*"],
+      "@/routes": ["./lib/routes/index"],
+      "@/api/*": ["./app/lib/api/*"]
     }
   },
   "include": [

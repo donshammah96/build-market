@@ -2,7 +2,7 @@
 
 import { Label } from "@/components/ui/label";
 import { DocumentUploader } from "@/components/admin/verification/DocumentUploader";
-import type { PropertyDocumentDto } from "@/lib/properties-client";
+import type { PropertyDocumentDto } from "@/lib/facades/properties-client";
 
 const DOC_TYPES = ["TITLE_DEED", "OFFICIAL_SEARCH", "MANDATE_LETTER"] as const;
 

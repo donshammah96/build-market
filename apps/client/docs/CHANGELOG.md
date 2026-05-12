@@ -26,6 +26,162 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
+## [2026-05-12] Architecture Compliance Phase 0 Closeout
+
+### Added (Architecture Compliance Phase 0 Closeout)
+
+- **Route-family shared helpers:** Added shared adapter helper modules for idea-books, leads, messaging, notifications, professionals, uploads, and user routes so multi-handler families have a canonical timing, actor-label, static message, conflict-response, and route-outcome logging surface.
+
+### Changed (Architecture Compliance Phase 0 Closeout)
+
+- **Phase 0 drift calibration:** Updated `drift-checks-phase0.mjs` so `missingSharedTs` enforces real route-family boundaries while exempting structural grouping directories and nested item-resource directories covered by an ancestor `shared.ts`.
+- **Logger scoping:** Replaced module-level route logger singletons with per-invocation `getClientLogger()` usage across API route logging call sites.
+- **Mapper ownership:** Moved remaining service/repository Date DTO normalization through domain mapper helpers for calendar, client-dashboard, finance, inquiries, messaging, notifications, professional-settings, properties, reviews, seller-insights, stores, and uploads.
+
+### Fixed (Architecture Compliance Phase 0 Closeout)
+
+- **Architectural Drift:** Closed the remaining Phase 0 categories: `inlineLoggerAtModuleLevel`, `missingSharedTs`, `inlineDateNow`, and `mapperNormalizationDrift`.
+- **Onboarding timing:** Replaced remaining onboarding skip route inline timing calls with the shared `now()` helper.
+
+### Docs (Architecture Compliance Phase 0 Closeout)
+
+- Updated `PROGRESS-SUMMARY.md` to mark Architecture Compliance Phase 0 Remediation completed with a zero-drift baseline.
+
+**Files changed:** `apps/client/app/api/**/route.ts`, `apps/client/app/api/{idea-books,leads,messaging,notifications,professionals,uploads,user}/shared.ts`, `apps/client/app/lib/domains/**/{service,repository,mappers}.ts`, `apps/client/scripts/drift-checks-phase0.mjs`, `apps/client/docs/CHANGELOG.md`, `apps/client/docs/PROGRESS-SUMMARY.md`
+
+**Verification:**
+
+- `pnpm -C apps/client run report-security-drift:strict` -> all categories 0
+- `pnpm -C apps/client exec tsc --noEmit --pretty false` -> exit 0
+- `pnpm -C apps/client exec vitest run __tests__/api/onboarding/route.test.ts __tests__/api/onboarding/skip.test.ts __tests__/api/onboarding/skip-professional.test.ts __tests__/api/onboarding/professional-complete.route.test.ts __tests__/api/idea-books/route.test.ts __tests__/api/idea-books/book-id.route.test.ts __tests__/api/idea-books/attachments.route.test.ts __tests__/api/idea-books/attachment-id.route.test.ts __tests__/api/messaging/route-auth-mapping.test.ts __tests__/api/notifications/route.test.ts __tests__/api/notifications/notification-id.route.test.ts __tests__/api/uploads/route.test.ts __tests__/api/uploads/direct.route.test.ts __tests__/api/uploads/upload-id.route.test.ts --pool=threads --maxWorkers=1` -> 14 files, 93 tests passed
+- `pnpm -C apps/client exec vitest run __tests__/lib/domains/calendar.service.test.ts __tests__/lib/domains/client-dashboard.service.test.ts __tests__/lib/domains/finance.service.test.ts __tests__/lib/domains/inquiries.service.test.ts __tests__/lib/domains/properties.service.test.ts __tests__/lib/domains/reviews.service.test.ts __tests__/lib/domains/seller-insights.service.test.ts __tests__/lib/uploads/service.test.ts __tests__/lib/calendar-client.test.ts __tests__/lib/inquiries-client-contracts.test.ts __tests__/lib/properties-client-contracts.test.ts __tests__/lib/upload-client.test.ts --pool=threads --maxWorkers=1` -> 12 files, 49 tests passed
+
+## [2026-05-12] Client Architecture Alignment Checks
+
+### Added (Client Architecture Alignment Checks)
+
+- **Architecture Compliance Phase 0 Integration:** Integrated script file into `report-security-drift.mjs` and added 4 new architectural drift categories (`safeIdempotencyCompleteDrift`, `mapperNormalizationDrift`, `operationsBuilderDrift`, `indexExportDrift`) to ensure alignment with the 2026-05-08 architecture update.
+
+### Fixed (Client Architecture Alignment Checks)
+
+- **Architectural Drift:** Fixed `indexExportDrift` violation in `app/lib/domains/user-profile/index.ts`.
+- **Architectural Drift:** Fixed 2 `inlineDateNow` violations in `app/api/onboarding/route.ts` by using the shared `now()` import.
+- **Architectural Drift:** Fixed 21 `safeIdempotencyCompleteDrift` violations by replacing raw `IdempotencyService.complete()` calls with the `safeIdempotencyComplete` wrapper in actions and resolving false positives in comments.
+
+## [2026-05-07] Client Architecture Refactor Pass - Closeout
+
+### Fixed (Verification Closeout)
+
+- **Typecheck restored:** Fixed the route actor context and professional-settings Prisma typing issues that blocked Phase 1 verification.
+- **Lint gate activation:** Registered the ESLint import plugin so the Phase 0B `import/no-cycle` rule can execute.
+- **Targeted regression coverage:** Verified representative route/domain coverage for properties and the moved professional repository.
+
+**Verification:**
+
+- `pnpm -C apps/client run check-types` -> pass
+- `pnpm -C apps/client run lint` -> pass with 13 warnings
+- `pnpm -C apps/client exec vitest run __tests__/api/properties/property-id.route.test.ts __tests__/lib/properties-validation.test.ts __tests__/lib/repositories/professional.repository.test.ts --pool=threads --maxWorkers=1` -> 53 tests pass
+- `pnpm -C apps/client run report-security-drift:strict` -> fails on existing drift categories: `criticalTransitionStepSequencing: 6`, `logSafetySpreadReview: 1`, `sensitiveAnnotationCoverage: 1`; idempotency completion safety is 0.
+
+## [2026-05-07] Client Architecture Refactor Pass - Phase 2A
+
+### Changed (Canonical Result Contracts)
+
+- **Projects result contract:** Replaced the projects-local `DomainResult<T>` alias with canonical `Result<T, DomainError<...>>` via `ProjectResult<T>`.
+- **Optimistic-lock convention:** Aligned the targeted properties optimistic-lock contract and certificate repository result contract to the canonical `ok` discriminant.
+
+**Files changed:** `apps/client/app/lib/domains/projects/contracts.ts`, `apps/client/app/lib/domains/projects/service.ts`, `apps/client/app/lib/domains/properties/contracts.ts`, `apps/client/app/lib/domains/certificates/*`
+**Verification:** `rg "DomainResult" apps/client/app/lib/domains/projects -g "*.ts"` -> zero results. `rg "success:" apps/client/app/lib/domains/properties/contracts.ts apps/client/app/lib/domains/certificates/contracts.ts` -> zero targeted result discriminants. Final closeout `pnpm -C apps/client run check-types` -> pass.
+
+## [2026-05-07] Client Architecture Refactor Pass - Phase 3
+
+### Added (Shared Route Adapters)
+
+- **Route-family shared helpers:** Added shared adapter modules for stores, projects, professional-portal, onboarding, and services.
+- **Structured route outcomes:** Wired the new helpers into representative high-traffic routes so success, validation, rate-limit, domain, and internal outcomes use a consistent ADR-005-style payload.
+- **Static adapter mappings:** Centralized static client messages, domain error-to-status mapping, timing helpers, actor role labels, and conflict response helpers for the new route families.
+
+**Files changed:** `apps/client/app/api/{stores,projects,professional-portal,onboarding,services}/shared.ts`, plus representative route wiring in those families.
+**Verification:** `Get-ChildItem apps/client/app/api -Recurse -Filter shared.ts` includes all five target families. `rg "log.*RouteOutcome" apps/client/app/api -g "*.ts"` shows active usage in stores, projects, professional-portal, onboarding, and services. Final closeout `pnpm -C apps/client run check-types` -> pass.
+
+## [2026-05-07] Client Architecture Refactor Pass - Phase 4
+
+### Added (Domain Mapper Coverage)
+
+- **Mapper coverage expansion:** Added mapper modules for finance, messaging, professionals, pipeline, calendar, client-dashboard, idea-books, notifications, professional-settings, reviews, seller-insights, and uploads.
+- **DTO serialization helpers:** New mappers provide domain-local serialization paths for `Date` values and decimal-like values before DTOs cross adapter or client boundaries.
+
+**Files changed:** `apps/client/app/lib/domains/**/mappers.ts`
+**Verification:** `Get-ChildItem -Path apps/client/app/lib/domains -Recurse -Filter mappers.ts | Measure-Object` -> 23 mapper files. Final closeout `pnpm -C apps/client run check-types` -> pass.
+
+## [2026-05-07] Client Architecture Refactor Pass - Phase 5-8
+
+### Changed (Client Structure)
+
+- **Facade colocation:** Moved root browser client facades from `apps/client/lib/*-client.ts` into `apps/client/lib/facades/*-client.ts` and updated imports.
+- **Route modules:** Added `apps/client/lib/routes` modules with compatibility exports from the existing route registry.
+- **Repository ownership:** Removed `apps/client/app/lib/repositories` by moving shared repositories under domain-owned locations and updating remaining imports.
+- **Path aliases:** Added aliases for domains, infrastructure, security, config, validation, UI, facades, and routes in `apps/client/tsconfig.json`.
+
+**Files changed:** `apps/client/lib/facades/*`, `apps/client/lib/routes/*`, `apps/client/app/lib/domains/**/repositories/*`, `apps/client/tsconfig.json`
+**Verification:** `Get-ChildItem apps/client/lib -Filter *-client.ts` -> zero files. `Test-Path apps/client/app/lib/repositories` -> `False`. Final closeout `pnpm -C apps/client run check-types` -> pass.
+
+## [2026-05-07] Client Architecture Refactor Pass - Phase 2B
+
+### Changed (Stores DTO Boundary)
+
+- **Stores result contract:** Replaced stores' local `DomainResult<T>` with canonical `Result<T, DomainError<...>>` via `StoreResult<T>`.
+- **Explicit stores DTOs:** Removed exported `Prisma.StoreGetPayload` contracts and replaced them with domain-owned store list, detail, document, and owner-stat DTOs.
+- **Stores mapper boundary:** Added stores mappers to normalize dates to ISO strings and decimal-like values to numbers before data leaves the stores domain service.
+
+**Files changed:** `apps/client/app/lib/domains/stores/contracts.ts`, `apps/client/app/lib/domains/stores/mappers.ts`, `apps/client/app/lib/domains/stores/service.ts`, `apps/client/app/lib/domains/stores/repository.ts`
+**Verification:** `rg "DomainResult|Prisma\\.StoreGetPayload|Prisma\\.Decimal" apps/client/app/lib/domains/stores -g "*.ts"` -> zero results. Final closeout `pnpm -C apps/client run check-types` -> pass.
+
+## [2026-05-07] Client Architecture Refactor Pass - Phase 1
+
+### Fixed (Idempotency Fail-Safe)
+
+- **Fail-safe idempotency completion helper:** Added `safeIdempotencyComplete()` so API adapters mark completed domain mutations as failed for retry if replay persistence fails, log the completion failure, and still return the successful mutation response.
+- **Adapter callsite migration:** Replaced direct route-level `await IdempotencyService.complete(...)` calls across project, property, store, onboarding, messaging, idea-book, service, and professional-portal mutation routes.
+- **Onboarding ordering preserved:** Kept the Clerk metadata transition before idempotency completion in onboarding routes while moving completion to the fail-safe helper.
+
+**Files changed:** `apps/client/app/lib/services/idempotency-helpers.ts`, `apps/client/app/api/**/route.ts`
+**Verification:** `rg "await\s+IdempotencyService\.complete\(" apps/client/app/api -g "*.ts"` -> zero route adapter calls. `pnpm -C apps/client run check-types` -> pass after closeout fixes.
+
+## [2026-05-07] Client Architecture Lint Gates (Phase 0B)
+
+### Changed (Client Architecture Guardrails)
+
+- **Adapter boundary lint gates:** Blocked `@build/db` imports inside `app/api/**` and `app/actions/**` (health routes exempt).
+- **Domain boundary lint gates:** Blocked `HttpStatus`, `NextResponse`, and `getClientLogger()` imports inside `app/lib/domains/**`.
+- **Env boundary lint gate:** Flagged `process.env` access outside `app/lib/infrastructure/env.ts`.
+- **Cycle detection:** Enabled `import/no-cycle` with `maxDepth: 3`.
+- **Adapter Prisma boundary remediation:** Routed service categories, internal user-status, public professional profile, and finance withdrawal adapters through domain services; removed Prisma reads from projects and password-reset actions.
+
+**Files changed:** `apps/client/eslint.config.js`
+**Verification:** Not run (lint gates only).
+
+## [2026-05-06] Client Architecture Clean Up & Legacy Wrapper Removal
+
+### Removed (Client Architecture Clean Up)
+
+- **Deprecated `apps/client/lib` Wrapper Directories:** Deleted entirely unused legacy directories (`lib/infrastructure`, `lib/repositories`, `lib/services`, `lib/security`) that had been superseded by the `app/lib/domains` domain-driven architecture.
+- **Unreferenced Legacy Files:** Purged unused top-level files (`db.ts`, `env.ts`, `generate-keys.ts`, `calendar-client.server.ts`) and associated legacy unit tests (`__tests__/lib/services/finance-withdrawal-limits.test.ts`).
+
+### Changed (Client Architecture Clean Up)
+
+- **Validation Schema Migration:** Migrated 21 legacy schema wrapper files out of `lib/validation/` and globally updated over 25 import references across the `apps/client` workspace to point directly to the canonical `@/app/lib/validation/` module.
+- **Onboarding Schema Relocation:** Moved `lib/schemas/onboarding.ts` directly into `app/lib/validation/onboarding.ts` and updated consumers (e.g., `HomeownerForm.tsx`).
+
+### Docs (Client Architecture Clean Up)
+
+- **Server Actions README:** Updated `app/actions/README.md` to reference the canonical `app/lib/domains/projects/service.ts` instead of the legacy `lib/services/projects`.
+
+**Verification:**
+
+- `pnpm run check-types` → exit 0
+- `pnpm run lint` → exit 0
+
 ### [2026-05-05] Storage Infrastructure Correctness Hardening
 
 #### Fixed (Storage Infrastructure Correctness Hardening)

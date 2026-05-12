@@ -23,6 +23,7 @@ import {
   type CreateStagedUploadInput,
   type UploadAssetRecord,
 } from "@/app/lib/domains/uploads/repository";
+import { toUploadDto } from "@/app/lib/domains/uploads/mappers";
 import { prisma, type Prisma } from "@build/db";
 
 let storageProviderOverride: StorageProvider | null = null;
@@ -374,7 +375,9 @@ export const uploadService = {
             asset: existingAsset,
             storedChecksum,
             deduplicated: true,
-            expiresAt: existingAsset.deleteAfter?.toISOString(),
+            expiresAt: existingAsset.deleteAfter
+              ? (toUploadDto(existingAsset.deleteAfter) as unknown as string)
+              : undefined,
           },
         });
       }
@@ -481,7 +484,9 @@ export const uploadService = {
         asset,
         storedChecksum: input.prepared.storedChecksum,
         deduplicated: false,
-        expiresAt: input.prepared.deleteAfter?.toISOString(),
+        expiresAt: input.prepared.deleteAfter
+          ? (toUploadDto(input.prepared.deleteAfter) as unknown as string)
+          : undefined,
       });
     } catch {
       return fail("processing_failed", "Failed to persist upload");
@@ -545,7 +550,7 @@ export const uploadService = {
         uploadId: staged.id,
         originalName: staged.originalName,
         previewUrl: staged.tempUrl,
-        expiresAt: staged.expiresAt.toISOString(),
+        expiresAt: toUploadDto(staged.expiresAt) as unknown as string,
       });
     } catch {
       return fail("processing_failed", "Failed to stage upload");
@@ -599,7 +604,7 @@ export const uploadService = {
         uploadUrl: presigned.uploadUrl,
         key: presigned.key,
         requiredHeaders: presigned.requiredHeaders,
-        expiresAt: expiresAt.toISOString(),
+        expiresAt: toUploadDto(expiresAt) as unknown as string,
       });
     } catch {
       return fail("processing_failed", "Failed to create direct upload");
@@ -786,7 +791,9 @@ export const uploadService = {
           assetId: asset.id,
           visibility: "PRIVATE",
           downloadUrl: presigned.downloadUrl,
-          expiresAt: new Date(presigned.expiresAt).toISOString(),
+          expiresAt: toUploadDto(
+            new Date(presigned.expiresAt),
+          ) as unknown as string,
         });
       }
 
@@ -918,10 +925,14 @@ export const uploadService = {
         height: asset.height,
         blurHash: asset.blurHash,
         downloadCount: asset.downloadCount,
-        lastAccessed: asset.lastAccessed?.toISOString(),
-        createdAt: asset.createdAt.toISOString(),
+        lastAccessed: asset.lastAccessed
+          ? (toUploadDto(asset.lastAccessed) as unknown as string)
+          : undefined,
+        createdAt: toUploadDto(asset.createdAt) as unknown as string,
         temporary: !!asset.deleteAfter,
-        expiresAt: asset.deleteAfter?.toISOString(),
+        expiresAt: asset.deleteAfter
+          ? (toUploadDto(asset.deleteAfter) as unknown as string)
+          : undefined,
       });
     } catch {
       return fail("processing_failed", "Failed to fetch file metadata");

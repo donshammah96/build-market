@@ -1,6 +1,7 @@
 import { prisma } from "@build/db";
 import { getFinancialSettings } from "@build/db/system-settings";
 import { ok, err } from "@/app/lib/errors/result";
+import { toFinanceDto } from "./mappers";
 import { normalizeRole } from "@/app/lib/security/roles";
 import {
   serializeTransactionDecimals,
@@ -24,7 +25,9 @@ import type {
 const FINANCE_ALLOWED_ROLES = new Set(["PROFESSIONAL", "ADMIN"]);
 
 function toIsoDateString(value: Date | string): string {
-  return value instanceof Date ? value.toISOString() : value;
+  return value instanceof Date
+    ? (toFinanceDto(value) as unknown as string)
+    : value;
 }
 
 function toIsoDateStringNullable(value: Date | string | null): string | null {
@@ -32,7 +35,9 @@ function toIsoDateStringNullable(value: Date | string | null): string | null {
     return null;
   }
 
-  return value instanceof Date ? value.toISOString() : value;
+  return value instanceof Date
+    ? (toFinanceDto(value) as unknown as string)
+    : value;
 }
 
 function normalizeListTransactionDates<
@@ -457,6 +462,62 @@ export const financeService = {
       normalizeDetailTransactionDates(
         serializeTransactionDecimals(transaction),
       ),
+    );
+  },
+
+  async getWithdrawal(
+    actor: FinanceActor,
+    transactionId: string,
+  ): Promise<FinanceResult<FinanceTransactionDetail>> {
+    const detail = await getOwnedTransaction(actor, transactionId);
+    if (!detail.ok) {
+      return detail;
+    }
+
+    if (detail.data.type !== "WITHDRAWAL") {
+      return err({
+        error: "not_found",
+        message: "Withdrawal not found",
+        status: 404,
+      });
+    }
+
+    return ok(detail.data);
+  },
+
+  async cancelWithdrawal(
+    actor: FinanceActor,
+    transactionId: string,
+  ): Promise<FinanceResult<FinanceTransactionDetail>> {
+    const detail = await getOwnedTransaction(actor, transactionId);
+    if (!detail.ok) {
+      return detail;
+    }
+
+    if (detail.data.type !== "WITHDRAWAL") {
+      return err({
+        error: "not_found",
+        message: "Withdrawal not found",
+        status: 404,
+      });
+    }
+
+    if (detail.data.status !== "PENDING") {
+      return err({
+        error: "not_deletable",
+        message: "Only PENDING withdrawals can be cancelled",
+        status: 400,
+      });
+    }
+
+    const cancelled = await prisma.professionalTransaction.update({
+      where: { id: transactionId },
+      data: { status: "CANCELLED" },
+      select: transactionDetailSelect,
+    });
+
+    return ok(
+      normalizeDetailTransactionDates(serializeTransactionDecimals(cancelled)),
     );
   },
 };

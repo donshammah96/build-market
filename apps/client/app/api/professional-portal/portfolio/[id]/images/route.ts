@@ -22,8 +22,6 @@ import {
 import { PORTFOLIO_CONFIG } from "@/app/lib/config/portfolio.config";
 import { portfolioService } from "@/app/lib/domains/portfolio";
 
-const logger = getClientLogger();
-
 type PortfolioParams = { id: string };
 
 /**
@@ -165,7 +163,7 @@ export const POST = withAuth<PortfolioParams>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Adding portfolio images", {
+    getClientLogger().info("Adding portfolio images", {
       correlationId,
       portfolioId,
       count: imagesToCreate.length,

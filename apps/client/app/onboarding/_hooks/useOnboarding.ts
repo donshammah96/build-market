@@ -3,7 +3,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useUser, useClerk } from "@clerk/nextjs";
 import { toast } from "react-toastify";
 import { OnboardingData } from "@build/types";
-import { onboardingClient } from "@/lib/onboarding-client";
+import { onboardingClient } from "@/lib/facades/onboarding-client";
 import { ROUTES, dashboardForRole } from "@/lib/links";
 import { useOnboardingAnalytics } from "@/lib/analytics/OnboardingAnalyticsContext";
 import { normalizeRole } from "@/app/lib/security/roles";

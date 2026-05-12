@@ -10,6 +10,7 @@ import {
   type WithdrawInput,
 } from "@/app/lib/validation/finance-validation";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   createActionFailure,
   secureAction,
@@ -169,7 +170,7 @@ export async function requestWithdrawalAction(
         }
 
         try {
-          await IdempotencyService.complete(idempotencyKey, result.data);
+          await safeIdempotencyComplete(idempotencyKey, result.data);
         } catch {
           // Avoid failing a successful withdrawal when replay persistence errors.
         }

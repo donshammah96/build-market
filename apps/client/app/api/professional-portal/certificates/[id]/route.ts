@@ -14,6 +14,7 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { UpdateCertificateSchema } from "@/app/lib/validation/certificate-validation";
 import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
@@ -23,7 +24,6 @@ import { normalizeRole } from "@/app/lib/security/roles";
 // ADR-006 classification: Class B - certificate detail, review status, and lifecycle fields cross this boundary.
 // Reviewed: 2026-04-09 by @copilot
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/professional-portal/certificates/[id]";
 
 type CertificateByIdAdapterOutcome =
@@ -55,7 +55,7 @@ function createCertificateByIdOutcomeLogger(
     httpStatus: number,
     details: CertificateByIdOutcomeLogFields = {},
   ) => {
-    logger.info("Professional certificate by-id adapter outcome", {
+    getClientLogger().info("Professional certificate by-id adapter outcome", {
       correlationId,
       operationName,
       httpMethod: req.method,
@@ -90,7 +90,7 @@ export const GET = withAuth<{ id: string }>(
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
     if (!actorRole) {
-      logger.warn("role_normalization_failed", {
+      getClientLogger().warn("role_normalization_failed", {
         correlationId,
         operationName: "get_professional_certificate",
         httpMethod: req.method,
@@ -149,7 +149,7 @@ export const GET = withAuth<{ id: string }>(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch certificate", result.error, {
+      getClientLogger().error("Failed to fetch certificate", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -198,7 +198,7 @@ export const PATCH = withAuth<{ id: string }>(
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
     if (!actorRole) {
-      logger.warn("role_normalization_failed", {
+      getClientLogger().warn("role_normalization_failed", {
         correlationId,
         operationName: "update_professional_certificate",
         httpMethod: req.method,
@@ -329,7 +329,7 @@ export const PATCH = withAuth<{ id: string }>(
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error("Failed to update certificate", result.error, {
+      getClientLogger().error("Failed to update certificate", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -382,10 +382,10 @@ export const PATCH = withAuth<{ id: string }>(
     }
 
     try {
-      await IdempotencyService.complete(idempotencyKey, data.data);
+      await safeIdempotencyComplete(idempotencyKey, data.data);
     } catch (error) {
       await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
-      logger.error(
+      getClientLogger().error(
         "Failed to complete certificate idempotency replay",
         normalizeCaughtError(error),
         {
@@ -422,7 +422,7 @@ export const DELETE = withAuth<{ id: string }>(
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
     if (!actorRole) {
-      logger.warn("role_normalization_failed", {
+      getClientLogger().warn("role_normalization_failed", {
         correlationId,
         operationName: "delete_professional_certificate",
         httpMethod: req.method,
@@ -482,7 +482,7 @@ export const DELETE = withAuth<{ id: string }>(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to delete certificate", result.error, {
+      getClientLogger().error("Failed to delete certificate", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -525,7 +525,7 @@ export const DELETE = withAuth<{ id: string }>(
       id,
       { category: data.data.category, action: "DELETE_CERTIFICATE" },
     ).catch((err) =>
-      logger.error("Failed to create audit log", err, {
+      getClientLogger().error("Failed to create audit log", err, {
         correlationId,
         operationName,
         httpMethod: req.method,

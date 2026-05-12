@@ -24,7 +24,7 @@ import {
   useNotifications,
   useMarkNotificationRead,
 } from "@/hooks/useNotifications";
-import type { NotificationListItem } from "@/lib/notifications-client";
+import type { NotificationListItem } from "@/lib/facades/notifications-client";
 
 type NotificationTypeKey =
   | "order"

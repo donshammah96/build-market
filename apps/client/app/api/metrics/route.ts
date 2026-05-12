@@ -12,8 +12,6 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { ensureValidInternalSecret } from "@/app/lib/security/internal-secret";
 
-const logger = getClientLogger();
-
 /**
  * Tracked operations — covers all major API operations across the platform.
  * Names must match the `operationName` values passed to `getResilientExecutor().execute()`.
@@ -119,7 +117,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const allMetrics = executor.getMetrics();
 
-    logger.info("Metrics collected", {
+    getClientLogger().info("Metrics collected", {
       correlationId,
       activeOperationCount: activeOperations.length,
       totalTracked: TRACKED_OPERATIONS.length,
@@ -136,7 +134,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       HttpStatus.OK,
     );
   } catch (err) {
-    logger.error(
+    getClientLogger().error(
       "Error collecting metrics",
       err instanceof Error ? err : new Error(String(err)),
       { correlationId },

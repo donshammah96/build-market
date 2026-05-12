@@ -15,7 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { messagingClient } from "@/lib/messaging-client";
+import { messagingClient } from "@/lib/facades/messaging-client";
 import { useUser } from "@clerk/nextjs";
 import type { Conversation } from "@build/types";
 import { useProfileStatus } from "@/hooks/useProfileStatus";

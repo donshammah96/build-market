@@ -14,13 +14,12 @@ import {
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { CreateMilestoneSchema } from "@/app/lib/validation/projects-validation";
 import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
 import { projectsService } from "@/app/lib/domains/projects/service";
 import type { ProjectActorRole } from "@/app/lib/domains/projects/contracts";
 import { normalizeRole } from "@/app/lib/security/roles";
-
-const logger = getClientLogger();
 
 type ProjectParams = { id: string };
 
@@ -84,7 +83,7 @@ export const GET = withAuth<ProjectParams>(
     );
 
     if (!result.success) {
-      logger.error("Failed to fetch milestones", result.error, {
+      getClientLogger().error("Failed to fetch milestones", result.error, {
         correlationId,
         projectId,
       });
@@ -196,7 +195,7 @@ export const POST = withAuth<ProjectParams>(
       );
     }
 
-    logger.info("Creating milestone", {
+    getClientLogger().info("Creating milestone", {
       correlationId,
       actorId: dbUserId,
       projectId,
@@ -256,7 +255,7 @@ export const POST = withAuth<ProjectParams>(
     }
 
     const payload = createResult.data;
-    await IdempotencyService.complete(idempotencyKey, payload);
+    await safeIdempotencyComplete(idempotencyKey, payload);
     return apiSuccess(payload, HttpStatus.CREATED);
   },
 );

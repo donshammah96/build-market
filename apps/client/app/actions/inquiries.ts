@@ -11,6 +11,7 @@ import {
   UpdateInquirySchema,
 } from "@/app/lib/validation/inquiries-validation";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { INQUIRY_CONFIG } from "@/app/lib/config/inquiry.config";
 import {
   createActionFailure,
@@ -196,7 +197,7 @@ export async function updateProfessionalInquiryAction(
           ),
           "Failed to update inquiry",
         );
-        await IdempotencyService.complete(idempotencyKey, inquiry);
+        await safeIdempotencyComplete(idempotencyKey, inquiry);
         revalidatePath("/professional-portal/inquiries");
         revalidatePath(
           `/professional-portal/inquiries/${validatedInput.inquiryId}`,
@@ -268,7 +269,7 @@ export async function deleteProfessionalInquiryAction(
           ),
           "Failed to delete inquiry",
         );
-        await IdempotencyService.complete(idempotencyKey, deleted);
+        await safeIdempotencyComplete(idempotencyKey, deleted);
         revalidatePath("/professional-portal/inquiries");
         return deleted;
       } catch (error) {

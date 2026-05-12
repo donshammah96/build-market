@@ -13,8 +13,6 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { clientDashboardService } from "@/app/lib/domains/client-dashboard";
 
-const logger = getClientLogger();
-
 /**
  * GET /api/client/dashboard
  *
@@ -52,7 +50,7 @@ export const GET = withAuth(
       );
     }
 
-    logger.info("Fetching client dashboard", {
+    getClientLogger().info("Fetching client dashboard", {
       correlationId,
       actorRole: userRole,
     });
@@ -71,7 +69,7 @@ export const GET = withAuth(
     );
 
     if (!result.success || !result.data) {
-      logger.error(
+      getClientLogger().error(
         "Failed to fetch client dashboard",
         result.error ?? new Error("Unknown error"),
         { correlationId, actorRole: userRole },
@@ -94,7 +92,7 @@ export const GET = withAuth(
       );
     }
 
-    logger.info("Client dashboard fetched successfully", {
+    getClientLogger().info("Client dashboard fetched successfully", {
       correlationId,
       actorRole: userRole,
       totalProjects: data.data.stats.totalProjects,

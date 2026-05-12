@@ -14,11 +14,15 @@ import {
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { UpdateProfileSchema } from "@/app/lib/validation/profile-validation";
 import { professionalSettingsService } from "@/app/lib/domains/professional-settings";
 import { normalizeRole } from "@/app/lib/security/roles";
-
-const logger = getClientLogger();
+import {
+  domainErrorCodeToStatus,
+  logProfessionalPortalRouteOutcome,
+  now,
+} from "@/app/api/professional-portal/shared";
 
 /**
  * GET /api/professional-portal/profile
@@ -26,7 +30,9 @@ const logger = getClientLogger();
  */
 export const GET = withAuth(
   async (req: NextRequest, { dbUserId, clerkId, userRole }) => {
+    const startedAt = now();
     const correlationId = initializeCorrelationId(req);
+    const operationName = "get_professional_profile";
     const normalizedRole = normalizeRole(String(userRole)) ?? null;
     const actorRole = normalizedRole ?? "unknown";
 
@@ -38,13 +44,23 @@ export const GET = withAuth(
     );
 
     if (!rateLimitResult.success) {
+      logProfessionalPortalRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+        resourceType: "professional_profile",
+      });
       return apiError(
         "Too many requests. Please try again later.",
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
 
-    logger.info("Fetching professional profile", {
+    getClientLogger().info("Fetching professional profile", {
       correlationId,
       actorRole,
     });
@@ -57,13 +73,22 @@ export const GET = withAuth(
           clerkId,
           role: normalizedRole,
         }),
-      { operationName: "get_professional_profile" },
+      { operationName },
     );
 
     if (!result.success) {
-      logger.error("Profile fetch failed", result.error, {
+      getClientLogger().error("Profile fetch failed", result.error, {
         correlationId,
         actorRole,
+      });
+      logProfessionalPortalRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "internal_error",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: now() - startedAt,
+        resourceType: "professional_profile",
       });
       return apiError(
         "Failed to fetch profile",
@@ -79,12 +104,32 @@ export const GET = withAuth(
       );
     }
     if (!data.ok) {
+      const status = domainErrorCodeToStatus(data.error);
+      logProfessionalPortalRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: status,
+        durationMs: now() - startedAt,
+        domainError: data.error,
+        resourceType: "professional_profile",
+      });
       return apiError(
         data.message || "Professional profile not found",
-        data.status || HttpStatus.NOT_FOUND,
+        data.status || status,
       );
     }
 
+    logProfessionalPortalRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "professional_profile",
+    });
     return apiSuccess(data.data, HttpStatus.OK);
   },
 );
@@ -95,7 +140,9 @@ export const GET = withAuth(
  */
 export const PATCH = withAuth(
   async (req: NextRequest, { dbUserId, clerkId, userRole }) => {
+    const startedAt = now();
     const correlationId = initializeCorrelationId(req);
+    const operationName = "update_professional_profile";
     const normalizedRole = normalizeRole(String(userRole)) ?? null;
     const actorRole = normalizedRole ?? "unknown";
     const { ipAddress } = getRequestMetadata(req);
@@ -112,10 +159,20 @@ export const PATCH = withAuth(
 
     const validation = UpdateProfileSchema.safeParse(body);
     if (!validation.success) {
-      logger.warn("Profile update validation failed", {
+      getClientLogger().warn("Profile update validation failed", {
         correlationId,
         actorRole,
         errors: validation.error.issues,
+      });
+      logProfessionalPortalRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "professional_profile",
       });
       return apiError(
         "Invalid input",
@@ -172,7 +229,7 @@ export const PATCH = withAuth(
       );
     }
 
-    logger.info("Updating professional profile", {
+    getClientLogger().info("Updating professional profile", {
       correlationId,
       actorRole,
       fields: Object.keys(validation.data),
@@ -190,16 +247,25 @@ export const PATCH = withAuth(
           },
           validation.data,
         ),
-      { operationName: "update_professional_profile" },
+      { operationName },
     );
 
     if (!result.success || !result.data) {
-      logger.error(
+      getClientLogger().error(
         "Profile update failed",
         result.error || new Error("Unknown error"),
         { correlationId, actorRole },
       );
       await IdempotencyService.fail(idempotencyKey);
+      logProfessionalPortalRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "internal_error",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: now() - startedAt,
+        resourceType: "professional_profile",
+      });
       return apiError(
         "Failed to update profile",
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -208,9 +274,20 @@ export const PATCH = withAuth(
 
     if (!result.data.ok) {
       await IdempotencyService.fail(idempotencyKey);
+      const status = domainErrorCodeToStatus(result.data.error);
+      logProfessionalPortalRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: status,
+        durationMs: now() - startedAt,
+        domainError: result.data.error,
+        resourceType: "professional_profile",
+      });
       return apiError(
         result.data.message || "Failed to update profile",
-        result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        result.data.status || status,
       );
     }
 
@@ -236,14 +313,23 @@ export const PATCH = withAuth(
       );
     }
 
-    await IdempotencyService.complete(
+    await safeIdempotencyComplete(
       idempotencyKey,
       refreshedProfileResult.data.data,
     );
 
-    logger.info("Professional profile updated successfully", {
+    getClientLogger().info("Professional profile updated successfully", {
       correlationId,
       actorRole,
+    });
+    logProfessionalPortalRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "professional_profile",
     });
 
     return apiSuccess(refreshedProfileResult.data.data, HttpStatus.OK);

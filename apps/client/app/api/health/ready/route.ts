@@ -5,8 +5,6 @@ import {
   getClientLogger,
 } from "@/app/lib/api/resilient-api";
 
-const logger = getClientLogger();
-
 /**
  * GET /api/health/ready
  *
@@ -62,7 +60,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const message =
       error instanceof Error ? error.message : "Readiness check failed";
 
-    logger.error("Readiness probe failed", new Error(message), {
+    getClientLogger().error("Readiness probe failed", new Error(message), {
       correlationId,
       latencyMs,
     });

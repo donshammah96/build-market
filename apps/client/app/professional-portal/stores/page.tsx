@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus, Store as StoreIcon } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { storesClient } from "@/lib/stores-client";
+import { storesClient } from "@/lib/facades/stores-client";
 import { StoreCard } from "./_components/store-card";
 
 export default function ProfessionalStoresPage() {

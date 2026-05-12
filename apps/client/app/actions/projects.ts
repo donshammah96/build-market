@@ -17,6 +17,7 @@ import {
   UpdateMilestoneSchema,
 } from "@/app/lib/validation/projects-validation";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
 import {
   createActionFailure,
@@ -25,7 +26,6 @@ import {
   throwActionFailure,
   unwrapResultOrThrow,
 } from "@/app/lib/actions/secure-action";
-import { prisma } from "@build/db";
 import { revalidatePath } from "next/cache";
 
 // ─── Client-side (existing) ─────────────────────────────────────────────────
@@ -138,7 +138,7 @@ export async function createProjectAction(data: CreateProjectActionInput) {
           }),
           "Failed to create project",
         );
-        await IdempotencyService.complete(idempotencyKey, project);
+        await safeIdempotencyComplete(idempotencyKey, project);
         revalidatePath("/projects");
         return project;
       } catch (error) {
@@ -273,7 +273,7 @@ export async function createProfessionalProjectAction(
           }),
           "Failed to create project",
         );
-        await IdempotencyService.complete(idempotencyKey, project);
+        await safeIdempotencyComplete(idempotencyKey, project);
         revalidatePath("/professional-portal/projects");
         return project;
       } catch (error) {
@@ -371,7 +371,7 @@ export async function updateProjectAction(input: UpdateProjectActionInput) {
             project: result.data.item,
             version: result.data.item.version ?? 0,
           };
-          await IdempotencyService.complete(idempotencyKey, response);
+          await safeIdempotencyComplete(idempotencyKey, response);
           revalidatePath("/professional-portal/projects");
           revalidatePath(`/professional-portal/projects/${input.projectId}`);
           return response;
@@ -384,11 +384,10 @@ export async function updateProjectAction(input: UpdateProjectActionInput) {
           if (attempt >= PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) {
             break;
           }
-          const current = await prisma.project.findUnique({
-            where: { id: input.projectId },
-            select: { version: true },
-          });
-          effectiveVersion = current?.version ?? effectiveVersion + 1;
+          const currentVersion = await projectsService.getProjectVersion(
+            input.projectId,
+          );
+          effectiveVersion = currentVersion ?? effectiveVersion + 1;
           await new Promise((resolve) =>
             setTimeout(
               resolve,
@@ -497,7 +496,7 @@ export async function deleteProjectAction(input: DeleteProjectActionInput) {
             projectId: result.data.projectId,
             deletedAt: new Date().toISOString(),
           };
-          await IdempotencyService.complete(idempotencyKey, response);
+          await safeIdempotencyComplete(idempotencyKey, response);
           revalidatePath("/professional-portal/projects");
           return response;
         }
@@ -509,11 +508,10 @@ export async function deleteProjectAction(input: DeleteProjectActionInput) {
           if (attempt >= PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) {
             break;
           }
-          const current = await prisma.project.findUnique({
-            where: { id: input.projectId },
-            select: { version: true },
-          });
-          effectiveVersion = current?.version ?? effectiveVersion + 1;
+          const currentVersion = await projectsService.getProjectVersion(
+            input.projectId,
+          );
+          effectiveVersion = currentVersion ?? effectiveVersion + 1;
           await new Promise((resolve) =>
             setTimeout(
               resolve,
@@ -610,7 +608,7 @@ export async function createMilestoneAction(input: CreateMilestoneActionInput) {
           }),
           `Maximum ${PROJECT_CONFIG.MAX_MILESTONES_PER_PROJECT} milestones per project`,
         );
-        await IdempotencyService.complete(idempotencyKey, result);
+        await safeIdempotencyComplete(idempotencyKey, result);
         revalidatePath(`/professional-portal/projects/${projectId}`);
         return result;
       } catch (error) {
@@ -710,7 +708,7 @@ export async function updateMilestoneAction(input: UpdateMilestoneActionInput) {
             milestone: result.data.milestone,
             version: result.data.newVersion,
           };
-          await IdempotencyService.complete(idempotencyKey, response);
+          await safeIdempotencyComplete(idempotencyKey, response);
           revalidatePath(`/professional-portal/projects/${input.projectId}`);
           return response;
         }
@@ -722,11 +720,10 @@ export async function updateMilestoneAction(input: UpdateMilestoneActionInput) {
           if (attempt >= PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) {
             break;
           }
-          const current = await prisma.projectMilestone.findUnique({
-            where: { id: input.milestoneId },
-            select: { version: true },
-          });
-          effectiveVersion = current?.version ?? effectiveVersion + 1;
+          const currentVersion = await projectsService.getMilestoneVersion(
+            input.milestoneId,
+          );
+          effectiveVersion = currentVersion ?? effectiveVersion + 1;
           await new Promise((resolve) =>
             setTimeout(
               resolve,
@@ -836,7 +833,7 @@ export async function deleteMilestoneAction(input: DeleteMilestoneActionInput) {
             message: "Milestone deleted successfully",
             milestoneId: result.data.milestoneId,
           };
-          await IdempotencyService.complete(idempotencyKey, response);
+          await safeIdempotencyComplete(idempotencyKey, response);
           revalidatePath(`/professional-portal/projects/${input.projectId}`);
           return response;
         }
@@ -848,11 +845,10 @@ export async function deleteMilestoneAction(input: DeleteMilestoneActionInput) {
           if (attempt >= PROJECT_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES - 1) {
             break;
           }
-          const current = await prisma.projectMilestone.findUnique({
-            where: { id: input.milestoneId },
-            select: { version: true },
-          });
-          effectiveVersion = current?.version ?? effectiveVersion + 1;
+          const currentVersion = await projectsService.getMilestoneVersion(
+            input.milestoneId,
+          );
+          effectiveVersion = currentVersion ?? effectiveVersion + 1;
           await new Promise((resolve) =>
             setTimeout(
               resolve,

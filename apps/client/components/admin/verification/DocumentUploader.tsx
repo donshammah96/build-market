@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { uploadForCredential } from "@/lib/upload-client";
+import { uploadForCredential } from "@/lib/facades/upload-client";
 
 interface Document {
   id: string;

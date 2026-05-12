@@ -10,8 +10,6 @@ import {
 import { getClientLogger } from "@/app/lib/api/resilient-api";
 import { ensureValidInternalSecret } from "@/app/lib/security/internal-secret";
 
-const logger = getClientLogger();
-
 /**
  * GET /api/internal/system-settings
  *
@@ -32,7 +30,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     req.headers.get("x-internal-secret"),
   );
   if (secretError) {
-    logger.warn("Internal system-settings forbidden: invalid secret");
+    getClientLogger().warn(
+      "Internal system-settings forbidden: invalid secret",
+    );
     return secretError;
   }
 
@@ -53,10 +53,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // Structured warn so Vercel log pipeline surfaces this without noise in
     // error-rate dashboards (DB connectivity issues are infrastructure alerts,
     // not application errors at the route layer).
-    logger.warn("system-settings serving DB-failure fallback defaults", {
-      operationName: "get_system_settings",
-      settingsSource: "fallback",
-    });
+    getClientLogger().warn(
+      "system-settings serving DB-failure fallback defaults",
+      {
+        operationName: "get_system_settings",
+        settingsSource: "fallback",
+      },
+    );
   }
 
   return NextResponse.json(

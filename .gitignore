@@ -91,6 +91,7 @@ apps/client/public/uploads/
 apps/client/tsc.log
 packages/resilience/tsconfig.tsbuildinfo
 .eslintcache
+/scratch
 
 # Temp logs and rot files
 tmp-*

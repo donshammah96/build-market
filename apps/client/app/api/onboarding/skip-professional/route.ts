@@ -5,8 +5,8 @@
  * KEY CHANGES FROM ORIGINAL:
  *
  * 1. CLERK UPDATE ORDERING FIX (critical)
- *    Original: domain logic → IdempotencyService.complete() → Clerk update
- *    Fixed:    domain logic → Clerk update → IdempotencyService.complete()
+ *    Original: domain logic → safeIdempotencyComplete() → Clerk update
+ *    Fixed:    domain logic → Clerk update → safeIdempotencyComplete()
  *
  * 2. SHARED CLERK HELPER replaces (await clerkClient()) as unknown as ClerkMetadataClient
  */
@@ -26,6 +26,7 @@ import {
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   type ClerkUserProfile,
   userProfileOnboardingService,
@@ -35,8 +36,8 @@ import {
   finalizeClerkOnboardingTransition,
 } from "@/app/lib/domains/user-profile/clerk-metadata";
 import { normalizeRole, type AppRole } from "@/app/lib/security/roles";
+import { now } from "../shared";
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/onboarding/skip-professional";
 const OPERATION_NAME = "skip_professional_onboarding";
 
@@ -61,7 +62,7 @@ function mapOutcomeFromStatus(status: number): string {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const startedAt = Date.now();
+  const startedAt = now();
   const correlationId = initializeCorrelationId(req);
   let actorRole: "unknown" | AppRole = "unknown";
 
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     httpStatus: number,
     fields?: LogOutcomeFields,
   ) => {
-    logger.info("Onboarding adapter outcome", {
+    getClientLogger().info("Onboarding adapter outcome", {
       correlationId,
       operationName: OPERATION_NAME,
       httpMethod: req.method,
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       actorRole,
       outcome,
       httpStatus,
-      durationMs: Date.now() - startedAt,
+      durationMs: now() - startedAt,
       ...(fields?.reason ? { reason: fields.reason } : {}),
       ...(fields?.source ? { source: fields.source } : {}),
       ...(fields?.domainError ? { domainError: fields.domainError } : {}),
@@ -189,7 +190,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (!result.success || !result.data) {
     await IdempotencyService.fail(idempotencyKey);
-    logger.error(
+    getClientLogger().error(
       "Onboarding adapter outcome",
       result.error instanceof Error
         ? result.error
@@ -202,7 +203,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         actorRole,
         outcome: "failed",
         httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
-        durationMs: Date.now() - startedAt,
+        durationMs: now() - startedAt,
         reason: "executor_failure",
       },
     );
@@ -225,7 +226,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const responseData = result.data.data;
 
-  // ORDERING INVARIANT: Clerk update BEFORE IdempotencyService.complete().
+  // ORDERING INVARIANT: Clerk update BEFORE safeIdempotencyComplete().
   try {
     await finalizeClerkOnboardingTransition({
       clerkId,
@@ -247,27 +248,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  try {
-    await IdempotencyService.complete(idempotencyKey, responseData);
-  } catch (completionError) {
-    await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
-    logger.error(
-      "Failed to complete onboarding professional skip idempotency replay",
-      completionError instanceof Error
-        ? completionError
-        : new Error("Idempotency completion failed"),
-      {
-        correlationId,
-        operationName: OPERATION_NAME,
-        httpMethod: req.method,
-        routePattern: ROUTE_PATTERN,
-        actorRole,
-        outcome: "idempotency_complete_failed",
-        httpStatus: HttpStatus.OK,
-        durationMs: Date.now() - startedAt,
-      },
-    );
-  }
+  await safeIdempotencyComplete(idempotencyKey, responseData, {
+    correlationId,
+    operationName: OPERATION_NAME,
+    httpMethod: req.method,
+    routePattern: ROUTE_PATTERN,
+    actorRole,
+    httpStatus: HttpStatus.OK,
+    durationMs: now() - startedAt,
+    resourceType: "skip-professional",
+  });
 
   logOutcome("succeeded", HttpStatus.OK, {
     skipped: true,

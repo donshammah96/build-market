@@ -15,7 +15,6 @@ import { getRequestMetadata, TimeoutConfig } from "@/app/lib/api/request-utils";
 import { uploadService } from "@/app/lib/domains/uploads";
 import { getUploadProcessingStatus } from "@/app/lib/infrastructure/upload-processing-status";
 
-const logger = getClientLogger();
 const executor = getResilientExecutor();
 const ROUTE_PATTERN = "/api/uploads/[id]";
 
@@ -60,7 +59,7 @@ export const GET = withAuth<{ id: string }>(
       httpStatus: number,
       additional: Record<string, unknown> = {},
     ) => {
-      logger.info("Upload metadata adapter outcome", {
+      getClientLogger().info("Upload metadata adapter outcome", {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -145,7 +144,7 @@ export const GET = withAuth<{ id: string }>(
 
       return apiSuccess(asset, HttpStatus.OK);
     } catch (err) {
-      logger.error(
+      getClientLogger().error(
         "Error fetching upload",
         err instanceof Error ? err : new Error(String(err)),
         {
@@ -195,7 +194,7 @@ export const DELETE = withAuth<{ id: string }>(
       httpStatus: number,
       additional: Record<string, unknown> = {},
     ) => {
-      logger.info("Upload deletion adapter outcome", {
+      getClientLogger().info("Upload deletion adapter outcome", {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -293,7 +292,7 @@ export const DELETE = withAuth<{ id: string }>(
         HttpStatus.OK,
       );
     } catch (err) {
-      logger.error(
+      getClientLogger().error(
         "Error deleting upload",
         err instanceof Error ? err : new Error(String(err)),
         {

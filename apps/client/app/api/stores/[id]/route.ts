@@ -19,6 +19,7 @@ import {
 } from "@/app/lib/api/request-utils";
 import { STORE_CONFIG } from "@/app/lib/config/store.config";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   checkBodySize,
   checkImageCount,
@@ -26,8 +27,6 @@ import {
 } from "@/app/lib/api/api-guards";
 import { storesService, UpdateStoreSchema } from "@/app/lib/domains/stores";
 import type { StoreOperationContext } from "@/app/lib/domains/stores";
-
-const logger = getClientLogger();
 
 type StoreParams = { id: string };
 
@@ -87,7 +86,7 @@ export async function GET(
   );
 
   if (!result.success) {
-    logger.error("Store fetch failed", result.error, {
+    getClientLogger().error("Store fetch failed", result.error, {
       correlationId,
       storeId: id,
     });
@@ -268,14 +267,14 @@ export const PATCH = withAuth<StoreParams>(
         );
       }
 
-      await IdempotencyService.complete(idempotencyKey, result.data);
+      await safeIdempotencyComplete(idempotencyKey, result.data);
 
       const response = apiSuccess(result.data, HttpStatus.OK, correlationId);
       response.headers.set("ETag", `"${result.data.meta.version}"`);
       return response;
     } catch (error) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error(
+      getClientLogger().error(
         "Store update failed",
         error instanceof Error ? error : new Error(String(error)),
         { correlationId, storeId },
@@ -390,11 +389,11 @@ export const DELETE = withAuth<StoreParams>(
         );
       }
 
-      await IdempotencyService.complete(idempotencyKey, result.data);
+      await safeIdempotencyComplete(idempotencyKey, result.data);
       return apiSuccess(result.data, HttpStatus.OK, correlationId);
     } catch (error) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error(
+      getClientLogger().error(
         "Store deletion failed",
         error instanceof Error ? error : new Error(String(error)),
         { correlationId, storeId },

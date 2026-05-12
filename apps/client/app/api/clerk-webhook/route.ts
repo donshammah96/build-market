@@ -28,8 +28,6 @@ import {
 } from "@/app/lib/infrastructure/webhook-replay";
 import { applyPrivateNoStoreHeaders } from "@/app/lib/api/http-security";
 
-const logger = getClientLogger();
-
 function mapClerkWebhookResult<T extends { message: string }>(
   result:
     | { ok: true; data: T }
@@ -82,7 +80,7 @@ export async function POST(req: NextRequest) {
   const finalizeResponse = (response: NextResponse) =>
     applyPrivateNoStoreHeaders(response);
 
-  logger.info("Clerk webhook request received", { correlationId });
+  getClientLogger().info("Clerk webhook request received", { correlationId });
 
   try {
     const sizeError = checkBodySize(req, WEBHOOK_CONFIG.MAX_PAYLOAD_SIZE);
@@ -91,9 +89,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (!env.clerk.webhookSecret) {
-      logger.error("CLERK_WEBHOOK_SECRET not configured", undefined, {
-        correlationId,
-      });
+      getClientLogger().error(
+        "CLERK_WEBHOOK_SECRET not configured",
+        undefined,
+        {
+          correlationId,
+        },
+      );
       return finalizeResponse(
         apiError(
           "Service configuration error",
@@ -110,7 +112,7 @@ export async function POST(req: NextRequest) {
     );
 
     if (missingSvixHeaders.length > 0) {
-      logger.warn("Missing Svix headers", {
+      getClientLogger().warn("Missing Svix headers", {
         correlationId,
         missing: missingSvixHeaders,
         outcome: "rejected_missing_headers",
@@ -126,7 +128,7 @@ export async function POST(req: NextRequest) {
     try {
       event = wh.verify(payload, headers) as ClerkWebhookEvent;
     } catch (verifyError) {
-      logger.error(
+      getClientLogger().error(
         "Webhook signature verification failed",
         verifyError instanceof Error
           ? verifyError
@@ -138,7 +140,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    logger.info("Webhook signature verified", {
+    getClientLogger().info("Webhook signature verified", {
       correlationId,
       eventType: event.type,
     });
@@ -149,7 +151,7 @@ export async function POST(req: NextRequest) {
     if (
       !isWebhookTimestampFresh(timestampHeader, env.clerk.replayWindowSeconds)
     ) {
-      logger.warn("Rejected stale webhook delivery", {
+      getClientLogger().warn("Rejected stale webhook delivery", {
         correlationId,
         eventType: event.type,
         outcome: "rejected_stale",
@@ -162,7 +164,7 @@ export async function POST(req: NextRequest) {
     try {
       const replayClaim = await claimClerkWebhookDelivery(deliveryId ?? "");
       if (replayClaim.status === "duplicate") {
-        logger.info("Duplicate webhook delivery acknowledged", {
+        getClientLogger().info("Duplicate webhook delivery acknowledged", {
           correlationId,
           eventType: event.type,
           outcome: "duplicate",
@@ -178,7 +180,7 @@ export async function POST(req: NextRequest) {
 
       claimedDeliveryId = replayClaim.deliveryId;
     } catch (replayError) {
-      logger.error(
+      getClientLogger().error(
         "Webhook replay protection unavailable",
         replayError instanceof Error
           ? replayError
@@ -207,7 +209,7 @@ export async function POST(req: NextRequest) {
       RateLimits.WEBHOOK.window,
     );
     if (!rateLimitResult.success) {
-      logger.warn("Webhook rate limited", {
+      getClientLogger().warn("Webhook rate limited", {
         correlationId,
         identifier,
         outcome: "rate_limited",
@@ -269,7 +271,7 @@ export async function POST(req: NextRequest) {
 
       default:
         await finalizeWebhookClaim(claimedDeliveryId, "processed");
-        logger.info("Unhandled event type acknowledged", {
+        getClientLogger().info("Unhandled event type acknowledged", {
           correlationId,
           eventType: event.type,
           outcome: "processed_unhandled",
@@ -286,7 +288,7 @@ export async function POST(req: NextRequest) {
     await finalizeWebhookClaim(claimedDeliveryId, "released").catch(
       () => undefined,
     );
-    logger.error(
+    getClientLogger().error(
       "Webhook processing failed",
       error instanceof Error ? error : new Error(String(error)),
       { correlationId, outcome: "released_on_failure" },

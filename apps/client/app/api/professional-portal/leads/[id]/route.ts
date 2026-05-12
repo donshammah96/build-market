@@ -13,12 +13,11 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { UpdateLeadSchema } from "@/app/lib/validation/leads-validation";
 import { LEAD_CONFIG } from "@/app/lib/config/lead.config";
 import { leadsService } from "@/app/lib/domains/leads";
 import { normalizeRole } from "@/app/lib/security/roles";
-
-const logger = getClientLogger();
 
 // Union narrowing: For { success: true; data } | { success: false; error } results,
 // use `if (data.success === false)` + explicit `else` for the success path so
@@ -160,7 +159,7 @@ export const PATCH = withAuth<LeadParams>(
       );
     }
 
-    logger.info("Updating lead", {
+    getClientLogger().info("Updating lead", {
       correlationId,
       leadId,
       fields: Object.keys(updateData),
@@ -196,7 +195,7 @@ export const PATCH = withAuth<LeadParams>(
         return apiError("Lead not found", HttpStatus.NOT_FOUND);
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
-    await IdempotencyService.complete(idempotencyKey, data.data);
+    await safeIdempotencyComplete(idempotencyKey, data.data);
     return apiSuccess(data.data, HttpStatus.OK);
   },
 );
@@ -260,7 +259,7 @@ export const DELETE = withAuth<LeadParams>(
       );
     }
 
-    logger.info("Deleting lead", {
+    getClientLogger().info("Deleting lead", {
       correlationId,
       leadId,
       actorRole: normalizeRole(String(userRole)),
@@ -294,7 +293,7 @@ export const DELETE = withAuth<LeadParams>(
         return apiError("Lead not found", HttpStatus.NOT_FOUND);
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
-    await IdempotencyService.complete(idempotencyKey, data.data);
+    await safeIdempotencyComplete(idempotencyKey, data.data);
     return apiSuccess(data.data, HttpStatus.OK);
   },
 );

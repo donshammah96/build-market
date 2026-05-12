@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { consentClient } from "@/lib/consent-client";
-import { financeClient } from "@/lib/finance-client";
-import { onboardingClient } from "@/lib/onboarding-client";
-import { portfolioClient } from "@/lib/portfolio-client";
-import { userProfileClient } from "@/lib/user-profile-client";
+import { consentClient } from "@/lib/facades/consent-client";
+import { financeClient } from "@/lib/facades/finance-client";
+import { onboardingClient } from "@/lib/facades/onboarding-client";
+import { portfolioClient } from "@/lib/facades/portfolio-client";
+import { userProfileClient } from "@/lib/facades/user-profile-client";
 
 function expectSuccess<T>(result: {
   success: boolean;

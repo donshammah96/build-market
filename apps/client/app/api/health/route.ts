@@ -11,8 +11,6 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { env } from "@/app/lib/infrastructure/env";
 
-const logger = getClientLogger();
-
 // ─── Boot timestamp (set once when module loads) ─────────────────────────────
 const BOOT_TIME = Date.now();
 
@@ -309,7 +307,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // ── Log unhealthy dependencies ───────────────────────────────────────
   const unhealthyDeps = dependencies.filter((d) => d.status === "unhealthy");
   if (unhealthyDeps.length > 0) {
-    logger.warn("Health check detected unhealthy dependencies", {
+    getClientLogger().warn("Health check detected unhealthy dependencies", {
       correlationId,
       status: overallStatus,
       unhealthy: unhealthyDeps.map((d) => ({

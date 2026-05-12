@@ -10,8 +10,15 @@ import type {
 import { getProfessionLabel } from "@/lib/constants/professionalCategories";
 import { env } from "@/app/lib/infrastructure/env";
 
+import {
+  normalizePublicProfessionalProfile,
+  type PublicProfessionalProfile,
+} from "@/lib/profile-contracts";
 const baseUrl = env.appUrl;
 
+type PublicProfileRecord = Parameters<
+  typeof normalizePublicProfessionalProfile
+>[0];
 function toRepositoryFilters(
   filters: ProfessionalQueryInput,
 ): ProfessionalFilters {
@@ -89,5 +96,36 @@ export const professionalsService = {
       profileImage: professional.user.avatar || undefined,
       profileUrl: `${baseUrl}/professionals/${professional.userId}`,
     });
+  },
+
+  async getPublicProfileById(
+    userId: string,
+  ): Promise<ProfessionalResult<PublicProfessionalProfile>> {
+    const profile =
+      await professionalRepository.findPublicProfileByUserId(userId);
+
+    if (!profile) {
+      return err({
+        error: "not_found",
+        message: "Professional not found",
+        status: 404,
+      });
+    }
+
+    const avgRating =
+      profile.reviews && profile.reviews.length > 0
+        ? profile.reviews.reduce((sum, review) => sum + review.rating, 0) /
+          profile.reviews.length
+        : null;
+
+    const normalizedRating =
+      avgRating === null ? null : Math.round(avgRating * 10) / 10;
+
+    return ok(
+      normalizePublicProfessionalProfile(
+        profile as PublicProfileRecord,
+        normalizedRating,
+      ),
+    );
   },
 };

@@ -5,7 +5,7 @@ import {
   uploadFilesDirect,
   uploadForCredential,
   UploadErrorCode,
-} from "@/lib/upload-client";
+} from "@/lib/facades/upload-client";
 
 describe("upload-client async lifecycle", () => {
   beforeEach(() => {
