@@ -14,12 +14,11 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { UpdatePortfolioSchema } from "@/app/lib/validation/portfolio-validation";
 import { PORTFOLIO_CONFIG } from "@/app/lib/config/portfolio.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
 import { portfolioService } from "@/app/lib/domains/portfolio";
-
-const logger = getClientLogger();
 
 type PortfolioParams = { id: string };
 
@@ -150,7 +149,7 @@ export const PATCH = withAuth<PortfolioParams>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Updating portfolio item", {
+    getClientLogger().info("Updating portfolio item", {
       correlationId,
       portfolioId,
       fields: Object.keys(updateData),
@@ -186,7 +185,7 @@ export const PATCH = withAuth<PortfolioParams>(
       return apiError("Linked project not found", HttpStatus.NOT_FOUND);
     }
 
-    await IdempotencyService.complete(idempotencyKey, data.data);
+    await safeIdempotencyComplete(idempotencyKey, data.data);
     return apiSuccess(data.data, HttpStatus.OK);
   },
 );
@@ -232,7 +231,7 @@ export const DELETE = withAuth<PortfolioParams>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Deleting portfolio item", {
+    getClientLogger().info("Deleting portfolio item", {
       correlationId,
       portfolioId,
       actorRole: userRole,
@@ -270,11 +269,11 @@ export const DELETE = withAuth<PortfolioParams>(
       "Portfolio",
       portfolioId,
       { title: data.data.title, action: "DELETE" },
-    ).catch((err) => logger.error("Failed to log deletion", err));
+    ).catch((err) => getClientLogger().error("Failed to log deletion", err));
 
     const { message, portfolioId: deletedId } = data.data;
     const response = { message, portfolioId: deletedId };
-    await IdempotencyService.complete(idempotencyKey, response);
+    await safeIdempotencyComplete(idempotencyKey, response);
     return apiSuccess(response, HttpStatus.OK);
   },
 );

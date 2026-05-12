@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { propertiesClient } from "@/lib/properties-client";
+import { propertiesClient } from "@/lib/facades/properties-client";
 
 describe("properties client contracts", () => {
   afterEach(() => {

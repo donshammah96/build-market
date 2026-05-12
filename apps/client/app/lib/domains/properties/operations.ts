@@ -8,7 +8,7 @@ import {
 import type {
   PropertyOperationContext,
   UpdatePropertyInput,
-} from "@/app/lib/domains/properties/contracts";
+} from "@/domains/properties/contracts";
 
 export type UpdatePropertyData = UpdatePropertyInput;
 export type { PropertyOperationContext };

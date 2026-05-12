@@ -15,8 +15,6 @@ import { InquiriesQuerySchema } from "@/app/lib/validation/inquiries-validation"
 import { inquiriesService } from "@/app/lib/domains/inquiries";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
-
 export const GET = withAuth(
   async (req: NextRequest, { dbUserId, userRole }) => {
     const correlationId = initializeCorrelationId(req);
@@ -59,7 +57,7 @@ export const GET = withAuth(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch inquiries", result.error, {
+      getClientLogger().error("Failed to fetch inquiries", result.error, {
         correlationId,
         actorRole: normalizeRole(String(userRole)),
       });

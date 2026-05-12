@@ -14,8 +14,6 @@ import {
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import { storesService } from "@/app/lib/domains/stores";
 
-const logger = getClientLogger();
-
 export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
   const correlationId = initializeCorrelationId(req);
   const { ipAddress } = getRequestMetadata(req);
@@ -31,7 +29,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
   }
 
-  logger.info("Fetching user stores", {
+  getClientLogger().info("Fetching user stores", {
     correlationId,
     actorRole: "professional",
     ipAddress,
@@ -45,7 +43,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
   );
 
   if (!result.success || !result.data) {
-    logger.error(
+    getClientLogger().error(
       "Failed to fetch user stores",
       result.error instanceof Error ? result.error : new Error("Unknown error"),
       { correlationId, actorRole: "professional" },
@@ -60,7 +58,7 @@ export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
     );
   }
 
-  logger.info("User stores fetched successfully", {
+  getClientLogger().info("User stores fetched successfully", {
     correlationId,
     actorRole: "professional",
     count: result.data.data.length,

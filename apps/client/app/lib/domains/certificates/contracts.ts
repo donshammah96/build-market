@@ -87,8 +87,8 @@ export type CertificateDeleteResult = {
 
 /** Internal repository return types */
 export type GetCertificateResult =
-  | { success: true; data: CertificateDetail }
-  | { success: false; error: "not_found" | "forbidden" };
+  | { ok: true; data: CertificateDetail }
+  | { ok: false; error: "not_found" | "forbidden" };
 
 export type CreateCertificateResult =
   | { data: CertificateListItem }

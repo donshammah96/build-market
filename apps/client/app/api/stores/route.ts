@@ -13,6 +13,7 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import {
   storesService,
@@ -20,8 +21,12 @@ import {
   BatchCreateStoresSchema,
   StoreQuerySchema,
 } from "@/app/lib/domains/stores";
-
-const logger = getClientLogger();
+import {
+  actorRoleLabel,
+  domainErrorCodeToStatus,
+  logStoresRouteOutcome,
+  now,
+} from "@/app/api/stores/shared";
 
 /**
  * GET /api/stores
@@ -29,7 +34,9 @@ const logger = getClientLogger();
  * Public endpoint - no authentication required
  */
 export async function GET(req: NextRequest) {
+  const startedAt = now();
   const correlationId = initializeCorrelationId(req);
+  const operationName = "get_stores";
 
   const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
@@ -39,6 +46,14 @@ export async function GET(req: NextRequest) {
   );
 
   if (!rateLimitResult.success) {
+    logStoresRouteOutcome({
+      correlationId,
+      operationName,
+      outcome: "rate_limited",
+      httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+      durationMs: now() - startedAt,
+      domainError: "limit_exceeded",
+    });
     return apiError(
       "Too many requests. Please try again later.",
       HttpStatus.TOO_MANY_REQUESTS,
@@ -51,9 +66,17 @@ export async function GET(req: NextRequest) {
 
   const queryValidation = StoreQuerySchema.safeParse(rawParams);
   if (!queryValidation.success) {
-    logger.warn("Store query validation failed", {
+    getClientLogger().warn("Store query validation failed", {
       correlationId,
       errors: queryValidation.error.issues,
+    });
+    logStoresRouteOutcome({
+      correlationId,
+      operationName,
+      outcome: "validation_error",
+      httpStatus: HttpStatus.BAD_REQUEST,
+      durationMs: now() - startedAt,
+      domainError: "invalid_input",
     });
     return apiError(
       "Invalid query parameters",
@@ -62,7 +85,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  logger.info("Fetching stores", {
+  getClientLogger().info("Fetching stores", {
     correlationId,
     filters: queryValidation.data,
   });
@@ -70,14 +93,30 @@ export async function GET(req: NextRequest) {
   const resilientExecutor = getResilientExecutor();
   const result = await resilientExecutor.execute(
     async () => storesService.listStores(queryValidation.data),
-    { operationName: "get_stores" },
+    { operationName },
   );
 
   if (result.success && result.data?.ok) {
+    logStoresRouteOutcome({
+      correlationId,
+      operationName,
+      outcome: "success",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+    });
     return apiSuccess(result.data.data, HttpStatus.OK);
   }
 
-  logger.error("Failed to fetch stores", result.error, { correlationId });
+  getClientLogger().error("Failed to fetch stores", result.error, {
+    correlationId,
+  });
+  logStoresRouteOutcome({
+    correlationId,
+    operationName,
+    outcome: "internal_error",
+    httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+    durationMs: now() - startedAt,
+  });
   return apiError("Failed to fetch stores", HttpStatus.INTERNAL_SERVER_ERROR);
 }
 
@@ -86,7 +125,10 @@ export async function GET(req: NextRequest) {
  * Create store(s) for the authenticated professional
  */
 export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
+  const startedAt = now();
   const correlationId = initializeCorrelationId(req);
+  const operationName = "create_store";
+  const actorRole = actorRoleLabel("professional");
   const { ipAddress, userAgent } = getRequestMetadata(req);
 
   const rateLimitResult = await checkRateLimit(
@@ -96,6 +138,15 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
   );
 
   if (!rateLimitResult.success) {
+    logStoresRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "rate_limited",
+      httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+      durationMs: now() - startedAt,
+      domainError: "limit_exceeded",
+    });
     return apiError(
       "Too many requests. Please try again later.",
       HttpStatus.TOO_MANY_REQUESTS,
@@ -120,7 +171,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
   if (isBatchMode) {
     const validation = BatchCreateStoresSchema.safeParse(body);
     if (!validation.success) {
-      logger.warn("Batch store validation failed", {
+      getClientLogger().warn("Batch store validation failed", {
         correlationId,
         errors: validation.error.issues,
       });
@@ -134,7 +185,7 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
   } else {
     const validation = CreateStoreSchema.safeParse(body);
     if (!validation.success) {
-      logger.warn("Single store validation failed", {
+      getClientLogger().warn("Single store validation failed", {
         correlationId,
         errors: validation.error.issues,
       });
@@ -210,19 +261,36 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     if (result.success && result.data?.ok) {
       const responseData = result.data.data;
-      await IdempotencyService.complete(idempotencyKey, responseData);
+      await safeIdempotencyComplete(idempotencyKey, responseData);
 
-      logger.info(`Store(s) created successfully`, {
+      getClientLogger().info(`Store(s) created successfully`, {
         correlationId,
         actorRole: "professional",
         mode: validatedPayload.type,
       });
 
+      logStoresRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "success",
+        httpStatus: HttpStatus.CREATED,
+        durationMs: now() - startedAt,
+      });
       return apiSuccess(responseData, HttpStatus.CREATED);
     }
 
     if (result.success && result.data && !result.data.ok) {
       await IdempotencyService.fail(idempotencyKey);
+      logStoresRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(result.data.error),
+        durationMs: now() - startedAt,
+        domainError: result.data.error,
+      });
       return apiError(
         result.data.message || "Failed to create store(s)",
         result.data.status || HttpStatus.INTERNAL_SERVER_ERROR,
@@ -230,6 +298,14 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
     }
 
     await IdempotencyService.fail(idempotencyKey);
+    logStoresRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "internal_error",
+      httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+      durationMs: now() - startedAt,
+    });
     return apiError(
       `Failed to create store(s)`,
       HttpStatus.INTERNAL_SERVER_ERROR,
@@ -247,9 +323,17 @@ export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
       return apiError(err.message, HttpStatus.FORBIDDEN);
     }
 
-    logger.error("Store creation failed", err, {
+    getClientLogger().error("Store creation failed", err, {
       correlationId,
       actorRole: "professional",
+    });
+    logStoresRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "internal_error",
+      httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+      durationMs: now() - startedAt,
     });
     return apiError("Failed to create store", HttpStatus.INTERNAL_SERVER_ERROR);
   }

@@ -15,7 +15,6 @@ import { TopProductsQuerySchema } from "@/app/lib/validation/products-validation
 import { sellerInsightsService } from "@/app/lib/domains/seller-insights";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/professional-portal/products/top";
 
 type SellerInsightsAdapterOutcome =
@@ -38,7 +37,7 @@ function createSellerInsightsOutcomeLogger(
     httpStatus: number,
     details: { domainError?: string } = {},
   ) => {
-    logger.info("Seller insights top products adapter outcome", {
+    getClientLogger().info("Seller insights top products adapter outcome", {
       correlationId,
       operationName,
       httpMethod: req.method,
@@ -118,7 +117,7 @@ export const GET = withAuth(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch top products", result.error, {
+      getClientLogger().error("Failed to fetch top products", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,

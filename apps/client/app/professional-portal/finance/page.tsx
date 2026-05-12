@@ -36,7 +36,10 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useWithdraw, financeKeys } from "@/hooks/useWithdraw";
-import { financeClient, type FinanceTransaction } from "@/lib/finance-client";
+import {
+  financeClient,
+  type FinanceTransaction,
+} from "@/lib/facades/finance-client";
 import { WithdrawSchema } from "@/app/lib/validation/finance-validation";
 import { FinanceCard } from "./_components/finance-card";
 import { TransactionRow } from "./_components/transaction-row";

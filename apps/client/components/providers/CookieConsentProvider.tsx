@@ -7,7 +7,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { consentClient } from "@/lib/consent-client";
+import { consentClient } from "@/lib/facades/consent-client";
 
 export const SECURITY_PERSISTENCE_ALLOWLIST = [
   "cookie-consent-preferences",

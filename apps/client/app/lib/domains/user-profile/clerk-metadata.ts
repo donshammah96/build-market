@@ -28,9 +28,6 @@ import "server-only";
  */
 
 import { clerkClient } from "@clerk/nextjs/server";
-import { getClientLogger } from "@/app/lib/api/resilient-api";
-
-const logger = getClientLogger();
 
 export const CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE =
   "Unable to finalize account state. Please retry.";
@@ -69,12 +66,12 @@ export async function updateClerkOnboardingMetadata(
       publicMetadata: metadata,
     });
   } catch (error) {
-    logger.error(
+    console.error(
       `Failed to update Clerk metadata during ${context.operation}`,
-      error instanceof Error ? error : new Error(String(error)),
       {
         correlationId: context.correlationId,
         hasClerkId: Boolean(clerkId),
+        error: error instanceof Error ? error.message : String(error),
       },
     );
 
@@ -99,14 +96,15 @@ export async function finalizeClerkOnboardingTransition(params: {
       try {
         await params.onFailure();
       } catch (failureError) {
-        logger.error(
+        console.error(
           `Failed to mark onboarding transition retryable during ${params.context.operation}`,
-          failureError instanceof Error
-            ? failureError
-            : new Error(String(failureError)),
           {
             correlationId: params.context.correlationId,
             hasClerkId: Boolean(params.clerkId),
+            error:
+              failureError instanceof Error
+                ? failureError.message
+                : String(failureError),
           },
         );
       }

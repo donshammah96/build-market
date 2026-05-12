@@ -13,7 +13,6 @@ import {
 } from "@/app/lib/api/resilient-api";
 import { uploadService } from "@/app/lib/domains/uploads";
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/uploads/presign";
 const OPERATION_NAME = "presign_direct_upload";
 
@@ -56,7 +55,7 @@ export const POST = withAuth(
       httpStatus: number,
       additional: Record<string, unknown> = {},
     ) => {
-      logger.info("Direct upload presign adapter outcome", {
+      getClientLogger().info("Direct upload presign adapter outcome", {
         correlationId,
         operationName: OPERATION_NAME,
         httpMethod: req.method,

@@ -365,7 +365,7 @@ export const CRITICAL_VERIFICATION_ADAPTER_STEP_SEQUENCE_RULES = [
         exportName: "POST",
         orderedSnippets: [
             "documentsService.createDocument(",
-            "IdempotencyService.complete(",
+            "safeIdempotencyComplete(",
         ],
     },
     {
@@ -373,7 +373,7 @@ export const CRITICAL_VERIFICATION_ADAPTER_STEP_SEQUENCE_RULES = [
         exportName: "PATCH",
         orderedSnippets: [
             "documentsService.updateDocument(",
-            "IdempotencyService.complete(",
+            "safeIdempotencyComplete(",
         ],
     },
     {
@@ -381,7 +381,7 @@ export const CRITICAL_VERIFICATION_ADAPTER_STEP_SEQUENCE_RULES = [
         exportName: "POST",
         orderedSnippets: [
             "certificatesService.createCertificate(",
-            "IdempotencyService.complete(",
+            "safeIdempotencyComplete(",
         ],
     },
     {
@@ -389,7 +389,7 @@ export const CRITICAL_VERIFICATION_ADAPTER_STEP_SEQUENCE_RULES = [
         exportName: "PATCH",
         orderedSnippets: [
             "certificatesService.updateCertificate(",
-            "IdempotencyService.complete(",
+            "safeIdempotencyComplete(",
         ],
     },
     {
@@ -397,7 +397,7 @@ export const CRITICAL_VERIFICATION_ADAPTER_STEP_SEQUENCE_RULES = [
         exportName: "POST",
         orderedSnippets: [
             "licensesService.createLicense(",
-            "IdempotencyService.complete(",
+            "safeIdempotencyComplete(",
         ],
     },
     {
@@ -405,7 +405,7 @@ export const CRITICAL_VERIFICATION_ADAPTER_STEP_SEQUENCE_RULES = [
         exportName: "PATCH",
         orderedSnippets: [
             "licensesService.updateLicense(",
-            "IdempotencyService.complete(",
+            "safeIdempotencyComplete(",
         ],
     },
 ];

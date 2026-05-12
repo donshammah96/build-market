@@ -13,11 +13,10 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { DisputeEscrowSchema } from "@/app/lib/validation/projects-validation";
 import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
 import { projectsService } from "@/app/lib/domains/projects/service";
-
-const logger = getClientLogger();
 
 type DisputeParams = { id: string; escrowId: string };
 
@@ -100,7 +99,7 @@ export const POST = withAuth<DisputeParams>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Processing escrow dispute", {
+    getClientLogger().info("Processing escrow dispute", {
       correlationId,
       projectId,
       escrowId,
@@ -151,7 +150,7 @@ export const POST = withAuth<DisputeParams>(
       );
     }
 
-    await IdempotencyService.complete(idempotencyKey, result.data.data);
+    await safeIdempotencyComplete(idempotencyKey, result.data.data);
     return apiSuccess(result.data.data, HttpStatus.OK);
   },
   {

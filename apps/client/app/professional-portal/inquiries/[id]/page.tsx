@@ -8,7 +8,7 @@ import {
   useUpdateInquiry,
   useDeleteInquiry,
 } from "@/hooks/useInquiries";
-import type { UpdateInquiryInput } from "@/lib/inquiries-client";
+import type { UpdateInquiryInput } from "@/lib/facades/inquiries-client";
 import {
   ArrowLeft,
   Phone,

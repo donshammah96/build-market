@@ -22,7 +22,34 @@ vi.mock("sonner", () => ({
   toast: mockToast,
 }));
 
-vi.mock("@/lib/upload-client", () => ({
+vi.mock("@/lib/facades/upload-client", () => ({
+  uploadFiles: (...args: unknown[]) => mockUploadFiles(...args),
+  validateFiles: (...args: unknown[]) => mockValidateFiles(...args),
+  UploadError: class UploadError extends Error {
+    code: string;
+    constructor(message: string, code: string) {
+      super(message);
+      this.code = code;
+    }
+  },
+  UploadErrorCode: {
+    VALIDATION_ERROR: "VALIDATION_ERROR",
+    NETWORK_ERROR: "NETWORK_ERROR",
+    SERVER_ERROR: "SERVER_ERROR",
+    INVALID_RESPONSE: "INVALID_RESPONSE",
+    MAX_RETRIES_EXCEEDED: "MAX_RETRIES_EXCEEDED",
+    ABORTED: "ABORTED",
+    UNKNOWN: "UNKNOWN",
+  },
+  FILE_LIMITS: {
+    IMAGE_MAX_SIZE: 10 * 1024 * 1024,
+    DOCUMENT_MAX_SIZE: 25 * 1024 * 1024,
+    MAX_FILES_PER_UPLOAD: 10,
+  },
+}));
+
+// Also mock the canonical colocated facade path (Phase 5 migration)
+vi.mock("@/lib/facades/uploads/upload-client", () => ({
   uploadFiles: (...args: unknown[]) => mockUploadFiles(...args),
   validateFiles: (...args: unknown[]) => mockValidateFiles(...args),
   UploadError: class UploadError extends Error {

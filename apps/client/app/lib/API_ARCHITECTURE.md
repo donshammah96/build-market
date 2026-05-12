@@ -135,52 +135,9 @@ For domain route families with multiple handlers (collection + item + attachment
 - Domain-error-to-response mapping (`domainErrorToResponse`)
 - Client-safe message mapping (`propertyDomainErrorToClientMessage`)
 - Timing and role label helpers (`now()`, `actorRoleLabel()`)
-- Optimistic-lock conflict response builder (`conflictResponse()`)
+- Idempotency-conflict response builder (`conflictResponse()`)
 
 This keeps handlers thin and ensures error mapping is consistent across all operations on the same resource.
-
-#### `conflictResponse()` — static message contract
-
-`conflictResponse()` must use a hardcoded static message. It does **not** accept a `message` parameter:
-
-```typescript
-// ✅ Correct — no message param, static string inside function
-export function conflictResponse(
-  currentVersion: number | null | undefined,
-  correlationId: string,
-): NextResponse {
-  const response = apiError(
-    "Resource version conflict. Retry with the latest version.",
-    HttpStatus.CONFLICT,
-    undefined,
-    correlationId,
-  );
-  if (currentVersion !== null && currentVersion !== undefined) {
-    response.headers.set("X-Property-Version", String(currentVersion));
-    response.headers.set("ETag", `"${currentVersion}"`);
-  }
-  return response;
-}
-```
-
-Callsite — pass only `currentVersion` and `correlationId`:
-
-```typescript
-// ✅ Correct
-return conflictResponse(
-  (result.details as { currentVersion?: number } | undefined)?.currentVersion,
-  correlationId,
-);
-
-// ❌ Prohibited — dynamic message parameter (removed in Phase 0A)
-return conflictResponse(
-  result.message ?? "Property has been modified.",
-  currentVersion,
-  correlationId,
-);
-```
-
-This extends the same rule as §9 (`apiError()` first argument must be static): `conflictResponse()` is a convenience wrapper over `apiError()`, so the same static-message constraint applies transitively.
 
 ### 6. Browser Facades (`lib/*-client.ts`)
 
@@ -451,12 +408,7 @@ export const PATCH = withAuth(
     // ⑨ Domain error mapping
     if (!result.ok) {
       await IdempotencyService.fail(idempotencyKey);
-      if (result.error === "conflict") {
-        return conflictResponse(
-          (result.details as { currentVersion?: number } | undefined)?.currentVersion,
-          correlationId,
-        );
-      }
+      if (result.error === "conflict") { return conflictResponse(...); }
       logRouteOutcome({ ..., outcome: "domain_error", ... });
       return domainResultToErrorResponse(result, correlationId)!;
     }
@@ -684,10 +636,8 @@ For versioned entities:
 - `PATCH` and `DELETE` require `If-Match: "N"`
 - Missing `If-Match` → `428 Precondition Required`
 - Invalid `If-Match` value → `400 Bad Request`
-- Version conflict → `409 Conflict` via `conflictResponse()` (see §5) — sets `X-{Resource}-Version` and `ETag` headers from the current persisted version
+- Version conflict → `409 Conflict` with `X-{Resource}-Version: current` header
 - **DELETE handlers use `extractExpectedVersionFromIfMatch()` exclusively** — `extractExpectedVersion()` body-fallback form is prohibited (GAP-017)
-
-`conflictResponse()` uses a static message and never exposes domain result message fields to the client (see §9). The `currentVersion` is extracted from `result.details` and passed to `conflictResponse()` for header injection only.
 
 ---
 

@@ -54,7 +54,7 @@ describe("certificatesService", () => {
 
   it("maps not_found from getCertificateById to Result err", async () => {
     repositoryMock.getCertificateById.mockResolvedValue({
-      success: false,
+      ok: false,
       error: "not_found",
     });
 
@@ -73,7 +73,7 @@ describe("certificatesService", () => {
 
   it("maps forbidden from getCertificateById to Result err", async () => {
     repositoryMock.getCertificateById.mockResolvedValue({
-      success: false,
+      ok: false,
       error: "forbidden",
     });
 
@@ -98,7 +98,7 @@ describe("certificatesService", () => {
       status: "PENDING",
     };
     repositoryMock.getCertificateById.mockResolvedValue({
-      success: true,
+      ok: true,
       data: mockCert,
     });
 

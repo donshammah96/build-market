@@ -19,7 +19,6 @@ import {
 } from "@/app/lib/domains/messaging";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
 type MessageParams = { id: string };
 
 function toMessagingActor(context: {
@@ -79,7 +78,7 @@ export const POST = withAuth<MessageParams>(
     );
 
     if (!result.success) {
-      logger.error("Failed to create reaction", result.error, {
+      getClientLogger().error("Failed to create reaction", result.error, {
         correlationId,
         messageId,
       });
@@ -127,7 +126,7 @@ export const DELETE = withAuth<MessageParams>(
     );
 
     if (!result.success) {
-      logger.error("Failed to delete reaction", result.error, {
+      getClientLogger().error("Failed to delete reaction", result.error, {
         correlationId,
         messageId,
       });

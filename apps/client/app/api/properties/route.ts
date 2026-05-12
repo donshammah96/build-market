@@ -15,6 +15,7 @@ import {
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   BatchCreatePropertiesSchema,
   CreatePropertySchema,
@@ -412,7 +413,7 @@ export const POST = withAuth(
     }
 
     try {
-      await IdempotencyService.complete(idempotencyKey, domainResult.data);
+      await safeIdempotencyComplete(idempotencyKey, domainResult.data);
     } catch (completionError) {
       await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
       logPropertiesRouteOutcome({

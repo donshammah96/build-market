@@ -16,7 +16,7 @@ import {
 import { OnboardingData } from "@build/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { onboardingClient } from "@/lib/onboarding-client";
+import { onboardingClient } from "@/lib/facades/onboarding-client";
 import { ROUTES } from "@/lib/links";
 
 export default function Onboarding() {

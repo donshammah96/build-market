@@ -33,7 +33,7 @@ vi.mock("@/hooks/useImageUploader", () => ({
 }));
 
 const mockUploadForCredential = vi.fn();
-vi.mock("@/lib/upload-client", () => ({
+vi.mock("@/lib/facades/upload-client", () => ({
   uploadForCredential: (...args: unknown[]) => mockUploadForCredential(...args),
 }));
 

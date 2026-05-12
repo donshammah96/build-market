@@ -14,6 +14,7 @@ import {
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   updateMilestoneWithOptimisticLock,
   deleteMilestoneWithOptimisticLock,
@@ -24,8 +25,6 @@ import { toMilestoneDetailDto } from "@/app/lib/domains/projects/mappers";
 import { UpdateMilestoneSchema } from "@/app/lib/validation/projects-validation";
 import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
 import { projectsService } from "@/app/lib/domains/projects/service";
-
-const logger = getClientLogger();
 
 type MilestoneParams = { id: string; milestoneId: string };
 
@@ -192,7 +191,7 @@ export const PATCH = withAuth<MilestoneParams>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Updating milestone", {
+    getClientLogger().info("Updating milestone", {
       correlationId,
       projectId,
       milestoneId,
@@ -254,9 +253,9 @@ export const PATCH = withAuth<MilestoneParams>(
           raw as Parameters<typeof toMilestoneDetailDto>[0],
         );
         const responseData = { result: mapped };
-        await IdempotencyService.complete(idempotencyKey, responseData);
+        await safeIdempotencyComplete(idempotencyKey, responseData);
 
-        logger.info("Milestone updated successfully", {
+        getClientLogger().info("Milestone updated successfully", {
           correlationId,
           milestoneId,
           newVersion: result.newVersion,
@@ -291,7 +290,7 @@ export const PATCH = withAuth<MilestoneParams>(
       return apiError("Update failed", HttpStatus.INTERNAL_SERVER_ERROR);
     } catch (error) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error(
+      getClientLogger().error(
         "Milestone update error",
         error instanceof Error ? error : new Error(String(error)),
         { correlationId, milestoneId },
@@ -366,7 +365,7 @@ export const DELETE = withAuth<MilestoneParams>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Deleting milestone", {
+    getClientLogger().info("Deleting milestone", {
       correlationId,
       projectId,
       milestoneId,
@@ -425,9 +424,9 @@ export const DELETE = withAuth<MilestoneParams>(
             milestoneId: result.data.milestoneId,
           },
         };
-        await IdempotencyService.complete(idempotencyKey, responseData);
+        await safeIdempotencyComplete(idempotencyKey, responseData);
 
-        logger.info("Milestone deleted successfully", {
+        getClientLogger().info("Milestone deleted successfully", {
           correlationId,
           milestoneId,
         });
@@ -459,7 +458,7 @@ export const DELETE = withAuth<MilestoneParams>(
       return apiError("Delete failed", HttpStatus.INTERNAL_SERVER_ERROR);
     } catch (error) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error(
+      getClientLogger().error(
         "Milestone delete error",
         error instanceof Error ? error : new Error(String(error)),
         { correlationId, milestoneId },

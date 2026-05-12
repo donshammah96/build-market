@@ -13,10 +13,9 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { checkBodySize, isValidId } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { UpdateCalendarEventSchema } from "@/app/lib/validation/calendar-validation";
 import { calendarService } from "@/app/lib/domains/calendar/service";
-
-const logger = getClientLogger();
 
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 
@@ -87,7 +86,7 @@ export const GET = withAuth<{ id: string }>(
     );
 
     if (!result.success) {
-      logger.error("Failed to fetch calendar event", result.error, {
+      getClientLogger().error("Failed to fetch calendar event", result.error, {
         eventId: id,
       });
       return apiError(
@@ -197,7 +196,7 @@ export const PATCH = withAuth<{ id: string }>(
       );
     }
 
-    logger.info("Updating calendar event", {
+    getClientLogger().info("Updating calendar event", {
       correlationId,
       eventId: id,
       actorRole: authCtx.userRole,
@@ -231,7 +230,7 @@ export const PATCH = withAuth<{ id: string }>(
       return mapCalendarError(data);
     }
 
-    await IdempotencyService.complete(idempotencyKey, data.data);
+    await safeIdempotencyComplete(idempotencyKey, data.data);
     return apiSuccess(data.data, HttpStatus.OK, correlationId);
   },
 );
@@ -262,7 +261,7 @@ export const DELETE = withAuth<{ id: string }>(
       );
     }
 
-    logger.info("Deleting calendar event", {
+    getClientLogger().info("Deleting calendar event", {
       correlationId,
       eventId: id,
       actorRole: authCtx.userRole,

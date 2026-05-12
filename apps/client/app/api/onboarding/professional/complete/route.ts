@@ -5,8 +5,8 @@
  * KEY CHANGES FROM ORIGINAL:
  *
  * 1. CLERK UPDATE ORDERING FIX (critical)
- *    Original: domain logic → IdempotencyService.complete() → Clerk update
- *    Fixed:    domain logic → Clerk update → IdempotencyService.complete()
+ *    Original: domain logic → safeIdempotencyComplete() → Clerk update
+ *    Fixed:    domain logic → Clerk update → safeIdempotencyComplete()
  *
  *    If Clerk update ran after complete() and failed silently, any retry
  *    returned the cached "completed" response without re-attempting the Clerk
@@ -46,6 +46,7 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { userProfileOnboardingService } from "@/app/lib/domains/user-profile";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   requireRole,
   RoleNormalizationError,
@@ -56,7 +57,6 @@ import {
   finalizeClerkOnboardingTransition,
 } from "@/app/lib/domains/user-profile/clerk-metadata";
 
-const logger = getClientLogger();
 const MAX_BODY_SIZE = 2 * 1024 * 1024;
 const ROUTE_PATTERN = "/api/onboarding/professional/complete";
 const OPERATION_NAME = "complete-professional-onboarding";
@@ -143,7 +143,7 @@ export const PATCH = withAuth(
       httpStatus: number,
       additionalContext?: Record<string, unknown>,
     ) => {
-      logger.info("Onboarding adapter outcome", {
+      getClientLogger().info("Onboarding adapter outcome", {
         correlationId,
         operationName: OPERATION_NAME,
         httpMethod: req.method,
@@ -209,7 +209,7 @@ export const PATCH = withAuth(
         issue.path.join("."),
       );
 
-      logger.warn("Onboarding completion validation failed", {
+      getClientLogger().warn("Onboarding completion validation failed", {
         actorRole,
         correlationId,
         errors: validationErrorFields,
@@ -283,7 +283,7 @@ export const PATCH = withAuth(
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error(
+      getClientLogger().error(
         "Onboarding adapter outcome",
         result.error instanceof Error
           ? result.error
@@ -323,7 +323,7 @@ export const PATCH = withAuth(
 
     const responseData = result.data.data;
 
-    // ORDERING INVARIANT: Clerk update BEFORE IdempotencyService.complete().
+    // ORDERING INVARIANT: Clerk update BEFORE safeIdempotencyComplete().
     // If Clerk ran after and failed, any retry returns cached success and
     // permanently skips the Clerk update.
     try {
@@ -348,7 +348,7 @@ export const PATCH = withAuth(
       );
     }
 
-    await IdempotencyService.complete(idempotencyKey, responseData);
+    await safeIdempotencyComplete(idempotencyKey, responseData);
 
     logOutcome("succeeded", HttpStatus.OK, {
       profession: data.profession,

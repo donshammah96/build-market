@@ -14,7 +14,6 @@ import {
 import { sellerInsightsService } from "@/app/lib/domains/seller-insights";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/professional-portal/inventory/alerts";
 
 type SellerInsightsAdapterOutcome =
@@ -36,7 +35,7 @@ function createSellerInsightsOutcomeLogger(
     httpStatus: number,
     details: { domainError?: string } = {},
   ) => {
-    logger.info("Seller insights inventory alerts adapter outcome", {
+    getClientLogger().info("Seller insights inventory alerts adapter outcome", {
       correlationId,
       operationName,
       httpMethod: req.method,
@@ -97,16 +96,20 @@ export const GET = withAuth(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch inventory alerts", result.error, {
-        correlationId,
-        operationName,
-        httpMethod: req.method,
-        routePattern: ROUTE_PATTERN,
-        actorRole,
-        outcome: "failed",
-        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
-        durationMs: Date.now() - requestStartedAt,
-      });
+      getClientLogger().error(
+        "Failed to fetch inventory alerts",
+        result.error,
+        {
+          correlationId,
+          operationName,
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          actorRole,
+          outcome: "failed",
+          httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+          durationMs: Date.now() - requestStartedAt,
+        },
+      );
       logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR);
       return apiError(
         "Failed to fetch inventory alerts",

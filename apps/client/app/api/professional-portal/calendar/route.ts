@@ -13,13 +13,13 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   CalendarQuerySchema,
   CreateCalendarEventSchema,
 } from "@/app/lib/validation/calendar-validation";
 import { calendarService } from "@/app/lib/domains/calendar/service";
 
-const logger = getClientLogger();
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 
 function parseCalendarQuery(req: NextRequest) {
@@ -101,7 +101,7 @@ export const GET = withAuth(async (req: NextRequest, authCtx) => {
   );
 
   if (!result.success || !result.data) {
-    logger.error("Failed to fetch calendar events", result.error, {
+    getClientLogger().error("Failed to fetch calendar events", result.error, {
       correlationId,
       actorRole: authCtx.userRole,
     });
@@ -197,7 +197,7 @@ export const POST = withAuth(async (req: NextRequest, authCtx) => {
     );
   }
 
-  logger.info("Creating calendar event", {
+  getClientLogger().info("Creating calendar event", {
     correlationId,
     actorRole: authCtx.userRole,
     title: eventData.title,
@@ -231,6 +231,6 @@ export const POST = withAuth(async (req: NextRequest, authCtx) => {
     return mapCalendarError(data);
   }
 
-  await IdempotencyService.complete(idempotencyKey, data.data);
+  await safeIdempotencyComplete(idempotencyKey, data.data);
   return apiSuccess(data.data, HttpStatus.CREATED, correlationId);
 });

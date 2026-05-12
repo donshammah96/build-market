@@ -123,5 +123,6 @@
       "source": "Git Bash",
       "icon": "terminal-git-bash"
     }
-  }
+  },
+  "chat.agent.sandbox.enabled": "allowNetwork"
 }

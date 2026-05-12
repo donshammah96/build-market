@@ -13,9 +13,9 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { financeService, WithdrawSchema } from "@/app/lib/domains/finance";
 
-const logger = getClientLogger();
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 
 /**
@@ -94,7 +94,7 @@ export const POST = withAuth(
       );
     }
 
-    logger.info("Processing withdrawal request", {
+    getClientLogger().info("Processing withdrawal request", {
       correlationId,
       actorRole: userRole,
       amount,
@@ -156,7 +156,7 @@ export const POST = withAuth(
       );
     }
 
-    await IdempotencyService.complete(idempotencyKey, data.data);
+    await safeIdempotencyComplete(idempotencyKey, data.data);
     return apiSuccess(data.data, HttpStatus.CREATED);
   },
   {

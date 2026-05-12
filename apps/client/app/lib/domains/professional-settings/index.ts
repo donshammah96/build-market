@@ -4,4 +4,10 @@ export type {
   ServiceGroup,
   SettingsProfileData,
   ProfessionalSettingsErrorCode,
+  ServiceCategoryListItem,
+  ServiceCategoryListResult,
+  ServiceCategoryQuery,
+  ServiceCategorySortField,
+  ServiceCategorySortDirection,
+  CreateServiceCategoryInput,
 } from "./service";

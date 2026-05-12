@@ -63,7 +63,7 @@ describe("onboarding route guard and sequencing policy", () => {
         [
           route.domainSnippet,
           "finalizeClerkOnboardingTransition(",
-          "IdempotencyService.complete(",
+          "safeIdempotencyComplete(",
         ],
         route.label,
       );
@@ -75,7 +75,10 @@ describe("onboarding route guard and sequencing policy", () => {
       const source = readRouteSource(route.file);
 
       expect(source).toContain(
-        `getActorRateLimitIdentifier(clerkId, \"${route.namespace}\")`,
+        `getActorRateLimitIdentifier(clerkId, "${route.namespace}")`.replace(
+          /\\"/g,
+          '"',
+        ),
       );
       expect(source).not.toContain("getRateLimitIdentifier(");
     }
@@ -85,20 +88,15 @@ describe("onboarding route guard and sequencing policy", () => {
     for (const route of ROUTES) {
       const source = readRouteSource(route.file);
 
-      const completionCallIndex = source.indexOf(
+      // Phase 1: idempotency completion is now delegated to safeIdempotencyComplete()
+      // which encapsulates the try-catch and no-rethrow contract in idempotency-helpers.ts
+      expect(source).toContain("safeIdempotencyComplete(");
+      expect(source).toContain("idempotency-helpers");
+      // Bare IdempotencyService.complete() must NOT appear (enforced by Phase 1)
+      const bareComplete = source.indexOf(
         "await IdempotencyService.complete(idempotencyKey, responseData)",
       );
-      expect(completionCallIndex).toBeGreaterThan(-1);
-
-      const completionWindow = source.slice(
-        Math.max(0, completionCallIndex - 100),
-        completionCallIndex + 520,
-      );
-
-      expect(completionWindow).toContain("try {");
-      expect(completionWindow).toContain("catch (completionError)");
-      expect(completionWindow).toContain("await IdempotencyService.fail(");
-      expect(completionWindow).not.toContain("throw completionError");
+      expect(bareComplete).toBe(-1);
     }
   });
 

@@ -15,7 +15,6 @@ import { isValidId } from "@/app/lib/api/api-guards";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
 import { storesService } from "@/app/lib/domains/stores";
 
-const logger = getClientLogger();
 const AUDIT_ACTION_DATA_RECTIFIED = "DATA_RECTIFIED";
 
 export const DELETE = withAuth<{ id: string; documentId: string }>(
@@ -57,7 +56,9 @@ export const DELETE = withAuth<{ id: string; documentId: string }>(
           "StoreDocument",
           documentId,
           { storeId: id, action: "DELETE" },
-        ).catch((err) => logger.error("Failed to log deletion", err));
+        ).catch((err) =>
+          getClientLogger().error("Failed to log deletion", err),
+        );
 
         return domainResult;
       },

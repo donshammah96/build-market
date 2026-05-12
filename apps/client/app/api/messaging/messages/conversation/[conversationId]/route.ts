@@ -19,7 +19,6 @@ import {
 } from "@/app/lib/domains/messaging";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
 type ConversationParams = { conversationId: string };
 
 function toMessagingActor(context: {
@@ -73,7 +72,9 @@ export const GET = withAuth<ConversationParams>(
     );
 
     if (!result.success) {
-      logger.error("Failed to fetch messages", result.error, { threadId });
+      getClientLogger().error("Failed to fetch messages", result.error, {
+        threadId,
+      });
       return apiError(
         "Failed to fetch messages",
         HttpStatus.INTERNAL_SERVER_ERROR,

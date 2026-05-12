@@ -238,7 +238,9 @@ describe("POST /api/onboarding", () => {
       }),
     );
 
-    const warnCall = mockLoggerWarn.mock.calls.at(-1);
+    const warnCall = mockLoggerWarn.mock.calls.find(
+      ([message]) => message === "Onboarding validation failed",
+    );
     const loggedErrors = (warnCall?.[1] as { errors?: unknown[] } | undefined)
       ?.errors;
     expect(Array.isArray(loggedErrors)).toBe(true);

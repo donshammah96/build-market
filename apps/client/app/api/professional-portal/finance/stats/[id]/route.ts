@@ -14,8 +14,6 @@ import {
 import { isValidId } from "@/app/lib/api/api-guards";
 import { financeService } from "@/app/lib/domains/finance";
 
-const logger = getClientLogger();
-
 /**
  * GET /api/professional-portal/finance/stats/[id]
  * Get financial statistics for a specific project.
@@ -58,9 +56,13 @@ export const GET = withAuth<{ id: string }>(
     );
 
     if (!result.success) {
-      logger.error("Failed to fetch project finance stats", result.error, {
-        projectId,
-      });
+      getClientLogger().error(
+        "Failed to fetch project finance stats",
+        result.error,
+        {
+          projectId,
+        },
+      );
       return apiError(
         "Failed to fetch project finance stats",
         HttpStatus.INTERNAL_SERVER_ERROR,

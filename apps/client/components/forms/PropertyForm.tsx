@@ -52,7 +52,7 @@ export const SECURITY_PERSISTENCE_ALLOWLIST = [
   "status",
   "features",
 ] as const;
-import { uploadForCredential } from "@/lib/upload-client";
+import { uploadForCredential } from "@/lib/facades/upload-client";
 import { isLocalUpload } from "@/lib/utils/upload";
 import { useImageUploader } from "@/hooks/useImageUploader";
 import Image from "next/image";

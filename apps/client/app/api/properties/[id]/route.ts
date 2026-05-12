@@ -19,6 +19,7 @@ import {
 } from "@/app/lib/api/request-utils";
 import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   propertiesService,
   UpdatePropertySchema,
@@ -460,7 +461,7 @@ export const PATCH = withAuth(
     }
 
     try {
-      await IdempotencyService.complete(idempotencyKey, latestResult.data);
+      await safeIdempotencyComplete(idempotencyKey, latestResult.data);
     } catch (completionError) {
       await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
       logPropertiesRouteOutcome({
@@ -710,7 +711,7 @@ export const DELETE = withAuth(
     }
 
     try {
-      await IdempotencyService.complete(idempotencyKey, result.data);
+      await safeIdempotencyComplete(idempotencyKey, result.data);
     } catch (completionError) {
       await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
       logPropertiesRouteOutcome({

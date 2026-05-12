@@ -182,6 +182,24 @@ export const projectsRepository = {
     return { success: true, data: milestone };
   },
 
+  async getProjectVersion(projectId: string): Promise<number | null> {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { version: true },
+    });
+
+    return project?.version ?? null;
+  },
+
+  async getMilestoneVersion(milestoneId: string): Promise<number | null> {
+    const milestone = await prisma.projectMilestone.findUnique({
+      where: { id: milestoneId },
+      select: { version: true },
+    });
+
+    return milestone?.version ?? null;
+  },
+
   async listActorProjects(input: {
     userId: string;
     page: number;

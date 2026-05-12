@@ -13,6 +13,7 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { UpdateLicenseSchema } from "@/app/lib/validation/documents-validation";
 import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
@@ -22,7 +23,6 @@ import { normalizeRole } from "@/app/lib/security/roles";
 // ADR-006 classification: Class B - license detail and renewal/compliance attributes cross this boundary.
 // Reviewed: 2026-04-09 by @copilot
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/professional-portal/licenses/[id]";
 
 type LicenseByIdAdapterOutcome =
@@ -54,7 +54,7 @@ function createLicenseByIdOutcomeLogger(
     httpStatus: number,
     details: LicenseByIdOutcomeLogFields = {},
   ) => {
-    logger.info("Professional license by-id adapter outcome", {
+    getClientLogger().info("Professional license by-id adapter outcome", {
       correlationId,
       operationName,
       httpMethod: req.method,
@@ -89,7 +89,7 @@ export const GET = withAuth<LicenseParams>(
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
     if (!actorRole) {
-      logger.warn("role_normalization_failed", {
+      getClientLogger().warn("role_normalization_failed", {
         correlationId,
         operationName: "get_professional_license_detail",
         httpMethod: req.method,
@@ -144,7 +144,7 @@ export const GET = withAuth<LicenseParams>(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch license", result.error, {
+      getClientLogger().error("Failed to fetch license", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -192,7 +192,7 @@ export const PATCH = withAuth<LicenseParams>(
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
     if (!actorRole) {
-      logger.warn("role_normalization_failed", {
+      getClientLogger().warn("role_normalization_failed", {
         correlationId,
         operationName: "update_professional_license",
         httpMethod: req.method,
@@ -315,7 +315,7 @@ export const PATCH = withAuth<LicenseParams>(
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error("Failed to update license", result.error, {
+      getClientLogger().error("Failed to update license", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -366,10 +366,10 @@ export const PATCH = withAuth<LicenseParams>(
     }
 
     try {
-      await IdempotencyService.complete(idempotencyKey, data.data);
+      await safeIdempotencyComplete(idempotencyKey, data.data);
     } catch (error) {
       await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
-      logger.error(
+      getClientLogger().error(
         "Failed to complete license idempotency replay",
         normalizeCaughtError(error),
         {
@@ -406,7 +406,7 @@ export const DELETE = withAuth<LicenseParams>(
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
     if (!actorRole) {
-      logger.warn("role_normalization_failed", {
+      getClientLogger().warn("role_normalization_failed", {
         correlationId,
         operationName: "delete_professional_license",
         httpMethod: req.method,
@@ -489,7 +489,7 @@ export const DELETE = withAuth<LicenseParams>(
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error("Failed to delete license", result.error, {
+      getClientLogger().error("Failed to delete license", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -537,7 +537,7 @@ export const DELETE = withAuth<LicenseParams>(
       licenseId,
       { authority, licenseNumber, action: "DELETE" },
     ).catch((err) =>
-      logger.error("Failed to log deletion", err, {
+      getClientLogger().error("Failed to log deletion", err, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -551,10 +551,10 @@ export const DELETE = withAuth<LicenseParams>(
 
     const response = { message, licenseId: deletedId };
     try {
-      await IdempotencyService.complete(idempotencyKey, response);
+      await safeIdempotencyComplete(idempotencyKey, response);
     } catch (error) {
       await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
-      logger.error(
+      getClientLogger().error(
         "Failed to complete license idempotency replay",
         normalizeCaughtError(error),
         {

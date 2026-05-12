@@ -88,6 +88,13 @@ export type UserProfileUpdateInput = {
   };
 };
 
+export type InternalUserStatus = {
+  isOnboarded: boolean;
+  role: string | null;
+  status: string | null;
+  professionalMissingProfile: boolean;
+};
+
 const userProfileSelect = {
   id: true,
   clerkId: true,
@@ -504,6 +511,50 @@ function buildProfessionalProfileUpdateData(
 }
 
 export const userProfileService = {
+  async getInternalUserStatusByClerkId(
+    clerkId: string,
+  ): Promise<UserProfileDomainResult<InternalUserStatus>> {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { clerkId, deletedAt: null },
+        select: {
+          role: true,
+          status: true,
+          professionalProfile: {
+            select: { userId: true },
+          },
+        },
+      });
+
+      if (!user) {
+        return ok({
+          isOnboarded: false,
+          role: null,
+          status: null,
+          professionalMissingProfile: false,
+        });
+      }
+
+      const userStatus = user.status ?? null;
+      const professionalMissingProfile =
+        user.role === "PROFESSIONAL" && !user.professionalProfile;
+      const isOnboarding = userStatus === "ONBOARDING";
+
+      return ok({
+        isOnboarded: !isOnboarding && !professionalMissingProfile,
+        role: user.role,
+        status: userStatus,
+        professionalMissingProfile,
+      });
+    } catch {
+      return err({
+        error: "internal",
+        message: "Failed to fetch user status",
+        status: 500,
+      });
+    }
+  },
+
   async getProfile(
     actor: UserProfileActor,
   ): Promise<

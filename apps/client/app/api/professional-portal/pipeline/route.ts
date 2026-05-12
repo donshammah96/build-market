@@ -14,8 +14,6 @@ import {
 import { pipelineService } from "@/app/lib/domains/pipeline";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
-
 /**
  * GET /api/professional-portal/pipeline
  * Get sales pipeline data for property professionals.
@@ -48,7 +46,7 @@ export const GET = withAuth(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch sales pipeline", result.error, {
+      getClientLogger().error("Failed to fetch sales pipeline", result.error, {
         correlationId,
         actorRole: normalizeRole(String(userRole)),
       });

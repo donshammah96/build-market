@@ -58,7 +58,7 @@ export const certificatesService = {
       actorResult.data.userId,
       certificateId,
     );
-    if (result.success === false) {
+    if (!result.ok) {
       if (result.error === "not_found") return notFound();
       return forbidden();
     }

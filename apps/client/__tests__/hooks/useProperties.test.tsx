@@ -10,8 +10,19 @@ const mockPropertiesClient = vi.hoisted(() => ({
   createPropertiesBatch: vi.fn(),
 }));
 
-vi.mock("@/lib/properties-client", async () => {
-  const actual = await vi.importActual("@/lib/properties-client");
+vi.mock("@/lib/facades/properties-client", async () => {
+  const actual = await vi.importActual("@/lib/facades/properties-client");
+  return {
+    ...actual,
+    propertiesClient: mockPropertiesClient,
+  };
+});
+
+// Also mock the canonical colocated facade path (Phase 5 migration)
+vi.mock("@/lib/facades/properties/properties-client", async () => {
+  const actual = await vi.importActual(
+    "@/lib/facades/properties/properties-client",
+  );
   return {
     ...actual,
     propertiesClient: mockPropertiesClient,

@@ -1,7 +1,7 @@
 export {
   ProfessionalRepository,
   professionalRepository,
-} from "@/app/lib/repositories/professional.repository";
+} from "@/app/lib/domains/shared/repositories/professional.repository";
 
 export type {
   CategoryDTO,
@@ -10,4 +10,4 @@ export type {
   ProfessionalDetailDTO,
   ProfessionalFilters,
   ServiceDTO,
-} from "@/app/lib/repositories/professional.repository";
+} from "@/app/lib/domains/shared/repositories/professional.repository";

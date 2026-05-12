@@ -51,19 +51,19 @@ export const certificatesRepository = {
       },
     });
 
-    if (!cert || cert.deletedAt) return { success: false, error: "not_found" };
+    if (!cert || cert.deletedAt) return { ok: false, error: "not_found" };
     if (cert.professionalId !== professionalId)
-      return { success: false, error: "forbidden" };
+      return { ok: false, error: "forbidden" };
     if (
       !CERTIFICATE_CATEGORIES.includes(
         cert.category as (typeof CERTIFICATE_CATEGORIES)[number],
       )
     ) {
-      return { success: false, error: "not_found" };
+      return { ok: false, error: "not_found" };
     }
 
     const { professionalId: _pid, ...data } = cert;
-    return { success: true, data: toCertificateDetail(data) };
+    return { ok: true, data: toCertificateDetail(data) };
   },
 
   async createCertificate(

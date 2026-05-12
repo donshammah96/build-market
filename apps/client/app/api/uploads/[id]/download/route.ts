@@ -12,7 +12,6 @@ import {
 } from "@/app/lib/api/resilient-api";
 import { uploadService } from "@/app/lib/domains/uploads";
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/uploads/[id]/download";
 const OPERATION_NAME = "get_upload_download_url";
 
@@ -47,7 +46,7 @@ export const GET = withAuth<{ id: string }>(
       httpStatus: number,
       additional: Record<string, unknown> = {},
     ) => {
-      logger.info("Upload download adapter outcome", {
+      getClientLogger().info("Upload download adapter outcome", {
         correlationId,
         operationName: OPERATION_NAME,
         httpMethod: req.method,

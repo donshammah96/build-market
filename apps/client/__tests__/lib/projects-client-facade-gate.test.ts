@@ -32,7 +32,7 @@ describe("projects client facade generic API", () => {
       ),
     );
 
-    const { projectsClient } = await import("@/lib/projects-client");
+    const { projectsClient } = await import("@/lib/facades/projects-client");
     const result = await projectsClient.getProjects({ page: 1 });
 
     expect(result.success).toBe(true);
@@ -58,7 +58,7 @@ describe("projects client facade generic API", () => {
       ),
     );
 
-    const { projectsClient } = await import("@/lib/projects-client");
+    const { projectsClient } = await import("@/lib/facades/projects-client");
     const result = await projectsClient.createProject({
       title: "Facade mutation",
       clientId: "11111111-1111-4111-8111-111111111111",
@@ -91,7 +91,7 @@ describe("projects client facade generic API", () => {
       ),
     );
 
-    const { projectsClient } = await import("@/lib/projects-client");
+    const { projectsClient } = await import("@/lib/facades/projects-client");
 
     const result = await projectsClient.createProject({
       title: "Idempotency facade mutation",

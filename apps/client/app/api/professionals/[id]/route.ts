@@ -13,8 +13,6 @@ import {
 import { isValidId } from "@/app/lib/api/api-guards";
 import { professionalsService } from "@/app/lib/domains/professionals";
 
-const logger = getClientLogger();
-
 /**
  * GET /api/professionals/[id]
  * Public endpoint — get detailed professional profile by user ID.
@@ -51,7 +49,7 @@ export async function GET(
   );
 
   if (!result.success || !result.data) {
-    logger.error("Failed to fetch professional", result.error, {
+    getClientLogger().error("Failed to fetch professional", result.error, {
       professionalId: id,
     });
     return apiError(

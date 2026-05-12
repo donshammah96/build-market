@@ -16,7 +16,7 @@ import type {
   ProjectDetailResponse,
   ProjectListResponse,
   ProjectQueryInput,
-} from "@/lib/projects-client";
+} from "@/lib/facades/projects-client";
 
 const mockProjectsClient = vi.hoisted(() => ({
   getProjects: vi.fn(),
@@ -27,7 +27,12 @@ const mockProjectsClient = vi.hoisted(() => ({
   deletePortalProject: vi.fn(),
 }));
 
-vi.mock("@/lib/projects-client", () => ({
+vi.mock("@/lib/facades/projects-client", () => ({
+  projectsClient: mockProjectsClient,
+}));
+
+// Also mock the canonical colocated facade path (Phase 5 migration)
+vi.mock("@/lib/facades/projects/projects-client", () => ({
   projectsClient: mockProjectsClient,
 }));
 
