@@ -195,9 +195,6 @@ async function collectInlineLoggerAtModuleLevel(appRoot, exceptions) {
   const findings = [];
   // Matches: const logger = getClientLogger() or const logger = getLogger()
   // at the start of a line (possibly with leading whitespace at depth 0)
-  const pattern =
-    /^(?:export\s+)?const\s+\w*[Ll]ogger\w*\s*=\s*get(?:Client)?Logger\s*\(/m;
-
   for (const dir of [apiDir, actionsDir]) {
     const files = await walkFiles(
       dir,

@@ -2,7 +2,6 @@ import {
   PrismaClient,
   StoreType,
   DeliveryOption,
-  VerificationStatus,
   Prisma,
   County,
 } from "@prisma/client";
