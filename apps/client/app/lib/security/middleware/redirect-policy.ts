@@ -1,12 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { AppRole } from "@/app/lib/security/roles";
-import { ROUTES, dashboardForRole } from "@/lib/links";
+import {
+  CLIENT_ROUTES,
+  PROFESSIONAL_ROUTES,
+  dashboardForRole,
+} from "@/lib/routes";
 
 export function redirectToSignIn(
   req: NextRequest,
   pathname: string,
 ): NextResponse {
-  const signInUrl = new URL(ROUTES.signIn, req.url);
+  const signInUrl = new URL(CLIENT_ROUTES.signIn, req.url);
   signInUrl.searchParams.set("redirect_url", pathname);
   return NextResponse.redirect(signInUrl);
 }
@@ -19,14 +23,14 @@ export function redirectToDashboardForRole(
 }
 
 export function redirectToOnboarding(req: NextRequest): NextResponse {
-  return NextResponse.redirect(new URL(ROUTES.onboarding, req.url));
+  return NextResponse.redirect(new URL(CLIENT_ROUTES.onboarding, req.url));
 }
 
 export function redirectToProfessionalPendingVerification(
   req: NextRequest,
 ): NextResponse {
   return NextResponse.redirect(
-    new URL(ROUTES.professionalPendingVerification, req.url),
+    new URL(PROFESSIONAL_ROUTES.professionalPendingVerification, req.url),
   );
 }
 

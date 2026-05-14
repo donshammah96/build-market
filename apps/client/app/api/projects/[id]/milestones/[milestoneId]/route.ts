@@ -164,15 +164,8 @@ export const PATCH = withAuth<MilestoneParams>(
       "project_milestone",
       dbUserId,
       "PATCH",
-      milestoneId,
-      PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      { ttlHours: PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
     );
-    if (!idempotencyCheck) {
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (idempotencyCheck.status === "completed") {
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
     }
@@ -344,8 +337,7 @@ export const DELETE = withAuth<MilestoneParams>(
       "project_milestone",
       dbUserId,
       "DELETE",
-      milestoneId,
-      PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      { ttlHours: PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
     );
     if (idempotencyCheck?.status === "completed") {
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);

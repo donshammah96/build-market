@@ -260,13 +260,6 @@ export const PATCH = withAuth<LicenseParams>(
       dbUserId,
       "PATCH",
     );
-    if (!idempotencyCheck) {
-      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, { licenseId });
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (idempotencyCheck.status === "completed") {
       logOutcome("succeeded", HttpStatus.OK, {
         licenseId,

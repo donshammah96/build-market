@@ -125,15 +125,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     clerkId,
     "POST",
   );
-  if (!idempotencyCheck) {
-    logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
-      reason: "idempotency_check_failed",
-    });
-    return apiError(
-      "Failed to process idempotency key",
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
-  }
   if (idempotencyCheck.status === "completed") {
     logOutcome("succeeded", HttpStatus.OK, {
       source: "idempotency_cache",

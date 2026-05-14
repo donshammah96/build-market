@@ -120,14 +120,14 @@ export const exportWorker = new Worker<ExportJobData>(
 );
 
 // Event handlers for monitoring
-exportWorker.on("completed", (job) => {
+exportWorker.on("completed", (job: Job) => {
   console.log(`[ExportWorker] Job ${job.id} completed`);
 });
 
-exportWorker.on("failed", (job, err) => {
+exportWorker.on("failed", (job: Job | undefined, err: Error) => {
   console.error(`[ExportWorker] Job ${job?.id} failed:`, err);
 });
 
-exportWorker.on("error", (err) => {
+exportWorker.on("error", (err: Error) => {
   console.error("[ExportWorker] Worker error:", err);
 });

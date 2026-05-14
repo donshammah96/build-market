@@ -298,15 +298,15 @@ export function createAssetCleanupWorker() {
     },
   );
 
-  worker.on("completed", (job) => {
+  worker.on("completed", (job: Job) => {
     console.log(`[AssetCleanup] Job ${job.id} completed`);
   });
 
-  worker.on("failed", (job, error) => {
+  worker.on("failed", (job: Job | undefined, error: Error) => {
     console.error(`[AssetCleanup] Job ${job?.id} failed:`, error);
   });
 
-  worker.on("error", (error) => {
+  worker.on("error", (error: Error) => {
     console.error("[AssetCleanup] Worker error:", error);
   });
 

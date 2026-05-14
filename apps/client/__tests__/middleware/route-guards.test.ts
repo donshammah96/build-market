@@ -66,7 +66,7 @@ vi.mock("@/app/lib/security/middleware/redirect-policy", () => ({
     NextResponse.redirect(new URL("/sign-up?pro=closed", req.url)),
 }));
 
-import middleware from "@/middleware";
+import middleware from "@/proxy";
 
 function assertResponse(
   res: Awaited<ReturnType<typeof middleware>>,

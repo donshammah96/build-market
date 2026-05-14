@@ -178,8 +178,10 @@ export const PATCH = withAuth<StoreParams>(
       "store",
       dbUserId,
       "PATCH",
-      storeId,
-      STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      {
+        entityConnect: { store: { connect: { id: storeId } } },
+        ttlHours: STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      },
     );
 
     if (idempotencyCheck?.status === "completed") {
@@ -329,8 +331,10 @@ export const DELETE = withAuth<StoreParams>(
       "store",
       dbUserId,
       "DELETE",
-      storeId,
-      STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      {
+        entityConnect: { store: { connect: { id: storeId } } },
+        ttlHours: STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      },
     );
 
     if (idempotencyCheck?.status === "completed") {

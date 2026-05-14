@@ -133,7 +133,7 @@ export class ExportProcessor {
     });
 
     // Handle archive warnings/errors
-    archive.on("warning", (err) => {
+    archive.on("warning", (err: NodeJS.ErrnoException) => {
       if (err.code === "ENOENT") {
         console.warn("Archive warning:", err);
       } else {
@@ -141,7 +141,7 @@ export class ExportProcessor {
       }
     });
 
-    archive.on("error", (err) => {
+    archive.on("error", (err: Error) => {
       throw err;
     });
 

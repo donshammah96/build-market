@@ -157,7 +157,7 @@ export function buildPropertyUpdatePayload(
 
   for (const [source, target] of fieldMappings) {
     if (data[source] !== undefined) {
-      (payload as Record<string, unknown>)[target] = data[source];
+      (payload as Record<string, unknown>)[target as string] = data[source];
     }
   }
 

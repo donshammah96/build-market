@@ -18,8 +18,9 @@
     "test": "echo \"No tests configured\" && exit 0"
   },
   "dependencies": {
+    "@build/db": "workspace:*",
     "@prisma/client": "^7.6.0",
-    "bullmq": "^5.76.1",
+    "bullmq": "^5.76.8",
     "ioredis": "^5.9.1"
   },
   "devDependencies": {

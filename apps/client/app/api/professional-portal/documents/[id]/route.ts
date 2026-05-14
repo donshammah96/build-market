@@ -302,15 +302,6 @@ export const PATCH = withAuth<{ id: string }>(
       dbUserId,
       "PATCH",
     );
-    if (!idempotencyCheck) {
-      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
-        documentId: id,
-      });
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (idempotencyCheck.status === "completed") {
       logOutcome("succeeded", HttpStatus.OK, {
         documentId: id,

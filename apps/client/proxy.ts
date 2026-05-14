@@ -27,7 +27,7 @@ import {
   buildCspWithNonce,
   generateCspNonce,
 } from "@/app/lib/security/middleware/csp-nonce";
-import { ROUTES } from "@/lib/links";
+import { PROFESSIONAL_ROUTES } from "@/lib/routes";
 
 // =============================================================================
 // Middleware
@@ -250,7 +250,7 @@ export default clerkMiddleware(async (auth, req: Request) => {
       status.role === "PROFESSIONAL" &&
       status.status === "PENDING_VERIFICATION";
     const isPendingVerificationRoute =
-      pathname === ROUTES.professionalPendingVerification;
+      pathname === PROFESSIONAL_ROUTES.professionalPendingVerification;
 
     if (isPendingVerification) {
       if (!isPendingVerificationRoute) {

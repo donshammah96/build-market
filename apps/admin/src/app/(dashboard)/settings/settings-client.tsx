@@ -95,7 +95,7 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
         <Button
           onClick={handleSave}
           disabled={!hasChanges || isPending}
-          className="bg-zinc-900 hover:bg-zinc-800 text-white min-w-[140px]"
+          className="bg-zinc-900 hover:bg-zinc-800 text-white min-w-35"
         >
           {isPending ? (
             "Saving..."
@@ -134,7 +134,9 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
                 </div>
                 <Switch
                   checked={settings.maintenanceMode}
-                  onCheckedChange={(c) => handleChange("maintenanceMode", c)}
+                  onCheckedChange={(c: boolean) =>
+                    handleChange("maintenanceMode", c)
+                  }
                   className="data-[state=checked]:bg-amber-500"
                 />
               </div>
@@ -148,7 +150,9 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
                 </div>
                 <Switch
                   checked={settings.publicSignup}
-                  onCheckedChange={(c) => handleChange("publicSignup", c)}
+                  onCheckedChange={(c: boolean) =>
+                    handleChange("publicSignup", c)
+                  }
                   className="data-[state=checked]:bg-emerald-600"
                 />
               </div>
@@ -196,7 +200,7 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
                 </div>
                 <Switch
                   checked={settings.enableAutoVerifyNCA}
-                  onCheckedChange={(c) =>
+                  onCheckedChange={(c: boolean) =>
                     handleChange("enableAutoVerifyNCA", c)
                   }
                   className="data-[state=checked]:bg-emerald-600"
@@ -253,7 +257,9 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
                 <Label className="flex-1">Email Alerts Enabled</Label>
                 <Switch
                   checked={settings.adminEmailAlerts}
-                  onCheckedChange={(c) => handleChange("adminEmailAlerts", c)}
+                  onCheckedChange={(c: boolean) =>
+                    handleChange("adminEmailAlerts", c)
+                  }
                   className="data-[state=checked]:bg-emerald-600"
                 />
               </div>
@@ -283,7 +289,9 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
                 </div>
                 <Switch
                   checked={settings.securityMFA}
-                  onCheckedChange={(c) => handleChange("securityMFA", c)}
+                  onCheckedChange={(c: boolean) =>
+                    handleChange("securityMFA", c)
+                  }
                   disabled
                   className="data-[state=checked]:bg-emerald-600"
                 />
@@ -335,7 +343,7 @@ function TabTrigger({ value, icon: Icon, label }: TabTriggerProps) {
   return (
     <TabsTrigger
       value={value}
-      className="flex-1 min-w-[120px] gap-2 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm"
+      className="flex-1 min-w-30 gap-2 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm"
     >
       <Icon className="h-4 w-4" />
       {label}

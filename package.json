@@ -16,7 +16,7 @@
     "sync:instructions-aligned-date": "node ./scripts/sync-instruction-alignment-date.mjs",
     "check:instructions": "pnpm run sync:instructions-aligned-date && node ./scripts/check-instructions-frontmatter.mjs",
     "test": "turbo run test",
-    "validate": "pnpm run format:check && pnpm run lint && pnpm run check-types && pnpm run test",
+    "validate": "pnpm run format && pnpm run format:check && pnpm run lint && pnpm run check-types && pnpm run test",
     "ci:local": "pnpm run deps:audit && pnpm run format:check && pnpm run lint && pnpm run client:check-env-contract && pnpm run client:check-security-drift && pnpm run client:report-security-drift:strict && pnpm run check-types && pnpm run test",
     "ci:local:full": "pnpm install --frozen-lockfile && pnpm run ci:local",
     "clean": "turbo run clean && rimraf node_modules",
@@ -75,9 +75,9 @@
     "turbo": "^2.9.5",
     "typescript": "^5.9.3"
   },
-  "packageManager": "pnpm@10.33.2",
+  "packageManager": "pnpm@11.1.1",
   "engines": {
-    "node": ">=20",
+    "node": "20.x || 22.x || 24.x",
     "pnpm": ">=10"
   },
   "dependencies": {
@@ -95,10 +95,13 @@
       "unrs-resolver",
       "prisma",
       "@prisma/client",
-      "@prisma/engines"
+      "@prisma/engines",
+      "core-js",
+      "protobufjs",
+      "workerd"
     ],
     "overrides": {
-      "@hono/node-server": ">=1.19.13",
+      "@hono/node-server": ">=2.0.2",
       "ajv@^6.12.0": "6.14.0",
       "brace-expansion@^2.0.0": "2.0.3",
       "defu": ">=6.1.5",
@@ -106,7 +109,8 @@
       "fast-uri": ">=3.1.2",
       "fast-xml-builder": ">=1.1.7",
       "fast-xml-parser": ">=5.7.0",
-      "uuid": ">=14.0.0",
+      "uuid": "11.1.1",
+      "bullmq>uuid": "11.1.1",
       "hono": ">=4.12.18",
       "lodash": ">=4.18.0",
       "mailparser": ">=3.9.3",
@@ -127,8 +131,9 @@
       "next": "16.2.6",
       "dompurify": ">=3.4.0",
       "axios": ">=1.15.0",
-      "protobufjs": ">=7.5.5",
-      "postcss": ">=8.5.10",
+      "protobufjs": ">=8.0.2",
+      "postcss": "8.5.14",
+      "next>postcss": "8.5.14",
       "admin>next": "16.2.6"
     }
   }

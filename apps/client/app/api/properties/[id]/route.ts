@@ -349,8 +349,10 @@ export const PATCH = withAuth(
       "property",
       context.dbUserId,
       "PATCH",
-      propertyId,
-      PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      {
+        entityConnect: { property: { connect: { id: propertyId } } },
+        ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      },
     );
 
     if (idempotencyCheck?.status === "completed") {
@@ -460,23 +462,15 @@ export const PATCH = withAuth(
       return errorResponse!;
     }
 
-    try {
-      await safeIdempotencyComplete(idempotencyKey, latestResult.data);
-    } catch (completionError) {
-      await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
-      logPropertiesRouteOutcome({
-        correlationId,
-        operationName,
-        actorRole,
-        outcome: "internal_error",
-        httpStatus: HttpStatus.OK,
-        durationMs: now() - startedAt,
-        domainError: "idempotency_complete_failed",
-        resourceType: "property",
-        resourceId: propertyId,
-      });
-      // Do NOT rethrow — domain mutation already succeeded
-    }
+    await safeIdempotencyComplete(idempotencyKey, latestResult.data, {
+      correlationId,
+      operationName,
+      actorRole,
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+      resourceId: propertyId,
+    });
     const response = apiSuccess(
       latestResult.data,
       HttpStatus.OK,
@@ -614,8 +608,10 @@ export const DELETE = withAuth(
       "property",
       context.dbUserId,
       "DELETE",
-      propertyId,
-      PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      {
+        entityConnect: { property: { connect: { id: propertyId } } },
+        ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      },
     );
 
     if (idempotencyCheck?.status === "completed") {
@@ -710,23 +706,15 @@ export const DELETE = withAuth(
       return errorResponse!;
     }
 
-    try {
-      await safeIdempotencyComplete(idempotencyKey, result.data);
-    } catch (completionError) {
-      await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
-      logPropertiesRouteOutcome({
-        correlationId,
-        operationName,
-        actorRole,
-        outcome: "internal_error",
-        httpStatus: HttpStatus.OK,
-        durationMs: now() - startedAt,
-        domainError: "idempotency_complete_failed",
-        resourceType: "property",
-        resourceId: propertyId,
-      });
-      // Do NOT rethrow — domain mutation already succeeded
-    }
+    await safeIdempotencyComplete(idempotencyKey, result.data, {
+      correlationId,
+      operationName,
+      actorRole,
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+      resourceId: propertyId,
+    });
     const response = apiSuccess(result.data, HttpStatus.OK, correlationId);
     response.headers.set("ETag", `"${result.data.version}"`);
     logPropertiesRouteOutcome({

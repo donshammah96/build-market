@@ -154,14 +154,14 @@ function personalizeContent(
 }
 
 // Event handlers
-notificationWorker.on("completed", (job) => {
+notificationWorker.on("completed", (job: Job) => {
   console.log(
     `[NotificationWorker] Completed batch ${job.data.batchNumber}:`,
     job.returnvalue,
   );
 });
 
-notificationWorker.on("failed", (job, err) => {
+notificationWorker.on("failed", (job: Job | undefined, err: Error) => {
   console.error(
     `[NotificationWorker] Batch ${job?.data.batchNumber} failed:`,
     err,

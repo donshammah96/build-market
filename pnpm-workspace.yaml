@@ -2,7 +2,32 @@ packages:
   - apps/*
   - packages/*
 
+allowBuilds:
+  "@clerk/shared": true
+  "@prisma/engines": true
+  core-js: true
+  cypress: true
+  esbuild: true
+  msgpackr-extract: true
+  ngrok: true
+  prisma: true
+  protobufjs: true
+  sharp: true
+  unrs-resolver: true
+  workerd: true
+
+auditConfig:
+  ignoreGhsas:
+    # postcss XSS via unescaped </style> — mitigated: root pnpm.overrides forces
+    # postcss@8.5.14 and next>postcss@8.5.14 (patched >=8.5.10) across all workspaces.
+    # pnpm audit still flags because it checks manifest ranges, not resolved versions.
+    - GHSA-qx2v-qp2m-jg93
+    # @hono/node-server middleware bypass — mitigated: root pnpm.overrides forces
+    # @hono/node-server@>=2.0.2 (patched >=1.19.13). Only reachable via @prisma/dev
+    # which is a dev-time Prisma Studio dep, never in production request paths.
+    - GHSA-92pp-h63x-v22m
+
 onlyBuiltDependencies:
-  - '@prisma/client'
-  - '@prisma/engines'
+  - "@prisma/client"
+  - "@prisma/engines"
   - prisma

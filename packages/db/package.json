@@ -9,6 +9,7 @@
     "./system-settings": "./lib/system-settings.ts"
   },
   "scripts": {
+    "build": "tsc",
     "check-types": "tsc --noEmit",
     "lint": "echo \"No lint configured\" && exit 0",
     "test": "echo \"No tests configured\" && exit 0",

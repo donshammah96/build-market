@@ -106,8 +106,7 @@ export async function createProjectAction(data: CreateProjectActionInput) {
         "project",
         actor!.dbUserId,
         "POST",
-        undefined,
-        PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -241,8 +240,7 @@ export async function createProfessionalProjectAction(
         "project",
         actor!.dbUserId,
         "POST",
-        undefined,
-        PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -312,14 +310,9 @@ export async function updateProjectAction(input: UpdateProjectActionInput) {
       const idempotencyCheck = await IdempotencyService.checkOrCreate<{
         project: unknown;
         version: number;
-      }>(
-        idempotencyKey,
-        "project",
-        actor!.dbUserId,
-        "PATCH",
-        input.projectId,
-        PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-      );
+      }>(idempotencyKey, "project", actor!.dbUserId, "PATCH", {
+        ttlHours: PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      });
 
       if (
         idempotencyCheck?.status === "completed" &&
@@ -438,14 +431,9 @@ export async function deleteProjectAction(input: DeleteProjectActionInput) {
         message: string;
         projectId: string;
         deletedAt: string;
-      }>(
-        idempotencyKey,
-        "project",
-        actor!.dbUserId,
-        "DELETE",
-        input.projectId,
-        PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-      );
+      }>(idempotencyKey, "project", actor!.dbUserId, "DELETE", {
+        ttlHours: PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      });
 
       if (
         idempotencyCheck?.status === "completed" &&
@@ -576,8 +564,7 @@ export async function createMilestoneAction(input: CreateMilestoneActionInput) {
         "project_milestone",
         actor!.dbUserId,
         "POST",
-        undefined,
-        PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -649,14 +636,9 @@ export async function updateMilestoneAction(input: UpdateMilestoneActionInput) {
       const idempotencyCheck = await IdempotencyService.checkOrCreate<{
         milestone: unknown;
         version: number;
-      }>(
-        idempotencyKey,
-        "project_milestone",
-        actor!.dbUserId,
-        "PATCH",
-        input.milestoneId,
-        PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-      );
+      }>(idempotencyKey, "project_milestone", actor!.dbUserId, "PATCH", {
+        ttlHours: PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      });
 
       if (
         idempotencyCheck?.status === "completed" &&
@@ -775,14 +757,9 @@ export async function deleteMilestoneAction(input: DeleteMilestoneActionInput) {
       const idempotencyCheck = await IdempotencyService.checkOrCreate<{
         message: string;
         milestoneId: string;
-      }>(
-        idempotencyKey,
-        "project_milestone",
-        actor!.dbUserId,
-        "DELETE",
-        input.milestoneId,
-        PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-      );
+      }>(idempotencyKey, "project_milestone", actor!.dbUserId, "DELETE", {
+        ttlHours: PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      });
 
       if (
         idempotencyCheck?.status === "completed" &&
