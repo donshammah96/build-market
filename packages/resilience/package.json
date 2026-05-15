@@ -19,11 +19,12 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "lru-cache": "^11.2.2",
-    "@build/redis": "workspace:*"
+    "@build/redis": "workspace:*",
+    "lru-cache": "^11.2.2"
   },
   "devDependencies": {
     "@build/typescript-config": "workspace:*",
+    "@types/node": "^25.7.0",
     "typescript": "^5.9.3"
   }
 }

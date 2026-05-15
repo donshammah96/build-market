@@ -238,15 +238,15 @@ export function createAnonymizationBatchWorker() {
     },
   );
 
-  worker.on("completed", (job) => {
+  worker.on("completed", (job: Job) => {
     console.log(`[AnonymizationBatch] Job ${job.id} completed`);
   });
 
-  worker.on("failed", (job, error) => {
+  worker.on("failed", (job: Job | undefined, error: Error) => {
     console.error(`[AnonymizationBatch] Job ${job?.id} failed:`, error);
   });
 
-  worker.on("error", (error) => {
+  worker.on("error", (error: Error) => {
     console.error("[AnonymizationBatch] Worker error:", error);
   });
 

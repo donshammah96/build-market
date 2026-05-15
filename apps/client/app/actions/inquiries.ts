@@ -160,8 +160,7 @@ export async function updateProfessionalInquiryAction(
         "property_inquiry",
         actor!.dbUserId,
         "PATCH",
-        validatedInput.inquiryId,
-        INQUIRY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: INQUIRY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -236,8 +235,7 @@ export async function deleteProfessionalInquiryAction(
         "property_inquiry",
         actor!.dbUserId,
         "DELETE",
-        validatedInput.inquiryId,
-        INQUIRY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: INQUIRY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (

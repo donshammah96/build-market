@@ -162,8 +162,7 @@ export async function createProfessionalLeadAction(
         "lead",
         actor!.dbUserId,
         "POST",
-        undefined,
-        LEAD_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: LEAD_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -238,8 +237,7 @@ export async function updateProfessionalLeadAction(
         "lead",
         actor!.dbUserId,
         "PATCH",
-        validatedInput.leadId,
-        LEAD_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: LEAD_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -310,8 +308,7 @@ export async function deleteProfessionalLeadAction(
         "lead",
         actor!.dbUserId,
         "DELETE",
-        validatedInput.leadId,
-        LEAD_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: LEAD_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (

@@ -469,7 +469,7 @@ class RedisQueueStrategy implements NotificationQueueStrategy {
     );
 
     // Handle worker events
-    this.worker.on("failed", (job, err) => {
+    this.worker.on("failed", (job: Job | undefined, err: Error) => {
       logger.error("Redis job failed", err, {
         jobId: job?.id,
         entityId: job?.data?.result?.entityId,
@@ -477,7 +477,7 @@ class RedisQueueStrategy implements NotificationQueueStrategy {
       });
     });
 
-    this.worker.on("completed", (job) => {
+    this.worker.on("completed", (job: Job) => {
       logger.info("Redis job completed", {
         jobId: job.id,
         entityId: job.data.result.entityId,

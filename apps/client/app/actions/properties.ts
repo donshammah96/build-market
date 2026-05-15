@@ -208,8 +208,7 @@ export async function createPropertyAction(data: CreatePropertyActionInput) {
         "property",
         actor!.dbUserId,
         "POST",
-        undefined,
-        PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -278,8 +277,7 @@ export async function createPropertiesBatchAction(
         "property",
         actor!.dbUserId,
         "POST",
-        undefined,
-        PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -357,8 +355,7 @@ export async function updatePropertyAction(
         "property",
         actor!.dbUserId,
         "PATCH",
-        input.id,
-        PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (
@@ -467,8 +464,7 @@ export async function deletePropertyAction(
         "property",
         actor!.dbUserId,
         "DELETE",
-        input.id,
-        PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+        { ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
       );
 
       if (

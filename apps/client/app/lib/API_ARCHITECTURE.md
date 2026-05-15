@@ -157,32 +157,32 @@ This keeps handlers thin and ensures error mapping is consistent across all oper
 
 ## Dependency Direction
 
-```
+```markdown
 UI Component / Page
-  → React Query hook  (hooks/use*.ts)
-  → Browser facade    (lib/<domain>-client.ts)
-  → API route         (app/api/<domain>/**)
-  → Domain service    (app/lib/domains/<domain>/service.ts)
-  → Repository        (app/lib/domains/<domain>/repository.ts)
-  → @build/db
+→ React Query hook (hooks/use\*.ts)
+→ Browser facade (lib/<domain>-client.ts)
+→ API route (app/api/<domain>/\*\*)
+→ Domain service (app/lib/domains/<domain>/service.ts)
+→ Repository (app/lib/domains/<domain>/repository.ts)
+→ @build/db
 ```
 
 Server-side form / mutation:
 
-```
+```markdown
 Server Component / form
-  → Server action     (app/actions/<domain>.ts)
-  → secureAction wrapper
-  → Domain service    (app/lib/domains/<domain>/service.ts)
-  → Repository
-  → @build/db
+→ Server action (app/actions/<domain>.ts)
+→ secureAction wrapper
+→ Domain service (app/lib/domains/<domain>/service.ts)
+→ Repository
+→ @build/db
 ```
 
 **Disallowed flows:**
 
-```
+```markdown
 domains → route handlers or server actions
-browser code → app/lib/domains/** or server-only modules
+browser code → app/lib/domains/\*\* or server-only modules
 repositories → authorization policy or HTTP response shaping
 route handlers → process.env directly (use envConfig)
 ```
@@ -272,32 +272,31 @@ if (!validation.success) {
 }
 ```
 
-### 6. Idempotency — `complete()` must be wrapped
+### 6. Idempotency — `complete()` must use `safeIdempotencyComplete`
 
-`IdempotencyService.complete()` can throw after a successful domain mutation. The handler must not rethrow — the domain operation succeeded and the client must receive the success response.
+`IdempotencyService.complete()` can throw after a successful domain mutation. Always use `safeIdempotencyComplete()` from `idempotency-helpers.ts` — it wraps the call in an isolated try-catch, calls `fail()` on error, and emits a structured log. **Do not double-wrap** `safeIdempotencyComplete()` in another try-catch.
 
 ```typescript
-// ✅ Correct — isolated try-catch, does NOT rethrow
-try {
-  await IdempotencyService.complete(idempotencyKey, result.data);
-} catch (completionError) {
-  await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
-  logger.error(
-    "Idempotency completion failed",
-    completionError instanceof Error
-      ? completionError
-      : new Error(String(completionError)),
-    {
-      correlationId,
-      operationName,
-      outcome: "idempotency_complete_failed",
-      httpStatus: HttpStatus.OK,
-      durationMs: now() - startedAt,
-    },
-  );
-  // Do NOT rethrow. Mutation succeeded.
-}
+// ✅ Correct — use the helper, supply IdempotencyCompletionContext
+await safeIdempotencyComplete(idempotencyKey, result.data, {
+  correlationId,
+  operationName: "update_property",
+  httpMethod: "PATCH",
+  routePattern: "/api/properties/[id]",
+  actorRole: String(actorRole),
+  httpStatus: HttpStatus.OK,
+  durationMs: now() - startedAt,
+  resourceType: "property",
+  resourceId: propertyId,
+});
 return apiSuccess(result.data, HttpStatus.OK, correlationId);
+
+// ❌ WRONG — double-wrapping defeats the isolation guarantee
+try {
+  await safeIdempotencyComplete(idempotencyKey, result.data);
+} catch {
+  /* ... */
+}
 ```
 
 ### 7. ETag on success
@@ -598,31 +597,72 @@ Optional safe fields: `domainError` (the error code), `resourceType`, `resourceI
 
 `IdempotencyService` lives at `app/lib/services/idempotency.service.ts`. It is an **adapter-layer concern** — never called from domain services or repositories.
 
+### `checkOrCreate` API
+
 ```typescript
-// Generate key — use Class C/D fields only (ADR-006)
-const idempotencyKey = req.headers.get("Idempotency-Key")
-  || IdempotencyService.generateKey(dbUserId, `PATCH:${resourceId}`, {
-    domain: "property",
-    resourceId,
-    fieldsUpdated: Object.keys(validationData).length,  // Class C summary, not full payload
-  });
+// Signature:
+static async checkOrCreate<T = unknown>(
+  key: string,
+  scope: string,
+  userId: string,
+  operation: string,
+  options?: {
+    entityConnect?: Record<string, { connect: { id: string } }>;
+    ttlHours?: number;
+  },
+): Promise<IdempotencyCheckResult<T>>
 
-// Check before execution
-const check = await IdempotencyService.checkOrCreate(key, scope, dbUserId, method, resourceId, ttlHours);
-if (check?.status === "completed") return apiSuccess(check.response, HttpStatus.OK, correlationId);
-if (check?.status === "pending")   return apiError("Already processing", HttpStatus.CONFLICT, ...);
-
-// ... domain execution ...
-
-// Complete — always in isolated try-catch
-try {
-  await IdempotencyService.complete(idempotencyKey, result.data);
-} catch (err) {
-  await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
-  logger.error("Idempotency completion failed", err, { correlationId, outcome: "idempotency_complete_failed", ... });
-  // Do NOT rethrow
-}
+// Returns { status: "new" | "completed" | "pending", response?: T }
+// Never returns null — callers must NOT null-guard the result.
 ```
+
+### Entity relation association
+
+To associate an idempotency record with a domain entity, pass an `entityConnect` option shaped as a Prisma relation connect payload. The service does **not** map entity IDs to relations internally — callers own the shape:
+
+```typescript
+// ✅ Correct — caller constructs the Prisma relation shape
+const check = await IdempotencyService.checkOrCreate(
+  idempotencyKey,
+  "property",
+  dbUserId,
+  "PATCH",
+  {
+    entityConnect: { property: { connect: { id: propertyId } } },
+    ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+  },
+);
+
+// ✅ No entity — just ttlHours
+const check = await IdempotencyService.checkOrCreate(
+  idempotencyKey,
+  "onboarding",
+  dbUserId,
+  "PATCH",
+  { ttlHours: 24 },
+);
+
+// ✅ Default TTL, no entity
+const check = await IdempotencyService.checkOrCreate(key, scope, userId, op);
+```
+
+### Replay guard
+
+```typescript
+if (check.status === "completed")
+  return apiSuccess(check.response, HttpStatus.OK, correlationId);
+if (check.status === "pending")
+  return apiError(
+    "Already processing",
+    HttpStatus.CONFLICT,
+    undefined,
+    correlationId,
+  );
+```
+
+### Completion
+
+Use `safeIdempotencyComplete()` with full `IdempotencyCompletionContext`. See §6 above.
 
 **Replay payload policy (ADR-006):** Default replay storage allows only Class C and Class D data. Class B fields require explicit scope registration in `IdempotencyService`. Class A data is never allowed in replay persistence.
 

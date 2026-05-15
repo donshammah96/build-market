@@ -34,7 +34,7 @@ const GENERAL_SCAN_PATHS = [
   "components",
   "hooks",
   "lib",
-  "middleware.ts",
+  "proxy.ts",
   "next.config.ts",
   "instrumentation.ts",
   "sentry.client.config.ts",
@@ -48,7 +48,7 @@ const SERVER_SCAN_PATHS = [
   "app/lib",
   "app/jobs",
   "app/workers",
-  "middleware.ts",
+  "proxy.ts",
 ];
 
 const DIRECT_ENV_PATTERN = /process\.env(?:\.|\[)/g;
@@ -1641,9 +1641,12 @@ report.summary.idempotencyKeyBodySpread =
   report.findings.idempotencyKeyBodySpread.length;
 report.summary.inlineDateNow = report.findings.inlineDateNow.length;
 report.summary.mapperInfraImport = report.findings.mapperInfraImport.length;
-report.summary.safeIdempotencyCompleteDrift = report.findings.safeIdempotencyCompleteDrift.length;
-report.summary.mapperNormalizationDrift = report.findings.mapperNormalizationDrift.length;
-report.summary.operationsBuilderDrift = report.findings.operationsBuilderDrift.length;
+report.summary.safeIdempotencyCompleteDrift =
+  report.findings.safeIdempotencyCompleteDrift.length;
+report.summary.mapperNormalizationDrift =
+  report.findings.mapperNormalizationDrift.length;
+report.summary.operationsBuilderDrift =
+  report.findings.operationsBuilderDrift.length;
 report.summary.indexExportDrift = report.findings.indexExportDrift.length;
 
 fs.writeFileSync(REPORT_OUTPUT, `${JSON.stringify(report, null, 2)}\n`, "utf8");

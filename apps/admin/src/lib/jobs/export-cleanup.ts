@@ -307,14 +307,14 @@ export function createCleanupWorker() {
   process.on("SIGINT", () => shutdown("SIGINT"));
 
   // Worker event handlers
-  worker.on("completed", (job, result) => {
+  worker.on("completed", (job: Job, result: unknown) => {
     logger.info("Cleanup job completed", {
       jobId: job.id,
       result,
     });
   });
 
-  worker.on("failed", (job, error) => {
+  worker.on("failed", (job: Job | undefined, error: Error) => {
     logger.error(
       "Cleanup job failed",
       error instanceof Error ? error : new Error(String(error)),
@@ -328,7 +328,7 @@ export function createCleanupWorker() {
     );
   });
 
-  worker.on("error", (error) => {
+  worker.on("error", (error: Error) => {
     logger.error(
       "Worker error occurred",
       error instanceof Error ? error : new Error(String(error)),

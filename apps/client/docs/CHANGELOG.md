@@ -26,6 +26,50 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
+## [2026-05-14] Infrastructure, Tests & Routing Remediation
+
+### Changed (Infrastructure & Routing)
+
+- **Next.js Proxy Migration:** Renamed `apps/client/middleware.ts` to `apps/client/proxy.ts` and updated `eslint.config.js` to address the Next.js `middleware` file convention deprecation warning.
+- **Proxy Route Imports:** Refactored `apps/client/proxy.ts` and `apps/client/app/lib/security/middleware/redirect-policy.ts` to consume the new structured domain routing module (`@/lib/routes/professional.routes` and `@/lib/routes/client.routes`), removing coupling to the legacy `@/lib/links` barrel.
+- **Vercel Build Config:** Locked `engines.node` to `"20.x"` in `package.json` to prevent unexpected auto-upgrades, and added 13 missing `STORAGE_*` environment variables to `turbo.json`'s `env` array to resolve Turborepo caching warnings.
+
+### Fixed (Tests)
+
+- **Onboarding Route Tests:** Fixed 7 failing Vitest tests in `professional-complete.route.test.ts`. Aligned `apiError`/`apiSuccess` mocks with their new location in `api-response`, updated test expectations to match the new `logOnboardingRouteOutcome` structured logging signatures, and corrected assertions for static domain error messages to prevent leaking internal error strings.
+
+## [2026-05-14] Idempotency Hardening — Deferred Cleanup
+
+### Changed (Idempotency Hardening — Deferred Cleanup)
+
+- **Null guard batch removal (28 files):** Removed all dead `if (!idempotencyCheck) { return apiError(...) }` blocks codebase-wide. These guards were unreachable after `checkOrCreate` return type was tightened to never return `null`. Files cleaned span `projects/`, `stores/`, `professional-portal/` (profile, portfolio, licenses, leads, inquiries, documents, finance, calendar, certificates), `messaging/`, and `idea-books/`.
+- **Properties double-wrap collapse (3 sites):** Collapsed `try { await safeIdempotencyComplete(...) } catch (completionError) { ... }` outer wrappers in `properties/[id]/route.ts` (PATCH + DELETE) and `properties/route.ts` (POST) into direct `await safeIdempotencyComplete(key, data, context)` calls. The helper already handles all failure isolation internally — double-wrapping defeated that guarantee.
+- **Messaging `.catch()` double-wrap (3 files):** Removed `.catch(() => {})` chains on `safeIdempotencyComplete` in `messaging/messages/route.ts`, `messaging/conversations/route.ts`, and `messaging/conversations/[id]/route.ts`. Silently swallowing the error suppressed the structured log that `safeIdempotencyComplete` emits on failure.
+
+### Verification (Idempotency Hardening — Deferred Cleanup)
+
+- `tsc --noEmit` — exit 0, zero errors
+- Zero remaining `!idempotencyCheck` occurrences across `app/api/**`
+
+### Changed (Idempotency Service Hardening)
+
+- **`IdempotencyService.checkOrCreate` return type tightened:** Return type changed from `Promise<IdempotencyCheckResult<T> | null>` to `Promise<IdempotencyCheckResult<T>>`. The `| null` variant was unreachable — all code paths either returned a result or threw. Dead null-guard blocks removed from onboarding route family (`route.ts`, `skip/route.ts`, `skip-professional/route.ts`) and `milestones/[milestoneId]/route.ts`.
+- **Entity ID decoupling (options bag API):** Replaced positional `entityId?: string, ttlHours?: number` parameters with an options bag `{ entityConnect?: Record<string, { connect: { id: string } }>; ttlHours?: number }`. The service no longer contains hardcoded `store`/`property` scope-to-relation mapping — callers now construct and own the Prisma relation connect payload. This eliminates the coupling between the generic service and domain-specific entity schemas.
+- **All callers migrated:** Updated 40+ call sites across API routes (`properties/`, `stores/`, `projects/`, `onboarding/`), server actions (`inquiries.ts`, `leads.ts`, `projects.ts`, `properties.ts`, `stores.ts`), and tests (`idempotency.service.test.ts`).
+
+### Fixed (Idempotency Service Hardening)
+
+- **F-1: Domain message passthrough** (`professional/complete/route.ts`): `apiError()` first argument now uses static error map via `onboardingDomainErrorToClientMessage()` instead of passing dynamic `result.data.message` to the client response. Prevents internal domain messages from leaking to the API surface.
+- **F-2: Missing `IdempotencyCompletionContext`** (`professional/complete/route.ts`): `safeIdempotencyComplete()` now receives full structured context (`correlationId`, `operationName`, `httpMethod`, `routePattern`, `actorRole`, `httpStatus`, `durationMs`, `resourceType`) for observability.
+- **F-3: Missing `correlationId`** (`professional/complete/route.ts`): All `apiSuccess()` and `apiError()` responses now pass `correlationId` for request tracing.
+- **F-4: Dynamic rate-limit message** (`professional/complete/route.ts`): Replaced template literal that leaked server timing data (`Try again in ${seconds} seconds`) with static string `"Too many requests. Please try again later."`.
+- **F-7: Inline `logOutcome` severity** (`professional/complete/route.ts`): Replaced inline `logOutcome` closure (which used `info` for all severities) with shared `logOnboardingRouteOutcome()` that correctly routes errors to `error`, warnings to `warn`, and successes to `info`.
+
+### Docs (Idempotency Service Hardening)
+
+- **`API_ARCHITECTURE.md` §6:** Updated to document `safeIdempotencyComplete()` as the canonical completion wrapper, the no-double-wrap rule, and the `IdempotencyCompletionContext` requirement.
+- **`API_ARCHITECTURE.md` Idempotency section:** Rewritten to document the new `checkOrCreate` options bag API, `entityConnect` pattern, and the "never returns null" contract.
+
 ## [2026-05-12] Architecture Compliance Phase 0 Closeout
 
 ### Added (Architecture Compliance Phase 0 Closeout)

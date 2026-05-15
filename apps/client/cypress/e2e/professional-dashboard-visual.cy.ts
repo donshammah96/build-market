@@ -392,7 +392,7 @@ function mockDashboardApis(profession: DashboardProfession) {
   }).as("pipeline");
 }
 
-function visitAndCapture(
+function visitAndCapturePro(
   profession: DashboardProfession,
   viewport: { width: number; height: number },
   label: string,
@@ -421,12 +421,12 @@ function visitAndCapture(
 
 describe("Professional Dashboard visual verification", () => {
   it("captures desktop and small-mobile for service-provider widgets", () => {
-    visitAndCapture(
+    visitAndCapturePro(
       "GENERAL_CONTRACTOR",
       { width: 1366, height: 1024 },
       "service-provider-desktop",
     );
-    visitAndCapture(
+    visitAndCapturePro(
       "GENERAL_CONTRACTOR",
       { width: 390, height: 844 },
       "service-provider-mobile",
@@ -434,12 +434,12 @@ describe("Professional Dashboard visual verification", () => {
   });
 
   it("captures desktop and small-mobile for seller-store widgets", () => {
-    visitAndCapture(
+    visitAndCapturePro(
       "HARDWARE",
       { width: 1366, height: 1024 },
       "seller-store-desktop",
     );
-    visitAndCapture(
+    visitAndCapturePro(
       "HARDWARE",
       { width: 390, height: 844 },
       "seller-store-mobile",
@@ -447,12 +447,12 @@ describe("Professional Dashboard visual verification", () => {
   });
 
   it("captures desktop and small-mobile for seller-property widgets", () => {
-    visitAndCapture(
+    visitAndCapturePro(
       "REAL_ESTATE_AGENT",
       { width: 1366, height: 1024 },
       "seller-property-desktop",
     );
-    visitAndCapture(
+    visitAndCapturePro(
       "REAL_ESTATE_AGENT",
       { width: 390, height: 844 },
       "seller-property-mobile",

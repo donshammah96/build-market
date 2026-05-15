@@ -147,11 +147,6 @@ export const POST = withAuth(
       actor.userId,
       "POST",
     );
-    if (!idempotencyCheck)
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
     if (idempotencyCheck.status === "completed")
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
     if (idempotencyCheck.status === "pending")
@@ -193,9 +188,7 @@ export const POST = withAuth(
           serviceResult?.status ?? HttpStatus.BAD_REQUEST,
         );
       }
-      await safeIdempotencyComplete(idempotencyKey, serviceResult.data).catch(
-        () => {},
-      );
+      await safeIdempotencyComplete(idempotencyKey, serviceResult.data);
       return apiSuccess(serviceResult.data, HttpStatus.CREATED);
     }
   },

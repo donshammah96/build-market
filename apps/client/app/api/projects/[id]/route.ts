@@ -170,8 +170,7 @@ export const PATCH = withAuth<ProjectParams>(
       "project",
       dbUserId,
       "PATCH",
-      params.id,
-      PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      { ttlHours: PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
     );
 
     if (idempotencyCheck?.status === "completed") {
@@ -291,8 +290,7 @@ export const DELETE = withAuth<ProjectParams>(
       "project",
       dbUserId,
       "DELETE",
-      params.id,
-      PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      { ttlHours: PROJECT_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
     );
 
     if (idempotencyCheck?.status === "completed") {

@@ -58,14 +58,10 @@ describe("IdempotencyService replay data policy", () => {
   });
 
   it("preserves reviewed Class B fields for registered business DTO scopes", async () => {
-    await IdempotencyService.checkOrCreate(
-      "key-1",
-      "store",
-      "user-1",
-      "POST",
-      "store-1",
-      1,
-    );
+    await IdempotencyService.checkOrCreate("key-1", "store", "user-1", "POST", {
+      entityConnect: { store: { connect: { id: "store-1" } } },
+      ttlHours: 1,
+    });
 
     await IdempotencyService.complete("key-1", {
       id: "store-1",
@@ -98,8 +94,7 @@ describe("IdempotencyService replay data policy", () => {
       "onboarding",
       "user-1",
       "POST",
-      undefined,
-      1,
+      { ttlHours: 1 },
     );
 
     await expect(
@@ -113,14 +108,10 @@ describe("IdempotencyService replay data policy", () => {
   });
 
   it("rejects Class A fields even when the scope allows reviewed Class B fields", async () => {
-    await IdempotencyService.checkOrCreate(
-      "key-3",
-      "store",
-      "user-1",
-      "POST",
-      "store-1",
-      1,
-    );
+    await IdempotencyService.checkOrCreate("key-3", "store", "user-1", "POST", {
+      entityConnect: { store: { connect: { id: "store-1" } } },
+      ttlHours: 1,
+    });
 
     await expect(
       IdempotencyService.complete("key-3", {
@@ -152,14 +143,10 @@ describe("IdempotencyService replay data policy", () => {
     });
 
     await expect(
-      IdempotencyService.checkOrCreate(
-        "key-4b",
-        "property",
-        "user-1",
-        "POST",
-        "property-1",
-        1,
-      ),
+      IdempotencyService.checkOrCreate("key-4b", "property", "user-1", "POST", {
+        entityConnect: { property: { connect: { id: "property-1" } } },
+        ttlHours: 1,
+      }),
     ).rejects.toThrow(/already bound to scope "store"/);
 
     expect(mocks.create).not.toHaveBeenCalled();
@@ -177,8 +164,10 @@ describe("IdempotencyService replay data policy", () => {
       "store",
       "user-1",
       "POST",
-      "store-1",
-      1,
+      {
+        entityConnect: { store: { connect: { id: "store-1" } } },
+        ttlHours: 1,
+      },
     );
 
     expect(replay).toEqual({ status: "completed", response: { ok: true } });
@@ -198,8 +187,10 @@ describe("IdempotencyService replay data policy", () => {
       "store",
       "user-1",
       "POST",
-      "store-1",
-      1,
+      {
+        entityConnect: { store: { connect: { id: "store-1" } } },
+        ttlHours: 1,
+      },
     );
 
     expect(mocks.delete).toHaveBeenCalledWith({ where: { key: "key-6" } });

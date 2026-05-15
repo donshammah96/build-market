@@ -307,8 +307,7 @@ export const POST = withAuth(
       "property",
       dbUserId,
       "POST",
-      undefined,
-      PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      { ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
     );
 
     if (idempotencyCheck?.status === "completed") {
@@ -412,22 +411,14 @@ export const POST = withAuth(
       return errorResponse!;
     }
 
-    try {
-      await safeIdempotencyComplete(idempotencyKey, domainResult.data);
-    } catch (completionError) {
-      await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
-      logPropertiesRouteOutcome({
-        correlationId,
-        operationName,
-        actorRole,
-        outcome: "internal_error",
-        httpStatus: HttpStatus.CREATED,
-        durationMs: now() - startedAt,
-        domainError: "idempotency_complete_failed",
-        resourceType: "property",
-      });
-      // Do NOT rethrow — domain mutation already succeeded
-    }
+    await safeIdempotencyComplete(idempotencyKey, domainResult.data, {
+      correlationId,
+      operationName,
+      actorRole,
+      httpStatus: HttpStatus.CREATED,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+    });
     const response = apiSuccess(
       domainResult.data,
       HttpStatus.CREATED,

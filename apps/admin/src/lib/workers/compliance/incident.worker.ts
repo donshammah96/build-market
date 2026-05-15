@@ -356,11 +356,11 @@ Reference: ${incident.id}
 }
 
 // Event handlers
-incidentWorker.on("completed", (job) => {
+incidentWorker.on("completed", (job: Job) => {
   console.log(`[IncidentWorker] Completed job ${job.id}`);
 });
 
-incidentWorker.on("failed", (job, err) => {
+incidentWorker.on("failed", (job: Job | undefined, err: Error) => {
   console.error(`[IncidentWorker] Job ${job?.id} failed:`, err);
 
   // Alert on-call engineer if critical

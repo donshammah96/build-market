@@ -166,12 +166,6 @@ export const PATCH = withAuth<{ id: string }>(
       authCtx.dbUserId,
       "PATCH",
     );
-    if (!idempotencyCheck) {
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (idempotencyCheck.status === "completed") {
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
     }
