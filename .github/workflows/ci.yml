@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: "20"
+  NODE_VERSION: "24.13.1"
   # Prevent Next.js from making outbound telemetry calls during build steps,
   # which can add latency and produce flaky network errors in CI.
   NEXT_TELEMETRY_DISABLED: "1"
@@ -82,6 +82,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
+
+      - name: Print Node and pnpm versions
+        run: |
+          node -v
+          pnpm -v
 
       # The validate job runs only static checks: lint, type-check, unit tests.
       # None of these require a Next.js build artifact, so there is no .next/cache
@@ -233,6 +238,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
+
+      - name: Print Node and pnpm versions
+        run: |
+          node -v
+          pnpm -v
 
       - name: Cache Next.js build
         uses: actions/cache@v4

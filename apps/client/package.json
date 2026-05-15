@@ -2,6 +2,11 @@
   "name": "client",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.1.1",
+  "engines": {
+    "node": "24.x",
+    "pnpm": ">=10"
+  },
   "type": "module",
   "scripts": {
     "dev": "next dev --turbopack --port 3500",
