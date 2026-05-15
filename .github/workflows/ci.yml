@@ -74,7 +74,7 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        # Version is sourced from the root packageManager field (pnpm@10.x).
+        # Version is sourced from the root packageManager field (pnpm@11.x).
         # No explicit version pin needed here — it's already canonical in package.json.
 
       - name: Setup Node.js
