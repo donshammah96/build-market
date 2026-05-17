@@ -1,17 +1,21 @@
 "use server";
 
-import { prisma } from "@build/db";
+import { AdminRole, UserRole, prisma } from "@build/db";
 import { auth } from "@clerk/nextjs/server";
 import { syncUserRole } from "../../lib/auth-sync";
 import {
   getAdminActionPolicy,
+  requireAdminCapability,
   type AdminAccessRole,
+  type AdminActionPolicy,
 } from "@/lib/security/authorization-policy";
 import {
   normalizeAdminAccessRole,
   parseSessionMetadata,
 } from "@/lib/security/claims";
-import type { ActionResponse } from "./types";
+import type { AdminActionContext, AdminActor } from "@/lib/security/admin-actor";
+import { checkRateLimit } from "@/lib/api/rate-limit";
+import type { ActionResponse, AdminActionError } from "./types";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 import { omitUndefined } from "@/lib/utils";
 
@@ -29,6 +33,12 @@ const VERIFICATION_ALLOWED_ROLES = ["admin", "verification_admin"] as const;
 const ADMIN_SUPER_ROLES = ["SUPER_ADMIN"] as const;
 
 type ActionActorRole = (typeof VERIFICATION_ALLOWED_ROLES)[number];
+
+type SafeActionOptions = {
+  recentAuth?: { maxAgeSeconds: number };
+  rateLimit?: { namespace: string; limit: number; windowMs: number };
+  auditLog?: { operation: string; resourceType?: string };
+};
 
 export type AdminPermissions = {
   role: AdminAccessRole | undefined;
@@ -202,34 +212,289 @@ export async function requireAdminGranularRole(
   return granularRole;
 }
 
+function adminActionError(
+  code: AdminActionError["code"],
+  message: string,
+  action?: string,
+  retryAfterMs?: number,
+): AdminActionError {
+  return {
+    code,
+    message,
+    ...omitUndefined({ action, retryAfterMs }),
+  };
+}
+
+function adminActionFailure<T>(
+  error: AdminActionError,
+  timestamp: string,
+): ActionResponse<T> {
+  return {
+    success: false,
+    error: error.message,
+    errorDetails: error,
+    timestamp,
+  };
+}
+
+function getSessionAuthTimeSeconds(sessionClaims: unknown): number | undefined {
+  if (!sessionClaims || typeof sessionClaims !== "object") {
+    return undefined;
+  }
+
+  const claims = sessionClaims as Record<string, unknown>;
+  const candidate = claims.auth_time ?? claims.iat;
+
+  if (typeof candidate === "number" && Number.isFinite(candidate)) {
+    return candidate;
+  }
+
+  if (typeof candidate === "string") {
+    const parsed = Number(candidate);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+}
+
+async function resolveAdminActor(): Promise<
+  | { success: true; actor: AdminActor; sessionClaims: unknown }
+  | { success: false; error: AdminActionError }
+> {
+  const { userId: clerkId, sessionClaims } = await auth();
+
+  if (!clerkId) {
+    return {
+      success: false,
+      error: adminActionError("UNAUTHORIZED", "Admin authentication required"),
+    };
+  }
+
+  await syncUserRole().catch(() => undefined);
+
+  const user = await prisma.user.findUnique({
+    where: { clerkId },
+    select: {
+      id: true,
+      role: true,
+      adminProfile: {
+        select: {
+          role: true,
+          isActive: true,
+        },
+      },
+    },
+  });
+
+  if (!user || user.role !== UserRole.ADMIN) {
+    return {
+      success: false,
+      error: adminActionError("FORBIDDEN", "Admin privileges required"),
+    };
+  }
+
+  if (!user.adminProfile || !user.adminProfile.isActive) {
+    return {
+      success: false,
+      error: adminActionError("FORBIDDEN", "Active admin profile required"),
+    };
+  }
+
+  return {
+    success: true,
+    actor: {
+      clerkId,
+      dbUserId: user.id,
+      adminRole: user.adminProfile.role,
+    },
+    sessionClaims,
+  };
+}
+
+function mergeSafeActionOptions(
+  policy: AdminActionPolicy,
+  options: SafeActionOptions | undefined,
+): SafeActionOptions {
+  return omitUndefined({
+    recentAuth: options?.recentAuth ?? policy.recentAuth,
+    rateLimit: options?.rateLimit ?? policy.rateLimit,
+    auditLog: options?.auditLog,
+  });
+}
+
+function enforceRecentAuth(
+  actionName: string,
+  sessionClaims: unknown,
+  recentAuth: { maxAgeSeconds: number } | undefined,
+): AdminActionError | undefined {
+  if (!recentAuth) {
+    return undefined;
+  }
+
+  const authTimeSeconds = getSessionAuthTimeSeconds(sessionClaims);
+
+  if (!authTimeSeconds) {
+    return adminActionError(
+      "SESSION_STALE",
+      "Recent admin authentication required",
+      actionName,
+    );
+  }
+
+  const ageSeconds = Math.floor(Date.now() / 1000) - authTimeSeconds;
+
+  if (ageSeconds > recentAuth.maxAgeSeconds) {
+    return adminActionError(
+      "SESSION_STALE",
+      "Recent admin authentication required",
+      actionName,
+    );
+  }
+
+  return undefined;
+}
+
+async function enforceActorRateLimit(
+  actionName: string,
+  actor: AdminActor,
+  rateLimit: SafeActionOptions["rateLimit"],
+): Promise<AdminActionError | undefined> {
+  if (!rateLimit) {
+    return undefined;
+  }
+
+  const result = await checkRateLimit(
+    `admin:${rateLimit.namespace}:${actor.dbUserId}`,
+    rateLimit.limit,
+    rateLimit.windowMs,
+  );
+
+  if (result.success) {
+    return undefined;
+  }
+
+  return adminActionError(
+    "RATE_LIMITED",
+    "Too many admin action attempts",
+    actionName,
+    Math.max(0, result.reset - Date.now()),
+  );
+}
+
+async function recordDeclarativeAudit(
+  actor: AdminActor,
+  auditLog: SafeActionOptions["auditLog"],
+  outcome: "SUCCESS" | "FAILURE",
+  details?: Record<string, unknown>,
+) {
+  if (!auditLog) {
+    return;
+  }
+
+  await logAdminAction({
+    userId: actor.dbUserId,
+    action: auditLog.operation,
+    targetType: auditLog.resourceType ?? "admin_action",
+    targetId: actor.dbUserId,
+    details: {
+      outcome,
+      ...details,
+    },
+  }).catch(() => undefined);
+}
+
 export async function safeAction<T>(
   actionName: string,
-  fn: (context: { adminUserId: string; adminRole: "admin" }) => Promise<T>,
+  fn: (context: AdminActionContext) => Promise<T>,
+  options?: SafeActionOptions,
 ): Promise<ActionResponse<T>> {
-  try {
-    const { dbUserId, role } = await assertAdmin();
-    const policy = getAdminActionPolicy(actionName);
+  const timestamp = new Date().toISOString();
 
-    if (!policy.allowedRoles.includes(role)) {
-      throw new Error("Forbidden: Action policy denied");
+  try {
+    const actorResult = await resolveAdminActor();
+
+    if (!actorResult.success) {
+      return adminActionFailure(
+        { ...actorResult.error, action: actionName },
+        timestamp,
+      );
     }
 
-    const data = await fn({ adminUserId: dbUserId, adminRole: role });
+    const policy = getAdminActionPolicy(actionName);
+    const actionOptions = mergeSafeActionOptions(policy, options);
+
+    if (!policy.allowedRoles.includes(actorResult.actor.adminRole)) {
+      return adminActionFailure(
+        adminActionError(
+          "FORBIDDEN",
+          "Admin action policy denied",
+          actionName,
+        ),
+        timestamp,
+      );
+    }
+
+    for (const capability of policy.capabilities) {
+      const capabilityResult = requireAdminCapability(
+        actorResult.actor,
+        capability,
+      );
+      if (!capabilityResult.success) {
+        return adminActionFailure(
+          adminActionError(
+            "FORBIDDEN",
+            capabilityResult.error.message,
+            actionName,
+          ),
+          timestamp,
+        );
+      }
+    }
+
+    const staleSessionError = enforceRecentAuth(
+      actionName,
+      actorResult.sessionClaims,
+      actionOptions.recentAuth,
+    );
+    if (staleSessionError) {
+      return adminActionFailure(staleSessionError, timestamp);
+    }
+
+    const rateLimitError = await enforceActorRateLimit(
+      actionName,
+      actorResult.actor,
+      actionOptions.rateLimit,
+    );
+    if (rateLimitError) {
+      return adminActionFailure(rateLimitError, timestamp);
+    }
+
+    const data = await fn({
+      actor: actorResult.actor,
+      adminUserId: actorResult.actor.dbUserId,
+      adminRole: actorResult.actor.adminRole,
+      correlationId: crypto.randomUUID(),
+      requestStartedAt: Date.now(),
+    });
+
+    await recordDeclarativeAudit(
+      actorResult.actor,
+      actionOptions.auditLog,
+      "SUCCESS",
+    );
 
     return {
       success: true,
       data,
-      timestamp: new Date().toISOString(),
+      timestamp,
     };
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "An unexpected error occurred";
+    const message = error instanceof Error ? error.message : "Admin action failed";
 
-    return {
-      success: false,
-      error: message,
-      timestamp: new Date().toISOString(),
-    };
+    return adminActionFailure(
+      adminActionError("ACTION_FAILED", message, actionName),
+      timestamp,
+    );
   }
 }
 
@@ -237,33 +502,83 @@ export async function safeVerificationAction<T>(
   actionName: string,
   fn: (context: {
     adminUserId: string;
-    adminRole: ActionActorRole;
+    adminRole: AdminRole;
+    actor: AdminActor;
+    correlationId: string;
+    requestStartedAt: number;
   }) => Promise<T>,
+  options?: SafeActionOptions,
 ): Promise<ActionResponse<T>> {
-  try {
-    const { dbUserId, role } = await assertVerificationAdmin();
-    const policy = getAdminActionPolicy(actionName);
+  const timestamp = new Date().toISOString();
 
-    if (!policy.allowedRoles.includes(role)) {
-      throw new Error("Forbidden: Action policy denied");
+  try {
+    const actorResult = await resolveAdminActor();
+
+    if (!actorResult.success) {
+      return adminActionFailure(
+        { ...actorResult.error, action: actionName },
+        timestamp,
+      );
     }
 
-    const data = await fn({ adminUserId: dbUserId, adminRole: role });
+    const policy = getAdminActionPolicy(actionName);
+    const actionOptions = mergeSafeActionOptions(policy, options);
+
+    if (!policy.allowedRoles.includes(actorResult.actor.adminRole)) {
+      return adminActionFailure(
+        adminActionError(
+          "FORBIDDEN",
+          "Admin action policy denied",
+          actionName,
+        ),
+        timestamp,
+      );
+    }
+
+    const staleSessionError = enforceRecentAuth(
+      actionName,
+      actorResult.sessionClaims,
+      actionOptions.recentAuth,
+    );
+    if (staleSessionError) {
+      return adminActionFailure(staleSessionError, timestamp);
+    }
+
+    const rateLimitError = await enforceActorRateLimit(
+      actionName,
+      actorResult.actor,
+      actionOptions.rateLimit,
+    );
+    if (rateLimitError) {
+      return adminActionFailure(rateLimitError, timestamp);
+    }
+
+    const data = await fn({
+      actor: actorResult.actor,
+      adminUserId: actorResult.actor.dbUserId,
+      adminRole: actorResult.actor.adminRole,
+      correlationId: crypto.randomUUID(),
+      requestStartedAt: Date.now(),
+    });
+
+    await recordDeclarativeAudit(
+      actorResult.actor,
+      actionOptions.auditLog,
+      "SUCCESS",
+    );
 
     return {
       success: true,
       data,
-      timestamp: new Date().toISOString(),
+      timestamp,
     };
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "An unexpected error occurred";
+    const message = error instanceof Error ? error.message : "Admin action failed";
 
-    return {
-      success: false,
-      error: message,
-      timestamp: new Date().toISOString(),
-    };
+    return adminActionFailure(
+      adminActionError("ACTION_FAILED", message, actionName),
+      timestamp,
+    );
   }
 }
 

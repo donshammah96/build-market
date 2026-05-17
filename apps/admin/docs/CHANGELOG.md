@@ -1,5 +1,34 @@
 # apps/admin Changelog
 
+## [2026-05-18] Phase 3 - Auth hardening foundation
+
+### Security
+
+- Added canonical `AdminActor` / `AdminActorContext` types for admin action execution.
+- Hardened `safeAction` and `safeVerificationAction` to resolve Clerk identity server-side, require an active database `AdminProfile`, authorize with `AdminRole`, enforce policy-provided recent-auth windows, and apply actor-scoped rate limits.
+- Added typed admin action error details while preserving the existing string `error` response field for current UI compatibility.
+- Added `AdminCapability`, capability-to-role policy mapping, high-risk action policy metadata, and `requireAdminCapability()` result-based authorization.
+- Added the high-risk admin action registry and build-script mirror for later drift-check integration.
+
+### Tests
+
+- Added Phase 3 policy tests covering every `AdminRole` across every `AdminCapability`, `SUPER_ADMIN` bypass behavior, stale-session rejection, actor-scoped rate limiting, and canonical actor forwarding.
+- Updated existing authorization policy tests for the database-backed `AdminRole` model.
+
+### Docs
+
+- Accepted ADR-ADMIN-001 and ADR-ADMIN-002 for the implemented admin actor, capability policy, and hardened action boundary foundation.
+
+**Verification:**
+
+- `pnpm run admin:check-types` -> pass.
+- `pnpm run admin:lint` -> pass with 213 warnings; warnings remain legacy Phase 4-12 debt.
+- `pnpm run admin:check-env-contract` -> pass; all env templates cover 54 boundary keys.
+- `pnpm run admin:test:all` -> pass; 15 files passed, 122 of 122 tests passed.
+- `pnpm -C apps/admin exec vitest run __tests__/security/admin-authorization-policy.test.ts src/lib/security/__tests__/authorization-policy.test.ts src/actions/admin/__tests__/users-actions.test.ts src/actions/admin/__tests__/verification-actions.test.ts --pool=threads --maxWorkers=1` -> pass; 4 files passed, 28 of 28 tests passed.
+- `pnpm run admin:report-security-drift` -> pass with known drift counts: env boundary 69, direct Prisma action files 18, unsafe mutations 13, action `.parse()` 23, `@ts-nocheck` 21, unstructured logging 104, log safety 4, missing audit log 3.
+- `pnpm run admin:report-security-drift:strict` -> fail with the same known Phase 4-12 drift backlog.
+
 ## [2026-05-15] Phase 0-2 - Overhaul foundation
 
 ### Security
