@@ -1,15 +1,39 @@
 # apps/admin Changelog
 
+## [2026-05-18] Phase 4 - Users domain slice
+
+### Added (Phase 4 - Users domain slice)
+
+- Added an admin-local `Result<T, E>` helper for domain/service boundaries.
+- Added the users domain contracts, repository, and service under `apps/admin/src/lib/domains/users`.
+- Added users repository contract tests covering Prisma query shape, soft-delete guards, and persistence-only mutation helpers.
+- Added users service policy tests covering list/query normalization, typed not-found errors, invitation authorization, and self-demotion prevention.
+
+### Changed (Phase 4 - Users domain slice)
+
+- Routed read-only admin users actions through the users service/domain boundary while leaving destructive action migration for the Phase 5 users action branch.
+- Preserved current UI response shapes for users list/detail actions while returning data from domain DTOs.
+
+**Verification:**
+
+- `pnpm run admin:check-types` -> pass.
+- `pnpm run admin:lint` -> pass with 213 warnings; warnings remain known Phase 4-12 debt.
+- `pnpm run admin:check-env-contract` -> pass; all env templates cover 59 boundary keys.
+- `pnpm run admin:test:all` -> pass; 18 files passed, 136 of 136 tests passed.
+- `pnpm -C apps/admin exec vitest run src/lib/domains/users/__tests__/service.test.ts src/lib/domains/users/__tests__/repository.test.ts src/actions/admin/__tests__/users-actions.test.ts --pool=threads --maxWorkers=1` -> pass; 3 files passed, 19 of 19 tests passed.
+- `pnpm run admin:report-security-drift` -> pass with known drift counts: env boundary 69, direct Prisma action files 18, unsafe mutations 13, action `.parse()` 23, `@ts-nocheck` 21, unstructured logging 104, log safety 4, missing audit log 3.
+- `pnpm run admin:report-security-drift:strict` -> fail with the same known Phase 4-12 drift backlog.
+
 ## [2026-05-18] Phase 10 - Feature flag rollout foundation
 
-### Added
+### Added (Phase 10 - Feature flag rollout foundation)
 
 - Added env-driven admin feature flags for v2 users, verification, finance dashboard, audit log UI, and structured logging rollout.
 - Added `/users-v2`, `/verifications-v2`, `/analytics-v2`, and `/audit-v2` route gates that redirect to the current routes when flags are disabled.
 - Added sidebar route switching so enabled v2 flags can steer navigation without removing current routes.
 - Added feature-flag tests covering default-off behavior, enabled route switching, and disabled-flag rollback behavior.
 
-### Docs
+### Docs (Phase 10 - Feature flag rollout foundation)
 
 - Documented Phase 10 rollback behavior in `PROGRESS-SUMMARY.md`.
 - Accepted ADR-ADMIN-009 for the env-driven strangler-fig feature flag foundation.
@@ -25,7 +49,7 @@
 
 ## [2026-05-18] Phase 3 - Auth hardening foundation
 
-### Security
+### Security (Phase 3 - Auth hardening foundation)
 
 - Added canonical `AdminActor` / `AdminActorContext` types for admin action execution.
 - Hardened `safeAction` and `safeVerificationAction` to resolve Clerk identity server-side, require an active database `AdminProfile`, authorize with `AdminRole`, enforce policy-provided recent-auth windows, and apply actor-scoped rate limits.
@@ -33,12 +57,12 @@
 - Added `AdminCapability`, capability-to-role policy mapping, high-risk action policy metadata, and `requireAdminCapability()` result-based authorization.
 - Added the high-risk admin action registry and build-script mirror for later drift-check integration.
 
-### Tests
+### Tests (Phase 3 - Auth hardening foundation)
 
 - Added Phase 3 policy tests covering every `AdminRole` across every `AdminCapability`, `SUPER_ADMIN` bypass behavior, stale-session rejection, actor-scoped rate limiting, and canonical actor forwarding.
 - Updated existing authorization policy tests for the database-backed `AdminRole` model.
 
-### Docs
+### Docs (Phase 3 - Auth hardening foundation)
 
 - Accepted ADR-ADMIN-001 and ADR-ADMIN-002 for the implemented admin actor, capability policy, and hardened action boundary foundation.
 
@@ -54,23 +78,23 @@
 
 ## [2026-05-15] Phase 0-2 - Overhaul foundation
 
-### Security
+### Security (Phase 0-2 - Overhaul foundation)
 
 - Added admin ADRs for authentication/authorization, action boundaries, observability, data handling, HTTP security, env access, UI contracts, audit logging, and strangler-fig rollout.
 - Added an admin security drift report with strict categories for env boundary drift, direct Prisma in actions, unsafe mutations, action `.parse()`, `@ts-nocheck`, unstructured logging, log safety, and missing audit coverage.
 
-### Fixed
+### Fixed (Phase 0-2 - Overhaul foundation)
 
 - Established canonical admin env templates and an env contract checker. `admin:check-env-contract` currently passes with 54 declared keys in each template.
 
-### Changed
+### Changed (Phase 0-2 - Overhaul foundation)
 
 - Tightened admin TypeScript configuration with `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, and `docs` exclusion.
 - Hardened admin ESLint configuration with env-boundary, action-persistence-boundary, server-only UI import, explicit-any, and floating-promise checks.
 - Replaced the placeholder admin test script with Vitest-backed `test` and `test:all` scripts.
 - Aligned `apps/admin` package manager metadata with the root `pnpm@11.1.2`.
 
-### Added
+### Added (Phase 0-2 - Overhaul foundation)
 
 - `apps/admin/docs/progress/AUTOPSY-REPORT.md`.
 - Canonical `apps/admin/docs/adr/ADR-ADMIN-001` through `ADR-ADMIN-009`.
@@ -78,7 +102,7 @@
 - Admin root scripts: `admin:lint`, `admin:test`, `admin:test:all`, `admin:check-env-contract`, `admin:report-security-drift`, and `admin:report-security-drift:strict`.
 - CI jobs for admin validation and admin changelog guarding.
 
-### Docs
+### Docs (Phase 0-2 - Overhaul foundation)
 
 - Documented Phase 0 critical and high-severity findings with evidence and command output.
 
