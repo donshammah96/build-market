@@ -18,6 +18,10 @@ import {
 import { syncUserRole } from "@/lib/auth-sync";
 import { currentUser } from "@clerk/nextjs/server";
 import { getPendingVerifications } from "@/actions/admin";
+import {
+  AdminFeatureFlag,
+  getAdminV2Route,
+} from "@/lib/config/feature-flags";
 
 export default async function DashboardLayout({
   children,
@@ -35,6 +39,26 @@ export default async function DashboardLayout({
   const pendingCount = pendingResponse.success
     ? pendingResponse.data?.pagination.total || 0
     : 0;
+  const usersHref = getAdminV2Route(
+    AdminFeatureFlag.ADMIN_V2_USER_MANAGEMENT,
+    "/users",
+    "/users-v2",
+  );
+  const verificationsHref = getAdminV2Route(
+    AdminFeatureFlag.ADMIN_V2_VERIFICATION_QUEUE,
+    "/verifications",
+    "/verifications-v2",
+  );
+  const analyticsHref = getAdminV2Route(
+    AdminFeatureFlag.ADMIN_V2_FINANCE_DASHBOARD,
+    "/analytics",
+    "/analytics-v2",
+  );
+  const auditHref = getAdminV2Route(
+    AdminFeatureFlag.ADMIN_V2_AUDIT_LOG_UI,
+    "/audit",
+    "/audit-v2",
+  );
 
   return (
     <div className="flex min-h-screen bg-zinc-50 font-sans">
@@ -71,7 +95,7 @@ export default async function DashboardLayout({
           </p>
 
           <Link
-            href="/verifications"
+            href={verificationsHref}
             className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all group"
           >
             <span className="flex items-center gap-3">
@@ -90,7 +114,7 @@ export default async function DashboardLayout({
           </p>
 
           <Link
-            href="/users"
+            href={usersHref}
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all group"
           >
             <Users className="h-4 w-4 group-hover:text-blue-400 transition-colors" />
@@ -144,14 +168,14 @@ export default async function DashboardLayout({
           </p>
 
           <Link
-            href="/analytics"
+            href={analyticsHref}
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all group"
           >
             <BarChart3 className="h-4 w-4 group-hover:text-emerald-400 transition-colors" />
             Analytics
           </Link>
           <Link
-            href="/audit"
+            href={auditHref}
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all group"
           >
             <FileText className="h-4 w-4 group-hover:text-yellow-400 transition-colors" />
