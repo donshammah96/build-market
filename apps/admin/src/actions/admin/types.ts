@@ -12,9 +12,25 @@ export type ActionResponse<T = null> = {
   success: boolean;
   data?: T;
   error?: string;
+  errorDetails?: AdminActionError;
   /** Timestamp for cache invalidation in optimistic updates */
   timestamp?: string;
   meta?: PaginationMeta;
+};
+
+export type AdminActionErrorCode =
+  | "UNAUTHORIZED"
+  | "FORBIDDEN"
+  | "SESSION_STALE"
+  | "RATE_LIMITED"
+  | "VALIDATION_ERROR"
+  | "ACTION_FAILED";
+
+export type AdminActionError = {
+  code: AdminActionErrorCode;
+  message: string;
+  action?: string;
+  retryAfterMs?: number;
 };
 
 export type PaginationMeta = {

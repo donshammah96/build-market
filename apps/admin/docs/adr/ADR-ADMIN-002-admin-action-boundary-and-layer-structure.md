@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -22,7 +22,9 @@ Existing action files will be migrated incrementally after Phase 2. Direct Prism
 
 ## Verification
 
-Security drift must report action Prisma imports/calls, action `.parse()`, and unwrapped authenticated mutations. Action tests must cover validation, authentication, authorization, domain-error mapping, audit behavior, and cache revalidation where applicable.
+Security drift reports action Prisma imports/calls, action `.parse()`, and unwrapped authenticated mutations. Phase 3 action-boundary tests cover authentication, authorization, recent-auth rejection, actor-scoped rate limiting, and actor forwarding. Phase 4/5 will close direct Prisma and action `.safeParse()` migration debt.
+
+Accepted on 2026-05-18 by Phase 3 implementation in `feat/admin-overhaul/auth-hardening`.
 
 ## Related Documentation
 

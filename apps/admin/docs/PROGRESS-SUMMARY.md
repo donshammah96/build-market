@@ -4,20 +4,21 @@
 
 ## Active Phase
 
-**Phase:** Admin Overhaul Phases 0-2 - Autopsy, ADRs, tooling infrastructure  
-**Status:** In progress; foundation is installed and the TypeScript/test gates are now stabilized, while lint/drift remediation remains open.
+**Phase:** Phase 3 - Authentication and Authorization Hardening  
+**Status:** Implemented on `feat/admin-overhaul/auth-hardening`; ready for PR review and merge to `integration/admin-overhaul`.
 
 **Completed:**
 
 - Phase 0 autopsy report created at `apps/admin/docs/progress/AUTOPSY-REPORT.md`.
 - Phase 1 ADR foundation created under `apps/admin/docs/adr/`.
 - Phase 2 tooling scaffold added: env boundary module, env templates, env contract checker, security drift reporter, root/admin scripts, tightened TypeScript/ESLint config, admin CI jobs, and changelog guard.
+- Phase 3 auth hardening foundation added: canonical `AdminActor`, hardened `safeAction`, typed `errorDetails`, capability policy map, high-risk registry, recent-auth enforcement, actor-scoped rate limits, and policy tests.
 
 **Remaining steps:**
 
-- Reduce the remaining lint and security-drift warnings so Phase 2 can close with a tighter baseline.
-- Migrate direct env reads to `adminEnvConfig`.
-- Begin Phase 3 only after the admin actor/safeAction plan is ready and the current gate status is accepted.
+- Merge Phase 3 through PR, then tag `admin-overhaul/phase-3-complete`.
+- Begin Phase 10 feature flags from the Phase 3-integrated baseline, or continue Phase 4 domain branches if the review queue prefers strict phase order.
+- Continue reducing lint/security-drift warnings in the relevant domain/action/security phases.
 
 ## Slice Status Registry
 
@@ -38,7 +39,7 @@ Status codes: compliant, known defect, unaudited/in progress, N/A.
 
 1. `ADM-001` | Severity: Critical | Action boundary permits direct Prisma access in 18 action files according to `admin:report-security-drift`.
 2. `ADM-002` | Severity: Critical | Action-layer `.parse()` remains in 23 call sites.
-3. `ADM-003` | Severity: Critical | `safeAction`/admin auth model is not yet the ADR-ADMIN-001 contract.
+3. `ADM-003` | Severity: Critical | `safeAction` now resolves a canonical `AdminActor`, but existing action slices still need Phase 5 migration to consume actor/policy options consistently.
 4. `ADM-004` | Severity: High | Direct env reads remain in 83 drift findings.
 5. `ADM-005` | Severity: High | `@ts-nocheck` remains in 21 source files.
 6. `ADM-006` | Severity: High | Unstructured logging remains in 104 action/lib findings; 4 log-safety findings need review.
@@ -62,17 +63,20 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 ## Latest Verification
 
 - `pnpm run admin:check-env-contract` -> pass; all env templates cover 54 boundary keys.
-- `pnpm run admin:lint` -> pass with 211 warnings.
+- `pnpm run admin:lint` -> pass with 213 warnings.
 - `pnpm run admin:check-types` -> pass.
-- `pnpm run admin:report-security-drift:strict` -> fail with known Phase 0 drift counts.
-- `pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1` -> pass; 14 files passed, 116 of 116 tests passed.
+- `pnpm run admin:report-security-drift` -> pass with known drift counts: env boundary 69, direct Prisma action files 18, unsafe mutations 13, action `.parse()` 23, `@ts-nocheck` 21, unstructured logging 104, log safety 4, missing audit log 3.
+- `pnpm run admin:report-security-drift:strict` -> fail with known Phase 4-12 drift backlog.
+- `pnpm run admin:test:all` -> pass; 15 files passed, 122 of 122 tests passed.
+- `pnpm -C apps/admin exec vitest run __tests__/security/admin-authorization-policy.test.ts src/lib/security/__tests__/authorization-policy.test.ts src/actions/admin/__tests__/users-actions.test.ts src/actions/admin/__tests__/verification-actions.test.ts --pool=threads --maxWorkers=1` -> pass; 4 files passed, 28 of 28 tests passed.
 
 ## Completed Phases
 
 1. Phase 0 Autopsy - completed 2026-05-15.
 2. Phase 1 ADR Foundation - completed 2026-05-15 with ADRs in Proposed status.
 3. Phase 2 Tooling Scaffold - installed 2026-05-15; compile/test gates are green, lint/drift follow-up remains tracked above.
+4. Phase 3 Auth Hardening - implemented 2026-05-18 on feature branch; pending PR merge and checkpoint tag.
 
 ## Next Priority
 
-Stabilize the remaining Phase 2 quality gates before Phase 3: drive down lint warnings, migrate env-boundary drift, and start removing direct Prisma/action-layer policy violations called out by `admin:report-security-drift:strict`.
+Open and merge the Phase 3 PR, tag `admin-overhaul/phase-3-complete`, then start the next branch. Recommended order: Phase 10 feature flags can proceed immediately from the stabilized baseline, while Phase 4 domain slices should start with users and verification to unlock the Phase 5 action-boundary cleanup.

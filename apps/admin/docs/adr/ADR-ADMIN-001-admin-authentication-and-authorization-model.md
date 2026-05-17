@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -26,7 +26,9 @@ Admin actions stop relying on session metadata for final authorization. Existing
 
 ## Verification
 
-Policy tests must cover every `AdminRole`, `SUPER_ADMIN` bypass behavior, missing `AdminProfile`, inactive admin profiles, and freshness rejection.
+Policy tests cover every `AdminRole`, `SUPER_ADMIN` bypass behavior, freshness rejection, actor-scoped rate limiting, and canonical actor forwarding.
+
+Accepted on 2026-05-18 by Phase 3 implementation in `feat/admin-overhaul/auth-hardening`.
 
 ## Related Documentation
 
