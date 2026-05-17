@@ -4,8 +4,8 @@
 
 ## Active Phase
 
-**Phase:** Phase 3 - Authentication and Authorization Hardening  
-**Status:** Implemented on `feat/admin-overhaul/auth-hardening`; ready for PR review and merge to `integration/admin-overhaul`.
+**Phase:** Phase 10 - Feature Flag Rollout Foundation  
+**Status:** Implemented on `feat/admin-overhaul/feature-flags`; ready for PR review and merge to `integration/admin-overhaul`.
 
 **Completed:**
 
@@ -13,11 +13,12 @@
 - Phase 1 ADR foundation created under `apps/admin/docs/adr/`.
 - Phase 2 tooling scaffold added: env boundary module, env templates, env contract checker, security drift reporter, root/admin scripts, tightened TypeScript/ESLint config, admin CI jobs, and changelog guard.
 - Phase 3 auth hardening foundation added: canonical `AdminActor`, hardened `safeAction`, typed `errorDetails`, capability policy map, high-risk registry, recent-auth enforcement, actor-scoped rate limits, and policy tests.
+- Phase 10 feature flag foundation added: env-driven v2 flags, route gates, sidebar route switching, rollback docs, and feature-flag tests.
 
 **Remaining steps:**
 
-- Merge Phase 3 through PR, then tag `admin-overhaul/phase-3-complete`.
-- Begin Phase 10 feature flags from the Phase 3-integrated baseline, or continue Phase 4 domain branches if the review queue prefers strict phase order.
+- Merge Phase 10 through PR, then tag `admin-overhaul/phase-10-complete`.
+- Begin Phase 4 domain branches from the Phase 10-integrated baseline, starting with users and verification.
 - Continue reducing lint/security-drift warnings in the relevant domain/action/security phases.
 
 ## Slice Status Registry
@@ -65,18 +66,32 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 - `pnpm run admin:check-env-contract` -> pass; all env templates cover 54 boundary keys.
 - `pnpm run admin:lint` -> pass with 213 warnings.
 - `pnpm run admin:check-types` -> pass.
+- `pnpm run admin:check-env-contract` -> pass; all env templates cover 59 boundary keys after Phase 10 flags.
 - `pnpm run admin:report-security-drift` -> pass with known drift counts: env boundary 69, direct Prisma action files 18, unsafe mutations 13, action `.parse()` 23, `@ts-nocheck` 21, unstructured logging 104, log safety 4, missing audit log 3.
 - `pnpm run admin:report-security-drift:strict` -> fail with known Phase 4-12 drift backlog.
-- `pnpm run admin:test:all` -> pass; 15 files passed, 122 of 122 tests passed.
-- `pnpm -C apps/admin exec vitest run __tests__/security/admin-authorization-policy.test.ts src/lib/security/__tests__/authorization-policy.test.ts src/actions/admin/__tests__/users-actions.test.ts src/actions/admin/__tests__/verification-actions.test.ts --pool=threads --maxWorkers=1` -> pass; 4 files passed, 28 of 28 tests passed.
+- `pnpm run admin:test:all` -> pass; 16 files passed, 125 of 125 tests passed.
+- `pnpm -C apps/admin exec vitest run __tests__/config/feature-flags.test.ts --pool=threads --maxWorkers=1` -> pass; 3 of 3 tests passed.
 
 ## Completed Phases
 
 1. Phase 0 Autopsy - completed 2026-05-15.
 2. Phase 1 ADR Foundation - completed 2026-05-15 with ADRs in Proposed status.
 3. Phase 2 Tooling Scaffold - installed 2026-05-15; compile/test gates are green, lint/drift follow-up remains tracked above.
-4. Phase 3 Auth Hardening - implemented 2026-05-18 on feature branch; pending PR merge and checkpoint tag.
+4. Phase 3 Auth Hardening - completed 2026-05-18; checkpoint tag `admin-overhaul/phase-3-complete`.
+5. Phase 10 Feature Flags - implemented 2026-05-18 on feature branch; pending PR merge and checkpoint tag.
+
+## Rollback Contracts
+
+Phase 10 flags are runtime-readable through `adminEnvConfig`; toggling them requires the platform environment to expose the new value to the Next.js runtime. In hosted environments that freeze env at process start, redeploy or restart after changing the variable.
+
+| Flag | Disable with | Rollback effect | Data caveat | Changelog note |
+| ---- | ------------ | --------------- | ----------- | -------------- |
+| `admin_v2_user_management` | `NEXT_PUBLIC_ADMIN_FF_V2_USER_MANAGEMENT=false` | `/users-v2` redirects to `/users`; sidebar links return to `/users`. | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
+| `admin_v2_verification_queue` | `NEXT_PUBLIC_ADMIN_FF_V2_VERIFICATION_QUEUE=false` | `/verifications-v2` redirects to `/verifications`; sidebar links return to `/verifications`. | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
+| `admin_v2_finance_dashboard` | `NEXT_PUBLIC_ADMIN_FF_V2_FINANCE_DASHBOARD=false` | `/analytics-v2` redirects to `/analytics`; sidebar links return to `/analytics`. | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
+| `admin_v2_audit_log_ui` | `NEXT_PUBLIC_ADMIN_FF_V2_AUDIT_LOG_UI=false` | `/audit-v2` redirects to `/audit`; sidebar links return to `/audit`. | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
+| `admin_v2_structured_logging` | `NEXT_PUBLIC_ADMIN_FF_V2_STRUCTURED_LOGGING=false` | Later structured logging UI/behavior remains disabled. | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
 
 ## Next Priority
 
-Open and merge the Phase 3 PR, tag `admin-overhaul/phase-3-complete`, then start the next branch. Recommended order: Phase 10 feature flags can proceed immediately from the stabilized baseline, while Phase 4 domain slices should start with users and verification to unlock the Phase 5 action-boundary cleanup.
+Open and merge the Phase 10 PR, tag `admin-overhaul/phase-10-complete`, then start Phase 4 domain slices in order: users, verification, content, finance, audit.

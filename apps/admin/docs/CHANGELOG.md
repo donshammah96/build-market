@@ -1,5 +1,28 @@
 # apps/admin Changelog
 
+## [2026-05-18] Phase 10 - Feature flag rollout foundation
+
+### Added
+
+- Added env-driven admin feature flags for v2 users, verification, finance dashboard, audit log UI, and structured logging rollout.
+- Added `/users-v2`, `/verifications-v2`, `/analytics-v2`, and `/audit-v2` route gates that redirect to the current routes when flags are disabled.
+- Added sidebar route switching so enabled v2 flags can steer navigation without removing current routes.
+- Added feature-flag tests covering default-off behavior, enabled route switching, and disabled-flag rollback behavior.
+
+### Docs
+
+- Documented Phase 10 rollback behavior in `PROGRESS-SUMMARY.md`.
+- Accepted ADR-ADMIN-009 for the env-driven strangler-fig feature flag foundation.
+
+**Verification:**
+
+- `pnpm run admin:check-types` -> pass.
+- `pnpm run admin:lint` -> pass with 213 warnings; warnings remain legacy Phase 4-12 debt.
+- `pnpm run admin:check-env-contract` -> pass; env boundary count is now 59 and all templates match.
+- `pnpm run admin:test:all` -> pass; 16 files passed, 125 of 125 tests passed.
+- `pnpm -C apps/admin exec vitest run __tests__/config/feature-flags.test.ts --pool=threads --maxWorkers=1` -> pass; 3 of 3 tests passed.
+- `pnpm run admin:report-security-drift:strict` -> fail with known Phase 4-12 drift backlog: env boundary 69, direct Prisma action files 18, unsafe mutations 13, action `.parse()` 23, `@ts-nocheck` 21, unstructured logging 104, log safety 4, missing audit log 3.
+
 ## [2026-05-18] Phase 3 - Auth hardening foundation
 
 ### Security
