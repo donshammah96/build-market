@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma, prisma, County } from "@build/db";
 import { safeAction, safeVerificationAction, logAdminAction } from "./shared";
 import { UpdateProfileSchema } from "./types";
+import { omitUndefined } from "@/lib/utils";
 
 // ============================================================================
 // Types
@@ -239,7 +240,7 @@ export async function rejectProfessional(userId: string, reason?: string) {
         data: {
           verified: false,
           verificationStatus: "REJECTED",
-          verificationNotes: reason,
+          ...(reason !== undefined ? { verificationNotes: reason } : {}),
         },
         include: {
           user: {
@@ -254,8 +255,8 @@ export async function rejectProfessional(userId: string, reason?: string) {
         action: "REJECT_PROFESSIONAL",
         targetType: "professional",
         targetId: userId,
-        reason,
         details: { newStatus: "REJECTED" },
+        ...(reason !== undefined ? { reason } : {}),
       });
 
       revalidatePath("/professionals");

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ComplianceService } from "@/lib/gdpr/services/compliance.service";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@build/db";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
 
 // Only accessible by ADMIN
 export async function GET(req: NextRequest) {
@@ -23,8 +24,8 @@ export async function GET(req: NextRequest) {
 
     if (user.role !== "ADMIN") {
       // For development: Allow if DEV_ADMIN_BYPASS is set
-      const isDev = process.env.NODE_ENV === "development";
-      const devBypass = process.env.DEV_ADMIN_BYPASS === "true";
+      const isDev = adminEnvConfig.NODE_ENV === "development";
+      const devBypass = adminEnvConfig.DEV_ADMIN_BYPASS;
 
       if (!isDev || !devBypass) {
         console.warn(`Unauthorized access attempt by ${clerkId}`);
@@ -36,10 +37,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const actorId = searchParams.get("actorId") || undefined;
 
-    const logs = await ComplianceService.getAuditLogs({
-      actorId,
-      // Add dates parsing if needed
-    });
+    const logs = await ComplianceService.getAuditLogs(
+      actorId ? { actorId } : {},
+    );
 
     // Log THIS access
     await ComplianceService.logAdminAction(

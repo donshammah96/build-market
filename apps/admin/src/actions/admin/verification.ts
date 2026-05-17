@@ -203,7 +203,9 @@ export async function verifyEntity(
             notes: validated.notes,
             newStatus: response.data.newStatus,
           },
-          reason: validated.reason,
+          ...(validated.reason !== undefined
+            ? { reason: validated.reason }
+            : {}),
         });
 
         return {
@@ -255,7 +257,7 @@ export async function verifyDocument(
             requestedAction: validated.action,
             notes: validated.notes,
           },
-          reason: validated.notes,
+          ...(validated.notes !== undefined ? { reason: validated.notes } : {}),
         });
 
         return {
@@ -437,7 +439,7 @@ export async function batchVerifyEntities(
               failed,
               reason,
             },
-            reason,
+            ...(reason !== undefined ? { reason } : {}),
           });
 
           return {

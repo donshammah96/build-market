@@ -35,9 +35,9 @@ export interface NotificationTemplate {
   type: "SUCCESS" | "ERROR" | "WARNING" | "INFO";
   link: string;
   // Optional email subject for external notifications
-  emailSubject?: string;
+  emailSubject?: string | undefined;
   // Optional email body template
-  emailBody?: string;
+  emailBody?: string | undefined;
 }
 
 /**
@@ -47,11 +47,11 @@ export function getVerificationTemplate(
   notificationType: NotificationType,
   entityType: EntityType,
   options?: {
-    entityName?: string;
-    entityId?: string;
-    rejectionReason?: string;
-    correctionNotes?: string;
-    adminNotes?: string;
+    entityName?: string | undefined;
+    entityId?: string | undefined;
+    rejectionReason?: string | undefined;
+    correctionNotes?: string | undefined;
+    adminNotes?: string | undefined;
   },
 ): NotificationTemplate {
   // Handle certificate as a document notification
@@ -66,7 +66,7 @@ export function getVerificationTemplate(
   const safeCorrectionNotes = sanitizeHtml(options?.correctionNotes);
   const safeAdminNotes = sanitizeHtml(options?.adminNotes);
   const baseLink = buildVerificationLink(entityType, notificationType, {
-    entityId: options?.entityId,
+    ...(options?.entityId ? { entityId: options.entityId } : {}),
   });
 
   switch (notificationType) {
@@ -172,11 +172,11 @@ export function getVerificationTemplate(
 function getDocumentNotificationTemplate(
   notificationType: NotificationType,
   options?: {
-    entityName?: string;
-    entityId?: string;
-    rejectionReason?: string;
-    correctionNotes?: string;
-    adminNotes?: string;
+    entityName?: string | undefined;
+    entityId?: string | undefined;
+    rejectionReason?: string | undefined;
+    correctionNotes?: string | undefined;
+    adminNotes?: string | undefined;
   },
 ): NotificationTemplate {
   // Sanitize user-provided inputs to prevent XSS in emails
@@ -184,7 +184,7 @@ function getDocumentNotificationTemplate(
   const safeRejectionReason = sanitizeHtml(options?.rejectionReason);
   const safeAdminNotes = sanitizeHtml(options?.adminNotes);
   const baseLink = buildVerificationLink("certificate", notificationType, {
-    entityId: options?.entityId,
+    ...(options?.entityId ? { entityId: options.entityId } : {}),
   });
 
   switch (notificationType) {
@@ -266,7 +266,7 @@ export function formatNotificationMessage(
     ...template,
     title,
     message,
-    emailBody,
+    ...(emailBody ? { emailBody } : {}),
   };
 }
 

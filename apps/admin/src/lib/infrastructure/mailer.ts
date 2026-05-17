@@ -1,6 +1,8 @@
 import { Resend } from "resend";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { omitUndefined } from "@/lib/utils";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = new Resend(adminEnvConfig.RESEND_API_KEY);
 
 interface EmailAttachment {
   filename: string;
@@ -25,9 +27,11 @@ export async function sendEmail({
     to,
     subject,
     html,
-    attachments: attachments?.map((att) => ({
-      filename: att.filename,
-      content: att.content,
-    })),
+    ...omitUndefined({
+      attachments: attachments?.map((att) => ({
+        filename: att.filename,
+        content: att.content,
+      })),
+    }),
   });
 }

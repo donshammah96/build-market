@@ -51,15 +51,15 @@ export interface VerificationQueueItem {
     firstName: string | null;
     lastName: string | null;
   };
-  documentCount?: number;
-  certificateCount?: number;
-  productCount?: number;
-  attachmentCount?: number;
-  imageCount?: number;
+  documentCount?: number | undefined;
+  certificateCount?: number | undefined;
+  productCount?: number | undefined;
+  attachmentCount?: number | undefined;
+  imageCount?: number | undefined;
   // Location info
-  city?: string | null;
-  county?: string | null;
-  location?: string;
+  city?: string | null | undefined;
+  county?: string | null | undefined;
+  location?: string | undefined;
 }
 
 export interface VerificationStats {
@@ -101,38 +101,44 @@ export interface VerificationDetails {
   entityType: EntityType;
   entityId: string;
   status: VerificationStatus;
-  verifiedAt?: string;
-  verifiedBy?: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-  };
-  verificationNotes?: string;
-  rejectionReason?: string;
-  submittedAt?: string;
+  verifiedAt?: string | undefined;
+  verifiedBy?:
+    | {
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+      }
+    | undefined;
+  verificationNotes?: string | undefined;
+  rejectionReason?: string | undefined;
+  submittedAt?: string | undefined;
   // Entity-specific details
   entity: Record<string, any>;
-  documents?: Array<{
-    id: string;
-    type: string;
-    fileUrl: string;
-    isVerified: boolean;
-    verifiedAt?: string;
-    notes?: string;
-  }>;
-  auditHistory?: Array<{
-    id: string;
-    action: string;
-    oldStatus: string;
-    newStatus: string;
-    reason?: string;
-    createdAt: string;
-    admin: {
-      firstName: string;
-      lastName: string;
-    };
-  }>;
+  documents?:
+    | Array<{
+        id: string;
+        type: string;
+        fileUrl: string;
+        isVerified: boolean;
+        verifiedAt?: string | undefined;
+        notes?: string | undefined;
+      }>
+    | undefined;
+  auditHistory?:
+    | Array<{
+        id: string;
+        action: string;
+        oldStatus: string;
+        newStatus: string;
+        reason?: string | undefined;
+        createdAt: string;
+        admin: {
+          firstName: string;
+          lastName: string;
+        };
+      }>
+    | undefined;
 }
 
 // ============================================================================

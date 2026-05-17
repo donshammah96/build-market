@@ -82,6 +82,8 @@ setup-database.ps1
 create-pr.ps1
 create-pr.sh
 docs
+!apps/admin/docs/
+!apps/admin/docs/**
 !apps/client/docs/
 apps/client/docs/*
 !apps/client/docs/STORAGE-INTEGRATION-GUIDE.md
