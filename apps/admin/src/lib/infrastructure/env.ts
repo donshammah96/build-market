@@ -64,6 +64,11 @@ const adminEnvSchema = z.object({
   ENCRYPTION_KEY: z.string().min(32).optional(),
   ENCRYPTION_KEY_V1: z.string().min(32).optional(),
   ENCRYPTION_KEY_V2: z.string().min(32).optional(),
+  NEXT_PUBLIC_ADMIN_FF_V2_USER_MANAGEMENT: booleanString,
+  NEXT_PUBLIC_ADMIN_FF_V2_VERIFICATION_QUEUE: booleanString,
+  NEXT_PUBLIC_ADMIN_FF_V2_FINANCE_DASHBOARD: booleanString,
+  NEXT_PUBLIC_ADMIN_FF_V2_AUDIT_LOG_UI: booleanString,
+  NEXT_PUBLIC_ADMIN_FF_V2_STRUCTURED_LOGGING: booleanString,
 });
 
 export type AdminEnvConfig = z.infer<typeof adminEnvSchema>;

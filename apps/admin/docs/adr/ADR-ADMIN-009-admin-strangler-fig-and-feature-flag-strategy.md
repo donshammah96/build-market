@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -22,7 +22,9 @@ Later implementation phases must avoid coupling enabled and disabled behavior th
 
 ## Verification
 
-Progress docs record rollback variables, runtime/deploy requirements, and data-state caveats for each admin feature flag.
+Progress docs record rollback variables, runtime/deploy requirements, and data-state caveats for each admin feature flag. Phase 10 tests cover default-disabled behavior and v2 route switching.
+
+Accepted on 2026-05-18 by Phase 10 implementation in `feat/admin-overhaul/feature-flags`.
 
 ## Related Documentation
 
