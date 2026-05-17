@@ -18,11 +18,11 @@ export interface VerificationRequest {
   entityType: EntityType;
   entityId: string;
   action: VerificationAction;
-  notes?: string;
-  reason?: string;
+  notes?: string | undefined;
+  reason?: string | undefined;
   adminId: string;
-  ipAddress?: string;
-  userAgent?: string;
+  ipAddress?: string | undefined;
+  userAgent?: string | undefined;
 }
 
 export interface VerificationResult {
@@ -31,12 +31,12 @@ export interface VerificationResult {
   entityId: string;
   previousStatus: VerificationStatus;
   newStatus: VerificationStatus;
-  verifiedAt?: Date;
+  verifiedAt?: Date | undefined;
   message: string;
   /** Rejection reason or correction notes from admin */
-  reason?: string;
+  reason?: string | undefined;
   /** Additional admin notes */
-  notes?: string;
+  notes?: string | undefined;
 }
 
 export interface VerificationValidation {

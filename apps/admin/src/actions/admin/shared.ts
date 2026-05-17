@@ -12,6 +12,8 @@ import {
   parseSessionMetadata,
 } from "@/lib/security/claims";
 import type { ActionResponse } from "./types";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { omitUndefined } from "@/lib/utils";
 
 export type {
   ActionResponse,
@@ -21,7 +23,7 @@ export type {
 } from "./types";
 
 const CLIENT_API_BASE_URL =
-  process.env.CLIENT_APP_URL || "http://localhost:3500";
+  adminEnvConfig.CLIENT_APP_URL ?? "http://localhost:3500";
 
 const VERIFICATION_ALLOWED_ROLES = ["admin", "verification_admin"] as const;
 const ADMIN_SUPER_ROLES = ["SUPER_ADMIN"] as const;
@@ -32,8 +34,8 @@ export type AdminPermissions = {
   role: AdminAccessRole | undefined;
   granularRole: string | null;
   canAccess: boolean;
-  dbUserId?: string;
-  clerkId?: string;
+  dbUserId?: string | undefined;
+  clerkId?: string | undefined;
 };
 
 function toAdminAccessRole(value: unknown): AdminAccessRole | undefined {
@@ -318,7 +320,7 @@ export async function logAdminAction(data: {
       targetType: data.targetType,
       targetId: data.targetId,
       details: immutableDetails,
-      reason: data.reason,
+      ...omitUndefined({ reason: data.reason }),
     },
   });
 }

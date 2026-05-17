@@ -5,6 +5,7 @@
 
 import { prisma } from "@build/db";
 import { StructuredLogger } from "@build/resilience";
+import { omitUndefined } from "@/lib/utils";
 
 const logger = new StructuredLogger("audit-service");
 
@@ -13,17 +14,17 @@ export interface AuditLogData {
   action: string;
   entityType: string;
   entityId: string;
-  oldStatus?: string;
+  oldStatus?: string | undefined;
   newStatus: string;
-  reason?: string;
-  metadata?: Record<string, any>;
-  ipAddress?: string;
-  userAgent?: string;
+  reason?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
+  ipAddress?: string | undefined;
+  userAgent?: string | undefined;
 }
 
 export async function createAuditLog(data: AuditLogData): Promise<void> {
   try {
-    const admin = await prisma.user.findUnique({
+    const admin = await prisma.user?.findUnique?.({
       where: { id: data.adminId },
       select: { firstName: true, lastName: true, email: true, role: true },
     });
@@ -40,13 +41,15 @@ export async function createAuditLog(data: AuditLogData): Promise<void> {
         targetType: data.entityType,
         targetId: data.entityId,
         details: {
-          ...(data.metadata || {}),
-          oldStatus: data.oldStatus,
+          ...(data.metadata ?? {}),
+          ...omitUndefined({
+            oldStatus: data.oldStatus,
+          }),
           newStatus: data.newStatus,
         },
-        reason: data.reason,
-        ipAddress: data.ipAddress,
-        userAgent: data.userAgent,
+        ...(data.reason !== undefined ? { reason: data.reason } : {}),
+        ...(data.ipAddress !== undefined ? { ipAddress: data.ipAddress } : {}),
+        ...(data.userAgent !== undefined ? { userAgent: data.userAgent } : {}),
       },
     });
 

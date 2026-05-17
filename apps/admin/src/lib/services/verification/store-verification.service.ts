@@ -12,6 +12,7 @@ import {
 } from "./types";
 import { createAuditLog } from "./audit-service";
 import { StructuredLogger } from "@build/resilience";
+import { omitUndefined } from "@/lib/utils";
 
 const logger = new StructuredLogger("store-verification-service");
 
@@ -63,7 +64,9 @@ export async function verifyStore(
       verificationStatus: newStatus,
       verified: newStatus === "VERIFIED",
       verifiedAt: newStatus === "VERIFIED" ? new Date() : null,
-      rejectionReason: action === "REJECT" ? reason : null,
+      ...(action === "REJECT"
+        ? { rejectionReason: reason ?? null }
+        : { rejectionReason: null }),
     },
   });
 
@@ -98,10 +101,12 @@ export async function verifyStore(
     entityId,
     previousStatus: currentStatus,
     newStatus,
-    verifiedAt: updated.verifiedAt || undefined,
     message: `Store "${store.name}" has been ${action.toLowerCase()}ed`,
-    reason: action === "REJECT" ? reason : undefined,
-    notes,
+    ...omitUndefined({
+      verifiedAt: updated.verifiedAt ?? undefined,
+      reason: action === "REJECT" ? reason : undefined,
+      notes,
+    }),
   };
 }
 

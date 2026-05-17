@@ -7,6 +7,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import { POST } from "@/actions/admin/verify/route";
 
+vi.mock("@/lib/services/verification/notification.service", () => ({
+  notifyVerificationResult: vi.fn(),
+}));
+
 // Test UUIDs for consistent test data (RFC 4122 compliant)
 const TEST_UUIDS = {
   ADMIN_CLERK: "a0000000-0000-4000-8000-000000000001",
@@ -22,8 +26,23 @@ vi.mock("@clerk/nextjs/server", () => ({
 }));
 
 vi.mock("@build/db", () => ({
+  UserRole: {
+    ADMIN: "ADMIN",
+  },
+  UserStatus: {
+    SUSPENDED: "SUSPENDED",
+    BANNED: "BANNED",
+    DEACTIVATED: "DEACTIVATED",
+    ARCHIVED: "ARCHIVED",
+  },
+  AdminRole: {
+    SUPER_ADMIN: "SUPER_ADMIN",
+  },
   prisma: {
     user: {
+      findUnique: vi.fn(),
+    },
+    adminProfile: {
       findUnique: vi.fn(),
     },
     professionalProfile: {
@@ -47,7 +66,7 @@ vi.mock("@build/db", () => ({
   },
 }));
 
-vi.mock("@/app/lib/api/rate-limit", () => ({
+vi.mock("@/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
   getRateLimitIdentifier: vi.fn().mockReturnValue("test-identifier"),
   RateLimits: {
@@ -57,7 +76,7 @@ vi.mock("@/app/lib/api/rate-limit", () => ({
 }));
 
 // Mock resilient-api to pass through operations directly
-vi.mock("@/app/lib/api/resilient-api", async () => {
+vi.mock("@/lib/api/resilient-api", async () => {
   const { NextResponse } = await import("next/server");
   return {
     initializeCorrelationId: vi.fn().mockReturnValue("test-correlation-id"),
@@ -109,13 +128,17 @@ describe("POST /api/admin/verify", () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
       email: "admin@test.com",
-      role: "admin",
+      role: "ADMIN",
+    } as any);
+    vi.mocked(prisma.adminProfile.findUnique).mockResolvedValue({
+      role: "SUPER_ADMIN",
+      isActive: true,
     } as any);
 
     vi.mocked(prisma.professionalProfile.findUnique).mockResolvedValue({
       userId: TEST_UUIDS.PROFESSIONAL,
       companyName: "Test Company",
-      status: "PENDING",
+      verificationStatus: "PENDING",
       verified: false,
       user: {
         email: "don@test.com",
@@ -127,7 +150,7 @@ describe("POST /api/admin/verify", () => {
     vi.mocked(prisma.professionalProfile.update).mockResolvedValue({
       userId: TEST_UUIDS.PROFESSIONAL,
       companyName: "Test Company",
-      status: "VERIFIED",
+      verificationStatus: "VERIFIED",
       verified: true,
       verifiedAt: new Date(),
       verifiedById: TEST_UUIDS.ADMIN_DB,
@@ -160,7 +183,7 @@ describe("POST /api/admin/verify", () => {
       expect.objectContaining({
         where: { userId: TEST_UUIDS.PROFESSIONAL },
         data: expect.objectContaining({
-          status: "VERIFIED",
+          verificationStatus: "VERIFIED",
           verified: true,
           verifiedById: TEST_UUIDS.ADMIN_DB,
         }),
@@ -177,7 +200,11 @@ describe("POST /api/admin/verify", () => {
     } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
-      role: "admin",
+      role: "ADMIN",
+    } as any);
+    vi.mocked(prisma.adminProfile.findUnique).mockResolvedValue({
+      role: "SUPER_ADMIN",
+      isActive: true,
     } as any);
 
     const request = new NextRequest("http://localhost:3500/api/admin/verify", {
@@ -205,12 +232,17 @@ describe("POST /api/admin/verify", () => {
     } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
-      role: "admin",
+      role: "ADMIN",
+    } as any);
+    vi.mocked(prisma.adminProfile.findUnique).mockResolvedValue({
+      role: "SUPER_ADMIN",
+      isActive: true,
     } as any);
 
     vi.mocked(prisma.professionalProfile.findUnique).mockResolvedValue({
       userId: TEST_UUIDS.PROFESSIONAL,
-      status: "PENDING",
+      verificationStatus: "PENDING",
+      companyName: "Test Company",
       user: { email: "test@test.com" },
     } as any);
 
@@ -240,7 +272,11 @@ describe("POST /api/admin/verify", () => {
     } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
-      role: "admin",
+      role: "ADMIN",
+    } as any);
+    vi.mocked(prisma.adminProfile.findUnique).mockResolvedValue({
+      role: "SUPER_ADMIN",
+      isActive: true,
     } as any);
 
     vi.mocked(prisma.store.findUnique).mockResolvedValue({

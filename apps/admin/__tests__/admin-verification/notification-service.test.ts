@@ -10,9 +10,33 @@ import {
 } from "@/lib/services/verification/notification.service";
 import type { VerificationResult } from "@/lib/services/verification/types";
 
+vi.mock("@build/nats", () => ({
+  createProducer: vi.fn(() => ({
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    publishWithRetry: vi.fn(),
+  })),
+}));
+
+vi.mock("@/lib/services/verification/notification-queue", () => ({
+  queueFailedNotification: vi.fn(),
+}));
+
 // Mock dependencies
 vi.mock("@build/db", () => ({
   prisma: {
+    professionalProfile: {
+      findUnique: vi.fn(),
+    },
+    store: {
+      findUnique: vi.fn(),
+    },
+    property: {
+      findUnique: vi.fn(),
+    },
+    professionalDocument: {
+      findUnique: vi.fn(),
+    },
     notification: {
       create: vi.fn(),
     },
@@ -31,6 +55,9 @@ describe("Notification Service", () => {
     it("should create database notification for verified professional", async () => {
       const { prisma } = await import("@build/db");
 
+      vi.mocked(prisma.professionalProfile.findUnique).mockResolvedValue({
+        companyName: "Test Company",
+      } as any);
       vi.mocked(prisma.notification.create).mockResolvedValue({
         id: "notif_123",
       } as any);
@@ -50,9 +77,8 @@ describe("Notification Service", () => {
       expect(prisma.notification.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           userId: "user_123",
-          title: "Professional Verified",
-          type: "success",
-          link: "/professional-portal/profile",
+          title: "Professional Verified Successfully",
+          type: "SUCCESS",
         }),
       });
     });
@@ -60,6 +86,9 @@ describe("Notification Service", () => {
     it("should create notification for rejected store", async () => {
       const { prisma } = await import("@build/db");
 
+      vi.mocked(prisma.store.findUnique).mockResolvedValue({
+        name: "My Store",
+      } as any);
       vi.mocked(prisma.notification.create).mockResolvedValue({
         id: "notif_123",
       } as any);
@@ -78,9 +107,8 @@ describe("Notification Service", () => {
       expect(prisma.notification.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           userId: "user_123",
-          title: "Store Rejected",
-          type: "error",
-          link: "/professional-portal/inventory",
+          title: "Store Verification Rejected",
+          type: "ERROR",
         }),
       });
     });
@@ -88,6 +116,9 @@ describe("Notification Service", () => {
     it("should create notification for property needing correction", async () => {
       const { prisma } = await import("@build/db");
 
+      vi.mocked(prisma.property.findUnique).mockResolvedValue({
+        title: "My Property",
+      } as any);
       vi.mocked(prisma.notification.create).mockResolvedValue({
         id: "notif_123",
       } as any);
@@ -107,16 +138,20 @@ describe("Notification Service", () => {
         data: expect.objectContaining({
           userId: "user_123",
           title: "Property Needs Correction",
-          type: "warning",
-          link: "/professional-portal/properties",
+          type: "WARNING",
         }),
       });
     });
 
     it("should send to external notification service when enabled", async () => {
       const { prisma } = await import("@build/db");
+      const { adminEnvConfig } = await import("@/lib/infrastructure/env");
       process.env.ENABLE_NOTIFICATION_SERVICE = "true";
+      adminEnvConfig.ENABLE_NOTIFICATION_SERVICE = true;
 
+      vi.mocked(prisma.professionalProfile.findUnique).mockResolvedValue({
+        companyName: "Test Company",
+      } as any);
       vi.mocked(prisma.notification.create).mockResolvedValue({
         id: "notif_123",
       } as any);
@@ -145,6 +180,8 @@ describe("Notification Service", () => {
           body: expect.stringContaining("user_123"),
         }),
       );
+
+      adminEnvConfig.ENABLE_NOTIFICATION_SERVICE = false;
     });
 
     it("should not throw on notification failure", async () => {

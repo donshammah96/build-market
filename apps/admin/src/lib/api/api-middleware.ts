@@ -4,6 +4,7 @@ import { prisma, UserRole, UserStatus, AdminRole } from "@build/db";
 import { apiError, HttpStatus } from "./api-response";
 import { initializeCorrelationId, getClientLogger } from "./resilient-api";
 import { withTimeout, CorrelationIdManager } from "@build/resilience";
+import { omitUndefined } from "@/lib/utils";
 
 /**
  * Blocked user statuses. Defined as string constants for forward-compatibility
@@ -42,7 +43,7 @@ export interface AuthContext {
   userEmail: string;
   userRole: UserRole;
   /** Granular admin role — only populated when userRole is ADMIN */
-  adminRole?: AdminRole;
+  adminRole?: AdminRole | undefined;
 }
 
 /**
@@ -149,7 +150,7 @@ export function withAuth<T = unknown>(handler: AuthenticatedHandler<T>) {
         dbUserId: user.id,
         userEmail: user.email,
         userRole: user.role,
-        adminRole,
+        ...(adminRole ? { adminRole } : {}),
       };
 
       logger.debug("Request authenticated", {
@@ -171,7 +172,7 @@ export function withAuth<T = unknown>(handler: AuthenticatedHandler<T>) {
       logger.error(
         "Authentication middleware error",
         error instanceof Error ? error : new Error(String(error)),
-        { correlationId },
+        omitUndefined({ correlationId }),
       );
       return apiError("Authentication failed", HttpStatus.UNAUTHORIZED);
     }
@@ -196,7 +197,7 @@ export function withRole(allowedRoles: UserRole[]) {
           userId: context.dbUserId,
           userRole: context.userRole,
           requiredRoles: allowedRoles,
-          correlationId,
+          ...omitUndefined({ correlationId }),
         });
         return apiError(
           "Forbidden. Insufficient permissions.",
@@ -207,7 +208,7 @@ export function withRole(allowedRoles: UserRole[]) {
       logger.debug("Role check passed", {
         userId: context.dbUserId,
         userRole: context.userRole,
-        correlationId,
+        ...omitUndefined({ correlationId }),
       });
 
       return handler(req, context, params);
@@ -239,7 +240,7 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
           userId: context.dbUserId,
           userRole: context.userRole,
           requiredAdminRoles: allowedAdminRoles,
-          correlationId,
+          ...omitUndefined({ correlationId }),
         });
         return apiError(
           "Forbidden. Admin access required.",
@@ -251,7 +252,7 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
       if (!context.adminRole) {
         logger.warn("Admin user missing AdminProfile", {
           userId: context.dbUserId,
-          correlationId,
+          ...omitUndefined({ correlationId }),
         });
         return apiError(
           "Admin profile not configured. Contact a system administrator.",
@@ -269,7 +270,7 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
           userId: context.dbUserId,
           adminRole: context.adminRole,
           requiredAdminRoles: allowedAdminRoles,
-          correlationId,
+          ...omitUndefined({ correlationId }),
         });
         return apiError(
           "Forbidden. You do not have the required admin permissions.",
@@ -280,7 +281,7 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
       logger.debug("Admin role check passed", {
         userId: context.dbUserId,
         adminRole: context.adminRole,
-        correlationId,
+        ...omitUndefined({ correlationId }),
       });
 
       return handler(req, context, params);

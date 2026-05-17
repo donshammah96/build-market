@@ -23,17 +23,32 @@ vi.mock("@clerk/nextjs/server", () => ({
 }));
 
 vi.mock("@build/db", () => ({
+  UserRole: {
+    ADMIN: "ADMIN",
+  },
+  UserStatus: {
+    SUSPENDED: "SUSPENDED",
+    BANNED: "BANNED",
+    DEACTIVATED: "DEACTIVATED",
+    ARCHIVED: "ARCHIVED",
+  },
+  AdminRole: {
+    SUPER_ADMIN: "SUPER_ADMIN",
+  },
   prisma: {
     user: {
+      findUnique: vi.fn(),
+    },
+    adminProfile: {
       findUnique: vi.fn(),
     },
     professionalDocument: {
       update: vi.fn(),
     },
-    propertyAttachment: {
+    propertyDocument: {
       update: vi.fn(),
     },
-    professionalLicense: {
+    certificate: {
       update: vi.fn(),
     },
     adminAuditLog: {
@@ -93,7 +108,11 @@ describe("POST /actions/admin/verify-document", () => {
     } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
-      role: "admin",
+      role: "ADMIN",
+    } as any);
+    vi.mocked(prisma.adminProfile.findUnique).mockResolvedValue({
+      role: "SUPER_ADMIN",
+      isActive: true,
     } as any);
 
     vi.mocked(prisma.professionalDocument.update).mockResolvedValue({
@@ -132,7 +151,7 @@ describe("POST /actions/admin/verify-document", () => {
       expect.objectContaining({
         where: { id: TEST_UUIDS.DOCUMENT_1 },
         data: expect.objectContaining({
-          isVerified: true,
+          verified: true,
           notes: "Document approved",
         }),
       }),
@@ -148,13 +167,17 @@ describe("POST /actions/admin/verify-document", () => {
     } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
-      role: "admin",
+      role: "ADMIN",
+    } as any);
+    vi.mocked(prisma.adminProfile.findUnique).mockResolvedValue({
+      role: "SUPER_ADMIN",
+      isActive: true,
     } as any);
 
-    vi.mocked(prisma.professionalLicense.update).mockResolvedValue({
+    vi.mocked((prisma as any).certificate.update).mockResolvedValue({
       id: TEST_UUIDS.LICENSE,
       professionalId: TEST_UUIDS.PROFESSIONAL,
-      status: "rejected",
+      verificationStatus: "rejected",
       verifiedAt: null,
       notes: "License expired",
       professional: {
@@ -170,7 +193,7 @@ describe("POST /actions/admin/verify-document", () => {
       {
         method: "POST",
         body: JSON.stringify({
-          documentType: "professional_license",
+          documentType: "certificate",
           documentId: TEST_UUIDS.LICENSE,
           action: "REJECT",
           notes: "License expired",
@@ -183,7 +206,7 @@ describe("POST /actions/admin/verify-document", () => {
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
-    expect(prisma.professionalLicense.update).toHaveBeenCalledWith(
+    expect((prisma as any).certificate.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: TEST_UUIDS.LICENSE },
         data: expect.objectContaining({
@@ -203,7 +226,11 @@ describe("POST /actions/admin/verify-document", () => {
     } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
-      role: "admin",
+      role: "ADMIN",
+    } as any);
+    vi.mocked(prisma.adminProfile.findUnique).mockResolvedValue({
+      role: "SUPER_ADMIN",
+      isActive: true,
     } as any);
 
     vi.mocked(prisma.professionalDocument.update)
@@ -267,7 +294,11 @@ describe("POST /actions/admin/verify-document", () => {
     } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
-      role: "admin",
+      role: "ADMIN",
+    } as any);
+    vi.mocked(prisma.adminProfile.findUnique).mockResolvedValue({
+      role: "SUPER_ADMIN",
+      isActive: true,
     } as any);
 
     const request = new NextRequest(

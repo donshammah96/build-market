@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { LeadSource, LeadStatus, Prisma, ProjectType, prisma } from "@build/db";
 import { safeAction, logAdminAction } from "./shared";
 import { z } from "zod";
+import { omitUndefined } from "@/lib/utils";
 
 // ============================================================================
 // Types
@@ -267,14 +268,21 @@ export async function updateLead(leadId: string, data: UpdateLeadInput) {
   return safeAction("updateLead", async ({ adminUserId }) => {
     const validated = UpdateLeadSchema.parse(data);
 
+    const updateData: Prisma.LeadUpdateInput = {
+      ...(validated.status !== undefined ? { status: validated.status } : {}),
+      ...(validated.notes !== undefined ? { notes: validated.notes } : {}),
+      ...(validated.followUpDate !== undefined
+        ? {
+            followUpDate: validated.followUpDate
+              ? new Date(validated.followUpDate)
+              : null,
+          }
+        : {}),
+    };
+
     const lead = await prisma.lead.update({
       where: { id: leadId },
-      data: {
-        ...validated,
-        followUpDate: validated.followUpDate
-          ? new Date(validated.followUpDate)
-          : null,
-      },
+      data: updateData,
       select: {
         id: true,
         clientName: true,
@@ -306,10 +314,18 @@ export async function updateLead(leadId: string, data: UpdateLeadInput) {
  * Deletes a lead.
  */
 export async function deleteLead(leadId: string) {
-  return safeAction("deleteLead", async () => {
+  return safeAction("deleteLead", async ({ adminUserId }) => {
     const lead = await prisma.lead.delete({
       where: { id: leadId },
       select: { id: true, clientName: true },
+    });
+
+    await logAdminAction({
+      userId: adminUserId,
+      action: "DELETE_LEAD",
+      targetType: "lead",
+      targetId: leadId,
+      details: { clientName: lead.clientName },
     });
 
     revalidatePath("/leads");

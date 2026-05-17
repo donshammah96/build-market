@@ -30,8 +30,8 @@ export function parseSessionMetadata(
       : undefined;
 
   return {
-    role: roleValue,
-    isOnboarded: onboardedValue,
+    ...(roleValue !== undefined ? { role: roleValue } : {}),
+    ...(onboardedValue !== undefined ? { isOnboarded: onboardedValue } : {}),
   };
 }
 

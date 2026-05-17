@@ -39,15 +39,15 @@ let isInitialized = false;
 export interface SchedulerStatus {
   name: string;
   isRunning: boolean;
-  lastRun?: Date;
-  nextRun?: Date;
-  lastError?: string;
+  lastRun?: Date | undefined;
+  nextRun?: Date | undefined;
+  lastError?: string | undefined;
 }
 
 export interface GDPRJobOrchestrator {
   isInitialized: boolean;
   schedulers: SchedulerStatus[];
-  startedAt?: Date;
+  startedAt?: Date | undefined;
 }
 
 /**
@@ -176,7 +176,7 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
   return {
     isInitialized,
     schedulers,
-    startedAt: isInitialized ? new Date() : undefined,
+    ...(isInitialized ? { startedAt: new Date() } : {}),
   };
 }
 
@@ -231,7 +231,9 @@ export async function triggerJob(
       `[JobOrchestrator] Manually triggered ${jobType} job: ${job.id}`,
     );
 
-    return { success: true, jobId: job.id };
+    return job.id
+      ? { success: true, jobId: String(job.id) }
+      : { success: true };
   } catch (error) {
     console.error(`[JobOrchestrator] Failed to trigger ${jobType}:`, error);
     return {
