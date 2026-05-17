@@ -7,12 +7,7 @@ import {
 
 describe("user-roles", () => {
   it("exposes the expected assignable roles", () => {
-    expect(ASSIGNABLE_USER_ROLES).toEqual([
-      "CLIENT",
-      "PROFESSIONAL",
-      "ADMIN",
-      "SUPPORT",
-    ]);
+    expect(ASSIGNABLE_USER_ROLES).toEqual(["CLIENT", "PROFESSIONAL", "ADMIN"]);
   });
 
   it("validates assignable roles with uppercase normalization expectations", () => {
@@ -24,7 +19,7 @@ describe("user-roles", () => {
 
   it("builds prompt text from shared role source", () => {
     expect(getAssignableUserRolesPromptText()).toBe(
-      "CLIENT | PROFESSIONAL | ADMIN | SUPPORT",
+      "CLIENT | PROFESSIONAL | ADMIN",
     );
   });
 });

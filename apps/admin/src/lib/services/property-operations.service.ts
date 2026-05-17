@@ -174,9 +174,9 @@ export function buildPropertyUpdatePayload(
     interface PropertyImage {
       assetId: string;
       category: string;
-      caption?: string;
+      caption?: string | undefined;
       isMain: boolean;
-      sortOrder?: number;
+      sortOrder?: number | undefined;
       tags?: string[];
     }
 
@@ -185,13 +185,13 @@ export function buildPropertyUpdatePayload(
       create: data.images.map((img: PropertyImage) => ({
         assetId: img.assetId,
         category: img.category as ImageCategory,
-        caption: img.caption,
         isMain: img.isMain,
         sortOrder: img.sortOrder ?? 0,
         tags: img.tags ?? [],
         uploadedBy: {
           connect: { id: userId },
         },
+        ...(img.caption !== undefined ? { caption: img.caption } : {}),
       })),
     };
   }

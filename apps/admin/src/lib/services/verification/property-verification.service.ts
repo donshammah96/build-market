@@ -12,6 +12,7 @@ import {
 } from "./types";
 import { createAuditLog } from "./audit-service";
 import { StructuredLogger } from "@build/resilience";
+import { omitUndefined } from "@/lib/utils";
 
 const logger = new StructuredLogger("property-verification-service");
 
@@ -62,7 +63,9 @@ export async function verifyProperty(
       verified: newStatus === "VERIFIED",
       verificationStatus: newStatus,
       verifiedAt: newStatus === "VERIFIED" ? new Date() : null,
-      rejectionReason: action === "REJECT" ? reason : null,
+      ...(action === "REJECT"
+        ? { rejectionReason: reason ?? null }
+        : { rejectionReason: null }),
     },
   });
 
@@ -97,10 +100,12 @@ export async function verifyProperty(
     entityId,
     previousStatus: currentStatus,
     newStatus,
-    verifiedAt: updated.verifiedAt || undefined,
     message: `Property "${property.title}" has been ${action.toLowerCase()}ed`,
-    reason: action === "REJECT" ? reason : undefined,
-    notes,
+    ...omitUndefined({
+      verifiedAt: updated.verifiedAt ?? undefined,
+      reason: action === "REJECT" ? reason : undefined,
+      notes,
+    }),
   };
 }
 

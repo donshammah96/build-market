@@ -12,6 +12,7 @@ import {
 } from "./types";
 import { createAuditLog } from "./audit-service";
 import { StructuredLogger } from "@build/resilience";
+import { omitUndefined } from "@/lib/utils";
 
 const logger = new StructuredLogger("professional-verification-service");
 
@@ -60,7 +61,7 @@ export async function verifyProfessional(
       verified: newStatus === "VERIFIED",
       verifiedAt: newStatus === "VERIFIED" ? new Date() : null,
       verifiedById: newStatus === "VERIFIED" ? adminId : null,
-      verificationNotes: notes,
+      ...(notes !== undefined ? { verificationNotes: notes } : {}),
     },
   });
 
@@ -95,10 +96,12 @@ export async function verifyProfessional(
     entityId,
     previousStatus: currentStatus,
     newStatus,
-    verifiedAt: updated.verifiedAt || undefined,
     message: `Professional "${professional.companyName}" has been ${action.toLowerCase()}ed`,
-    reason: action === "REJECT" ? reason : undefined,
-    notes,
+    ...omitUndefined({
+      verifiedAt: updated.verifiedAt ?? undefined,
+      reason: action === "REJECT" ? reason : undefined,
+      notes,
+    }),
   };
 }
 

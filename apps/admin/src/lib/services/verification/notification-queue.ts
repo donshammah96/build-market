@@ -15,6 +15,8 @@ import { PrismaClient } from "@prisma/client";
 import { Queue, Worker, Job } from "bullmq";
 import type { VerificationStatus } from "@build/db";
 import { getBullMQConnectionOptions } from "@build/queue-server";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { omitUndefined } from "@/lib/utils";
 
 // Config and Types
 const logger = new StructuredLogger("notification-queue-service");
@@ -37,7 +39,13 @@ export enum QueueProvider {
 
 // Current Provider Selection
 const CURRENT_PROVIDER: QueueProvider =
-  (process.env.QUEUE_PROVIDER as QueueProvider) || QueueProvider.MEMORY;
+  adminEnvConfig.QUEUE_PROVIDER === "redis"
+    ? QueueProvider.REDIS
+    : adminEnvConfig.QUEUE_PROVIDER === "bullmq"
+      ? QueueProvider.REDIS
+      : adminEnvConfig.QUEUE_PROVIDER === "memory"
+        ? QueueProvider.MEMORY
+        : QueueProvider.MEMORY;
 
 // Maximum retry attempts before moving to dead letter
 const MAX_RETRY_ATTEMPTS = 3;
@@ -48,16 +56,14 @@ const RETRY_DELAYS: readonly number[] = [60000, 300000, 900000] as const; // 1mi
 // Default retry delay fallback
 const DEFAULT_RETRY_DELAY = 60000;
 
-const REDIS_CONFIG = getBullMQConnectionOptions();
-
 export interface FailedNotificationEntry {
   id: string;
   entityType: EntityType;
   entityId: string;
   recipientUserId: string;
   newStatus: string;
-  reason?: string;
-  notes?: string;
+  reason?: string | undefined;
+  notes?: string | undefined;
   attemptCount: number;
   lastAttemptAt: Date;
   nextRetryAt: Date;
@@ -160,9 +166,11 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
           entityId: item.entityId,
           previousStatus: "PENDING" as VerificationStatus, // Not stored, use default
           newStatus: item.newStatus as VerificationStatus,
-          reason: item.reason ?? undefined,
-          notes: item.notes ?? undefined,
           message: "Retry notification",
+          ...omitUndefined({
+            reason: item.reason ?? undefined,
+            notes: item.notes ?? undefined,
+          }),
         };
 
         // Attempt to resend the notification
@@ -255,12 +263,12 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
       });
 
       // Optionally send to external notification service
-      if (process.env.ENABLE_NOTIFICATION_SERVICE === "true") {
-        const NOTIFICATION_SERVICE_URL =
-          process.env.NOTIFICATION_SERVICE_URL || "http://localhost:3011";
+      if (adminEnvConfig.ENABLE_NOTIFICATION_SERVICE) {
+        const notificationServiceUrl =
+          adminEnvConfig.NOTIFICATION_SERVICE_URL ?? "http://localhost:3011";
 
         const response = await fetch(
-          `${NOTIFICATION_SERVICE_URL}/api/notifications`,
+          `${notificationServiceUrl}/api/notifications`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -437,9 +445,11 @@ class RedisQueueStrategy implements NotificationQueueStrategy {
   private readonly queueName = "notification-retries";
 
   constructor() {
+    const redisConfig = getBullMQConnectionOptions();
+
     this.prisma = getPrisma();
     this.queue = new Queue<NotificationJobData>(this.queueName, {
-      connection: REDIS_CONFIG,
+      connection: redisConfig,
     });
 
     // Initialize Worker with notification resend logic
@@ -464,7 +474,7 @@ class RedisQueueStrategy implements NotificationQueueStrategy {
         return { sent: true, entityId: result.entityId };
       },
       {
-        connection: REDIS_CONFIG,
+        connection: redisConfig,
       },
     );
 
@@ -539,12 +549,12 @@ class RedisQueueStrategy implements NotificationQueueStrategy {
       });
 
       // Optionally send to external notification service
-      if (process.env.ENABLE_NOTIFICATION_SERVICE === "true") {
-        const NOTIFICATION_SERVICE_URL =
-          process.env.NOTIFICATION_SERVICE_URL || "http://localhost:3011";
+      if (adminEnvConfig.ENABLE_NOTIFICATION_SERVICE) {
+        const notificationServiceUrl =
+          adminEnvConfig.NOTIFICATION_SERVICE_URL ?? "http://localhost:3011";
 
         const response = await fetch(
-          `${NOTIFICATION_SERVICE_URL}/api/notifications`,
+          `${notificationServiceUrl}/api/notifications`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -741,14 +751,16 @@ class MemoryQueueStrategy implements NotificationQueueStrategy {
       entityId: result.entityId,
       recipientUserId,
       newStatus: result.newStatus,
-      reason: result.reason,
-      notes: result.notes,
       attemptCount: 1,
       lastAttemptAt: new Date(),
       nextRetryAt,
       lastError: error.message,
       createdAt: new Date(),
       status: "PENDING",
+      ...omitUndefined({
+        reason: result.reason,
+        notes: result.notes,
+      }),
     };
 
     failedNotificationsQueue.set(id, entry);
@@ -775,9 +787,11 @@ class MemoryQueueStrategy implements NotificationQueueStrategy {
             entityId: entry.entityId,
             previousStatus: "PENDING" as VerificationStatus,
             newStatus: entry.newStatus as VerificationStatus,
-            reason: entry.reason,
-            notes: entry.notes,
             message: "Retry notification",
+            ...omitUndefined({
+              reason: entry.reason,
+              notes: entry.notes,
+            }),
           };
 
           // Attempt to resend the notification
@@ -865,12 +879,12 @@ class MemoryQueueStrategy implements NotificationQueueStrategy {
       });
 
       // Optionally send to external notification service
-      if (process.env.ENABLE_NOTIFICATION_SERVICE === "true") {
-        const NOTIFICATION_SERVICE_URL =
-          process.env.NOTIFICATION_SERVICE_URL || "http://localhost:3011";
+      if (adminEnvConfig.ENABLE_NOTIFICATION_SERVICE) {
+        const notificationServiceUrl =
+          adminEnvConfig.NOTIFICATION_SERVICE_URL ?? "http://localhost:3011";
 
         const response = await fetch(
-          `${NOTIFICATION_SERVICE_URL}/api/notifications`,
+          `${notificationServiceUrl}/api/notifications`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },

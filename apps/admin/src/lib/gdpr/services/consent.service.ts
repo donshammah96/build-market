@@ -1,5 +1,6 @@
 import { prisma, Prisma } from "@build/db";
 import { ConsentType } from "@prisma/client";
+import { omitUndefined } from "@/lib/utils";
 
 // Valid consent types for runtime validation
 const VALID_CONSENT_TYPES: ConsentType[] = [
@@ -42,9 +43,14 @@ export class ConsentService {
 
         let record;
         if (existing) {
+          const updateData: Prisma.ConsentRecordUpdateInput = {
+            granted,
+            ...(granted ? { grantedAt: new Date() } : {}),
+          };
+
           record = await tx.consentRecord.update({
             where: { id: existing.id },
-            data: { granted, grantedAt: granted ? new Date() : undefined },
+            data: updateData,
           });
         } else {
           record = await tx.consentRecord.create({
@@ -114,7 +120,7 @@ export class ConsentService {
 
       await tx.consentRecord.updateMany({
         where: { userId, granted: true },
-        data: { granted: false, grantedAt: undefined },
+        data: { granted: false },
       });
 
       await tx.user.update({
@@ -166,11 +172,11 @@ export class ConsentService {
         update: {
           granted,
           withdrawnAt: granted ? null : new Date(),
-          grantedAt: granted ? new Date() : undefined, // Only update grantedAt if granting? Or always?
+          ...(granted ? { grantedAt: new Date() } : {}),
           // Usually grantedAt is when it was originally granted.
           // If revoked, granted is false.
           // If re-granted, grantedAt updates.
-          ipAddress,
+          ...(ipAddress !== undefined ? { ipAddress } : {}),
           documentVersion,
         },
         create: {
@@ -179,8 +185,8 @@ export class ConsentService {
           granted,
           grantedAt: new Date(),
           withdrawnAt: granted ? null : new Date(),
-          ipAddress,
           documentVersion,
+          ...(ipAddress !== undefined ? { ipAddress } : {}),
         },
       });
 
@@ -221,9 +227,6 @@ export class ConsentService {
         data: {
           actorId: userId,
           actorType: "USER",
-          actorEmail: actor?.email,
-          actorFirstName: actor?.firstName,
-          actorLastName: actor?.lastName,
           action: granted ? "CONSENT_GRANTED" : "CONSENT_WITHDRAWN",
           entityType: "ConsentRecord",
           entityId: consent.id,
@@ -234,6 +237,11 @@ export class ConsentService {
             ipAddress,
             documentVersion,
           },
+          ...omitUndefined({
+            actorEmail: actor?.email,
+            actorFirstName: actor?.firstName ?? undefined,
+            actorLastName: actor?.lastName ?? undefined,
+          }),
         },
       });
 

@@ -19,6 +19,9 @@ const TEST_UUIDs = {
 
 vi.mock("@build/db", () => ({
   prisma: {
+    user: {
+      findUnique: vi.fn(),
+    },
     adminAuditLog: {
       create: vi.fn(),
       findMany: vi.fn(),
@@ -35,6 +38,12 @@ describe("Audit Service", () => {
     it("should create audit log with all fields", async () => {
       const { prisma } = await import("@build/db");
 
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        firstName: "Don",
+        lastName: "Shammah",
+        email: "admin@test.com",
+        role: "ADMIN",
+      } as any);
       vi.mocked(prisma.adminAuditLog.create).mockResolvedValue({
         id: TEST_UUIDs.LOG_ID_1,
         adminId: TEST_UUIDs.ADMIN_1,
@@ -66,11 +75,10 @@ describe("Audit Service", () => {
       expect(prisma.adminAuditLog.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           adminId: TEST_UUIDs.ADMIN_1,
+          targetType: "ProfessionalProfile",
+          targetId: "prof_123",
           action: "VERIFY_PROFESSIONAL",
-          entityType: "ProfessionalProfile",
-          entityId: "prof_123",
-          oldStatus: "PENDING",
-          newStatus: "VERIFIED",
+          reason: "All documents verified",
         }),
       });
     });
@@ -131,8 +139,8 @@ describe("Audit Service", () => {
       expect(prisma.adminAuditLog.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
-            entityType: "ProfessionalProfile",
-            entityId: "prof_123",
+            targetType: "ProfessionalProfile",
+            targetId: "prof_123",
           },
           orderBy: { createdAt: "desc" },
           take: 50,

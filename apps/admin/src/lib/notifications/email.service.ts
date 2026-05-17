@@ -6,6 +6,7 @@
  */
 
 import { sendEmail as baseSendEmail } from "@/lib/infrastructure/mailer";
+import { omitUndefined } from "@/lib/utils";
 
 export type DPOEscalationMetadata = Record<string, unknown>;
 export interface IncidentSeverityLevel {
@@ -60,10 +61,12 @@ export async function sendEmail(options: EmailOptions) {
         to: recipient,
         subject: options.subject,
         html: options.html,
-        attachments: options.attachments?.map((attachment) => ({
-          filename: attachment.filename,
-          content: attachment.content,
-        })),
+        ...omitUndefined({
+          attachments: options.attachments?.map((attachment) => ({
+            filename: attachment.filename,
+            content: attachment.content,
+          })),
+        }),
       }),
     ),
   );

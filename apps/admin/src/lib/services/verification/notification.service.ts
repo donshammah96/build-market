@@ -16,11 +16,13 @@ import {
   type JetStreamProducer,
   type VerificationEvent,
 } from "@build/nats";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { omitUndefined } from "@/lib/utils";
 
 const logger = new StructuredLogger("verification-notification-service");
 
 const NOTIFICATION_SERVICE_URL =
-  process.env.NOTIFICATION_SERVICE_URL || "http://localhost:3011";
+  adminEnvConfig.NOTIFICATION_SERVICE_URL ?? "http://localhost:3011";
 
 // NATS producer instance (lazy initialized)
 let natsProducer: JetStreamProducer | null = null;
@@ -45,7 +47,7 @@ export async function notifyVerificationResult(
     await createDatabaseNotification(result, recipientUserId);
 
     // Optionally send to external notification service
-    if (process.env.ENABLE_NOTIFICATION_SERVICE === "true") {
+    if (adminEnvConfig.ENABLE_NOTIFICATION_SERVICE) {
       await sendToNotificationService(result, recipientUserId);
     }
 
@@ -240,13 +242,15 @@ export async function publishVerificationEvent(
       newStatus: result.newStatus,
       success: result.success,
       message: result.message,
-      verifiedAt: result.verifiedAt?.toISOString(),
-      reason: result.reason,
-      notes: result.notes,
       metadata: {
         email: userEmail,
         userName,
       },
+      ...omitUndefined({
+        verifiedAt: result.verifiedAt?.toISOString(),
+        reason: result.reason,
+        notes: result.notes,
+      }),
     };
 
     // Publish to verification stream
