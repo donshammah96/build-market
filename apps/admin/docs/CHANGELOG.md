@@ -1,5 +1,29 @@
 # apps/admin Changelog
 
+## [2026-05-18] Phase 4 - Content domain slice
+
+### Added (Phase 4 - Content domain slice)
+
+- Added content domain contracts, repository, and service under `apps/admin/src/lib/domains/content`.
+- Added a content moderation queue contract for stores, properties, and projects with result-based errors and `MANAGE_CONTENT` capability enforcement.
+- Added content repository contract tests covering soft-delete guards, owner includes, caller filters, and model-specific sort mapping.
+- Added content service tests covering policy denial, invalid filters, pagination, and all-entity sorting.
+
+### Changed (Phase 4 - Content domain slice)
+
+- Kept legacy content actions behavior unchanged in this domain branch; Phase 5 will migrate stores, properties, projects, and adjacent content actions onto the service boundary.
+- Mapped admin-facing `title` sorting to the store `name` column while preserving `title` sorting for property and project records.
+
+**Verification:**
+
+- `pnpm run admin:check-types` -> pass.
+- `pnpm run admin:lint` -> pass with 213 warnings; warnings remain known Phase 4-12 debt.
+- `pnpm run admin:check-env-contract` -> pass; all env templates cover 59 boundary keys.
+- `pnpm run admin:test:all` -> pass; 22 files passed, 155 of 155 tests passed.
+- `pnpm -C apps/admin exec vitest run src/lib/domains/content/__tests__/service.test.ts src/lib/domains/content/__tests__/repository.test.ts --pool=threads --maxWorkers=1` -> pass; 2 files passed, 8 of 8 tests passed.
+- `pnpm run admin:report-security-drift` -> pass with known drift counts: env boundary 69, direct Prisma action files 18, unsafe mutations 13, action `.parse()` 23, `@ts-nocheck` 21, unstructured logging 104, log safety 4, missing audit log 3.
+- `pnpm run admin:report-security-drift:strict` -> fail with the same known Phase 4-12 drift backlog.
+
 ## [2026-05-18] Phase 4 - Verification domain slice
 
 ### Added (Phase 4 - Verification domain slice)
