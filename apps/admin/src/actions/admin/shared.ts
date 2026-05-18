@@ -40,7 +40,22 @@ type ActionActorRole = (typeof VERIFICATION_ALLOWED_ROLES)[number];
 type SafeActionOptions = {
   recentAuth?: { maxAgeSeconds: number };
   rateLimit?: { namespace: string; limit: number; windowMs: number };
-  auditLog?: { operation: string; resourceType?: string };
+  auditLog?: {
+    operation: string;
+    resourceType?: string;
+    getTargetId?: (payload: {
+      actor: AdminActor;
+      data: unknown;
+    }) => string;
+    getDetails?: (payload: {
+      actor: AdminActor;
+      data: unknown;
+    }) => Record<string, unknown> | undefined;
+    getReason?: (payload: {
+      actor: AdminActor;
+      data: unknown;
+    }) => string | undefined;
+  };
 };
 
 export type AdminPermissions = {
@@ -387,22 +402,25 @@ async function enforceActorRateLimit(
 async function recordDeclarativeAudit(
   actor: AdminActor,
   auditLog: SafeActionOptions["auditLog"],
-  outcome: "SUCCESS" | "FAILURE",
-  details?: Record<string, unknown>,
+  data: unknown,
 ) {
   if (!auditLog) {
     return;
   }
 
+  const targetId = auditLog.getTargetId?.({ actor, data }) ?? actor.dbUserId;
+  const details = auditLog.getDetails?.({ actor, data });
+  const reason = auditLog.getReason?.({ actor, data });
+
   await logAdminAction({
     userId: actor.dbUserId,
     action: auditLog.operation,
     targetType: auditLog.resourceType ?? "admin_action",
-    targetId: actor.dbUserId,
-    details: {
-      outcome,
-      ...details,
-    },
+    targetId,
+    ...omitUndefined({
+      details,
+      reason,
+    }),
   }).catch(() => undefined);
 }
 
@@ -479,7 +497,7 @@ export async function safeAction<T>(
     await recordDeclarativeAudit(
       actorResult.actor,
       actionOptions.auditLog,
-      "SUCCESS",
+      data,
     );
 
     return {
@@ -560,7 +578,7 @@ export async function safeVerificationAction<T>(
     await recordDeclarativeAudit(
       actorResult.actor,
       actionOptions.auditLog,
-      "SUCCESS",
+      data,
     );
 
     return {

@@ -11,6 +11,7 @@ import {
 import type {
   AdminUserDetails,
   AdminUserActor,
+  DeleteUsersBulkInput,
   AssignUserRoleInput,
   InviteUserInput,
   ListUsersInput,
@@ -19,6 +20,8 @@ import type {
   NormalizedAssignUserRoleInput,
   NormalizedInviteUserInput,
   UsersDomainError,
+  UserCredentialsTarget,
+  UserIdentityTarget,
 } from "./contracts";
 import * as repository from "./repository";
 
@@ -226,5 +229,106 @@ export async function prepareAssignUserRole(
     });
   }
 
-  return ok({ userId: input.userId, role: roleResult.data });
+  try {
+    const user = await repository.findUserRoleTarget(input.userId);
+
+    if (!user) {
+      return err({ error: "USER_NOT_FOUND", message: "User not found" });
+    }
+
+    return ok({ user, role: roleResult.data });
+  } catch (error) {
+    return err(toDomainError(error));
+  }
+}
+
+export async function prepareDeleteUser(
+  actor: AdminUserActor,
+  userId: string,
+): Promise<Result<UserIdentityTarget, UsersDomainError>> {
+  const authResult = requireManageUsers(actor);
+
+  if (!authResult.ok) {
+    return authResult;
+  }
+
+  if (!userId.trim()) {
+    return err({ error: "INVALID_INPUT", message: "User ID is required" });
+  }
+
+  if (userId === actor.dbUserId) {
+    return err({
+      error: "SELF_DELETE_DENIED",
+      message: "Cannot delete your own admin account",
+    });
+  }
+
+  try {
+    const user = await repository.findUserIdentityTarget(userId);
+
+    if (!user) {
+      return err({ error: "USER_NOT_FOUND", message: "User not found" });
+    }
+
+    return ok(user);
+  } catch (error) {
+    return err(toDomainError(error));
+  }
+}
+
+export async function prepareDeleteUsersBulk(
+  actor: AdminUserActor,
+  input: DeleteUsersBulkInput,
+): Promise<Result<{ userIds: string[] }, UsersDomainError>> {
+  const authResult = requireManageUsers(actor);
+
+  if (!authResult.ok) {
+    return authResult;
+  }
+
+  const userIds = Array.from(new Set(input.userIds.map((userId) => userId.trim())))
+    .filter(Boolean);
+
+  if (userIds.length === 0) {
+    return err({
+      error: "USER_SELECTION_REQUIRED",
+      message: "No users selected",
+    });
+  }
+
+  if (userIds.length > 50) {
+    return err({
+      error: "BULK_LIMIT_EXCEEDED",
+      message: "Bulk delete limit exceeded (max 50 users per request)",
+    });
+  }
+
+  return ok({ userIds });
+}
+
+export async function prepareResetUserCredentials(
+  actor: AdminUserActor,
+  userId: string,
+): Promise<Result<UserCredentialsTarget, UsersDomainError>> {
+  const authResult = requireManageUsers(actor);
+
+  if (!authResult.ok) {
+    return authResult;
+  }
+
+  if (!userId.trim()) {
+    return err({ error: "INVALID_INPUT", message: "User ID is required" });
+  }
+
+  try {
+    const user = await repository.findUserCredentialsTarget(userId);
+
+    if (!user) {
+      return err({ error: "USER_NOT_FOUND", message: "User not found" });
+    }
+
+    return ok(user);
+  } catch (error) {
+    return err(toDomainError(error));
+  }
 }

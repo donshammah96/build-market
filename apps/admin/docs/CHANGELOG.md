@@ -1,5 +1,34 @@
 # apps/admin Changelog
 
+## [2026-05-18] Phase 5 - Users action slice
+
+### Security (Phase 5 - Users action slice)
+
+- Added `safeParse`-backed input validation for admin user detail, delete, bulk delete, invite, reset-credentials, and role-assignment actions.
+- Added declarative `auditLog` coverage in `safeAction` so high-risk user mutations can attach target IDs and non-PII details without manual audit calls.
+- Blocked self-deletion for admin user mutations to align single-delete behavior with the existing bulk-delete guard.
+
+### Changed (Phase 5 - Users action slice)
+
+- Removed direct Prisma access from `apps/admin/src/actions/admin/users.ts`; the action slice now delegates persistence to `usersRepository` and business rules to `usersService`.
+- Moved remaining users mutation preconditions into the users domain service, including target lookups, bulk-delete normalization, and reset/role-assignment preparation.
+- Updated the admin security drift reporter so declarative `auditLog:` usage counts as audit coverage for high-risk action files.
+
+### Tests (Phase 5 - Users action slice)
+
+- Reworked users action-boundary tests to assert service/repository delegation instead of action-layer Prisma calls.
+- Extended users domain service tests for delete preparation, bulk-delete normalization, reset preparation, and role-assignment target loading.
+
+**Verification:**
+
+- `pnpm run admin:check-types` -> pass.
+- `pnpm run admin:lint` -> pass with 211 warnings; warnings remain tracked Phase 5-12 backlog.
+- `pnpm run admin:check-env-contract` -> pass; all env templates cover 59 boundary keys.
+- `pnpm run admin:test:all` -> pass; 26 files passed, 174 of 174 tests passed.
+- `pnpm -C apps/admin exec vitest run src/lib/domains/users/__tests__/service.test.ts src/lib/domains/users/__tests__/repository.test.ts src/actions/admin/__tests__/users-actions.test.ts --pool=threads --maxWorkers=1` -> pass; 3 files passed, 22 of 22 tests passed.
+- `pnpm run admin:report-security-drift` -> pass with known drift counts: env boundary 69, direct Prisma action files 17, unsafe mutations 13, action `.parse()` 23, `@ts-nocheck` 21, unstructured logging 103, log safety 3, missing audit log 3.
+- `pnpm run admin:report-security-drift:strict` -> fail with the remaining Phase 5-12 drift backlog.
+
 ## [2026-05-18] Phase 4 - Audit domain slice
 
 ### Added (Phase 4 - Audit domain slice)
