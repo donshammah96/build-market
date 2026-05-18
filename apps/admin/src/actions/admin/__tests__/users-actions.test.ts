@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@build/db", () => ({
+  AdminRole: {
+    SUPER_ADMIN: "SUPER_ADMIN",
+    CONTENT_MODERATOR: "CONTENT_MODERATOR",
+    SUPPORT_AGENT: "SUPPORT_AGENT",
+    FINANCE_MANAGER: "FINANCE_MANAGER",
+    AUDITOR: "AUDITOR",
+  },
   prisma: {
     user: {
       findFirst: vi.fn(),
