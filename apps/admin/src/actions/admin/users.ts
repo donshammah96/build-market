@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { clerkClient } from "@clerk/nextjs/server";
-import { Prisma, prisma } from "@build/db";
+import { prisma } from "@build/db";
 import { safeAction, requireAdminGranularRole, logAdminAction } from "./shared";
 import { runWithIdempotency } from "./idempotency";
 import {
