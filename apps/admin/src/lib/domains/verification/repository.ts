@@ -1,0 +1,232 @@
+import { prisma, type Prisma } from "@build/db";
+import type {
+  PrismaVerificationStatus,
+  VerificationQueueItem,
+  VerificationQueueQuery,
+  VerificationStatsPeriod,
+} from "./contracts";
+
+const OWNER_SELECT = {
+  id: true,
+  email: true,
+  firstName: true,
+  lastName: true,
+  phone: true,
+} as const;
+
+const PROFESSIONAL_QUEUE_INCLUDE = {
+  user: { select: OWNER_SELECT },
+  _count: { select: { documents: true, licenses: true } },
+} satisfies Prisma.ProfessionalProfileInclude;
+
+const STORE_QUEUE_INCLUDE = {
+  professional: {
+    include: {
+      user: { select: OWNER_SELECT },
+    },
+  },
+  _count: { select: { products: true } },
+} satisfies Prisma.StoreInclude;
+
+const PROPERTY_QUEUE_INCLUDE = {
+  agent: {
+    include: {
+      user: { select: OWNER_SELECT },
+    },
+  },
+  _count: { select: { attachments: true, images: true } },
+} satisfies Prisma.PropertyInclude;
+
+type ProfessionalQueueRow = Prisma.ProfessionalProfileGetPayload<{
+  include: typeof PROFESSIONAL_QUEUE_INCLUDE;
+}>;
+type StoreQueueRow = Prisma.StoreGetPayload<{
+  include: typeof STORE_QUEUE_INCLUDE;
+}>;
+type PropertyQueueRow = Prisma.PropertyGetPayload<{
+  include: typeof PROPERTY_QUEUE_INCLUDE;
+}>;
+
+function dateFilterForPeriod(
+  period: VerificationStatsPeriod,
+  now: Date = new Date(),
+): Prisma.DateTimeFilter | undefined {
+  if (period === "all") return undefined;
+
+  const start = new Date(now);
+  if (period === "today") {
+    start.setHours(0, 0, 0, 0);
+  }
+  if (period === "week") {
+    start.setDate(start.getDate() - 7);
+  }
+  if (period === "month") {
+    start.setDate(start.getDate() - 30);
+  }
+
+  return { gte: start };
+}
+
+function statusWhere(status: PrismaVerificationStatus) {
+  return { verificationStatus: status };
+}
+
+function pendingSubmissionWhere(status: PrismaVerificationStatus) {
+  if (status !== "PENDING") return {};
+  return { submittedAt: { not: null } };
+}
+
+function orderByFor(query: VerificationQueueQuery) {
+  return {
+    [query.sortBy === "submittedAt" ? "submittedAt" : "createdAt"]:
+      query.sortOrder,
+  };
+}
+
+export async function listProfessionalQueue(
+  query: VerificationQueueQuery & { status: PrismaVerificationStatus },
+): Promise<VerificationQueueItem[]> {
+  const rows = (await prisma.professionalProfile.findMany({
+    where: statusWhere(query.status),
+    include: PROFESSIONAL_QUEUE_INCLUDE,
+    orderBy: { createdAt: query.sortOrder },
+    skip: query.entityType === "professional" ? query.skip : 0,
+    ...(query.entityType === "professional" ? { take: query.limit } : {}),
+  })) as ProfessionalQueueRow[];
+
+  return rows.map((profile) => ({
+    entityType: "professional",
+    entityId: profile.userId,
+    name: profile.companyName,
+    status: profile.verificationStatus,
+    submittedAt: null,
+    createdAt: profile.createdAt,
+    owner: profile.user,
+    documentCount: profile._count.documents,
+    certificateCount: profile._count.licenses,
+    city: profile.city,
+    county: profile.county,
+  }));
+}
+
+export async function countProfessionalQueue(
+  status: PrismaVerificationStatus,
+): Promise<number> {
+  return prisma.professionalProfile.count({
+    where: statusWhere(status),
+  });
+}
+
+export async function listStoreQueue(
+  query: VerificationQueueQuery & { status: PrismaVerificationStatus },
+): Promise<VerificationQueueItem[]> {
+  const rows = (await prisma.store.findMany({
+    where: {
+      ...statusWhere(query.status),
+      ...pendingSubmissionWhere(query.status),
+      deletedAt: null,
+    },
+    include: STORE_QUEUE_INCLUDE,
+    orderBy: orderByFor(query),
+    skip: query.entityType === "store" ? query.skip : 0,
+    ...(query.entityType === "store" ? { take: query.limit } : {}),
+  })) as StoreQueueRow[];
+
+  return rows.map((store) => ({
+    entityType: "store",
+    entityId: store.id,
+    name: store.name,
+    status: store.verificationStatus,
+    submittedAt: store.submittedAt,
+    createdAt: store.createdAt,
+    owner: store.professional.user,
+    productCount: store._count.products,
+    city: store.city,
+    county: store.county,
+  }));
+}
+
+export async function countStoreQueue(
+  status: PrismaVerificationStatus,
+): Promise<number> {
+  return prisma.store.count({
+    where: {
+      ...statusWhere(status),
+      ...pendingSubmissionWhere(status),
+      deletedAt: null,
+    },
+  });
+}
+
+export async function listPropertyQueue(
+  query: VerificationQueueQuery & { status: PrismaVerificationStatus },
+): Promise<VerificationQueueItem[]> {
+  const rows = (await prisma.property.findMany({
+    where: {
+      ...statusWhere(query.status),
+      ...pendingSubmissionWhere(query.status),
+      deletedAt: null,
+    },
+    include: PROPERTY_QUEUE_INCLUDE,
+    orderBy: orderByFor(query),
+    skip: query.entityType === "property" ? query.skip : 0,
+    ...(query.entityType === "property" ? { take: query.limit } : {}),
+  })) as PropertyQueueRow[];
+
+  return rows.map((property) => ({
+    entityType: "property",
+    entityId: property.id,
+    name: property.title,
+    status: property.verificationStatus,
+    submittedAt: property.submittedAt,
+    createdAt: property.createdAt,
+    owner: property.agent.user,
+    attachmentCount: property._count.attachments,
+    imageCount: property._count.images,
+    location: property.location,
+    county: property.county,
+  }));
+}
+
+export async function countPropertyQueue(
+  status: PrismaVerificationStatus,
+): Promise<number> {
+  return prisma.property.count({
+    where: {
+      ...statusWhere(status),
+      ...pendingSubmissionWhere(status),
+      deletedAt: null,
+    },
+  });
+}
+
+export async function countVerificationStatus(
+  model: "professional" | "store" | "property",
+  status: PrismaVerificationStatus,
+  period: VerificationStatsPeriod,
+): Promise<number> {
+  const createdAt = dateFilterForPeriod(period);
+  const where = {
+    ...(createdAt ? { createdAt } : {}),
+    verificationStatus: status,
+    ...(model === "professional" ? {} : { deletedAt: null }),
+  };
+
+  if (model === "professional") {
+    return prisma.professionalProfile.count({ where });
+  }
+  if (model === "store") {
+    return prisma.store.count({ where });
+  }
+  return prisma.property.count({ where });
+}
+
+export const verificationRepository = {
+  listProfessionalQueue,
+  countProfessionalQueue,
+  listStoreQueue,
+  countStoreQueue,
+  listPropertyQueue,
+  countPropertyQueue,
+  countVerificationStatus,
+};
