@@ -7,7 +7,6 @@ import type {
   PrismaVerificationStatus,
   VerificationActor,
   VerificationDomainError,
-  VerificationQueueEntityType,
   VerificationQueueInput,
   VerificationQueuePage,
   VerificationQueueQuery,
