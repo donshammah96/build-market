@@ -106,10 +106,113 @@ export type VerificationStats = {
   period: VerificationStatsPeriod;
 };
 
+export type VerificationEntityAction =
+  | "VERIFY"
+  | "REJECT"
+  | "REQUEST_CORRECTION";
+
+export type VerificationDocumentType =
+  | "professional_document"
+  | "property_document"
+  | "certificate";
+
+export type VerificationDocumentAction = "APPROVE" | "REJECT";
+
+export type VerifyEntityInput = {
+  entityType: VerificationEntityType;
+  entityId: string;
+  action: VerificationEntityAction;
+  notes?: string | undefined;
+  reason?: string | undefined;
+};
+
+export type VerifyDocumentInput = {
+  documentType: VerificationDocumentType;
+  documentId: string;
+  action: VerificationDocumentAction;
+  notes?: string | undefined;
+};
+
+export type BatchVerifyDocumentsInput = {
+  documents: VerifyDocumentInput[];
+};
+
+export type BatchVerifyEntitiesInput = {
+  entities: Array<{
+    entityType: VerificationEntityType;
+    entityId: string;
+  }>;
+  action: VerificationEntityAction;
+  reason?: string;
+};
+
+export type VerificationDocumentSummary = {
+  documentType: VerificationDocumentType;
+  documentId: string;
+  targetEntityType: "professional" | "property";
+  targetEntityId: string;
+  status: "APPROVED" | "REJECTED";
+  message: string;
+  notes?: string | undefined;
+};
+
+export type VerificationEntitySummary = {
+  entityType: VerificationEntityType;
+  entityId: string;
+  previousStatus: VerificationStatus;
+  newStatus: VerificationStatus;
+  message: string;
+  verifiedAt?: Date | undefined;
+  reason?: string | undefined;
+  notes?: string | undefined;
+};
+
+export type VerificationDocumentDetails = {
+  id: string;
+  type: string;
+  fileUrl: string;
+  isVerified: boolean;
+  verifiedAt?: string;
+  notes?: string;
+};
+
+export type VerificationAuditHistoryEntry = {
+  id: string;
+  action: string;
+  oldStatus: string;
+  newStatus: string;
+  reason?: string;
+  createdAt: string;
+  admin: {
+    firstName: string | null;
+    lastName: string | null;
+  };
+};
+
+export type VerificationDetails = {
+  entityType: VerificationEntityType;
+  entityId: string;
+  status: VerificationQueueStatus;
+  verifiedAt?: string;
+  verifiedBy?: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+  };
+  verificationNotes?: string;
+  rejectionReason?: string;
+  submittedAt?: string;
+  entity: Record<string, unknown>;
+  documents?: VerificationDocumentDetails[];
+  auditHistory?: VerificationAuditHistoryEntry[];
+};
+
 export type VerificationDomainErrorCode =
   | "VERIFICATION_INVALID_FILTER"
   | "VERIFICATION_POLICY_DENIED"
-  | "VERIFICATION_REPOSITORY_ERROR";
+  | "VERIFICATION_REPOSITORY_ERROR"
+  | "VERIFICATION_NOT_FOUND";
 
 export type VerificationDomainError = {
   code: VerificationDomainErrorCode;

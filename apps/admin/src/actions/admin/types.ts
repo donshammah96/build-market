@@ -111,6 +111,7 @@ export interface VerificationStats {
     adminId: string;
     createdAt: string;
   }>;
+  period?: "today" | "week" | "month" | "all" | undefined;
 }
 
 export interface VerificationDetails {
@@ -221,31 +222,40 @@ export const VerifyEntitySchema = z.object({
   reason: z.string().optional(),
 });
 
-export const VerifyDocumentSchema = z.object({
-  documentType: z.enum([
+const DocumentTypeSchema = z
+  .enum([
     "professional_document",
+    "property_document",
     "property_attachment",
     "certificate",
-  ]),
-  documentId: z.string().uuid(),
-  action: z.enum(["APPROVE", "REJECT"]),
-  notes: z.string().optional(),
-});
+  ])
+  .transform((value) =>
+    value === "property_attachment" ? "property_document" : value,
+  );
 
-export const BatchVerifyDocumentsSchema = z.object({
-  documents: z.array(
-    z.object({
-      documentType: z.enum([
-        "professional_document",
-        "property_attachment",
-        "certificate",
-      ]),
-      documentId: z.string().uuid(),
-      action: z.enum(["APPROVE", "REJECT"]),
-      notes: z.string().optional(),
-    }),
-  ),
-});
+export const VerifyDocumentSchema = z
+  .object({
+    documentType: DocumentTypeSchema,
+    documentId: z.string().uuid(),
+    action: z.enum(["APPROVE", "REJECT"]),
+    notes: z.string().optional(),
+  })
+  .strict();
+
+export const BatchVerifyDocumentsSchema = z
+  .object({
+    documents: z.array(
+      z
+        .object({
+          documentType: DocumentTypeSchema,
+          documentId: z.string().uuid(),
+          action: z.enum(["APPROVE", "REJECT"]),
+          notes: z.string().optional(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
 
 // ============================================================================
 // Inferred Types
@@ -267,19 +277,52 @@ export type BatchVerifyDocumentsInput = z.infer<
 export function parseVerificationFilter(
   input: unknown,
 ): VerificationFilterInput {
-  return VerificationFilterSchema.parse(input);
+  const result = VerificationFilterSchema.safeParse(input);
+
+  if (!result.success) {
+    throw new Error(
+      result.error.issues[0]?.message ?? "Invalid verification filters",
+    );
+  }
+
+  return result.data;
 }
 
 export function parseVerifyEntity(input: unknown): VerifyEntityInput {
-  return VerifyEntitySchema.parse(input);
+  const result = VerifyEntitySchema.strict().safeParse(input);
+
+  if (!result.success) {
+    throw new Error(
+      result.error.issues[0]?.message ?? "Invalid verification payload",
+    );
+  }
+
+  return result.data;
 }
 
 export function parseVerifyDocument(input: unknown): VerifyDocumentInput {
-  return VerifyDocumentSchema.parse(input);
+  const result = VerifyDocumentSchema.safeParse(input);
+
+  if (!result.success) {
+    throw new Error(
+      result.error.issues[0]?.message ?? "Invalid document verification payload",
+    );
+  }
+
+  return result.data;
 }
 
 export function parseBatchVerifyDocuments(
   input: unknown,
 ): BatchVerifyDocumentsInput {
-  return BatchVerifyDocumentsSchema.parse(input);
+  const result = BatchVerifyDocumentsSchema.safeParse(input);
+
+  if (!result.success) {
+    throw new Error(
+      result.error.issues[0]?.message ??
+        "Invalid batch document verification payload",
+    );
+  }
+
+  return result.data;
 }

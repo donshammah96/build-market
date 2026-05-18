@@ -134,12 +134,14 @@ export async function getPropertyVerificationDetails(propertyId: string) {
           isMain: true,
         },
       },
-      attachments: {
+      documents: {
         select: {
           id: true,
-          fileUrl: true,
+          url: true,
           type: true,
           notes: true,
+          status: true,
+          verifiedAt: true,
           createdAt: true,
         },
       },

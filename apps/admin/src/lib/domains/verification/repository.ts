@@ -1,6 +1,9 @@
 import { prisma, type Prisma } from "@build/db";
 import type {
   PrismaVerificationStatus,
+  VerificationDocumentAction,
+  VerificationDocumentSummary,
+  VerificationDocumentType,
   VerificationQueueItem,
   VerificationQueueQuery,
   VerificationStatsPeriod,
@@ -221,6 +224,106 @@ export async function countVerificationStatus(
   return prisma.property.count({ where });
 }
 
+export async function findStoreOwnerId(
+  entityId: string,
+): Promise<string | null> {
+  const store = await prisma.store.findUnique({
+    where: { id: entityId },
+    select: { professionalId: true },
+  });
+
+  return store?.professionalId ?? null;
+}
+
+export async function findPropertyOwnerId(
+  entityId: string,
+): Promise<string | null> {
+  const property = await prisma.property.findUnique({
+    where: { id: entityId },
+    select: { agentId: true },
+  });
+
+  return property?.agentId ?? null;
+}
+
+function toDocumentStatus(action: VerificationDocumentAction) {
+  return action === "APPROVE" ? "APPROVED" : "REJECTED";
+}
+
+function toVerificationStatus(action: VerificationDocumentAction) {
+  return action === "APPROVE" ? "VERIFIED" : "REJECTED";
+}
+
+export async function updateDocumentVerification(
+  input: {
+    documentType: VerificationDocumentType;
+    documentId: string;
+    action: VerificationDocumentAction;
+    notes?: string | undefined;
+    adminId: string;
+  },
+): Promise<VerificationDocumentSummary> {
+  const status = toDocumentStatus(input.action);
+  const verificationStatus = toVerificationStatus(input.action);
+  const verifiedAt = input.action === "APPROVE" ? new Date() : null;
+  const verifiedById = input.action === "APPROVE" ? input.adminId : null;
+  const rejectionReason = input.action === "REJECT" ? input.notes ?? null : null;
+
+  if (
+    input.documentType === "professional_document" ||
+    input.documentType === "certificate"
+  ) {
+    const document = await prisma.professionalDocument.update({
+      where: { id: input.documentId },
+      data: {
+        status: verificationStatus,
+        verifiedAt,
+        verifiedById,
+        rejectionReason,
+      },
+      select: {
+        id: true,
+        professionalId: true,
+      },
+    });
+
+    return {
+      documentType: input.documentType,
+      documentId: document.id,
+      targetEntityType: "professional",
+      targetEntityId: document.professionalId,
+      status,
+      message: `Document ${input.action.toLowerCase()}d successfully`,
+      ...(input.notes ? { notes: input.notes } : {}),
+    };
+  }
+
+  const document = await prisma.propertyDocument.update({
+    where: { id: input.documentId },
+    data: {
+      status,
+      verifiedAt,
+      verifiedById,
+      rejectionReason,
+      ...(input.notes !== undefined ? { notes: input.notes } : {}),
+    },
+    select: {
+      id: true,
+      propertyId: true,
+    },
+  });
+
+  return {
+    documentType: input.documentType,
+    documentId: document.id,
+    targetEntityType: "property",
+    targetEntityId: document.propertyId,
+    status,
+    message: `Document ${input.action.toLowerCase()}d successfully`,
+    ...(input.notes ? { notes: input.notes } : {}),
+  };
+}
+
 export const verificationRepository = {
   listProfessionalQueue,
   countProfessionalQueue,
@@ -229,4 +332,7 @@ export const verificationRepository = {
   listPropertyQueue,
   countPropertyQueue,
   countVerificationStatus,
+  findStoreOwnerId,
+  findPropertyOwnerId,
+  updateDocumentVerification,
 };
