@@ -4,8 +4,8 @@
 
 ## Active Phase
 
-**Phase:** Phase 10 - Feature Flag Rollout Foundation  
-**Status:** Implemented on `feat/admin-overhaul/feature-flags`; ready for PR review and merge to `integration/admin-overhaul`.
+**Phase:** Phase 4 - Domain Users Slice
+**Status:** Implemented on `feat/admin-overhaul/domain-users`; ready for PR review and merge to `integration/admin-overhaul`.
 
 **Completed:**
 
@@ -13,12 +13,14 @@
 - Phase 1 ADR foundation created under `apps/admin/docs/adr/`.
 - Phase 2 tooling scaffold added: env boundary module, env templates, env contract checker, security drift reporter, root/admin scripts, tightened TypeScript/ESLint config, admin CI jobs, and changelog guard.
 - Phase 3 auth hardening foundation added: canonical `AdminActor`, hardened `safeAction`, typed `errorDetails`, capability policy map, high-risk registry, recent-auth enforcement, actor-scoped rate limits, and policy tests.
-- Phase 10 feature flag foundation added: env-driven v2 flags, route gates, sidebar route switching, rollback docs, and feature-flag tests.
+- Phase 10 feature flag foundation added and tagged: env-driven v2 flags, route gates, sidebar route switching, rollback docs, and feature-flag tests.
+- Phase 4 users domain slice added: users contracts, repository, service, typed results, read-action service wiring, and users domain tests.
 
 **Remaining steps:**
 
-- Merge Phase 10 through PR, then tag `admin-overhaul/phase-10-complete`.
-- Begin Phase 4 domain branches from the Phase 10-integrated baseline, starting with users and verification.
+- Merge the Phase 4 users domain branch through PR.
+- Continue Phase 4 domain branches from the updated integration baseline in order: verification, content, finance, audit.
+- Tag `admin-overhaul/phase-4-complete` only after all Phase 4 domain slices are merged and verified.
 - Continue reducing lint/security-drift warnings in the relevant domain/action/security phases.
 
 ## Slice Status Registry
@@ -27,7 +29,7 @@ Status codes: compliant, known defect, unaudited/in progress, N/A.
 
 | Slice                        | Tier | Auth/Policy           | Actions      | Domain/Repo           | Tests                 | Observability | Overall               |
 | ---------------------------- | ---- | --------------------- | ------------ | --------------------- | --------------------- | ------------- | --------------------- |
-| users                        | T1   | known defect          | known defect | unaudited/in progress | known defect          | known defect  | known defect          |
+| users                        | T1   | known defect          | known defect | unaudited/in progress | compliant             | known defect  | unaudited/in progress |
 | verification                 | T1   | known defect          | known defect | unaudited/in progress | known defect          | known defect  | known defect          |
 | audit                        | T1   | known defect          | known defect | unaudited/in progress | known defect          | known defect  | known defect          |
 | GDPR/export                  | T1   | unaudited/in progress | N/A          | known defect          | unaudited/in progress | known defect  | known defect          |
@@ -63,14 +65,13 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 
 ## Latest Verification
 
-- `pnpm run admin:check-env-contract` -> pass; all env templates cover 54 boundary keys.
-- `pnpm run admin:lint` -> pass with 213 warnings.
 - `pnpm run admin:check-types` -> pass.
-- `pnpm run admin:check-env-contract` -> pass; all env templates cover 59 boundary keys after Phase 10 flags.
+- `pnpm run admin:lint` -> pass with 213 warnings.
+- `pnpm run admin:check-env-contract` -> pass; all env templates cover 59 boundary keys.
 - `pnpm run admin:report-security-drift` -> pass with known drift counts: env boundary 69, direct Prisma action files 18, unsafe mutations 13, action `.parse()` 23, `@ts-nocheck` 21, unstructured logging 104, log safety 4, missing audit log 3.
 - `pnpm run admin:report-security-drift:strict` -> fail with known Phase 4-12 drift backlog.
-- `pnpm run admin:test:all` -> pass; 16 files passed, 125 of 125 tests passed.
-- `pnpm -C apps/admin exec vitest run __tests__/config/feature-flags.test.ts --pool=threads --maxWorkers=1` -> pass; 3 of 3 tests passed.
+- `pnpm run admin:test:all` -> pass; 18 files passed, 136 of 136 tests passed.
+- `pnpm -C apps/admin exec vitest run src/lib/domains/users/__tests__/service.test.ts src/lib/domains/users/__tests__/repository.test.ts src/actions/admin/__tests__/users-actions.test.ts --pool=threads --maxWorkers=1` -> pass; 3 files passed, 19 of 19 tests passed.
 
 ## Completed Phases
 
@@ -78,7 +79,8 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 2. Phase 1 ADR Foundation - completed 2026-05-15 with ADRs in Proposed status.
 3. Phase 2 Tooling Scaffold - installed 2026-05-15; compile/test gates are green, lint/drift follow-up remains tracked above.
 4. Phase 3 Auth Hardening - completed 2026-05-18; checkpoint tag `admin-overhaul/phase-3-complete`.
-5. Phase 10 Feature Flags - implemented 2026-05-18 on feature branch; pending PR merge and checkpoint tag.
+5. Phase 10 Feature Flags - completed 2026-05-18; checkpoint tag `admin-overhaul/phase-10-complete`.
+6. Phase 4 Users Domain Slice - implemented 2026-05-18 on feature branch; pending PR merge. Phase 4 checkpoint tag waits for verification, content, finance, and audit domain slices.
 
 ## Rollback Contracts
 
@@ -94,4 +96,4 @@ Phase 10 flags are runtime-readable through `adminEnvConfig`; toggling them requ
 
 ## Next Priority
 
-Open and merge the Phase 10 PR, tag `admin-overhaul/phase-10-complete`, then start Phase 4 domain slices in order: users, verification, content, finance, audit.
+Open and merge the Phase 4 users domain PR, then continue Phase 4 domain slices in order: verification, content, finance, audit.

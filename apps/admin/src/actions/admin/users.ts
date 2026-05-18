@@ -10,31 +10,19 @@ import {
   type AssignableUserRole,
   isAssignableUserRole,
 } from "../../lib/users/user-roles";
+import {
+  usersService,
+  type AdminUserDetails,
+  type AdminUserListItem,
+} from "@/lib/domains/users";
+import { omitUndefined } from "@/lib/utils";
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type UserWithProfile = Prisma.UserGetPayload<{
-  include: {
-    professionalProfile: {
-      select: { companyName: true; verified: true };
-    };
-  };
-}>;
-
-export type UserDetails = Prisma.UserGetPayload<{
-  include: {
-    professionalProfile: true;
-    clientProfile: true;
-    orders: true;
-    reviews: {
-      include: {
-        professional: { select: { companyName: true } };
-      };
-    };
-  };
-}>;
+export type UserWithProfile = AdminUserListItem;
+export type UserDetails = AdminUserDetails;
 
 const USER_MUTATION_ROLES = ["SUPER_ADMIN"];
 const USER_IDEMPOTENCY_TTL_HOURS = 0.25;
@@ -65,53 +53,25 @@ export async function getUsers(
   sortBy: "createdAt" | "firstName" = "createdAt",
   sortOrder: "asc" | "desc" = "desc",
 ) {
-  return safeAction("getUsers", async () => {
-    const skip = (page - 1) * limit;
-
-    const where: Prisma.UserWhereInput = {
-      ...(search && {
-        OR: [
-          { email: { contains: search, mode: "insensitive" } },
-          { firstName: { contains: search, mode: "insensitive" } },
-          { lastName: { contains: search, mode: "insensitive" } },
-        ],
-      }),
-      ...(role && { role: normalizeUserRole(role) }),
-      ...(verified !== undefined && {
-        professionalProfile: {
-          verified,
-        },
-      }),
-    };
-
-    const orderBy: Prisma.UserOrderByWithRelationInput = {
-      [sortBy === "firstName" ? "firstName" : "createdAt"]: sortOrder,
-    };
-
-    const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy,
-        include: {
-          professionalProfile: {
-            select: { companyName: true, verified: true },
-          },
-        },
-      }),
-      prisma.user.count({ where }),
-    ]);
-
-    return {
-      users,
-      meta: {
-        total,
+  return safeAction("getUsers", async ({ actor }) => {
+    const result = await usersService.listAdminUsers(
+      actor,
+      omitUndefined({
         page,
         limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+        search,
+        role,
+        verified,
+        sortBy,
+        sortOrder,
+      }),
+    );
+
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+
+    return result.data;
   });
 }
 
@@ -119,28 +79,14 @@ export async function getUsers(
  * Fetches complete user details with related profiles and recent activity.
  */
 export async function getUserDetails(userId: string) {
-  return safeAction("getUserDetails", async () => {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        professionalProfile: true,
-        clientProfile: true,
-        orders: {
-          take: 5,
-          orderBy: { createdAt: "desc" },
-        },
-        reviews: {
-          take: 5,
-          orderBy: { createdAt: "desc" },
-          include: {
-            professional: { select: { companyName: true } },
-          },
-        },
-      },
-    });
+  return safeAction("getUserDetails", async ({ actor }) => {
+    const result = await usersService.getAdminUserDetails(actor, userId);
 
-    if (!user) throw new Error("User not found");
-    return user;
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+
+    return result.data;
   });
 }
 
