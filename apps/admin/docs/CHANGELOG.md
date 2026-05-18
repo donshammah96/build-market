@@ -1,5 +1,28 @@
 # apps/admin Changelog
 
+## [2026-05-18] Phase 4 - Audit domain slice
+
+### Added (Phase 4 - Audit domain slice)
+
+- Added audit domain contracts, repository, and service under `apps/admin/src/lib/domains/audit`.
+- Added a read-only audit log page contract and audit stats contract using existing `AdminAuditLog` snapshot fields.
+- Added audit repository contract tests covering safe snapshot selects, caller filters, date bounds, group-by stats, and recent activity queries.
+- Added audit service tests covering query normalization, `EXPORT_DATA` capability enforcement, invalid dates, pagination, and grouped stats.
+
+### Changed (Phase 4 - Audit domain slice)
+
+- Kept legacy audit actions behavior unchanged in this domain branch; Phase 5/8 will migrate readers and automatic audit writes onto the canonical audit service boundary.
+
+**Verification:**
+
+- `pnpm run admin:check-types` -> pass.
+- `pnpm run admin:lint` -> pass with 213 warnings; warnings remain known Phase 4-12 debt.
+- `pnpm run admin:check-env-contract` -> pass; all env templates cover 59 boundary keys.
+- `pnpm run admin:test:all` -> pass; 26 files passed, 171 of 171 tests passed.
+- `pnpm -C apps/admin exec vitest run src/lib/domains/audit/__tests__/service.test.ts src/lib/domains/audit/__tests__/repository.test.ts --pool=threads --maxWorkers=1` -> pass; 2 files passed, 9 of 9 tests passed.
+- `pnpm run admin:report-security-drift` -> pass with known drift counts: env boundary 69, direct Prisma action files 18, unsafe mutations 13, action `.parse()` 23, `@ts-nocheck` 21, unstructured logging 104, log safety 4, missing audit log 3.
+- `pnpm run admin:report-security-drift:strict` -> fail with the same known Phase 4-12 drift backlog.
+
 ## [2026-05-18] Phase 4 - Finance domain slice
 
 ### Added (Phase 4 - Finance domain slice)

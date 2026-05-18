@@ -4,8 +4,8 @@
 
 ## Active Phase
 
-**Phase:** Phase 4 - Domain Finance Slice
-**Status:** Implemented on stacked branch `feat/admin-overhaul/domain-finance`, based on the users, verification, and content domain branches because PR creation is blocked by an invalid local `gh` token.
+**Phase:** Phase 4 - Domain Audit Slice
+**Status:** Implemented on stacked branch `feat/admin-overhaul/domain-audit`, based on the full Phase 4 domain stack because PR creation is blocked by an invalid local `gh` token.
 
 **Completed:**
 
@@ -18,6 +18,7 @@
 - Phase 4 verification domain slice added: verification contracts, repository, service, typed results, policy checks, queue/stat tests, and repository contract tests.
 - Phase 4 content domain slice added: content contracts, repository, service, typed results, policy checks, moderation queue tests, and repository contract tests.
 - Phase 4 finance domain slice added: finance contracts, repository, service, typed results, policy checks, overview tests, and repository contract tests.
+- Phase 4 audit domain slice added: audit contracts, repository, service, typed results, policy checks, audit page/stat tests, and repository contract tests.
 
 **Remaining steps:**
 
@@ -25,7 +26,8 @@
 - Retarget/rebase `feat/admin-overhaul/domain-verification` onto the users-integrated baseline, then open and merge the verification domain PR.
 - Retarget/rebase `feat/admin-overhaul/domain-content` onto the verification-integrated baseline, then open and merge the content domain PR.
 - Retarget/rebase `feat/admin-overhaul/domain-finance` onto the content-integrated baseline, then open and merge the finance domain PR.
-- Continue Phase 4 domain branches from the updated integration baseline with audit.
+- Retarget/rebase `feat/admin-overhaul/domain-audit` onto the finance-integrated baseline, then open and merge the audit domain PR.
+- After all Phase 4 domain PRs merge, run the full gate set on `integration/admin-overhaul` and tag `admin-overhaul/phase-4-complete`.
 - Tag `admin-overhaul/phase-4-complete` only after all Phase 4 domain slices are merged and verified.
 - Continue reducing lint/security-drift warnings in the relevant domain/action/security phases.
 
@@ -37,7 +39,7 @@ Status codes: compliant, known defect, unaudited/in progress, N/A.
 | ---------------------------- | ---- | --------------------- | ------------ | --------------------- | --------------------- | ------------- | --------------------- |
 | users                        | T1   | known defect          | known defect | unaudited/in progress | compliant             | known defect  | unaudited/in progress |
 | verification                 | T1   | known defect          | known defect | unaudited/in progress | compliant             | known defect  | unaudited/in progress |
-| audit                        | T1   | known defect          | known defect | unaudited/in progress | known defect          | known defect  | known defect          |
+| audit                        | T1   | known defect          | known defect | unaudited/in progress | compliant             | known defect  | unaudited/in progress |
 | GDPR/export                  | T1   | unaudited/in progress | N/A          | known defect          | unaudited/in progress | known defect  | known defect          |
 | finance/analytics            | T1   | known defect          | known defect | unaudited/in progress | compliant             | known defect  | unaudited/in progress |
 | stores/properties/projects   | T2   | known defect          | known defect | unaudited/in progress | compliant             | known defect  | unaudited/in progress |
@@ -76,8 +78,8 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 - `pnpm run admin:check-env-contract` -> pass; all env templates cover 59 boundary keys.
 - `pnpm run admin:report-security-drift` -> pass with known drift counts: env boundary 69, direct Prisma action files 18, unsafe mutations 13, action `.parse()` 23, `@ts-nocheck` 21, unstructured logging 104, log safety 4, missing audit log 3.
 - `pnpm run admin:report-security-drift:strict` -> fail with known Phase 4-12 drift backlog.
-- `pnpm run admin:test:all` -> pass; 24 files passed, 162 of 162 tests passed.
-- `pnpm -C apps/admin exec vitest run src/lib/domains/finance/__tests__/service.test.ts src/lib/domains/finance/__tests__/repository.test.ts --pool=threads --maxWorkers=1` -> pass; 2 files passed, 7 of 7 tests passed.
+- `pnpm run admin:test:all` -> pass; 26 files passed, 171 of 171 tests passed.
+- `pnpm -C apps/admin exec vitest run src/lib/domains/audit/__tests__/service.test.ts src/lib/domains/audit/__tests__/repository.test.ts --pool=threads --maxWorkers=1` -> pass; 2 files passed, 9 of 9 tests passed.
 
 ## Completed Phases
 
@@ -90,6 +92,7 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 7. Phase 4 Verification Domain Slice - implemented 2026-05-18 on stacked feature branch; pending users PR merge/retarget before verification PR.
 8. Phase 4 Content Domain Slice - implemented 2026-05-18 on stacked feature branch; pending users and verification PR merge/retarget before content PR.
 9. Phase 4 Finance Domain Slice - implemented 2026-05-18 on stacked feature branch; pending users, verification, and content PR merge/retarget before finance PR.
+10. Phase 4 Audit Domain Slice - implemented 2026-05-18 on stacked feature branch; pending prior Phase 4 PR merge/retarget before audit PR. Phase 4 checkpoint tag waits for all domain PRs to land on `integration/admin-overhaul`.
 
 ## Rollback Contracts
 
@@ -105,4 +108,4 @@ Phase 10 flags are runtime-readable through `adminEnvConfig`; toggling them requ
 
 ## Next Priority
 
-Open and merge the Phase 4 users domain PR, retarget and merge the verification/content/finance domain PRs, then finish Phase 4 with the audit domain slice.
+Open and merge the stacked Phase 4 domain PRs in order: users, verification, content, finance, audit. Then run integration gates and tag `admin-overhaul/phase-4-complete`.
