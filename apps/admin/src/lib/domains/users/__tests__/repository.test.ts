@@ -115,4 +115,3 @@ describe("users repository contract", () => {
     });
   });
 });
-

@@ -15,4 +15,3 @@ export default function AnalyticsV2Layout({
 
   return children;
 }
-

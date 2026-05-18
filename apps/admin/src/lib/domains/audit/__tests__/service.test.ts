@@ -29,7 +29,11 @@ vi.mock("../repository", () => ({
 }));
 
 import type { AuditActor } from "../contracts";
-import { buildAuditLogQuery, getAuditLogStats, listAuditLogPage } from "../service";
+import {
+  buildAuditLogQuery,
+  getAuditLogStats,
+  listAuditLogPage,
+} from "../service";
 
 function actor(
   adminRole: (typeof dbMock.AdminRole)[keyof typeof dbMock.AdminRole],
@@ -147,6 +151,8 @@ describe("audit domain service", () => {
     });
     const expectedToday = new Date("2026-05-18T12:00:00.000Z");
     expectedToday.setHours(0, 0, 0, 0);
-    expect(repositoryMock.countTodayAuditLogs).toHaveBeenCalledWith(expectedToday);
+    expect(repositoryMock.countTodayAuditLogs).toHaveBeenCalledWith(
+      expectedToday,
+    );
   });
 });

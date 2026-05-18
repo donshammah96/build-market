@@ -22,4 +22,3 @@ export function isOk<T, E extends object>(
 ): result is { ok: true; data: T } {
   return result.ok;
 }
-

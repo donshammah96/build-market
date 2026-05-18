@@ -98,13 +98,13 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 
 Phase 10 flags are runtime-readable through `adminEnvConfig`; toggling them requires the platform environment to expose the new value to the Next.js runtime. In hosted environments that freeze env at process start, redeploy or restart after changing the variable.
 
-| Flag | Disable with | Rollback effect | Data caveat | Changelog note |
-| ---- | ------------ | --------------- | ----------- | -------------- |
-| `admin_v2_user_management` | `NEXT_PUBLIC_ADMIN_FF_V2_USER_MANAGEMENT=false` | `/users-v2` redirects to `/users`; sidebar links return to `/users`. | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
+| Flag                          | Disable with                                       | Rollback effect                                                                              | Data caveat                             | Changelog note                                               |
+| ----------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------ |
+| `admin_v2_user_management`    | `NEXT_PUBLIC_ADMIN_FF_V2_USER_MANAGEMENT=false`    | `/users-v2` redirects to `/users`; sidebar links return to `/users`.                         | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
 | `admin_v2_verification_queue` | `NEXT_PUBLIC_ADMIN_FF_V2_VERIFICATION_QUEUE=false` | `/verifications-v2` redirects to `/verifications`; sidebar links return to `/verifications`. | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
-| `admin_v2_finance_dashboard` | `NEXT_PUBLIC_ADMIN_FF_V2_FINANCE_DASHBOARD=false` | `/analytics-v2` redirects to `/analytics`; sidebar links return to `/analytics`. | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
-| `admin_v2_audit_log_ui` | `NEXT_PUBLIC_ADMIN_FF_V2_AUDIT_LOG_UI=false` | `/audit-v2` redirects to `/audit`; sidebar links return to `/audit`. | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
-| `admin_v2_structured_logging` | `NEXT_PUBLIC_ADMIN_FF_V2_STRUCTURED_LOGGING=false` | Later structured logging UI/behavior remains disabled. | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
+| `admin_v2_finance_dashboard`  | `NEXT_PUBLIC_ADMIN_FF_V2_FINANCE_DASHBOARD=false`  | `/analytics-v2` redirects to `/analytics`; sidebar links return to `/analytics`.             | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
+| `admin_v2_audit_log_ui`       | `NEXT_PUBLIC_ADMIN_FF_V2_AUDIT_LOG_UI=false`       | `/audit-v2` redirects to `/audit`; sidebar links return to `/audit`.                         | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
+| `admin_v2_structured_logging` | `NEXT_PUBLIC_ADMIN_FF_V2_STRUCTURED_LOGGING=false` | Later structured logging UI/behavior remains disabled.                                       | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
 
 ## Next Priority
 

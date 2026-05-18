@@ -15,4 +15,3 @@ export default function VerificationsV2Layout({
 
   return children;
 }
-

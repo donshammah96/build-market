@@ -105,4 +105,3 @@ export type UsersAuthorizationSnapshot = {
   actorRole: AdminRole;
   canManageUsers: boolean;
 };
-

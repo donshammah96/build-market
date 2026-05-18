@@ -18,10 +18,7 @@ import {
 import { syncUserRole } from "@/lib/auth-sync";
 import { currentUser } from "@clerk/nextjs/server";
 import { getPendingVerifications } from "@/actions/admin";
-import {
-  AdminFeatureFlag,
-  getAdminV2Route,
-} from "@/lib/config/feature-flags";
+import { AdminFeatureFlag, getAdminV2Route } from "@/lib/config/feature-flags";
 
 export default async function DashboardLayout({
   children,

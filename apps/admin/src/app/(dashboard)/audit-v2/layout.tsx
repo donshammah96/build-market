@@ -15,4 +15,3 @@ export default function AuditV2Layout({
 
   return children;
 }
-
