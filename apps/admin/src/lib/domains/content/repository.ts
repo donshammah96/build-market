@@ -36,7 +36,9 @@ const PROJECT_INCLUDE = {
   client: { select: USER_OWNER_SELECT },
 } satisfies Prisma.ProjectInclude;
 
-type StoreContentRow = Prisma.StoreGetPayload<{ include: typeof STORE_INCLUDE }>;
+type StoreContentRow = Prisma.StoreGetPayload<{
+  include: typeof STORE_INCLUDE;
+}>;
 type PropertyContentRow = Prisma.PropertyGetPayload<{
   include: typeof PROPERTY_INCLUDE;
 }>;

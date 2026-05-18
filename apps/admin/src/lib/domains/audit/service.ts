@@ -18,8 +18,7 @@ const SORT_ORDER = ["asc", "desc"] as const;
 
 function isSortOrder(value: unknown): value is AuditLogSortOrder {
   return (
-    typeof value === "string" &&
-    SORT_ORDER.includes(value as AuditLogSortOrder)
+    typeof value === "string" && SORT_ORDER.includes(value as AuditLogSortOrder)
   );
 }
 

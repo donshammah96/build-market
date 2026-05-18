@@ -1,4 +1,7 @@
-import { AdminCapability, requireAdminCapability } from "@/lib/security/authorization-policy";
+import {
+  AdminCapability,
+  requireAdminCapability,
+} from "@/lib/security/authorization-policy";
 import { err, ok, type Result } from "@/lib/errors/result";
 import {
   ASSIGNABLE_USER_ROLES,
@@ -30,7 +33,9 @@ function toDomainError(error: unknown): UsersDomainError {
   };
 }
 
-function normalizeUserRole(role: string): Result<AssignableUserRole, UsersDomainError> {
+function normalizeUserRole(
+  role: string,
+): Result<AssignableUserRole, UsersDomainError> {
   const normalized = role.trim().toUpperCase();
 
   if (!isAssignableUserRole(normalized)) {
@@ -43,7 +48,9 @@ function normalizeUserRole(role: string): Result<AssignableUserRole, UsersDomain
   return ok(normalized);
 }
 
-function requireManageUsers(actor: AdminUserActor): Result<true, UsersDomainError> {
+function requireManageUsers(
+  actor: AdminUserActor,
+): Result<true, UsersDomainError> {
   const result = requireAdminCapability(actor, AdminCapability.MANAGE_USERS);
 
   if (result.success) {
@@ -57,7 +64,9 @@ function requireManageUsers(actor: AdminUserActor): Result<true, UsersDomainErro
   });
 }
 
-export function buildListUsersQuery(input: ListUsersInput): Result<
+export function buildListUsersQuery(
+  input: ListUsersInput,
+): Result<
   { query: ListUsersQuery; page: number; limit: number },
   UsersDomainError
 > {
@@ -219,4 +228,3 @@ export async function prepareAssignUserRole(
 
   return ok({ userId: input.userId, role: roleResult.data });
 }
-

@@ -125,20 +125,26 @@ describe("users domain service", () => {
   });
 
   it("allows only SUPER_ADMIN to prepare user invitations", async () => {
-    const denied = await prepareInviteUser(actor(dbMock.AdminRole.FINANCE_MANAGER), {
-      email: "new@example.com",
-      role: "client",
-    });
+    const denied = await prepareInviteUser(
+      actor(dbMock.AdminRole.FINANCE_MANAGER),
+      {
+        email: "new@example.com",
+        role: "client",
+      },
+    );
 
     expect(denied.ok).toBe(false);
     if (denied.ok) return;
     expect(denied.error).toBe("UNAUTHORIZED");
 
     repositoryMock.findUserByEmail.mockResolvedValue(null);
-    const allowed = await prepareInviteUser(actor(dbMock.AdminRole.SUPER_ADMIN), {
-      email: " New.User@Example.COM ",
-      role: "professional",
-    });
+    const allowed = await prepareInviteUser(
+      actor(dbMock.AdminRole.SUPER_ADMIN),
+      {
+        email: " New.User@Example.COM ",
+        role: "professional",
+      },
+    );
 
     expect(allowed).toEqual({
       ok: true,
@@ -147,10 +153,13 @@ describe("users domain service", () => {
   });
 
   it("blocks non-admin self-demotion during role assignment preparation", async () => {
-    const result = await prepareAssignUserRole(actor(dbMock.AdminRole.SUPER_ADMIN), {
-      userId: "admin_1",
-      role: "client",
-    });
+    const result = await prepareAssignUserRole(
+      actor(dbMock.AdminRole.SUPER_ADMIN),
+      {
+        userId: "admin_1",
+        role: "client",
+      },
+    );
 
     expect(result).toEqual({
       ok: false,

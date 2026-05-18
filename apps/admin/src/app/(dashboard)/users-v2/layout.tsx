@@ -15,4 +15,3 @@ export default function UsersV2Layout({
 
   return children;
 }
-

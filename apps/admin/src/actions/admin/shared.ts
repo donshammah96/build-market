@@ -13,7 +13,10 @@ import {
   normalizeAdminAccessRole,
   parseSessionMetadata,
 } from "@/lib/security/claims";
-import type { AdminActionContext, AdminActor } from "@/lib/security/admin-actor";
+import type {
+  AdminActionContext,
+  AdminActor,
+} from "@/lib/security/admin-actor";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 import type { ActionResponse, AdminActionError } from "./types";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
@@ -425,11 +428,7 @@ export async function safeAction<T>(
 
     if (!policy.allowedRoles.includes(actorResult.actor.adminRole)) {
       return adminActionFailure(
-        adminActionError(
-          "FORBIDDEN",
-          "Admin action policy denied",
-          actionName,
-        ),
+        adminActionError("FORBIDDEN", "Admin action policy denied", actionName),
         timestamp,
       );
     }
@@ -489,7 +488,8 @@ export async function safeAction<T>(
       timestamp,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Admin action failed";
+    const message =
+      error instanceof Error ? error.message : "Admin action failed";
 
     return adminActionFailure(
       adminActionError("ACTION_FAILED", message, actionName),
@@ -526,11 +526,7 @@ export async function safeVerificationAction<T>(
 
     if (!policy.allowedRoles.includes(actorResult.actor.adminRole)) {
       return adminActionFailure(
-        adminActionError(
-          "FORBIDDEN",
-          "Admin action policy denied",
-          actionName,
-        ),
+        adminActionError("FORBIDDEN", "Admin action policy denied", actionName),
         timestamp,
       );
     }
@@ -573,7 +569,8 @@ export async function safeVerificationAction<T>(
       timestamp,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Admin action failed";
+    const message =
+      error instanceof Error ? error.message : "Admin action failed";
 
     return adminActionFailure(
       adminActionError("ACTION_FAILED", message, actionName),

@@ -53,4 +53,3 @@ export function getAdminV2Route(
 ): string {
   return isAdminFeatureEnabled(flag) ? v2Route : currentRoute;
 }
-
