@@ -1,5 +1,28 @@
 # apps/admin Changelog
 
+## [2026-05-18] Phase 4 - Finance domain slice
+
+### Added (Phase 4 - Finance domain slice)
+
+- Added finance domain contracts, repository, and service under `apps/admin/src/lib/domains/finance`.
+- Added a read-only finance overview contract for revenue, paid/delivered orders, average order value, and pending payouts.
+- Added finance repository contract tests covering successful payment sums, period ranges, paid-order metrics, and pending withdrawal payouts.
+- Added finance service tests covering period normalization, `VIEW_FINANCIALS` capability enforcement, invalid filters, and overview assembly.
+
+### Changed (Phase 4 - Finance domain slice)
+
+- Kept legacy analytics actions behavior unchanged in this domain branch; Phase 5 will migrate finance and analytics callers onto the service boundary.
+
+**Verification:**
+
+- `pnpm run admin:check-types` -> pass.
+- `pnpm run admin:lint` -> pass with 213 warnings; warnings remain known Phase 4-12 debt.
+- `pnpm run admin:check-env-contract` -> pass; all env templates cover 59 boundary keys.
+- `pnpm run admin:test:all` -> pass; 24 files passed, 162 of 162 tests passed.
+- `pnpm -C apps/admin exec vitest run src/lib/domains/finance/__tests__/service.test.ts src/lib/domains/finance/__tests__/repository.test.ts --pool=threads --maxWorkers=1` -> pass; 2 files passed, 7 of 7 tests passed.
+- `pnpm run admin:report-security-drift` -> pass with known drift counts: env boundary 69, direct Prisma action files 18, unsafe mutations 13, action `.parse()` 23, `@ts-nocheck` 21, unstructured logging 104, log safety 4, missing audit log 3.
+- `pnpm run admin:report-security-drift:strict` -> fail with the same known Phase 4-12 drift backlog.
+
 ## [2026-05-18] Phase 4 - Content domain slice
 
 ### Added (Phase 4 - Content domain slice)
