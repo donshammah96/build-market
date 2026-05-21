@@ -6,12 +6,14 @@ import {
 import type {
   AuditActor,
   AuditDomainError,
+  AuditExportPage,
   AuditLogInput,
   AuditLogPage,
   AuditLogQuery,
   AuditLogSortOrder,
   AuditLogStats,
 } from "./contracts";
+import { AUDIT_EXPORT_MAX_ROWS } from "./contracts";
 import { auditRepository } from "./repository";
 
 const SORT_ORDER = ["asc", "desc"] as const;
@@ -26,9 +28,24 @@ function invalidFilter(message: string): AuditDomainError {
   return { code: "AUDIT_INVALID_FILTER", message };
 }
 
-function requireAuditCapability(
+function requireAuditReadCapability(
   actor: AuditActor,
 ): Result<true, AuditDomainError> {
+  // Audit log reads: VIEW_FINANCIALS (SUPER_ADMIN, FINANCE_MANAGER, AUDITOR)
+  const policy = requireAdminCapability(actor, AdminCapability.VIEW_FINANCIALS);
+  if (!policy.success) {
+    return err({
+      code: "AUDIT_POLICY_DENIED",
+      message: policy.error.message,
+    });
+  }
+  return ok(true);
+}
+
+function requireAuditExportCapability(
+  actor: AuditActor,
+): Result<true, AuditDomainError> {
+  // Exports: EXPORT_DATA (SUPER_ADMIN, AUDITOR only — Tier 1)
   const policy = requireAdminCapability(actor, AdminCapability.EXPORT_DATA);
   if (!policy.success) {
     return err({
@@ -85,7 +102,7 @@ export async function listAuditLogPage(
   actor: AuditActor,
   input: AuditLogInput = {},
 ): Promise<Result<AuditLogPage, AuditDomainError>> {
-  const capability = requireAuditCapability(actor);
+  const capability = requireAuditReadCapability(actor);
   if (!capability.ok) return capability;
 
   const queryResult = buildAuditLogQuery(input);
@@ -113,7 +130,7 @@ export async function getAuditLogStats(
   actor: AuditActor,
   now: Date = new Date(),
 ): Promise<Result<AuditLogStats, AuditDomainError>> {
-  const capability = requireAuditCapability(actor);
+  const capability = requireAuditReadCapability(actor);
   if (!capability.ok) return capability;
 
   const today = new Date(now);
@@ -143,8 +160,64 @@ export async function getAuditLogStats(
   });
 }
 
+/**
+ * Returns distinct action strings for filter dropdown population.
+ * Requires VIEW_FINANCIALS capability — same gate as list/stats reads.
+ */
+export async function getDistinctActions(
+  actor: AuditActor,
+): Promise<Result<string[], AuditDomainError>> {
+  const capability = requireAuditReadCapability(actor);
+  if (!capability.ok) return capability;
+
+  const actions = await auditRepository.findDistinctActions();
+  return ok(actions);
+}
+
+/**
+ * Exports audit logs as a structured page capped at AUDIT_EXPORT_MAX_ROWS.
+ * Requires EXPORT_DATA capability (SUPER_ADMIN, AUDITOR — Tier 1).
+ */
+export async function exportAuditLogs(
+  actor: AuditActor,
+  input: AuditLogInput = {},
+): Promise<Result<AuditExportPage, AuditDomainError>> {
+  const capability = requireAuditExportCapability(actor);
+  if (!capability.ok) return capability;
+
+  // Force export-safe limit regardless of caller input
+  const exportInput: AuditLogInput = {
+    ...input,
+    limit: AUDIT_EXPORT_MAX_ROWS,
+    page: 1,
+  };
+
+  const queryResult = buildAuditLogQuery(exportInput);
+  if (!queryResult.ok) return queryResult;
+
+  const rows = await auditRepository.findForExport(queryResult.data);
+
+  const data = rows.map((row) => ({
+    id: row.id,
+    adminName: row.adminName,
+    adminRole: row.adminRole,
+    action: row.action,
+    targetType: row.targetType,
+    targetId: row.targetId,
+    severity: row.severity,
+    status: row.status,
+    reason: row.reason ?? "",
+    ipAddress: row.ipAddress ?? "",
+    createdAt: row.createdAt.toISOString(),
+  }));
+
+  return ok({ data, count: data.length });
+}
+
 export const auditService = {
   buildAuditLogQuery,
   listAuditLogPage,
   getAuditLogStats,
+  getDistinctActions,
+  exportAuditLogs,
 };
