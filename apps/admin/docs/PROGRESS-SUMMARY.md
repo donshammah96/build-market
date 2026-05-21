@@ -6,6 +6,8 @@
 
 **Phase:** Track A (complete) + Track B (complete) — open PRs for both; next is `finance/analytics` action slice
 **Status:** Both Track A (`feat/admin-overhaul/actions-audit`) and Track B (`feat/admin-overhaul/ui-tokens`) committed and pushed. PRs ready to open. Next priority is `stores/properties/projects` or `finance/analytics` action slice.
+**Phase:** Track C Phase 7 - Observability foundation (complete) / Track A Phase 5 - Audit/export action slice (next)
+**Status:** Track C implemented on `feat/admin-overhaul/observability`, ready for PR to `integration/admin-overhaul`. Track B `feat/admin-overhaul/ui-tokens` (tokens + route boundaries) runs in parallel with Track A.
 
 **Completed:**
 
@@ -31,6 +33,18 @@
 - Open PRs for Track A (`feat/admin-overhaul/actions-audit`) and Track B (`feat/admin-overhaul/ui-tokens`).
 - Start next action slice: `finance/analytics` (direct Prisma + `.parse()` in `analytics.ts`) or `stores/properties` (next highest direct-Prisma count).
 - Continue reducing drift: 12 direct-Prisma action files, 14 `.parse()` call sites, 12 unsafe mutations, 17 `@ts-nocheck` files.
+- Phase 5 users action slice added: `safeParse` action validation, service/repository delegation for all user mutations, declarative audit coverage, self-delete protection, and refreshed users action-boundary tests.
+- Phase 5 verification action slice added: `safeAction` migration, verification service-backed queue/stats/details/mutation adapters, normalized document verification contracts, updated verification route handlers, and refreshed action/route/domain tests.
+- Phase 5 verification bug fixes applied: fixed API route audit gaps, privilege escalation fallbacks, unhandled parsing exceptions, and string concatenation bugs.
+- Phase 5 users and verification PRs merged; tag `admin-overhaul/phase-5-complete` pushed.
+- Phase 7 (Track C) observability foundation added on `feat/admin-overhaul/observability`: structured `getAdminLogger()` with PII exclusion, `AsyncLocalStorage`-backed correlation ID threading, typed `AdminOperationName` registry (40+ operations), and `safeAction`/`safeVerificationAction` integration emitting structured log events at every outcome path.
+
+**Remaining steps:**
+
+- Merge Track C `feat/admin-overhaul/observability` PR into `integration/admin-overhaul`; apply `admin-overhaul/phase-7-complete` tag.
+- Start Track A `feat/admin-overhaul/actions-audit`: migrate `audit.ts` and `compliance/route.ts` off direct Prisma / `.parse()` / `@ts-nocheck`, consuming the Phase 7 structured logger. Fix `professionals.ts` log-safety drift.
+- Start Track B `feat/admin-overhaul/ui-tokens` in parallel: create `tokens.css`, import in `globals.css`, add `loading.tsx`/`error.tsx` for 5 route segments, adopt tokens in `CardList.tsx`, `AppBarChart.tsx`, `AddUser.tsx`.
+- Continue reducing remaining drift: 13 direct-Prisma action files, 16 `.parse()` call sites, 12 unsafe mutations, 18 `@ts-nocheck` files.
 
 ## Slice Status Registry
 

@@ -77,6 +77,8 @@
 - `pnpm run admin:test:all` → pass; 29 files passed, 213 of 213 tests passed.
 - Targeted suite: `pnpm -C apps/admin exec vitest run src/lib/infrastructure/__tests__/logger.test.ts src/lib/infrastructure/__tests__/correlation.test.ts src/lib/observability/__tests__/operation-names.test.ts --pool=threads --maxWorkers=1` → 3 files, 36 tests passed.
 
+
+
 ### Fixed (Phase 5 - Verification action bug fixes)
 
 - Fixed a privilege escalation risk in API routes (`verification-details`, `verification-stats`, `pending-verifications`, `verify-document`, `verify`) where missing `adminRole` context improperly defaulted to `SUPER_ADMIN`.
