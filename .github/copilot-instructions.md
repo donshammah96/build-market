@@ -258,11 +258,20 @@ Route test patterns, mock structure, risk matrix expectations, and critical-jour
 
 Preferred verification commands:
 
-- `pnpm run client:tsc-noemit`
-- targeted `pnpm run client:test:<suite>` commands
+**`apps/client` and Global:**
+- `pnpm run format:check` and `pnpm run lint` for formatting and linting
+- `pnpm run client:check-env-contract` and `pnpm run client:report-security-drift:strict` for boundary/security checks
+- `pnpm run client:tsc-noemit` or `pnpm run check-types` for type checking
+- `pnpm run test` for unit tests, or targeted `pnpm run client:test:<suite>` commands
 - `pnpm -C apps/client exec vitest run __tests__/contracts __tests__/policy` for fast boundary and policy checks
 - `pnpm run cypress:run --spec "cypress/e2e/critical-journeys/**"` when protected-route or authz behavior is touched
-- `pnpm run admin:check-types` when touching `apps/admin`
+
+**`apps/admin`:**
+- `pnpm run admin:check-types` for type checking
+- `pnpm run admin:lint` for linting
+- `pnpm run admin:check-env-contract` for env boundary checks
+- `pnpm run admin:report-security-drift:strict` for security drift checks
+- `pnpm run admin:test:all` for all admin tests
 
 Critical-journey E2E tests are a blocking CI surface for high-severity auth and routing regressions. Mandatory journeys include unauthenticated redirect, onboarded professional access, non-professional denial, incomplete onboarding redirect, thread read authz, and thread send authz.
 
