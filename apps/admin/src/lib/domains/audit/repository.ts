@@ -1,5 +1,6 @@
 import { prisma, type Prisma } from "@build/db";
 import type { AuditLogEntry, AuditLogQuery } from "./contracts";
+import { AUDIT_EXPORT_MAX_ROWS } from "./contracts";
 
 const AUDIT_LOG_SELECT = {
   id: true,
@@ -19,8 +20,26 @@ const AUDIT_LOG_SELECT = {
   createdAt: true,
 } satisfies Prisma.AdminAuditLogSelect;
 
+const AUDIT_EXPORT_SELECT = {
+  id: true,
+  adminName: true,
+  adminRole: true,
+  action: true,
+  targetType: true,
+  targetId: true,
+  severity: true,
+  status: true,
+  reason: true,
+  ipAddress: true,
+  createdAt: true,
+} satisfies Prisma.AdminAuditLogSelect;
+
 type AuditLogRow = Prisma.AdminAuditLogGetPayload<{
   select: typeof AUDIT_LOG_SELECT;
+}>;
+
+type AuditExportRow = Prisma.AdminAuditLogGetPayload<{
+  select: typeof AUDIT_EXPORT_SELECT;
 }>;
 
 function whereFor(query: AuditLogQuery): Prisma.AdminAuditLogWhereInput {
@@ -124,6 +143,34 @@ export async function listRecentAuditLogs(): Promise<AuditLogEntry[]> {
   return rows.map(mapAuditLog);
 }
 
+/**
+ * Returns a deduplicated list of all action strings in the audit log.
+ * Persistence-only — no policy enforcement; that belongs in the service.
+ */
+export async function findDistinctActions(): Promise<string[]> {
+  const rows = await prisma.adminAuditLog.findMany({
+    distinct: ["action"],
+    select: { action: true },
+    orderBy: { action: "asc" },
+  });
+  return rows.map((r) => r.action);
+}
+
+/**
+ * Returns audit log rows for export, capped at AUDIT_EXPORT_MAX_ROWS.
+ * adminEmail is excluded — it is a PII field not surfaced in exports.
+ */
+export async function findForExport(
+  query: AuditLogQuery,
+): Promise<AuditExportRow[]> {
+  return prisma.adminAuditLog.findMany({
+    where: whereFor(query),
+    orderBy: { createdAt: "desc" },
+    take: AUDIT_EXPORT_MAX_ROWS,
+    select: AUDIT_EXPORT_SELECT,
+  });
+}
+
 export const auditRepository = {
   listAuditLogs,
   countAuditLogs,
@@ -132,4 +179,6 @@ export const auditRepository = {
   groupAuditLogsByAction,
   groupAuditLogsByTargetType,
   listRecentAuditLogs,
+  findDistinctActions,
+  findForExport,
 };

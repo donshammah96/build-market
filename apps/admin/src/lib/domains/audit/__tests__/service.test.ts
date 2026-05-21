@@ -18,6 +18,8 @@ const repositoryMock = vi.hoisted(() => ({
   groupAuditLogsByAction: vi.fn(),
   groupAuditLogsByTargetType: vi.fn(),
   listRecentAuditLogs: vi.fn(),
+  findDistinctActions: vi.fn(),
+  findForExport: vi.fn(),
 }));
 
 vi.mock("@build/db", () => ({
@@ -31,7 +33,9 @@ vi.mock("../repository", () => ({
 import type { AuditActor } from "../contracts";
 import {
   buildAuditLogQuery,
+  exportAuditLogs,
   getAuditLogStats,
+  getDistinctActions,
   listAuditLogPage,
 } from "../service";
 
@@ -49,6 +53,10 @@ describe("audit domain service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
+  // ---------------------------------------------------------------------------
+  // buildAuditLogQuery
+  // ---------------------------------------------------------------------------
 
   it("normalizes audit log filters and pagination", () => {
     const result = buildAuditLogQuery({
@@ -86,7 +94,11 @@ describe("audit domain service", () => {
     expect(repositoryMock.listAuditLogs).not.toHaveBeenCalled();
   });
 
-  it("requires audit/export capability for audit reads", async () => {
+  // ---------------------------------------------------------------------------
+  // listAuditLogPage — capability
+  // ---------------------------------------------------------------------------
+
+  it("denies CONTENT_MODERATOR from reading audit logs", async () => {
     const result = await listAuditLogPage(
       actor(dbMock.AdminRole.CONTENT_MODERATOR),
     );
@@ -99,7 +111,15 @@ describe("audit domain service", () => {
     expect(repositoryMock.listAuditLogs).not.toHaveBeenCalled();
   });
 
-  it("returns a paginated audit log page for allowed roles", async () => {
+  it("denies SUPPORT_AGENT from reading audit logs", async () => {
+    const result = await listAuditLogPage(
+      actor(dbMock.AdminRole.SUPPORT_AGENT),
+    );
+    expect(result.ok).toBe(false);
+    expect(repositoryMock.listAuditLogs).not.toHaveBeenCalled();
+  });
+
+  it("returns a paginated audit log page for AUDITOR", async () => {
     repositoryMock.listAuditLogs.mockResolvedValue([{ id: "log_1" }]);
     repositoryMock.countAuditLogs.mockResolvedValue(1);
 
@@ -113,17 +133,26 @@ describe("audit domain service", () => {
       data: {
         logs: [{ id: "log_1" }],
         meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
-        filters: {
-          page: 1,
-          limit: 10,
-          skip: 0,
-          sortOrder: "desc",
-        },
+        filters: { page: 1, limit: 10, skip: 0, sortOrder: "desc" },
       },
     });
   });
 
-  it("returns grouped audit stats", async () => {
+  it("returns a paginated audit log page for FINANCE_MANAGER", async () => {
+    repositoryMock.listAuditLogs.mockResolvedValue([]);
+    repositoryMock.countAuditLogs.mockResolvedValue(0);
+
+    const result = await listAuditLogPage(
+      actor(dbMock.AdminRole.FINANCE_MANAGER),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  // ---------------------------------------------------------------------------
+  // getAuditLogStats
+  // ---------------------------------------------------------------------------
+
+  it("returns grouped audit stats for SUPER_ADMIN", async () => {
     repositoryMock.countAllAuditLogs.mockResolvedValue(10);
     repositoryMock.countTodayAuditLogs.mockResolvedValue(2);
     repositoryMock.groupAuditLogsByAction.mockResolvedValue([
@@ -154,5 +183,102 @@ describe("audit domain service", () => {
     expect(repositoryMock.countTodayAuditLogs).toHaveBeenCalledWith(
       expectedToday,
     );
+  });
+
+  // ---------------------------------------------------------------------------
+  // getDistinctActions
+  // ---------------------------------------------------------------------------
+
+  it("returns distinct action strings for AUDITOR", async () => {
+    repositoryMock.findDistinctActions.mockResolvedValue([
+      "delete_user",
+      "verify_entity",
+    ]);
+
+    const result = await getDistinctActions(actor(dbMock.AdminRole.AUDITOR));
+
+    expect(result).toEqual({
+      ok: true,
+      data: ["delete_user", "verify_entity"],
+    });
+    expect(repositoryMock.findDistinctActions).toHaveBeenCalledOnce();
+  });
+
+  it("denies CONTENT_MODERATOR from getDistinctActions", async () => {
+    const result = await getDistinctActions(
+      actor(dbMock.AdminRole.CONTENT_MODERATOR),
+    );
+    expect(result.ok).toBe(false);
+    expect(repositoryMock.findDistinctActions).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // exportAuditLogs — capability + data shape
+  // ---------------------------------------------------------------------------
+
+  it("denies FINANCE_MANAGER from exportAuditLogs (requires EXPORT_DATA)", async () => {
+    const result = await exportAuditLogs(
+      actor(dbMock.AdminRole.FINANCE_MANAGER),
+    );
+    expect(result).toEqual({
+      ok: false,
+      code: "AUDIT_POLICY_DENIED",
+      message: "Admin capability denied",
+    });
+    expect(repositoryMock.findForExport).not.toHaveBeenCalled();
+  });
+
+  it("denies CONTENT_MODERATOR from exportAuditLogs", async () => {
+    const result = await exportAuditLogs(
+      actor(dbMock.AdminRole.CONTENT_MODERATOR),
+    );
+    expect(result.ok).toBe(false);
+    expect(repositoryMock.findForExport).not.toHaveBeenCalled();
+  });
+
+  it("returns export page for AUDITOR", async () => {
+    const now = new Date("2026-05-21T00:00:00.000Z");
+    repositoryMock.findForExport.mockResolvedValue([
+      {
+        id: "log_export_1",
+        adminName: "Admin User",
+        adminRole: "AUDITOR",
+        action: "export_audit_log",
+        targetType: "audit_log",
+        targetId: "report",
+        severity: "INFO",
+        status: "SUCCESS",
+        reason: null,
+        ipAddress: "10.0.0.1",
+        createdAt: now,
+      },
+    ]);
+
+    const result = await exportAuditLogs(actor(dbMock.AdminRole.AUDITOR));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.count).toBe(1);
+    expect(result.data.data[0]).toMatchObject({
+      id: "log_export_1",
+      adminName: "Admin User",
+      adminRole: "AUDITOR",
+      action: "export_audit_log",
+      reason: "",
+      ipAddress: "10.0.0.1",
+      createdAt: now.toISOString(),
+    });
+  });
+
+  it("calls findForExport (AUDIT_EXPORT_MAX_ROWS is applied inside the repository, not via query.limit)", async () => {
+    repositoryMock.findForExport.mockResolvedValue([]);
+
+    const result = await exportAuditLogs(actor(dbMock.AdminRole.SUPER_ADMIN), {
+      limit: 10,
+    });
+
+    // The service must always call findForExport regardless of caller limit input
+    expect(result.ok).toBe(true);
+    expect(repositoryMock.findForExport).toHaveBeenCalledOnce();
   });
 });
