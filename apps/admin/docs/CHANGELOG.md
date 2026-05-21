@@ -1,5 +1,23 @@
 # apps/admin Changelog
 
+## [2026-05-21] Track B — UI Token System and Route Boundaries
+
+### Added (Track B — UI Token System and Route Boundaries)
+
+- Added `src/app/tokens.css`: admin design token system with 100+ CSS custom properties across 9 categories (colour, surface, status badge, role badge, data table, spacing, radius, shadow, animation). Full dark mode overrides. All values use OKLCH for perceptual uniformity. Includes `@keyframes admin-skeleton-shimmer` and `.admin-skeleton` utility class.
+- Added `loading.tsx` for v2 route segments (`analytics-v2`, `users-v2`, `verifications-v2`, `audit-v2`) — consistent skeleton structure matching existing v1 patterns, using `<Skeleton>` from the component library.
+
+### Changed (Track B — UI Token System and Route Boundaries)
+
+- `src/app/globals.css`: import `./tokens.css` before Tailwind so token custom properties are available application-wide to both Tailwind-based and non-Tailwind styles.
+
+**Files changed:** `apps/admin/src/app/tokens.css` [NEW], `apps/admin/src/app/globals.css`, `apps/admin/src/app/(dashboard)/analytics-v2/loading.tsx` [NEW], `apps/admin/src/app/(dashboard)/users-v2/loading.tsx` [NEW], `apps/admin/src/app/(dashboard)/verifications-v2/loading.tsx` [NEW], `apps/admin/src/app/(dashboard)/audit-v2/loading.tsx` [NEW]
+
+**Verification:**
+
+- `pnpm run admin:check-types` → pass.
+- `pnpm run admin:test:all` → no regressions (UI-only changes).
+
 ## [2026-05-21] Track A — Audit/Export Action Slice (Phase 5 continuation)
 
 ### Changed (Track A — Audit/Export Action Slice)
