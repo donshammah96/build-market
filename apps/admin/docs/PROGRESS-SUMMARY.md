@@ -20,6 +20,17 @@
 - Phase 4 finance domain slice added: finance contracts, repository, service, typed results, policy checks, overview tests, and repository contract tests.
 - Phase 4 audit domain slice added: audit contracts, repository, service, typed results, policy checks, audit page/stat tests, and repository contract tests.
 - Phase 4 checkpoint merged on `integration/admin-overhaul` and tagged `admin-overhaul/phase-4-complete`.
+- Phase 5 users action slice added and merged; tag `admin-overhaul/phase-5-complete` pushed.
+- Phase 5 verification action slice added, merged, and bug-fixed.
+- Phase 7 (Track C) observability foundation: structured logger, correlation threading, typed `AdminOperationName` registry (40+ ops), `safeAction`/`safeVerificationAction` integration. Tag `admin-overhaul/phase-7-complete` pushed.
+- Track A (Phase 5 continuation) audit/export action slice: migrated `audit.ts` and `compliance/route.ts`; extended audit domain contracts/repository/service with export and distinct-action support; 8 new action-boundary tests + 8 new service tests. Drift: −1 direct-Prisma action file, −2 `.parse()`, −1 `@ts-nocheck`, −3 unstructured logs.
+- Track B UI token system: `tokens.css` with 100+ design tokens, dark mode overrides, skeleton animation; `globals.css` import; `loading.tsx` for 4 v2 route segments.
+
+**Remaining steps:**
+
+- Open PRs for Track A (`feat/admin-overhaul/actions-audit`) and Track B (`feat/admin-overhaul/ui-tokens`).
+- Start next action slice: `finance/analytics` (direct Prisma + `.parse()` in `analytics.ts`) or `stores/properties` (next highest direct-Prisma count).
+- Continue reducing drift: 12 direct-Prisma action files, 14 `.parse()` call sites, 12 unsafe mutations, 17 `@ts-nocheck` files.
 - Phase 5 users action slice added: `safeParse` action validation, service/repository delegation for all user mutations, declarative audit coverage, self-delete protection, and refreshed users action-boundary tests.
 - Phase 5 verification action slice added: `safeAction` migration, verification service-backed queue/stats/details/mutation adapters, normalized document verification contracts, updated verification route handlers, and refreshed action/route/domain tests.
 - Phase 5 verification bug fixes applied: fixed API route audit gaps, privilege escalation fallbacks, unhandled parsing exceptions, and string concatenation bugs.
