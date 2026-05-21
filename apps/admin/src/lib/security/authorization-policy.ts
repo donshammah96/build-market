@@ -155,6 +155,74 @@ export const ADMIN_ACTION_POLICY_MAP = {
   get_geo_distribution: lowRiskReadPolicy(AdminCapability.VIEW_FINANCIALS),
   get_top_professionals: lowRiskReadPolicy(AdminCapability.VIEW_FINANCIALS),
 
+  // ---- Leads (v2 / snake_case) ----
+  list_leads: lowRiskReadPolicy(AdminCapability.VIEW_CONTENT),
+  get_lead_detail: lowRiskReadPolicy(AdminCapability.VIEW_CONTENT),
+  get_lead_stats: lowRiskReadPolicy(AdminCapability.VIEW_CONTENT),
+  update_lead: strictMutationPolicy(AdminCapability.MANAGE_CONTENT, "leads"),
+  delete_lead: strictMutationPolicy(AdminCapability.MANAGE_CONTENT, "leads"),
+  bulk_update_lead_status: strictMutationPolicy(
+    AdminCapability.MANAGE_CONTENT,
+    "leads",
+  ),
+  export_leads: strictMutationPolicy(AdminCapability.EXPORT_DATA, "exports"),
+
+  // ---- Services (v2 / snake_case) ----
+  list_services: lowRiskReadPolicy(AdminCapability.VIEW_CONTENT),
+  get_service_detail: lowRiskReadPolicy(AdminCapability.VIEW_CONTENT),
+  get_service_stats: lowRiskReadPolicy(AdminCapability.VIEW_CONTENT),
+  create_service: strictMutationPolicy(
+    AdminCapability.MANAGE_CONTENT,
+    "services",
+  ),
+  update_service: strictMutationPolicy(
+    AdminCapability.MANAGE_CONTENT,
+    "services",
+  ),
+  toggle_service_active: strictMutationPolicy(
+    AdminCapability.MANAGE_CONTENT,
+    "services",
+  ),
+  delete_service: strictMutationPolicy(
+    AdminCapability.MANAGE_CONTENT,
+    "services",
+  ),
+  reorder_services: strictMutationPolicy(
+    AdminCapability.MANAGE_CONTENT,
+    "services",
+  ),
+
+  // ---- Professionals (v2 / snake_case) ----
+  list_professionals: lowRiskReadPolicy(AdminCapability.VIEW_CONTENT),
+  get_professional_detail: lowRiskReadPolicy(AdminCapability.VIEW_CONTENT),
+  update_professional: strictMutationPolicy(
+    AdminCapability.MANAGE_CONTENT,
+    "professionals",
+  ),
+  delete_certificate: strictMutationPolicy(
+    AdminCapability.MANAGE_CONTENT,
+    "professionals",
+  ),
+  verify_professional: {
+    allowedRoles:
+      ADMIN_CAPABILITY_ROLE_MAP[AdminCapability.MANAGE_VERIFICATION],
+    capabilities: [AdminCapability.MANAGE_VERIFICATION],
+    risk: "high",
+    recentAuth: { maxAgeSeconds: 300 },
+    rateLimit: { namespace: "verification", limit: 10, windowMs: 60_000 },
+  },
+  reject_professional: {
+    allowedRoles:
+      ADMIN_CAPABILITY_ROLE_MAP[AdminCapability.MANAGE_VERIFICATION],
+    capabilities: [AdminCapability.MANAGE_VERIFICATION],
+    risk: "high",
+    recentAuth: { maxAgeSeconds: 300 },
+    rateLimit: { namespace: "verification", limit: 10, windowMs: 60_000 },
+  },
+
+  // ---- Compliance (v2 / snake_case) ----
+  get_compliance_queue_status: lowRiskReadPolicy(AdminCapability.VIEW_CONTENT),
+
   deleteUser: strictMutationPolicy(AdminCapability.MANAGE_USERS, "users"),
   deleteUsersBulk: strictMutationPolicy(AdminCapability.MANAGE_USERS, "users"),
   inviteUser: strictMutationPolicy(AdminCapability.MANAGE_USERS, "users"),

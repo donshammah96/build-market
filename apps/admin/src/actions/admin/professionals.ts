@@ -1,64 +1,31 @@
 "use server";
 
+import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { Prisma, prisma, County } from "@build/db";
-import { safeAction, safeVerificationAction, logAdminAction } from "./shared";
-import { UpdateProfileSchema } from "./types";
+import { safeAction, safeVerificationAction } from "./shared";
 import { omitUndefined } from "@/lib/utils";
+import { UpdateProfileSchema } from "./types";
+import { professionalsService } from "@/lib/domains/professionals/service";
+import type {
+  ProfessionalDetails,
+  ProfessionalListItem as ProfessionalWithUser,
+} from "@/lib/domains/professionals/contracts";
 
-// ============================================================================
-// Types
-// ============================================================================
+export type { ProfessionalDetails, ProfessionalWithUser };
 
-export type ProfessionalWithUser = Prisma.ProfessionalProfileGetPayload<{
-  include: { user: true };
-}>;
+function parseActionInput<T>(
+  schema: z.ZodType<T>,
+  input: unknown,
+  fallbackMessage: string,
+): T {
+  const result = schema.safeParse(input);
 
-export type ProfessionalDetails = Prisma.ProfessionalProfileGetPayload<{
-  include: {
-    user: true;
-    documents: {
-      select: {
-        id: true;
-        title: true;
-        fileUrl: true;
-        issuer: true;
-        expiryDate: true;
-      };
-    };
-    portfolios: true;
-    reviews: true;
-    offeredServices: {
-      select: {
-        service: {
-          select: {
-            id: true;
-            name: true;
-            slug: true;
-            icon: true;
-          };
-        };
-      };
-    };
-    projects: {
-      include: { client: true };
-    };
-  };
-}> & {
-  services: Array<{
-    id: string;
-    name: string;
-    slug: string;
-    icon: string | null;
-  }>;
-  certificates: Array<{
-    id: string;
-    name: string;
-    fileUrl: string;
-    issuer: string | null;
-    expiryDate: Date | null;
-  }>;
-};
+  if (!result.success) {
+    throw new Error(result.error.issues[0]?.message ?? fallbackMessage);
+  }
+
+  return result.data;
+}
 
 // ============================================================================
 // List & Details Actions
@@ -78,45 +45,20 @@ export async function getProfessionals(
   sortBy: "createdAt" | "companyName" = "createdAt",
   sortOrder: "asc" | "desc" = "desc",
 ) {
-  return safeAction("getProfessionals", async () => {
-    const skip = (page - 1) * limit;
-
-    const where: Prisma.ProfessionalProfileWhereInput = {
-      ...(search && {
-        OR: [
-          { companyName: { contains: search, mode: "insensitive" } },
-          { user: { email: { contains: search, mode: "insensitive" } } },
-          { user: { firstName: { contains: search, mode: "insensitive" } } },
-          { user: { lastName: { contains: search, mode: "insensitive" } } },
-        ],
-      }),
-      ...(verified !== undefined && { verified }),
-    };
-
-    const orderBy: Prisma.ProfessionalProfileOrderByWithRelationInput = {
-      [sortBy === "companyName" ? "companyName" : "createdAt"]: sortOrder,
-    };
-
-    const [professionals, total] = await Promise.all([
-      prisma.professionalProfile.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy,
-        include: { user: true },
-      }),
-      prisma.professionalProfile.count({ where }),
-    ]);
-
-    return {
-      professionals,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+  return safeAction("getProfessionals", async ({ actor }) => {
+    const result = await professionalsService.listProfessionals(
+      actor,
+      page,
+      limit,
+      search,
+      verified,
+      sortBy,
+      sortOrder,
+    );
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+    return result.data;
   });
 }
 
@@ -124,57 +66,20 @@ export async function getProfessionals(
  * Fetches complete professional profile with all related data.
  */
 export async function getProfessionalDetails(userId: string) {
-  return safeAction("getProfessionalDetails", async () => {
-    const professional = await prisma.professionalProfile.findUnique({
-      where: { userId },
-      include: {
-        user: true,
-        documents: {
-          select: {
-            id: true,
-            title: true,
-            fileUrl: true,
-            issuer: true,
-            expiryDate: true,
-          },
-        },
-        portfolios: true,
-        reviews: true,
-        offeredServices: {
-          select: {
-            service: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                icon: true,
-              },
-            },
-          },
-        },
-        projects: {
-          take: 10,
-          orderBy: { createdAt: "desc" },
-          include: { client: true },
-        },
-      },
-    });
-
-    if (!professional) throw new Error("Professional profile not found");
-
-    const details: ProfessionalDetails = {
-      ...professional,
-      services: professional.offeredServices.map((item) => item.service),
-      certificates: professional.documents.map((document) => ({
-        id: document.id,
-        name: document.title,
-        fileUrl: document.fileUrl || "",
-        issuer: document.issuer,
-        expiryDate: document.expiryDate,
-      })),
-    };
-
-    return details;
+  return safeAction("getProfessionalDetails", async ({ actor }) => {
+    const parsedUserId = parseActionInput(
+      z.string().min(1),
+      userId,
+      "User ID is required",
+    );
+    const result = await professionalsService.getProfessionalDetails(
+      actor,
+      parsedUserId,
+    );
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+    return result.data;
   });
 }
 
@@ -189,40 +94,31 @@ export async function getProfessionalDetails(userId: string) {
 export async function verifyProfessional(userId: string) {
   return safeVerificationAction(
     "verifyProfessional",
-    async ({ adminUserId }) => {
-      const professional = await prisma.professionalProfile.update({
-        where: { userId },
-        data: {
-          verified: true,
-          verificationStatus: "VERIFIED",
-          verifiedAt: new Date(),
-          verifiedById: adminUserId,
-        },
-        include: {
-          user: {
-            select: { email: true, firstName: true, lastName: true },
-          },
-        },
-      });
-
-      // Log audit event
-      await logAdminAction({
-        userId: adminUserId,
-        action: "VERIFY_PROFESSIONAL",
-        targetType: "professional",
-        targetId: userId,
-        details: { newStatus: "VERIFIED" },
-      });
+    async ({ actor }) => {
+      const parsedUserId = parseActionInput(
+        z.string().min(1),
+        userId,
+        "User ID is required",
+      );
+      const result = await professionalsService.verifyProfessional(
+        actor,
+        parsedUserId,
+      );
+      if (!result.ok) {
+        throw new Error(result.message);
+      }
 
       revalidatePath("/professionals");
 
-      // Return full entity for optimistic updates
-      return {
-        userId: professional.userId,
-        verified: true,
-        companyName: professional.companyName,
-        user: professional.user,
-      };
+      return result.data;
+    },
+    {
+      auditLog: {
+        operation: "VERIFY_PROFESSIONAL",
+        resourceType: "professional",
+        getTargetId: () => userId,
+        getDetails: () => ({ newStatus: "VERIFIED" }),
+      },
     },
   );
 }
@@ -234,40 +130,36 @@ export async function verifyProfessional(userId: string) {
 export async function rejectProfessional(userId: string, reason?: string) {
   return safeVerificationAction(
     "rejectProfessional",
-    async ({ adminUserId }) => {
-      const professional = await prisma.professionalProfile.update({
-        where: { userId },
-        data: {
-          verified: false,
-          verificationStatus: "REJECTED",
-          ...(reason !== undefined ? { verificationNotes: reason } : {}),
-        },
-        include: {
-          user: {
-            select: { email: true, firstName: true, lastName: true },
-          },
-        },
-      });
-
-      // Log audit event
-      await logAdminAction({
-        userId: adminUserId,
-        action: "REJECT_PROFESSIONAL",
-        targetType: "professional",
-        targetId: userId,
-        details: { newStatus: "REJECTED" },
-        ...(reason !== undefined ? { reason } : {}),
-      });
+    async ({ actor }) => {
+      const parsedUserId = parseActionInput(
+        z.string().min(1),
+        userId,
+        "User ID is required",
+      );
+      const parsedReason = reason
+        ? parseActionInput(z.string().max(500), reason, "Invalid reason")
+        : undefined;
+      const result = await professionalsService.rejectProfessional(
+        actor,
+        parsedUserId,
+        parsedReason,
+      );
+      if (!result.ok) {
+        throw new Error(result.message);
+      }
 
       revalidatePath("/professionals");
 
-      // Return full entity for optimistic updates
-      return {
-        userId: professional.userId,
-        verified: false,
-        companyName: professional.companyName,
-        user: professional.user,
-      };
+      return result.data;
+    },
+    {
+      auditLog: {
+        operation: "REJECT_PROFESSIONAL",
+        resourceType: "professional",
+        getTargetId: () => userId,
+        getDetails: () => ({ newStatus: "REJECTED" }),
+        getReason: () => reason,
+      },
     },
   );
 }
@@ -284,51 +176,30 @@ export async function updateProfessionalProfile(
   userId: string,
   formData: unknown,
 ) {
-  return safeAction("updateProfessionalProfile", async () => {
-    const data = UpdateProfileSchema.parse(formData);
+  return safeAction("updateProfessionalProfile", async ({ actor }) => {
+    const parsedUserId = parseActionInput(
+      z.string().min(1),
+      userId,
+      "User ID is required",
+    );
+    const data = parseActionInput(
+      UpdateProfileSchema,
+      formData,
+      "Invalid profile update data",
+    );
 
-    const normalizedCounty =
-      data.county && Object.values(County).includes(data.county as County)
-        ? (data.county as County)
-        : undefined;
+    const result = await professionalsService.updateProfessionalProfile(
+      actor,
+      parsedUserId,
+      omitUndefined(data) as any,
+    );
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
 
-    const updateData: Prisma.ProfessionalProfileUpdateInput = {
-      ...(data.companyName !== undefined
-        ? { companyName: data.companyName }
-        : {}),
-      ...(data.yearsExperience !== undefined
-        ? { yearsExperience: data.yearsExperience }
-        : {}),
-      ...(data.bio !== undefined ? { bio: data.bio } : {}),
-      ...(data.website !== undefined ? { website: data.website || null } : {}),
-      ...(data.city !== undefined ? { city: data.city } : {}),
-      ...(normalizedCounty !== undefined ? { county: normalizedCounty } : {}),
-      ...(data.country !== undefined ? { country: data.country } : {}),
-    };
+    revalidatePath(`/professionals/${parsedUserId}`);
 
-    const professional = await prisma.professionalProfile.update({
-      where: { userId },
-      data: updateData,
-      select: {
-        userId: true,
-        companyName: true,
-        yearsExperience: true,
-        bio: true,
-        website: true,
-        city: true,
-        county: true,
-        country: true,
-        verified: true,
-      },
-    });
-
-    revalidatePath(`/professionals/${userId}`);
-
-    // Return updated entity for optimistic updates
-    return {
-      updated: true,
-      professional,
-    };
+    return result.data;
   });
 }
 
@@ -337,23 +208,22 @@ export async function updateProfessionalProfile(
  * Returns the deleted certificate ID for optimistic UI updates.
  */
 export async function deleteCertificate(certificateId: string) {
-  return safeAction("deleteCertificate", async () => {
-    const certificate = await prisma.professionalDocument.delete({
-      where: { id: certificateId },
-      select: {
-        id: true,
-        title: true,
-        professionalId: true,
-      },
-    });
+  return safeAction("deleteCertificate", async ({ actor }) => {
+    const parsedCertificateId = parseActionInput(
+      z.string().min(1),
+      certificateId,
+      "Certificate ID is required",
+    );
+    const result = await professionalsService.deleteCertificate(
+      actor,
+      parsedCertificateId,
+    );
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
 
-    revalidatePath(`/professionals/${certificate.professionalId}`);
+    revalidatePath("/professionals");
 
-    // Return deleted certificate info for optimistic updates
-    return {
-      deleted: true,
-      certificateId: certificate.id,
-      certificateName: certificate.title,
-    };
+    return result.data;
   });
 }
