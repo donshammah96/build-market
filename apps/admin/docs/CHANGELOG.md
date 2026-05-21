@@ -1,5 +1,45 @@
 # apps/admin Changelog
 
+## [2026-05-21] Phase 5 - Verification action bug fixes
+
+### Fixed (Phase 5 - Verification action bug fixes)
+
+- Fixed a privilege escalation risk in API routes (`verification-details`, `verification-stats`, `pending-verifications`, `verify-document`, `verify`) where missing `adminRole` context improperly defaulted to `SUPER_ADMIN`.
+- Fixed a bug in `safeAction` definitions (`verifyEntity`, `verifyDocument`, `batchVerifyDocuments`, `batchVerifyEntities`) where `auditLog` parsing threw synchronous exceptions before execution.
+- Fixed a bug in `updateDocumentVerification` in `repository.ts` that concatenated "d" to the action string, producing "rejectd" instead of "rejected".
+- Fixed an audit gap in `verify-document/route.ts` where single and batch document verifications bypassed `safeAction` audit logging by explicitly invoking `logAdminAction`.
+- Added missing `.min(1)` validation to `BatchVerifyDocumentsSchema`.
+
+## [2026-05-18] Phase 5 - Verification action slice
+
+### Security (Phase 5 - Verification action slice)
+
+- Replaced verification action and route `.parse()` calls with `safeParse`-backed validation and strict payload handling.
+- Moved verification entity and document mutations behind the admin verification domain/service boundary and removed direct Prisma from the migrated verification adapters.
+- Added declarative `auditLog` coverage on verification server actions for entity verification, single-document verification, batch document verification, and batch entity verification.
+
+### Changed (Phase 5 - Verification action slice)
+
+- Refactored `apps/admin/src/actions/admin/verification.ts` to use `safeAction` plus the verification domain service instead of client API round-trips and manual audit writes.
+- Rebuilt `pending-verifications`, `verification-stats`, `verification-details`, `verify`, and `verify-document` handlers as thin verification-service adapters.
+- Normalized property document verification onto the `property_document` contract while preserving `property_attachment` request compatibility at the parser boundary.
+- Updated verification detail mapping so property verification reads from `PropertyDocument` records instead of the stale attachment-only shape.
+
+### Tests (Phase 5 - Verification action slice)
+
+- Reworked verification action tests to assert domain-service delegation and declarative audit wiring instead of action-layer Prisma or client API behavior.
+- Reworked verification route tests to mock the verification service boundary instead of legacy Prisma-heavy internals.
+- Extended verification domain service tests to cover entity verification, document verification, normalized details loading, and batch failure aggregation.
+
+**Verification:**
+
+- `pnpm run admin:check-types` -> pass.
+- `pnpm run admin:lint` -> pass with 156 warnings; warnings remain tracked Phase 5-12 backlog.
+- `pnpm run admin:check-env-contract` -> pass; all env templates cover 59 boundary keys.
+- `pnpm run admin:test:all` -> pass; 26 files passed, 177 of 177 tests passed.
+- `pnpm run admin:report-security-drift` -> pass with known drift counts: env boundary 69, direct Prisma action files 13, unsafe mutations 12, action `.parse()` 16, `@ts-nocheck` 18, unstructured logging 103, log safety 3, missing audit log 3.
+- `pnpm run admin:report-security-drift:strict` -> fail with the remaining Phase 5-12 drift backlog.
+
 ## [2026-05-18] Phase 5 - Users action slice
 
 ### Security (Phase 5 - Users action slice)

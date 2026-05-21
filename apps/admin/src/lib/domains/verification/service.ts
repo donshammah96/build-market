@@ -3,10 +3,31 @@ import {
   requireAdminCapability,
 } from "@/lib/security/authorization-policy";
 import { err, ok, type Result } from "@/lib/errors/result";
+import { getAuditHistory } from "@/lib/services/verification/audit-service";
+import { notifyVerificationResult } from "@/lib/services/verification/notification.service";
+import {
+  getProfessionalVerificationDetails,
+  verifyProfessional,
+} from "@/lib/services/verification/professional-verification.service";
+import {
+  getPropertyVerificationDetails,
+  verifyProperty,
+} from "@/lib/services/verification/property-verification.service";
+import {
+  getStoreVerificationDetails,
+  verifyStore,
+} from "@/lib/services/verification/store-verification.service";
+import type { VerificationRequest } from "@/lib/services/verification/types";
 import type {
+  BatchVerifyDocumentsInput,
+  BatchVerifyEntitiesInput,
   PrismaVerificationStatus,
+  VerificationDetails,
   VerificationActor,
   VerificationDomainError,
+  VerificationDocumentSummary,
+  VerificationEntitySummary,
+  VerificationEntityType,
   VerificationQueueInput,
   VerificationQueuePage,
   VerificationQueueQuery,
@@ -15,6 +36,8 @@ import type {
   VerificationQueueStatus,
   VerificationStats,
   VerificationStatsPeriod,
+  VerifyDocumentInput,
+  VerifyEntityInput,
 } from "./contracts";
 import { PRISMA_VERIFICATION_STATUSES } from "./contracts";
 import { verificationRepository } from "./repository";
@@ -47,6 +70,10 @@ function invalidFilter(message: string): VerificationDomainError {
 
 function policyDenied(message: string): VerificationDomainError {
   return { code: "VERIFICATION_POLICY_DENIED", message };
+}
+
+function notFound(message: string): VerificationDomainError {
+  return { code: "VERIFICATION_NOT_FOUND", message };
 }
 
 function requireVerificationCapability(
@@ -254,6 +281,403 @@ async function countStatusSet(
   };
 }
 
+function toVerificationRequest(
+  actor: VerificationActor,
+  input: VerifyEntityInput,
+  metadata?: {
+    ipAddress?: string | undefined;
+    userAgent?: string | undefined;
+  },
+): VerificationRequest {
+  return {
+    ...input,
+    adminId: actor.dbUserId,
+    ...(metadata?.ipAddress ? { ipAddress: metadata.ipAddress } : {}),
+    ...(metadata?.userAgent ? { userAgent: metadata.userAgent } : {}),
+  };
+}
+
+async function resolveVerificationRecipient(
+  entityType: VerificationEntityType,
+  entityId: string,
+): Promise<string | null> {
+  if (entityType === "professional") {
+    return entityId;
+  }
+
+  if (entityType === "store") {
+    return verificationRepository.findStoreOwnerId(entityId);
+  }
+
+  return verificationRepository.findPropertyOwnerId(entityId);
+}
+
+function mapAuditEntry(entry: {
+  id: string;
+  action: string;
+  createdAt: Date;
+  reason: string | null;
+  details: unknown;
+  admin: {
+    firstName: string | null;
+    lastName: string | null;
+  } | null;
+}) {
+  const details =
+    typeof entry.details === "object" && entry.details
+      ? (entry.details as Record<string, unknown>)
+      : {};
+
+  return {
+    id: entry.id,
+    action: entry.action,
+    oldStatus:
+      typeof details.oldStatus === "string" ? details.oldStatus : "UNKNOWN",
+    newStatus:
+      typeof details.newStatus === "string" ? details.newStatus : "UNKNOWN",
+    ...(entry.reason ? { reason: entry.reason } : {}),
+    createdAt: entry.createdAt.toISOString(),
+    admin: {
+      firstName: entry.admin?.firstName ?? null,
+      lastName: entry.admin?.lastName ?? null,
+    },
+  };
+}
+
+function mapProfessionalDetails(
+  entityId: string,
+  details: Awaited<ReturnType<typeof getProfessionalVerificationDetails>>,
+  auditHistory: Awaited<ReturnType<typeof getAuditHistory>>,
+): VerificationDetails {
+  if (!details) {
+    throw new Error("Professional profile not found");
+  }
+
+  return {
+    entityType: "professional",
+    entityId,
+    status: details.verificationStatus,
+    ...(details.verifiedAt
+      ? { verifiedAt: details.verifiedAt.toISOString() }
+      : {}),
+    ...(details.verificationNotes
+      ? { verificationNotes: details.verificationNotes }
+      : {}),
+    entity: details as unknown as Record<string, unknown>,
+    documents: details.documents.map((document) => ({
+      id: document.id,
+      type: String(document.category),
+      fileUrl: document.fileUrl ?? "",
+      isVerified: document.status === "VERIFIED",
+      ...(document.verifiedAt
+        ? { verifiedAt: document.verifiedAt.toISOString() }
+        : {}),
+    })),
+    auditHistory: auditHistory.map(mapAuditEntry),
+  };
+}
+
+function mapStoreDetails(
+  entityId: string,
+  details: Awaited<ReturnType<typeof getStoreVerificationDetails>>,
+  auditHistory: Awaited<ReturnType<typeof getAuditHistory>>,
+): VerificationDetails {
+  if (!details) {
+    throw new Error("Store not found");
+  }
+
+  return {
+    entityType: "store",
+    entityId,
+    status: details.verificationStatus,
+    ...(details.submittedAt
+      ? { submittedAt: details.submittedAt.toISOString() }
+      : {}),
+    ...(details.verifiedAt
+      ? { verifiedAt: details.verifiedAt.toISOString() }
+      : {}),
+    ...(details.rejectionReason
+      ? { rejectionReason: details.rejectionReason }
+      : {}),
+    entity: details as unknown as Record<string, unknown>,
+    documents: [],
+    auditHistory: auditHistory.map(mapAuditEntry),
+  };
+}
+
+function mapPropertyDetails(
+  entityId: string,
+  details: Awaited<ReturnType<typeof getPropertyVerificationDetails>>,
+  auditHistory: Awaited<ReturnType<typeof getAuditHistory>>,
+): VerificationDetails {
+  if (!details) {
+    throw new Error("Property not found");
+  }
+
+  return {
+    entityType: "property",
+    entityId,
+    status: details.verificationStatus,
+    ...(details.submittedAt
+      ? { submittedAt: details.submittedAt.toISOString() }
+      : {}),
+    ...(details.verifiedAt
+      ? { verifiedAt: details.verifiedAt.toISOString() }
+      : {}),
+    ...(details.verificationNotes
+      ? { verificationNotes: details.verificationNotes }
+      : {}),
+    ...(details.rejectionReason
+      ? { rejectionReason: details.rejectionReason }
+      : {}),
+    entity: details as unknown as Record<string, unknown>,
+    documents: details.documents.map((document) => ({
+      id: document.id,
+      type: String(document.type),
+      fileUrl: document.url ?? "",
+      isVerified: document.status === "APPROVED",
+      ...(document.verifiedAt
+        ? { verifiedAt: document.verifiedAt.toISOString() }
+        : {}),
+      ...(document.notes ? { notes: document.notes } : {}),
+    })),
+    auditHistory: auditHistory.map(mapAuditEntry),
+  };
+}
+
+export async function getVerificationDetails(
+  actor: VerificationActor,
+  input: {
+    entityType: VerificationEntityType;
+    entityId: string;
+  },
+): Promise<Result<VerificationDetails, VerificationDomainError>> {
+  const capability = requireVerificationCapability(actor);
+  if (!capability.ok) return capability;
+
+  if (input.entityType === "professional") {
+    const [details, auditHistory] = await Promise.all([
+      getProfessionalVerificationDetails(input.entityId),
+      getAuditHistory("ProfessionalProfile", input.entityId),
+    ]);
+
+    if (!details) {
+      return err(notFound("Professional profile not found"));
+    }
+
+    return ok(mapProfessionalDetails(input.entityId, details, auditHistory));
+  }
+
+  if (input.entityType === "store") {
+    const [details, auditHistory] = await Promise.all([
+      getStoreVerificationDetails(input.entityId),
+      getAuditHistory("Store", input.entityId),
+    ]);
+
+    if (!details) {
+      return err(notFound("Store not found"));
+    }
+
+    return ok(mapStoreDetails(input.entityId, details, auditHistory));
+  }
+
+  const [details, auditHistory] = await Promise.all([
+    getPropertyVerificationDetails(input.entityId),
+    getAuditHistory("Property", input.entityId),
+  ]);
+
+  if (!details) {
+    return err(notFound("Property not found"));
+  }
+
+  return ok(mapPropertyDetails(input.entityId, details, auditHistory));
+}
+
+export async function verifyEntity(
+  actor: VerificationActor,
+  input: VerifyEntityInput,
+  metadata?: {
+    ipAddress?: string | undefined;
+    userAgent?: string | undefined;
+  },
+): Promise<Result<VerificationEntitySummary, VerificationDomainError>> {
+  const capability = requireVerificationCapability(actor);
+  if (!capability.ok) return capability;
+
+  try {
+    const request = toVerificationRequest(actor, input, metadata);
+    const result =
+      input.entityType === "professional"
+        ? await verifyProfessional(request)
+        : input.entityType === "store"
+          ? await verifyStore(request)
+          : await verifyProperty(request);
+
+    const recipientUserId = await resolveVerificationRecipient(
+      input.entityType,
+      input.entityId,
+    );
+
+    if (recipientUserId) {
+      await notifyVerificationResult(result, recipientUserId);
+    }
+
+    return ok({
+      entityType: input.entityType,
+      entityId: input.entityId,
+      previousStatus: result.previousStatus,
+      newStatus: result.newStatus,
+      message: result.message,
+      ...(result.verifiedAt ? { verifiedAt: result.verifiedAt } : {}),
+      ...(result.reason ? { reason: result.reason } : {}),
+      ...(result.notes ? { notes: result.notes } : {}),
+    });
+  } catch (error) {
+    return err({
+      code: "VERIFICATION_REPOSITORY_ERROR",
+      message: error instanceof Error ? error.message : "Verification failed",
+    });
+  }
+}
+
+export async function verifyDocument(
+  actor: VerificationActor,
+  input: VerifyDocumentInput,
+): Promise<Result<VerificationDocumentSummary, VerificationDomainError>> {
+  const capability = requireVerificationCapability(actor);
+  if (!capability.ok) return capability;
+
+  try {
+    const result = await verificationRepository.updateDocumentVerification({
+      ...input,
+      adminId: actor.dbUserId,
+    });
+
+    return ok(result);
+  } catch (error) {
+    return err({
+      code: "VERIFICATION_REPOSITORY_ERROR",
+      message:
+        error instanceof Error ? error.message : "Document verification failed",
+    });
+  }
+}
+
+export async function batchVerifyDocuments(
+  actor: VerificationActor,
+  input: BatchVerifyDocumentsInput,
+): Promise<
+  Result<
+    {
+      summary: { total: number; successful: number; failed: number };
+      results: Array<{ documentId: string; success: boolean; error?: string }>;
+    },
+    VerificationDomainError
+  >
+> {
+  const capability = requireVerificationCapability(actor);
+  if (!capability.ok) return capability;
+
+  const results: Array<{
+    documentId: string;
+    success: boolean;
+    error?: string;
+  }> = [];
+
+  for (const document of input.documents) {
+    try {
+      const result = await verificationRepository.updateDocumentVerification({
+        ...document,
+        adminId: actor.dbUserId,
+      });
+      results.push({
+        documentId: result.documentId,
+        success: true,
+      });
+    } catch (error) {
+      results.push({
+        documentId: document.documentId,
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  const successful = results.filter((result) => result.success).length;
+
+  return ok({
+    summary: {
+      total: results.length,
+      successful,
+      failed: results.length - successful,
+    },
+    results,
+  });
+}
+
+export async function batchVerifyEntities(
+  actor: VerificationActor,
+  input: BatchVerifyEntitiesInput,
+): Promise<
+  Result<
+    {
+      summary: { total: number; successful: number; failed: number };
+      results: Array<{
+        entityType: VerificationEntityType;
+        entityId: string;
+        success: boolean;
+        error?: string;
+      }>;
+    },
+    VerificationDomainError
+  >
+> {
+  const capability = requireVerificationCapability(actor);
+  if (!capability.ok) return capability;
+
+  const results: Array<{
+    entityType: VerificationEntityType;
+    entityId: string;
+    success: boolean;
+    error?: string;
+  }> = [];
+
+  for (const entity of input.entities) {
+    const result = await verifyEntity(actor, {
+      ...entity,
+      action: input.action,
+      ...(input.reason ? { reason: input.reason } : {}),
+    });
+
+    if (result.ok) {
+      results.push({
+        entityType: entity.entityType,
+        entityId: entity.entityId,
+        success: true,
+      });
+      continue;
+    }
+
+    results.push({
+      entityType: entity.entityType,
+      entityId: entity.entityId,
+      success: false,
+      error: result.message,
+    });
+  }
+
+  const successful = results.filter((result) => result.success).length;
+
+  return ok({
+    summary: {
+      total: results.length,
+      successful,
+      failed: results.length - successful,
+    },
+    results,
+  });
+}
+
 export async function getVerificationStats(
   actor: VerificationActor,
   periodInput: unknown = "all",
@@ -286,4 +710,9 @@ export const verificationService = {
   listVerificationQueue,
   normalizeStatsPeriod,
   getVerificationStats,
+  getVerificationDetails,
+  verifyEntity,
+  verifyDocument,
+  batchVerifyDocuments,
+  batchVerifyEntities,
 };

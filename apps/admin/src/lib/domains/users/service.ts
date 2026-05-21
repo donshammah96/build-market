@@ -286,8 +286,9 @@ export async function prepareDeleteUsersBulk(
     return authResult;
   }
 
-  const userIds = Array.from(new Set(input.userIds.map((userId) => userId.trim())))
-    .filter(Boolean);
+  const userIds = Array.from(
+    new Set(input.userIds.map((userId) => userId.trim())),
+  ).filter(Boolean);
 
   if (userIds.length === 0) {
     return err({

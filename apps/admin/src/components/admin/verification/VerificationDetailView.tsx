@@ -162,10 +162,10 @@ export function VerificationDetailView({
       // Determine document type based on entity type
       let documentType:
         | "professional_document"
-        | "property_attachment"
+        | "property_document"
         | "certificate" = "professional_document";
       if (entityType === "property") {
-        documentType = "property_attachment";
+        documentType = "property_document";
       }
 
       const response = await verifyDocument(

@@ -18,6 +18,32 @@ const repositoryMock = vi.hoisted(() => ({
   listPropertyQueue: vi.fn(),
   countPropertyQueue: vi.fn(),
   countVerificationStatus: vi.fn(),
+  findStoreOwnerId: vi.fn(),
+  findPropertyOwnerId: vi.fn(),
+  updateDocumentVerification: vi.fn(),
+}));
+
+const professionalServiceMock = vi.hoisted(() => ({
+  verifyProfessional: vi.fn(),
+  getProfessionalVerificationDetails: vi.fn(),
+}));
+
+const storeServiceMock = vi.hoisted(() => ({
+  verifyStore: vi.fn(),
+  getStoreVerificationDetails: vi.fn(),
+}));
+
+const propertyServiceMock = vi.hoisted(() => ({
+  verifyProperty: vi.fn(),
+  getPropertyVerificationDetails: vi.fn(),
+}));
+
+const notificationServiceMock = vi.hoisted(() => ({
+  notifyVerificationResult: vi.fn(),
+}));
+
+const auditServiceMock = vi.hoisted(() => ({
+  getAuditHistory: vi.fn(),
 }));
 
 vi.mock("@build/db", () => ({
@@ -28,12 +54,35 @@ vi.mock("../repository", () => ({
   verificationRepository: repositoryMock,
 }));
 
+vi.mock(
+  "@/lib/services/verification/professional-verification.service",
+  () => professionalServiceMock,
+);
+vi.mock(
+  "@/lib/services/verification/store-verification.service",
+  () => storeServiceMock,
+);
+vi.mock(
+  "@/lib/services/verification/property-verification.service",
+  () => propertyServiceMock,
+);
+vi.mock(
+  "@/lib/services/verification/notification.service",
+  () => notificationServiceMock,
+);
+vi.mock("@/lib/services/verification/audit-service", () => auditServiceMock);
+
 import type { VerificationActor } from "../contracts";
 import {
+  batchVerifyDocuments,
+  batchVerifyEntities,
   buildVerificationQueueQuery,
+  getVerificationDetails,
   getVerificationStats,
   listVerificationQueue,
   normalizeStatsPeriod,
+  verifyDocument,
+  verifyEntity,
 } from "../service";
 
 function actor(
@@ -219,6 +268,164 @@ describe("verification domain service", () => {
         },
         period: "week",
       },
+    });
+  });
+
+  it("verifies an entity and dispatches recipient notification", async () => {
+    professionalServiceMock.verifyProfessional.mockResolvedValue({
+      previousStatus: "PENDING",
+      newStatus: "VERIFIED",
+      message: "Professional verified",
+      verifiedAt: new Date("2026-05-18T00:00:00.000Z"),
+    });
+
+    const result = await verifyEntity(actor(dbMock.AdminRole.SUPER_ADMIN), {
+      entityType: "professional",
+      entityId: "user_1",
+      action: "VERIFY",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        entityType: "professional",
+        entityId: "user_1",
+        newStatus: "VERIFIED",
+      }),
+    });
+    expect(notificationServiceMock.notifyVerificationResult).toHaveBeenCalled();
+  });
+
+  it("verifies a document through the repository boundary", async () => {
+    repositoryMock.updateDocumentVerification.mockResolvedValue({
+      documentType: "professional_document",
+      documentId: "doc_1",
+      targetEntityType: "professional",
+      targetEntityId: "user_1",
+      status: "APPROVED",
+      message: "Document approved successfully",
+    });
+
+    const result = await verifyDocument(actor(dbMock.AdminRole.SUPER_ADMIN), {
+      documentType: "professional_document",
+      documentId: "doc_1",
+      action: "APPROVE",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        documentId: "doc_1",
+        status: "APPROVED",
+      }),
+    });
+    expect(repositoryMock.updateDocumentVerification).toHaveBeenCalled();
+  });
+
+  it("batch verifies entities and aggregates failures", async () => {
+    professionalServiceMock.verifyProfessional.mockResolvedValue({
+      previousStatus: "PENDING",
+      newStatus: "VERIFIED",
+      message: "Professional verified",
+    });
+    storeServiceMock.verifyStore.mockRejectedValue(
+      new Error("Store not found"),
+    );
+    repositoryMock.findStoreOwnerId.mockResolvedValue("owner_1");
+
+    const result = await batchVerifyEntities(
+      actor(dbMock.AdminRole.SUPER_ADMIN),
+      {
+        entities: [
+          { entityType: "professional", entityId: "user_1" },
+          { entityType: "store", entityId: "store_1" },
+        ],
+        action: "VERIFY",
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.summary).toEqual({
+      total: 2,
+      successful: 1,
+      failed: 1,
+    });
+  });
+
+  it("loads normalized verification details", async () => {
+    professionalServiceMock.getProfessionalVerificationDetails.mockResolvedValue(
+      {
+        verificationStatus: "PENDING",
+        verificationNotes: "Needs manual review",
+        verifiedAt: null,
+        user: {
+          id: "user_1",
+          email: "pro@example.com",
+          firstName: "Pro",
+          lastName: "User",
+          phone: null,
+          createdAt: new Date("2026-05-18T00:00:00.000Z"),
+        },
+        documents: [],
+      },
+    );
+    auditServiceMock.getAuditHistory.mockResolvedValue([]);
+
+    const result = await getVerificationDetails(
+      actor(dbMock.AdminRole.SUPER_ADMIN),
+      {
+        entityType: "professional",
+        entityId: "user_1",
+      },
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({
+        entityType: "professional",
+        entityId: "user_1",
+        status: "PENDING",
+      }),
+    });
+  });
+
+  it("batch verifies documents through the repository boundary", async () => {
+    repositoryMock.updateDocumentVerification
+      .mockResolvedValueOnce({
+        documentType: "professional_document",
+        documentId: "doc_1",
+        targetEntityType: "professional",
+        targetEntityId: "user_1",
+        status: "APPROVED",
+        message: "Document approved successfully",
+      })
+      .mockRejectedValueOnce(new Error("missing"));
+
+    const result = await batchVerifyDocuments(
+      actor(dbMock.AdminRole.SUPER_ADMIN),
+      {
+        documents: [
+          {
+            documentType: "professional_document",
+            documentId: "doc_1",
+            action: "APPROVE",
+          },
+          {
+            documentType: "certificate",
+            documentId: "doc_2",
+            action: "REJECT",
+          },
+        ],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.summary).toEqual({
+      total: 2,
+      successful: 1,
+      failed: 1,
     });
   });
 });

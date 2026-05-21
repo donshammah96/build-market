@@ -259,6 +259,7 @@ Route test patterns, mock structure, risk matrix expectations, and critical-jour
 Preferred verification commands:
 
 **`apps/client` and Global:**
+
 - `pnpm run format:check` and `pnpm run lint` for formatting and linting
 - `pnpm run client:check-env-contract` and `pnpm run client:report-security-drift:strict` for boundary/security checks
 - `pnpm run client:tsc-noemit` or `pnpm run check-types` for type checking
@@ -267,6 +268,7 @@ Preferred verification commands:
 - `pnpm run cypress:run --spec "cypress/e2e/critical-journeys/**"` when protected-route or authz behavior is touched
 
 **`apps/admin`:**
+
 - `pnpm run admin:check-types` for type checking
 - `pnpm run admin:lint` for linting
 - `pnpm run admin:check-env-contract` for env boundary checks

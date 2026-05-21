@@ -18,7 +18,10 @@ export type UserDetails = AdminUserDetails;
 
 const USER_IDEMPOTENCY_TTL_HOURS = 0.25;
 const NonEmptyStringSchema = z.string().trim().min(1);
-const IdempotencyKeySchema = z.string().trim().min(1, "Idempotency-Key is required");
+const IdempotencyKeySchema = z
+  .string()
+  .trim()
+  .min(1, "Idempotency-Key is required");
 const InviteUserSchema = z
   .object({
     email: z.string().trim(),
@@ -135,7 +138,10 @@ export async function deleteUser(userId: string, idempotencyKey: string) {
         resourceId: parsedUserId,
         ttlHours: USER_IDEMPOTENCY_TTL_HOURS,
         run: async () => {
-          const result = await usersService.prepareDeleteUser(actor, parsedUserId);
+          const result = await usersService.prepareDeleteUser(
+            actor,
+            parsedUserId,
+          );
 
           if (!result.ok) {
             throw new Error(result.message);
@@ -303,7 +309,10 @@ export async function inviteUser(
         resourceId: parsedInput.email.trim().toLowerCase(),
         ttlHours: USER_IDEMPOTENCY_TTL_HOURS,
         run: async () => {
-          const result = await usersService.prepareInviteUser(actor, parsedInput);
+          const result = await usersService.prepareInviteUser(
+            actor,
+            parsedInput,
+          );
 
           if (!result.ok) {
             throw new Error(result.message);
@@ -445,16 +454,16 @@ export async function assignUserRole(
         resourceId: parsedInput.userId,
         ttlHours: USER_IDEMPOTENCY_TTL_HOURS,
         run: async () => {
-          const result = await usersService.prepareAssignUserRole(actor, parsedInput);
+          const result = await usersService.prepareAssignUserRole(
+            actor,
+            parsedInput,
+          );
 
           if (!result.ok) {
             throw new Error(result.message);
           }
 
-          const {
-            user,
-            role,
-          } = result.data;
+          const { user, role } = result.data;
 
           await usersRepository.updateUserRole(user.id, role);
 
