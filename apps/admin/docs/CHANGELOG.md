@@ -1,6 +1,36 @@
 # apps/admin Changelog
 
-## [2026-05-21] Phase 5 - Verification action bug fixes
+## [2026-05-21] Phase 7 - Observability foundation
+
+### Added (Phase 7 - Observability foundation)
+
+- Added `src/lib/infrastructure/logger.ts` implementing ADR-ADMIN-003: `getAdminLogger()` returns a feature-flag-gated structured logger with PII exclusion enforced at the type level (keys `userId`, `email`, `phone`, `nationalId`, `clerkId`, `userEmail`, `adminEmail`, `userPhone`, `firstName`, `lastName` are rejected). Structured mode writes JSON to stdout; fallback mode delegates to `console.log/warn/error` when `admin_v2_structured_logging` is disabled.
+- Added `src/lib/infrastructure/correlation.ts` implementing ADR-ADMIN-003 §7.2: `initializeAdminCorrelationId()` reads `x-correlation-id` from request headers or generates UUID v4; `withAdminCorrelation()` threads the ID through async continuations via `AsyncLocalStorage`; `getAdminCorrelationId()` reads the active ID without prop-drilling.
+- Added `src/lib/observability/operation-names.ts` implementing ADR-ADMIN-003 §7.3: typed `AdminOperationName` const registry with 40+ stable `<verb>_<resource>` operation names covering users, verification, audit, finance, content, leads/services, compliance, settings, and dashboard. Added `isRegisteredOperationName()` guard for drift-check use.
+
+### Changed (Phase 7 - Observability foundation)
+
+- Integrated structured logger into `safeAction` and `safeVerificationAction` in `shared.ts`: every terminal outcome path (unauthorized, forbidden, session_stale, rate_limited, success, internal_error) now emits a structured `AdminLogEvent` with `correlationId`, `operationName`, `adminRole`, `outcome`, and `durationMs`.
+- `safeAction` now wraps action body execution in `withAdminCorrelation()` so downstream service/repository code can call `getAdminCorrelationId()` without receiving the ID via parameter.
+- `correlationId` in the action context is now sourced from a single `crypto.randomUUID()` call at the top of `safeAction`, shared across the log emission and the action body context.
+
+### Tests (Phase 7 - Observability foundation)
+
+- Added `src/lib/infrastructure/__tests__/logger.test.ts` (11 tests): structured-mode JSON output, PII runtime stripping, optional field omission, all log levels, fallback-mode console routing.
+- Added `src/lib/infrastructure/__tests__/correlation.test.ts` (11 tests): header extraction, UUID generation, blank-header guard, uniqueness, async propagation, scope isolation, concurrent scope independence, outside-scope undefined return.
+- Added `src/lib/observability/__tests__/operation-names.test.ts` (14 tests): lower_snake_case enforcement, uniqueness, verb_resource format, domain coverage assertions, type assignability, `isRegisteredOperationName` guard.
+
+**Files changed:** `apps/admin/src/lib/infrastructure/logger.ts` [NEW], `apps/admin/src/lib/infrastructure/correlation.ts` [NEW], `apps/admin/src/lib/observability/operation-names.ts` [NEW], `apps/admin/src/lib/infrastructure/__tests__/logger.test.ts` [NEW], `apps/admin/src/lib/infrastructure/__tests__/correlation.test.ts` [NEW], `apps/admin/src/lib/observability/__tests__/operation-names.test.ts` [NEW], `apps/admin/src/actions/admin/shared.ts`
+
+**Verification:**
+
+- `pnpm run admin:check-types` → pass.
+- `pnpm run admin:lint` → pass with known warnings backlog.
+- `pnpm run admin:check-env-contract` → pass; 59 boundary keys.
+- `pnpm run admin:test:all` → pass; 29 files passed, 213 of 213 tests passed.
+- Targeted suite: `pnpm -C apps/admin exec vitest run src/lib/infrastructure/__tests__/logger.test.ts src/lib/infrastructure/__tests__/correlation.test.ts src/lib/observability/__tests__/operation-names.test.ts --pool=threads --maxWorkers=1` → 3 files, 36 tests passed.
+
+
 
 ### Fixed (Phase 5 - Verification action bug fixes)
 
