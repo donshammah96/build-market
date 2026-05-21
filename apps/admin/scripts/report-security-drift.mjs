@@ -107,11 +107,17 @@ const unsafeMutations = actionFiles
 
 const missingAuditLog = actionFiles
   .filter((file) => /(delete|remove|verify|reject|approve|export|role)/i.test(file))
-  .filter((file) => !read(path.join(appRoot, file)).includes("logAdminAction"))
+  .filter((file) => {
+    const content = read(path.join(appRoot, file));
+    return (
+      !content.includes("logAdminAction") &&
+      !/\bauditLog\s*:/.test(content)
+    );
+  })
   .map((file) => ({
     file,
     line: 1,
-    sample: "high-risk action file without logAdminAction",
+    sample: "high-risk action file without audit coverage",
   }));
 
 const categories = {

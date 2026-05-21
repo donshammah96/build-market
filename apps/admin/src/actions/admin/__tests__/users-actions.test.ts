@@ -1,26 +1,65 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@build/db", () => ({
-  AdminRole: {
-    SUPER_ADMIN: "SUPER_ADMIN",
-    CONTENT_MODERATOR: "CONTENT_MODERATOR",
-    SUPPORT_AGENT: "SUPPORT_AGENT",
-    FINANCE_MANAGER: "FINANCE_MANAGER",
-    AUDITOR: "AUDITOR",
-  },
-  prisma: {
-    user: {
-      findFirst: vi.fn(),
-      findUnique: vi.fn(),
-      update: vi.fn(),
+const usersServiceMock = vi.hoisted(() => ({
+  prepareInviteUser: vi.fn(),
+  prepareAssignUserRole: vi.fn(),
+  prepareDeleteUser: vi.fn(),
+  prepareDeleteUsersBulk: vi.fn(),
+  prepareResetUserCredentials: vi.fn(),
+}));
+
+const usersRepositoryMock = vi.hoisted(() => ({
+  deleteUserById: vi.fn(),
+  markPasswordResetRequired: vi.fn(),
+  updateUserRole: vi.fn(),
+}));
+
+const sharedMock = vi.hoisted(() => ({
+  safeAction: vi.fn(
+    async (
+      _name: string,
+      fn: (context: {
+        adminUserId: string;
+        adminRole: string;
+        actor: {
+          clerkId: string;
+          dbUserId: string;
+          adminRole: string;
+        };
+        correlationId: string;
+        requestStartedAt: number;
+      }) => Promise<unknown>,
+    ) => {
+      try {
+        const data = await fn({
+          adminUserId: "admin_user_1",
+          adminRole: "SUPER_ADMIN",
+          actor: {
+            clerkId: "clerk_admin_1",
+            dbUserId: "admin_user_1",
+            adminRole: "SUPER_ADMIN",
+          },
+          correlationId: "corr_1",
+          requestStartedAt: Date.now(),
+        });
+
+        return {
+          success: true,
+          data,
+          timestamp: new Date().toISOString(),
+        };
+      } catch (error) {
+        return {
+          success: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "An unexpected error occurred",
+        };
+      }
     },
-    idempotencyKey: {
-      findUnique: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-    },
-  },
+  ),
+  logAdminAction: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@clerk/nextjs/server", () => ({
@@ -37,62 +76,44 @@ vi.mock("@/lib/config/store.config", () => ({
   },
 }));
 
-vi.mock("../../lib/services/idempotency.service", () => ({
-  IdempotencyService: {
-    generateKey: vi.fn().mockReturnValue("scoped-idempotency-key"),
-    checkOrCreate: vi.fn().mockResolvedValue({ status: "new" }),
-    complete: vi.fn().mockResolvedValue(undefined),
-    fail: vi.fn().mockResolvedValue(undefined),
-  },
+vi.mock("../idempotency", () => ({
+  runWithIdempotency: vi.fn(
+    async <T,>(params: { run: () => Promise<T> }) => params.run(),
+  ),
 }));
 
-vi.mock("../shared", () => ({
-  safeAction: vi.fn(
-    async (
-      _name: string,
-      fn: (context: {
-        adminUserId: string;
-        adminRole: string;
-      }) => Promise<unknown>,
-    ) => {
-      try {
-        const data = await fn({
-          adminUserId: "admin_user_1",
-          adminRole: "admin",
-        });
-        return { success: true, data, timestamp: new Date().toISOString() };
-      } catch (error) {
-        return {
-          success: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "An unexpected error occurred",
-        };
-      }
-    },
-  ),
-  requireAdminGranularRole: vi.fn().mockResolvedValue("SUPER_ADMIN"),
-  logAdminAction: vi.fn().mockResolvedValue(undefined),
+vi.mock("../shared", () => sharedMock);
+
+vi.mock("@/lib/domains/users", () => ({
+  usersService: usersServiceMock,
+  usersRepository: usersRepositoryMock,
 }));
 
 import { clerkClient } from "@clerk/nextjs/server";
-import { prisma } from "@build/db";
-import { assignUserRole, inviteUser } from "../users";
+import { revalidatePath } from "next/cache";
+import {
+  assignUserRole,
+  deleteUser,
+  deleteUsersBulk,
+  inviteUser,
+  resetUserCredentials,
+} from "../users";
+import { safeAction } from "../shared";
 
 const IDEMPOTENCY_KEY = "idem-key-1";
 
 describe("admin users actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(prisma.idempotencyKey.findUnique).mockResolvedValue(
-      null as never,
-    );
-    vi.mocked(prisma.idempotencyKey.create).mockResolvedValue({} as never);
-    vi.mocked(prisma.idempotencyKey.update).mockResolvedValue({} as never);
   });
 
-  it("rejects invite when role is not assignable", async () => {
+  it("rejects invite when the users service denies the input", async () => {
+    usersServiceMock.prepareInviteUser.mockResolvedValue({
+      ok: false,
+      error: "INVALID_INPUT",
+      message: "Invalid role. Allowed roles: CLIENT, PROFESSIONAL, ADMIN",
+    });
+
     const response = await inviteUser(
       {
         email: "new.user@example.com",
@@ -103,43 +124,17 @@ describe("admin users actions", () => {
 
     expect(response.success).toBe(false);
     expect(response.error).toContain("Invalid role");
+    expect(clerkClient).not.toHaveBeenCalled();
   });
 
-  it("rejects inviteUser when role input is only whitespace", async () => {
-    const response = await inviteUser(
-      {
+  it("creates a Clerk invitation from the normalized service payload", async () => {
+    usersServiceMock.prepareInviteUser.mockResolvedValue({
+      ok: true,
+      data: {
         email: "new.user@example.com",
-        role: "   ",
+        role: "ADMIN",
       },
-      IDEMPOTENCY_KEY,
-    );
-
-    expect(response.success).toBe(false);
-    expect(response.error).toContain("Invalid role. Allowed roles:");
-    expect(prisma.user.findFirst).not.toHaveBeenCalled();
-    expect(clerkClient).not.toHaveBeenCalled();
-  });
-
-  it("rejects inviteUser when email input is empty or whitespace", async () => {
-    for (const email of ["", "   "]) {
-      const response = await inviteUser(
-        {
-          email,
-          role: "ADMIN",
-        },
-        IDEMPOTENCY_KEY,
-      );
-
-      expect(response.success).toBe(false);
-      expect(response.error).toBe("Valid email is required");
-    }
-
-    expect(prisma.user.findFirst).not.toHaveBeenCalled();
-    expect(clerkClient).not.toHaveBeenCalled();
-  });
-
-  it("normalizes lowercase role input for invite and persists uppercase role metadata", async () => {
-    vi.mocked(prisma.user.findFirst).mockResolvedValue(null as never);
+    });
 
     const createInvitation = vi.fn().mockResolvedValue({
       id: "inv_123",
@@ -153,29 +148,42 @@ describe("admin users actions", () => {
 
     const response = await inviteUser(
       {
-        email: "new.user@example.com",
+        email: " New.User@example.com ",
         role: "admin",
       },
       IDEMPOTENCY_KEY,
     );
 
     expect(response.success).toBe(true);
-    expect(createInvitation).toHaveBeenCalledWith(
+    expect(createInvitation).toHaveBeenCalledWith({
+      emailAddress: "new.user@example.com",
+      publicMetadata: { role: "ADMIN" },
+    });
+    expect(safeAction).toHaveBeenCalledWith(
+      "inviteUser",
+      expect.any(Function),
       expect.objectContaining({
-        publicMetadata: { role: "ADMIN" },
+        auditLog: expect.objectContaining({
+          operation: "INVITE_USER",
+          resourceType: "user",
+        }),
       }),
     );
   });
 
-  it("normalizes lowercase role input for role assignment", async () => {
-    vi.mocked(prisma.user.findUnique).mockResolvedValue({
-      id: "user_1",
-      email: "user@example.com",
-      role: "CLIENT",
-      clerkId: "clerk_1",
-    } as never);
-
-    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+  it("updates user role through the repository and Clerk metadata", async () => {
+    usersServiceMock.prepareAssignUserRole.mockResolvedValue({
+      ok: true,
+      data: {
+        user: {
+          id: "user_1",
+          email: "user@example.com",
+          role: "CLIENT",
+          clerkId: "clerk_1",
+        },
+        role: "PROFESSIONAL",
+      },
+    });
 
     const updateUserMetadata = vi.fn().mockResolvedValue({});
     vi.mocked(clerkClient).mockResolvedValue({
@@ -191,26 +199,25 @@ describe("admin users actions", () => {
     );
 
     expect(response.success).toBe(true);
-    expect(prisma.user.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "user_1" },
-        data: { role: "PROFESSIONAL" },
-      }),
+    expect(usersRepositoryMock.updateUserRole).toHaveBeenCalledWith(
+      "user_1",
+      "PROFESSIONAL",
     );
     expect(updateUserMetadata).toHaveBeenCalledWith("clerk_1", {
       publicMetadata: {
         role: "PROFESSIONAL",
       },
     });
+    expect(revalidatePath).toHaveBeenCalledWith("/users");
+    expect(revalidatePath).toHaveBeenCalledWith("/users/user_1");
   });
 
-  it("blocks self-demotion from ADMIN role", async () => {
-    vi.mocked(prisma.user.findUnique).mockResolvedValue({
-      id: "admin_user_1",
-      email: "admin@example.com",
-      role: "ADMIN",
-      clerkId: "clerk_admin_1",
-    } as never);
+  it("blocks self-demotion when the users service rejects the assignment", async () => {
+    usersServiceMock.prepareAssignUserRole.mockResolvedValue({
+      ok: false,
+      error: "SELF_ROLE_CHANGE_DENIED",
+      message: "Cannot remove your own admin platform role",
+    });
 
     const response = await assignUserRole(
       "admin_user_1",
@@ -220,31 +227,135 @@ describe("admin users actions", () => {
 
     expect(response.success).toBe(false);
     expect(response.error).toBe("Cannot remove your own admin platform role");
-    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(usersRepositoryMock.updateUserRole).not.toHaveBeenCalled();
     expect(clerkClient).not.toHaveBeenCalled();
   });
 
-  it("rejects assignUserRole when role is not assignable", async () => {
-    const response = await assignUserRole(
-      "user_1",
-      "invalid_role",
+  it("deletes a user via repository persistence and ignores Clerk 404s", async () => {
+    usersServiceMock.prepareDeleteUser.mockResolvedValue({
+      ok: true,
+      data: {
+        id: "user_1",
+        clerkId: "clerk_1",
+        email: "user@example.com",
+      },
+    });
+
+    const deleteUserFromClerk = vi
+      .fn()
+      .mockRejectedValue({ status: 404 } as never);
+    vi.mocked(clerkClient).mockResolvedValue({
+      users: {
+        deleteUser: deleteUserFromClerk,
+      },
+    } as never);
+
+    const response = await deleteUser("user_1", IDEMPOTENCY_KEY);
+
+    expect(response.success).toBe(true);
+    expect(usersRepositoryMock.deleteUserById).toHaveBeenCalledWith("user_1");
+    expect(revalidatePath).toHaveBeenCalledWith("/users");
+    expect(vi.mocked(safeAction).mock.calls[0]?.[0]).toBe("deleteUser");
+    expect(vi.mocked(safeAction).mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({
+        auditLog: expect.objectContaining({
+          operation: "DELETE_USER",
+          resourceType: "user",
+        }),
+      }),
+    );
+  });
+
+  it("returns per-item bulk delete results without direct Prisma calls", async () => {
+    usersServiceMock.prepareDeleteUsersBulk.mockResolvedValue({
+      ok: true,
+      data: {
+        userIds: ["user_1", "admin_user_1", "user_404"],
+      },
+    });
+    usersServiceMock.prepareDeleteUser
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          id: "user_1",
+          clerkId: "clerk_1",
+          email: "user1@example.com",
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        error: "SELF_DELETE_DENIED",
+        message: "Cannot delete your own admin account",
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        error: "USER_NOT_FOUND",
+        message: "User not found",
+      });
+
+    const deleteUserFromClerk = vi.fn().mockResolvedValue({});
+    vi.mocked(clerkClient).mockResolvedValue({
+      users: {
+        deleteUser: deleteUserFromClerk,
+      },
+    } as never);
+
+    const response = await deleteUsersBulk(
+      ["user_1", "admin_user_1", "user_404"],
       IDEMPOTENCY_KEY,
     );
 
-    expect(response.success).toBe(false);
-    expect(response.error).toContain("Invalid role. Allowed roles:");
-    expect(prisma.user.findUnique).not.toHaveBeenCalled();
-    expect(prisma.user.update).not.toHaveBeenCalled();
-    expect(clerkClient).not.toHaveBeenCalled();
+    expect(response.success).toBe(true);
+    expect(response.data).toEqual({
+      summary: {
+        total: 3,
+        successful: 1,
+        failed: 2,
+      },
+      results: [
+        { userId: "user_1", email: "user1@example.com", success: true },
+        {
+          userId: "admin_user_1",
+          success: false,
+          error: "Cannot delete your own admin account",
+        },
+        {
+          userId: "user_404",
+          success: false,
+          error: "User not found",
+        },
+      ],
+    });
   });
 
-  it("rejects assignUserRole when role input is only whitespace", async () => {
-    const response = await assignUserRole("user_1", "    ", IDEMPOTENCY_KEY);
+  it("marks credentials reset through the repository and Clerk metadata", async () => {
+    usersServiceMock.prepareResetUserCredentials.mockResolvedValue({
+      ok: true,
+      data: {
+        id: "user_1",
+        clerkId: "clerk_1",
+        email: "user@example.com",
+        passwordResetRequired: false,
+      },
+    });
 
-    expect(response.success).toBe(false);
-    expect(response.error).toContain("Invalid role. Allowed roles:");
-    expect(prisma.user.findUnique).not.toHaveBeenCalled();
-    expect(prisma.user.update).not.toHaveBeenCalled();
-    expect(clerkClient).not.toHaveBeenCalled();
+    const updateUserMetadata = vi.fn().mockResolvedValue({});
+    vi.mocked(clerkClient).mockResolvedValue({
+      users: {
+        updateUserMetadata,
+      },
+    } as never);
+
+    const response = await resetUserCredentials("user_1", IDEMPOTENCY_KEY);
+
+    expect(response.success).toBe(true);
+    expect(usersRepositoryMock.markPasswordResetRequired).toHaveBeenCalledWith(
+      "user_1",
+    );
+    expect(updateUserMetadata).toHaveBeenCalledWith("clerk_1", {
+      publicMetadata: {
+        passwordResetRequired: true,
+      },
+    });
   });
 });
