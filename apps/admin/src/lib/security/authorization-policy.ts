@@ -20,6 +20,7 @@ export enum AdminCapability {
   PROCESS_PAYOUTS = "PROCESS_PAYOUTS",
   MANAGE_VERIFICATION = "MANAGE_VERIFICATION",
   EXPORT_DATA = "EXPORT_DATA",
+  VIEW_CONTENT = "VIEW_CONTENT",
   MANAGE_CONTENT = "MANAGE_CONTENT",
   SYSTEM_ADMIN_ONLY = "SYSTEM_ADMIN_ONLY",
 }
@@ -70,6 +71,11 @@ export const ADMIN_CAPABILITY_ROLE_MAP: Record<
     AdminRole.CONTENT_MODERATOR,
   ],
   [AdminCapability.EXPORT_DATA]: [AdminRole.SUPER_ADMIN, AdminRole.AUDITOR],
+  [AdminCapability.VIEW_CONTENT]: [
+    AdminRole.SUPER_ADMIN,
+    AdminRole.CONTENT_MODERATOR,
+    AdminRole.SUPPORT_AGENT,
+  ],
   [AdminCapability.MANAGE_CONTENT]: [
     AdminRole.SUPER_ADMIN,
     AdminRole.CONTENT_MODERATOR,
@@ -88,7 +94,67 @@ const strictMutationPolicy = (
   rateLimit: { namespace, limit: 10, windowMs: 60_000 },
 });
 
+const lowRiskReadPolicy = (capability: AdminCapability): AdminActionPolicy => ({
+  allowedRoles: ADMIN_CAPABILITY_ROLE_MAP[capability],
+  capabilities: [capability],
+  risk: "low",
+});
+
 export const ADMIN_ACTION_POLICY_MAP = {
+  // ---- Stores (v2 / snake_case) ----
+  list_stores: lowRiskReadPolicy(AdminCapability.VIEW_CONTENT),
+  get_store_detail: lowRiskReadPolicy(AdminCapability.VIEW_CONTENT),
+  get_store_stats: lowRiskReadPolicy(AdminCapability.VIEW_CONTENT),
+  update_store: strictMutationPolicy(AdminCapability.MANAGE_CONTENT, "content"),
+  toggle_store_featured: strictMutationPolicy(
+    AdminCapability.MANAGE_CONTENT,
+    "content",
+  ),
+  verify_store: strictMutationPolicy(
+    AdminCapability.MANAGE_VERIFICATION,
+    "verification",
+  ),
+  reject_store: strictMutationPolicy(
+    AdminCapability.MANAGE_VERIFICATION,
+    "verification",
+  ),
+  delete_store: strictMutationPolicy(AdminCapability.MANAGE_CONTENT, "content"),
+
+  // ---- Properties (v2 / snake_case) ----
+  list_properties: lowRiskReadPolicy(AdminCapability.VIEW_CONTENT),
+  get_property_detail: lowRiskReadPolicy(AdminCapability.VIEW_CONTENT),
+  get_property_stats: lowRiskReadPolicy(AdminCapability.VIEW_CONTENT),
+  update_property: strictMutationPolicy(
+    AdminCapability.MANAGE_CONTENT,
+    "content",
+  ),
+  toggle_property_featured: strictMutationPolicy(
+    AdminCapability.MANAGE_CONTENT,
+    "content",
+  ),
+  verify_property: strictMutationPolicy(
+    AdminCapability.MANAGE_VERIFICATION,
+    "verification",
+  ),
+  reject_property: strictMutationPolicy(
+    AdminCapability.MANAGE_VERIFICATION,
+    "verification",
+  ),
+  change_property_status: strictMutationPolicy(
+    AdminCapability.MANAGE_VERIFICATION,
+    "verification",
+  ),
+  delete_property: strictMutationPolicy(
+    AdminCapability.MANAGE_CONTENT,
+    "content",
+  ),
+
+  // ---- Finance & Analytics (v2 / snake_case) ----
+  get_analytics: lowRiskReadPolicy(AdminCapability.VIEW_FINANCIALS),
+  get_metric_timeseries: lowRiskReadPolicy(AdminCapability.VIEW_FINANCIALS),
+  get_geo_distribution: lowRiskReadPolicy(AdminCapability.VIEW_FINANCIALS),
+  get_top_professionals: lowRiskReadPolicy(AdminCapability.VIEW_FINANCIALS),
+
   deleteUser: strictMutationPolicy(AdminCapability.MANAGE_USERS, "users"),
   deleteUsersBulk: strictMutationPolicy(AdminCapability.MANAGE_USERS, "users"),
   inviteUser: strictMutationPolicy(AdminCapability.MANAGE_USERS, "users"),
