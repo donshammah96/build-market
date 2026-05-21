@@ -15,6 +15,9 @@ const repositoryMock = vi.hoisted(() => ({
   countUsers: vi.fn(),
   findUserDetailsById: vi.fn(),
   findUserByEmail: vi.fn(),
+  findUserRoleTarget: vi.fn(),
+  findUserIdentityTarget: vi.fn(),
+  findUserCredentialsTarget: vi.fn(),
 }));
 
 vi.mock("@build/db", () => ({
@@ -29,7 +32,10 @@ import {
   getAdminUserDetails,
   listAdminUsers,
   prepareAssignUserRole,
+  prepareDeleteUser,
+  prepareDeleteUsersBulk,
   prepareInviteUser,
+  prepareResetUserCredentials,
 } from "../service";
 
 function actor(
@@ -165,6 +171,114 @@ describe("users domain service", () => {
       ok: false,
       error: "SELF_ROLE_CHANGE_DENIED",
       message: "Cannot remove your own admin platform role",
+    });
+  });
+
+  it("loads the target user during role assignment preparation", async () => {
+    repositoryMock.findUserRoleTarget.mockResolvedValue({
+      id: "user_1",
+      email: "user@example.com",
+      role: "CLIENT",
+      clerkId: "clerk_1",
+    });
+
+    const result = await prepareAssignUserRole(
+      actor(dbMock.AdminRole.SUPER_ADMIN),
+      {
+        userId: "user_1",
+        role: "professional",
+      },
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        user: {
+          id: "user_1",
+          email: "user@example.com",
+          role: "CLIENT",
+          clerkId: "clerk_1",
+        },
+        role: "PROFESSIONAL",
+      },
+    });
+  });
+
+  it("prevents self-deletion and missing targets during delete preparation", async () => {
+    const selfDelete = await prepareDeleteUser(
+      actor(dbMock.AdminRole.SUPER_ADMIN),
+      "admin_1",
+    );
+
+    expect(selfDelete).toEqual({
+      ok: false,
+      error: "SELF_DELETE_DENIED",
+      message: "Cannot delete your own admin account",
+    });
+
+    repositoryMock.findUserIdentityTarget.mockResolvedValue(null);
+    const missing = await prepareDeleteUser(
+      actor(dbMock.AdminRole.SUPER_ADMIN),
+      "user_404",
+    );
+
+    expect(missing).toEqual({
+      ok: false,
+      error: "USER_NOT_FOUND",
+      message: "User not found",
+    });
+  });
+
+  it("normalizes and bounds bulk delete input", async () => {
+    const result = await prepareDeleteUsersBulk(
+      actor(dbMock.AdminRole.SUPER_ADMIN),
+      {
+        userIds: [" user_1 ", "user_2", "user_1", ""],
+      },
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        userIds: ["user_1", "user_2"],
+      },
+    });
+
+    const tooMany = await prepareDeleteUsersBulk(
+      actor(dbMock.AdminRole.SUPER_ADMIN),
+      {
+        userIds: Array.from({ length: 51 }, (_, index) => `user_${index}`),
+      },
+    );
+
+    expect(tooMany).toEqual({
+      ok: false,
+      error: "BULK_LIMIT_EXCEEDED",
+      message: "Bulk delete limit exceeded (max 50 users per request)",
+    });
+  });
+
+  it("returns credentials target for reset preparation", async () => {
+    repositoryMock.findUserCredentialsTarget.mockResolvedValue({
+      id: "user_1",
+      clerkId: "clerk_1",
+      email: "user@example.com",
+      passwordResetRequired: false,
+    });
+
+    const result = await prepareResetUserCredentials(
+      actor(dbMock.AdminRole.SUPER_ADMIN),
+      "user_1",
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        id: "user_1",
+        clerkId: "clerk_1",
+        email: "user@example.com",
+        passwordResetRequired: false,
+      },
     });
   });
 });
