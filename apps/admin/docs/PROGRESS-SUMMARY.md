@@ -4,8 +4,8 @@
 
 ## Active Phase
 
-**Phase:** Phase 5 - Verification action slice
-**Status:** Implemented on `feat/admin-overhaul/actions-verification`, stacked on the unmerged `feat/admin-overhaul/actions-users` Phase 5 baseline after the Phase 4 integration tag `admin-overhaul/phase-4-complete`.
+**Phase:** Track C Phase 7 - Observability foundation (complete) / Track A Phase 5 - Audit/export action slice (next)
+**Status:** Track C implemented on `feat/admin-overhaul/observability`, ready for PR to `integration/admin-overhaul`. Track B `feat/admin-overhaul/ui-tokens` (tokens + route boundaries) runs in parallel with Track A.
 
 **Completed:**
 
@@ -23,15 +23,15 @@
 - Phase 5 users action slice added: `safeParse` action validation, service/repository delegation for all user mutations, declarative audit coverage, self-delete protection, and refreshed users action-boundary tests.
 - Phase 5 verification action slice added: `safeAction` migration, verification service-backed queue/stats/details/mutation adapters, normalized document verification contracts, updated verification route handlers, and refreshed action/route/domain tests.
 - Phase 5 verification bug fixes applied: fixed API route audit gaps, privilege escalation fallbacks, unhandled parsing exceptions, and string concatenation bugs.
+- Phase 5 users and verification PRs merged; tag `admin-overhaul/phase-5-complete` pushed.
+- Phase 7 (Track C) observability foundation added on `feat/admin-overhaul/observability`: structured `getAdminLogger()` with PII exclusion, `AsyncLocalStorage`-backed correlation ID threading, typed `AdminOperationName` registry (40+ operations), and `safeAction`/`safeVerificationAction` integration emitting structured log events at every outcome path.
 
 **Remaining steps:**
 
-- Open and merge the Phase 5 users action PR from `feat/admin-overhaul/actions-users` into `integration/admin-overhaul`.
-- Open and merge the Phase 5 verification action PR from `feat/admin-overhaul/actions-verification`, stacked on the users slice baseline.
-- Start Track C Phase 7 observability on a separate branch after the users slice is stable enough to consume the improved audit/logger primitives.
-- Continue Track A with the audit/export slice so direct Prisma and `.parse()` drift drop in the remaining high-risk export/compliance readers and mutations.
-- Start Track B Phase 6 token and route-boundary work after the current action slice lands, keeping UI-only changes isolated from Track A.
-- Continue reducing lint/security-drift warnings inside the active action/security slices instead of deferring new debt.
+- Merge Track C `feat/admin-overhaul/observability` PR into `integration/admin-overhaul`; apply `admin-overhaul/phase-7-complete` tag.
+- Start Track A `feat/admin-overhaul/actions-audit`: migrate `audit.ts` and `compliance/route.ts` off direct Prisma / `.parse()` / `@ts-nocheck`, consuming the Phase 7 structured logger. Fix `professionals.ts` log-safety drift.
+- Start Track B `feat/admin-overhaul/ui-tokens` in parallel: create `tokens.css`, import in `globals.css`, add `loading.tsx`/`error.tsx` for 5 route segments, adopt tokens in `CardList.tsx`, `AppBarChart.tsx`, `AddUser.tsx`.
+- Continue reducing remaining drift: 13 direct-Prisma action files, 16 `.parse()` call sites, 12 unsafe mutations, 18 `@ts-nocheck` files.
 
 ## Slice Status Registry
 
@@ -75,13 +75,13 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 
 ## Latest Verification
 
-- `pnpm run admin:check-types` -> pass.
-- `pnpm run admin:lint` -> pass with 156 warnings.
-- `pnpm run admin:check-env-contract` -> pass; all env templates cover 59 boundary keys.
-- `pnpm run admin:report-security-drift` -> pass with known drift counts: env boundary 69, direct Prisma action files 13, unsafe mutations 12, action `.parse()` 16, `@ts-nocheck` 18, unstructured logging 103, log safety 3, missing audit log 3.
-- `pnpm run admin:report-security-drift:strict` -> fail with known Phase 4-12 drift backlog.
-- `pnpm run admin:test:all` -> pass; 26 files passed, 177 of 177 tests passed.
-- `pnpm -C apps/admin exec vitest run src/lib/domains/verification/__tests__/service.test.ts src/actions/admin/__tests__/verification-actions.test.ts __tests__/admin-verification/verify-api.test.ts __tests__/admin-verification/verify-document-api.test.ts --pool=threads --maxWorkers=1` -> pass; 4 files passed, 26 of 26 tests passed.
+- `pnpm run admin:check-types` → pass.
+- `pnpm run admin:lint` → pass with known warnings backlog.
+- `pnpm run admin:check-env-contract` → pass; 59 boundary keys.
+- `pnpm run admin:report-security-drift` → pass with known drift counts: env boundary 69, direct Prisma action files 13, unsafe mutations 12, action `.parse()` 16, `@ts-nocheck` 18, unstructured logging 103, log safety 3, missing audit log 2.
+- `pnpm run admin:report-security-drift:strict` → fail with known Phase 4-12 drift backlog.
+- `pnpm run admin:test:all` → pass; 29 files passed, 213 of 213 tests passed.
+- `pnpm -C apps/admin exec vitest run src/lib/infrastructure/__tests__/logger.test.ts src/lib/infrastructure/__tests__/correlation.test.ts src/lib/observability/__tests__/operation-names.test.ts --pool=threads --maxWorkers=1` → 3 files, 36 tests passed.
 
 ## Completed Phases
 
@@ -91,8 +91,9 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 4. Phase 3 Auth Hardening - completed 2026-05-18; checkpoint tag `admin-overhaul/phase-3-complete`.
 5. Phase 10 Feature Flags - completed 2026-05-18; checkpoint tag `admin-overhaul/phase-10-complete`.
 6. Phase 4 Domain/Repository Layer - completed 2026-05-18; checkpoint tag `admin-overhaul/phase-4-complete`.
-7. Phase 5 Users Action Slice - implemented 2026-05-18 on `feat/admin-overhaul/actions-users`; pending PR merge.
-8. Phase 5 Verification Action Slice - implemented 2026-05-18 on `feat/admin-overhaul/actions-verification`; pending PR merge and follow-on action slices for audit/export, finance, content, and leads/services/professionals.
+7. Phase 5 Users Action Slice - merged 2026-05-21; checkpoint tag `admin-overhaul/phase-5-complete`.
+8. Phase 5 Verification Action Slice - merged 2026-05-21; pending follow-on action slices for audit/export, finance, content, and leads/services/professionals.
+9. Phase 7 (Track C) Observability Foundation - implemented 2026-05-21 on `feat/admin-overhaul/observability`; pending PR merge. Structured logger, correlation threading, operation name registry, `safeAction` integration.
 
 ## Rollback Contracts
 
@@ -108,4 +109,4 @@ Phase 10 flags are runtime-readable through `adminEnvConfig`; toggling them requ
 
 ## Next Priority
 
-Continue Phase 5 on the audit/GDPR/export slice after merging the stacked users and verification action branches, then sequence finance/analytics, stores/properties/projects, and leads/services/professionals.
+Merge Track C `feat/admin-overhaul/observability` PR. Then open Track A `feat/admin-overhaul/actions-audit` to migrate `audit.ts` and `compliance/route.ts` off direct Prisma and `.parse()`, consuming the Phase 7 logger. Open Track B `feat/admin-overhaul/ui-tokens` in parallel for the token system and route-boundary work. After Track A merges, continue with `finance/analytics`, `stores/properties/projects`, and `leads/services/professionals` action slices.

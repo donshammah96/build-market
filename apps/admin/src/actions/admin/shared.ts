@@ -21,6 +21,11 @@ import { checkRateLimit } from "@/lib/api/rate-limit";
 import type { ActionResponse, AdminActionError } from "./types";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 import { omitUndefined } from "@/lib/utils";
+import {
+  getAdminLogger,
+  type AdminLogOutcome,
+} from "@/lib/infrastructure/logger";
+import { withAdminCorrelation } from "@/lib/infrastructure/correlation";
 
 export type {
   ActionResponse,
@@ -427,21 +432,44 @@ export async function safeAction<T>(
   options?: SafeActionOptions,
 ): Promise<ActionResponse<T>> {
   const timestamp = new Date().toISOString();
+  const requestStartedAt = Date.now();
+  const correlationId = crypto.randomUUID();
+  const logger = getAdminLogger();
+
+  function emitLog(
+    outcome: AdminLogOutcome,
+    adminRole: string,
+    extra?: { errorCode?: string; errorMessage?: string },
+  ): void {
+    logger.info({
+      correlationId,
+      operationName: actionName,
+      adminRole,
+      outcome,
+      durationMs: Date.now() - requestStartedAt,
+      ...omitUndefined(extra ?? {}),
+    });
+  }
 
   try {
     const actorResult = await resolveAdminActor();
 
     if (!actorResult.success) {
+      emitLog("unauthorized", "unknown", {
+        errorCode: actorResult.error.code,
+      });
       return adminActionFailure(
         { ...actorResult.error, action: actionName },
         timestamp,
       );
     }
 
+    const adminRole = String(actorResult.actor.adminRole);
     const policy = getAdminActionPolicy(actionName);
     const actionOptions = mergeSafeActionOptions(policy, options);
 
     if (!policy.allowedRoles.includes(actorResult.actor.adminRole)) {
+      emitLog("forbidden", adminRole, { errorCode: "FORBIDDEN" });
       return adminActionFailure(
         adminActionError("FORBIDDEN", "Admin action policy denied", actionName),
         timestamp,
@@ -454,6 +482,7 @@ export async function safeAction<T>(
         capability,
       );
       if (!capabilityResult.success) {
+        emitLog("forbidden", adminRole, { errorCode: "FORBIDDEN" });
         return adminActionFailure(
           adminActionError(
             "FORBIDDEN",
@@ -471,6 +500,7 @@ export async function safeAction<T>(
       actionOptions.recentAuth,
     );
     if (staleSessionError) {
+      emitLog("session_stale", adminRole, { errorCode: "SESSION_STALE" });
       return adminActionFailure(staleSessionError, timestamp);
     }
 
@@ -480,16 +510,19 @@ export async function safeAction<T>(
       actionOptions.rateLimit,
     );
     if (rateLimitError) {
+      emitLog("rate_limited", adminRole, { errorCode: "RATE_LIMITED" });
       return adminActionFailure(rateLimitError, timestamp);
     }
 
-    const data = await fn({
-      actor: actorResult.actor,
-      adminUserId: actorResult.actor.dbUserId,
-      adminRole: actorResult.actor.adminRole,
-      correlationId: crypto.randomUUID(),
-      requestStartedAt: Date.now(),
-    });
+    const data = await withAdminCorrelation(correlationId, () =>
+      fn({
+        actor: actorResult.actor,
+        adminUserId: actorResult.actor.dbUserId,
+        adminRole: actorResult.actor.adminRole,
+        correlationId,
+        requestStartedAt,
+      }),
+    );
 
     await recordDeclarativeAudit(
       actorResult.actor,
@@ -497,6 +530,7 @@ export async function safeAction<T>(
       data,
     );
 
+    emitLog("success", adminRole);
     return {
       success: true,
       data,
@@ -505,6 +539,17 @@ export async function safeAction<T>(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Admin action failed";
+
+    // Best-effort log — actor role may not be resolved at this point
+    logger.error({
+      correlationId,
+      operationName: actionName,
+      adminRole: "unknown",
+      outcome: "internal_error",
+      durationMs: Date.now() - requestStartedAt,
+      errorCode: "ACTION_FAILED",
+      errorMessage: message,
+    });
 
     return adminActionFailure(
       adminActionError("ACTION_FAILED", message, actionName),
@@ -525,21 +570,42 @@ export async function safeVerificationAction<T>(
   options?: SafeActionOptions,
 ): Promise<ActionResponse<T>> {
   const timestamp = new Date().toISOString();
+  const requestStartedAt = Date.now();
+  const correlationId = crypto.randomUUID();
+  const logger = getAdminLogger();
+
+  function emitLog(
+    outcome: AdminLogOutcome,
+    adminRole: string,
+    extra?: { errorCode?: string; errorMessage?: string },
+  ): void {
+    logger.info({
+      correlationId,
+      operationName: actionName,
+      adminRole,
+      outcome,
+      durationMs: Date.now() - requestStartedAt,
+      ...omitUndefined(extra ?? {}),
+    });
+  }
 
   try {
     const actorResult = await resolveAdminActor();
 
     if (!actorResult.success) {
+      emitLog("unauthorized", "unknown", { errorCode: actorResult.error.code });
       return adminActionFailure(
         { ...actorResult.error, action: actionName },
         timestamp,
       );
     }
 
+    const adminRole = String(actorResult.actor.adminRole);
     const policy = getAdminActionPolicy(actionName);
     const actionOptions = mergeSafeActionOptions(policy, options);
 
     if (!policy.allowedRoles.includes(actorResult.actor.adminRole)) {
+      emitLog("forbidden", adminRole, { errorCode: "FORBIDDEN" });
       return adminActionFailure(
         adminActionError("FORBIDDEN", "Admin action policy denied", actionName),
         timestamp,
@@ -552,6 +618,7 @@ export async function safeVerificationAction<T>(
       actionOptions.recentAuth,
     );
     if (staleSessionError) {
+      emitLog("session_stale", adminRole, { errorCode: "SESSION_STALE" });
       return adminActionFailure(staleSessionError, timestamp);
     }
 
@@ -561,16 +628,19 @@ export async function safeVerificationAction<T>(
       actionOptions.rateLimit,
     );
     if (rateLimitError) {
+      emitLog("rate_limited", adminRole, { errorCode: "RATE_LIMITED" });
       return adminActionFailure(rateLimitError, timestamp);
     }
 
-    const data = await fn({
-      actor: actorResult.actor,
-      adminUserId: actorResult.actor.dbUserId,
-      adminRole: actorResult.actor.adminRole,
-      correlationId: crypto.randomUUID(),
-      requestStartedAt: Date.now(),
-    });
+    const data = await withAdminCorrelation(correlationId, () =>
+      fn({
+        actor: actorResult.actor,
+        adminUserId: actorResult.actor.dbUserId,
+        adminRole: actorResult.actor.adminRole,
+        correlationId,
+        requestStartedAt,
+      }),
+    );
 
     await recordDeclarativeAudit(
       actorResult.actor,
@@ -578,6 +648,7 @@ export async function safeVerificationAction<T>(
       data,
     );
 
+    emitLog("success", adminRole);
     return {
       success: true,
       data,
@@ -586,6 +657,16 @@ export async function safeVerificationAction<T>(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Admin action failed";
+
+    logger.error({
+      correlationId,
+      operationName: actionName,
+      adminRole: "unknown",
+      outcome: "internal_error",
+      durationMs: Date.now() - requestStartedAt,
+      errorCode: "ACTION_FAILED",
+      errorMessage: message,
+    });
 
     return adminActionFailure(
       adminActionError("ACTION_FAILED", message, actionName),
