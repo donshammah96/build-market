@@ -3,7 +3,6 @@ import { AdminRole } from "@build/db";
 import { type AuthContext, withAdminRole } from "@/lib/api/api-middleware";
 import { HttpStatus } from "@/lib/api/api-response";
 import {
-  apiError,
   executeResilient,
   getClientLogger,
   initializeCorrelationId,
