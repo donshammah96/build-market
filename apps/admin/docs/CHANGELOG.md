@@ -1,5 +1,34 @@
 # apps/admin Changelog
 
+## [2026-05-21] Finance/Analytics + Stores/Properties Action Slice
+
+### Added (Finance/Analytics + Stores/Properties Action Slice)
+
+- **Domain/Stores**: Created a brand new domain slice under `src/lib/domains/stores/` (`contracts.ts`, `repository.ts`, `service.ts`, and full unit tests) with complete business rules, Prisma-free repository, and security policy capability gates (`VIEW_CONTENT` for reads, `MANAGE_CONTENT` for updates/featured toggle, and `MANAGE_VERIFICATION` / `strictMutationPolicy` / 180s recentAuth freshness for deletions).
+- **Domain/Properties**: Created a brand new domain slice under `src/lib/domains/properties/` (`contracts.ts`, `repository.ts`, `service.ts`, and full unit tests) with same capability-split policy.
+- **Domain/Finance (Analytics)**: Extended finance repository with 8 specialized analytical aggregation queries (time-series metrics, active stores/properties, verification rates, transactional value, geographic distribution, and top performing professionals). Extended finance service with 4 analytics methods (`getPlatformAnalytics`, `getMetricTimeSeries`, `getGeographicDistribution`, `getTopProfessionals`) protected by the `VIEW_FINANCIALS` capability gate. Added comprehensive unit tests under `src/lib/domains/finance/__tests__/analytics.test.ts`.
+
+### Changed (Finance/Analytics + Stores/Properties Action Slice)
+
+- **Actions/Stores**: Rewrote `src/actions/admin/stores.ts` to utilize `safeAction` and `storesService`. Added Zod-based validation, exactOptionalPropertyTypes compliance utilizing `omitUndefined` to map action inputs to domain contracts safely, and declarative `auditLog` annotations for mutations (`updateStore`, `deleteStore`), completely removing legacy direct Prisma usage, `@ts-nocheck`, and the unstructured `logAdminAction`.
+- **Actions/Properties**: Rewrote `src/actions/admin/properties.ts` in the identical secure, Prisma-free pattern.
+- **Actions/Analytics**: Rewrote `src/actions/admin/analytics.ts` to completely eliminate direct Prisma usage and raw SQL queries, delegating fully to `financeService`.
+- **Infrastructure/Security**: Added `VIEW_CONTENT` to the central capability registry `src/lib/security/authorization-policy.ts` and mapped it to roles (`SUPER_ADMIN`, `CONTENT_MODERATOR`, `SUPPORT_AGENT`). Registered 12 new snake_case operation names to `src/lib/observability/operation-names.ts` covering stores, properties, and finance/analytics actions.
+
+### Tests (Finance/Analytics + Stores/Properties Action Slice)
+
+- Created `src/actions/admin/__tests__/stores-actions.test.ts` (12 tests) and `src/actions/admin/__tests__/properties-actions.test.ts` (12 tests) to assert strict boundary integration, capability policy gates, validation, and fresh-session enforcement (`recentAuth: 180`).
+- Created `src/actions/admin/__tests__/analytics-actions.test.ts` (6 tests) to test action-delegation for all platform and metric actions.
+
+**Files changed:** `apps/admin/src/actions/admin/analytics.ts`, `apps/admin/src/actions/admin/properties.ts`, `apps/admin/src/actions/admin/stores.ts`, `apps/admin/src/lib/domains/finance/contracts.ts`, `apps/admin/src/lib/domains/finance/repository.ts`, `apps/admin/src/lib/domains/finance/service.ts`, `apps/admin/src/lib/observability/operation-names.ts`, `apps/admin/src/lib/security/authorization-policy.ts`, `apps/admin/src/actions/admin/__tests__/stores-actions.test.ts`, `apps/admin/src/actions/admin/__tests__/properties-actions.test.ts` [NEW], `apps/admin/src/actions/admin/__tests__/analytics-actions.test.ts` [NEW], `apps/admin/src/lib/domains/finance/__tests__/analytics.test.ts` [NEW], `apps/admin/src/lib/domains/properties/` [NEW], `apps/admin/src/lib/domains/stores/` [NEW]
+
+**Drift reduction:** directPrismaInActions −3 files; zodParseDrift −6 call sites; `@ts-nocheck` −3 files; unstructuredLogging −3 findings.
+
+**Verification:**
+
+- `pnpm run admin:check-types` → pass.
+- `pnpm run admin:test:all` → pass; 35 files passed, 294 of 294 tests passed.
+
 ## [2026-05-21] Track A — Audit/Export Action Slice (Phase 5 continuation)
 
 ### Changed (Track A — Audit/Export Action Slice)
@@ -58,8 +87,6 @@
 - `pnpm run admin:check-env-contract` → pass; 59 boundary keys.
 - `pnpm run admin:test:all` → pass; 29 files passed, 213 of 213 tests passed.
 - Targeted suite: `pnpm -C apps/admin exec vitest run src/lib/infrastructure/__tests__/logger.test.ts src/lib/infrastructure/__tests__/correlation.test.ts src/lib/observability/__tests__/operation-names.test.ts --pool=threads --maxWorkers=1` → 3 files, 36 tests passed.
-
-
 
 ### Fixed (Phase 5 - Verification action bug fixes)
 

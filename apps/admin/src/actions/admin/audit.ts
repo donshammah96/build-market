@@ -70,22 +70,19 @@ export async function getAuditLogStats() {
  * Capability: VIEW_FINANCIALS.
  */
 export async function getAuditLogActions() {
-  return safeAction(
-    AdminOperationName.GET_AUDIT_ACTIONS,
-    async ({ actor }) => {
-      const result = await auditService.getDistinctActions({
-        dbUserId: actor.dbUserId,
-        clerkId: actor.clerkId,
-        adminRole: actor.adminRole,
-      });
+  return safeAction(AdminOperationName.GET_AUDIT_ACTIONS, async ({ actor }) => {
+    const result = await auditService.getDistinctActions({
+      dbUserId: actor.dbUserId,
+      clerkId: actor.clerkId,
+      adminRole: actor.adminRole,
+    });
 
-      if (!result.ok) {
-        throw new Error(result.message ?? "Audit actions query failed");
-      }
+    if (!result.ok) {
+      throw new Error(result.message ?? "Audit actions query failed");
+    }
 
-      return result.data;
-    },
-  );
+    return result.data;
+  });
 }
 
 /**

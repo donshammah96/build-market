@@ -32,17 +32,18 @@ const rateLimitMock = vi.hoisted(() => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
 }));
 
-const storesServiceMock = vi.hoisted(() => ({
-  storesService: {
-    listStorePage: vi.fn(),
-    getStoreDetail: vi.fn(),
-    getStoreStats: vi.fn(),
-    updateStore: vi.fn(),
-    toggleStoreFeatured: vi.fn(),
-    verifyStore: vi.fn(),
-    rejectStore: vi.fn(),
-    deleteStore: vi.fn(),
-    buildStoreListQuery: vi.fn(),
+const propertiesServiceMock = vi.hoisted(() => ({
+  propertiesService: {
+    listPropertyPage: vi.fn(),
+    getPropertyDetail: vi.fn(),
+    getPropertyStats: vi.fn(),
+    updateProperty: vi.fn(),
+    togglePropertyFeatured: vi.fn(),
+    verifyProperty: vi.fn(),
+    rejectProperty: vi.fn(),
+    changePropertyStatus: vi.fn(),
+    deleteProperty: vi.fn(),
+    buildPropertyListQuery: vi.fn(),
   },
 }));
 
@@ -54,7 +55,7 @@ vi.mock("@build/db", () => ({
 }));
 vi.mock("@clerk/nextjs/server", () => ({ auth: clerkMock.auth }));
 vi.mock("@/lib/api/rate-limit", () => rateLimitMock);
-vi.mock("@/lib/domains/stores/service", () => storesServiceMock);
+vi.mock("@/lib/domains/properties/service", () => propertiesServiceMock);
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/config/feature-flags", () => ({
   AdminFeatureFlag: {
@@ -62,26 +63,22 @@ vi.mock("@/lib/config/feature-flags", () => ({
   },
   isAdminFeatureEnabled: vi.fn().mockReturnValue(false),
 }));
-vi.mock("../idempotency", () => ({
-  runWithIdempotency: vi.fn(async <T>(params: { run: () => Promise<T> }) =>
-    params.run(),
-  ),
-}));
 
 // ============================================================================
 // Imports (after mocks)
 // ============================================================================
 
 import {
-  getStores,
-  getStoreDetails,
-  updateStore,
-  verifyStore,
-  rejectStore,
-  deleteStore,
-} from "../stores";
+  getProperties,
+  getPropertyDetails,
+  updateProperty,
+  verifyProperty,
+  rejectProperty,
+  changePropertyStatus,
+  deleteProperty,
+} from "../properties";
 
-const mockService = storesServiceMock.storesService;
+const mockService = propertiesServiceMock.propertiesService;
 
 // ============================================================================
 // Auth helpers
@@ -97,7 +94,6 @@ function mockActorAs(role: string) {
 }
 
 function mockVerificationActorAs(role: string) {
-  // safeVerificationAction checks auth_time for freshness (maxAgeSeconds: 300)
   const freshAuthTime = Math.floor(Date.now() / 1000);
   clerkMock.auth.mockResolvedValue({
     userId: "clerk_test",
@@ -111,132 +107,121 @@ function mockVerificationActorAs(role: string) {
 }
 
 // ============================================================================
-// getStores
+// getProperties
 // ============================================================================
 
-describe("getStores action", () => {
+describe("getProperties action", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("returns page result on service success", async () => {
     mockActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
-    mockService.listStorePage.mockResolvedValue({
+    mockService.listPropertyPage.mockResolvedValue({
       ok: true,
       data: {
-        stores: [],
+        properties: [],
         meta: { total: 0, page: 1, limit: 10, totalPages: 0 },
         filters: {},
       },
     });
-    const result = await getStores();
+    const result = await getProperties();
     expect(result.success).toBe(true);
   });
 
-  it("rejects invalid filter (page < 1)", async () => {
-    const result = await getStores({ page: -1 });
+  it("rejects invalid page (< 1)", async () => {
+    const result = await getProperties({ page: 0 });
     expect(result.success).toBe(false);
   });
 
   it("propagates service error", async () => {
     mockActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
-    mockService.listStorePage.mockResolvedValue({
+    mockService.listPropertyPage.mockResolvedValue({
       ok: false,
-      code: "STORES_POLICY_DENIED",
+      code: "PROPERTIES_POLICY_DENIED",
       message: "denied",
     });
-    const result = await getStores();
+    const result = await getProperties();
     expect(result.success).toBe(false);
   });
 
   it("returns UNAUTHORIZED when not authenticated", async () => {
     clerkMock.auth.mockResolvedValue({ userId: null });
-    const result = await getStores();
+    const result = await getProperties();
     expect(result.success).toBe(false);
   });
 });
 
 // ============================================================================
-// getStoreDetails
+// getPropertyDetails
 // ============================================================================
 
-describe("getStoreDetails action", () => {
-  it("returns store detail on success", async () => {
+describe("getPropertyDetails action", () => {
+  it("propagates PROPERTIES_NOT_FOUND", async () => {
     mockActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
-    mockService.getStoreDetail.mockResolvedValue({
-      ok: true,
-      data: { id: "s1", name: "Test" },
-    });
-    const result = await getStoreDetails("s1");
-    expect(result.success).toBe(true);
-  });
-
-  it("propagates STORES_NOT_FOUND", async () => {
-    mockActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
-    mockService.getStoreDetail.mockResolvedValue({
+    mockService.getPropertyDetail.mockResolvedValue({
       ok: false,
-      code: "STORES_NOT_FOUND",
-      message: "Store not found",
+      code: "PROPERTIES_NOT_FOUND",
+      message: "Property not found",
     });
-    const result = await getStoreDetails("s1");
+    const result = await getPropertyDetails("p1");
     expect(result.success).toBe(false);
   });
 });
 
 // ============================================================================
-// updateStore
+// updateProperty
 // ============================================================================
 
-describe("updateStore action", () => {
-  it("rejects empty name (fails safeParse min(1))", async () => {
-    const result = await updateStore("s1", { name: "" });
+describe("updateProperty action", () => {
+  it("rejects empty title (fails safeParse min(1))", async () => {
+    const result = await updateProperty("p1", { title: "" });
     expect(result.success).toBe(false);
   });
 
   it("delegates valid data to service", async () => {
     mockVerificationActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
-    mockService.updateStore.mockResolvedValue({
+    mockService.updateProperty.mockResolvedValue({
       ok: true,
       data: {
         updated: true,
-        store: {
-          id: "s1",
-          name: "New",
-          verified: true,
+        property: {
+          id: "p1",
+          title: "New",
           featured: false,
+          status: "AVAILABLE",
           updatedAt: new Date(),
         },
       },
     });
-    const result = await updateStore("s1", { name: "New" });
+    const result = await updateProperty("p1", { title: "New" });
     expect(result.success).toBe(true);
-    expect(mockService.updateStore).toHaveBeenCalledWith(
+    expect(mockService.updateProperty).toHaveBeenCalledWith(
       expect.any(Object),
-      "s1",
-      { name: "New" },
+      "p1",
+      { title: "New" },
     );
   });
 });
 
 // ============================================================================
-// verifyStore (safeVerificationAction — needs fresh auth_time)
+// verifyProperty (safeVerificationAction — requires fresh auth_time)
 // ============================================================================
 
-describe("verifyStore action", () => {
-  it("delegates to service with storeId and notes", async () => {
+describe("verifyProperty action", () => {
+  it("delegates to service with propertyId and notes", async () => {
     mockVerificationActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
-    mockService.verifyStore.mockResolvedValue({
+    mockService.verifyProperty.mockResolvedValue({
       ok: true,
       data: {
         verified: true,
-        store: { id: "s1", name: "Test", verified: true },
-        oldStatus: "PENDING",
+        property: { id: "p1", title: "Test", verificationStatus: "VERIFIED" },
         notes: "ok",
       },
     });
-    const result = await verifyStore("s1", "idem-1", "ok");
+    const result = await verifyProperty("p1", "ok");
     expect(result.success).toBe(true);
-    expect(mockService.verifyStore).toHaveBeenCalledWith(
+    expect(mockService.verifyProperty).toHaveBeenCalledWith(
       expect.any(Object),
-      "s1",
+      "p1",
       "ok",
     );
   });
@@ -255,53 +240,75 @@ describe("verifyStore action", () => {
         isActive: true,
       },
     });
-    const result = await verifyStore("s1", "idem-stale", "notes");
+    const result = await verifyProperty("p1", "notes");
     expect(result.success).toBe(false);
   });
 });
 
 // ============================================================================
-// rejectStore
+// rejectProperty
 // ============================================================================
 
-describe("rejectStore action", () => {
+describe("rejectProperty action", () => {
   it("delegates reason to service", async () => {
     mockVerificationActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
-    mockService.rejectStore.mockResolvedValue({
+    mockService.rejectProperty.mockResolvedValue({
       ok: true,
       data: {
         rejected: true,
-        store: { id: "s1", name: "Test", verified: false },
-        oldStatus: "PENDING",
+        property: { id: "p1", title: "Bad", verificationStatus: "REJECTED" },
       },
     });
-    const result = await rejectStore("s1", "Missing docs", "idem-2");
+    const result = await rejectProperty("p1", "Missing docs");
     expect(result.success).toBe(true);
-    expect(mockService.rejectStore).toHaveBeenCalledWith(
+    expect(mockService.rejectProperty).toHaveBeenCalledWith(
       expect.any(Object),
-      "s1",
+      "p1",
       "Missing docs",
-      undefined,
     );
   });
 });
 
 // ============================================================================
-// deleteStore
+// changePropertyStatus
 // ============================================================================
 
-describe("deleteStore action", () => {
+describe("changePropertyStatus action", () => {
+  it("delegates status to service", async () => {
+    mockVerificationActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
+    mockService.changePropertyStatus.mockResolvedValue({
+      ok: true,
+      data: {
+        updated: true,
+        property: { id: "p1", title: "Sold", status: "SOLD" },
+      },
+    });
+    const result = await changePropertyStatus("p1", "SOLD");
+    expect(result.success).toBe(true);
+    expect(mockService.changePropertyStatus).toHaveBeenCalledWith(
+      expect.any(Object),
+      "p1",
+      "SOLD",
+    );
+  });
+});
+
+// ============================================================================
+// deleteProperty
+// ============================================================================
+
+describe("deleteProperty action", () => {
   it("delegates to service", async () => {
     mockVerificationActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
-    mockService.deleteStore.mockResolvedValue({
+    mockService.deleteProperty.mockResolvedValue({
       ok: true,
-      data: { deleted: true, storeId: "s1", storeName: "Deleted" },
+      data: { deleted: true, propertyId: "p1", propertyTitle: "Deleted" },
     });
-    const result = await deleteStore("s1", "idem-3");
+    const result = await deleteProperty("p1");
     expect(result.success).toBe(true);
-    expect(mockService.deleteStore).toHaveBeenCalledWith(
+    expect(mockService.deleteProperty).toHaveBeenCalledWith(
       expect.any(Object),
-      "s1",
+      "p1",
     );
   });
 });
