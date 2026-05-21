@@ -4,8 +4,8 @@
 
 ## Active Phase
 
-**Phase:** Track C Phase 7 - Observability foundation (complete) / Track A Phase 5 - Audit/export action slice (next)
-**Status:** Track C implemented on `feat/admin-overhaul/observability`, ready for PR to `integration/admin-overhaul`. Track B `feat/admin-overhaul/ui-tokens` (tokens + route boundaries) runs in parallel with Track A.
+**Phase:** Track A (complete) + Track B (complete) — open PRs for both; next is `finance/analytics` action slice
+**Status:** Both Track A (`feat/admin-overhaul/actions-audit`) and Track B (`feat/admin-overhaul/ui-tokens`) committed and pushed. PRs ready to open. Next priority is `stores/properties/projects` or `finance/analytics` action slice.
 
 **Completed:**
 
@@ -20,18 +20,17 @@
 - Phase 4 finance domain slice added: finance contracts, repository, service, typed results, policy checks, overview tests, and repository contract tests.
 - Phase 4 audit domain slice added: audit contracts, repository, service, typed results, policy checks, audit page/stat tests, and repository contract tests.
 - Phase 4 checkpoint merged on `integration/admin-overhaul` and tagged `admin-overhaul/phase-4-complete`.
-- Phase 5 users action slice added: `safeParse` action validation, service/repository delegation for all user mutations, declarative audit coverage, self-delete protection, and refreshed users action-boundary tests.
-- Phase 5 verification action slice added: `safeAction` migration, verification service-backed queue/stats/details/mutation adapters, normalized document verification contracts, updated verification route handlers, and refreshed action/route/domain tests.
-- Phase 5 verification bug fixes applied: fixed API route audit gaps, privilege escalation fallbacks, unhandled parsing exceptions, and string concatenation bugs.
-- Phase 5 users and verification PRs merged; tag `admin-overhaul/phase-5-complete` pushed.
-- Phase 7 (Track C) observability foundation added on `feat/admin-overhaul/observability`: structured `getAdminLogger()` with PII exclusion, `AsyncLocalStorage`-backed correlation ID threading, typed `AdminOperationName` registry (40+ operations), and `safeAction`/`safeVerificationAction` integration emitting structured log events at every outcome path.
+- Phase 5 users action slice added and merged; tag `admin-overhaul/phase-5-complete` pushed.
+- Phase 5 verification action slice added, merged, and bug-fixed.
+- Phase 7 (Track C) observability foundation: structured logger, correlation threading, typed `AdminOperationName` registry (40+ ops), `safeAction`/`safeVerificationAction` integration. Tag `admin-overhaul/phase-7-complete` pushed.
+- Track A (Phase 5 continuation) audit/export action slice: migrated `audit.ts` and `compliance/route.ts`; extended audit domain contracts/repository/service with export and distinct-action support; 8 new action-boundary tests + 8 new service tests. Drift: −1 direct-Prisma action file, −2 `.parse()`, −1 `@ts-nocheck`, −3 unstructured logs.
+- Track B UI token system: `tokens.css` with 100+ design tokens, dark mode overrides, skeleton animation; `globals.css` import; `loading.tsx` for 4 v2 route segments.
 
 **Remaining steps:**
 
-- Merge Track C `feat/admin-overhaul/observability` PR into `integration/admin-overhaul`; apply `admin-overhaul/phase-7-complete` tag.
-- Start Track A `feat/admin-overhaul/actions-audit`: migrate `audit.ts` and `compliance/route.ts` off direct Prisma / `.parse()` / `@ts-nocheck`, consuming the Phase 7 structured logger. Fix `professionals.ts` log-safety drift.
-- Start Track B `feat/admin-overhaul/ui-tokens` in parallel: create `tokens.css`, import in `globals.css`, add `loading.tsx`/`error.tsx` for 5 route segments, adopt tokens in `CardList.tsx`, `AppBarChart.tsx`, `AddUser.tsx`.
-- Continue reducing remaining drift: 13 direct-Prisma action files, 16 `.parse()` call sites, 12 unsafe mutations, 18 `@ts-nocheck` files.
+- Open PRs for Track A (`feat/admin-overhaul/actions-audit`) and Track B (`feat/admin-overhaul/ui-tokens`).
+- Start next action slice: `finance/analytics` (direct Prisma + `.parse()` in `analytics.ts`) or `stores/properties` (next highest direct-Prisma count).
+- Continue reducing drift: 12 direct-Prisma action files, 14 `.parse()` call sites, 12 unsafe mutations, 17 `@ts-nocheck` files.
 
 ## Slice Status Registry
 
@@ -41,7 +40,7 @@ Status codes: compliant, known defect, unaudited/in progress, N/A.
 | ---------------------------- | ---- | --------------------- | ------------ | --------------------- | --------------------- | ------------- | --------------------- |
 | users                        | T1   | compliant             | compliant    | compliant             | compliant             | known defect  | unaudited/in progress |
 | verification                 | T1   | compliant             | compliant    | compliant             | compliant             | known defect  | unaudited/in progress |
-| audit                        | T1   | known defect          | known defect | unaudited/in progress | compliant             | known defect  | unaudited/in progress |
+| audit                        | T1   | compliant             | compliant    | compliant             | compliant             | compliant     | compliant             |
 | GDPR/export                  | T1   | unaudited/in progress | N/A          | known defect          | unaudited/in progress | known defect  | known defect          |
 | finance/analytics            | T1   | known defect          | known defect | unaudited/in progress | compliant             | known defect  | unaudited/in progress |
 | stores/properties/projects   | T2   | known defect          | known defect | unaudited/in progress | compliant             | known defect  | unaudited/in progress |
@@ -50,12 +49,12 @@ Status codes: compliant, known defect, unaudited/in progress, N/A.
 
 ## Open Defects
 
-1. `ADM-001` | Severity: Critical | Action boundary still permits direct Prisma access in 13 action files according to `admin:report-security-drift`.
-2. `ADM-002` | Severity: Critical | Action-layer `.parse()` remains in 16 call sites.
+1. `ADM-001` | Severity: Critical | Action boundary still permits direct Prisma access in **12** action files (reduced from 13 by Track A).
+2. `ADM-002` | Severity: Critical | Action-layer `.parse()` remains in **14** call sites (reduced from 16 by Track A).
 3. `ADM-003` | Severity: Critical | `safeAction` now resolves a canonical `AdminActor`, but remaining action slices still need Phase 5 migration to consume actor/policy options consistently.
 4. `ADM-004` | Severity: High | Direct env reads remain in 69 drift findings.
-5. `ADM-005` | Severity: High | `@ts-nocheck` remains in 18 source files.
-6. `ADM-006` | Severity: High | Unstructured logging remains in 103 action/lib findings; 3 log-safety findings need review.
+5. `ADM-005` | Severity: High | `@ts-nocheck` remains in **17** source files (reduced from 18 by Track A).
+6. `ADM-006` | Severity: High | Unstructured logging remains in ~100 action/lib findings; Track A reduced `compliance/route.ts` by 3 findings.
 7. `ADM-007` | Severity: High | Strict TypeScript gate was stabilized, but adjacent legacy files still need contract cleanup to avoid regressions.
 8. `ADM-008` | Severity: Medium | Vitest aliasing and stale role expectations were fixed; keep the root admin suite green as action/verification flows evolve.
 9. `ADM-009` | Severity: Medium | ESLint passes but still reports 156 warnings after the verification slice cleanup.
