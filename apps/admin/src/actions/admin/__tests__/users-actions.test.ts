@@ -77,8 +77,8 @@ vi.mock("@/lib/config/store.config", () => ({
 }));
 
 vi.mock("../idempotency", () => ({
-  runWithIdempotency: vi.fn(
-    async <T,>(params: { run: () => Promise<T> }) => params.run(),
+  runWithIdempotency: vi.fn(async <T>(params: { run: () => Promise<T> }) =>
+    params.run(),
   ),
 }));
 

@@ -1,26 +1,11 @@
-/**
- * Admin Verification API Test Suite
- * Integration tests for the unified verification endpoint
- */
-
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { POST } from "@/actions/admin/verify/route";
 
-vi.mock("@/lib/services/verification/notification.service", () => ({
-  notifyVerificationResult: vi.fn(),
+const verificationServiceMock = vi.hoisted(() => ({
+  verifyEntity: vi.fn(),
 }));
 
-// Test UUIDs for consistent test data (RFC 4122 compliant)
-const TEST_UUIDS = {
-  ADMIN_CLERK: "a0000000-0000-4000-8000-000000000001",
-  ADMIN_DB: "a0000000-0000-4000-8000-000000000002",
-  PROFESSIONAL: "b0000000-0000-4000-8000-000000000001",
-  STORE: "c0000000-0000-4000-8000-000000000001",
-  PROPERTY: "d0000000-0000-4000-8000-000000000001",
-};
-
-// Mock dependencies
 vi.mock("@clerk/nextjs/server", () => ({
   auth: vi.fn(),
 }));
@@ -37,6 +22,7 @@ vi.mock("@build/db", () => ({
   },
   AdminRole: {
     SUPER_ADMIN: "SUPER_ADMIN",
+    CONTENT_MODERATOR: "CONTENT_MODERATOR",
   },
   prisma: {
     user: {
@@ -45,37 +31,18 @@ vi.mock("@build/db", () => ({
     adminProfile: {
       findUnique: vi.fn(),
     },
-    professionalProfile: {
-      findUnique: vi.fn(),
-      update: vi.fn(),
-    },
-    store: {
-      findUnique: vi.fn(),
-      update: vi.fn(),
-    },
-    property: {
-      findUnique: vi.fn(),
-      update: vi.fn(),
-    },
-    adminAuditLog: {
-      create: vi.fn(),
-    },
-    notification: {
-      create: vi.fn(),
-    },
   },
 }));
 
 vi.mock("@/lib/api/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
   getRateLimitIdentifier: vi.fn().mockReturnValue("test-identifier"),
-  RateLimits: {
-    READ: { limit: 100, window: 60000 },
-    WRITE: { limit: 50, window: 60000 },
-  },
 }));
 
-// Mock resilient-api to pass through operations directly
+vi.mock("@/lib/domains/verification", () => ({
+  verificationService: verificationServiceMock,
+}));
+
 vi.mock("@/lib/api/resilient-api", async () => {
   const { NextResponse } = await import("next/server");
   return {
@@ -103,63 +70,55 @@ vi.mock("@/lib/api/resilient-api", async () => {
       warn: vi.fn(),
       debug: vi.fn(),
     }),
-    apiError: vi.fn().mockImplementation((message, status = 500) => {
-      return NextResponse.json({ success: false, error: message }, { status });
-    }),
-    apiSuccess: vi.fn().mockImplementation((data, status = 200) => {
-      return NextResponse.json({ success: true, data }, { status });
+    apiError: vi.fn().mockImplementation((message, status = 500, details) => {
+      return NextResponse.json(
+        { success: false, error: message, ...(details ? { details } : {}) },
+        { status },
+      );
     }),
   };
 });
+
+const TEST_UUIDS = {
+  ADMIN_CLERK: "a0000000-0000-4000-8000-000000000001",
+  ADMIN_DB: "a0000000-0000-4000-8000-000000000002",
+  PROFESSIONAL: "b0000000-0000-4000-8000-000000000001",
+  STORE: "c0000000-0000-4000-8000-000000000001",
+};
 
 describe("POST /api/admin/verify", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("should verify a professional successfully", async () => {
+  it("verifies a professional successfully through the domain service", async () => {
     const { auth } = await import("@clerk/nextjs/server");
     const { prisma } = await import("@build/db");
 
-    // Setup mocks
     vi.mocked(auth).mockResolvedValue({
       userId: TEST_UUIDS.ADMIN_CLERK,
-    } as any);
+    } as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
       email: "admin@test.com",
       role: "ADMIN",
-    } as any);
+    } as never);
     vi.mocked(prisma.adminProfile.findUnique).mockResolvedValue({
       role: "SUPER_ADMIN",
       isActive: true,
-    } as any);
+    } as never);
 
-    vi.mocked(prisma.professionalProfile.findUnique).mockResolvedValue({
-      userId: TEST_UUIDS.PROFESSIONAL,
-      companyName: "Test Company",
-      verificationStatus: "PENDING",
-      verified: false,
-      user: {
-        email: "don@test.com",
-        firstName: "Don",
-        lastName: "Shammah",
+    verificationServiceMock.verifyEntity.mockResolvedValue({
+      ok: true,
+      data: {
+        entityType: "professional",
+        entityId: TEST_UUIDS.PROFESSIONAL,
+        previousStatus: "PENDING",
+        newStatus: "VERIFIED",
+        message: "Professional verified",
       },
-    } as any);
+    });
 
-    vi.mocked(prisma.professionalProfile.update).mockResolvedValue({
-      userId: TEST_UUIDS.PROFESSIONAL,
-      companyName: "Test Company",
-      verificationStatus: "VERIFIED",
-      verified: true,
-      verifiedAt: new Date(),
-      verifiedById: TEST_UUIDS.ADMIN_DB,
-    } as any);
-
-    vi.mocked(prisma.adminAuditLog.create).mockResolvedValue({} as any);
-    vi.mocked(prisma.notification.create).mockResolvedValue({} as any);
-
-    // Create request
     const request = new NextRequest("http://localhost:3500/api/admin/verify", {
       method: "POST",
       body: JSON.stringify({
@@ -170,42 +129,39 @@ describe("POST /api/admin/verify", () => {
       }),
     });
 
-    // Execute
     const response = await POST(request, { dbUserId: TEST_UUIDS.ADMIN_DB });
     const data = await response.json();
 
-    // Assertions
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
     expect(data.data.newStatus).toBe("VERIFIED");
-    expect(data.data.entityType).toBe("professional");
-    expect(prisma.professionalProfile.update).toHaveBeenCalledWith(
+    expect(verificationServiceMock.verifyEntity).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { userId: TEST_UUIDS.PROFESSIONAL },
-        data: expect.objectContaining({
-          verificationStatus: "VERIFIED",
-          verified: true,
-          verifiedById: TEST_UUIDS.ADMIN_DB,
-        }),
+        dbUserId: TEST_UUIDS.ADMIN_DB,
       }),
+      expect.objectContaining({
+        entityType: "professional",
+        action: "VERIFY",
+      }),
+      {},
     );
   });
 
-  it("should reject verification with invalid entity type", async () => {
+  it("rejects verification with invalid entity type", async () => {
     const { auth } = await import("@clerk/nextjs/server");
     const { prisma } = await import("@build/db");
 
     vi.mocked(auth).mockResolvedValue({
       userId: TEST_UUIDS.ADMIN_CLERK,
-    } as any);
+    } as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
       role: "ADMIN",
-    } as any);
+    } as never);
     vi.mocked(prisma.adminProfile.findUnique).mockResolvedValue({
       role: "SUPER_ADMIN",
       isActive: true,
-    } as any);
+    } as never);
 
     const request = new NextRequest("http://localhost:3500/api/admin/verify", {
       method: "POST",
@@ -219,91 +175,32 @@ describe("POST /api/admin/verify", () => {
     const response = await POST(request, { dbUserId: TEST_UUIDS.ADMIN_DB });
     const data = await response.json();
 
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(400);
     expect(data.success).toBe(false);
+    expect(verificationServiceMock.verifyEntity).not.toHaveBeenCalled();
   });
 
-  it("should reject verification without reason when required", async () => {
+  it("surfaces verification service errors", async () => {
     const { auth } = await import("@clerk/nextjs/server");
     const { prisma } = await import("@build/db");
 
     vi.mocked(auth).mockResolvedValue({
       userId: TEST_UUIDS.ADMIN_CLERK,
-    } as any);
+    } as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: TEST_UUIDS.ADMIN_DB,
       role: "ADMIN",
-    } as any);
+    } as never);
     vi.mocked(prisma.adminProfile.findUnique).mockResolvedValue({
       role: "SUPER_ADMIN",
       isActive: true,
-    } as any);
+    } as never);
 
-    vi.mocked(prisma.professionalProfile.findUnique).mockResolvedValue({
-      userId: TEST_UUIDS.PROFESSIONAL,
-      verificationStatus: "PENDING",
-      companyName: "Test Company",
-      user: { email: "test@test.com" },
-    } as any);
-
-    const request = new NextRequest("http://localhost:3500/api/admin/verify", {
-      method: "POST",
-      body: JSON.stringify({
-        entityType: "professional",
-        entityId: TEST_UUIDS.PROFESSIONAL,
-        action: "REJECT",
-        // Missing 'reason' field
-      }),
+    verificationServiceMock.verifyEntity.mockResolvedValue({
+      ok: false,
+      code: "VERIFICATION_POLICY_DENIED",
+      message: "Admin capability denied",
     });
-
-    const response = await POST(request, { dbUserId: TEST_UUIDS.ADMIN_DB });
-    const data = await response.json();
-
-    expect(response.status).toBe(500);
-    expect(data.success).toBe(false);
-  });
-
-  it("should verify a store successfully", async () => {
-    const { auth } = await import("@clerk/nextjs/server");
-    const { prisma } = await import("@build/db");
-
-    vi.mocked(auth).mockResolvedValue({
-      userId: TEST_UUIDS.ADMIN_CLERK,
-    } as any);
-    vi.mocked(prisma.user.findUnique).mockResolvedValue({
-      id: TEST_UUIDS.ADMIN_DB,
-      role: "ADMIN",
-    } as any);
-    vi.mocked(prisma.adminProfile.findUnique).mockResolvedValue({
-      role: "SUPER_ADMIN",
-      isActive: true,
-    } as any);
-
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: TEST_UUIDS.STORE,
-      name: "Test Store",
-      verificationStatus: "PENDING",
-      verified: false,
-      professional: {
-        user: {
-          email: "owner@test.com",
-          firstName: "Jane",
-          lastName: "Smith",
-        },
-      },
-    } as any);
-
-    vi.mocked(prisma.store.update).mockResolvedValue({
-      id: TEST_UUIDS.STORE,
-      name: "Test Store",
-      verificationStatus: "VERIFIED",
-      verified: true,
-      verifiedAt: new Date(),
-      professionalId: TEST_UUIDS.PROFESSIONAL,
-    } as any);
-
-    vi.mocked(prisma.adminAuditLog.create).mockResolvedValue({} as any);
-    vi.mocked(prisma.notification.create).mockResolvedValue({} as any);
 
     const request = new NextRequest("http://localhost:3500/api/admin/verify", {
       method: "POST",
@@ -317,16 +214,15 @@ describe("POST /api/admin/verify", () => {
     const response = await POST(request, { dbUserId: TEST_UUIDS.ADMIN_DB });
     const data = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(data.success).toBe(true);
-    expect(data.data.entityType).toBe("store");
-    expect(data.data.newStatus).toBe("VERIFIED");
+    expect(response.status).toBe(500);
+    expect(data.success).toBe(false);
+    expect(data.error).toBe("Admin capability denied");
   });
 
-  it("should handle rate limiting", async () => {
+  it("handles rate limiting", async () => {
     const { checkRateLimit } = await import("@/lib/api/rate-limit");
 
-    vi.mocked(checkRateLimit).mockResolvedValue({ success: false } as any);
+    vi.mocked(checkRateLimit).mockResolvedValue({ success: false } as never);
 
     const request = new NextRequest("http://localhost:3500/api/admin/verify", {
       method: "POST",

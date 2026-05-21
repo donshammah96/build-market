@@ -43,10 +43,7 @@ type SafeActionOptions = {
   auditLog?: {
     operation: string;
     resourceType?: string;
-    getTargetId?: (payload: {
-      actor: AdminActor;
-      data: unknown;
-    }) => string;
+    getTargetId?: (payload: { actor: AdminActor; data: unknown }) => string;
     getDetails?: (payload: {
       actor: AdminActor;
       data: unknown;
