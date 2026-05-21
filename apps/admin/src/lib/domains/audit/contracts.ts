@@ -70,9 +70,36 @@ export type AuditLogStats = {
   recentActivity: AuditLogEntry[];
 };
 
+/**
+ * CSV-friendly export row. adminName is a display alias already stored in
+ * the audit record — it is not a live PII lookup.
+ */
+export type AuditExportEntry = {
+  id: string;
+  adminName: string;
+  adminRole: string;
+  action: string;
+  targetType: string;
+  targetId: string;
+  severity: string;
+  status: string;
+  reason: string;
+  ipAddress: string;
+  createdAt: string; // ISO-8601 for CSV serialisation
+};
+
+export type AuditExportPage = {
+  data: AuditExportEntry[];
+  count: number;
+};
+
+/** Maximum rows returnable in a single export call. */
+export const AUDIT_EXPORT_MAX_ROWS = 5_000;
+
 export type AuditDomainErrorCode =
   | "AUDIT_INVALID_FILTER"
-  | "AUDIT_POLICY_DENIED";
+  | "AUDIT_POLICY_DENIED"
+  | "AUDIT_EXPORT_LIMIT_EXCEEDED";
 
 export type AuditDomainError = {
   code: AuditDomainErrorCode;
