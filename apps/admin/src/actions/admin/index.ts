@@ -178,7 +178,10 @@ export {
 export type {
   AuditLogEntry,
   AuditLogStats,
-  AuditLogFilterInput,
+  AuditLogPage,
+  AuditExportPage,
+  AuditExportEntry,
+  AuditLogInput,
 } from "./audit";
 
 // Analytics

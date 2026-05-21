@@ -1,5 +1,52 @@
 # apps/admin Changelog
 
+## [2026-05-21] Track B — UI Token System and Route Boundaries
+
+### Added (Track B — UI Token System and Route Boundaries)
+
+- Added `src/app/tokens.css`: admin design token system with 100+ CSS custom properties across 9 categories (colour, surface, status badge, role badge, data table, spacing, radius, shadow, animation). Full dark mode overrides. All values use OKLCH for perceptual uniformity. Includes `@keyframes admin-skeleton-shimmer` and `.admin-skeleton` utility class.
+- Added `loading.tsx` for v2 route segments (`analytics-v2`, `users-v2`, `verifications-v2`, `audit-v2`) — consistent skeleton structure matching existing v1 patterns, using `<Skeleton>` from the component library.
+
+### Changed (Track B — UI Token System and Route Boundaries)
+
+- `src/app/globals.css`: import `./tokens.css` before Tailwind so token custom properties are available application-wide to both Tailwind-based and non-Tailwind styles.
+
+**Files changed:** `apps/admin/src/app/tokens.css` [NEW], `apps/admin/src/app/globals.css`, `apps/admin/src/app/(dashboard)/analytics-v2/loading.tsx` [NEW], `apps/admin/src/app/(dashboard)/users-v2/loading.tsx` [NEW], `apps/admin/src/app/(dashboard)/verifications-v2/loading.tsx` [NEW], `apps/admin/src/app/(dashboard)/audit-v2/loading.tsx` [NEW]
+
+**Verification:**
+
+- `pnpm run admin:check-types` → pass.
+- `pnpm run admin:test:all` → no regressions (UI-only changes).
+
+## [2026-05-21] Track A — Audit/Export Action Slice (Phase 5 continuation)
+
+### Changed (Track A — Audit/Export Action Slice)
+
+- Migrated `src/actions/admin/audit.ts` off direct Prisma, `AuditLogFilterSchema.parse()`, and `@ts-nocheck`. All four actions (`getAuditLogs`, `getAuditLogStats`, `getAuditLogActions`, `exportAuditLogs`) delegate to the Phase 4 audit domain service via `auditService`. Operation names use the typed `AdminOperationName` registry so every `safeAction` call emits a structured log event with a stable join key (ADR-ADMIN-003 §7.3).
+- `exportAuditLogs` adds `recentAuth: { maxAgeSeconds: 300 }` (Tier 2 — high-sensitivity read) and a declarative `auditLog` entry per ADR-ADMIN-008, written before success is returned.
+- Hardened `src/actions/admin/compliance/route.ts`: replaced `console.log/warn/error` PII logging with structured `getAdminLogger()` events keyed by `correlationId`; added `adminProfile.isActive` check alongside role check; correlation ID sourced from `initializeAdminCorrelationId()`.
+- Fixed stale `AuditLogFilterInput` re-export in `src/actions/admin/index.ts` → `AuditLogInput`; added `AuditLogPage`, `AuditExportPage`, `AuditExportEntry` to index re-exports.
+
+### Added (Track A — Audit/Export Action Slice)
+
+- `src/lib/domains/audit/contracts.ts`: added `AuditExportEntry`, `AuditExportPage`, `AUDIT_EXPORT_MAX_ROWS = 5_000`, `AUDIT_EXPORT_LIMIT_EXCEEDED` error code.
+- `src/lib/domains/audit/repository.ts`: added `findDistinctActions()` (distinct action strings, persistence-only, `adminEmail` excluded) and `findForExport()` (capped at `AUDIT_EXPORT_MAX_ROWS`).
+- `src/lib/domains/audit/service.ts`: added `getDistinctActions(actor)` (requires `VIEW_FINANCIALS`) and `exportAuditLogs(actor, input)` (requires `EXPORT_DATA` — Tier 1). Both exposed on `auditService` facade.
+
+### Tests (Track A — Audit/Export Action Slice)
+
+- Extended `src/lib/domains/audit/__tests__/service.test.ts` from 5 → 13 tests: `getDistinctActions` capability gates, `exportAuditLogs` capability gates (FINANCE_MANAGER denied, AUDITOR allowed), data shape assertions, `findForExport` call path.
+- Added `src/actions/admin/__tests__/audit-actions.test.ts` (8 tests): service delegation, domain error propagation, UNAUTHORIZED gate, `exportAuditLogs` stale session rejection (`SESSION_STALE`), fresh session delegation, unauthenticated guard.
+
+**Files changed:** `apps/admin/src/actions/admin/audit.ts`, `apps/admin/src/actions/admin/compliance/route.ts`, `apps/admin/src/actions/admin/index.ts`, `apps/admin/src/lib/domains/audit/contracts.ts`, `apps/admin/src/lib/domains/audit/repository.ts`, `apps/admin/src/lib/domains/audit/service.ts`, `apps/admin/src/lib/domains/audit/__tests__/service.test.ts` [EXTENDED], `apps/admin/src/actions/admin/__tests__/audit-actions.test.ts` [NEW]
+
+**Drift reduction:** directPrismaInActions −1 file (`audit.ts`); zodParseDrift −2 call sites; `@ts-nocheck` −1 file; unstructuredLogging −3 findings (`compliance/route.ts`).
+
+**Verification:**
+
+- `pnpm run admin:check-types` → pass.
+- `pnpm run admin:test:all` → pass; 30 files passed, 229 of 229 tests passed.
+
 ## [2026-05-21] Phase 7 - Observability foundation
 
 ### Added (Phase 7 - Observability foundation)
