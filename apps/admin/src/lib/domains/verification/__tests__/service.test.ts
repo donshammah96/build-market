@@ -54,10 +54,22 @@ vi.mock("../repository", () => ({
   verificationRepository: repositoryMock,
 }));
 
-vi.mock("@/lib/services/verification/professional-verification.service", () => professionalServiceMock);
-vi.mock("@/lib/services/verification/store-verification.service", () => storeServiceMock);
-vi.mock("@/lib/services/verification/property-verification.service", () => propertyServiceMock);
-vi.mock("@/lib/services/verification/notification.service", () => notificationServiceMock);
+vi.mock(
+  "@/lib/services/verification/professional-verification.service",
+  () => professionalServiceMock,
+);
+vi.mock(
+  "@/lib/services/verification/store-verification.service",
+  () => storeServiceMock,
+);
+vi.mock(
+  "@/lib/services/verification/property-verification.service",
+  () => propertyServiceMock,
+);
+vi.mock(
+  "@/lib/services/verification/notification.service",
+  () => notificationServiceMock,
+);
 vi.mock("@/lib/services/verification/audit-service", () => auditServiceMock);
 
 import type { VerificationActor } from "../contracts";
@@ -316,16 +328,21 @@ describe("verification domain service", () => {
       newStatus: "VERIFIED",
       message: "Professional verified",
     });
-    storeServiceMock.verifyStore.mockRejectedValue(new Error("Store not found"));
+    storeServiceMock.verifyStore.mockRejectedValue(
+      new Error("Store not found"),
+    );
     repositoryMock.findStoreOwnerId.mockResolvedValue("owner_1");
 
-    const result = await batchVerifyEntities(actor(dbMock.AdminRole.SUPER_ADMIN), {
-      entities: [
-        { entityType: "professional", entityId: "user_1" },
-        { entityType: "store", entityId: "store_1" },
-      ],
-      action: "VERIFY",
-    });
+    const result = await batchVerifyEntities(
+      actor(dbMock.AdminRole.SUPER_ADMIN),
+      {
+        entities: [
+          { entityType: "professional", entityId: "user_1" },
+          { entityType: "store", entityId: "store_1" },
+        ],
+        action: "VERIFY",
+      },
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -337,20 +354,22 @@ describe("verification domain service", () => {
   });
 
   it("loads normalized verification details", async () => {
-    professionalServiceMock.getProfessionalVerificationDetails.mockResolvedValue({
-      verificationStatus: "PENDING",
-      verificationNotes: "Needs manual review",
-      verifiedAt: null,
-      user: {
-        id: "user_1",
-        email: "pro@example.com",
-        firstName: "Pro",
-        lastName: "User",
-        phone: null,
-        createdAt: new Date("2026-05-18T00:00:00.000Z"),
+    professionalServiceMock.getProfessionalVerificationDetails.mockResolvedValue(
+      {
+        verificationStatus: "PENDING",
+        verificationNotes: "Needs manual review",
+        verifiedAt: null,
+        user: {
+          id: "user_1",
+          email: "pro@example.com",
+          firstName: "Pro",
+          lastName: "User",
+          phone: null,
+          createdAt: new Date("2026-05-18T00:00:00.000Z"),
+        },
+        documents: [],
       },
-      documents: [],
-    });
+    );
     auditServiceMock.getAuditHistory.mockResolvedValue([]);
 
     const result = await getVerificationDetails(
@@ -383,20 +402,23 @@ describe("verification domain service", () => {
       })
       .mockRejectedValueOnce(new Error("missing"));
 
-    const result = await batchVerifyDocuments(actor(dbMock.AdminRole.SUPER_ADMIN), {
-      documents: [
-        {
-          documentType: "professional_document",
-          documentId: "doc_1",
-          action: "APPROVE",
-        },
-        {
-          documentType: "certificate",
-          documentId: "doc_2",
-          action: "REJECT",
-        },
-      ],
-    });
+    const result = await batchVerifyDocuments(
+      actor(dbMock.AdminRole.SUPER_ADMIN),
+      {
+        documents: [
+          {
+            documentType: "professional_document",
+            documentId: "doc_1",
+            action: "APPROVE",
+          },
+          {
+            documentType: "certificate",
+            documentId: "doc_2",
+            action: "REJECT",
+          },
+        ],
+      },
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;

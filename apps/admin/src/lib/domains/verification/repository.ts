@@ -254,20 +254,19 @@ function toVerificationStatus(action: VerificationDocumentAction) {
   return action === "APPROVE" ? "VERIFIED" : "REJECTED";
 }
 
-export async function updateDocumentVerification(
-  input: {
-    documentType: VerificationDocumentType;
-    documentId: string;
-    action: VerificationDocumentAction;
-    notes?: string | undefined;
-    adminId: string;
-  },
-): Promise<VerificationDocumentSummary> {
+export async function updateDocumentVerification(input: {
+  documentType: VerificationDocumentType;
+  documentId: string;
+  action: VerificationDocumentAction;
+  notes?: string | undefined;
+  adminId: string;
+}): Promise<VerificationDocumentSummary> {
   const status = toDocumentStatus(input.action);
   const verificationStatus = toVerificationStatus(input.action);
   const verifiedAt = input.action === "APPROVE" ? new Date() : null;
   const verifiedById = input.action === "APPROVE" ? input.adminId : null;
-  const rejectionReason = input.action === "REJECT" ? input.notes ?? null : null;
+  const rejectionReason =
+    input.action === "REJECT" ? (input.notes ?? null) : null;
 
   if (
     input.documentType === "professional_document" ||
@@ -293,7 +292,7 @@ export async function updateDocumentVerification(
       targetEntityType: "professional",
       targetEntityId: document.professionalId,
       status,
-      message: `Document ${input.action.toLowerCase()}d successfully`,
+      message: `Document ${input.action === "APPROVE" ? "approved" : "rejected"} successfully`,
       ...(input.notes ? { notes: input.notes } : {}),
     };
   }
@@ -319,7 +318,7 @@ export async function updateDocumentVerification(
     targetEntityType: "property",
     targetEntityId: document.propertyId,
     status,
-    message: `Document ${input.action.toLowerCase()}d successfully`,
+    message: `Document ${input.action === "APPROVE" ? "approved" : "rejected"} successfully`,
     ...(input.notes ? { notes: input.notes } : {}),
   };
 }

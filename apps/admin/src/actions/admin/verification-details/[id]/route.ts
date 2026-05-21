@@ -45,11 +45,15 @@ export const GET = withAdminRole([
 
   return executeResilient(
     async () => {
+      if (!context.adminRole) {
+        throw new Error("Unauthorized: Admin role missing");
+      }
+
       const result = await verificationService.getVerificationDetails(
         {
           clerkId: context.clerkId,
           dbUserId: context.dbUserId,
-          adminRole: context.adminRole ?? AdminRole.SUPER_ADMIN,
+          adminRole: context.adminRole,
         },
         {
           entityType: entityType as VerificationEntityType,

@@ -59,8 +59,8 @@ vi.mock("next/cache", () => ({
 }));
 
 vi.mock("../idempotency", () => ({
-  runWithIdempotency: vi.fn(
-    async <T,>(params: { run: () => Promise<T> }) => params.run(),
+  runWithIdempotency: vi.fn(async <T>(params: { run: () => Promise<T> }) =>
+    params.run(),
   ),
 }));
 

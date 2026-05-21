@@ -244,16 +244,18 @@ export const VerifyDocumentSchema = z
 
 export const BatchVerifyDocumentsSchema = z
   .object({
-    documents: z.array(
-      z
-        .object({
-          documentType: DocumentTypeSchema,
-          documentId: z.string().uuid(),
-          action: z.enum(["APPROVE", "REJECT"]),
-          notes: z.string().optional(),
-        })
-        .strict(),
-    ),
+    documents: z
+      .array(
+        z
+          .object({
+            documentType: DocumentTypeSchema,
+            documentId: z.string().uuid(),
+            action: z.enum(["APPROVE", "REJECT"]),
+            notes: z.string().optional(),
+          })
+          .strict(),
+      )
+      .min(1, "At least one document is required"),
   })
   .strict();
 
@@ -305,7 +307,8 @@ export function parseVerifyDocument(input: unknown): VerifyDocumentInput {
 
   if (!result.success) {
     throw new Error(
-      result.error.issues[0]?.message ?? "Invalid document verification payload",
+      result.error.issues[0]?.message ??
+        "Invalid document verification payload",
     );
   }
 

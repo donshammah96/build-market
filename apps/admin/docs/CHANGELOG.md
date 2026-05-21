@@ -1,5 +1,15 @@
 # apps/admin Changelog
 
+## [2026-05-21] Phase 5 - Verification action bug fixes
+
+### Fixed (Phase 5 - Verification action bug fixes)
+
+- Fixed a privilege escalation risk in API routes (`verification-details`, `verification-stats`, `pending-verifications`, `verify-document`, `verify`) where missing `adminRole` context improperly defaulted to `SUPER_ADMIN`.
+- Fixed a bug in `safeAction` definitions (`verifyEntity`, `verifyDocument`, `batchVerifyDocuments`, `batchVerifyEntities`) where `auditLog` parsing threw synchronous exceptions before execution.
+- Fixed a bug in `updateDocumentVerification` in `repository.ts` that concatenated "d" to the action string, producing "rejectd" instead of "rejected".
+- Fixed an audit gap in `verify-document/route.ts` where single and batch document verifications bypassed `safeAction` audit logging by explicitly invoking `logAdminAction`.
+- Added missing `.min(1)` validation to `BatchVerifyDocumentsSchema`.
+
 ## [2026-05-18] Phase 5 - Verification action slice
 
 ### Security (Phase 5 - Verification action slice)

@@ -64,11 +64,15 @@ export const POST = withAdminRole([
 
   return executeResilient(
     async () => {
+      if (!context.adminRole) {
+        throw new Error("Unauthorized: Admin role missing");
+      }
+
       const result = await verificationService.verifyEntity(
         {
           clerkId: context.clerkId,
           dbUserId: context.dbUserId,
-          adminRole: context.adminRole ?? AdminRole.SUPER_ADMIN,
+          adminRole: context.adminRole,
         },
         parsed.data,
         {

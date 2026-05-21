@@ -80,7 +80,9 @@ function parseActionInput<T>(
   return result.data;
 }
 
-function mapQueueItem(item: DomainVerificationQueueItem): VerificationQueueItem {
+function mapQueueItem(
+  item: DomainVerificationQueueItem,
+): VerificationQueueItem {
   return {
     entityType: item.entityType,
     entityId: item.entityId,
@@ -104,7 +106,9 @@ function mapQueueItem(item: DomainVerificationQueueItem): VerificationQueueItem 
     ...(item.imageCount !== undefined ? { imageCount: item.imageCount } : {}),
     ...(item.city !== undefined ? { city: item.city } : {}),
     ...(item.county !== undefined ? { county: item.county } : {}),
-    ...(item.location ?? undefined ? { location: item.location ?? undefined } : {}),
+    ...((item.location ?? undefined)
+      ? { location: item.location ?? undefined }
+      : {}),
   };
 }
 
@@ -233,7 +237,10 @@ export async function verifyEntity(
         resourceId: `${validated.entityType}:${validated.entityId}:${validated.action}`,
         ttlHours: VERIFICATION_IDEMPOTENCY_TTL_HOURS,
         run: async () => {
-          const result = await verificationService.verifyEntity(actor, validated);
+          const result = await verificationService.verifyEntity(
+            actor,
+            validated,
+          );
 
           if (!result.ok) {
             throw new Error(result.message);
@@ -254,19 +261,18 @@ export async function verifyEntity(
     {
       auditLog: {
         operation: "VERIFY_ENTITY",
-        resourceType: parseVerifyEntity(input).entityType,
-        getTargetId: () => parseVerifyEntity(input).entityId,
+        resourceType: input?.entityType ?? "verification",
+        getTargetId: () => input?.entityId ?? "unknown",
         getDetails: ({ data }) => {
-          const validated = parseVerifyEntity(input);
           const result = data as { newStatus: string; message: string };
           return {
-            requestedAction: validated.action,
-            ...(validated.reason ? { reason: validated.reason } : {}),
-            ...(validated.notes ? { notes: validated.notes } : {}),
+            requestedAction: input?.action,
+            ...(input?.reason ? { reason: input.reason } : {}),
+            ...(input?.notes ? { notes: input.notes } : {}),
             newStatus: result.newStatus,
           };
         },
-        getReason: () => parseVerifyEntity(input).reason,
+        getReason: () => input?.reason,
       },
     },
   );
@@ -293,7 +299,10 @@ export async function verifyDocument(
         resourceId: `${validated.documentType}:${validated.documentId}:${validated.action}`,
         ttlHours: VERIFICATION_IDEMPOTENCY_TTL_HOURS,
         run: async () => {
-          const result = await verificationService.verifyDocument(actor, validated);
+          const result = await verificationService.verifyDocument(
+            actor,
+            validated,
+          );
 
           if (!result.ok) {
             throw new Error(result.message);
@@ -316,19 +325,20 @@ export async function verifyDocument(
     {
       auditLog: {
         operation: "VERIFY_DOCUMENT",
-        resourceType: toDocumentAuditResourceType(
-          parseVerifyDocument(input).documentType,
-        ),
-        getTargetId: () => parseVerifyDocument(input).documentId,
+        resourceType: input?.documentType
+          ? toDocumentAuditResourceType(
+              input.documentType as VerificationDocumentType,
+            )
+          : "document",
+        getTargetId: () => input?.documentId ?? "unknown",
         getDetails: () => {
-          const validated = parseVerifyDocument(input);
           return {
-            documentType: validated.documentType,
-            requestedAction: validated.action,
-            ...(validated.notes ? { notes: validated.notes } : {}),
+            documentType: input?.documentType,
+            requestedAction: input?.action,
+            ...(input?.notes ? { notes: input.notes } : {}),
           };
         },
-        getReason: () => parseVerifyDocument(input).notes,
+        getReason: () => input?.notes,
       },
     },
   );
@@ -387,12 +397,11 @@ export async function batchVerifyDocuments(
         resourceType: "document",
         getTargetId: () => "batch",
         getDetails: ({ data }) => {
-          const validated = parseBatchVerifyDocuments(input);
           const result = data as {
             summary: { total: number; successful: number; failed: number };
           };
           return {
-            total: validated.documents.length,
+            total: input?.documents?.length ?? 0,
             summary: result.summary,
           };
         },
@@ -467,28 +476,18 @@ export async function batchVerifyEntities(
         resourceType: "verification",
         getTargetId: () => "batch",
         getDetails: ({ data }) => {
-          const parsedInput = parseActionInput(
-            BatchEntitySchema,
-            { entities, action, reason },
-            "Valid batch verification payload is required",
-          );
           const result = data as {
             summary: { total: number; successful: number; failed: number };
           };
           return {
-            requestedAction: parsedInput.action,
-            total: parsedInput.entities.length,
+            requestedAction: action,
+            total: entities?.length ?? 0,
             successful: result.summary.successful,
             failed: result.summary.failed,
-            ...(parsedInput.reason ? { reason: parsedInput.reason } : {}),
+            ...(reason ? { reason } : {}),
           };
         },
-        getReason: () =>
-          parseActionInput(
-            BatchEntitySchema,
-            { entities, action, reason },
-            "Valid batch verification payload is required",
-          ).reason,
+        getReason: () => reason,
       },
     },
   );

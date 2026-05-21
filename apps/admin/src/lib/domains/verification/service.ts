@@ -3,12 +3,8 @@ import {
   requireAdminCapability,
 } from "@/lib/security/authorization-policy";
 import { err, ok, type Result } from "@/lib/errors/result";
-import {
-  getAuditHistory,
-} from "@/lib/services/verification/audit-service";
-import {
-  notifyVerificationResult,
-} from "@/lib/services/verification/notification.service";
+import { getAuditHistory } from "@/lib/services/verification/audit-service";
+import { notifyVerificationResult } from "@/lib/services/verification/notification.service";
 import {
   getProfessionalVerificationDetails,
   verifyProfessional,
@@ -361,7 +357,9 @@ function mapProfessionalDetails(
     entityType: "professional",
     entityId,
     status: details.verificationStatus,
-    ...(details.verifiedAt ? { verifiedAt: details.verifiedAt.toISOString() } : {}),
+    ...(details.verifiedAt
+      ? { verifiedAt: details.verifiedAt.toISOString() }
+      : {}),
     ...(details.verificationNotes
       ? { verificationNotes: details.verificationNotes }
       : {}),
@@ -392,8 +390,12 @@ function mapStoreDetails(
     entityType: "store",
     entityId,
     status: details.verificationStatus,
-    ...(details.submittedAt ? { submittedAt: details.submittedAt.toISOString() } : {}),
-    ...(details.verifiedAt ? { verifiedAt: details.verifiedAt.toISOString() } : {}),
+    ...(details.submittedAt
+      ? { submittedAt: details.submittedAt.toISOString() }
+      : {}),
+    ...(details.verifiedAt
+      ? { verifiedAt: details.verifiedAt.toISOString() }
+      : {}),
     ...(details.rejectionReason
       ? { rejectionReason: details.rejectionReason }
       : {}),
@@ -416,8 +418,12 @@ function mapPropertyDetails(
     entityType: "property",
     entityId,
     status: details.verificationStatus,
-    ...(details.submittedAt ? { submittedAt: details.submittedAt.toISOString() } : {}),
-    ...(details.verifiedAt ? { verifiedAt: details.verifiedAt.toISOString() } : {}),
+    ...(details.submittedAt
+      ? { submittedAt: details.submittedAt.toISOString() }
+      : {}),
+    ...(details.verifiedAt
+      ? { verifiedAt: details.verifiedAt.toISOString() }
+      : {}),
     ...(details.verificationNotes
       ? { verificationNotes: details.verificationNotes }
       : {}),
@@ -572,8 +578,11 @@ export async function batchVerifyDocuments(
   const capability = requireVerificationCapability(actor);
   if (!capability.ok) return capability;
 
-  const results: Array<{ documentId: string; success: boolean; error?: string }> =
-    [];
+  const results: Array<{
+    documentId: string;
+    success: boolean;
+    error?: string;
+  }> = [];
 
   for (const document of input.documents) {
     try {
