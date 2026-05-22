@@ -1,108 +1,86 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ComplianceService } from "@/lib/gdpr/services/compliance.service";
-import { auth } from "@clerk/nextjs/server";
-import { prisma } from "@build/db";
-import { adminEnvConfig } from "@/lib/infrastructure/env";
 import { getAdminLogger } from "@/lib/infrastructure/logger";
+import type { AdminLogEvent } from "@/lib/infrastructure/logger";
 import { initializeAdminCorrelationId } from "@/lib/infrastructure/correlation";
+import { resolveAdminRouteActor } from "@/lib/security/route-auth";
+import { gdprService } from "@/lib/domains/gdpr/service";
 
-// Only accessible by ADMIN
+// Only accessible by ADMIN with EXPORT_DATA capability
 export async function GET(req: NextRequest) {
   const correlationId = initializeAdminCorrelationId(req);
   const logger = getAdminLogger();
   const requestStartedAt = Date.now();
+  const operationName = "get_compliance_queue";
 
   try {
-    const { userId: clerkId } = await auth();
+    const authResult = await resolveAdminRouteActor(
+      correlationId,
+      operationName,
+      (fields) => logger.warn(fields as AdminLogEvent),
+      requestStartedAt,
+    );
 
-    if (!clerkId) {
-      logger.warn({
-        correlationId,
-        operationName: "get_compliance_queue",
-        adminRole: "unknown",
-        outcome: "unauthorized",
-        durationMs: Date.now() - requestStartedAt,
-      });
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!authResult.authorized) {
+      return authResult.response;
     }
 
-    const user = await prisma.user.findUnique({
-      where: { clerkId },
-      select: {
-        role: true,
-        id: true,
-        adminProfile: { select: { role: true, isActive: true } },
-      },
-    });
-
-    if (!user) {
-      logger.warn({
-        correlationId,
-        operationName: "get_compliance_queue",
-        adminRole: "unknown",
-        outcome: "unauthorized",
-        durationMs: Date.now() - requestStartedAt,
-      });
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const isAdmin = user.role === "ADMIN";
-    const hasActiveProfile = user.adminProfile?.isActive === true;
-
-    if (!isAdmin || !hasActiveProfile) {
-      const isDev = adminEnvConfig.NODE_ENV === "development";
-      const devBypass = adminEnvConfig.DEV_ADMIN_BYPASS;
-
-      if (!isDev || !devBypass) {
-        logger.warn({
-          correlationId,
-          operationName: "get_compliance_queue",
-          adminRole: user.adminProfile?.role
-            ? String(user.adminProfile.role)
-            : "unknown",
-          outcome: "forbidden",
-          durationMs: Date.now() - requestStartedAt,
-          errorCode: "FORBIDDEN",
-        });
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-    }
-
-    const adminRole = user.adminProfile?.role
-      ? String(user.adminProfile.role)
-      : "unknown";
+    const { actor, adminRoleStr } = authResult;
 
     const { searchParams } = new URL(req.url);
     const actorId = searchParams.get("actorId") ?? undefined;
 
-    const logs = await ComplianceService.getAuditLogs(
+    const logsResult = await gdprService.getComplianceQueue(
+      actor,
       actorId ? { actorId } : {},
     );
 
-    // Record this data access in the audit trail
-    await ComplianceService.logAdminAction(
-      user.id,
-      "DATA_ACCESS_BY_ADMIN",
-      "AuditLog",
-      "report",
-      { query: searchParams.toString() },
-    );
+    if (!logsResult.ok) {
+      logger.warn({
+        correlationId,
+        operationName,
+        adminRole: adminRoleStr,
+        outcome: "domain_error",
+        durationMs: Date.now() - requestStartedAt,
+        errorCode: logsResult.code,
+      });
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // Record this data access in the compliance audit trail (ADR-ADMIN-008)
+    const auditResult = await gdprService.logAdminDataAccess(actor, {
+      action: "DATA_ACCESS_BY_ADMIN",
+      entityType: "AuditLog",
+      entityId: "report",
+      details: { query: searchParams.toString() },
+    });
+
+    if (!auditResult.ok) {
+      // Non-blocking per ADR-ADMIN-008 — log but do not fail the request
+      logger.warn({
+        correlationId,
+        operationName,
+        adminRole: adminRoleStr,
+        outcome: "domain_error",
+        durationMs: Date.now() - requestStartedAt,
+        errorCode: auditResult.code,
+      });
+    }
 
     logger.info({
       correlationId,
-      operationName: "get_compliance_queue",
-      adminRole,
+      operationName,
+      adminRole: adminRoleStr,
       outcome: "success",
       durationMs: Date.now() - requestStartedAt,
       resourceType: "compliance_audit_log",
     });
 
-    return NextResponse.json(logs);
+    return NextResponse.json(logsResult.data);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     logger.error({
       correlationId,
-      operationName: "get_compliance_queue",
+      operationName,
       adminRole: "unknown",
       outcome: "internal_error",
       durationMs: Date.now() - requestStartedAt,
