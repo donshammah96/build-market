@@ -1,43 +1,22 @@
-// @ts-nocheck
 "use server";
 
 import { safeAction } from "./shared";
-import { prisma } from "@build/db";
+import { dashboardService } from "@/lib/domains/dashboard/service";
+import type { DashboardStats } from "@/lib/domains/dashboard/contracts";
 
-// ============================================================================
-// Dashboard Statistics
-// ============================================================================
-
-export type DashboardStats = {
-  userCount: number;
-  professionalCount: number;
-  verifiedProfessionalCount: number;
-  activeProjectCount: number;
-};
+export type { DashboardStats };
 
 /**
  * Fetches platform-wide statistics for the admin dashboard.
+ * Delegates to dashboardService (VIEW_FINANCIALS capability gate).
  * Uses Promise.all for parallel queries to minimize latency.
  */
 export async function getDashboardStats() {
-  return safeAction("getDashboardStats", async (): Promise<DashboardStats> => {
-    const [
-      userCount,
-      professionalCount,
-      verifiedProfessionalCount,
-      activeProjectCount,
-    ] = await Promise.all([
-      prisma.user.count(),
-      prisma.professionalProfile.count(),
-      prisma.professionalProfile.count({ where: { verified: true } }),
-      prisma.project.count({ where: { status: "in_progress" } }),
-    ]);
-
-    return {
-      userCount,
-      professionalCount,
-      verifiedProfessionalCount,
-      activeProjectCount,
-    };
+  return safeAction("getDashboardStats", async ({ actor }) => {
+    const result = await dashboardService.getDashboardStats(actor);
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+    return result.data;
   });
 }
