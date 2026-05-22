@@ -37,6 +37,7 @@ export const AdminOperationName = {
   BATCH_VERIFY_DOCUMENTS: "batch_verify_documents",
   BATCH_VERIFY_ENTITIES: "batch_verify_entities",
   VERIFY_PROFESSIONAL: "verify_professional",
+  REJECT_PROFESSIONAL: "reject_professional",
 
   // ---- Audit (Tier 1) -------------------------------------------------------
   QUERY_AUDIT_LOG: "query_audit_log",
@@ -78,15 +79,26 @@ export const AdminOperationName = {
   LIST_LEADS: "list_leads",
   GET_LEAD_DETAIL: "get_lead_detail",
   UPDATE_LEAD: "update_lead",
+  DELETE_LEAD: "delete_lead",
+  GET_LEAD_STATS: "get_lead_stats",
+  BULK_UPDATE_LEAD_STATUS: "bulk_update_lead_status",
+  EXPORT_LEADS: "export_leads",
   LIST_SERVICES: "list_services",
   GET_SERVICE_DETAIL: "get_service_detail",
+  CREATE_SERVICE: "create_service",
   UPDATE_SERVICE: "update_service",
+  TOGGLE_SERVICE_ACTIVE: "toggle_service_active",
+  DELETE_SERVICE: "delete_service",
+  REORDER_SERVICES: "reorder_services",
+  GET_SERVICE_STATS: "get_service_stats",
   LIST_PROFESSIONALS: "list_professionals",
   GET_PROFESSIONAL_DETAIL: "get_professional_detail",
   UPDATE_PROFESSIONAL: "update_professional",
+  DELETE_CERTIFICATE: "delete_certificate",
 
   // ---- Compliance / GDPR (Tier 1) -------------------------------------------
   GET_COMPLIANCE_QUEUE: "get_compliance_queue",
+  GET_COMPLIANCE_QUEUE_STATUS: "get_compliance_queue_status",
   PROCESS_COMPLIANCE_REQUEST: "process_compliance_request",
 
   // ---- Settings (Tier 1) ----------------------------------------------------

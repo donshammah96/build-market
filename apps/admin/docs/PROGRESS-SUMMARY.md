@@ -4,8 +4,8 @@
 
 ## Active Phase
 
-**Phase:** Finance/Analytics + Stores/Properties Action Slice (complete)
-**Status:** Completed and fully verified the Finance/Analytics + Stores/Properties action slice, including complete domain slices for `stores` and `properties` and comprehensive analytics persistence/services for `finance`. Added robust type check and unit test verification (35 test files passed, 294 tests passed, 0 failed).
+**Phase:** Leads, Services, & Professionals Action Overhaul with UI Hardening (complete)
+**Status:** Completed and fully verified the Leads, Services, & Professionals action overhaul and visual/styling token hardening across `CardList.tsx`, `AppBarChart.tsx`, and `AddUser.tsx`. Hardened compliance queue API route and resolved compiler/typing issues with zero regression. Added robust type check and unit test verification (39 test files passed, 326 tests passed, 0 failed).
 
 **Completed:**
 
@@ -38,39 +38,39 @@
 - Phase 7 (Track C) observability foundation added on `feat/admin-overhaul/observability`: structured `getAdminLogger()` with PII exclusion, `AsyncLocalStorage`-backed correlation ID threading, typed `AdminOperationName` registry (40+ operations), and `safeAction`/`safeVerificationAction` integration emitting structured log events at every outcome path.
 - Track A — Phase 5 Audit/Export Action Slice added: migrated `audit.ts` and `compliance/route.ts` off direct Prisma / `.parse()` / `@ts-nocheck`, integrated the structured logger, and added comprehensive service & action tests.
 - Finance/Analytics + Stores/Properties Action Slice added: implemented full `stores` and `properties` domain layers (contracts, repository, service), extended `finance` domain for advanced analytics, and rewrote analytics, stores, and properties actions using `safeAction` to eliminate direct Prisma, `@ts-nocheck`, and legacy logging. Achieved 100% test coverage with zero type check or runtime regressions.
+- Leads, Services, & Professionals Action Overhaul with UI Hardening added: implemented full domain slices (`leads`, `services`, `professionals`) to completely eliminate direct Prisma access and unstructured log traces from their server actions. Upgraded UI layers (`CardList.tsx`, `AppBarChart.tsx`, `AddUser.tsx`) to utilize native Tailwind CSS v4 parentheses design tokens `(--variable)`, fully resolving legacy compile silences (`// @ts-nocheck`). Hardened `/api/admin/compliance/queue-status` route with robust profile authorization checks, structured log wrappers, and test suites.
 
 **Remaining steps:**
 
 - Start Track B Phase 6 token and route-boundary work after the current action slice lands, keeping UI-only changes isolated from Track A.
 - Continue with the remaining high-risk compliance/export mutations and GDPR tasks (Track A Phase 6 GDPR/export slice).
-- Start leads/services/professionals action slice migrations.
-- Continue reducing remaining drift: 10 direct-Prisma action files, 10 `.parse()` call sites, 12 `@ts-nocheck` files.
+- Continue reducing remaining drift: 7 direct-Prisma action files, 7 `.parse()` call sites, 9 `@ts-nocheck` files.
 
 ## Slice Status Registry
 
 Status codes: compliant, known defect, unaudited/in progress, N/A.
 
-| Slice                        | Tier | Auth/Policy           | Actions           | Domain/Repo           | Tests                 | Observability     | Overall               |
-| ---------------------------- | ---- | --------------------- | ----------------- | --------------------- | --------------------- | ----------------- | --------------------- |
-| users                        | T1   | compliant             | compliant         | compliant             | compliant             | compliant         | compliant             |
-| verification                 | T1   | compliant             | compliant         | compliant             | compliant             | compliant         | compliant             |
-| audit                        | T1   | compliant             | compliant         | compliant             | compliant             | compliant         | compliant             |
-| GDPR/export                  | T1   | unaudited/in progress | N/A               | known defect          | unaudited/in progress | known defect      | known defect          |
-| finance/analytics            | T1   | compliant             | compliant         | compliant             | compliant             | compliant         | compliant             |
-| stores/properties/projects   | T2   | compliant (st/pr)     | compliant (st/pr) | compliant (st/pr)     | compliant             | compliant (st/pr) | compliant (st/pr)     |
-| leads/services/professionals | T2   | known defect          | known defect      | unaudited/in progress | unaudited/in progress | known defect      | known defect          |
-| UI shell/components          | T3   | N/A                   | N/A               | N/A                   | unaudited/in progress | N/A               | unaudited/in progress |
+| Slice                        | Tier | Auth/Policy           | Actions           | Domain/Repo       | Tests                 | Observability     | Overall           |
+| ---------------------------- | ---- | --------------------- | ----------------- | ----------------- | --------------------- | ----------------- | ----------------- |
+| users                        | T1   | compliant             | compliant         | compliant         | compliant             | compliant         | compliant         |
+| verification                 | T1   | compliant             | compliant         | compliant         | compliant             | compliant         | compliant         |
+| audit                        | T1   | compliant             | compliant         | compliant         | compliant             | compliant         | compliant         |
+| GDPR/export                  | T1   | unaudited/in progress | N/A               | known defect      | unaudited/in progress | known defect      | known defect      |
+| finance/analytics            | T1   | compliant             | compliant         | compliant         | compliant             | compliant         | compliant         |
+| stores/properties/projects   | T2   | compliant (st/pr)     | compliant (st/pr) | compliant (st/pr) | compliant             | compliant (st/pr) | compliant (st/pr) |
+| leads/services/professionals | T2   | compliant             | compliant         | compliant         | compliant             | compliant         | compliant         |
+| UI shell/components          | T3   | N/A                   | N/A               | N/A               | compliant             | N/A               | compliant         |
 
 ## Open Defects
 
-1. `ADM-001` | Severity: Critical | Action boundary still permits direct Prisma access in remaining action files (reduced from 13 down to 10 files).
-2. `ADM-002` | Severity: Critical | Action-layer `.parse()` remains in 10 call sites.
-3. `ADM-003` | Severity: Critical | `safeAction` now resolves a canonical `AdminActor`, but remaining action slices still need Phase 5 migration to consume actor/policy options consistently.
+1. `ADM-001` | Severity: Critical | Action boundary still permits direct Prisma access in remaining action files (reduced from 10 down to 7 files).
+2. `ADM-002` | Severity: Critical | Action-layer `.parse()` remains in 7 call sites.
+3. `ADM-003` | Severity: Critical | `safeAction` now resolves a canonical `AdminActor`, but remaining legacy action slices still need Phase 5 migration to consume actor/policy options consistently.
 4. `ADM-004` | Severity: High | Direct env reads remain in 69 drift findings.
-5. `ADM-005` | Severity: High | `@ts-nocheck` remains in 12 source files (reduced from 18 files).
+5. `ADM-005` | Severity: High | `@ts-nocheck` remains in 9 source files (reduced from 12 files).
 6. `ADM-006` | Severity: High | Unstructured logging has been resolved in all updated slices, remaining legacy code still has structured-logging drift.
 7. `ADM-007` | Severity: High | Strict TypeScript gate remains fully stabilized.
-8. `ADM-008` | Severity: Medium | Vitest aliasing and stale role expectations are fully verified; root admin suite is solid with 294 green tests.
+8. `ADM-008` | Severity: Medium | Vitest aliasing and stale role expectations are fully verified; root admin suite is solid with 326 green tests.
 9. `ADM-009` | Severity: Medium | ESLint passes but still reports known warnings.
 10. `ADM-010` | Severity: Medium | High-risk verify route files are completely audit-logged.
 
@@ -92,7 +92,7 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 - `pnpm run admin:lint` → pass with known warnings backlog.
 - `pnpm run admin:check-env-contract` → pass; 59 boundary keys.
 - `pnpm run admin:report-security-drift` → pass with improved drift counts.
-- `pnpm run admin:test:all` → pass; 35 files passed, 294 of 294 tests passed.
+- `pnpm run admin:test:all` → pass; 39 files passed, 326 of 326 tests passed.
 
 ## Completed Phases
 
@@ -107,6 +107,7 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 9. Phase 7 (Track C) Observability Foundation - completed 2026-05-21.
 10. Track A — Phase 5 Audit/Export Action Slice - completed 2026-05-21.
 11. Finance/Analytics + Stores/Properties Action Slice - completed 2026-05-21.
+12. Leads, Services, & Professionals Action Overhaul with UI Hardening - completed 2026-05-22.
 
 ## Rollback Contracts
 
@@ -122,4 +123,4 @@ Phase 10 flags are runtime-readable through `adminEnvConfig`; toggling them requ
 
 ## Next Priority
 
-Complete GDPR/export and leads/services/professionals action slices and continue UI token and route-boundary integrations.
+Complete the Track A Phase 6 GDPR/data export slice, followed by the Phase 12 Security Hardening Pass (enforcing strict ASVS L2 controls, step-up authentication, rate limits, mass assignment schema protection, anti-caching, and resolving all remaining security and environment boundary drift findings).

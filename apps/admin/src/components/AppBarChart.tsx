@@ -1,5 +1,5 @@
-// @ts-nocheck
 "use client";
+
 import {
   ChartContainer,
   ChartLegend,
@@ -8,29 +8,25 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
-import { OrderChartType } from "@build/types";
 import { use } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+
+export type OrderChartType = {
+  month: string;
+  total: number;
+  successful: number;
+};
 
 const chartConfig = {
   total: {
     label: "Total",
-    color: "var(--chart-1)",
+    color: "var(--admin-color-accent)",
   },
   successful: {
     label: "Successful",
-    color: "var(--chart-4)",
+    color: "var(--admin-color-success)",
   },
 } satisfies ChartConfig;
-
-// const chartData = [
-//   { month: "January", total: 186, successful: 80 },
-//   { month: "February", total: 305, successful: 200 },
-//   { month: "March", total: 237, successful: 120 },
-//   { month: "April", total: 173, successful: 100 },
-//   { month: "May", total: 209, successful: 130 },
-//   { month: "June", total: 214, successful: 140 },
-// ];
 
 const AppBarChart = ({
   dataPromise,
@@ -40,8 +36,10 @@ const AppBarChart = ({
   const chartData = use(dataPromise);
   return (
     <div className="">
-      <h1 className="text-lg font-medium mb-6">Total Revenue</h1>
-      <ChartContainer config={chartConfig} className="min-h-[200px] w-full">
+      <h1 className="text-lg font-medium mb-6 text-(--admin-color-text-primary)">
+        Total Revenue
+      </h1>
+      <ChartContainer config={chartConfig} className="min-h-50 w-full">
         <BarChart accessibilityLayer data={chartData}>
           <CartesianGrid vertical={false} />
           <XAxis
