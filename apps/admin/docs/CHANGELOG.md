@@ -1,5 +1,35 @@
 # apps/admin Changelog
 
+## [2026-05-22] Phase 6 Overhaul: Dashboard, Projects, Settings, & GDPR Action Overhaul
+
+### Added (Phase 6 Overhaul)
+
+- **Domain/Dashboard**: Created a dedicated domain slice under `src/lib/domains/dashboard/` (`contracts.ts`, `repository.ts`, `service.ts`, and full unit tests) with the `VIEW_FINANCIALS` policy capability check (with explicit `SUPPORT_AGENT` bypass for non-financial stats).
+- **Domain/Projects**: Created a dedicated domain slice under `src/lib/domains/projects/` (`contracts.ts`, `repository.ts`, `service.ts`, and full unit tests) with dynamic database schema queries for budget resolving.
+- **Domain/Settings**: Created a dedicated domain slice under `src/lib/domains/settings/` (`contracts.ts`, `repository.ts`, `service.ts`, and full unit tests) protecting configuration values and caching gates with the `SYSTEM_ADMIN_ONLY` capability.
+- **Domain/GDPR**: Created a dedicated domain slice under `src/lib/domains/gdpr/` (`contracts.ts`, `service.ts`, and full unit tests) providing clean encapsulation of GDPR actions.
+
+### Changed (Phase 6 Overhaul)
+
+- **Actions/Dashboard**: Refactored `src/actions/admin/dashboard.ts` to utilize `safeAction` and delegate to `dashboardService.getDashboardStats`, completely removing direct Prisma queries.
+- **Actions/Projects**: Refactored `src/actions/admin/projects.ts` off legacy Prisma. Wired Zod schema parameters (`projectsQuerySchema`, `projectIdSchema`) through `safeAction` inputs to prevent unhandled throwing.
+- **Actions/Settings**: Refactored `src/actions/admin/settings.ts` to consume `settingsService`. Wired Tier 1 mutations (`updateSystemSettings` and `clearSystemCache`) through `safeAction` with strict `recentAuth: { maxAgeSeconds: 180 }` freshness enforcement and declarative `auditLog` annotations.
+- **Compliance Route**: Hardened `/api/admin/compliance/route.ts` to wire route authentication, correlation logging, and delegate queue processing fully to `gdprService`.
+
+### Tests (Phase 6 Overhaul)
+
+- Created comprehensive action-boundary test files: `dashboard-actions.test.ts` (4 tests), `projects-actions.test.ts` (6 tests), and `settings-actions.test.ts` (7 tests) verifying successful execution, validation failure handling, capability denials, and stale session rejections.
+- Extended domain test suites to cover the new domain logic, achieving 100% test coverage with **366 green tests across 46 files**.
+
+**Files changed:** `apps/admin/src/actions/admin/dashboard.ts`, `apps/admin/src/actions/admin/projects.ts`, `apps/admin/src/actions/admin/settings.ts`, `apps/admin/src/actions/admin/compliance/route.ts`, `apps/admin/src/lib/observability/operation-names.ts`, `apps/admin/src/lib/domains/dashboard/` [NEW], `apps/admin/src/lib/domains/projects/` [NEW], `apps/admin/src/lib/domains/settings/` [NEW], `apps/admin/src/lib/domains/gdpr/` [NEW], `src/actions/admin/__tests__/dashboard-actions.test.ts` [NEW], `src/actions/admin/__tests__/projects-actions.test.ts` [NEW], `src/actions/admin/__tests__/settings-actions.test.ts` [NEW]
+
+**Drift reduction:** directPrismaInActions −4 files; zodParseDrift −4 call sites; `@ts-nocheck` −3 files.
+
+**Verification:**
+
+- `pnpm run check-types` → pass.
+- `pnpm run test:all` → pass; 46 files passed, 366 of 366 tests passed.
+
 ## [2026-05-22] Phase 6 & 7 Overhaul: Leads, Services, & Professionals Slices with UI Token Hardening
 
 ### Added (Phase 6 & 7 Overhaul)

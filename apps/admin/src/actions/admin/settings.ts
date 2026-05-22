@@ -1,34 +1,28 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { assertAdmin, type SystemSettingsInput } from "./shared";
+import { z } from "zod";
+import { safeAction } from "./shared";
 import { SystemSettingsSchema } from "./types";
-import { prisma } from "@build/db";
-import { invalidateCache } from "@build/db/system-settings";
+import { settingsService } from "@/lib/domains/settings/service";
+import type { SystemSettings } from "@/lib/domains/settings/contracts";
+
+export type { SystemSettings };
 
 // ============================================================================
-// Types
+// Helpers
 // ============================================================================
 
-export type SystemSettings = {
-  maintenanceMode: boolean;
-  publicSignup: boolean;
-  enableAutoVerifyNCA: boolean;
-  platformCommission: number;
-  supportEmail: string;
-  adminEmailAlerts: boolean;
-  securityMFA: boolean;
-};
-
-const DEFAULT_SETTINGS: SystemSettings = {
-  maintenanceMode: false,
-  publicSignup: true,
-  enableAutoVerifyNCA: false,
-  platformCommission: 10,
-  supportEmail: "support@buildmarket.co.ke",
-  adminEmailAlerts: true,
-  securityMFA: true,
-};
+function parseActionInput<T>(
+  schema: z.ZodType<T>,
+  input: unknown,
+  fallbackMessage: string,
+): T {
+  const result = schema.safeParse(input);
+  if (!result.success) {
+    throw new Error(result.error.issues[0]?.message ?? fallbackMessage);
+  }
+  return result.data;
+}
 
 // ============================================================================
 // Actions
@@ -37,86 +31,66 @@ const DEFAULT_SETTINGS: SystemSettings = {
 /**
  * Get current system settings.
  * Fetches the singleton row 'global', returns defaults if missing.
+ * Requires SYSTEM_ADMIN_ONLY capability.
  */
-export async function getSystemSettings(): Promise<SystemSettings | null> {
-  try {
-    await assertAdmin();
-
-    const settings = await prisma.systemSettings.findUnique({
-      where: { id: "global" },
-    });
-
-    if (!settings) {
-      return DEFAULT_SETTINGS;
+export async function getSystemSettings() {
+  return safeAction("getSystemSettings", async ({ actor }) => {
+    const result = await settingsService.getSystemSettings(actor);
+    if (!result.ok) {
+      throw new Error(result.message);
     }
-
-    return {
-      ...settings,
-      platformCommission: Number(settings.platformCommission ?? 10),
-      enableAutoVerifyNCA: settings.enableAutoVerifyNCA ?? false,
-    };
-  } catch (error) {
-    console.error("Failed to fetch settings:", error);
-    return null;
-  }
+    return result.data;
+  });
 }
 
 /**
  * Updates system-wide settings.
  * Uses 'global' ID to enforce singleton pattern.
- * Returns the updated settings for optimistic UI updates.
+ * Tier 1 mutation — requires recentAuth and SYSTEM_ADMIN_ONLY capability.
  */
-export async function updateSystemSettings(data: SystemSettingsInput) {
-  try {
-    await assertAdmin();
+export async function updateSystemSettings(data: unknown) {
+  return safeAction(
+    "updateSystemSettings",
+    async ({ actor }) => {
+      const validated = parseActionInput(
+        SystemSettingsSchema,
+        data,
+        "Invalid settings data",
+      );
 
-    const validated = SystemSettingsSchema.parse(data);
+      const result = await settingsService.updateSystemSettings(
+        actor,
+        validated,
+      );
+      if (!result.ok) {
+        throw new Error(result.message);
+      }
 
-    const settings = await prisma.systemSettings.upsert({
-      where: { id: "global" },
-      update: {
-        ...validated,
-        platformCommission: validated.platformCommission,
-        enableAutoVerifyNCA: validated.enableAutoVerifyNCA,
+      return result.data.settings;
+    },
+    {
+      recentAuth: { maxAgeSeconds: 180 },
+      auditLog: {
+        operation: "UPDATE_SYSTEM_SETTINGS",
+        resourceType: "system_settings",
+        getTargetId: () => "global",
+        getDetails: () =>
+          typeof data === "object" ? (data as Record<string, unknown>) : {},
       },
-      create: {
-        id: "global",
-        ...validated,
-        platformCommission: validated.platformCommission,
-        enableAutoVerifyNCA: validated.enableAutoVerifyNCA,
-      },
-    });
-
-    invalidateCache();
-    revalidatePath("/settings");
-
-    // Return updated settings for optimistic updates
-    return {
-      success: true,
-      data: {
-        ...settings,
-        platformCommission: Number(settings.platformCommission),
-      },
-      timestamp: new Date().toISOString(),
-    };
-  } catch {
-    console.error("Failed to update settings:");
-    return { success: false, error: "Failed to update settings" };
-  }
+    },
+  );
 }
 
 /**
  * Clears all Next.js caches by revalidating the root layout.
+ * Requires SYSTEM_ADMIN_ONLY capability.
  */
 export async function clearSystemCache() {
-  try {
-    await assertAdmin();
-    revalidatePath("/", "layout");
-    return {
-      success: true,
-      timestamp: new Date().toISOString(),
-    };
-  } catch {
-    return { success: false, error: "Failed to clear cache" };
-  }
+  return safeAction("clearSystemCache", async ({ actor }) => {
+    const result = await settingsService.clearSystemCache(actor);
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+    return result.data;
+  });
 }

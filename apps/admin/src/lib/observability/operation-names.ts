@@ -104,6 +104,7 @@ export const AdminOperationName = {
   // ---- Settings (Tier 1) ----------------------------------------------------
   GET_SYSTEM_SETTINGS: "get_system_settings",
   UPDATE_SYSTEM_SETTINGS: "update_system_settings",
+  CLEAR_SYSTEM_CACHE: "clear_system_cache",
 
   // ---- Dashboard ------------------------------------------------------------
   GET_DASHBOARD_STATS: "get_dashboard_stats",
