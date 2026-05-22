@@ -18,5 +18,13 @@
     "**/.next/**": true,
     "**/.turbo/**": true,
     "**/dist/**": true
+  },
+  "chat.tools.terminal.autoApprove": {
+    "ConvertFrom-Json": true,
+    "ConvertTo-Json": true,
+    "Out-File": true,
+    "Get-Item": true,
+    "ForEach-Object": true,
+    "Get-Member": true
   }
 }
