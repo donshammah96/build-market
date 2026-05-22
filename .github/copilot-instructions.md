@@ -119,17 +119,17 @@ Hard rules:
 
 ### TypeScript Path Aliases (enforced via `tsconfig.json`)
 
-| Alias | Resolves to | Guards |
-|---|---|---|
-| `@/domains/*` | `app/lib/domains/*` | Domain boundary |
-| `@/facades/*` | `lib/facades/*` | Client boundary (colocated facades + hooks) |
-| `@/routes` | `lib/routes` barrel | No inline URL strings |
-| `@/infra/*` | `app/lib/infrastructure/*` | Infrastructure boundary |
-| `@/security/*` | `app/lib/security/*` | Auth/authz policy |
-| `@/config/*` | `app/lib/config/*` | Domain constants |
-| `@/validation/*` | `app/lib/validation/*` | Zod schemas |
-| `@/ui/*` | `components/*` | Presentation |
-| `@/app/lib/errors/result` | `app/lib/errors/result` | No local `Result` redefinitions |
+| Alias                     | Resolves to                | Guards                                      |
+| ------------------------- | -------------------------- | ------------------------------------------- |
+| `@/domains/*`             | `app/lib/domains/*`        | Domain boundary                             |
+| `@/facades/*`             | `lib/facades/*`            | Client boundary (colocated facades + hooks) |
+| `@/routes`                | `lib/routes` barrel        | No inline URL strings                       |
+| `@/infra/*`               | `app/lib/infrastructure/*` | Infrastructure boundary                     |
+| `@/security/*`            | `app/lib/security/*`       | Auth/authz policy                           |
+| `@/config/*`              | `app/lib/config/*`         | Domain constants                            |
+| `@/validation/*`          | `app/lib/validation/*`     | Zod schemas                                 |
+| `@/ui/*`                  | `components/*`             | Presentation                                |
+| `@/app/lib/errors/result` | `app/lib/errors/result`    | No local `Result` redefinitions             |
 
 New aliases require a corresponding `no-restricted-imports` rule reviewed in the same PR.
 
@@ -454,11 +454,11 @@ Key requirements:
 
 Three document categories govern how documentation is treated (see `apps/client/docs/adr/ADR-009-documentation-lifecycle.md`):
 
-| Category | Location | Status header | Lifespan |
-|---|---|---|---|
-| **Living** | `docs/adr/`, `app/lib/` | Updated continuously | Permanent — never deleted, only superseded |
-| **Progress / implementation plans** | `docs/progress/` | `In Progress` / `Complete` / `Superseded` | Archived to `docs/archive/` within one sprint of completion |
-| **Ephemeral working notes** | `docs/scratch/` (if committed at all) | `Status: EPHEMERAL` or `Expires: YYYY-MM-DD` | Deleted at end of work window; never reference from code or ADRs |
+| Category                            | Location                              | Status header                                | Lifespan                                                         |
+| ----------------------------------- | ------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------- |
+| **Living**                          | `docs/adr/`, `app/lib/`               | Updated continuously                         | Permanent — never deleted, only superseded                       |
+| **Progress / implementation plans** | `docs/progress/`                      | `In Progress` / `Complete` / `Superseded`    | Archived to `docs/archive/` within one sprint of completion      |
+| **Ephemeral working notes**         | `docs/scratch/` (if committed at all) | `Status: EPHEMERAL` or `Expires: YYYY-MM-DD` | Deleted at end of work window; never reference from code or ADRs |
 
 Enforcement rules:
 
