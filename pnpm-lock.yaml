@@ -7,14 +7,13 @@ settings:
 importers:
 
   .:
-    dependencies:
-      ngrok:
-        specifier: 5.0.0-beta.2
-        version: 5.0.0-beta.2
     devDependencies:
       next:
         specifier: 16.2.6
         version: 16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      ngrok:
+        specifier: 5.0.0-beta.2
+        version: 5.0.0-beta.2
       prettier:
         specifier: ^3.6.2
         version: 3.8.3
@@ -980,6 +979,7 @@ packages:
   '@aws-sdk/core@3.974.9':
     resolution: {integrity: sha512-bXxosFunr+v/kqNb99r1NRkrVBha7CG036fRSpWGbC1A/e363XFQN6wcZMx7MYTdRr1tYwNnkrWX2xc1rT3BCQ==}
     engines: {node: '>=20.0.0'}
+    deprecated: Deprecated due to an error deserialization bug in JSON 1.0 protocol services, see https://github.com/aws/aws-sdk-js-v3/pull/8031. Newer version available.
 
   '@aws-sdk/crc64-nvme@3.972.8':
     resolution: {integrity: sha512-fVfUCL/Xh2zINYMPZvj+iBn6XWouQf0DAnjaWCI9MkmqXzL2Iy5FoQB8O7syFe6gN6AH1ecDDU58T51Ou0kFkA==}
