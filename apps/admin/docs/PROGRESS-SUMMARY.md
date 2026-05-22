@@ -53,16 +53,16 @@
 
 Status codes: compliant, known defect, unaudited/in progress, N/A.
 
-| Slice                        | Tier | Auth/Policy           | Actions           | Domain/Repo       | Tests                 | Observability     | Overall           |
-| ---------------------------- | ---- | --------------------- | ----------------- | ----------------- | --------------------- | ----------------- | ----------------- |
-| users                        | T1   | compliant             | compliant         | compliant         | compliant             | compliant         | compliant         |
-| verification                 | T1   | compliant             | compliant         | compliant         | compliant             | compliant         | compliant         |
-| audit                        | T1   | compliant             | compliant         | compliant         | compliant             | compliant         | compliant         |
-| GDPR/export                  | T1   | compliant             | compliant         | compliant         | compliant             | compliant         | compliant         |
-| finance/analytics            | T1   | compliant             | compliant         | compliant         | compliant             | compliant         | compliant         |
-| stores/properties/projects   | T2   | compliant             | compliant         | compliant         | compliant             | compliant         | compliant         |
-| leads/services/professionals | T2   | compliant             | compliant         | compliant         | compliant             | compliant         | compliant         |
-| UI shell/components          | T3   | N/A                   | N/A               | N/A               | compliant             | N/A               | compliant         |
+| Slice                        | Tier | Auth/Policy | Actions   | Domain/Repo | Tests     | Observability | Overall   |
+| ---------------------------- | ---- | ----------- | --------- | ----------- | --------- | ------------- | --------- |
+| users                        | T1   | compliant   | compliant | compliant   | compliant | compliant     | compliant |
+| verification                 | T1   | compliant   | compliant | compliant   | compliant | compliant     | compliant |
+| audit                        | T1   | compliant   | compliant | compliant   | compliant | compliant     | compliant |
+| GDPR/export                  | T1   | compliant   | compliant | compliant   | compliant | compliant     | compliant |
+| finance/analytics            | T1   | compliant   | compliant | compliant   | compliant | compliant     | compliant |
+| stores/properties/projects   | T2   | compliant   | compliant | compliant   | compliant | compliant     | compliant |
+| leads/services/professionals | T2   | compliant   | compliant | compliant   | compliant | compliant     | compliant |
+| UI shell/components          | T3   | N/A         | N/A       | N/A         | compliant | N/A           | compliant |
 
 ## Open Defects
 
