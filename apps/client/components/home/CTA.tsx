@@ -18,16 +18,16 @@ export const CTA: FC = memo(function CTA() {
   return (
     <section
       ref={ref as React.RefObject<HTMLElement>}
-      className="py-20 px-4 sm:px-6 md:px-20 bg-zinc-900 overflow-hidden relative"
+      className="py-20 px-4 sm:px-6 md:px-20 bg-gradient-to-br from-foreground via-foreground to-primary overflow-hidden relative"
       aria-labelledby="cta-heading"
     >
       {/* Abstract Background shapes - GPU optimized with will-change */}
       <div
-        className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"
+        className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-primary/20 rounded-full blur-3xl pointer-events-none"
         aria-hidden="true"
       />
       <div
-        className="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"
+        className="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-chart-2/20 rounded-full blur-3xl pointer-events-none"
         aria-hidden="true"
       />
 
@@ -36,10 +36,10 @@ export const CTA: FC = memo(function CTA() {
         <div
           className={cn(
             "max-w-2xl text-center md:text-left",
-            isInView && shouldAnimate && "animate-fade-in-up"
+            isInView && shouldAnimate && "motion-safe:animate-fade-in-up",
           )}
         >
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-900/50 border border-emerald-800 text-emerald-400 text-sm font-medium mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/25 text-white text-sm font-medium mb-6">
             <Hammer size={14} aria-hidden="true" />
             <span>Ready to build?</span>
           </div>
@@ -49,10 +49,10 @@ export const CTA: FC = memo(function CTA() {
             className="text-4xl sm:text-5xl md:text-6xl font-bold text-white tracking-tight mb-6"
           >
             Let&apos;s get your project{" "}
-            <span className="text-emerald-500">off the ground.</span>
+            <span className="text-primary-foreground">off the ground.</span>
           </h2>
 
-          <p className="text-zinc-400 text-lg md:text-xl max-w-lg mx-auto md:mx-0">
+          <p className="text-white/75 text-lg md:text-xl max-w-lg mx-auto md:mx-0">
             Join thousands of Kenyan homeowners and top-rated professionals
             building better, together.
           </p>
@@ -62,7 +62,7 @@ export const CTA: FC = memo(function CTA() {
         <div
           className={cn(
             "flex flex-col sm:flex-row gap-4 w-full md:w-auto",
-            isInView && shouldAnimate && "animate-slide-in-right"
+            isInView && shouldAnimate && "motion-safe:animate-slide-in-right",
           )}
           style={{
             animationDelay: isInView && shouldAnimate ? "200ms" : "0ms",
@@ -70,7 +70,7 @@ export const CTA: FC = memo(function CTA() {
         >
           <Button
             size="lg"
-            className="bg-emerald-600 hover:bg-emerald-700 text-white text-lg h-14 px-8 transition-transform hover:scale-[1.02] active:scale-95"
+            className="bg-background text-foreground text-lg h-14 px-8 motion-safe:hover:scale-[1.02] active:scale-95"
             asChild
           >
             <Link href={ROUTES.joinAsPro}>
@@ -82,7 +82,7 @@ export const CTA: FC = memo(function CTA() {
           <Button
             variant="secondary"
             size="lg"
-            className="text-lg h-14 px-8 bg-white text-zinc-900 hover:bg-zinc-100 transition-transform hover:scale-[1.02] active:scale-95"
+            className="text-lg h-14 px-8 bg-white/15 border border-white/30 text-white hover:bg-white/20 motion-safe:hover:scale-[1.02] active:scale-95"
             asChild
           >
             <Link href={ROUTES.signIn}>Log In</Link>

@@ -1,193 +1,252 @@
-import { NextRequest } from "next/server";
-import { auth, currentUser, clerkClient } from "@clerk/nextjs/server";
-import { prisma } from "@repo/db";
-import { County } from "@prisma/client";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
-import {
-  initializeCorrelationId,
-  executeResilient,
-  getClientLogger,
-} from "@/app/lib/resilient-api";
-import {
-  checkRateLimit,
-  getRateLimitIdentifier,
-  RateLimits,
-} from "@/app/lib/rate-limit";
-
-const logger = getClientLogger();
-
 /**
  * POST /api/onboarding/skip
- * Skip onboarding for homeowners - creates minimal profile and redirects to dashboard
+ * app/api/onboarding/skip/route.ts
  *
- * This allows homeowners to go directly to their dashboard without filling the
- * onboarding form. They can complete their profile later from the client portal.
+ * KEY CHANGES FROM ORIGINAL:
  *
- * This endpoint uses Clerk auth directly (not withAuth middleware) because
- * the user may not exist in the database yet. It will create the user if needed.
+ * 1. CLERK UPDATE ORDERING FIX (critical)
+ *    Original: domain logic → safeIdempotencyComplete() → Clerk update
+ *    Fixed:    domain logic → Clerk update → safeIdempotencyComplete()
+ *
+ * 2. SHARED CLERK HELPER replaces (await clerkClient()) as unknown as ClerkMetadataClient
  */
-export async function POST(req: NextRequest) {
+
+import { NextRequest, NextResponse } from "next/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
+import { apiError, HttpStatus } from "@/app/lib/api/api-response";
+import {
+  initializeCorrelationId,
+  apiSuccess,
+  getResilientExecutor,
+  getClientLogger,
+} from "@/app/lib/api/resilient-api";
+import {
+  checkRateLimit,
+  getActorRateLimitIdentifier,
+  RateLimits,
+} from "@/app/lib/api/rate-limit";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
+import {
+  type ClerkUserProfile,
+  userProfileOnboardingService,
+} from "@/app/lib/domains/user-profile";
+import {
+  CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
+  finalizeClerkOnboardingTransition,
+} from "@/app/lib/domains/user-profile/clerk-metadata";
+import { normalizeRole, type AppRole } from "@/app/lib/security/roles";
+import { now } from "../shared";
+
+const ROUTE_PATTERN = "/api/onboarding/skip";
+const OPERATION_NAME = "skip_onboarding";
+
+const SKIP_ONBOARDING_ERROR_MESSAGE_MAP: Partial<Record<string, string>> = {
+  conflict: "Onboarding already completed",
+  forbidden: "Forbidden",
+  not_found: "User not found",
+  invalid_state: "Invalid onboarding state",
+  invalid_input: "Invalid onboarding input",
+  internal: "Skip onboarding failed",
+};
+
+function mapOutcomeFromStatus(status: number): string {
+  if (status === HttpStatus.BAD_REQUEST) return "bad_request";
+  if (status === HttpStatus.UNAUTHORIZED) return "unauthorized";
+  if (status === HttpStatus.FORBIDDEN) return "forbidden";
+  if (status === HttpStatus.CONFLICT) return "conflict";
+  if (status === HttpStatus.TOO_MANY_REQUESTS) return "rate_limited";
+  return "failed";
+}
+
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  const startedAt = now();
   const correlationId = initializeCorrelationId(req);
+  let actorRole: "unknown" | AppRole = "unknown";
 
-  try {
-    // Get Clerk user ID
-    const { userId: clerkId } = await auth();
+  type LogOutcomeFields = {
+    reason?: string;
+    source?: string;
+    domainError?: string;
+    skipped?: boolean;
+  };
 
-    if (!clerkId) {
-      return apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED);
-    }
-
-    // Rate limiting
-    const identifier = getRateLimitIdentifier(req);
-    const rateLimitResult = await checkRateLimit(
-      `onboarding_skip:${identifier}`,
-      RateLimits.AUTH.limit,
-      RateLimits.AUTH.window
-    );
-
-    if (!rateLimitResult.success) {
-      return apiError(
-        "Too many requests. Please try again later.",
-        HttpStatus.TOO_MANY_REQUESTS
-      );
-    }
-
-    logger.info("Processing skip onboarding request", {
+  const logOutcome = (
+    outcome: string,
+    httpStatus: number,
+    fields?: LogOutcomeFields,
+  ) => {
+    getClientLogger().info("Onboarding adapter outcome", {
       correlationId,
-      clerkId,
+      operationName: OPERATION_NAME,
+      httpMethod: req.method,
+      routePattern: ROUTE_PATTERN,
+      actorRole,
+      outcome,
+      httpStatus,
+      durationMs: now() - startedAt,
+      ...(fields?.reason ? { reason: fields.reason } : {}),
+      ...(fields?.source ? { source: fields.source } : {}),
+      ...(fields?.domainError ? { domainError: fields.domainError } : {}),
+      ...(typeof fields?.skipped === "boolean"
+        ? { skipped: fields.skipped }
+        : {}),
+    });
+  };
+
+  const { userId: clerkId } = await auth();
+  if (!clerkId) {
+    logOutcome("unauthorized", HttpStatus.UNAUTHORIZED);
+    return apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED);
+  }
+
+  const rateLimitResult = await checkRateLimit(
+    getActorRateLimitIdentifier(clerkId, "onboarding-skip-client"),
+    RateLimits.AUTH.limit,
+    RateLimits.AUTH.window,
+  );
+  if (!rateLimitResult.success) {
+    logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
+    return apiError(
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
+  const idempotencyKey =
+    req.headers.get("Idempotency-Key") ||
+    IdempotencyService.generateKey(clerkId, "POST", {
+      domain: "onboarding-skip",
     });
 
-    // Get Clerk user data to create/update database user
-    const clerkUserData = await currentUser();
-    if (!clerkUserData) {
-      return apiError(
-        "Could not retrieve user data from Clerk",
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
-    }
-
-    return executeResilient(
-      async () => {
-        // Check if user exists OUTSIDE the transaction to reduce transaction time
-        const existingUser = await prisma.user.findUnique({
-          where: { clerkId },
-          select: {
-            id: true,
-            isProfileComplete: true,
-            professionalProfile: {
-              select: { userId: true },
-            },
-          },
-        });
-
-        // Check if user already has a professional profile - they shouldn't skip
-        if (existingUser?.professionalProfile) {
-          throw new Error(
-            "Professionals cannot skip onboarding. Please complete the full form."
-          );
-        }
-
-        // Check if user already completed onboarding
-        if (existingUser?.isProfileComplete) {
-          throw new Error("Onboarding already completed");
-        }
-
-        // Use transaction with extended timeout for database operations
-        const result = await prisma.$transaction(
-          async (tx) => {
-            // Create or update user as client with incomplete profile (they skipped)
-            const user = await tx.user.upsert({
-              where: { clerkId },
-              create: {
-                clerkId,
-                email: clerkUserData.emailAddresses[0]?.emailAddress || "",
-                firstName: clerkUserData.firstName || null,
-                lastName: clerkUserData.lastName || null,
-                phone: clerkUserData.phoneNumbers?.[0]?.phoneNumber || null,
-                role: "client",
-                isProfileComplete: false, // Profile is NOT complete since they skipped
-              },
-              update: {
-                role: "client",
-                isProfileComplete: false, // Profile is NOT complete since they skipped
-              },
-            });
-
-            // Create empty client profile if it doesn't exist
-            // Use default county since it's required but user skipped onboarding
-            await tx.clientProfile.upsert({
-              where: { userId: user.id },
-              update: {}, // No updates needed if exists
-              create: {
-                userId: user.id,
-                county: "NAIROBI" as County, // Default county required by schema
-                preferences: {}, // Empty preferences object since they skipped
-              },
-            });
-
-            return user;
-          },
-          {
-            // Extended timeout for slow database connections
-            maxWait: 10000, // 10 seconds max wait to acquire connection
-            timeout: 30000, // 30 seconds transaction timeout
-          }
-        );
-
-        logger.info("Skip onboarding completed successfully", {
-          correlationId,
-          userId: result.id,
-          role: "client",
-          skipped: true,
-        });
-
-        // Update Clerk metadata so middleware can detect onboarding is complete
-        // This is critical - without it, the JWT token will still have isOnboarded = undefined
-        try {
-          const client = await clerkClient();
-          await client.users.updateUserMetadata(clerkId, {
-            publicMetadata: {
-              role: "client",
-              isOnboarded: true,
-            },
-          });
-          logger.info("Clerk metadata updated for skipped onboarding", {
-            correlationId,
-            clerkId,
-          });
-        } catch (clerkError) {
-          // Log but don't fail - DB is source of truth
-          logger.error(
-            "Failed to update Clerk metadata during skip",
-            clerkError instanceof Error
-              ? clerkError
-              : new Error(String(clerkError)),
-            { correlationId, clerkId }
-          );
-        }
-
-        return {
-          success: true,
-          userId: result.id,
-          role: result.role,
-          isProfileComplete: result.isProfileComplete,
-          skipped: true,
-          redirectTo: "/dashboard",
-          message:
-            "Onboarding skipped. You can complete your profile from the dashboard.",
-        };
-      },
-      {
-        operationName: "skip_onboarding",
-        successStatus: HttpStatus.OK,
-      }
+  const idempotencyCheck = await IdempotencyService.checkOrCreate(
+    idempotencyKey,
+    "onboarding",
+    clerkId,
+    "POST",
+  );
+  if (idempotencyCheck.status === "completed") {
+    logOutcome("succeeded", HttpStatus.OK, {
+      source: "idempotency_cache",
+    });
+    return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+  }
+  if (idempotencyCheck.status === "pending") {
+    logOutcome("conflict", HttpStatus.CONFLICT, {
+      reason: "idempotency_pending",
+    });
+    return apiError(
+      "Request is being processed. Please wait.",
+      HttpStatus.CONFLICT,
     );
-  } catch (error) {
-    logger.error(
-      "Skip onboarding error",
-      error instanceof Error ? error : new Error(String(error)),
-      { correlationId }
+  }
+
+  const clerkUserData = (await currentUser()) as ClerkUserProfile | null;
+  if (!clerkUserData) {
+    await IdempotencyService.fail(idempotencyKey);
+    logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
+      reason: "clerk_user_unavailable",
+    });
+    return apiError(
+      "Could not retrieve user data from Clerk",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  const metadataRole = normalizeRole(
+    (clerkUserData as { publicMetadata?: { role?: unknown } }).publicMetadata
+      ?.role,
+  );
+  const resolvedActorRole = metadataRole ?? "CLIENT";
+  actorRole = resolvedActorRole;
+
+  if (resolvedActorRole !== "CLIENT" && resolvedActorRole !== "ADMIN") {
+    logOutcome("forbidden", HttpStatus.FORBIDDEN, {
+      reason: "invalid_actor_role",
+    });
+    return apiError("Forbidden", HttpStatus.FORBIDDEN);
+  }
+
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    async () =>
+      userProfileOnboardingService.skipClientOnboarding({
+        actor: { clerkId, correlationId, role: resolvedActorRole },
+        clerkUser: clerkUserData,
+      }),
+    { operationName: OPERATION_NAME },
+  );
+
+  if (!result.success || !result.data) {
+    await IdempotencyService.fail(idempotencyKey);
+    getClientLogger().error(
+      "Onboarding adapter outcome",
+      result.error instanceof Error
+        ? result.error
+        : new Error("Skip onboarding execution failed"),
+      {
+        correlationId,
+        operationName: OPERATION_NAME,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: now() - startedAt,
+        reason: "executor_failure",
+      },
     );
     return apiError("Skip onboarding failed", HttpStatus.INTERNAL_SERVER_ERROR);
   }
+
+  if (!result.data.ok) {
+    await IdempotencyService.fail(idempotencyKey);
+    const status = result.data.status || HttpStatus.INTERNAL_SERVER_ERROR;
+    const safeMessage =
+      SKIP_ONBOARDING_ERROR_MESSAGE_MAP[result.data.error ?? ""] ||
+      "Skip onboarding failed";
+
+    logOutcome(mapOutcomeFromStatus(status), status, {
+      reason: "domain_error",
+      domainError: result.data.error || "unknown",
+    });
+    return apiError(safeMessage, status);
+  }
+
+  const responseData = result.data.data;
+
+  // ORDERING INVARIANT: Clerk update BEFORE safeIdempotencyComplete().
+  try {
+    await finalizeClerkOnboardingTransition({
+      clerkId,
+      metadata: { role: "CLIENT", isOnboarded: true, status: "ACTIVE" },
+      context: { correlationId, operation: OPERATION_NAME },
+      onFailure: () => IdempotencyService.fail(idempotencyKey),
+    });
+  } catch {
+    logOutcome("failed", HttpStatus.SERVICE_UNAVAILABLE, {
+      reason: "clerk_metadata_sync_failed",
+    });
+    return apiError(
+      CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+  }
+
+  await safeIdempotencyComplete(idempotencyKey, responseData, {
+    correlationId,
+    operationName: OPERATION_NAME,
+    httpMethod: req.method,
+    routePattern: ROUTE_PATTERN,
+    actorRole,
+    httpStatus: HttpStatus.OK,
+    durationMs: now() - startedAt,
+    resourceType: "skip-client",
+  });
+
+  logOutcome("succeeded", HttpStatus.OK, {
+    skipped: true,
+  });
+
+  return apiSuccess(responseData, HttpStatus.OK);
 }

@@ -1,135 +1,92 @@
-import { NextRequest } from "next/server";
-import { z } from "zod";
-import { prisma } from "@repo/db";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  RateLimits,
   getRateLimitIdentifier,
-} from "@/app/lib/rate-limit";
-import { createNotification } from "@/lib/notifications";
-
-const logger = getClientLogger();
-
-// Schema aligned with Lead model
-const createPublicLeadSchema = z.object({
-  professionalId: z.string().uuid("Invalid professional ID"),
-  clientName: z.string().min(1, "Name is required"),
-  clientEmail: z.string().email("Invalid email address"),
-  clientPhone: z.string().optional(),
-  projectType: z.string().min(1, "Project type is required"),
-  message: z.string().min(1, "Message is required"),
-  location: z.string().optional(),
-  budget: z.string().optional(),
-  // Source field for tracking where leads come from (aligned with schema)
-  source: z.string().optional(), // e.g., "website", "profile_page", "search"
-});
+  RateLimits,
+} from "@/app/lib/api/rate-limit";
+import { checkBodySize } from "@/app/lib/api/api-guards";
+import {
+  CreatePublicLeadSchema,
+  LEAD_CONFIG,
+} from "@/app/lib/validation/leads-validation";
+import { leadsService } from "@/app/lib/domains/leads";
 
 /**
  * POST /api/leads
- * Public endpoint for clients to submit inquiries to professionals
- * No authentication required - this is a public contact form
+ * Public endpoint — no authentication required.
+ * Allows clients to submit inquiry leads to professionals.
+ *
+ * The lead is created with status NEW and the professional
+ * receives an in-app notification.
  */
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   const correlationId = initializeCorrelationId(req);
 
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
-    identifier,
-    RateLimits.WRITE.limit,
-    RateLimits.WRITE.window
-  );
+  const sizeError = checkBodySize(req, LEAD_CONFIG.MAX_BODY_SIZE);
+  if (sizeError) return sizeError;
 
-  if (!success) {
+  const identifier = getRateLimitIdentifier(req);
+  const rateLimitResult = await checkRateLimit(
+    `leads-public-write:${identifier}`,
+    RateLimits.WRITE.limit,
+    RateLimits.WRITE.window,
+  );
+  if (!rateLimitResult.success) {
     return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
   }
 
-  const body = await req.json();
-  const validation = createPublicLeadSchema.safeParse(body);
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+  }
 
+  const validation = CreatePublicLeadSchema.safeParse(body);
   if (!validation.success) {
-    logger.warn("Lead validation failed", {
-      correlationId,
-      errors: validation.error.issues,
-    });
     return apiError(
       "Invalid input data",
       HttpStatus.BAD_REQUEST,
-      validation.error.issues
+      validation.error.issues,
     );
   }
 
-  const { data } = validation;
+  const data = validation.data;
 
-  logger.info("Creating public lead inquiry", {
-    correlationId,
-    professionalId: data.professionalId,
-    projectType: data.projectType,
-    source: data.source,
-  });
-
-  return executeResilient(
-    async () => {
-      // Verify professional exists and is verified
-      const professional = await prisma.professionalProfile.findUnique({
-        where: { userId: data.professionalId },
-        select: {
-          userId: true,
-          companyName: true,
-          verified: true,
-        },
-      });
-
-      if (!professional) {
-        logger.warn("Professional not found for lead", {
-          correlationId,
-          professionalId: data.professionalId,
-        });
-        return apiError("Professional not found", HttpStatus.NOT_FOUND);
-      }
-
-      const lead = await prisma.lead.create({
-        data: {
-          professional: {
-            connect: { userId: data.professionalId },
-          },
-          clientName: data.clientName,
-          clientEmail: data.clientEmail,
-          clientPhone: data.clientPhone || null,
-          projectType: data.projectType,
-          location: data.location || null,
-          budget: data.budget || null,
-          status: "NEW",
-          notes: data.message,
-          source: data.source || "website", // Default source
-        },
-      });
-
-      // Trigger notification to professional
-      await createNotification({
-        userId: data.professionalId,
-        title: "New Lead Received",
-        message: `You have a new inquiry from ${data.clientName} for ${data.projectType}.`,
-        type: "info",
-        link: "/professional-portal/leads",
-      });
-
-      logger.info("Lead created successfully", {
-        correlationId,
-        leadId: lead.id,
-        professionalId: data.professionalId,
-      });
-
-      return { message: "Inquiry sent successfully", leadId: lead.id };
-    },
+  const executor = getResilientExecutor();
+  const result = await executor.execute(
+    () => leadsService.submitPublicLead(data),
     {
       operationName: "create_public_lead",
-      successStatus: HttpStatus.CREATED,
-    }
+    },
   );
+
+  if (!result.success || !result.data) {
+    getClientLogger().error("Failed to create lead", result.error, {
+      correlationId,
+    });
+    return apiError(
+      "Failed to submit inquiry",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  const serviceResult = result.data;
+  if (!serviceResult.ok) {
+    return apiError("Professional not found", HttpStatus.NOT_FOUND);
+  }
+
+  getClientLogger().info("Public lead created", {
+    correlationId,
+    leadId: serviceResult.data.lead.id,
+    professionalId: data.professionalId,
+  });
+
+  return apiSuccess(serviceResult.data, HttpStatus.CREATED);
 }

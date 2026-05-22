@@ -44,10 +44,9 @@ const chartData = [
 ];
 
 const AppPieChart = () => {
-
   // If you don't use React compiler use useMemo hook to improve performance
   const totalVisitors = chartData.reduce((acc, curr) => acc + curr.visitors, 0);
-  
+
   return (
     <div className="">
       <h1 className="text-lg font-medium mb-6">Browser Usage</h1>
@@ -101,7 +100,8 @@ const AppPieChart = () => {
       </ChartContainer>
       <div className="mt-4 flex flex-col gap-2 items-center">
         <div className="flex items-center gap-2 font-medium leading-none">
-          Trending up by 5.2% this month <TrendingUp className="h-4 w-4 text-green-500" />
+          Trending up by 5.2% this month{" "}
+          <TrendingUp className="h-4 w-4 text-green-500" />
         </div>
         <div className="leading-none text-muted-foreground">
           Showing total visitors for the last 6 months

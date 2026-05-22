@@ -1,232 +1,174 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
-import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { createProfessionalPortalGet } from "@/app/lib/api/professional-portal-handler";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { getRequestMetadata } from "@/app/lib/api/request-utils";
+import { checkBodySize } from "@/app/lib/api/api-guards";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
+import {
+  PortfolioQuerySchema,
+  CreatePortfolioSchema,
+} from "@/app/lib/validation/portfolio-validation";
+import { PORTFOLIO_CONFIG } from "@/app/lib/config/portfolio.config";
+import { portfolioService } from "@/app/lib/domains/portfolio";
 
-const logger = getClientLogger();
-
-// Schema for image data matching PortfolioImage model
-const portfolioImageSchema = z.object({
-  url: z.string().url(),
-  key: z.string().optional(),
-  caption: z.string().optional(),
-  isMain: z.boolean().optional().default(false),
-  isBefore: z.boolean().optional().default(false),
-  isAfter: z.boolean().optional().default(false),
-  sortOrder: z.number().int().optional().default(0),
-});
-
-const createPortfolioSchema = z.object({
-  title: z.string().min(3),
-  description: z.string().optional(),
-  projectType: z.string(),
-  clientTestimonial: z.string().optional(),
-  completedAt: z.string().datetime().optional(),
-  // Images as array of PortfolioImage data
-  images: z
-    .array(portfolioImageSchema)
-    .min(1, "At least one image is required"),
-});
+function parsePortfolioQuery(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  return {
+    page: searchParams.get("page") || undefined,
+    limit: searchParams.get("limit") || undefined,
+    projectType: searchParams.get("projectType") || undefined,
+  };
+}
 
 /**
  * GET /api/professional-portal/portfolio
- * Get all portfolio items for the authenticated professional
- * Supports pagination via ?page=&limit= query params
+ * List all portfolio items for the authenticated professional.
  */
-export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
-
-  const identifier = getRateLimitIdentifier(req);
-  const rateLimitResult = await checkRateLimit(
-    `portfolio:${identifier}`,
-    RateLimits.READ.limit,
-    RateLimits.READ.window
-  );
-
-  if (!rateLimitResult.success) {
-    return apiError(
-      "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS
-    );
-  }
-
-  // Parse pagination params
-  const { searchParams } = new URL(req.url);
-  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-  const limit = Math.min(
-    50,
-    Math.max(1, parseInt(searchParams.get("limit") || "20", 10))
-  );
-  const skip = (page - 1) * limit;
-
-  logger.info("Fetching portfolio items", {
-    correlationId,
-    userId: dbUserId,
-    page,
-    limit,
-  });
-
-  return executeResilient(
-    async () => {
-      const [portfolioItems, total] = await Promise.all([
-        prisma.portfolio.findMany({
-          where: {
-            professionalId: dbUserId,
-          },
-          include: {
-            // Include related images properly
-            images: {
-              orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }],
-              select: {
-                id: true,
-                url: true,
-                key: true,
-                caption: true,
-                isMain: true,
-                isBefore: true,
-                isAfter: true,
-                sortOrder: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: "desc",
-          },
-          skip,
-          take: limit,
-        }),
-        prisma.portfolio.count({
-          where: { professionalId: dbUserId },
-        }),
-      ]);
-
-      logger.info("Portfolio items fetched successfully", {
-        correlationId,
-        userId: dbUserId,
-        count: portfolioItems.length,
-      });
-
-      return {
-        data: portfolioItems,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        },
-      };
-    },
-    {
-      operationName: "get_portfolio_items",
-      successStatus: HttpStatus.OK,
+export const GET = createProfessionalPortalGet({
+  rateLimitKey: "portfolio-read",
+  querySchema: PortfolioQuerySchema,
+  parseQuery: parsePortfolioQuery,
+  handler: async ({ dbUserId, query }) => {
+    const result = await portfolioService.listPortfolios({
+      userId: dbUserId,
+      query,
+    });
+    if (!result.ok) {
+      throw new Error(result.message ?? "Failed to fetch portfolio items");
     }
-  );
+    return result.data;
+  },
+  operationName: "get_portfolio_items",
+  errorMessage: "Failed to fetch portfolio items",
 });
 
 /**
  * POST /api/professional-portal/portfolio
- * Create a new portfolio item with images
+ * Create a new portfolio item.
  */
-export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
+export const POST = withAuth(
+  async (req: NextRequest, { dbUserId, userRole }) => {
+    const correlationId = initializeCorrelationId(req);
+    const { ipAddress, userAgent } = getRequestMetadata(req);
 
-  const identifier = getRateLimitIdentifier(req);
-  const rateLimitResult = await checkRateLimit(
-    `portfolio:${identifier}`,
-    RateLimits.WRITE.limit,
-    RateLimits.WRITE.window
-  );
+    const sizeError = checkBodySize(req, PORTFOLIO_CONFIG.MAX_BODY_SIZE);
+    if (sizeError) return sizeError;
 
-  if (!rateLimitResult.success) {
-    return apiError(
-      "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS
-    );
-  }
-
-  const body = await req.json();
-  const validation = createPortfolioSchema.safeParse(body);
-
-  if (!validation.success) {
-    logger.warn("Portfolio creation validation failed", {
-      correlationId,
-      userId: dbUserId,
-      errors: validation.error.issues,
-    });
-    return apiError(
-      "Invalid input",
-      HttpStatus.BAD_REQUEST,
-      validation.error.issues
-    );
-  }
-
-  const {
-    title,
-    description,
-    projectType,
-    images,
-    clientTestimonial,
-    completedAt,
-  } = validation.data;
-
-  logger.info("Creating portfolio item", {
-    correlationId,
-    userId: dbUserId,
-    title,
-    imageCount: images.length,
-  });
-
-  return executeResilient(
-    async () => {
-      // Ensure exactly one image is marked as main (first one if none specified)
-      const hasMainImage = images.some((img) => img.isMain);
-      const processedImages = images.map((img, index) => ({
-        ...img,
-        isMain: hasMainImage ? img.isMain : index === 0,
-        sortOrder: img.sortOrder ?? index,
-      }));
-
-      const portfolioItem = await prisma.portfolio.create({
-        data: {
-          professionalId: dbUserId,
-          title,
-          description,
-          projectType,
-          clientTestimonial,
-          completedAt: completedAt ? new Date(completedAt) : null,
-          // Create nested PortfolioImage records
-          images: {
-            create: processedImages,
-          },
-        },
-        include: {
-          images: {
-            orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }],
-          },
-        },
-      });
-
-      logger.info("Portfolio item created successfully", {
-        correlationId,
-        userId: dbUserId,
-        portfolioId: portfolioItem.id,
-      });
-      return portfolioItem;
-    },
-    {
-      operationName: "create_portfolio_item",
-      successStatus: HttpStatus.CREATED,
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
     }
-  );
-});
+
+    const validation = CreatePortfolioSchema.safeParse(body);
+    if (!validation.success) {
+      return apiError(
+        "Invalid input",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+      );
+    }
+
+    const portfolioData = validation.data;
+
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      IdempotencyService.generateKey(dbUserId, "POST", {
+        domain: "portfolio",
+        title: portfolioData.title,
+      });
+
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
+      idempotencyKey,
+      "portfolio",
+      dbUserId,
+      "POST",
+    );
+    if (idempotencyCheck.status === "completed") {
+      return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+    }
+    if (idempotencyCheck.status === "pending") {
+      return apiError(
+        "Request is being processed. Please wait.",
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `portfolio-write:${identifier}`,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
+    );
+    if (!rateLimitResult.success) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    getClientLogger().info("Creating portfolio item", {
+      correlationId,
+      actorRole: userRole,
+      title: portfolioData.title,
+    });
+
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      async () =>
+        portfolioService.createPortfolio({
+          userId: dbUserId,
+          data: portfolioData,
+          ipAddress,
+          userAgent,
+        }),
+      { operationName: "create_portfolio_item" },
+    );
+
+    if (!result.success || !result.data) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        "Failed to create portfolio item",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const data = result.data;
+    if (!data.ok) {
+      if (data.error === "limit_exceeded") {
+        await IdempotencyService.fail(idempotencyKey);
+        return apiError(
+          `Maximum ${PORTFOLIO_CONFIG.MAX_PORTFOLIOS_PER_PROFESSIONAL} portfolios per professional`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (data.error === "project_not_found") {
+        await IdempotencyService.fail(idempotencyKey);
+        return apiError("Linked project not found", HttpStatus.NOT_FOUND);
+      }
+      // Fallback for unexpected errors
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        "Failed to create portfolio item",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    await safeIdempotencyComplete(idempotencyKey, data.data);
+    return apiSuccess(data.data, HttpStatus.CREATED);
+  },
+);

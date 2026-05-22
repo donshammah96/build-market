@@ -1,20 +1,24 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
 import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
+  getResilientExecutor,
   initializeCorrelationId,
-  executeResilient,
-  getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  RateLimits,
   getRateLimitIdentifier,
-} from "@/app/lib/rate-limit";
-
-const logger = getClientLogger();
+  RateLimits,
+} from "@/app/lib/api/rate-limit";
+import { propertiesService } from "@/app/lib/domains/properties";
+import {
+  actorRoleLabel,
+  domainErrorCodeToStatus,
+  domainResultToErrorResponse,
+  logPropertiesRouteOutcome,
+  now,
+} from "@/app/api/properties/shared";
 
 const querySchema = z.object({
   limit: z.string().regex(/^\d+$/).optional().default("10"),
@@ -24,131 +28,134 @@ const querySchema = z.object({
     .default("active"),
 });
 
-/**
- * GET /api/properties/my-listings
- * Get property listings owned by the authenticated user
- * Returns property data formatted for dashboard widget
- */
-export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
+export const GET = withAuth(
+  async (req: NextRequest, { dbUserId, userRole }) => {
+    const startedAt = now();
+    const correlationId = initializeCorrelationId(req);
+    const operationName = "get_my_listings";
+    const actorRole = actorRoleLabel(userRole);
 
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
-    identifier,
-    RateLimits.READ.limit,
-    RateLimits.READ.window
-  );
-
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  // Parse query params
-  const { searchParams } = new URL(req.url);
-  const queryParams = {
-    limit: searchParams.get("limit") || "10",
-    status: searchParams.get("status") || "active",
-  };
-
-  const queryValidation = querySchema.safeParse(queryParams);
-  if (!queryValidation.success) {
-    return apiError(
-      "Invalid query parameters",
-      HttpStatus.BAD_REQUEST,
-      queryValidation.error.issues
+    const identifier = getRateLimitIdentifier(req);
+    const { success } = await checkRateLimit(
+      `my-listings:${identifier}`,
+      RateLimits.READ.limit,
+      RateLimits.READ.window,
     );
-  }
 
-  const { limit, status } = queryValidation.data;
-  const limitNum = Math.min(parseInt(limit), 50);
-
-  logger.info("Fetching user property listings", {
-    correlationId,
-    userId: dbUserId,
-    limit: limitNum,
-    status,
-  });
-
-  return executeResilient(
-    async () => {
-      // Build status filter
-      const whereClause: {
-        agentId: string;
-        status?:
-          | "AVAILABLE"
-          | "SOLD"
-          | "RENTED"
-          | "UNDER_OFFER"
-          | { in: ("AVAILABLE" | "UNDER_OFFER")[] };
-      } = {
-        agentId: dbUserId,
-      };
-
-      if (status !== "all") {
-        if (status === "active") {
-          whereClause.status = { in: ["AVAILABLE", "UNDER_OFFER"] };
-        } else if (status === "pending") {
-          whereClause.status = "UNDER_OFFER";
-        } else {
-          whereClause.status = "SOLD";
-        }
-      }
-
-      // Get properties with images and verification status
-      const properties = await prisma.property.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          title: true,
-          price: true,
-          location: true,
-          type: true,
-          status: true,
-          verificationStatus: true,
-          rejectionReason: true,
-          images: {
-            select: { url: true },
-            take: 1,
-            orderBy: { sortOrder: "asc" },
-          },
-          _count: {
-            select: { inquiries: true },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        take: limitNum,
-      });
-
-      // Format for dashboard widget
-      const formattedProperties = properties.map((p) => ({
-        id: p.id,
-        title: p.title,
-        price: p.price,
-        location: p.location || "Unknown",
-        type: p.type,
-        status: p.status.toLowerCase() as
-          | "active"
-          | "pending"
-          | "sold"
-          | "rented",
-        verificationStatus: p.verificationStatus,
-        rejectionReason: p.rejectionReason,
-        views: 0, // Would need analytics
-        inquiries: p._count.inquiries,
-        images: p.images.map((img: { url: string }) => img.url),
-      }));
-
-      logger.info("User property listings fetched successfully", {
+    if (!success) {
+      const response = apiError(
+        "Too many requests",
+        HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
         correlationId,
-        userId: dbUserId,
-        count: formattedProperties.length,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+        resourceType: "property",
       });
-
-      return { data: formattedProperties };
-    },
-    {
-      operationName: "get_my_listings",
-      successStatus: HttpStatus.OK,
+      return response;
     }
-  );
-});
+
+    const { searchParams } = new URL(req.url);
+    const queryValidation = querySchema.safeParse({
+      limit: searchParams.get("limit") || "10",
+      status: searchParams.get("status") || "active",
+    });
+
+    if (!queryValidation.success) {
+      const response = apiError(
+        "Invalid query parameters",
+        HttpStatus.BAD_REQUEST,
+        queryValidation.error.issues,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+      });
+      return response;
+    }
+
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      () =>
+        propertiesService.getMyListings(
+          { userId: dbUserId, role: userRole },
+          {
+            limit: Math.min(
+              Number.parseInt(queryValidation.data.limit, 10),
+              50,
+            ),
+            status: queryValidation.data.status,
+          },
+        ),
+      { operationName },
+    );
+
+    if (!result.success || !result.data) {
+      const response = apiError(
+        "Failed to fetch listings",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "internal_error",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: now() - startedAt,
+        resourceType: "property",
+      });
+      return response;
+    }
+
+    const domainResult = result.data;
+    if (!domainResult.ok) {
+      const errorResponse = domainResultToErrorResponse(
+        domainResult,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(domainResult.error),
+        durationMs: now() - startedAt,
+        domainError: domainResult.error,
+        resourceType: "property",
+      });
+      return errorResponse!;
+    }
+
+    const response = apiSuccess(
+      domainResult.data,
+      HttpStatus.OK,
+      correlationId,
+    );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+    });
+    return response;
+  },
+);

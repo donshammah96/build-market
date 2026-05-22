@@ -225,7 +225,7 @@ export const Professionals = memo(function Professionals({
                 <div
                   className={cn(
                     "h-full",
-                    isInView && shouldAnimate && "animate-fade-in-up"
+                    isInView && shouldAnimate && "animate-fade-in-up",
                   )}
                   style={{
                     animationDelay:

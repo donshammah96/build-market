@@ -5,6 +5,7 @@
     "lib": ["ES2020"],
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
+    "composite": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "strict": true,
@@ -12,10 +13,10 @@
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
     "declarationMap": true,
+    "incremental": true,
     "outDir": "./dist",
     "rootDir": "./"
   },
   "include": ["lib/**/*", "prisma/**/*"],
   "exclude": ["node_modules", "dist"]
 }
-

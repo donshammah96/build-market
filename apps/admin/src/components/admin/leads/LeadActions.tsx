@@ -60,7 +60,7 @@ export function LeadActions({
     const subject = encodeURIComponent("Regarding Your Project Inquiry");
     const body = encodeURIComponent(
       emailMessage ||
-        "Hello,\n\nThank you for your interest. We'll be in touch soon.\n\nBest regards"
+        "Hello,\n\nThank you for your interest. We'll be in touch soon.\n\nBest regards",
     );
     window.location.href = `mailto:${clientEmail}?subject=${subject}&body=${body}`;
     setSendEmailOpen(false);

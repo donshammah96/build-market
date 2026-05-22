@@ -1,98 +1,66 @@
-import Redis, { type Redis as RedisClient } from "ioredis";
-import type { RedisConfig } from "./types";
+/**
+ * Upstash Redis REST client.
+ *
+ * Uses HTTP transport — safe for serverless, edge, and Next.js route handlers.
+ * Never creates persistent TCP connections, so there is no connection pool to
+ * manage and no risk of exhausting Upstash's concurrent connection limit from
+ * short-lived Lambda/Vercel function invocations.
+ *
+ * For BullMQ workers that require a persistent ioredis connection, see
+ * redis-connection.ts instead.
+ */
 
-let client: RedisClient | null = null;
+import { Redis } from "@upstash/redis";
 
-const defaultConfig: RedisConfig = {
-  host: process.env.REDIS_HOST || "localhost",
-  port: parseInt(process.env.REDIS_PORT || "6379", 10),
-  password: process.env.REDIS_PASSWORD || undefined,
-  db: parseInt(process.env.REDIS_DB || "0", 10),
-  keyPrefix: process.env.REDIS_KEY_PREFIX || undefined,
-  tls: process.env.REDIS_TLS === "true",
-  maxRetriesPerRequest: parseInt(
-    process.env.REDIS_MAX_RETRIES_PER_REQUEST || "5",
-    10
-  ),
-  connectTimeout: parseInt(process.env.REDIS_CONNECT_TIMEOUT || "10000", 10),
-};
+let client: Redis | null = null;
 
 /**
- * Get or create the Redis client singleton
+ * Returns the shared Upstash REST client singleton.
+ *
+ * Reads UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN from the
+ * environment. Both must be present in production; the client throws at
+ * construction time if either is missing so startup fails fast rather than
+ * producing silent undefined behaviour at the first Redis call.
  */
-export function getRedisClient(config?: Partial<RedisConfig>): RedisClient {
-  if (!client) {
-    const finalConfig = { ...defaultConfig, ...config };
-
-    client = new Redis({
-      host: finalConfig.host,
-      port: finalConfig.port,
-      password: finalConfig.password,
-      db: finalConfig.db,
-      maxRetriesPerRequest: finalConfig.maxRetriesPerRequest,
-      connectTimeout: finalConfig.connectTimeout,
-      lazyConnect: true,
-      enableReadyCheck: true,
-      keyPrefix: finalConfig.keyPrefix,
-      tls: finalConfig.tls ? {} : undefined,
-      retryStrategy: (times) => {
-        if (times > 3) {
-          console.error(`Failed to connect to Redis after ${times} attempts`);
-          return null; // Stop retrying
-        }
-        return Math.min(times * 200, 2000); // Exponential backoff with max 2s
-      },
-    });
-    client.on("connect", () => {
-      console.log(
-        `[Redis] connected to ${finalConfig.host}:${finalConfig.port}`
-      );
-    });
-    client.on("error", (error) => {
-      console.error(`[Redis] connection error: ${error.message}`);
-      client = null;
-    });
-    client.on("ready", () => {
-      console.log(`[Redis] ready`);
-    });
-    client.on("reconnecting", () => {
-      console.log(`[Redis] reconnecting...`);
-    });
-    client.on("end", () => {
-      console.log(`[Redis] disconnected`);
-    });
-    client.on("close", () => {
-      console.log(`[Redis] closed`);
-    });
+export function getRedisClient(): Redis {
+  if (client) {
+    return client;
   }
+
+  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+
+  if (!url || !token) {
+    throw new Error(
+      "Missing Upstash credentials. Set UPSTASH_REDIS_REST_URL and " +
+        "UPSTASH_REDIS_REST_TOKEN before initialising the Redis client.",
+    );
+  }
+
+  client = new Redis({ url, token });
   return client;
 }
 
 /**
- * Disconnect and cleanup  the Redis client
+ * Reset the singleton — intended for use in tests only.
+ * Calling this in production discards the shared instance and forces
+ * re-initialisation on the next getRedisClient() call.
  */
-export async function disconnectRedis(): Promise<void> {
-  if (client) {
-    await client.quit();
-    client = null;
-    console.log(`[Redis] disconnected and cleaned up`);
-  }
+export function resetRedisClient(): void {
+  client = null;
 }
 
 /**
- * Check if Redis is connected and healthy
+ * Ping the Upstash REST endpoint and return true if the response is "PONG".
+ * Safe to call from a health-check route without creating a TCP connection.
  */
 export async function isRedisHealthy(): Promise<boolean> {
   try {
-    const redisClient = getRedisClient();
-    const pong = await redisClient.ping();
-    return pong === "PONG";
-  } catch (error) {
-    console.error(`[Redis] health check failed: ${error}`);
+    const result = await getRedisClient().ping();
+    return result === "PONG";
+  } catch {
     return false;
-  } finally {
-    await disconnectRedis();
   }
 }
 
-export type { RedisClient };
+export type { Redis as RedisClient };

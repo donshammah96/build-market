@@ -3,7 +3,7 @@
 
 import { County, COUNTY_LABELS } from "./store";
 import { VerificationStatus, VERIFICATION_STATUS_LABELS } from "./professional";
-
+import { PropertyTenure } from "@build/enums";
 // ============================================================================
 // ENUMS - Property Types (from Prisma schema)
 // ============================================================================
@@ -121,11 +121,13 @@ export interface PropertyAgentData {
 export interface Property {
   id: string;
   title: string;
+  slug: string;
   description?: string | null;
   price: number; // Decimal converted to number
   currency: string;
   type: PropertyType;
   category: PropertyCategory;
+  tenure: PropertyTenure;
 
   // Location details
   county: County;

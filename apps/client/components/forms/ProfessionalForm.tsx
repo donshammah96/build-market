@@ -1,28 +1,46 @@
 "use client";
 
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+} from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Award, Loader2 } from "lucide-react";
 
-import { ProfessionalOnboardingData } from "@repo/types";
+import {
+  ProfessionalOnboardingData,
+  Profession,
+  County,
+  StoreOnboardingSchema,
+  PropertyOnboardingSchema,
+} from "@build/types";
+import { DocumentCategory } from "@build/enums";
 import {
   StepProgress,
   CompactStepProgress,
 } from "@/components/ui/step-progress";
-import { API_ROUTES } from "@/lib/links";
-
+import { onboardingClient } from "@/lib/facades/onboarding-client";
+import { getRegulatoryAuthorityCode } from "@/lib/constants/professionOptions";
 import {
   ProfessionStep,
   DetailsStep,
   StoreStep,
+  PropertyStep,
   CredentialsStep,
   DocumentsStep,
   ReviewStep,
-  ProfessionalWizardData,
   getActiveSteps,
+  ProfessionalWizardData,
+  professionalDraftSchema,
 } from "./professional-wizard";
+import { useOnboardingAnalytics } from "@/lib/analytics/OnboardingAnalyticsContext";
+
+// SECURITY_PERSISTENCE_ALLOWLIST: Stores non-sensitive onboarding draft state in sessionStorage.
 
 // ============================================================================
 // TYPES
@@ -36,29 +54,33 @@ export type ProfessionalFormVariant = "dark" | "light";
 // ============================================================================
 
 const STORAGE_KEYS = {
-  onboarding: "professional_onboarding_draft",
-  completion: "professional_completion_draft",
+  onboarding: "professional_onboarding_draft_v1",
+  completion: "professional_completion_draft_v1",
 } as const;
 
+const StorePayloadSchema = StoreOnboardingSchema.omit({ role: true });
+const PropertyPayloadSchema = PropertyOnboardingSchema.omit({ role: true });
+
 // Theme-aware styles
-const createTheme = (variant: ProfessionalFormVariant) => {
-  const isDark = variant === "dark";
+const createTheme = (_variant: ProfessionalFormVariant) => {
   return {
-    container: isDark ? "max-w-2xl mx-auto" : "max-w-2xl mx-auto",
-    loadingOverlay: isDark
-      ? "fixed inset-0 bg-zinc-950/80 backdrop-blur-sm z-50 flex items-center justify-center"
-      : "fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center",
-    loadingSpinner: isDark ? "text-emerald-500" : "text-emerald-600",
-    loadingText: isDark
-      ? "text-emerald-500 font-medium animate-pulse"
-      : "text-emerald-600 font-medium animate-pulse",
+    container: "max-w-2xl mx-auto",
+    loadingOverlay:
+      "fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center",
+    loadingSpinner: "text-[var(--color-onboarding-primary)]",
+    loadingText:
+      "text-[var(--color-onboarding-primary)] font-medium animate-pulse",
   };
 };
 
-// Animation variants for step transitions
-const stepVariants = {
+// Step transition variants.
+// When the user has enabled "Reduce motion" in their OS/browser,
+// we honour that by eliminating the horizontal slide — only opacity transitions.
+// This is required by WCAG 2.3.3 (Animation from Interactions, AAA) and is
+// good practice for vestibular disorder accessibility even at AA.
+const createStepVariants = (prefersReduced: boolean) => ({
   enter: (direction: number) => ({
-    x: direction > 0 ? 50 : -50,
+    x: prefersReduced ? 0 : direction > 0 ? 50 : -50,
     opacity: 0,
   }),
   center: {
@@ -66,10 +88,10 @@ const stepVariants = {
     opacity: 1,
   },
   exit: (direction: number) => ({
-    x: direction < 0 ? 50 : -50,
+    x: prefersReduced ? 0 : direction < 0 ? 50 : -50,
     opacity: 0,
   }),
-};
+});
 
 interface Props {
   /** Mode determines behavior: onboarding (new user) vs completion (existing profile) */
@@ -116,11 +138,11 @@ const SuccessCard: React.FC<SuccessCardProps> = ({
       animate={{ opacity: 1, scale: 1 }}
       className={
         isDark
-          ? "bg-white/5 backdrop-blur-sm border border-white/20 p-8 max-w-md mx-auto text-center rounded-xl"
-          : "bg-white border border-zinc-200 shadow-lg p-8 max-w-md mx-auto text-center rounded-xl"
+          ? "bg-onboarding-surface/82 backdrop-blur-md border border-onboarding-primary/28 p-8 max-w-md mx-auto text-center rounded-xl"
+          : "bg-white border border-border shadow-lg p-8 max-w-md mx-auto text-center rounded-xl"
       }
     >
-      <div className={isDark ? "mb-4 text-amber-500" : "mb-4 text-emerald-500"}>
+      <div className="mb-4 text-onboarding-primary">
         <Award
           className={`w-12 h-12 inline-block ${isDark ? "drop-shadow-[0_0_15px_rgba(245,158,11,0.5)]" : "drop-shadow-md"}`}
         />
@@ -128,13 +150,17 @@ const SuccessCard: React.FC<SuccessCardProps> = ({
       <h3
         className={
           isDark
-            ? "font-playfair text-2xl text-white mb-2 drop-shadow-lg"
-            : "font-semibold text-2xl text-zinc-900 mb-2"
+            ? "font-['Syne'] text-2xl text-white mb-2 drop-shadow-lg"
+            : "font-semibold text-2xl text-foreground mb-2"
         }
       >
         {isCompletion ? "Profile Updated!" : "Thanks — application received"}
       </h3>
-      <p className={isDark ? "text-slate-200 mb-6" : "text-zinc-600 mb-6"}>
+      <p
+        className={
+          isDark ? "text-onboarding-ink/62 mb-6" : "text-muted-foreground mb-6"
+        }
+      >
         {isCompletion
           ? "Your profile has been updated successfully. You're all set to start connecting with clients!"
           : "Our team will review your documents and contact you within 3 business days for verification."}
@@ -145,8 +171,8 @@ const SuccessCard: React.FC<SuccessCardProps> = ({
           disabled={isNavigating}
           className={
             isDark
-              ? "text-sm border-b border-emerald-400/50 pb-1 text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50 flex items-center gap-2"
-              : "text-sm border-b border-emerald-600/50 pb-1 text-emerald-600 hover:text-emerald-500 transition-colors disabled:opacity-50 flex items-center gap-2"
+              ? "text-sm border-b border-onboarding-primary/50 pb-1 text-onboarding-primary hover:opacity-90 transition-colors disabled:opacity-50 flex items-center gap-2"
+              : "text-sm border-b border-success/50 pb-1 text-success hover:opacity-90 transition-colors disabled:opacity-50 flex items-center gap-2"
           }
         >
           {isNavigating && <Loader2 className="h-3 w-3 animate-spin" />}
@@ -157,8 +183,8 @@ const SuccessCard: React.FC<SuccessCardProps> = ({
           disabled={isNavigating}
           className={
             isDark
-              ? "text-sm text-slate-400 hover:text-white transition-colors disabled:opacity-50"
-              : "text-sm text-zinc-400 hover:text-zinc-900 transition-colors disabled:opacity-50"
+              ? "text-sm text-onboarding-ink/58 hover:text-onboarding-ink transition-colors disabled:opacity-50"
+              : "text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
           }
         >
           {isCompletion ? "Make more changes" : "Edit application"}
@@ -184,6 +210,13 @@ const ProfessionalForm: React.FC<Props> = ({
   const router = useRouter();
   const storageKey = STORAGE_KEYS[mode];
   const theme = createTheme(variant);
+  const analytics = useOnboardingAnalytics();
+  // Respect the user's OS/browser reduced-motion preference for step animations.
+  const prefersReducedMotion = useReducedMotion() ?? false;
+  const stepVariants = useMemo(
+    () => createStepVariants(prefersReducedMotion),
+    [prefersReducedMotion],
+  );
 
   // ========================================
   // STATE
@@ -193,14 +226,12 @@ const ProfessionalForm: React.FC<Props> = ({
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [direction, setDirection] = useState(0); // For animation direction
 
-  // Form data state - merge initialData with localStorage draft
+  // Form data state - base from initialData; draft restore happens in useEffect (hydration-safe)
   const [formData, setFormData] = useState<Partial<ProfessionalWizardData>>(
     () => {
-      // Start with initial data if provided (completion mode)
       const baseData: Partial<ProfessionalWizardData> = initialData
         ? {
             ...initialData,
-            // Don't restore File objects from initialData
             certificates: [],
             idDocuments: [],
           }
@@ -211,28 +242,36 @@ const ProfessionalForm: React.FC<Props> = ({
             certificates: [],
             idDocuments: [],
           };
-
-      // Try to restore from localStorage (may have more recent edits)
-      if (typeof window !== "undefined") {
-        const saved = localStorage.getItem(storageKey);
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            // Merge with base data, localStorage takes precedence for edited fields
-            return {
-              ...baseData,
-              ...parsed,
-              certificates: [],
-              idDocuments: [],
-            };
-          } catch {
-            // Invalid saved data, use base
-          }
-        }
-      }
       return baseData;
-    }
+    },
   );
+
+  // Restore draft from sessionStorage on mount (hydration-safe; validates with Zod)
+  useEffect(() => {
+    // SECURITY_PERSISTENCE_ALLOWLIST: Reads non-sensitive professional onboarding draft state.
+    const saved = sessionStorage.getItem(storageKey);
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved);
+      const result = professionalDraftSchema.safeParse(parsed);
+      if (!result.success) {
+        // SECURITY_PERSISTENCE_ALLOWLIST: Clears invalid non-sensitive professional onboarding draft state.
+        sessionStorage.removeItem(storageKey);
+        analytics.trackDraftRestoreFailed();
+        return;
+      }
+      const data = result.data as Partial<ProfessionalWizardData>;
+      setFormData({
+        ...data,
+        certificates: [],
+        idDocuments: [],
+      });
+    } catch {
+      // SECURITY_PERSISTENCE_ALLOWLIST: Clears malformed non-sensitive professional onboarding draft state.
+      sessionStorage.removeItem(storageKey);
+      analytics.trackDraftRestoreFailed();
+    }
+  }, [storageKey, analytics]);
 
   // UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -249,41 +288,50 @@ const ProfessionalForm: React.FC<Props> = ({
   // Current step
   const currentStep = activeSteps[currentStepIndex];
 
-  // Progress indicator steps (for UI)
-  const progressSteps = useMemo(
-    () =>
-      activeSteps.map((step) => ({
-        id: step.id,
-        label: step.label,
-        description: step.description,
-        optional: step.optional,
-      })),
-    [activeSteps]
-  );
-
   // ========================================
   // PERSISTENCE
   // ========================================
 
-  // Save to localStorage when form data changes (excluding files)
+  // Save to sessionStorage when form data changes (excluding files)
   useEffect(() => {
-    if (typeof window !== "undefined" && formData.profession) {
+    if (formData.profession) {
       const dataToSave = {
         ...formData,
         certificates: undefined,
         idDocuments: undefined,
-        storeData: formData.storeData,
+        stores: formData.stores,
+        properties: formData.properties,
       };
-      localStorage.setItem(storageKey, JSON.stringify(dataToSave));
+      // SECURITY_PERSISTENCE_ALLOWLIST: Persists non-sensitive professional onboarding draft state.
+      sessionStorage.setItem(storageKey, JSON.stringify(dataToSave));
     }
   }, [formData, storageKey]);
 
-  // Clear localStorage on successful submission
+  // Clear sessionStorage on successful submission
   const clearSavedData = useCallback(() => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(storageKey);
-    }
+    // SECURITY_PERSISTENCE_ALLOWLIST: Removes non-sensitive professional onboarding draft state.
+    sessionStorage.removeItem(storageKey);
   }, [storageKey]);
+
+  // ========================================
+  // FOCUS MANAGEMENT
+  // ========================================
+
+  // When the step changes, move focus to the step heading so keyboard and
+  // screen reader users are oriented in the new step context.
+  // tabIndex={-1} on the heading makes it programmatically focusable without
+  // entering the tab order — WCAG 2.4.3 (Focus Order).
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    // Use a microtask delay to ensure the new step's DOM has rendered
+    // before we attempt to focus. Without this, focus may land on the
+    // previous step's heading if AnimatePresence hasn't completed the swap.
+    const raf = requestAnimationFrame(() => {
+      stepHeadingRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [currentStepIndex]);
 
   // ========================================
   // NAVIGATION
@@ -292,37 +340,29 @@ const ProfessionalForm: React.FC<Props> = ({
   // Track if we should submit on next render (to avoid stale closure)
   const [shouldSubmit, setShouldSubmit] = useState(false);
 
-  const handleNext = useCallback(() => {
-    if (currentStepIndex < activeSteps.length - 1) {
-      setDirection(1);
-      setCurrentStepIndex((prev) => prev + 1);
-    } else {
-      // Last step - trigger submission
-      setShouldSubmit(true);
-    }
-  }, [currentStepIndex, activeSteps.length]);
-
   const handleBack = useCallback(() => {
     if (currentStepIndex > 0) {
       setDirection(-1);
       setCurrentStepIndex((prev) => prev - 1);
     } else if (onBack) {
-      // First step - go back to role selection (onboarding mode)
       onBack();
     } else if (mode === "completion") {
-      // In completion mode, go back to dashboard
       router.push("/professional-portal/dashboard");
     }
   }, [currentStepIndex, onBack, mode, router]);
 
-  const handleStepClick = useCallback(
-    (stepIndex: number) => {
-      if (stepIndex < currentStepIndex) {
-        setDirection(-1);
+  const goToStep = useCallback(
+    (stepId: string) => {
+      const stepIndex = activeSteps.findIndex((s) => s.id === stepId);
+      if (stepIndex !== -1) {
+        setDirection(stepIndex > currentStepIndex ? 1 : -1);
         setCurrentStepIndex(stepIndex);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        console.error(`Step ${stepId} is currently not active.`);
       }
     },
-    [currentStepIndex]
+    [activeSteps, currentStepIndex],
   );
 
   // ========================================
@@ -331,18 +371,16 @@ const ProfessionalForm: React.FC<Props> = ({
 
   const handleUpdate = useCallback(
     (updates: Partial<ProfessionalWizardData>) => {
-      setFormData((prev) => ({ ...prev, ...updates }));
-
-      // If profession changed, we might need to recalculate steps
-      // Reset to appropriate step if current step is no longer valid
-      if (updates.profession !== undefined) {
-        const newActiveSteps = getActiveSteps({ ...formData, ...updates });
+      setFormData((prev) => {
+        const newData = { ...prev, ...updates };
+        const newActiveSteps = getActiveSteps(newData);
         if (currentStepIndex >= newActiveSteps.length) {
           setCurrentStepIndex(newActiveSteps.length - 1);
         }
-      }
+        return newData;
+      });
     },
-    [formData, currentStepIndex]
+    [currentStepIndex],
   );
 
   // ========================================
@@ -361,196 +399,248 @@ const ProfessionalForm: React.FC<Props> = ({
   // FILE UPLOAD HELPER
   // ========================================
 
-  const uploadFiles = async (
-    files: File[],
-    fieldName: string,
-    signal?: AbortSignal,
-    onProgress?: (uploaded: number, total: number, fileName: string) => void
-  ): Promise<string[]> => {
-    if (files.length === 0) return [];
+  const uploadFiles = useCallback(
+    async (
+      files: File[],
+      fieldName: string,
+      signal?: AbortSignal,
+      onProgress?: (uploaded: number, total: number, fileName: string) => void,
+    ): Promise<Array<{ uploadId: string; previewUrl: string }>> => {
+      if (files.length === 0) return [];
 
-    const urls: string[] = [];
-    const totalFiles = files.length;
-    let uploadedIndex = 0;
+      const results: Array<{ uploadId: string; previewUrl: string }> = [];
+      const totalFiles = files.length;
+      let uploadedIndex = 0;
 
-    for (const file of files) {
-      if (signal?.aborted) {
-        throw new DOMException("Upload cancelled", "AbortError");
-      }
+      for (const file of files) {
+        if (signal?.aborted) {
+          throw new DOMException("Upload cancelled", "AbortError");
+        }
 
-      onProgress?.(uploadedIndex, totalFiles, file.name);
+        onProgress?.(uploadedIndex, totalFiles, file.name);
 
-      const form = new FormData();
-      form.append(fieldName, file);
-
-      try {
-        const res = await fetch(API_ROUTES.onboardingUploads, {
-          method: "POST",
-          body: form,
-          signal,
-        });
-
-        if (!res.ok) {
-          const errorText = await res.text().catch(() => "");
-          throw new Error(
-            errorText || `Upload failed with status ${res.status}`
+        try {
+          const res = await onboardingClient.uploadFiles(
+            [file],
+            fieldName,
+            signal,
           );
+
+          if (!res.success) {
+            throw new Error(res.error || "Upload failed");
+          }
+
+          const uploadedResult = res.data?.[0];
+
+          if (uploadedResult?.uploadId) {
+            results.push({
+              uploadId: uploadedResult.uploadId,
+              previewUrl: uploadedResult.previewUrl || "",
+            });
+          } else {
+            throw new Error("No uploadId returned from server");
+          }
+        } catch (err) {
+          if (err instanceof Error && err.name === "AbortError") {
+            throw err;
+          }
+          console.error(`Failed to upload ${file.name}:`, err);
+          toast.error(`Failed to upload "${file.name}"`);
         }
 
-        const json = await res.json();
-        const uploadedUrl = json.uploaded?.[fieldName]?.[0]?.url;
-
-        if (uploadedUrl) {
-          urls.push(uploadedUrl);
-        } else {
-          throw new Error("No URL returned from server");
-        }
-      } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") {
-          throw err;
-        }
-        console.error(`Failed to upload ${file.name}:`, err);
-        toast.error(`Failed to upload "${file.name}"`);
+        uploadedIndex++;
       }
 
-      uploadedIndex++;
-    }
-
-    onProgress?.(totalFiles, totalFiles, "");
-    return urls;
-  };
+      onProgress?.(totalFiles, totalFiles, "");
+      return results;
+    },
+    [],
+  );
 
   // ========================================
   // FORM SUBMISSION
   // ========================================
 
-  const handleSubmitForm = async () => {
+  const handleSubmitForm = useCallback(async () => {
     setIsSubmitting(true);
     const toastId = toast.loading("Preparing your application…");
 
     try {
-      // Extract files from form data
       const certificateFiles = formData.certificates?.map((c) => c.file) ?? [];
       const idDocumentFiles = formData.idDocuments?.map((d) => d.file) ?? [];
-      const totalFiles = certificateFiles.length + idDocumentFiles.length;
 
-      // Upload files
-      let certificatesUrls: string[] = [];
-      let idDocumentsUrls: string[] = [];
+      const uploadedDocuments: Array<{
+        uploadId: string;
+        previewUrl?: string;
+        category: DocumentCategory;
+        title?: string;
+      }> = [];
 
+      // 1. Upload Certificates
       if (certificateFiles.length > 0) {
-        toast.loading("Uploading certificates…", { id: toastId });
-        certificatesUrls = await uploadFiles(
+        const certRecords = await uploadFiles(
           certificateFiles,
           "certificates",
           undefined,
-          (uploaded, total, fileName) => {
-            if (fileName) {
-              toast.loading(
-                `Uploading certificate ${uploaded + 1}/${total}: ${fileName}`,
-                { id: toastId }
-              );
-            }
-          }
+          (up, tot, name) => {
+            if (name)
+              toast.loading(`Uploading certificate ${up + 1}/${tot}: ${name}`, {
+                id: toastId,
+              });
+          },
+        );
+        certRecords.forEach((record, i) =>
+          uploadedDocuments.push({
+            uploadId: record.uploadId,
+            previewUrl: record.previewUrl,
+            category: "EDUCATION_CERT",
+            title: `Professional Certificate ${i + 1}`,
+          }),
         );
       }
 
+      // 2. Upload IDs
       if (idDocumentFiles.length > 0) {
-        toast.loading("Uploading ID documents…", { id: toastId });
-        idDocumentsUrls = await uploadFiles(
+        const idRecords = await uploadFiles(
           idDocumentFiles,
           "idDocuments",
           undefined,
-          (uploaded, total, fileName) => {
-            if (fileName) {
-              toast.loading(
-                `Uploading ID document ${uploaded + 1}/${total}: ${fileName}`,
-                { id: toastId }
+          (up, tot, name) => {
+            if (name)
+              toast.loading(`Uploading ID document ${up + 1}/${tot}: ${name}`, {
+                id: toastId,
+              });
+          },
+        );
+        idRecords.forEach((record, i) =>
+          uploadedDocuments.push({
+            uploadId: record.uploadId,
+            previewUrl: record.previewUrl,
+            category: "ID_OR_PASSPORT",
+            title: `ID Document ${i + 1}`,
+          }),
+        );
+      }
+
+      toast.loading("Submitting your application…", { id: toastId });
+
+      // 3. Resolve Domain Logic
+      const professionEnum = (formData.profession as Profession) || "OTHER";
+      const authority =
+        formData.authority ||
+        getRegulatoryAuthorityCode(formData.profession || "") ||
+        "OTHER";
+
+      // STAFF FIX: Unified License Mapping
+      const finalLicenseNumber =
+        formData.boardRegistrationNumber || formData.licenseNumber || "PENDING";
+
+      const stores = formData.stores?.length
+        ? formData.stores.map((store, index) => {
+            const parsed = StorePayloadSchema.safeParse(store);
+            if (!parsed.success) {
+              throw new Error(
+                `Store ${index + 1} is invalid: ${parsed.error.issues[0]?.message || "Invalid store data"}`,
               );
             }
-          }
-        );
-      }
+            return parsed.data;
+          })
+        : undefined;
 
-      // Check for partial upload success
-      const uploadedCount = certificatesUrls.length + idDocumentsUrls.length;
-      if (totalFiles > 0 && uploadedCount < totalFiles) {
-        toast.loading(
-          `Submitting application (${uploadedCount}/${totalFiles} files uploaded)…`,
-          { id: toastId }
-        );
-      } else {
-        toast.loading("Submitting your application…", { id: toastId });
-      }
+      const properties = formData.properties?.length
+        ? formData.properties.map((property, index) => {
+            const parsed = PropertyPayloadSchema.safeParse(property);
+            if (!parsed.success) {
+              throw new Error(
+                `Property ${index + 1} is invalid: ${parsed.error.issues[0]?.message || "Invalid property data"}`,
+              );
+            }
+            return parsed.data;
+          })
+        : undefined;
 
-      // Construct payload
+      // 4. Construct Payload
       const payload: ProfessionalOnboardingData = {
         role: "professional",
-        profession: formData.profession || "other",
+        profession: professionEnum,
         companyName: formData.companyName || "",
-        licenseNumber: formData.licenseNumber || "",
+        county: formData.county as County,
         yearsExperience: formData.yearsExperience,
         website: formData.website,
         bio: formData.bio,
-        certificatesUrls,
-        idDocumentsUrls,
-        // Include store data for suppliers
-        ...(formData.storeData && { storeData: formData.storeData }),
-        // Include EARB number for real estate professionals
-        ...(formData.earbNumber && { earbNumber: formData.earbNumber }),
+        license: {
+          authority,
+          licenseNumber: finalLicenseNumber,
+          certificateUrl:
+            uploadedDocuments.find((d) => d.category === "EDUCATION_CERT")
+              ?.previewUrl || "",
+        },
+        documents: uploadedDocuments,
+        ...(stores && {
+          stores,
+        }),
+        ...(properties && {
+          properties,
+        }),
       };
 
+      // 5. Execute Parent Submit
       await onSubmit(payload);
 
-      // Success!
+      // 6. Cleanup & Success States
       clearSavedData();
       setSuccess(true);
+      toast.success(
+        mode === "completion"
+          ? "Profile updated successfully!"
+          : "Application received.",
+        { id: toastId },
+      );
 
-      // Show appropriate success message based on mode
-      if (mode === "completion") {
-        toast.success("Profile updated successfully!", { id: toastId });
-      } else {
-        toast.success(
-          "Application received. You will be contacted for verification.",
-          { id: toastId }
-        );
-      }
-
-      // Call success callback (support both new and deprecated)
-      if (onSuccess) {
-        onSuccess(payload);
-      } else if (onAuthSuccess) {
-        onAuthSuccess(payload);
-      }
+      // 7. Fire Callbacks
+      if (onSuccess) onSuccess(payload);
+      else if (onAuthSuccess) onAuthSuccess(payload);
     } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
-        toast.dismiss(toastId);
-        return;
-      }
-
-      console.error("Professional submit error", err);
-      const message =
+      toast.error(
         err instanceof Error
           ? err.message
-          : "Failed to submit. Please try again.";
-      toast.error(message, { id: toastId });
+          : "Failed to submit. Please try again.",
+        { id: toastId },
+      );
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [
+    // DEPENDENCY ARRAY: Everything external that this function relies on
+    formData,
+    mode,
+    uploadFiles,
+    onSubmit,
+    clearSavedData,
+    onSuccess,
+    onAuthSuccess,
+  ]);
 
   // ========================================
   // POST-SUCCESS NAVIGATION
   // ========================================
+  const handleNext = useCallback(() => {
+    if (currentStepIndex < activeSteps.length - 1) {
+      setDirection(1);
+      setCurrentStepIndex((prev) => prev + 1);
+    } else {
+      handleSubmitForm();
+    }
+  }, [currentStepIndex, activeSteps.length, handleSubmitForm]);
 
   const handleGoDashboard = useCallback(() => {
     setNavigating(true);
-    if (formData.storeData) {
+    if (formData.stores && formData.stores.length > 0) {
       router.push("/professional-portal/settings/stores");
     } else {
       router.push("/professional-portal/dashboard");
     }
-  }, [formData.storeData, router]);
+  }, [formData.stores, router]);
 
   // ========================================
   // RENDER SUCCESS STATE
@@ -585,17 +675,19 @@ const ProfessionalForm: React.FC<Props> = ({
   // RENDER STEP CONTENT
   // ========================================
 
-  const renderStepContent = () => {
-    const stepProps = {
-      data: formData,
-      onUpdate: handleUpdate,
-      onNext: handleNext,
-      onBack: handleBack,
-      isFirstStep: currentStepIndex === 0,
-      isLastStep: currentStepIndex === activeSteps.length - 1,
-      isSubmitting,
-    };
+  const stepProps = {
+    data: formData,
+    onUpdate: handleUpdate,
+    onNext: handleNext,
+    onBack: handleBack,
+    goToStep, // <--- PASSED DOWN HERE
+    isFirstStep: currentStepIndex === 0,
+    isLastStep: currentStepIndex === activeSteps.length - 1,
+    isSubmitting,
+    stepHeadingRef, // <--- Focus management: each step renders a heading with this ref
+  };
 
+  const renderStepContent = () => {
     switch (currentStep?.id) {
       case "profession":
         return <ProfessionStep {...stepProps} />;
@@ -603,6 +695,8 @@ const ProfessionalForm: React.FC<Props> = ({
         return <DetailsStep {...stepProps} />;
       case "store":
         return <StoreStep {...stepProps} />;
+      case "property":
+        return <PropertyStep {...stepProps} />;
       case "credentials":
         return <CredentialsStep {...stepProps} />;
       case "documents":
@@ -614,26 +708,23 @@ const ProfessionalForm: React.FC<Props> = ({
     }
   };
 
-  // ========================================
-  // MAIN RENDER
-  // ========================================
-
   return (
     <div className={theme.container}>
-      {/* Progress Indicator */}
       <div className="mb-8">
-        {/* Desktop: Full step progress */}
         <div className="hidden md:block">
           <StepProgress
-            steps={progressSteps}
+            steps={activeSteps}
             currentStep={currentStepIndex}
-            onStepClick={handleStepClick}
+            onStepClick={(idx) => {
+              const targetStepId = activeSteps[idx]?.id;
+              if (targetStepId) {
+                goToStep(targetStepId);
+              }
+            }}
             allowClickOnCompleted
             theme={variant}
           />
         </div>
-
-        {/* Mobile: Compact progress bar */}
         <div className="md:hidden">
           <CompactStepProgress
             currentStep={currentStepIndex}
@@ -643,7 +734,6 @@ const ProfessionalForm: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Step Content with Animation */}
       <AnimatePresence mode="wait" custom={direction}>
         <motion.div
           key={currentStep?.id}
@@ -661,7 +751,6 @@ const ProfessionalForm: React.FC<Props> = ({
         </motion.div>
       </AnimatePresence>
 
-      {/* Loading Overlay */}
       {isSubmitting && (
         <div className={theme.loadingOverlay}>
           <div className="flex flex-col items-center gap-3">

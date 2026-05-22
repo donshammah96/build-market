@@ -1,170 +1,438 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@repo/db';
-import { PropertyRepository, PropertyFilters } from '@/app/lib/repositories/property.repository';
-import { checkRateLimit, getRateLimitIdentifier, RateLimits } from '@/app/lib/rate-limit';
-import { env } from '@/app/lib/env';
+import { NextRequest } from "next/server";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
-  executeResilient,
+  getResilientExecutor,
   initializeCorrelationId,
-  apiError,
-  getClientLogger,
-} from '@/app/lib/resilient-api';
-import { PropertyType, PropertyCategory } from '@prisma/client';
+} from "@/app/lib/api/resilient-api";
+import { checkBodySize } from "@/app/lib/api/api-guards";
+import {
+  checkRateLimit,
+  getActorRateLimitIdentifier,
+  getRateLimitIdentifier,
+  RateLimits,
+} from "@/app/lib/api/rate-limit";
+import { getRequestMetadata } from "@/app/lib/api/request-utils";
+import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
+import {
+  BatchCreatePropertiesSchema,
+  CreatePropertySchema,
+  PropertyQuerySchema,
+  propertiesService,
+} from "@/app/lib/domains/properties";
+import {
+  actorRoleLabel,
+  domainErrorCodeToStatus,
+  domainResultToErrorResponse,
+  logPropertiesRouteOutcome,
+  now,
+} from "@/app/api/properties/shared";
 
-const logger = getClientLogger();
+export async function GET(req: NextRequest) {
+  const startedAt = now();
+  const correlationId = initializeCorrelationId(req);
+  const operationName = "list_properties";
 
-/**
- * GET /api/properties
- * Get list of properties with filtering, sorting, and pagination
- */
-export async function GET(request: NextRequest): Promise<NextResponse> {
-  const correlationId = initializeCorrelationId(request);
-
-  // Rate limiting
-  const identifier = getRateLimitIdentifier(request);
+  const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
-    `properties:${identifier}`,
+    `properties-read:${identifier}`,
     RateLimits.READ.limit,
-    RateLimits.READ.window
+    RateLimits.READ.window,
   );
 
   if (!rateLimitResult.success) {
-    logger.warn('Rate limit exceeded', { correlationId, identifier });
-    return apiError('Too many requests. Please try again later.', 429);
+    const response = apiError(
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS,
+      undefined,
+      correlationId,
+    );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: "anonymous",
+      outcome: "rate_limited",
+      httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+      durationMs: now() - startedAt,
+      domainError: "limit_exceeded",
+      resourceType: "property",
+    });
+    return response;
   }
 
-  const searchParams = request.nextUrl.searchParams;
+  const { searchParams } = new URL(req.url);
+  const rawParams = Object.fromEntries(searchParams.entries());
+  const queryParams = {
+    ...rawParams,
+    type: rawParams.type || undefined,
+    category: rawParams.category || undefined,
+    county: rawParams.county || undefined,
+    status: rawParams.status || undefined,
+    verified: rawParams.verified || undefined,
+    featured: rawParams.featured || undefined,
+    furnishing: rawParams.furnishing || undefined,
+    minPrice: rawParams.minPrice || undefined,
+    maxPrice: rawParams.maxPrice || undefined,
+    minBedrooms: rawParams.minBedrooms || rawParams.beds || undefined,
+    maxBedrooms: rawParams.maxBedrooms || undefined,
+    minBathrooms: rawParams.minBathrooms || rawParams.baths || undefined,
+    search: rawParams.search || undefined,
+    sortBy: rawParams.sortBy || "createdAt",
+    sortOrder: rawParams.sortOrder || "desc",
+    page: rawParams.page || "1",
+    limit: rawParams.limit || "20",
+  };
 
-  // Parse and validate query parameters
-  const type = searchParams.get('type') as PropertyType | null;
-  const category = searchParams.get('category') as PropertyCategory | null;
-  const county = searchParams.get('county')?.trim().toUpperCase() || undefined;
-  const constituency = searchParams.get('constituency')?.trim().slice(0, 100) || undefined;
-  const neighbourhood = searchParams.get('neighbourhood')?.trim().slice(0, 100) || undefined;
-  const location = searchParams.get('location')?.trim().slice(0, 100) || undefined;
-  const minPrice = searchParams.get('minPrice') ? Number(searchParams.get('minPrice')) : undefined;
-  const maxPrice = searchParams.get('maxPrice') ? Number(searchParams.get('maxPrice')) : undefined;
-  const minBedrooms = searchParams.get('beds') ? Number(searchParams.get('beds')) : undefined;
-  const minBathrooms = searchParams.get('baths') ? Number(searchParams.get('baths')) : undefined;
-  const verified = searchParams.get('verified') === 'true' ? true : 
-                   searchParams.get('verified') === 'false' ? false : undefined;
-  const featured = searchParams.get('featured') === 'true' ? true : undefined;
-  const sortBy = (searchParams.get('sortBy') || 'newest') as 'price_asc' | 'price_desc' | 'newest' | 'oldest';
-  const limit = Math.min(Number(searchParams.get('limit')) || 20, 50);
-  const offset = Number(searchParams.get('offset')) || 0;
-
-  // Validate sortBy
-  const validSortOptions = ['price_asc', 'price_desc', 'newest', 'oldest'];
-  if (!validSortOptions.includes(sortBy)) {
-    return apiError('Invalid sort option. Must be one of: price_asc, price_desc, newest, oldest', 400);
+  const queryValidation = PropertyQuerySchema.safeParse(queryParams);
+  if (!queryValidation.success) {
+    const response = apiError(
+      "Invalid query parameters",
+      HttpStatus.BAD_REQUEST,
+      queryValidation.error.issues,
+      correlationId,
+    );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: "anonymous",
+      outcome: "validation_error",
+      httpStatus: HttpStatus.BAD_REQUEST,
+      durationMs: now() - startedAt,
+      domainError: "invalid_input",
+      resourceType: "property",
+    });
+    return response;
   }
 
-  // Validate type if provided
-  if (type && !['SALE', 'RENT', 'LEASE'].includes(type)) {
-    return apiError('Invalid property type. Must be one of: SALE, RENT, LEASE', 400);
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    () => propertiesService.listProperties(queryValidation.data),
+    { operationName },
+  );
+
+  if (!result.success || !result.data) {
+    const response = apiError(
+      "Failed to fetch properties",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      undefined,
+      correlationId,
+    );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: "anonymous",
+      outcome: "internal_error",
+      httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+    });
+    return response;
   }
 
-  // Validate category if provided
-  if (category && !['RESIDENTIAL', 'COMMERCIAL', 'LAND', 'INDUSTRIAL'].includes(category)) {
-    return apiError('Invalid property category. Must be one of: RESIDENTIAL, COMMERCIAL, LAND, INDUSTRIAL', 400);
+  const domainResult = result.data;
+  if (!domainResult.ok) {
+    const errorResponse = domainResultToErrorResponse(
+      domainResult,
+      correlationId,
+    );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: "anonymous",
+      outcome: "domain_error",
+      httpStatus: domainErrorCodeToStatus(domainResult.error),
+      durationMs: now() - startedAt,
+      domainError: domainResult.error,
+      resourceType: "property",
+    });
+    return errorResponse!;
   }
 
-  // Execute with resilience patterns
-  return executeResilient(
-    async () => {
-      const repo = new PropertyRepository(prisma);
-      const result = await repo.findMany({
-        type: type || undefined,
-        category: category || undefined,
-        county: county as PropertyFilters['county'],
-        constituency,
-        neighbourhood,
-        location,
-        minPrice,
-        maxPrice,
-        minBedrooms,
-        minBathrooms,
-        verified,
-        featured,
-        sortBy,
-        limit,
-        offset,
-      });
+  const response = apiSuccess(domainResult.data, HttpStatus.OK, correlationId);
+  logPropertiesRouteOutcome({
+    correlationId,
+    operationName,
+    actorRole: "anonymous",
+    outcome: "success",
+    httpStatus: HttpStatus.OK,
+    durationMs: now() - startedAt,
+    resourceType: "property",
+  });
+  return response;
+}
 
-      const baseUrl = env.NEXT_PUBLIC_APP_URL || 'http://localhost:3500';
+export const POST = withAuth(
+  async (req: NextRequest, { dbUserId, userRole }) => {
+    const startedAt = now();
+    const correlationId = initializeCorrelationId(req);
+    const operationName = "create_property";
+    const actorRole = actorRoleLabel(userRole);
+    const { ipAddress, userAgent } = getRequestMetadata(req);
 
-      // Transform to PropertyCardData format
-      const properties = result.properties.map((property) => {
-        const agentName = property.agent?.user
-          ? `${property.agent.user.firstName || ''} ${property.agent.user.lastName || ''}`.trim() || property.agent.companyName
-          : property.agent?.companyName || 'Unknown';
+    const identifier = getActorRateLimitIdentifier(dbUserId, "property-write");
+    const rateLimitResult = await checkRateLimit(
+      identifier,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
+    );
 
-        // Get main image URL from images relation
-        const mainImage = property.images?.find((img) => img.isMain) || property.images?.[0];
-        const imageUrl = mainImage?.url || '/placeholder-property.jpg';
-
-        return {
-          id: property.id,
-          title: property.title,
-          price: Number(property.price),
-          currency: property.currency,
-          location: property.location,
-          county: property.county,
-          type: property.type,
-          category: property.category,
-          status: property.status,
-          beds: property.bedrooms || undefined,
-          baths: property.bathrooms || undefined,
-          area: property.areaSqFt || undefined,
-          image: imageUrl,
-          images: property.images?.map((img) => ({
-            id: img.id,
-            url: img.url,
-            caption: img.caption,
-            isMain: img.isMain,
-            sortOrder: img.sortOrder,
-          })),
-          featured: property.featured,
-          agent: property.agent ? {
-            name: agentName,
-            image: property.agent.user?.avatar || undefined,
-          } : undefined,
-          propertyUrl: `${baseUrl}/properties/${property.id}`,
-        };
-      });
-
-      logger.info('Properties fetched successfully', {
+    if (!rateLimitResult.success) {
+      const response = apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
         correlationId,
-        count: properties.length,
-        total: result.total,
-        filters: { type, category, county, location, minPrice, maxPrice, minBedrooms, minBathrooms, verified, featured, sortBy },
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+        resourceType: "property",
       });
+      return response;
+    }
+
+    const sizeError = checkBodySize(req, PROPERTY_CONFIG.MAX_BODY_SIZE);
+    if (sizeError) {
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: sizeError.status,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+      });
+      return sizeError;
+    }
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      const response = apiError(
+        "Invalid JSON body",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+      });
+      return response;
+    }
+
+    const isBatchPayload =
+      typeof body === "object" && body !== null && "properties" in body;
+
+    const validatedData = (() => {
+      if (isBatchPayload) {
+        const validation = BatchCreatePropertiesSchema.safeParse(body);
+        if (!validation.success) {
+          return {
+            ok: false as const,
+            response: apiError(
+              "Invalid batch property data",
+              HttpStatus.BAD_REQUEST,
+              validation.error.issues,
+              correlationId,
+            ),
+          };
+        }
+        return {
+          ok: true as const,
+          value: {
+            type: "batch" as const,
+            data: validation.data.properties,
+          },
+        };
+      }
+
+      const validation = CreatePropertySchema.safeParse(body);
+      if (!validation.success) {
+        return {
+          ok: false as const,
+          response: apiError(
+            "Invalid property data",
+            HttpStatus.BAD_REQUEST,
+            validation.error.issues,
+            correlationId,
+          ),
+        };
+      }
 
       return {
-        properties,
-        total: result.total,
-        page: Math.floor(offset / limit) + 1,
-        limit,
-        hasMore: result.hasMore,
+        ok: true as const,
+        value: {
+          type: "single" as const,
+          data: validation.data,
+        },
       };
-    },
-    {
-      criticality: 'normal',
-      operationName: 'fetch-properties',
-      cache: {
-        ttl: 30000, // 30s cache
-        staleWhileRevalidate: 15000,
-      },
-      fallback: async () => {
-        logger.warn('Using fallback for properties list', { correlationId });
-        return {
-          properties: [],
-          total: 0,
-          page: 1,
-          limit,
-          hasMore: false,
-        };
-      },
+    })();
+
+    if (!validatedData.ok) {
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+      });
+      return validatedData.response;
     }
-  );
-}
+
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      IdempotencyService.generateKey(dbUserId, "POST", body);
+
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
+      idempotencyKey,
+      "property",
+      dbUserId,
+      "POST",
+      { ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS },
+    );
+
+    if (idempotencyCheck?.status === "completed") {
+      const response = apiSuccess(
+        idempotencyCheck.response,
+        HttpStatus.OK,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "success",
+        httpStatus: HttpStatus.OK,
+        durationMs: now() - startedAt,
+        resourceType: "property",
+      });
+      return response;
+    }
+
+    if (idempotencyCheck?.status === "pending") {
+      const response = apiError(
+        "A request with this idempotency key is already being processed",
+        HttpStatus.CONFLICT,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: HttpStatus.CONFLICT,
+        durationMs: now() - startedAt,
+        domainError: "conflict",
+        resourceType: "property",
+      });
+      return response;
+    }
+
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      async () => {
+        const actor = { userId: dbUserId, role: userRole };
+        const options = { ipAddress, userAgent };
+
+        if (validatedData.value.type === "batch") {
+          return propertiesService.createPropertiesBatch(
+            actor,
+            validatedData.value.data,
+            options,
+          );
+        }
+
+        return propertiesService.createProperty(
+          actor,
+          validatedData.value.data,
+          options,
+        );
+      },
+      { operationName },
+    );
+
+    if (!result.success || !result.data) {
+      await IdempotencyService.fail(idempotencyKey);
+      const response = apiError(
+        "Failed to create property",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "internal_error",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: now() - startedAt,
+        resourceType: "property",
+      });
+      return response;
+    }
+
+    const domainResult = result.data;
+    if (!domainResult.ok) {
+      const errorResponse = domainResultToErrorResponse(
+        domainResult,
+        correlationId,
+      );
+      await IdempotencyService.fail(idempotencyKey);
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(domainResult.error),
+        durationMs: now() - startedAt,
+        domainError: domainResult.error,
+        resourceType: "property",
+      });
+      return errorResponse!;
+    }
+
+    await safeIdempotencyComplete(idempotencyKey, domainResult.data, {
+      correlationId,
+      operationName,
+      actorRole,
+      httpStatus: HttpStatus.CREATED,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+    });
+    const response = apiSuccess(
+      domainResult.data,
+      HttpStatus.CREATED,
+      correlationId,
+    );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.CREATED,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+    });
+    return response;
+  },
+);

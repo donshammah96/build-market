@@ -12,7 +12,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -56,23 +56,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
+import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 
-// Portfolio item interface
-interface PortfolioItem {
-  id: string;
-  title: string;
-  description?: string;
-  projectType: string;
-  images: string[] | string;
-}
+import {
+  usePortfolios,
+  useCreatePortfolio,
+  useDeletePortfolio,
+  portfolioKeys,
+} from "@/hooks/usePortfolio";
+import {
+  portfolioClient,
+  type PortfolioItem,
+  type ProjectTypeValue,
+} from "@/lib/facades/portfolio-client";
+
+// ─── Form schema (UI-layer only) ──────────────────────────────────────────────
 
 const createProjectSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters"),
   description: z.string().optional(),
   projectType: z.string().min(1, "Project type is required"),
-  // Image URL is optional in schema - we validate file separately
-  imageUrl: z.string().optional(),
   clientTestimonial: z.string().optional(),
 });
 
@@ -83,7 +86,7 @@ type CreateProjectFormValues = z.infer<typeof createProjectSchema>;
  *
  * Enterprise-level portfolio management interface with:
  * - Image upload with drag & drop
- * - CRUD operations
+ * - CRUD operations via custom React Query hooks
  * - Responsive grid layout
  * - Error handling and validation
  */
@@ -100,42 +103,90 @@ export default function PortfolioPage() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- File Upload Helper ---
-  const uploadFiles = async (
-    files: File[],
-    fieldName: string
-  ): Promise<string[]> => {
-    const form = new FormData();
-    files.forEach((f) => form.append(fieldName, f));
+  // ─── Data Fetching ────────────────────────────────────────────────────────
 
-    const res = await fetch("/api/uploads", { method: "POST", body: form });
+  const {
+    data: portfolioItems = [],
+    isLoading,
+    error: fetchError,
+  } = usePortfolios();
 
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      throw new Error(txt || `Upload failed with ${res.status}`);
+  // ─── Create Mutation ──────────────────────────────────────────────────────
+
+  const createMutation = useCreatePortfolio({
+    onSuccess: () => {
+      setIsCreateOpen(false);
+      toast.success("Project added successfully");
+      form.reset();
+      setSelectedFile(null);
+      setImagePreview(null);
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  // ─── Form ─────────────────────────────────────────────────────────────────
+
+  const form = useForm<CreateProjectFormValues>({
+    resolver: zodResolver(createProjectSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      projectType: "",
+      clientTestimonial: "",
+    },
+  });
+
+  async function onSubmit(data: CreateProjectFormValues) {
+    if (!selectedFile) {
+      toast.error("Please select an image for your project");
+      return;
     }
 
-    const json = await res.json();
-    return (
-      json.data?.uploaded?.[fieldName]?.map((i: { url: string }) => i.url) || []
-    );
-  };
+    setIsUploading(true);
+    let imageUrls: string[];
+    try {
+      imageUrls = await portfolioClient.uploadImages([selectedFile], "images");
+    } catch {
+      toast.error("Failed to upload image. Please try again.");
+      setIsUploading(false);
+      return;
+    }
+    setIsUploading(false);
 
-  // --- File Selection Handler ---
+    if (!imageUrls.length) {
+      toast.error("No image was uploaded. Please try again.");
+      return;
+    }
+
+    // Convert relative URLs to absolute (portfolio API validates full URLs)
+    const absoluteUrls = imageUrls.map((url) =>
+      url.startsWith("/") ? `${window.location.origin}${url}` : url,
+    );
+
+    createMutation.mutate({
+      title: data.title,
+      description: data.description,
+      clientTestimonial: data.clientTestimonial,
+      projectType: data.projectType as ProjectTypeValue,
+      images: absoluteUrls,
+    });
+  }
+
+  // ─── File Selection & Drag/Drop ───────────────────────────────────────────
+
   const handleFileSelect = useCallback((file: File | null) => {
     if (file) {
-      // Validate file type
       if (!file.type.startsWith("image/")) {
         toast.error("Please select an image file");
         return;
       }
-      // Validate file size (max 10MB)
       if (file.size > 10 * 1024 * 1024) {
         toast.error("Image must be less than 10MB");
         return;
       }
       setSelectedFile(file);
-      // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
@@ -147,7 +198,6 @@ export default function PortfolioPage() {
     }
   }, []);
 
-  // --- Drag & Drop Handlers ---
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -165,120 +215,8 @@ export default function PortfolioPage() {
       const file = e.dataTransfer.files[0];
       if (file) handleFileSelect(file);
     },
-    [handleFileSelect]
+    [handleFileSelect],
   );
-
-  // --- Fetch Portfolio ---
-  const {
-    data: portfolioData,
-    isLoading,
-    error: fetchError,
-  } = useQuery({
-    queryKey: ["professional-portfolio"],
-    queryFn: async () => {
-      const response = await fetch("/api/professional-portal/portfolio");
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || "Failed to fetch portfolio");
-      }
-      const result = await response.json();
-      // Handle both direct array response and paginated response
-      if (Array.isArray(result)) {
-        return result;
-      }
-      if (result.data && Array.isArray(result.data)) {
-        return result.data;
-      }
-      return [];
-    },
-    retry: 2,
-    staleTime: 30000, // 30 seconds
-  });
-
-  // Ensure portfolioItems is always an array
-  const portfolioItems = useMemo(() => {
-    if (!portfolioData) return [];
-    if (Array.isArray(portfolioData)) return portfolioData;
-    if (portfolioData.data && Array.isArray(portfolioData.data)) {
-      return portfolioData.data;
-    }
-    return [];
-  }, [portfolioData]);
-
-  // --- Create Mutation ---
-  const createMutation = useMutation({
-    mutationFn: async (data: CreateProjectFormValues) => {
-      // Validate image is selected
-      if (!selectedFile) {
-        throw new Error("Please select an image for your project");
-      }
-
-      // Upload file first
-      setIsUploading(true);
-      let imageUrls: string[];
-      try {
-        imageUrls = await uploadFiles([selectedFile], "images");
-      } catch {
-        throw new Error("Failed to upload image. Please try again.");
-      } finally {
-        setIsUploading(false);
-      }
-
-      if (!imageUrls.length) {
-        throw new Error("No image was uploaded. Please try again.");
-      }
-
-      // Create portfolio item with uploaded image URL
-      // Convert relative URLs to absolute URLs (portfolio API validates for full URLs)
-      const absoluteUrls = imageUrls.map((url) =>
-        url.startsWith("/") ? `${window.location.origin}${url}` : url
-      );
-
-      const payload = {
-        ...data,
-        images: absoluteUrls,
-      };
-
-      const res = await fetch("/api/professional-portal/portfolio", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to create project");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["professional-portfolio"] });
-      setIsCreateOpen(false);
-      toast.success("Project added successfully");
-      form.reset();
-      // Reset file state
-      setSelectedFile(null);
-      setImagePreview(null);
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
-
-  const form = useForm<CreateProjectFormValues>({
-    resolver: zodResolver(createProjectSchema),
-    defaultValues: {
-      title: "",
-      description: "",
-      projectType: "",
-      imageUrl: "",
-      clientTestimonial: "",
-    },
-  });
-
-  function onSubmit(data: CreateProjectFormValues) {
-    createMutation.mutate(data);
-  }
 
   return (
     <div className="space-y-8 max-w-[1600px] mx-auto pb-10">
@@ -345,18 +283,25 @@ export default function PortfolioPage() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="Residential">
+                            <SelectItem value="RESIDENTIAL">
                               Residential
                             </SelectItem>
-                            <SelectItem value="Commercial">
+                            <SelectItem value="COMMERCIAL">
                               Commercial
                             </SelectItem>
-                            <SelectItem value="Renovation">
+                            <SelectItem value="RENOVATION">
                               Renovation
                             </SelectItem>
-                            <SelectItem value="Landscaping">
+                            <SelectItem value="LANDSCAPING">
                               Landscaping
                             </SelectItem>
+                            <SelectItem value="INTERIOR_DESIGN">
+                              Interior Design
+                            </SelectItem>
+                            <SelectItem value="INFRASTRUCTURE">
+                              Infrastructure
+                            </SelectItem>
+                            <SelectItem value="OTHER">Other</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -502,7 +447,7 @@ export default function PortfolioPage() {
             <Button
               onClick={() =>
                 queryClient.invalidateQueries({
-                  queryKey: ["professional-portfolio"],
+                  queryKey: portfolioKeys.lists(),
                 })
               }
             >
@@ -522,7 +467,7 @@ export default function PortfolioPage() {
             </div>
             <h3 className="font-semibold text-zinc-900">Create New Project</h3>
             <p className="text-sm text-zinc-500 mt-1">
-              Upload photos & details
+              Upload photos &amp; details
             </p>
           </Card>
 
@@ -552,48 +497,45 @@ export default function PortfolioPage() {
   );
 }
 
+// ─── PortfolioItemCard Component ──────────────────────────────────────────────
+
 function PortfolioItemCard({ item }: { item: PortfolioItem }) {
-  const queryClient = useQueryClient();
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
-  // Safe image handling: item.images might be string[] or JSON
   const mainImage = useMemo(() => {
-    if (Array.isArray(item.images)) {
-      return item.images[0];
+    if (Array.isArray(item.images) && item.images.length > 0) {
+      const first = item.images[0];
+      if (typeof first === "string") return first;
+      if (first && typeof first === "object") {
+        if (
+          "url" in first &&
+          typeof (first as { url?: string }).url === "string"
+        )
+          return (first as { url: string }).url;
+        if ("asset" in first) {
+          const a = (
+            first as { asset?: { cdnUrl?: string; thumbnailUrl?: string } }
+          ).asset;
+          return a?.cdnUrl ?? a?.thumbnailUrl ?? null;
+        }
+      }
+      return null;
     }
-    if (typeof item.images === "string") {
-      return item.images;
-    }
+    if (typeof item.images === "string") return item.images;
     return null;
   }, [item.images]);
 
-  // Delete Mutation
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/professional-portal/portfolio/${item.id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to delete portfolio");
-      }
-      return res.json();
-    },
+  const deleteMutation = useDeletePortfolio({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["professional-portfolio"] });
       setIsDeleteOpen(false);
       toast.success("Portfolio deleted successfully");
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete portfolio"
+        error instanceof Error ? error.message : "Failed to delete portfolio",
       );
     },
   });
-
-  const handleDelete = () => {
-    deleteMutation.mutate();
-  };
 
   return (
     <>
@@ -689,7 +631,7 @@ function PortfolioItemCard({ item }: { item: PortfolioItem }) {
             </DialogClose>
             <Button
               variant="destructive"
-              onClick={handleDelete}
+              onClick={() => deleteMutation.mutate({ portfolioId: item.id })}
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending && (

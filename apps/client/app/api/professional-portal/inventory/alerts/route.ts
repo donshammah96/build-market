@@ -1,117 +1,131 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
+  getActorRateLimitIdentifier,
   RateLimits,
-  getRateLimitIdentifier,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { sellerInsightsService } from "@/app/lib/domains/seller-insights";
+import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
+const ROUTE_PATTERN = "/api/professional-portal/inventory/alerts";
 
-// Default low stock threshold if not set on product
-const DEFAULT_LOW_STOCK_THRESHOLD = 10;
+type SellerInsightsAdapterOutcome =
+  | "started"
+  | "succeeded"
+  | "failed"
+  | "rate_limited"
+  | "domain_error";
+
+function createSellerInsightsOutcomeLogger(
+  req: NextRequest,
+  correlationId: string,
+  actorRole: string,
+  requestStartedAt: number,
+  operationName: string,
+) {
+  return (
+    outcome: SellerInsightsAdapterOutcome,
+    httpStatus: number,
+    details: { domainError?: string } = {},
+  ) => {
+    getClientLogger().info("Seller insights inventory alerts adapter outcome", {
+      correlationId,
+      operationName,
+      httpMethod: req.method,
+      routePattern: ROUTE_PATTERN,
+      actorRole,
+      outcome,
+      httpStatus,
+      durationMs: Date.now() - requestStartedAt,
+      ...(details.domainError ? { domainError: details.domainError } : {}),
+    });
+  };
+}
 
 /**
  * GET /api/professional-portal/inventory/alerts
- * Get inventory alerts (low stock, out of stock) for professional's stores
- * Returns alerts formatted for dashboard widget
+ * Get inventory alerts for the professional's stores.
  */
-export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
+export const GET = withAuth(
+  async (req: NextRequest, { dbUserId, userRole }) => {
+    const requestStartedAt = Date.now();
+    const correlationId = initializeCorrelationId(req);
+    const actorRole = normalizeRole(String(userRole)) ?? String(userRole);
+    const operationName = "get_inventory_alerts";
+    const logOutcome = createSellerInsightsOutcomeLogger(
+      req,
+      correlationId,
+      actorRole,
+      requestStartedAt,
+      operationName,
+    );
 
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
-    identifier,
-    RateLimits.READ.limit,
-    RateLimits.READ.window
-  );
-
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  logger.info("Fetching inventory alerts", { correlationId, userId: dbUserId });
-
-  return executeResilient(
-    async () => {
-      // Get all store IDs for this professional
-      const stores = await prisma.store.findMany({
-        where: { professionalId: dbUserId },
-        select: { id: true },
-      });
-
-      const storeIds = stores.map((s) => s.id);
-
-      if (storeIds.length === 0) {
-        return { data: [] };
-      }
-
-      // Get products with low or zero stock
-      const products = await prisma.product.findMany({
-        where: {
-          storeId: { in: storeIds },
-          OR: [
-            { stockCount: 0 },
-            {
-              stockCount: {
-                lte: DEFAULT_LOW_STOCK_THRESHOLD,
-                gt: 0,
-              },
-            },
-            {
-              stockCount: null,
-              inStock: false,
-            },
-          ],
-        },
-        select: {
-          id: true,
-          name: true,
-          sku: true,
-          stockCount: true,
-          inStock: true,
-        },
-        orderBy: [
-          { stockCount: "asc" },
-          { inStock: "asc" },
-        ],
-        take: 20, // Limit to top 20 alerts
-      });
-
-      // Format for dashboard widget
-      const alerts = products.map((product) => {
-        const currentStock = product.stockCount ?? 0;
-        return {
-          id: product.id,
-          productName: product.name,
-          sku: product.sku,
-          currentStock,
-          threshold: DEFAULT_LOW_STOCK_THRESHOLD,
-          status:
-            currentStock === 0 || !product.inStock
-              ? ("out_of_stock" as const)
-              : ("low" as const),
-        };
-      });
-
-      logger.info("Inventory alerts fetched successfully", {
-        correlationId,
-        userId: dbUserId,
-        count: alerts.length,
-      });
-
-      return { data: alerts };
-    },
-    {
-      operationName: "get_inventory_alerts",
-      successStatus: HttpStatus.OK,
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "seller-insights-read",
+    );
+    const rateLimitResult = await checkRateLimit(
+      rateLimitKey,
+      RateLimits.READ.limit,
+      RateLimits.READ.window,
+    );
+    if (!rateLimitResult.success) {
+      logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
-  );
-});
+
+    const resilientExecutor = getResilientExecutor();
+    logOutcome("started", HttpStatus.OK);
+    const result = await resilientExecutor.execute(
+      () =>
+        sellerInsightsService.getInventoryAlerts({
+          userId: dbUserId,
+          role: actorRole,
+        }),
+      { operationName },
+    );
+
+    if (!result.success || !result.data) {
+      getClientLogger().error(
+        "Failed to fetch inventory alerts",
+        result.error,
+        {
+          correlationId,
+          operationName,
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          actorRole,
+          outcome: "failed",
+          httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+          durationMs: Date.now() - requestStartedAt,
+        },
+      );
+      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to fetch inventory alerts",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const data = result.data;
+    if (!data.ok) {
+      logOutcome("domain_error", HttpStatus.FORBIDDEN, {
+        domainError: (data as { error?: string }).error,
+      });
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    }
+
+    logOutcome("succeeded", HttpStatus.OK);
+    return apiSuccess(data.data, HttpStatus.OK);
+  },
+);

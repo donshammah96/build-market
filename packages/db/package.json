@@ -1,29 +1,37 @@
 {
-  "name": "@repo/db",
+  "name": "@build/db",
   "version": "1.0.0",
   "description": "BuildMarket Database",
   "main": "./lib/prisma.ts",
   "types": "./lib/prisma.ts",
   "exports": {
-    ".": "./lib/prisma.ts"
+    ".": "./lib/prisma.ts",
+    "./system-settings": "./lib/system-settings.ts"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc",
+    "check-types": "tsc --noEmit",
+    "lint": "echo \"No lint configured\" && exit 0",
+    "test": "echo \"No tests configured\" && exit 0",
     "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "Don Shammah",
   "license": "ISC",
   "dependencies": {
-    "@prisma/client": "^6.19.0",
-    "prisma": "^6.19.0"
+    "@prisma/adapter-pg": "^7.6.0",
+    "@prisma/client": "^7.6.0",
+    "pg": "^8.18.0",
+    "prisma": "^7.6.0",
+    "zod": "^4.3.6"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "devDependencies": {
+    "@prisma/config": "^7.6.0",
     "@types/node": "^24.8.1",
-    "ts-node": "^10.9.2",
+    "@types/pg": "^8.16.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   }

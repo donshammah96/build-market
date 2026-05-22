@@ -10,7 +10,7 @@ import {
   Store as StoreIcon,
   Package,
 } from "lucide-react";
-import { ImageWithFallback } from "../../app/lib/ImageWithFallback";
+import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import Link from "next/link";
 import { VendorCardData } from "../../types/vendor";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ const VendorCard: React.FC<VendorCardProps> = memo(function VendorCard({
       <Card
         className={cn(
           "h-full flex flex-col border border-zinc-200 bg-white overflow-hidden rounded-xl shadow-sm",
-          "transition-all duration-300 hover:shadow-xl hover:border-emerald-100 group"
+          "transition-all duration-300 hover:shadow-xl hover:border-emerald-100 group",
         )}
       >
         {/* Image Area */}

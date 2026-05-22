@@ -1,6 +1,5 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { ShieldAlert, ArrowLeft, LogOut, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,8 +7,9 @@ import { Card, CardContent } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
 
+const SIGN_IN_URL = "/sign-in";
+
 const UnauthorizedPage = () => {
-  const { signOut } = useAuth();
   const router = useRouter();
 
   return (
@@ -62,11 +62,11 @@ const UnauthorizedPage = () => {
 
             <div className="flex flex-col gap-3 w-full">
               <Button
-                onClick={() => signOut({ redirectUrl: "/" })}
+                onClick={() => router.push(SIGN_IN_URL)}
                 className="w-full bg-zinc-900 hover:bg-zinc-800 text-white h-11 shadow-sm transition-all hover:shadow-md rounded-lg"
               >
                 <LogOut className="mr-2 h-4 w-4" />
-                Sign Out
+                Go to Sign In
               </Button>
 
               <Button

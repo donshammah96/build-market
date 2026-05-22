@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -12,10 +11,9 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, MapPin, Store, Home } from "lucide-react";
+import { Loader2, MapPin, Store, Home, FileCheck } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
@@ -30,108 +28,82 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/text-area";
 import Link from "next/link";
+import { profileClient } from "@/lib/facades/profile-client";
+import { UpdateProfileSchema } from "@/app/lib/validation/profile-validation";
+import { ServiceSelector } from "@/components/forms/ServiceSelector";
 
-// --- Schema Definition ---
-const profileSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  companyName: z.string().min(1, "Company name is required"),
-  bio: z.string().optional(),
-  city: z.string().optional(),
-  county: z.string().optional(),
-  website: z.string().url("Invalid URL").optional().or(z.literal("")),
-  portfolioUrl: z.string().url("Invalid URL").optional().or(z.literal("")),
-  yearsExperience: z.number().int().min(0).optional(),
-  serviceIds: z.array(z.string().uuid()).optional(),
-});
-
-type ProfileFormValues = z.infer<typeof profileSchema>;
-
-interface ServiceCategory {
-  id: string;
-  name: string;
-  slug: string;
-  description?: string | null;
-  icon?: string | null;
-}
+type ProfileFormValues = z.infer<typeof UpdateProfileSchema>;
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
 
   // --- Fetch Data ---
-  const { data: profile, isLoading: isLoadingProfile } = useQuery({
+  const { data: profileResult, isLoading: isLoadingProfile } = useQuery({
     queryKey: ["professional-profile"],
     queryFn: async () => {
-      const res = await fetch("/api/professional-portal/profile");
-      if (!res.ok) throw new Error("Failed to fetch profile");
-      return res.json();
+      const res = await profileClient.getProfile();
+      if (!res.success) throw new Error(res.error || "Failed to fetch profile");
+      return res.data;
     },
   });
 
   // --- Fetch Service Categories ---
-  const { data: servicesData, isLoading: isLoadingServices } = useQuery<{
-    data: ServiceCategory[];
-  }>({
-    queryKey: ["service-categories"],
+  const { data: serviceGroupsResult, isLoading: isLoadingServices } = useQuery({
+    queryKey: ["service-groups"],
     queryFn: async () => {
-      const res = await fetch("/api/services?limit=100");
-      if (!res.ok) throw new Error("Failed to fetch services");
-      return res.json();
+      const res = await profileClient.getServiceGroups();
+      if (!res.success)
+        throw new Error(res.error || "Failed to fetch services");
+      return res.data || [];
     },
   });
 
   const isLoading = isLoadingProfile || isLoadingServices;
-  const serviceCategories = servicesData?.data || [];
+  const profile = profileResult;
+  const serviceGroups = serviceGroupsResult || [];
 
   // --- Form Setup ---
+  // Using `values` prop to auto-sync form with profile data (avoids useEffect pitfalls)
+  const formValues = profile
+    ? {
+        firstName: profile.user.firstName || "",
+        lastName: profile.user.lastName || "",
+        companyName: profile.companyName || "",
+        bio: profile.bio || "",
+        city: profile.city || "",
+        county: (profile.county as ProfileFormValues["county"]) || undefined,
+        website: profile.website || "",
+        portfolioUrl: profile.portfolioUrl || "",
+        yearsExperience: profile.yearsExperience || undefined,
+        serviceIds: profile.services.map((s) => s.id),
+      }
+    : undefined;
+
   const form = useForm<ProfileFormValues>({
-    resolver: zodResolver(profileSchema),
+    resolver: zodResolver(UpdateProfileSchema),
     defaultValues: {
       firstName: "",
       lastName: "",
       companyName: "",
       bio: "",
       city: "",
-      county: "",
+      county: undefined,
       website: "",
       portfolioUrl: "",
       yearsExperience: undefined,
       serviceIds: [],
     },
+    values: formValues,
   });
-
-  // --- Update Form Defaults on Data Load ---
-  useEffect(() => {
-    if (profile) {
-      form.reset({
-        firstName: profile.user?.firstName || "",
-        lastName: profile.user?.lastName || "",
-        companyName: profile.companyName || "",
-        bio: profile.bio || "",
-        city: profile.city || "",
-        county: profile.county || "",
-        website: profile.website || "",
-        portfolioUrl: profile.portfolioUrl || "",
-        yearsExperience: profile.yearsExperience || undefined,
-        serviceIds: profile.services?.map((s: ServiceCategory) => s.id) || [],
-      });
-    }
-  }, [profile, form]);
 
   // --- Mutation ---
   const updateProfileMutation = useMutation({
     mutationFn: async (data: ProfileFormValues) => {
-      const res = await fetch("/api/professional-portal/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to update profile");
+      const res = await profileClient.updateProfile(data);
+      if (!res.success) {
+        throw new Error(res.error || "Failed to update profile");
       }
-      return res.json();
+      return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["professional-profile"] });
@@ -148,7 +120,7 @@ export default function SettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex items-center justify-center min-h-100">
         <Loader2 className="h-8 w-8 animate-spin text-zinc-500" />
       </div>
     );
@@ -207,6 +179,28 @@ export default function SettingsPage() {
                 </Button>
               </div>
               <Store className="h-8 w-8 text-zinc-400" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border border-zinc-200 shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-zinc-900 mb-1">
+                  Credentials & Verification
+                </h3>
+                <p className="text-sm text-zinc-600 mb-4">
+                  Manage your documents, certificates, and professional licenses
+                </p>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/professional-portal/settings/credentials">
+                    <FileCheck className="mr-2 h-4 w-4" />
+                    Manage Credentials
+                  </Link>
+                </Button>
+              </div>
+              <FileCheck className="h-8 w-8 text-zinc-400" />
             </div>
           </CardContent>
         </Card>
@@ -340,6 +334,7 @@ export default function SettingsPage() {
                                 className="pl-9"
                                 placeholder="e.g., Nairobi"
                                 {...field}
+                                value={field.value || ""}
                               />
                             </FormControl>
                           </div>
@@ -357,6 +352,7 @@ export default function SettingsPage() {
                             <Input
                               placeholder="e.g., Nairobi County"
                               {...field}
+                              value={field.value || ""}
                             />
                           </FormControl>
                           <FormMessage />
@@ -373,7 +369,11 @@ export default function SettingsPage() {
                         <FormItem>
                           <FormLabel>Website</FormLabel>
                           <FormControl>
-                            <Input placeholder="https://..." {...field} />
+                            <Input
+                              placeholder="https://..."
+                              {...field}
+                              value={field.value || ""}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -391,12 +391,14 @@ export default function SettingsPage() {
                               min="0"
                               placeholder="e.g., 5"
                               {...field}
-                              onChange={(e) => {
-                                const value = e.target.value;
+                              value={
+                                field.value !== undefined ? field.value : ""
+                              }
+                              onChange={(e) =>
                                 field.onChange(
-                                  value === "" ? undefined : parseInt(value, 10)
-                                );
-                              }}
+                                  e.target.valueAsNumber || undefined,
+                                )
+                              }
                             />
                           </FormControl>
                           <FormMessage />
@@ -412,7 +414,11 @@ export default function SettingsPage() {
                       <FormItem>
                         <FormLabel>External Portfolio URL</FormLabel>
                         <FormControl>
-                          <Input placeholder="https://..." {...field} />
+                          <Input
+                            placeholder="https://..."
+                            {...field}
+                            value={field.value || ""}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -428,71 +434,26 @@ export default function SettingsPage() {
                 <CardHeader>
                   <CardTitle>Services Offered</CardTitle>
                   <CardDescription>
-                    Select the service categories you want to be listed under.
+                    Select the specific services you offer.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {isLoadingServices ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
-                    </div>
-                  ) : serviceCategories.length === 0 ? (
-                    <p className="text-sm text-zinc-500 py-4">
-                      No service categories available.
-                    </p>
-                  ) : (
-                    <FormField
-                      control={form.control}
-                      name="serviceIds"
-                      render={() => (
-                        <FormItem>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {serviceCategories.map((service) => (
-                              <FormField
-                                key={service.id}
-                                control={form.control}
-                                name="serviceIds"
-                                render={({ field }) => {
-                                  return (
-                                    <FormItem
-                                      key={service.id}
-                                      className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm"
-                                    >
-                                      <FormControl>
-                                        <Checkbox
-                                          checked={field.value?.includes(
-                                            service.id
-                                          )}
-                                          onCheckedChange={(checked) => {
-                                            const currentValue =
-                                              field.value || [];
-                                            return checked
-                                              ? field.onChange([
-                                                  ...currentValue,
-                                                  service.id,
-                                                ])
-                                              : field.onChange(
-                                                  currentValue.filter(
-                                                    (id) => id !== service.id
-                                                  )
-                                                );
-                                          }}
-                                        />
-                                      </FormControl>
-                                      <FormLabel className="font-normal cursor-pointer">
-                                        {service.name}
-                                      </FormLabel>
-                                    </FormItem>
-                                  );
-                                }}
-                              />
-                            ))}
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  )}
+                  <FormField
+                    control={form.control}
+                    name="serviceIds"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <ServiceSelector
+                            serviceGroups={serviceGroups}
+                            initialSelectedIds={field.value}
+                            onChange={field.onChange}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>

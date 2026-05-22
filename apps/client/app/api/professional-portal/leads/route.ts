@@ -1,230 +1,204 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
-import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
+import { getRequestMetadata } from "@/app/lib/api/request-utils";
+import { checkBodySize } from "@/app/lib/api/api-guards";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
-  initializeCorrelationId,
-  executeResilient,
-  getClientLogger,
-} from "@/app/lib/resilient-api";
+  LeadQuerySchema,
+  CreateLeadSchema,
+} from "@/app/lib/validation/leads-validation";
+import { LEAD_CONFIG } from "@/app/lib/config/lead.config";
 import {
   checkRateLimit,
-  RateLimits,
   getRateLimitIdentifier,
-} from "@/app/lib/rate-limit";
+  RateLimits,
+} from "@/app/lib/api/rate-limit";
+import { leadsService } from "@/app/lib/domains/leads";
+import { normalizeRole } from "@/app/lib/security/roles";
+import { getResilientExecutor } from "@/app/lib/api/resilient-api";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import {
+  initializeCorrelationId,
+  getClientLogger,
+} from "@/app/lib/api/resilient-api";
 
-const logger = getClientLogger();
+export const GET = withAuth(
+  async (req: NextRequest, { dbUserId, userRole }) => {
+    const correlationId = initializeCorrelationId(req);
+    const validation = LeadQuerySchema.safeParse(
+      Object.fromEntries(new URL(req.url).searchParams.entries()),
+    );
 
-const createLeadSchema = z.object({
-  clientName: z.string().min(1, "Client name is required"),
-  clientEmail: z.string().email().optional().or(z.literal("")),
-  clientPhone: z.string().optional(),
-  projectType: z.string().min(1, "Project type is required"),
-  location: z.string().optional(),
-  budget: z.string().optional(),
-  followUpDate: z.string().optional(),
-  status: z
-    .enum(["NEW", "CONTACTED", "PROPOSAL", "WON", "LOST"])
-    .default("NEW"),
-  notes: z.string().optional(),
-  source: z.string().optional(), // Where the lead came from (e.g., "website", "referral", "social")
-});
-
-/**
- * GET /api/professional-portal/leads
- * Get all leads for the authenticated professional
- * Supports pagination via ?page=&limit= and filtering via ?status=
- */
-export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
-
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
-    identifier,
-    RateLimits.READ.limit,
-    RateLimits.READ.window
-  );
-
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  // Parse query params
-  const { searchParams } = new URL(req.url);
-  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-  const limit = Math.min(
-    100,
-    Math.max(1, parseInt(searchParams.get("limit") || "20", 10))
-  );
-  const skip = (page - 1) * limit;
-  const statusParam = searchParams.get("status");
-
-  // Map status parameter(s) to LeadStatus enum values
-  // Supports comma-separated values (e.g., "new,contacted") or single value
-  let statusFilter:
-    | "NEW"
-    | "CONTACTED"
-    | "PROPOSAL"
-    | "WON"
-    | "LOST"
-    | { in: ("NEW" | "CONTACTED" | "PROPOSAL" | "WON" | "LOST")[] }
-    | undefined;
-
-  if (statusParam) {
-    const statusMap: Record<
-      string,
-      "NEW" | "CONTACTED" | "PROPOSAL" | "WON" | "LOST"
-    > = {
-      new: "NEW",
-      contacted: "CONTACTED",
-      proposal: "PROPOSAL",
-      won: "WON",
-      lost: "LOST",
-    };
-
-    // Handle comma-separated values
-    const statusValues: ("NEW" | "CONTACTED" | "PROPOSAL" | "WON" | "LOST")[] =
-      statusParam
-        .split(",")
-        .map((s) => s.trim().toLowerCase())
-        .map((s) => statusMap[s])
-        .filter(
-          (s): s is "NEW" | "CONTACTED" | "PROPOSAL" | "WON" | "LOST" =>
-            s !== undefined
-        );
-
-    if (statusValues.length === 1) {
-      statusFilter = statusValues[0];
-    } else if (statusValues.length > 1) {
-      statusFilter = { in: statusValues };
+    if (!validation.success) {
+      return apiError(
+        "Invalid query parameters",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+      );
     }
-  }
 
-  logger.info("Fetching leads", {
-    correlationId,
-    userId: dbUserId,
-    page,
-    limit,
-    statusFilter,
-  });
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `leads-read:${identifier}`,
+      RateLimits.READ.limit,
+      RateLimits.READ.window,
+    );
+    if (!rateLimitResult.success) {
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
 
-  return executeResilient(
-    async () => {
-      const whereClause = {
-        professionalId: dbUserId,
-        ...(statusFilter && { status: statusFilter }),
-      };
-
-      const [leads, total] = await Promise.all([
-        prisma.lead.findMany({
-          where: whereClause,
-          orderBy: {
-            createdAt: "desc",
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      async () =>
+        leadsService.listProfessionalLeads(
+          {
+            userId: dbUserId,
+            role: normalizeRole(String(userRole)),
           },
-          skip,
-          take: limit,
-        }),
-        prisma.lead.count({ where: whereClause }),
-      ]);
+          validation.data,
+        ),
+      { operationName: "get_leads" },
+    );
 
-      logger.info("Leads fetched successfully", {
+    if (!result.success || !result.data) {
+      getClientLogger().error("Failed to fetch leads", result.error, {
         correlationId,
-        userId: dbUserId,
-        count: leads.length,
+        actorRole: normalizeRole(String(userRole)),
       });
-
-      return {
-        data: leads,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        },
-      };
-    },
-    {
-      operationName: "get_leads",
-      successStatus: HttpStatus.OK,
+      return apiError(
+        "Failed to fetch leads",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
-  );
-});
+
+    if (!result.data.ok) {
+      if (result.data.error === "forbidden") {
+        return apiError(
+          result.data.message ?? "Forbidden",
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      return apiError(
+        result.data.message ?? "Failed to fetch leads",
+        result.data.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    return apiSuccess(result.data.data, HttpStatus.OK);
+  },
+);
 
 /**
  * POST /api/professional-portal/leads
- * Create a new lead for the authenticated professional
+ * Create a new lead for the authenticated professional.
  */
-export const POST = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
+export const POST = withAuth(
+  async (req: NextRequest, { dbUserId, userRole }) => {
+    const correlationId = initializeCorrelationId(req);
+    const { ipAddress } = getRequestMetadata(req);
 
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
-    identifier,
-    RateLimits.WRITE.limit,
-    RateLimits.WRITE.window
-  );
+    const sizeError = checkBodySize(req, LEAD_CONFIG.MAX_BODY_SIZE);
+    if (sizeError) return sizeError;
 
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  const body = await req.json();
-  const validation = createLeadSchema.safeParse(body);
-
-  if (!validation.success) {
-    logger.warn("Lead creation validation failed", {
-      correlationId,
-      userId: dbUserId,
-      errors: validation.error.issues,
-    });
-    return apiError(
-      "Invalid input data",
-      HttpStatus.BAD_REQUEST,
-      validation.error.issues
-    );
-  }
-
-  const { data } = validation;
-
-  logger.info("Creating lead", {
-    correlationId,
-    userId: dbUserId,
-    projectType: data.projectType,
-  });
-
-  return executeResilient(
-    async () => {
-      const lead = await prisma.lead.create({
-        data: {
-          professional: {
-            connect: {
-              userId: dbUserId,
-            },
-          },
-          clientName: data.clientName,
-          clientEmail: data.clientEmail || null,
-          clientPhone: data.clientPhone || null,
-          projectType: data.projectType,
-          location: data.location || null,
-          budget: data.budget || null,
-          followUpDate: data.followUpDate ? new Date(data.followUpDate) : null,
-          status: data.status,
-          notes: data.notes || null,
-          source: data.source || null,
-        },
-      });
-
-      logger.info("Lead created successfully", {
-        correlationId,
-        userId: dbUserId,
-        leadId: lead.id,
-      });
-      return lead;
-    },
-    {
-      operationName: "create_lead",
-      successStatus: HttpStatus.CREATED,
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
     }
-  );
-});
+
+    const validation = CreateLeadSchema.safeParse(body);
+    if (!validation.success) {
+      return apiError(
+        "Invalid input",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+      );
+    }
+
+    const leadData = validation.data;
+
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      IdempotencyService.generateKey(dbUserId, "POST", {
+        domain: "lead",
+        clientName: leadData.clientName,
+        title: leadData.title,
+      });
+
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
+      idempotencyKey,
+      "lead",
+      dbUserId,
+      "POST",
+    );
+    if (idempotencyCheck.status === "completed") {
+      return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+    }
+    if (idempotencyCheck.status === "pending") {
+      return apiError(
+        "Request is being processed. Please wait.",
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `leads-write:${identifier}`,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
+    );
+    if (!rateLimitResult.success) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    getClientLogger().info("Creating lead", {
+      correlationId,
+      actorRole: normalizeRole(String(userRole)),
+      title: leadData.title,
+      ipAddress,
+    });
+
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      async () =>
+        leadsService.createProfessionalLead(
+          {
+            userId: dbUserId,
+            role: normalizeRole(String(userRole)),
+          },
+          leadData,
+        ),
+      { operationName: "create_lead" },
+    );
+
+    if (!result.success || !result.data) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        "Failed to create lead",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const serviceResult = result.data;
+    if (!serviceResult.ok) {
+      await IdempotencyService.fail(idempotencyKey);
+      return apiError(
+        serviceResult.message ?? "Failed to create lead",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    await safeIdempotencyComplete(idempotencyKey, serviceResult.data);
+    return apiSuccess(serviceResult.data, HttpStatus.CREATED);
+  },
+);

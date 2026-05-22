@@ -1,200 +1,732 @@
-import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
+import { checkBodySize, isValidId } from "@/app/lib/api/api-guards";
 import {
+  getResilientExecutor,
   initializeCorrelationId,
-  executeResilient,
-  getClientLogger,
-} from "@/app/lib/resilient-api";
-import { PropertyRepository } from "@/app/lib/repositories/property.repository";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
+  getActorRateLimitIdentifier,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
-import { env } from "@/app/lib/env";
+} from "@/app/lib/api/rate-limit";
+import {
+  getRequestMetadata,
+  extractExpectedVersionFromIfMatch,
+} from "@/app/lib/api/request-utils";
+import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
+import {
+  propertiesService,
+  UpdatePropertySchema,
+} from "@/app/lib/domains/properties";
+import {
+  actorRoleLabel,
+  conflictResponse,
+  domainErrorCodeToStatus,
+  domainResultToErrorResponse,
+  isOptimisticRetryEnabled,
+  logPropertiesRouteOutcome,
+  now,
+} from "@/app/api/properties/shared";
 
-const logger = getClientLogger();
+type PropertyParams = {
+  id: string;
+};
 
-/**
- * GET /api/properties/[id]
- * Get detailed information about a specific property (public endpoint)
- */
+async function checkPropertyRateLimit(
+  req: NextRequest,
+  operation: "read" | "write",
+  dbUserId?: string,
+) {
+  const identifier = dbUserId
+    ? getActorRateLimitIdentifier(dbUserId, `property-${operation}`)
+    : getRateLimitIdentifier(req);
+  const config = RateLimits[operation.toUpperCase() as keyof typeof RateLimits];
+  return checkRateLimit(identifier, config.limit, config.window);
+}
+
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<PropertyParams> },
 ) {
+  const startedAt = now();
   const correlationId = initializeCorrelationId(request);
+  const operationName = "get_property_detail";
+  const { ipAddress, userAgent } = getRequestMetadata(request);
   const { id } = await params;
 
-  // Rate limiting
-  const identifier = getRateLimitIdentifier(request);
-  const rateLimitResult = await checkRateLimit(
-    `property-detail:${identifier}`,
-    RateLimits.READ.limit,
-    RateLimits.READ.window
+  if (!isValidId(id)) {
+    const response = apiError(
+      "Invalid property ID",
+      HttpStatus.BAD_REQUEST,
+      undefined,
+      correlationId,
+    );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: "anonymous",
+      outcome: "validation_error",
+      httpStatus: HttpStatus.BAD_REQUEST,
+      durationMs: now() - startedAt,
+      domainError: "invalid_input",
+      resourceType: "property",
+      resourceId: id,
+    });
+    return response;
+  }
+
+  const rateLimitResult = await checkPropertyRateLimit(request, "read");
+  if (!rateLimitResult.success) {
+    const response = apiError(
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS,
+      undefined,
+      correlationId,
+    );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: "anonymous",
+      outcome: "rate_limited",
+      httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+      durationMs: now() - startedAt,
+      domainError: "limit_exceeded",
+      resourceType: "property",
+      resourceId: id,
+    });
+    return response;
+  }
+
+  const { userId: clerkId } = await auth().catch(() => ({ userId: null }));
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    () =>
+      propertiesService.getPropertyDetail(id, {
+        clerkId,
+        ipAddress,
+        userAgent,
+      }),
+    { operationName },
   );
 
-  if (!rateLimitResult.success) {
-    return apiError(
-      "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS
+  if (!result.success || !result.data) {
+    const response = apiError(
+      "Failed to fetch property",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      undefined,
+      correlationId,
     );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: clerkId ? "authenticated" : "anonymous",
+      outcome: "internal_error",
+      httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+      resourceId: id,
+    });
+    return response;
   }
 
-  // Validate ID format (UUID format check)
-  if (!id || id.length < 10) {
-    logger.warn("Invalid property ID format", { correlationId, id });
-    return apiError("Invalid property ID", HttpStatus.BAD_REQUEST);
+  const domainResult = result.data;
+  if (!domainResult.ok) {
+    const errorResponse = domainResultToErrorResponse(
+      domainResult,
+      correlationId,
+    );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole: clerkId ? "authenticated" : "anonymous",
+      outcome: "domain_error",
+      httpStatus: domainErrorCodeToStatus(domainResult.error),
+      durationMs: now() - startedAt,
+      domainError: domainResult.error,
+      resourceType: "property",
+      resourceId: id,
+    });
+    return errorResponse!;
   }
 
-  logger.info("Fetching property details", { correlationId, propertyId: id });
+  const response = apiSuccess(domainResult.data, HttpStatus.OK, correlationId);
+  response.headers.set("ETag", `"${domainResult.data.property.version}"`);
+  logPropertiesRouteOutcome({
+    correlationId,
+    operationName,
+    actorRole: clerkId ? "authenticated" : "anonymous",
+    outcome: "success",
+    httpStatus: HttpStatus.OK,
+    durationMs: now() - startedAt,
+    resourceType: "property",
+    resourceId: id,
+  });
+  return response;
+}
 
-  return executeResilient(
-    async () => {
-      const repo = new PropertyRepository(prisma);
-      const property = await repo.findById(id);
+export const PATCH = withAuth(
+  async (
+    req: NextRequest,
+    context: { dbUserId: string; userRole?: string },
+    params?: { id: string },
+  ): Promise<NextResponse> => {
+    const startedAt = now();
+    const correlationId = initializeCorrelationId(req);
+    const operationName = "update_property";
+    const actorRole = actorRoleLabel(context.userRole);
+    const { ipAddress, userAgent } = getRequestMetadata(req);
 
-      if (!property) {
-        logger.warn("Property not found", { correlationId, propertyId: id });
-        return apiError("Property not found", HttpStatus.NOT_FOUND);
+    if (!params?.id || !isValidId(params.id)) {
+      const response = apiError(
+        "Property ID is required",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: params?.id,
+      });
+      return response;
+    }
+
+    const propertyId = params.id;
+    const rateLimitResult = await checkPropertyRateLimit(
+      req,
+      "write",
+      context.dbUserId,
+    );
+    if (!rateLimitResult.success) {
+      const response = apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    const sizeError = checkBodySize(req, PROPERTY_CONFIG.MAX_BODY_SIZE);
+    if (sizeError) {
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: sizeError.status,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return sizeError;
+    }
+
+    const ifMatch = req.headers.get("If-Match");
+    if (!ifMatch) {
+      const response = apiError(
+        'Missing If-Match header. Include the property version as: If-Match: "N"',
+        HttpStatus.PRECONDITION_REQUIRED,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.PRECONDITION_REQUIRED,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    const expectedVersion = extractExpectedVersionFromIfMatch(req);
+    if (expectedVersion === null) {
+      const response = apiError(
+        "Invalid If-Match header value",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      const response = apiError(
+        "Invalid JSON body",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    const validation = UpdatePropertySchema.safeParse(body);
+    if (!validation.success) {
+      const response = apiError(
+        "Invalid update data",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      IdempotencyService.generateKey(
+        context.dbUserId,
+        `PATCH:${propertyId}`,
+        body,
+      );
+
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
+      idempotencyKey,
+      "property",
+      context.dbUserId,
+      "PATCH",
+      {
+        entityConnect: { property: { connect: { id: propertyId } } },
+        ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      },
+    );
+
+    if (idempotencyCheck?.status === "completed") {
+      const response = apiSuccess(
+        idempotencyCheck.response,
+        HttpStatus.OK,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "success",
+        httpStatus: HttpStatus.OK,
+        durationMs: now() - startedAt,
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    if (idempotencyCheck?.status === "pending") {
+      const response = apiError(
+        "A request with this idempotency key is already being processed",
+        HttpStatus.CONFLICT,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: HttpStatus.CONFLICT,
+        durationMs: now() - startedAt,
+        domainError: "conflict",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    const shouldRetry = isOptimisticRetryEnabled(req);
+    const maxRetries = shouldRetry
+      ? PROPERTY_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES
+      : 1;
+
+    const operationContext = {
+      correlationId,
+      userId: context.dbUserId,
+      propertyId,
+      ipAddress,
+      userAgent,
+      idempotencyKey,
+    };
+
+    const latestResult = await propertiesService.updatePropertyWithRetry(
+      propertyId,
+      { userId: context.dbUserId, role: context.userRole ?? "unknown" },
+      validation.data,
+      operationContext,
+      expectedVersion,
+      {
+        maxRetries,
+        retryDelayMs: PROPERTY_CONFIG.OPTIMISTIC_LOCK_RETRY_DELAY_MS,
+      },
+    );
+
+    if (!latestResult.ok) {
+      await IdempotencyService.fail(idempotencyKey);
+
+      if (latestResult.error === "conflict") {
+        const response = conflictResponse(
+          (latestResult.details as { currentVersion?: number } | undefined)
+            ?.currentVersion,
+          correlationId,
+        );
+        logPropertiesRouteOutcome({
+          correlationId,
+          operationName,
+          actorRole,
+          outcome: "domain_error",
+          httpStatus: HttpStatus.CONFLICT,
+          durationMs: now() - startedAt,
+          domainError: latestResult.error,
+          resourceType: "property",
+          resourceId: propertyId,
+        });
+        return response;
       }
 
-      const baseUrl = env.NEXT_PUBLIC_APP_URL || "http://localhost:3500";
-
-      // Format agent name
-      const agentName = property.agent?.user
-        ? `${property.agent.user.firstName || ""} ${property.agent.user.lastName || ""}`.trim() ||
-          property.agent.companyName
-        : property.agent?.companyName || "Unknown";
-
-      // Transform images to include all relevant fields
-      const transformedImages =
-        property.images?.map((img) => ({
-          id: img.id,
-          url: img.url,
-          caption: img.caption,
-          isMain: img.isMain,
-          sortOrder: img.sortOrder,
-        })) || [];
-
-      // Transform to PropertyDetailData
-      const propertyData = {
-        id: property.id,
-        title: property.title,
-        description: property.description,
-        price: Number(property.price),
-        currency: property.currency,
-        type: property.type,
-        category: property.category,
-        status: property.status,
-        // Location fields
-        county: property.county,
-        constituency: property.constituency,
-        neighbourhood: property.neighbourhood,
-        location: property.location,
-        address: property.address,
-        coordinates:
-          property.latitude && property.longitude
-            ? { lat: property.latitude, lng: property.longitude }
-            : null,
-        // Property details
-        bedrooms: property.bedrooms,
-        bathrooms: property.bathrooms,
-        areaSqFt: property.areaSqFt,
-        lotSize: property.lotSize,
-        // Media
-        images: transformedImages,
-        floorPlan: property.floorPlan,
-        videoUrl: property.videoUrl,
-        // Verification
-        verificationStatus: property.verificationStatus,
-        lrNumber: property.lrNumber,
-        // Attachments (for verified properties)
-        attachments: property.attachments?.map((att) => ({
-          id: att.id,
-          type: att.type,
-          fileUrl: att.fileUrl,
-          isVerified: att.isVerified,
-          notes: att.notes,
-        })),
-        // Additional details
-        features: property.features,
-        featured: property.featured,
-        agent: {
-          userId: property.agent.userId,
-          companyName: property.agent.companyName,
-          name: agentName,
-          verified: property.agent.verified,
-          bio: property.agent.bio,
-          city: property.agent.city,
-          county: property.agent.county,
-          earbNumber: property.agent.earbNumber,
-          user: {
-            id: property.agent.user.id,
-            firstName: property.agent.user.firstName,
-            lastName: property.agent.user.lastName,
-            email: property.agent.user.email,
-            phone: property.agent.user.phone,
-            avatar: property.agent.user.avatar,
-          },
-          profileUrl: `${baseUrl}/professionals/${property.agent.userId}`,
-        },
-        createdAt: property.createdAt,
-        updatedAt: property.updatedAt,
-        propertyUrl: `${baseUrl}/properties/${property.id}`,
-      };
-
-      // Get similar properties
-      const similarProperties = await repo.findSimilar(id, 4);
-      const similarData = similarProperties.map((p) => {
-        // Get main image from images relation
-        const mainImage = p.images?.[0];
-        const imageUrl = mainImage?.url || "/placeholder-property.jpg";
-
-        return {
-          id: p.id,
-          title: p.title,
-          price: Number(p.price),
-          currency: p.currency,
-          location: p.location,
-          county: p.county,
-          type: p.type,
-          category: p.category,
-          status: p.status,
-          beds: p.bedrooms || undefined,
-          baths: p.bathrooms || undefined,
-          area: p.areaSqFt || undefined,
-          image: imageUrl,
-          featured: p.featured,
-          agent: p.agent
-            ? {
-                name:
-                  `${p.agent.user?.firstName || ""} ${p.agent.user?.lastName || ""}`.trim() ||
-                  p.agent.companyName,
-                image: p.agent.user?.avatar || undefined,
-              }
-            : undefined,
-        };
-      });
-
-      logger.info("Property details fetched successfully", {
+      const errorResponse = domainResultToErrorResponse(
+        latestResult,
         correlationId,
-        propertyId: id,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(latestResult.error),
+        durationMs: now() - startedAt,
+        domainError: latestResult.error,
+        resourceType: "property",
+        resourceId: propertyId,
       });
-
-      return {
-        property: propertyData,
-        similarProperties: similarData,
-      };
-    },
-    {
-      operationName: "get_property_detail",
-      successStatus: HttpStatus.OK,
-      cache: {
-        ttl: 30000, // 30s cache
-        staleWhileRevalidate: 10000,
-      },
+      return errorResponse!;
     }
-  );
-}
+
+    await safeIdempotencyComplete(idempotencyKey, latestResult.data, {
+      correlationId,
+      operationName,
+      actorRole,
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+      resourceId: propertyId,
+    });
+    const response = apiSuccess(
+      latestResult.data,
+      HttpStatus.OK,
+      correlationId,
+    );
+    response.headers.set("ETag", `"${latestResult.data.version}"`);
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+      resourceId: propertyId,
+    });
+    return response;
+  },
+);
+
+export const DELETE = withAuth(
+  async (
+    req: NextRequest,
+    context: { dbUserId: string; userRole?: string },
+    params?: { id: string },
+  ): Promise<NextResponse> => {
+    const startedAt = now();
+    const correlationId = initializeCorrelationId(req);
+    const operationName = "delete_property";
+    const actorRole = actorRoleLabel(context.userRole);
+    const { ipAddress, userAgent } = getRequestMetadata(req);
+
+    if (!params?.id || !isValidId(params.id)) {
+      const response = apiError(
+        "Property ID is required",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: params?.id,
+      });
+      return response;
+    }
+
+    const propertyId = params.id;
+    const rateLimitResult = await checkPropertyRateLimit(
+      req,
+      "write",
+      context.dbUserId,
+    );
+    if (!rateLimitResult.success) {
+      const response = apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    const ifMatch = req.headers.get("If-Match");
+    if (!ifMatch) {
+      const response = apiError(
+        'Missing If-Match header. Include the property version as: If-Match: "N"',
+        HttpStatus.PRECONDITION_REQUIRED,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.PRECONDITION_REQUIRED,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    const expectedVersion = extractExpectedVersionFromIfMatch(req);
+    if (expectedVersion === null) {
+      const response = apiError(
+        "Invalid If-Match header value",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      IdempotencyService.generateKey(
+        context.dbUserId,
+        `DELETE:${propertyId}`,
+        {},
+      );
+
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
+      idempotencyKey,
+      "property",
+      context.dbUserId,
+      "DELETE",
+      {
+        entityConnect: { property: { connect: { id: propertyId } } },
+        ttlHours: PROPERTY_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      },
+    );
+
+    if (idempotencyCheck?.status === "completed") {
+      const response = apiSuccess(
+        idempotencyCheck.response,
+        HttpStatus.OK,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "success",
+        httpStatus: HttpStatus.OK,
+        durationMs: now() - startedAt,
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    if (idempotencyCheck?.status === "pending") {
+      const response = apiError(
+        "A request with this idempotency key is already being processed",
+        HttpStatus.CONFLICT,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: HttpStatus.CONFLICT,
+        durationMs: now() - startedAt,
+        domainError: "conflict",
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    const result = await propertiesService.deleteProperty(
+      propertyId,
+      { userId: context.dbUserId, role: context.userRole ?? "unknown" },
+      {
+        correlationId,
+        userId: context.dbUserId,
+        propertyId,
+        ipAddress,
+        userAgent,
+        idempotencyKey,
+      },
+      expectedVersion,
+    );
+
+    if (!result.ok) {
+      await IdempotencyService.fail(idempotencyKey);
+
+      if (result.error === "conflict") {
+        const response = conflictResponse(
+          (result.details as { currentVersion?: number } | undefined)
+            ?.currentVersion,
+          correlationId,
+        );
+        logPropertiesRouteOutcome({
+          correlationId,
+          operationName,
+          actorRole,
+          outcome: "domain_error",
+          httpStatus: HttpStatus.CONFLICT,
+          durationMs: now() - startedAt,
+          domainError: result.error,
+          resourceType: "property",
+          resourceId: propertyId,
+        });
+        return response;
+      }
+
+      const errorResponse = domainResultToErrorResponse(result, correlationId);
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(result.error),
+        durationMs: now() - startedAt,
+        domainError: result.error,
+        resourceType: "property",
+        resourceId: propertyId,
+      });
+      return errorResponse!;
+    }
+
+    await safeIdempotencyComplete(idempotencyKey, result.data, {
+      correlationId,
+      operationName,
+      actorRole,
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+      resourceId: propertyId,
+    });
+    const response = apiSuccess(result.data, HttpStatus.OK, correlationId);
+    response.headers.set("ETag", `"${result.data.version}"`);
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "property",
+      resourceId: propertyId,
+    });
+    return response;
+  },
+);

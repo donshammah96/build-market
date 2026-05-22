@@ -8,12 +8,8 @@ import { ProfileCompletionWidget } from "./ProfileCompletionWidget";
  * Fetches profile completion data and renders the floating widget
  */
 export function ProfileCompletionWidgetWrapper() {
-  const {
-    percentage,
-    isComplete,
-    missingRequiredLabels,
-    isLoading,
-  } = useProfileCompletion();
+  const { percentage, isComplete, missingRequiredLabels, isLoading } =
+    useProfileCompletion();
 
   // Don't render while loading or if complete
   if (isLoading || isComplete) {

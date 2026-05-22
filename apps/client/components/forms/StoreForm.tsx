@@ -25,21 +25,20 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
-import { isLocalUpload } from "@/lib/services/upload";
+import { isLocalUpload } from "@/lib/utils/upload";
 import { useImageUploader } from "@/hooks/useImageUploader";
 import Image from "next/image";
 import {
-  StoreCategory,
-  StoreType,
-  County,
-  STORE_CATEGORY_OPTIONS,
+  DELIVERY_OPTIONS,
+  STORE_CATEGORIES,
   STORE_CATEGORY_LABELS,
   STORE_TYPE_LABELS,
+  COUNTIES,
   COUNTY_LABELS,
-  CountyEnum,
-  StoreCategoryEnum,
-  StoreTypeEnum,
-} from "@/types/store";
+  type County,
+  type StoreType,
+  type StoreCategory,
+} from "@build/enums";
 import {
   Popover,
   PopoverContent,
@@ -70,7 +69,7 @@ const createTheme = (variant: StoreFormVariant) => {
 
   return {
     // Container styles
-    container: isDark ? "space-y-6" : "space-y-6",
+    container: "space-y-6",
 
     // Section card
     section: isDark
@@ -137,7 +136,7 @@ const createTheme = (variant: StoreFormVariant) => {
       ? "border-2 border-dashed border-zinc-700 rounded-xl p-8 text-center bg-white/5"
       : "border-2 border-dashed border-zinc-200 rounded-xl p-8 text-center bg-zinc-50/30",
 
-    emptyStateText: isDark ? "text-sm text-zinc-500" : "text-sm text-zinc-500",
+    emptyStateText: "text-sm text-zinc-500",
 
     // Icon container
     iconContainer: isDark
@@ -199,29 +198,32 @@ const MAX_CATEGORIES = 10;
 const LAZY_LOAD_THRESHOLD = 4;
 
 // Convert STORE_CATEGORY_OPTIONS to array format for dropdown
-const STORE_CATEGORY_OPTIONS_ARRAY = Object.values(STORE_CATEGORY_OPTIONS);
+const STORE_CATEGORY_OPTIONS_ARRAY = STORE_CATEGORIES.map((value) => ({
+  value,
+  label: STORE_CATEGORY_LABELS[value as keyof typeof STORE_CATEGORY_LABELS],
+}));
 
 // Store Type options - using types from store.ts
 const STORE_TYPES: Array<{ value: StoreType; label: string }> = [
-  { value: "retail", label: `Retail - ${STORE_TYPE_LABELS.retail}` },
-  { value: "wholesale", label: `Wholesale - ${STORE_TYPE_LABELS.wholesale}` },
+  { value: "RETAIL", label: `Retail - ${STORE_TYPE_LABELS.RETAIL}` },
+  { value: "WHOLESALE", label: `Wholesale - ${STORE_TYPE_LABELS.WHOLESALE}` },
   {
-    value: "manufacturer",
-    label: `Manufacturer - ${STORE_TYPE_LABELS.manufacturer}`,
+    value: "MANUFACTURER",
+    label: `Manufacturer - ${STORE_TYPE_LABELS.MANUFACTURER}`,
   },
   {
-    value: "distributor",
-    label: `Distributor - ${STORE_TYPE_LABELS.distributor}`,
+    value: "DISTRIBUTOR",
+    label: `Distributor - ${STORE_TYPE_LABELS.DISTRIBUTOR}`,
   },
   {
-    value: "online_only",
-    label: `Online Only - ${STORE_TYPE_LABELS.online_only}`,
+    value: "ONLINE_ONLY",
+    label: `Online Only - ${STORE_TYPE_LABELS.ONLINE_ONLY}`,
   },
 ];
 
 // County options - using types from store.ts
 const COUNTY_OPTIONS: Array<{ value: County; label: string }> = Object.entries(
-  COUNTY_LABELS
+  COUNTY_LABELS,
 ).map(([value, label]) => ({
   value: value as County,
   label,
@@ -231,11 +233,17 @@ const COUNTY_OPTIONS: Array<{ value: County; label: string }> = Object.entries(
 const KENYAN_POSTAL_CODE_REGEX = /^\d{5}$/;
 
 const storeSchema = z.object({
+  role: z.literal("professional"),
+  slug: z
+    .string()
+    .min(1, "Store slug is required")
+    .max(100)
+    .regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
   name: z.string().min(1, "Store name is required").max(100),
   description: z.string().max(1000).optional(),
   address: z.string().min(1, "Address is required"),
   city: z.string().min(1, "City is required"),
-  county: CountyEnum,
+  county: z.enum(COUNTIES),
   zipCode: z
     .string()
     .optional()
@@ -243,10 +251,11 @@ const storeSchema = z.object({
       message: "Postal code must be 5 digits (e.g., 00100)",
     }),
   categories: z
-    .array(StoreCategoryEnum)
+    .array(z.enum(STORE_CATEGORY_LABELS))
     .min(1, "Select at least one category")
     .max(MAX_CATEGORIES, `Maximum ${MAX_CATEGORIES} categories allowed`),
-  storeType: StoreTypeEnum,
+  storeType: z.enum(STORE_TYPE_LABELS),
+  deliveryOption: z.enum(DELIVERY_OPTIONS),
   images: z
     .array(
       z.object({
@@ -257,10 +266,29 @@ const storeSchema = z.object({
           .refine((url) => url.startsWith("https://") || url.startsWith("/"), {
             message: "Image URL must be HTTPS or a local path",
           }),
-      })
+      }),
     )
     .max(MAX_IMAGES, `Maximum ${MAX_IMAGES} images allowed`)
     .optional(),
+  documents: z.array(z.any()).optional(),
+  acceptsCard: z.boolean().optional(),
+  acceptsCash: z.boolean().optional(),
+  contactPhone: z.string().optional(),
+
+  email: z.string().email().optional(),
+  website: z.string().url().optional(),
+  whatsappNumber: z.string().optional(),
+  neighbourhood: z.string().optional(),
+  // Business verification
+  businessRegNo: z.string().optional(),
+  kraPin: z.string().optional(),
+
+  logoUrl: z.string().url().optional(),
+  bannerUrl: z.string().url().optional(),
+
+  deliveryRadiusKm: z.number().int().positive().optional(),
+  baseDeliveryFee: z.number().min(0).optional(),
+  minOrderValue: z.number().min(0).optional(),
 });
 
 export type StoreFormData = z.infer<typeof storeSchema>;
@@ -401,7 +429,7 @@ const CategoryMultiSelect = memo<CategoryMultiSelectProps>(
           toast.error(`Maximum ${maxCategories} categories allowed`);
         }
       },
-      [selectedValues, onChange, maxCategories]
+      [selectedValues, onChange, maxCategories],
     );
 
     return (
@@ -444,7 +472,7 @@ const CategoryMultiSelect = memo<CategoryMultiSelectProps>(
                         <Check
                           className={cn(
                             "mr-2 h-4 w-4",
-                            isSelected ? "opacity-100" : "opacity-0"
+                            isSelected ? "opacity-100" : "opacity-0",
                           )}
                         />
                         {option.label}
@@ -477,7 +505,7 @@ const CategoryMultiSelect = memo<CategoryMultiSelectProps>(
         )}
       </>
     );
-  }
+  },
 );
 
 /**
@@ -524,7 +552,7 @@ const ImageGallery = memo<ImageGalleryProps>(function ImageGallery({
         className={cn(
           theme.dropZone,
           "p-6 mb-4",
-          isDragging ? theme.dropZoneActive : theme.dropZoneDefault
+          isDragging ? theme.dropZoneActive : theme.dropZoneDefault,
         )}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -742,7 +770,7 @@ export default function StoreForm({
   // Memoized image fields for stable reference
   const stableImageFields = useMemo(
     () => imageFields.map((f) => ({ id: f.id, value: f.value })),
-    [imageFields]
+    [imageFields],
   );
 
   // Wrapper handlers that connect the hook to useFieldArray
@@ -752,7 +780,7 @@ export default function StoreForm({
       stableImageFields,
       appendImage,
       updateImage,
-      removeImage
+      removeImage,
     );
   };
 
@@ -772,7 +800,7 @@ export default function StoreForm({
   const safeMessage = (msg: unknown): string => {
     if (typeof msg === "string") return msg;
     if (msg === null || msg === undefined) return "Unknown error";
-    return msg?.toString?.() ?? String(msg ?? "Unknown error");
+    return String(msg);
   };
 
   const FIELD_LABELS: Record<string, { label: string; section: string }> = {
@@ -838,7 +866,7 @@ export default function StoreForm({
               errorList.push({
                 field: `Image ${index + 1}`,
                 message: safeMessage(
-                  (valueError as { message: unknown }).message
+                  (valueError as { message: unknown }).message,
                 ),
                 section: "Media",
               });
@@ -859,7 +887,7 @@ export default function StoreForm({
 
   const onFormSubmit = async (data: StoreFormData): Promise<void> => {
     const loadingToast = toast.loading(
-      isEditing ? "Saving changes..." : "Creating store..."
+      isEditing ? "Saving changes..." : "Creating store...",
     );
     try {
       // Transform images from object array to string array for submission
@@ -902,7 +930,7 @@ export default function StoreForm({
   ];
 
   const sortedSections = Object.keys(errorsBySection).sort(
-    (a, b) => sectionOrder.indexOf(a) - sectionOrder.indexOf(b)
+    (a, b) => sectionOrder.indexOf(a) - sectionOrder.indexOf(b),
   );
 
   return (
@@ -911,7 +939,7 @@ export default function StoreForm({
       {externalError && (
         <div className={theme.errorBanner}>
           <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+            <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
             <p className={theme.errorBannerText}>{externalError}</p>
           </div>
         </div>
@@ -921,7 +949,7 @@ export default function StoreForm({
       {hasErrors && (
         <div className={theme.errorBanner}>
           <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+            <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
             <div className="flex-1">
               <h3 className={theme.errorBannerTitle}>
                 Please fix the following errors ({allErrors.length}):
@@ -938,7 +966,7 @@ export default function StoreForm({
                           key={idx}
                           className={cn(
                             "flex items-start gap-2",
-                            theme.errorBannerText
+                            theme.errorBannerText,
                           )}
                         >
                           <span className="text-red-500 mt-0.5">•</span>

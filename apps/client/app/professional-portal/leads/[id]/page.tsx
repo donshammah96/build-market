@@ -2,10 +2,8 @@
 
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import {
   ArrowLeft,
   Phone,
@@ -57,37 +55,14 @@ import {
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 
-// Lead interface matching API response
-interface Lead {
-  id: string;
-  clientName: string;
-  clientEmail?: string | null;
-  clientPhone?: string | null;
-  projectType: string;
-  location?: string | null;
-  budget?: string | null;
-  status: "NEW" | "CONTACTED" | "PROPOSAL" | "WON" | "LOST";
-  notes?: string | null;
-  followUpDate?: string | null;
-  source?: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+import { useLead, useUpdateLead, useDeleteLead } from "@/hooks/useLeads";
+import type { LeadDetailResult } from "@/app/lib/domains/leads/contracts";
+import {
+  UpdateLeadSchema,
+  type UpdateLeadInput,
+} from "@/app/lib/validation/leads-validation";
 
-// Schema for updating a lead
-const updateLeadSchema = z.object({
-  clientName: z.string().min(1, "Client name is required"),
-  clientEmail: z.string().email().optional().or(z.literal("")),
-  clientPhone: z.string().optional(),
-  projectType: z.string().min(1, "Project type is required"),
-  location: z.string().optional(),
-  budget: z.string().optional(),
-  status: z.enum(["NEW", "CONTACTED", "PROPOSAL", "WON", "LOST"]),
-  notes: z.string().optional(),
-  followUpDate: z.string().optional().or(z.literal("")),
-});
-
-type UpdateLeadFormValues = z.infer<typeof updateLeadSchema>;
+type UpdateLeadFormValues = UpdateLeadInput;
 
 const statusConfig: Record<
   string,
@@ -123,44 +98,14 @@ const statusConfig: Record<
 export default function LeadDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const queryClient = useQueryClient();
   const id = params.id as string;
   const [isEditOpen, setIsEditOpen] = useState(false);
 
-  // Fetch Lead
-  const {
-    data: lead,
-    isLoading,
-    error,
-  } = useQuery({
-    queryKey: ["lead", id],
-    queryFn: async () => {
-      const res = await fetch(`/api/professional-portal/leads/${id}`);
-      if (!res.ok) {
-        if (res.status === 404) {
-          throw new Error("Lead not found");
-        }
-        throw new Error("Failed to fetch lead");
-      }
-      return res.json() as Promise<Lead>;
-    },
-    enabled: !!id,
-  });
+  const { data: leadData, isLoading, error } = useLead(id);
+  const lead = leadData as LeadDetailResult | undefined;
 
-  // Update Lead Mutation
-  const updateLeadMutation = useMutation({
-    mutationFn: async (data: UpdateLeadFormValues) => {
-      const res = await fetch(`/api/professional-portal/leads/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error("Failed to update lead");
-      return res.json();
-    },
+  const updateLeadMutation = useUpdateLead({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["lead", id] });
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
       setIsEditOpen(false);
       toast.success("Lead updated successfully");
     },
@@ -169,17 +114,8 @@ export default function LeadDetailPage() {
     },
   });
 
-  // Delete Lead Mutation
-  const deleteLeadMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/professional-portal/leads/${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Failed to delete lead");
-      return res.json();
-    },
+  const deleteLeadMutation = useDeleteLead({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
       toast.success("Lead deleted successfully");
       router.push("/professional-portal/leads");
     },
@@ -189,15 +125,16 @@ export default function LeadDetailPage() {
   });
 
   const form = useForm<UpdateLeadFormValues>({
-    resolver: zodResolver(updateLeadSchema),
+    resolver: zodResolver(UpdateLeadSchema),
     defaultValues: {
       clientName: lead?.clientName || "",
       clientEmail: lead?.clientEmail || "",
       clientPhone: lead?.clientPhone || "",
-      projectType: lead?.projectType || "",
+      projectType: (lead?.projectType ||
+        "RESIDENTIAL") as UpdateLeadFormValues["projectType"],
       location: lead?.location || "",
-      budget: lead?.budget || "",
-      status: lead?.status || "NEW",
+      budget: undefined,
+      status: (lead?.status || "NEW") as UpdateLeadFormValues["status"],
       notes: lead?.notes || "",
       followUpDate: lead?.followUpDate
         ? new Date(lead.followUpDate).toISOString().split("T")[0]
@@ -205,16 +142,18 @@ export default function LeadDetailPage() {
     },
   });
 
+  const formControl = form.control as Control<UpdateLeadFormValues>;
+
   // Update form when lead data loads
   if (lead && form.getValues().clientName === "") {
     form.reset({
       clientName: lead.clientName,
       clientEmail: lead.clientEmail || "",
       clientPhone: lead.clientPhone || "",
-      projectType: lead.projectType,
+      projectType: lead.projectType as UpdateLeadFormValues["projectType"],
       location: lead.location || "",
-      budget: lead.budget || "",
-      status: lead.status,
+      budget: undefined,
+      status: lead.status as UpdateLeadFormValues["status"],
       notes: lead.notes || "",
       followUpDate: lead.followUpDate
         ? new Date(lead.followUpDate).toISOString().split("T")[0]
@@ -223,16 +162,33 @@ export default function LeadDetailPage() {
   }
 
   function onSubmit(data: UpdateLeadFormValues) {
-    updateLeadMutation.mutate(data);
+    if (!id) return;
+
+    // Remove undefined values to ensure the PATCH doesn't fail parsing overrides.
+    const cleanData = { ...data };
+    Object.keys(cleanData).forEach((key) => {
+      const typedKey = key as keyof UpdateLeadFormValues;
+      if (cleanData[typedKey] === undefined) {
+        delete cleanData[typedKey];
+      }
+    });
+
+    updateLeadMutation.mutate({
+      leadId: id,
+      data: {
+        ...cleanData,
+        budget: data.budget ? Number(data.budget) : undefined,
+      },
+    });
   }
 
   const handleDelete = () => {
     if (
       confirm(
-        "Are you sure you want to delete this lead? This action cannot be undone."
+        "Are you sure you want to delete this lead? This action cannot be undone.",
       )
     ) {
-      deleteLeadMutation.mutate();
+      deleteLeadMutation.mutate({ leadId: id });
     }
   };
 
@@ -560,10 +516,10 @@ export default function LeadDetailPage() {
                   className="w-full justify-start text-blue-600 border-blue-100 hover:bg-blue-50"
                   onClick={() => {
                     const subject = encodeURIComponent(
-                      `Regarding your ${lead.projectType} project`
+                      `Regarding your ${lead.projectType} project`,
                     );
                     const body = encodeURIComponent(
-                      `Hello ${lead.clientName},\n\nThank you for your interest in our services. I'll be in touch soon.\n\nBest regards,`
+                      `Hello ${lead.clientName},\n\nThank you for your interest in our services. I'll be in touch soon.\n\nBest regards,`,
                     );
                     window.location.href = `mailto:${lead.clientEmail}?subject=${subject}&body=${body}`;
                   }}
@@ -624,7 +580,7 @@ export default function LeadDetailPage() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
-                control={form.control}
+                control={formControl}
                 name="clientName"
                 render={({ field }) => (
                   <FormItem>
@@ -638,7 +594,7 @@ export default function LeadDetailPage() {
               />
               <div className="grid grid-cols-2 gap-4">
                 <FormField
-                  control={form.control}
+                  control={formControl}
                   name="clientEmail"
                   render={({ field }) => (
                     <FormItem>
@@ -651,7 +607,7 @@ export default function LeadDetailPage() {
                   )}
                 />
                 <FormField
-                  control={form.control}
+                  control={formControl}
                   name="clientPhone"
                   render={({ field }) => (
                     <FormItem>
@@ -666,7 +622,7 @@ export default function LeadDetailPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <FormField
-                  control={form.control}
+                  control={formControl}
                   name="projectType"
                   render={({ field }) => (
                     <FormItem>
@@ -679,7 +635,7 @@ export default function LeadDetailPage() {
                   )}
                 />
                 <FormField
-                  control={form.control}
+                  control={formControl}
                   name="budget"
                   render={({ field }) => (
                     <FormItem>
@@ -693,7 +649,7 @@ export default function LeadDetailPage() {
                 />
               </div>
               <FormField
-                control={form.control}
+                control={formControl}
                 name="location"
                 render={({ field }) => (
                   <FormItem>
@@ -706,7 +662,7 @@ export default function LeadDetailPage() {
                 )}
               />
               <FormField
-                control={form.control}
+                control={formControl}
                 name="status"
                 render={({ field }) => (
                   <FormItem>
@@ -733,20 +689,20 @@ export default function LeadDetailPage() {
                 )}
               />
               <FormField
-                control={form.control}
+                control={formControl}
                 name="followUpDate"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Follow-up Date</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} />
+                      <Input type="date" {...field} value={field.value || ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
               <FormField
-                control={form.control}
+                control={formControl}
                 name="notes"
                 render={({ field }) => (
                   <FormItem>

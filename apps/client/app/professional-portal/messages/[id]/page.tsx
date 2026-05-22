@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@clerk/nextjs";
 import {
   ArrowLeft,
@@ -34,7 +33,12 @@ import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { messagingClient } from "@/lib/messaging-client";
+import {
+  useConversation,
+  useMessages,
+  useDeleteConversation,
+} from "@/hooks/useMessaging";
+import { useProfileStatus } from "@/hooks/useProfileStatus";
 
 interface ConversationDetail {
   id: string;
@@ -56,71 +60,51 @@ interface ConversationDetail {
 export default function ConversationDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const queryClient = useQueryClient();
   const { user } = useUser();
+  const { user: profileUser } = useProfileStatus();
   const id = params.id as string;
+  const currentUserDbId = profileUser?.id ?? "";
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
-  // Fetch Conversation Details
+  // Fetch conversation
   const {
-    data: conversation,
+    data: conversationData,
     isLoading,
     error,
-  } = useQuery<ConversationDetail>({
-    queryKey: ["conversation", id],
-    queryFn: async () => {
-      const result = await messagingClient.getConversation(id);
-      if (!result.success || !result.data) {
-        throw new Error(result.error || "Failed to fetch conversation");
-      }
+  } = useConversation(id, !!id && !!user);
 
-      // Fetch additional details if needed
-      const messagesResult = await messagingClient.getMessages(id, 1, 1);
-      const messageCount = messagesResult.success
-        ? messagesResult.data?.pagination?.total || 0
-        : 0;
-
-      return {
-        ...result.data,
-        messageCount,
-      };
-    },
+  // Fetch messages for statistics
+  const { data: messagesData } = useMessages({
+    conversationId: id,
+    limit: 1000,
     enabled: !!id && !!user,
-    retry: 2,
-    staleTime: 30000, // 30 seconds
   });
 
-  // Fetch Messages for statistics
-  const { data: messagesData } = useQuery({
-    queryKey: ["messages", id],
-    queryFn: async () => {
-      const result = await messagingClient.getMessages(id, 1, 1000);
-      if (!result.success) {
-        return { items: [], pagination: { total: 0 } };
-      }
-      return result.data;
-    },
-    enabled: !!id && !!user,
-    staleTime: 30000,
-  });
+  const conversation = useMemo((): ConversationDetail | undefined => {
+    if (!conversationData) return undefined;
+    const rawParticipants = (conversationData as { participants?: unknown[] })
+      .participants;
+    const participantIds = (
+      Array.isArray(rawParticipants) ? rawParticipants : []
+    ).map((p: unknown) =>
+      typeof p === "string" ? p : ((p as { userId?: string }).userId ?? ""),
+    );
+    return {
+      ...conversationData,
+      participants: participantIds,
+      messageCount: messagesData?.items?.length ?? 0,
+    } as ConversationDetail;
+  }, [conversationData, messagesData?.items?.length]);
 
-  // Delete Conversation Mutation
-  const deleteConversationMutation = useMutation({
-    mutationFn: async () => {
-      const result = await messagingClient.deleteConversation(id);
-      if (!result.success) {
-        throw new Error(result.error || "Failed to delete conversation");
-      }
-      return result;
-    },
+  // Delete conversation
+  const deleteConversationMutation = useDeleteConversation({
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
       toast.success("Conversation deleted successfully");
       router.push("/professional-portal/messages");
     },
-    onError: (error) => {
+    onError: (err) => {
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete conversation"
+        err instanceof Error ? err.message : "Failed to delete conversation",
       );
     },
   });
@@ -138,8 +122,10 @@ export default function ConversationDetailPage() {
 
     const messages = messagesData.items || [];
     const unreadCount =
-      conversation?.unreadCount && user?.id
-        ? conversation.unreadCount[user.id] || 0
+      conversation?.unreadCount && currentUserDbId
+        ? ((conversation.unreadCount as Record<string, number>)[
+            currentUserDbId
+          ] ?? 0)
         : 0;
 
     return {
@@ -153,10 +139,10 @@ export default function ConversationDetailPage() {
         ? new Date(conversation.lastMessageAt)
         : null,
     };
-  }, [messagesData, conversation, user?.id]);
+  }, [messagesData, conversation, currentUserDbId]);
 
   const handleDelete = () => {
-    deleteConversationMutation.mutate();
+    deleteConversationMutation.mutate(id);
   };
 
   if (isLoading) {
@@ -293,7 +279,7 @@ export default function ConversationDetailPage() {
                             day: "numeric",
                             hour: "2-digit",
                             minute: "2-digit",
-                          }
+                          },
                         )
                       : "No messages yet"}
                   </p>
@@ -331,7 +317,7 @@ export default function ConversationDetailPage() {
                         day: "numeric",
                         hour: "2-digit",
                         minute: "2-digit",
-                      }
+                      },
                     )}
                   </p>
                 </div>
@@ -349,7 +335,7 @@ export default function ConversationDetailPage() {
                         day: "numeric",
                         hour: "2-digit",
                         minute: "2-digit",
-                      }
+                      },
                     )}
                   </p>
                 </div>
@@ -393,7 +379,7 @@ export default function ConversationDetailPage() {
               {conversation.participants &&
               conversation.participants.length > 0 ? (
                 conversation.participants.map((participantId) => {
-                  const isCurrentUser = participantId === user?.id;
+                  const isCurrentUser = participantId === currentUserDbId;
                   return (
                     <div
                       key={participantId}
@@ -496,7 +482,7 @@ export default function ConversationDetailPage() {
                       {Math.ceil(
                         (statistics.lastMessageDate.getTime() -
                           statistics.firstMessageDate.getTime()) /
-                          (1000 * 60 * 60 * 24)
+                          (1000 * 60 * 60 * 24),
                       )}{" "}
                       days
                     </span>

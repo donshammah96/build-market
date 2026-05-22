@@ -30,8 +30,19 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files - protect secrets!
+.env
+.env.local
+.env.*.local
+.env.vercel
+
+# Keep templates and non-secret configs committed
+!.env.example
+!.env.local.example
+!.env.development
+!.env.test
+!.env.production
+!.env.vercel.example
 
 # vercel
 .vercel
@@ -41,3 +52,6 @@ yarn-error.log*
 next-env.d.ts
 
 MESSAGING_API_SETUP.md
+
+# Secrets Rotation Tracker
+secrets-rotation-*.csv

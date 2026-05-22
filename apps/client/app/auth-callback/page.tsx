@@ -1,9 +1,17 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { useUser, useClerk } from "@clerk/nextjs";
-import { ROUTES } from "@/lib/links";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useAuth, useUser, useClerk } from "@clerk/nextjs";
+import { ROUTES, dashboardForRole } from "@/lib/links";
+import {
+  CLERK_CLAIM_REFRESH_FAILURE_MESSAGE,
+  hasExpectedOnboardingClaims,
+  hasRoutableAuthClaims,
+  type ClaimRefreshRole,
+  type ClerkPublicMetadataLike,
+  waitForClerkClaimRefresh,
+} from "@/app/lib/auth/clerk-claim-refresh";
 
 /**
  * AuthCallbackPage handles post-authentication redirect logic.
@@ -15,165 +23,146 @@ import { ROUTES } from "@/lib/links";
  * Flow:
  * 1. Not signed in → /sign-in
  * 2. Signed in + onboarded + professional → /professional-portal/dashboard
- * 3. Signed in + onboarded + client → /dashboard
+ * 3. Signed in + onboarded + client → /homeowner-dashboard
  * 4. Signed in + NOT onboarded → /onboarding
  *
- * Performance optimizations:
- * - Uses Clerk's session directly (no API calls)
- * - Implements retry with user.reload() for stale metadata
- * - Has timeout protection to prevent infinite loading
+ * Session freshness:
+ * - Uses Clerk refresh primitives before any role-gated redirect
+ * - Reuses the shared claim-refresh helper from onboarding flows
+ * - Fails closed for onboarding transition callbacks if refreshed claims
+ *   cannot be confirmed
  */
 
 interface UserMetadata {
-  role?: "client" | "professional";
+  role?: unknown;
   isOnboarded?: boolean;
 }
 
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 500; // 500ms between retries
-const TOTAL_TIMEOUT = 10000; // 10 seconds max
+const MAX_RETRIES = 5;
+const RETRY_DELAY = 300;
+
+function parseExpectedRole(value: string | null): ClaimRefreshRole | undefined {
+  if (value === "client" || value === "professional") {
+    return value;
+  }
+
+  return undefined;
+}
 
 export default function AuthCallbackPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isLoaded, isSignedIn, user } = useUser();
+  const { getToken } = useAuth();
   const { signOut } = useClerk();
   const [status, setStatus] = useState<"checking" | "redirecting" | "error">(
-    "checking"
+    "checking",
   );
   const [message, setMessage] = useState("Verifying your session...");
   const retryCount = useRef(0);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const startTime = useRef(Date.now());
+
+  const transitionSource = searchParams.get("transition");
+  const expectedRole = parseExpectedRole(searchParams.get("expectedRole"));
+  const isOnboardingTransition =
+    transitionSource === "onboarding" && Boolean(expectedRole);
 
   /**
    * Get the appropriate redirect path based on user metadata
    */
   const getRedirectPath = useCallback(
     (metadata: UserMetadata | undefined): string => {
-      if (!metadata?.isOnboarded) {
+      if (metadata?.isOnboarded !== true) {
         return ROUTES.onboarding;
       }
-      return metadata.role === "professional"
-        ? ROUTES.professionalDashboard
-        : ROUTES.userDashboard;
+      return dashboardForRole(
+        typeof metadata?.role === "string" ? metadata.role : undefined,
+      );
     },
-    []
+    [],
   );
 
   /**
    * Perform redirect with router.replace for SPA navigation
    */
   const performRedirect = useCallback(
-    (path: string) => {
+    (path: string, redirectMessage = "Redirecting...") => {
       setStatus("redirecting");
-      setMessage("Redirecting to your dashboard...");
-
-      // Clear any pending timeouts
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-
-      // Use router.replace for smooth SPA navigation
+      setMessage(redirectMessage);
       router.replace(path);
     },
-    [router]
+    [router],
   );
 
   /**
-   * Check metadata and redirect, with retry support for stale metadata
+   * Check metadata and redirect after forcing a Clerk claim refresh.
    */
   const checkAndRedirect = useCallback(async () => {
     if (!user) return;
 
-    const metadata = user.publicMetadata as UserMetadata | undefined;
+    const refreshResult = await waitForClerkClaimRefresh({
+      user,
+      getToken,
+      maxAttempts: MAX_RETRIES,
+      retryDelayMs: RETRY_DELAY,
+      isReady: (metadata: ClerkPublicMetadataLike) =>
+        isOnboardingTransition && expectedRole
+          ? hasExpectedOnboardingClaims(metadata, expectedRole)
+          : hasRoutableAuthClaims(metadata),
+      onAttempt: (attempt, maxAttempts) => {
+        retryCount.current = attempt;
+        setMessage(`Refreshing session (attempt ${attempt}/${maxAttempts})...`);
+      },
+    });
 
-    // If metadata exists and shows onboarded, redirect immediately
-    if (metadata?.isOnboarded !== undefined) {
-      performRedirect(getRedirectPath(metadata));
+    if (refreshResult.ok) {
+      performRedirect(getRedirectPath(refreshResult.metadata));
       return;
     }
 
-    // Metadata is undefined - could be stale. Try to reload user session
-    if (retryCount.current < MAX_RETRIES) {
-      retryCount.current++;
-      setMessage(
-        `Refreshing session (attempt ${retryCount.current}/${MAX_RETRIES})...`
-      );
-
-      try {
-        // Reload user to get fresh metadata from Clerk
-        await user.reload();
-
-        // Check again after reload
-        const freshMetadata = user.publicMetadata as UserMetadata | undefined;
-
-        if (freshMetadata?.isOnboarded !== undefined) {
-          performRedirect(getRedirectPath(freshMetadata));
-          return;
-        }
-
-        // Still undefined, wait and retry
-        if (retryCount.current < MAX_RETRIES) {
-          timeoutRef.current = setTimeout(checkAndRedirect, RETRY_DELAY);
-        } else {
-          // Max retries reached, assume not onboarded (safe default)
-          performRedirect(ROUTES.onboarding);
-        }
-      } catch (error) {
-        console.error("Failed to reload user session:", error);
-        // On error, redirect to onboarding as safe default
-        performRedirect(ROUTES.onboarding);
-      }
-    } else {
-      // Max retries reached without valid metadata
-      performRedirect(ROUTES.onboarding);
+    if (isOnboardingTransition) {
+      setStatus("error");
+      setMessage(CLERK_CLAIM_REFRESH_FAILURE_MESSAGE);
+      return;
     }
-  }, [user, performRedirect, getRedirectPath]);
+
+    const currentMetadata = user.publicMetadata as UserMetadata | undefined;
+    if (currentMetadata?.isOnboarded === true) {
+      setStatus("error");
+      setMessage(CLERK_CLAIM_REFRESH_FAILURE_MESSAGE);
+      return;
+    }
+
+    retryCount.current = 0;
+    performRedirect(ROUTES.onboarding, "Taking you to onboarding...");
+  }, [
+    expectedRole,
+    getRedirectPath,
+    getToken,
+    isOnboardingTransition,
+    performRedirect,
+    user,
+  ]);
 
   useEffect(() => {
-    // Wait for Clerk to load
     if (!isLoaded) return;
 
-    // If not signed in, redirect to sign-in
     if (!isSignedIn || !user) {
       router.replace(ROUTES.signIn);
       return;
     }
 
-    // Set up global timeout to prevent infinite loading
-    const globalTimeout = setTimeout(() => {
-      if (status === "checking") {
-        console.warn("Auth callback timeout - redirecting to onboarding");
-        performRedirect(ROUTES.onboarding);
-      }
-    }, TOTAL_TIMEOUT);
-
-    // Start checking metadata
-    checkAndRedirect();
-
-    return () => {
-      clearTimeout(globalTimeout);
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, [
-    isLoaded,
-    isSignedIn,
-    user,
-    router,
-    status,
-    checkAndRedirect,
-    performRedirect,
-  ]);
+    retryCount.current = 0;
+    setStatus("checking");
+    setMessage("Verifying your session...");
+    void checkAndRedirect();
+  }, [checkAndRedirect, isLoaded, isSignedIn, router, user]);
 
   // Handle error state with retry option
   const handleRetry = () => {
     retryCount.current = 0;
-    startTime.current = Date.now();
     setStatus("checking");
-    setMessage("Retrying...");
-    checkAndRedirect();
+    setMessage("Verifying your session...");
+    void checkAndRedirect();
   };
 
   // Handle sign out if stuck
@@ -182,7 +171,7 @@ export default function AuthCallbackPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-zinc-50 to-zinc-100">
+    <div className="flex min-h-screen items-center justify-center bg-linear-to-br from-zinc-50 to-zinc-100">
       <div className="text-center max-w-md mx-auto px-4">
         {/* Loading Spinner */}
         <div className="relative mb-6">

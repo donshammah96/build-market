@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   Plus,
@@ -11,11 +12,11 @@ import {
   ChevronRight,
   AlertCircle,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useCalendarEvents } from "@/hooks/useCalendar";
+import type { CalendarEventClientSummary } from "@/hooks/useCalendar";
 
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -25,26 +26,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// Event type matching API response
-interface CalendarEvent {
-  id: string;
-  title: string;
-  type: string;
-  startDate: string | Date;
-  endDate: string | Date;
-  location?: string | null;
-  status: string;
-  description?: string | null;
-  client?: {
-    id: string;
-    firstName?: string | null;
-    lastName?: string | null;
-  } | null;
-  project?: {
-    id: string;
-    title: string;
-  } | null;
-}
+const CalendarSidebar = dynamic(() => import("./_components/CalendarSidebar"), {
+  ssr: false,
+  loading: () => <CalendarSidebarSkeleton />,
+});
 
 /**
  * CalendarPage Component
@@ -56,45 +41,34 @@ interface CalendarEvent {
  * - Error handling
  */
 export default function CalendarPage() {
-  const [date, setDate] = useState<Date | undefined>(new Date());
+  const [date, setDate] = useState<Date | undefined>();
 
   // Fetch calendar events
   const {
     data: apiEvents,
     isLoading,
     error: fetchError,
-  } = useQuery<CalendarEvent[]>({
-    queryKey: ["professional-calendar"],
-    queryFn: async () => {
-      const response = await fetch("/api/professional-portal/calendar");
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || "Failed to fetch events");
-      }
-      const result = await response.json();
-      // Handle both direct array and paginated response
-      const events = Array.isArray(result) ? result : result.data || [];
-      // Convert string dates to Date objects
-      return events.map((event: CalendarEvent) => ({
-        ...event,
-        startDate: new Date(event.startDate),
-        endDate: new Date(event.endDate),
-      }));
-    },
-    retry: 2,
-    staleTime: 30000, // 30 seconds
-  });
+    refetch,
+  } = useCalendarEvents();
 
-  // Ensure events is always an array
+  useEffect(() => {
+    setDate(new Date());
+  }, []);
+
+  // Ensure events is always an array with Date objects
   const events = useMemo(() => {
     if (!apiEvents) return [];
-    return Array.isArray(apiEvents) ? apiEvents : [];
+    return apiEvents.map((evt) => ({
+      ...evt,
+      startDate: new Date(evt.startDate),
+      endDate: new Date(evt.endDate),
+    }));
   }, [apiEvents]);
 
   // Filter events based on selected date
   const selectedDateEvents = useMemo(() => {
     if (!date || events.length === 0) return [];
-    return events.filter((event: CalendarEvent) => {
+    return events.filter((event) => {
       const eventDate = new Date(event.startDate);
       return (
         eventDate.getDate() === date.getDate() &&
@@ -107,9 +81,9 @@ export default function CalendarPage() {
   // Calculate event statistics
   const eventStats = useMemo(() => {
     return {
-      siteVisits: events.filter((e) => e.type === "site_visit").length,
-      deadlines: events.filter((e) => e.type === "deadline").length,
-      meetings: events.filter((e) => e.type === "meeting").length,
+      siteVisits: events.filter((e) => e.type === "SITE_VISIT").length,
+      deadlines: events.filter((e) => e.type === "DEADLINE").length,
+      meetings: events.filter((e) => e.type === "MEETING").length,
     };
   }, [events]);
 
@@ -133,59 +107,11 @@ export default function CalendarPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* --- Calendar Widget --- */}
         <div className="lg:col-span-4 xl:col-span-3">
-          <Card className="border border-zinc-200 shadow-sm bg-white">
-            <CardContent className="p-4">
-              <Calendar
-                mode="single"
-                selected={date}
-                onSelect={setDate}
-                className="rounded-md border-0 w-full"
-                classNames={{
-                  day_selected:
-                    "bg-zinc-900 text-white hover:bg-zinc-800 focus:bg-zinc-900",
-                  day_today: "bg-zinc-100 text-zinc-900 font-bold",
-                }}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Upcoming Summary */}
-          <Card className="border border-zinc-200 shadow-sm bg-white mt-6">
-            <CardHeader className="pb-3 pt-5 px-5">
-              <CardTitle className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
-                Upcoming
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-5 pb-6 space-y-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-zinc-600">Site Visits</span>
-                <Badge
-                  variant="secondary"
-                  className="bg-zinc-100 text-zinc-900"
-                >
-                  {eventStats.siteVisits}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-zinc-600">Deadlines</span>
-                <Badge
-                  variant="secondary"
-                  className="bg-amber-50 text-amber-700"
-                >
-                  {eventStats.deadlines}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-zinc-600">Meetings</span>
-                <Badge
-                  variant="secondary"
-                  className="bg-zinc-100 text-zinc-900"
-                >
-                  {eventStats.meetings}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
+          <CalendarSidebar
+            selectedDate={date}
+            onSelectDate={setDate}
+            eventStats={eventStats}
+          />
         </div>
 
         {/* --- Events List --- */}
@@ -223,18 +149,12 @@ export default function CalendarPage() {
                     ? fetchError.message
                     : "Failed to load calendar events"}
                 </p>
-                <Button
-                  onClick={() => {
-                    window.location.reload();
-                  }}
-                >
-                  Retry
-                </Button>
+                <Button onClick={() => void refetch()}>Retry</Button>
               </div>
             </Card>
           ) : selectedDateEvents.length > 0 ? (
             <div className="space-y-4">
-              {selectedDateEvents.map((event: CalendarEvent) => (
+              {selectedDateEvents.map((event) => (
                 <EventCard key={event.id} event={event} />
               ))}
             </div>
@@ -263,7 +183,33 @@ export default function CalendarPage() {
   );
 }
 
-function EventCard({ event }: { event: CalendarEvent }) {
+function CalendarSidebarSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+        <div className="h-[320px] rounded-lg bg-zinc-100 animate-pulse" />
+      </div>
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <div className="h-4 w-20 rounded bg-zinc-200 animate-pulse" />
+        <div className="mt-4 space-y-3">
+          <div className="h-4 rounded bg-zinc-100 animate-pulse" />
+          <div className="h-4 rounded bg-zinc-100 animate-pulse" />
+          <div className="h-4 rounded bg-zinc-100 animate-pulse" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type CalendarPageEvent = Omit<
+  CalendarEventClientSummary,
+  "startDate" | "endDate"
+> & {
+  startDate: Date;
+  endDate: Date;
+};
+
+function EventCard({ event }: { event: CalendarPageEvent }) {
   // Format time range
   const formatTimeRange = useCallback(() => {
     const start = new Date(event.startDate);
@@ -293,11 +239,11 @@ function EventCard({ event }: { event: CalendarEvent }) {
   // Get status badge color
   const getStatusColor = useCallback((status: string) => {
     switch (status) {
-      case "completed":
+      case "COMPLETED":
         return "bg-emerald-100 text-emerald-700 hover:bg-emerald-200";
-      case "cancelled":
+      case "CANCELLED":
         return "bg-red-100 text-red-700 hover:bg-red-200";
-      case "scheduled":
+      case "SCHEDULED":
       default:
         return "bg-blue-100 text-blue-700 hover:bg-blue-200";
     }
@@ -314,7 +260,7 @@ function EventCard({ event }: { event: CalendarEvent }) {
               {formatTimeRange()}
             </div>
             <Badge className={`w-fit ${getStatusColor(event.status)} border-0`}>
-              {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+              {event.status.replaceAll("_", " ")}
             </Badge>
           </div>
 

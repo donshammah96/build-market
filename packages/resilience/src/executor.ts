@@ -3,14 +3,25 @@
  * Combines timeout, retry, circuit breaker, cache, and fallback patterns
  */
 
-import { ResilienceOptions, OperationResult, OperationCriticality } from './types';
-import { withTimeout, withCriticalityTimeout, DEFAULT_TIMEOUTS } from './timeout';
-import { withRetry, DEFAULT_RETRY_CONFIG } from './retry';
-import { CircuitBreakerRegistry, DEFAULT_CIRCUIT_BREAKER_CONFIG } from './circuit-breaker';
-import { CacheRegistry, DEFAULT_CACHE_CONFIG } from './cache';
-import { withFallback } from './fallback';
-import { MetricsCollector } from './metrics';
-import { StructuredLogger } from './logger';
+import {
+  ResilienceOptions,
+  OperationResult,
+  OperationCriticality,
+} from "./types";
+import {
+  withTimeout,
+  withCriticalityTimeout,
+  DEFAULT_TIMEOUTS,
+} from "./timeout";
+import { withRetry, DEFAULT_RETRY_CONFIG } from "./retry";
+import {
+  CircuitBreakerRegistry,
+  DEFAULT_CIRCUIT_BREAKER_CONFIG,
+} from "./circuit-breaker";
+import { CacheRegistry, DEFAULT_CACHE_CONFIG } from "./cache";
+import { withFallback } from "./fallback";
+import { MetricsCollector } from "./metrics";
+import { StructuredLogger } from "./logger";
 
 /**
  * Resilient operation executor
@@ -21,9 +32,12 @@ export class ResilientExecutor {
   private readonly metrics: MetricsCollector;
   private readonly logger: StructuredLogger;
 
-  constructor(serviceName: string = 'resilient-service') {
+  constructor(serviceName: string = "resilient-service") {
     this.logger = new StructuredLogger(serviceName);
-    this.circuitBreakers = new CircuitBreakerRegistry(DEFAULT_CIRCUIT_BREAKER_CONFIG, this.logger);
+    this.circuitBreakers = new CircuitBreakerRegistry(
+      DEFAULT_CIRCUIT_BREAKER_CONFIG,
+      this.logger,
+    );
     this.caches = new CacheRegistry(DEFAULT_CACHE_CONFIG, this.logger);
     this.metrics = new MetricsCollector(this.logger);
   }
@@ -33,10 +47,10 @@ export class ResilientExecutor {
    */
   async execute<T>(
     operation: () => Promise<T>,
-    options: ResilienceOptions = {}
+    options: ResilienceOptions = {},
   ): Promise<OperationResult<T>> {
     const startTime = Date.now();
-    const operationName = options.operationName || 'unnamed-operation';
+    const operationName = options.operationName || "unnamed-operation";
     let attempts = 0;
     let fromCache = false;
     let fromFallback = false;
@@ -44,16 +58,17 @@ export class ResilientExecutor {
     try {
       // Check cache first if enabled
       if (options.cache) {
-        const cacheConfig = typeof options.cache === 'object' ? options.cache : {};
+        const cacheConfig =
+          typeof options.cache === "object" ? options.cache : {};
         const cache = this.caches.getCache<T>(operationName, cacheConfig);
-        
+
         const cacheKey = `${operationName}:default`;
         const cached = await cache.get(cacheKey);
-        
+
         if (cached !== undefined) {
           this.logger.debug(`Cache hit for operation: ${operationName}`);
           this.metrics.incrementCounter(`${operationName}.cache.hit`);
-          
+
           return {
             success: true,
             data: cached,
@@ -61,7 +76,7 @@ export class ResilientExecutor {
             duration: Date.now() - startTime,
           };
         }
-        
+
         this.metrics.incrementCounter(`${operationName}.cache.miss`);
       }
 
@@ -70,36 +85,39 @@ export class ResilientExecutor {
 
       // 1. Apply timeout
       if (options.timeout !== undefined) {
-        const timeoutMs = typeof options.timeout === 'string'
-          ? DEFAULT_TIMEOUTS[options.timeout as OperationCriticality]
-          : options.timeout;
-        
-        resilientOperation = async () => 
+        const timeoutMs =
+          typeof options.timeout === "string"
+            ? DEFAULT_TIMEOUTS[options.timeout as OperationCriticality]
+            : options.timeout;
+
+        resilientOperation = async () =>
           withTimeout(operation, timeoutMs, operationName);
       }
 
       // 2. Apply circuit breaker
       if (options.circuitBreaker) {
-        const cbConfig = typeof options.circuitBreaker === 'object' 
-          ? options.circuitBreaker 
-          : {};
-        
+        const cbConfig =
+          typeof options.circuitBreaker === "object"
+            ? options.circuitBreaker
+            : {};
+
         const originalOp = resilientOperation;
-        resilientOperation = async () => 
+        resilientOperation = async () =>
           this.circuitBreakers.execute(operationName, originalOp, cbConfig);
       }
 
       // 3. Apply retry logic
       if (options.retry) {
-        const retryConfig = typeof options.retry === 'object' ? options.retry : {};
+        const retryConfig =
+          typeof options.retry === "object" ? options.retry : {};
         const originalOp = resilientOperation;
-        
+
         resilientOperation = async () => {
           const result = await withRetry(
             originalOp,
             retryConfig,
             operationName,
-            this.logger
+            this.logger,
           );
           attempts = result.attempts;
           return result.result;
@@ -108,7 +126,7 @@ export class ResilientExecutor {
 
       // 4. Execute with fallback if provided
       let result: T;
-      
+
       if (options.fallback) {
         const fallbackResult = await withFallback(resilientOperation, {
           fallbackFn: options.fallback,
@@ -122,7 +140,8 @@ export class ResilientExecutor {
 
       // Cache the successful result if caching is enabled
       if (options.cache && !fromCache) {
-        const cacheConfig = typeof options.cache === 'object' ? options.cache : {};
+        const cacheConfig =
+          typeof options.cache === "object" ? options.cache : {};
         const cache = this.caches.getCache<T>(operationName, cacheConfig);
         const cacheKey = `${operationName}:default`;
         await cache.set(cacheKey, result);
@@ -147,7 +166,6 @@ export class ResilientExecutor {
         attempts: attempts || 1,
         duration,
       };
-
     } catch (error) {
       const duration = Date.now() - startTime;
       const err = error instanceof Error ? error : new Error(String(error));
@@ -179,7 +197,7 @@ export class ResilientExecutor {
   async executeWithCriticality<T>(
     operation: () => Promise<T>,
     criticality: OperationCriticality,
-    operationName?: string
+    operationName?: string,
   ): Promise<OperationResult<T>> {
     const options: ResilienceOptions = {
       timeout: criticality,
@@ -188,7 +206,7 @@ export class ResilientExecutor {
 
     // Configure based on criticality
     switch (criticality) {
-      case 'critical':
+      case "critical":
         // Critical operations: no retry, fast fail, no cache
         options.retry = false;
         options.cache = false;
@@ -198,14 +216,14 @@ export class ResilientExecutor {
         };
         break;
 
-      case 'normal':
+      case "normal":
         // Normal operations: retry, cache, standard circuit breaker
         options.retry = { maxAttempts: 3 };
         options.cache = { ttl: 60000, staleWhileRevalidate: 30000 };
         options.circuitBreaker = true;
         break;
 
-      case 'background':
+      case "background":
         // Background operations: aggressive retry, long cache, lenient circuit breaker
         options.retry = { maxAttempts: 5, maxDelayMs: 30000 };
         options.cache = { ttl: 300000, staleWhileRevalidate: 60000 }; // 5min cache

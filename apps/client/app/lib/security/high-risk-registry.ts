@@ -1,0 +1,455 @@
+export type GuardNumericConstantRule = {
+  symbol: string;
+  expectedValue: number;
+};
+
+export type HighValueServerActionGuardRule = {
+  file: string;
+  actionName: string;
+  requiredOptions: string[];
+  requiredRecentAuthSnippets?: string[];
+  requiredRateLimitSnippets?: string[];
+  requiredNumericConstants?: GuardNumericConstantRule[];
+};
+
+export type HighValueRouteGuardRule = {
+  file: string;
+  exportName: string;
+  requiredAuthOptions: string[];
+  emptyAuthOptionsRationale?: string;
+  requiredRecentAuthSnippets?: string[];
+  requiredRateLimitSnippets?: string[];
+};
+
+export type CriticalTransitionStepSequenceRule = {
+  file: string;
+  actionName: string;
+  orderedSnippets: string[];
+};
+
+export type CriticalVerificationAdapterStepSequenceRule = {
+  file: string;
+  exportName: string;
+  orderedSnippets: string[];
+};
+
+export const HIGH_VALUE_SERVER_ACTION_GUARD_RULES: HighValueServerActionGuardRule[] =
+  [
+    {
+      file: "app/actions/finance.ts",
+      actionName: "requestWithdrawalAction",
+      requiredOptions: ["recentAuth", "rateLimit"],
+      requiredRecentAuthSnippets: [
+        "maxAgeSeconds: WITHDRAWAL_RECENT_AUTH_MAX_AGE_SECONDS",
+      ],
+      requiredNumericConstants: [
+        {
+          symbol: "WITHDRAWAL_RECENT_AUTH_MAX_AGE_SECONDS",
+          expectedValue: 180,
+        },
+      ],
+      requiredRateLimitSnippets: ["high-value-withdrawal:"],
+    },
+    {
+      file: "app/actions/onboarding.ts",
+      actionName: "submitOnboarding",
+      requiredOptions: ["recentAuth", "rateLimit"],
+      requiredRecentAuthSnippets: [
+        "maxAgeSeconds: ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+      ],
+      requiredNumericConstants: [
+        {
+          symbol: "ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+          expectedValue: 300,
+        },
+      ],
+      requiredRateLimitSnippets: ["high-value-onboarding-transition:submit:"],
+    },
+    {
+      file: "app/actions/onboarding.ts",
+      actionName: "skipOnboarding",
+      requiredOptions: ["recentAuth", "rateLimit"],
+      requiredRecentAuthSnippets: [
+        "maxAgeSeconds: ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+      ],
+      requiredNumericConstants: [
+        {
+          symbol: "ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+          expectedValue: 300,
+        },
+      ],
+      requiredRateLimitSnippets: [
+        "high-value-onboarding-transition:skip-client:",
+      ],
+    },
+    {
+      file: "app/actions/onboarding.ts",
+      actionName: "skipProfessionalOnboarding",
+      requiredOptions: ["recentAuth", "rateLimit"],
+      requiredRecentAuthSnippets: [
+        "maxAgeSeconds: ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+      ],
+      requiredNumericConstants: [
+        {
+          symbol: "ONBOARDING_RECENT_AUTH_MAX_AGE_SECONDS",
+          expectedValue: 300,
+        },
+      ],
+      requiredRateLimitSnippets: [
+        "high-value-onboarding-transition:skip-professional:",
+      ],
+    },
+  ];
+
+export const HIGH_VALUE_ROUTE_GUARD_RULES: HighValueRouteGuardRule[] = [
+  {
+    file: "app/api/projects/[id]/escrow/[escrowId]/fund/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: ["recentAuth", "csrf"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 180"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "escrow-write",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/projects/[id]/escrow/[escrowId]/release/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: ["recentAuth", "csrf"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 180"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "escrow-write",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/projects/[id]/escrow/[escrowId]/dispute/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: ["recentAuth", "csrf"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 180"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "escrow-write",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/professional-portal/finance/withdraw/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: ["recentAuth"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 180"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "finance-withdraw",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/professional-portal/finance/withdraw/[id]/route.ts",
+    exportName: "DELETE",
+    requiredAuthOptions: ["recentAuth"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 180"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "finance-withdrawal-cancel",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/user/export/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: ["recentAuth"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 300"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "user-export",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/user/deletion/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: ["recentAuth"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 300"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "user-deletion",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/user/deletion/route.ts",
+    exportName: "PATCH",
+    requiredAuthOptions: ["recentAuth"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 300"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "user-deletion-cancel",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/user/rectification/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: ["recentAuth"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 300"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "user-rectification",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/professional-portal/documents/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: ["recentAuth", "csrf"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 300"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "prof-docs-write",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/professional-portal/documents/[id]/route.ts",
+    exportName: "GET",
+    requiredAuthOptions: [],
+    emptyAuthOptionsRationale:
+      "AUTH-RATIONALE: withAuth session gate plus domain ownership authorization governs this read route.",
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "prof-docs-read",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/professional-portal/documents/[id]/route.ts",
+    exportName: "PATCH",
+    requiredAuthOptions: ["recentAuth", "csrf"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 300"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "prof-docs-write",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/professional-portal/documents/[id]/route.ts",
+    exportName: "DELETE",
+    requiredAuthOptions: ["recentAuth", "csrf"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 300"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "prof-docs-write",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/professional-portal/certificates/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: ["recentAuth", "csrf"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 300"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "prof-certificates-write",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/professional-portal/certificates/[id]/route.ts",
+    exportName: "GET",
+    requiredAuthOptions: [],
+    emptyAuthOptionsRationale:
+      "AUTH-RATIONALE: withAuth session gate plus domain ownership authorization governs this read route.",
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "prof-certificates-read",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/professional-portal/certificates/[id]/route.ts",
+    exportName: "PATCH",
+    requiredAuthOptions: ["recentAuth", "csrf"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 300"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "prof-certificates-write",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/professional-portal/certificates/[id]/route.ts",
+    exportName: "DELETE",
+    requiredAuthOptions: ["recentAuth", "csrf"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 300"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "prof-certificates-write",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/professional-portal/licenses/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: ["recentAuth", "csrf"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 300"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "prof-licenses-write",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/professional-portal/licenses/[id]/route.ts",
+    exportName: "GET",
+    requiredAuthOptions: [],
+    emptyAuthOptionsRationale:
+      "AUTH-RATIONALE: withAuth session gate plus domain ownership authorization governs this read route.",
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "prof-licenses-read",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/professional-portal/licenses/[id]/route.ts",
+    exportName: "PATCH",
+    requiredAuthOptions: ["recentAuth", "csrf"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 300"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "prof-licenses-write",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/professional-portal/licenses/[id]/route.ts",
+    exportName: "DELETE",
+    requiredAuthOptions: ["recentAuth", "csrf"],
+    requiredRecentAuthSnippets: ["maxAgeSeconds: 300"],
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "prof-licenses-write",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/onboarding/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: [],
+    emptyAuthOptionsRationale:
+      "AUTH-RATIONALE: Uses direct Clerk auth() because DB user may not exist yet. Actor-scoped rate limiting via clerkId.",
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "onboarding-submit",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/onboarding/skip/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: [],
+    emptyAuthOptionsRationale:
+      "AUTH-RATIONALE: Uses direct Clerk auth(). Actor-scoped rate limiting via clerkId.",
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "onboarding-skip-client",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+  {
+    file: "app/api/onboarding/skip-professional/route.ts",
+    exportName: "POST",
+    requiredAuthOptions: [],
+    emptyAuthOptionsRationale:
+      "AUTH-RATIONALE: Uses direct Clerk auth(). Actor-scoped rate limiting via clerkId.",
+    requiredRateLimitSnippets: [
+      "checkRateLimit(",
+      "onboarding-skip-professional",
+      "getActorRateLimitIdentifier(",
+    ],
+  },
+];
+
+export const CRITICAL_TRANSITION_STEP_SEQUENCE_RULES: CriticalTransitionStepSequenceRule[] =
+  [
+    {
+      file: "app/actions/onboarding.ts",
+      actionName: "submitOnboarding",
+      orderedSnippets: [
+        "checkOnboardingTransitionIdempotency(",
+        "executeOnboardingTransition(",
+      ],
+    },
+    {
+      file: "app/actions/onboarding.ts",
+      actionName: "skipOnboarding",
+      orderedSnippets: [
+        "checkOnboardingTransitionIdempotency(",
+        "executeOnboardingTransition(",
+      ],
+    },
+    {
+      file: "app/actions/onboarding.ts",
+      actionName: "skipProfessionalOnboarding",
+      orderedSnippets: [
+        "checkOnboardingTransitionIdempotency(",
+        "executeOnboardingTransition(",
+      ],
+    },
+  ];
+
+export const CRITICAL_VERIFICATION_ADAPTER_STEP_SEQUENCE_RULES: CriticalVerificationAdapterStepSequenceRule[] =
+  [
+    {
+      file: "app/api/professional-portal/documents/route.ts",
+      exportName: "POST",
+      orderedSnippets: [
+        "documentsService.createDocument(",
+        "safeIdempotencyComplete(",
+      ],
+    },
+    {
+      file: "app/api/professional-portal/documents/[id]/route.ts",
+      exportName: "PATCH",
+      orderedSnippets: [
+        "documentsService.updateDocument(",
+        "safeIdempotencyComplete(",
+      ],
+    },
+    {
+      file: "app/api/professional-portal/certificates/route.ts",
+      exportName: "POST",
+      orderedSnippets: [
+        "certificatesService.createCertificate(",
+        "safeIdempotencyComplete(",
+      ],
+    },
+    {
+      file: "app/api/professional-portal/certificates/[id]/route.ts",
+      exportName: "PATCH",
+      orderedSnippets: [
+        "certificatesService.updateCertificate(",
+        "safeIdempotencyComplete(",
+      ],
+    },
+    {
+      file: "app/api/professional-portal/licenses/route.ts",
+      exportName: "POST",
+      orderedSnippets: [
+        "licensesService.createLicense(",
+        "safeIdempotencyComplete(",
+      ],
+    },
+    {
+      file: "app/api/professional-portal/licenses/[id]/route.ts",
+      exportName: "PATCH",
+      orderedSnippets: [
+        "licensesService.updateLicense(",
+        "safeIdempotencyComplete(",
+      ],
+    },
+  ];

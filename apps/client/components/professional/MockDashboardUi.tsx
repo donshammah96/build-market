@@ -1,16 +1,10 @@
 "use client";
 
-import { 
-  Users, 
-  DollarSign, 
-  TrendingUp
-} from "lucide-react";
-
+import { Users, DollarSign, TrendingUp } from "lucide-react";
 
 export function MockDashboard() {
   return (
     <div className="w-full h-full bg-zinc-900 p-6 flex flex-col font-sans select-none">
-      
       {/* Header Mock */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -25,26 +19,26 @@ export function MockDashboard() {
 
       {/* Metrics Row */}
       <div className="grid grid-cols-3 gap-4 mb-8">
-        <MetricCard 
-          icon={DollarSign} 
-          label="Revenue" 
-          value="4.2M" 
-          trend="+12%" 
-          color="emerald" 
+        <MetricCard
+          icon={DollarSign}
+          label="Revenue"
+          value="4.2M"
+          trend="+12%"
+          color="emerald"
         />
-        <MetricCard 
-          icon={Users} 
-          label="Leads" 
-          value="14" 
-          trend="+3" 
-          color="blue" 
+        <MetricCard
+          icon={Users}
+          label="Leads"
+          value="14"
+          trend="+3"
+          color="blue"
         />
-        <MetricCard 
-          icon={TrendingUp} 
-          label="Growth" 
-          value="85%" 
-          trend="" 
-          color="purple" 
+        <MetricCard
+          icon={TrendingUp}
+          label="Growth"
+          value="85%"
+          trend=""
+          color="purple"
         />
       </div>
 
@@ -54,26 +48,26 @@ export function MockDashboard() {
           <div className="h-3 w-24 bg-zinc-700 rounded" />
           <div className="h-3 w-3 bg-zinc-700 rounded-full" />
         </div>
-        
+
         <div className="space-y-3">
-          <LeadItem 
-            name="Sarah Johnson" 
-            project="Kitchen Reno" 
-            status="New" 
+          <LeadItem
+            name="Sarah Johnson"
+            project="Kitchen Reno"
+            status="New"
             time="2h ago"
             color="emerald"
           />
-          <LeadItem 
-            name="David Ochieng" 
-            project="Landscape" 
-            status="Offer Sent" 
+          <LeadItem
+            name="David Ochieng"
+            project="Landscape"
+            status="Offer Sent"
             time="5h ago"
             color="blue"
           />
-          <LeadItem 
-            name="Tech Corp" 
-            project="Office Fitout" 
-            status="Pending" 
+          <LeadItem
+            name="Tech Corp"
+            project="Office Fitout"
+            status="Pending"
             time="1d ago"
             color="zinc"
           />
@@ -91,22 +85,36 @@ interface MetricCardProps {
   color: string;
 }
 
-function MetricCard({ icon: Icon, label, value, trend, color }: MetricCardProps) {
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  trend,
+  color,
+}: MetricCardProps) {
   const colors = {
     emerald: "text-emerald-500 bg-emerald-500/10",
     blue: "text-blue-500 bg-blue-500/10",
     purple: "text-purple-500 bg-purple-500/10",
   };
-  
+
   return (
     <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700/50">
       <div className="flex justify-between items-start mb-2">
-        <div className={`p-1.5 rounded ${colors[color as keyof typeof colors]}`}>
+        <div
+          className={`p-1.5 rounded ${colors[color as keyof typeof colors]}`}
+        >
           <Icon className="h-3 w-3" />
         </div>
-        {trend && <span className="text-[10px] text-emerald-500 font-medium">{trend}</span>}
+        {trend && (
+          <span className="text-[10px] text-emerald-500 font-medium">
+            {trend}
+          </span>
+        )}
       </div>
-      <div className="text-zinc-400 text-[10px] uppercase tracking-wider mb-0.5">{label}</div>
+      <div className="text-zinc-400 text-[10px] uppercase tracking-wider mb-0.5">
+        {label}
+      </div>
       <div className="text-white font-bold text-lg">{value}</div>
     </div>
   );
@@ -137,7 +145,9 @@ function LeadItem({ status, time, color }: LeadItemProps) {
         </div>
         <div className="h-2 w-16 bg-zinc-700 rounded" />
       </div>
-      <div className={`px-2 py-0.5 rounded text-[10px] font-medium border ${statusColors[color as keyof typeof statusColors]}`}>
+      <div
+        className={`px-2 py-0.5 rounded text-[10px] font-medium border ${statusColors[color as keyof typeof statusColors]}`}
+      >
         {status}
       </div>
     </div>

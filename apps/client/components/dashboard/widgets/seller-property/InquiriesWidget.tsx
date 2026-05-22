@@ -40,7 +40,7 @@ const STATUS_CONFIG = {
   new: {
     label: "New",
     icon: MessageSquare,
-    color: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    color: "bg-success/10 text-success border-success/40",
   },
   contacted: {
     label: "Contacted",
@@ -60,7 +60,7 @@ const STATUS_CONFIG = {
   closed: {
     label: "Closed",
     icon: CheckCircle2,
-    color: "bg-zinc-100 text-zinc-600 border-zinc-200",
+    color: "bg-muted text-muted-foreground border-border",
   },
 } as const;
 
@@ -90,11 +90,11 @@ function InquiryItem({ inquiry }: InquiryItemProps) {
   };
 
   return (
-    <div className="p-5 hover:bg-zinc-50/50 transition-colors group">
+    <div className="p-5 hover:bg-accent/60 transition-colors group">
       <div className="flex items-start gap-4">
         {/* Avatar */}
-        <Avatar className="h-10 w-10 border border-zinc-100 shrink-0">
-          <AvatarFallback className="bg-zinc-100 text-zinc-500 font-medium text-sm">
+        <Avatar className="h-10 w-10 border border-border shrink-0">
+          <AvatarFallback className="bg-muted text-muted-foreground font-medium text-sm">
             {inquiry.clientName
               .split(" ")
               .map((n) => n[0])
@@ -107,21 +107,21 @@ function InquiryItem({ inquiry }: InquiryItemProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-1">
             <div>
-              <h4 className="text-sm font-semibold text-zinc-900">
+              <h4 className="text-sm font-semibold text-foreground">
                 {inquiry.clientName}
               </h4>
-              <p className="text-xs text-zinc-500 truncate">
+              <p className="text-xs text-muted-foreground truncate">
                 {inquiry.propertyTitle}
               </p>
             </div>
-            <span className="text-[10px] text-zinc-400 shrink-0 flex items-center gap-1">
+            <span className="text-[10px] text-muted-foreground shrink-0 flex items-center gap-1">
               <Clock className="h-3 w-3" />
               {formatTime(inquiry.createdAt)}
             </span>
           </div>
 
           {/* Message Preview */}
-          <p className="text-xs text-zinc-600 line-clamp-2 mt-2 mb-3">
+          <p className="text-xs text-muted-foreground line-clamp-2 mt-2 mb-3">
             &quot;{inquiry.message}&quot;
           </p>
 
@@ -131,7 +131,7 @@ function InquiryItem({ inquiry }: InquiryItemProps) {
               variant="outline"
               className={cn(
                 "text-[10px] font-medium border",
-                statusConfig.color
+                statusConfig.color,
               )}
             >
               {statusConfig.label}
@@ -151,7 +151,7 @@ function InquiryItem({ inquiry }: InquiryItemProps) {
               </Button>
               <Button
                 size="sm"
-                className="h-7 text-xs bg-zinc-900 hover:bg-zinc-800"
+                className="h-7 text-xs bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 Reply
               </Button>
@@ -169,21 +169,21 @@ function InquiryItem({ inquiry }: InquiryItemProps) {
 
 function InquiriesWidgetSkeleton() {
   return (
-    <Card className="border border-zinc-200 shadow-sm overflow-hidden bg-white">
-      <CardHeader className="border-b border-zinc-100 py-5 px-6">
-        <div className="flex items-center gap-2 animate-pulse">
-          <div className="h-5 w-36 bg-zinc-200 rounded" />
-          <div className="h-5 w-14 bg-zinc-200 rounded-full" />
+    <Card className="border border-border shadow-sm overflow-hidden bg-card">
+      <CardHeader className="border-b border-border py-5 px-6">
+        <div className="flex items-center gap-2 motion-safe:animate-pulse">
+          <div className="h-5 w-36 bg-muted rounded" />
+          <div className="h-5 w-14 bg-muted rounded-full" />
         </div>
       </CardHeader>
-      <div className="divide-y divide-zinc-100">
+      <div className="divide-y divide-border">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="p-5 flex gap-4 animate-pulse">
-            <div className="h-10 w-10 bg-zinc-200 rounded-full" />
+          <div key={i} className="p-5 flex gap-4 motion-safe:animate-pulse">
+            <div className="h-10 w-10 bg-muted rounded-full" />
             <div className="flex-1 space-y-2">
-              <div className="h-4 w-32 bg-zinc-200 rounded" />
-              <div className="h-3 w-48 bg-zinc-200 rounded" />
-              <div className="h-10 w-full bg-zinc-100 rounded" />
+              <div className="h-4 w-32 bg-muted rounded" />
+              <div className="h-3 w-48 bg-muted rounded" />
+              <div className="h-10 w-full bg-muted/70 rounded" />
             </div>
           </div>
         ))}
@@ -212,24 +212,24 @@ export function InquiriesWidget({
   return (
     <Card
       className={cn(
-        "border border-zinc-200 shadow-sm overflow-hidden bg-white",
-        className
+        "border border-border shadow-sm overflow-hidden bg-card",
+        className,
       )}
     >
-      <CardHeader className="border-b border-zinc-100 py-5 px-6 flex flex-row items-center justify-between">
+      <CardHeader className="border-b border-border py-5 px-6 flex flex-row items-center justify-between">
         <div className="flex items-center gap-2">
-          <CardTitle className="text-base font-bold text-zinc-900">
+          <CardTitle className="text-base font-bold text-foreground">
             Property Inquiries
           </CardTitle>
           {displayNewCount > 0 && (
-            <div className="h-5 px-2 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold flex items-center">
+            <div className="h-5 px-2 rounded-full bg-success/20 text-success text-[10px] font-bold flex items-center">
               {displayNewCount} NEW
             </div>
           )}
         </div>
         <Link
           href="/professional-portal/inquiries"
-          className="text-xs font-medium text-zinc-500 hover:text-zinc-900 flex items-center gap-1 group"
+          className="text-xs font-medium text-muted-foreground hover:text-foreground flex items-center gap-1 group"
         >
           View All{" "}
           <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
@@ -238,14 +238,14 @@ export function InquiriesWidget({
 
       {inquiries.length === 0 ? (
         <div className="p-12 text-center">
-          <MessageSquare className="h-12 w-12 text-zinc-200 mx-auto mb-3" />
-          <p className="text-sm text-zinc-500">No inquiries yet</p>
-          <p className="text-xs text-zinc-400 mt-1">
+          <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">No inquiries yet</p>
+          <p className="text-xs text-muted-foreground mt-1">
             Client inquiries will appear here
           </p>
         </div>
       ) : (
-        <div className="divide-y divide-zinc-100">
+        <div className="divide-y divide-border">
           {inquiries.slice(0, 4).map((inquiry) => (
             <InquiryItem key={inquiry.id} inquiry={inquiry} />
           ))}

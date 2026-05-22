@@ -13,15 +13,19 @@ interface CertificateManagerProps {
     name: string;
     fileUrl: string;
   }[];
+  canManage?: boolean;
 }
 
-export function CertificateManager({ certificates }: CertificateManagerProps) {
+export function CertificateManager({
+  certificates,
+  canManage = false,
+}: CertificateManagerProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const router = useRouter();
 
   async function handleDelete(id: string) {
     if (!confirm("Are you sure you want to delete this certificate?")) return;
-    
+
     setDeletingId(id);
     try {
       const result = await deleteCertificate(id);
@@ -31,9 +35,9 @@ export function CertificateManager({ certificates }: CertificateManagerProps) {
       } else {
         toast.error(result.error || "Failed to delete");
       }
-      } catch {
-        toast.error("Failed to revoke certificate");
-      } finally {
+    } catch {
+      toast.error("Failed to revoke certificate");
+    } finally {
       setDeletingId(null);
     }
   }
@@ -41,22 +45,31 @@ export function CertificateManager({ certificates }: CertificateManagerProps) {
   // Note: Add functionality would typically involve a file uploader component
   // For now we just implement Delete
 
+  if (!canManage) return null;
+
   return (
     <div className="space-y-2">
-        {certificates.map(cert => (
-            <div key={cert.id} className="flex items-center justify-between p-2 border rounded bg-background">
-                <span className="text-sm truncate max-w-[200px]">{cert.name}</span>
-                <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                    onClick={() => handleDelete(cert.id)}
-                    disabled={deletingId === cert.id}
-                >
-                    {deletingId === cert.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                </Button>
-            </div>
-        ))}
+      {certificates.map((cert) => (
+        <div
+          key={cert.id}
+          className="flex items-center justify-between p-2 border rounded bg-background"
+        >
+          <span className="text-sm truncate max-w-[200px]">{cert.name}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+            onClick={() => handleDelete(cert.id)}
+            disabled={deletingId === cert.id}
+          >
+            {deletingId === cert.id ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+      ))}
     </div>
   );
 }

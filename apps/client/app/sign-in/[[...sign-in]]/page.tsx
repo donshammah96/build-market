@@ -78,6 +78,27 @@ export default function SignInPage() {
             />
           </div>
 
+          {/* Layer 1: Clickwrap Agreement */}
+          <p className="text-center text-xs text-zinc-400 leading-relaxed">
+            By signing in, you agree to Build Market&apos;s{" "}
+            <Link
+              href="/legal/professional-terms"
+              target="_blank"
+              className="text-emerald-600 hover:underline"
+            >
+              Terms of Service
+            </Link>{" "}
+            and{" "}
+            <Link
+              href="/legal/privacy"
+              target="_blank"
+              className="text-emerald-600 hover:underline"
+            >
+              Privacy Policy
+            </Link>
+            .
+          </p>
+
           <div className="text-center">
             <Link
               href="/"

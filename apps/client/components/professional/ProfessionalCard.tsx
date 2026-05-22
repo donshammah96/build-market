@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
+import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import { getProfessionalUrl } from "@/lib/links";
 import { ProfessionalCardData } from "@/types/professional";
 import { getProfessionLabel } from "@/lib/constants/professionalCategories";
@@ -22,9 +22,11 @@ interface ProfessionalCardProps {
 const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
   function ProfessionalCard({ professional }) {
     const profileUrl = getProfessionalUrl(professional.id);
+    const services = professional.services ?? [];
+    const serviceCount = services.length;
 
     const fullName = professional.name || professional.companyName;
-    const primaryService = professional.services?.[0]?.name || "Professional";
+    const primaryService = services[0]?.name || "Professional";
     const displayTitle =
       professional.title || getProfessionLabel(primaryService);
     const projectCount = professional.projectCount || 0;
@@ -34,11 +36,11 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
         <Card
           className={cn(
             "h-full flex flex-col border border-zinc-200 bg-white overflow-hidden rounded-xl shadow-sm",
-            "transition-all duration-300 hover:shadow-lg group"
+            "transition-all duration-300 hover:shadow-lg group",
           )}
         >
           {/* Hero Image (Portfolio Preview) */}
-          <div className="relative aspect-[4/3] overflow-hidden bg-zinc-100 border-b border-zinc-100">
+          <div className="relative aspect-4/3 overflow-hidden bg-zinc-100 border-b border-zinc-100">
             <Link href={profileUrl} className="block h-full w-full">
               <div className="h-full w-full overflow-hidden">
                 <ImageWithFallback
@@ -83,7 +85,7 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
           </div>
 
           {/* Content Section */}
-          <CardContent className="flex flex-col flex-grow p-5">
+          <CardContent className="flex flex-col grow p-5">
             {/* Header Info */}
             <div className="flex items-start justify-between gap-4 mb-3">
               <div className="flex-1 min-w-0">
@@ -126,7 +128,7 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
               role="list"
               aria-label="Services offered"
             >
-              {professional.services?.slice(0, 3).map((service, i) => (
+              {services.slice(0, 3).map((service, i) => (
                 <Badge
                   key={service.id || i}
                   variant="secondary"
@@ -135,12 +137,11 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
                   {service.name}
                 </Badge>
               ))}
-              {professional.services?.length &&
-                professional.services?.length > 3 && (
-                  <span className="text-[10px] text-zinc-400 self-center pl-1">
-                    +{professional.services?.length - 3} more
-                  </span>
-                )}
+              {serviceCount > 3 && (
+                <span className="text-[10px] text-zinc-400 self-center pl-1">
+                  +{serviceCount - 3} more
+                </span>
+              )}
             </div>
 
             {/* Footer Actions */}
@@ -171,7 +172,7 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
         </Card>
       </div>
     );
-  }
+  },
 );
 
 export default ProfessionalCard;

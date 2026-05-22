@@ -1,7 +1,8 @@
 {
-  "name": "@repo/redis",
+  "name": "@build/redis",
   "version": "1.0.0",
   "description": "Redis client and caching utilities for the monorepo",
+  "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
@@ -11,14 +12,21 @@
     }
   },
   "scripts": {
-    "check-types": "tsc --noEmit"
+    "lint": "echo \"No lint configured\" && exit 0",
+    "healthcheck": "node --env-file=../.env --import tsx ./src/healthcheck.ts",
+    "enforce-maxmemory-policy": "node --env-file=../.env --import tsx ./src/enforce-maxmemory-policy.ts",
+    "check-types": "tsc --noEmit",
+    "test": "echo \"No tests configured\" && exit 0"
   },
   "dependencies": {
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.36.2",
     "ioredis": "^5.4.1"
   },
   "devDependencies": {
-    "@repo/typescript-config": "workspace:*",
+    "@build/typescript-config": "workspace:*",
     "@types/node": "^22.0.0",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   }
 }

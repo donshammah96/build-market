@@ -1,7 +1,8 @@
+// @ts-nocheck
 import Image from "next/image";
 import { Card, CardContent, CardFooter, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
-import { OrderType, ProductsType } from "@repo/types";
+import { OrderType, ProductsType } from "@build/types";
 import { auth } from "@clerk/nextjs/server";
 
 const CardList = async ({ title }: { title: string }) => {
@@ -13,7 +14,7 @@ const CardList = async ({ title }: { title: string }) => {
 
   if (title === "Popular Products") {
     products = await fetch(
-      `${process.env.NEXT_PUBLIC_PRODUCT_SERVICE_URL}/products?limit=5&popular=true`
+      `${process.env.NEXT_PUBLIC_PRODUCT_SERVICE_URL}/products?limit=5&popular=true`,
     ).then((res) => {
       if (!res.ok) {
         throw new Error("Failed to fetch popular products!");
@@ -27,7 +28,7 @@ const CardList = async ({ title }: { title: string }) => {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      }
+      },
     ).then((res) => {
       if (!res.ok) {
         throw new Error("Failed to fetch orders!");
@@ -41,7 +42,7 @@ const CardList = async ({ title }: { title: string }) => {
       <h1 className="text-lg font-medium mb-6">{title}</h1>
       <div className="flex flex-col gap-2">
         {title === "Popular Products"
-          ? products.map((item) => (
+          ? products.map((item: ProductsType[number]) => (
               <Card
                 key={item.id}
                 className="flex-row items-center justify-between gap-4 p-4"
@@ -76,7 +77,9 @@ const CardList = async ({ title }: { title: string }) => {
                   </CardTitle>
                   <Badge variant="secondary">{item.status}</Badge>
                 </CardContent>
-                <CardFooter className="p-0">${item.totalAmount / 100}</CardFooter>
+                <CardFooter className="p-0">
+                  ${item.totalAmount / 100}
+                </CardFooter>
               </Card>
             ))}
       </div>

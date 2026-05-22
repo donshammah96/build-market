@@ -5,7 +5,7 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  } from "@/components/ui/sheet";
+} from "@/components/ui/sheet";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,13 +19,11 @@ import {
   FormMessage,
 } from "./ui/form";
 import { Input } from "./ui/input";
-import {
-
-} from "@/components/ui/select";
+import {} from "@/components/ui/select";
 import { Button } from "./ui/button";
 import { useAuth } from "@clerk/nextjs";
 import { useMutation } from "@tanstack/react-query";
-import { UserFormSchema } from "@repo/types";
+import { UserFormSchema } from "@build/types";
 import { toast } from "react-toastify";
 
 const AddUser = () => {
@@ -54,7 +52,7 @@ const AddUser = () => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
       if (!res.ok) {
         throw new Error("Failed to create user!");

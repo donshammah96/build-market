@@ -7,7 +7,7 @@ import { MapPin, Bed, Bath, Square, Heart, ArrowRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ImageWithFallback } from "@/app/lib/ImageWithFallback";
+import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
 import { getPropertyUrl } from "@/lib/links";
 import { cn } from "@/lib/utils";
 import { PropertyCardData } from "@/types/property";
@@ -35,7 +35,7 @@ const PropertyCard: React.FC<PropertyCardProps> = memo(function PropertyCard({
       <Card
         className={cn(
           "h-full flex flex-col border border-zinc-200 bg-white overflow-hidden rounded-xl shadow-sm",
-          "transition-all duration-300 hover:shadow-lg"
+          "transition-all duration-300 hover:shadow-lg",
         )}
       >
         {/* Image Section */}

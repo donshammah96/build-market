@@ -5,8 +5,20 @@ import {
   DiscardPolicy,
   StreamInfo,
 } from "nats";
-import { getNatsClient, createNatsClient } from "./client";
+import { createNatsClient } from "./client";
 import type { NatsConfig, StreamOptions } from "./types";
+
+function isNotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const maybeError = error as { code?: string; message?: string };
+  return (
+    maybeError.code === "404" ||
+    maybeError.message?.includes("not found") === true
+  );
+}
 
 /**
  * Stream management utilities for JetStream
@@ -47,15 +59,17 @@ export class StreamManager {
 
     try {
       // Try to get existing stream
-      const existing = await jsm.streams.info(options.name);
-      console.log(`[NATS Streams] Stream ${options.name} already exists, updating...`);
+      await jsm.streams.info(options.name);
+      console.log(
+        `[NATS Streams] Stream ${options.name} already exists, updating...`,
+      );
 
       // Update stream config
       await jsm.streams.update(options.name, streamConfig);
       return await jsm.streams.info(options.name);
-    } catch (error: any) {
+    } catch (error) {
       // Stream doesn't exist, create it
-      if (error?.code === "404" || error?.message?.includes("not found")) {
+      if (isNotFoundError(error)) {
         console.log(`[NATS Streams] Creating stream ${options.name}...`);
         return await jsm.streams.add(streamConfig);
       }
@@ -85,7 +99,7 @@ export class StreamManager {
     const jsm = await this.getJsm();
     try {
       return await jsm.streams.info(name);
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -184,14 +198,18 @@ export class StreamManager {
 /**
  * Create a stream manager instance
  */
-export function createStreamManager(config?: Partial<NatsConfig>): StreamManager {
+export function createStreamManager(
+  config?: Partial<NatsConfig>,
+): StreamManager {
   return new StreamManager(config);
 }
 
 /**
  * Initialize all predefined streams for Build Market
  */
-export async function initializeStreams(config?: Partial<NatsConfig>): Promise<void> {
+export async function initializeStreams(
+  config?: Partial<NatsConfig>,
+): Promise<void> {
   const manager = createStreamManager(config);
 
   const streams: StreamOptions[] = [
@@ -239,7 +257,10 @@ export async function initializeStreams(config?: Partial<NatsConfig>): Promise<v
       await manager.ensureStream(stream);
       console.log(`[NATS Streams] Stream ${stream.name} ready`);
     } catch (error) {
-      console.error(`[NATS Streams] Failed to create stream ${stream.name}:`, error);
+      console.error(
+        `[NATS Streams] Failed to create stream ${stream.name}:`,
+        error,
+      );
     }
   }
 

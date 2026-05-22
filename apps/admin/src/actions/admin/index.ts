@@ -1,16 +1,16 @@
 /**
  * Admin Actions - Domain Module Exports
- * 
+ *
  * This module re-exports all admin actions organized by domain.
  * Import from this file to access any admin action:
- * 
+ *
  * @example
  * import { getUsers, verifyProfessional, getDashboardStats } from "@/actions/admin";
  */
 
 // Types & Shared Utilities
-export type { 
-  ActionResponse, 
+export type {
+  ActionResponse,
   PaginationMeta,
   SystemSettingsInput,
   UpdateProfileInput,
@@ -21,38 +21,54 @@ export { getDashboardStats } from "./dashboard";
 export type { DashboardStats } from "./dashboard";
 
 // Users
-export { 
-  getUsers, 
-  getUserDetails, 
-  deleteUser 
+export {
+  getUsers,
+  getUserDetails,
+  deleteUser,
+  deleteUsersBulk,
+  inviteUser,
+  resetUserCredentials,
+  assignUserRole,
 } from "./users";
 export type { UserWithProfile, UserDetails } from "./users";
 
 // Professionals
-export { 
-  getProfessionals, 
+export {
+  getProfessionals,
   getProfessionalDetails,
-  verifyProfessional, 
+  verifyProfessional,
   rejectProfessional,
   updateProfessionalProfile,
   deleteCertificate,
 } from "./professionals";
-export type { ProfessionalWithUser, ProfessionalDetails } from "./professionals";
+export type {
+  ProfessionalWithUser,
+  ProfessionalDetails,
+} from "./professionals";
 
 // Projects
-export { 
-  getProjects, 
-  getProjectDetails 
-} from "./projects";
+export { getProjects, getProjectDetails } from "./projects";
 export type { ProjectListItem, ProjectDetails } from "./projects";
 
 // Settings
-export { 
-  getSystemSettings, 
-  updateSystemSettings, 
-  clearSystemCache 
+export {
+  getSystemSettings,
+  updateSystemSettings,
+  clearSystemCache,
 } from "./settings";
 export type { SystemSettings } from "./settings";
+
+// Onboarding Remediation
+export {
+  onboardingReconcile,
+  onboardingClerkSync,
+  onboardingIdempotencyReconcile,
+} from "./onboarding-remediation";
+export type {
+  AdminOnboardingReconciliationResult,
+  AdminOnboardingClerkSyncResult,
+  AdminOnboardingIdempotencyReconcileResult,
+} from "./onboarding-remediation";
 
 // Verification
 export {

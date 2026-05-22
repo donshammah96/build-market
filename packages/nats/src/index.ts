@@ -11,17 +11,10 @@ export {
 } from "./client";
 
 // Producer
-export {
-  JetStreamProducer,
-  createProducer,
-  publishMessage,
-} from "./producer";
+export { JetStreamProducer, createProducer, publishMessage } from "./producer";
 
 // Consumer
-export {
-  JetStreamConsumer,
-  createConsumer,
-} from "./consumer";
+export { JetStreamConsumer, createConsumer } from "./consumer";
 
 // Streams
 export {

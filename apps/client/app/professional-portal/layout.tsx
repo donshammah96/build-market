@@ -1,18 +1,22 @@
 import { ReactNode } from "react";
 import { auth } from "@clerk/nextjs/server";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
 import { ProfessionalSidebar } from "@/components/layout/ProfessionalSidebar";
 import { ProfessionalNavbar } from "@/components/layout/ProfessionalNavbar";
 import { ProfileCompletionWidgetWrapper } from "@/components/shared/ProfileCompletionWidgetWrapper";
 
-export default async function ProfessionalPortalLayout({ children }: { children: ReactNode }) {
+export default async function ProfessionalPortalLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const { userId } = await auth();
-  
+
   let verified = false;
   if (userId) {
     const profile = await prisma.professionalProfile.findUnique({
       where: { userId },
-      select: { verified: true }
+      select: { verified: true },
     });
     verified = profile?.verified ?? false;
   }
@@ -25,9 +29,7 @@ export default async function ProfessionalPortalLayout({ children }: { children:
       {/* Main Content Area - Shifts right on Desktop */}
       <div className="flex-1 flex flex-col lg:pl-64 min-w-0">
         <ProfessionalNavbar />
-        <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-          {children}
-        </main>
+        <main className="flex-1 p-4 md:p-8 overflow-y-auto">{children}</main>
       </div>
 
       {/* Floating Profile Completion Widget */}

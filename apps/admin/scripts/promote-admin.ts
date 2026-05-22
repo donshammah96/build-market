@@ -1,26 +1,25 @@
-
-import { PrismaClient } from '@repo/db';
+import { PrismaClient, UserRole } from "@build/db";
 
 const prisma = new PrismaClient();
 
 async function main() {
   const emails = ["donshammah1@gmail.com", "buildmarkettest@gmail.com"];
-  
+
   for (const email of emails) {
     try {
-        const user = await prisma.user.update({
-            where: { email },
-            data: { role: 'admin' }
-        });
-        console.log(`Successfully promoted ${email} to admin.`);
+      await prisma.user.update({
+        where: { email },
+        data: { role: UserRole.ADMIN },
+      });
+      console.log(`Successfully promoted ${email} to admin.`);
     } catch (error) {
-        console.error(`Failed to promote ${email}:`, error);
+      console.error(`Failed to promote ${email}:`, error);
     }
   }
 }
 
 main()
-  .catch(e => console.error(e))
+  .catch((e) => console.error(e))
   .finally(async () => {
     await prisma.$disconnect();
   });

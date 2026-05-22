@@ -1,286 +1,424 @@
-import { NextRequest } from "next/server";
-import { z } from "zod";
-import { prisma } from "@repo/db";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  getRateLimitIdentifier,
+  getActorRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { checkBodySize } from "@/app/lib/api/api-guards";
+import {
+  NotificationQuerySchema,
+  MarkReadSchema,
+  BatchDeleteSchema,
+  NOTIFICATION_CONFIG,
+} from "@/app/lib/validation/notifications-validation";
+import { notificationsService } from "@/app/lib/domains/notifications";
+import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
+const ROUTE_PATTERN = "/api/notifications";
 
-// Validation schemas
-const updateNotificationSchema = z.object({
-  id: z.union([z.string().uuid(), z.literal("all")]),
-  read: z.boolean().optional().default(true),
-});
+type NotificationsAdapterOutcome =
+  | "started"
+  | "succeeded"
+  | "failed"
+  | "rate_limited"
+  | "bad_request"
+  | "domain_error";
+
+type NotificationsOutcomeLogFields = {
+  domainError?: string;
+};
+
+function createNotificationsOutcomeLogger(
+  req: NextRequest,
+  correlationId: string,
+  actorRole: string,
+  requestStartedAt: number,
+  operationName: string,
+) {
+  return (
+    outcome: NotificationsAdapterOutcome,
+    httpStatus: number,
+    details: NotificationsOutcomeLogFields = {},
+  ) => {
+    getClientLogger().info("Notifications adapter outcome", {
+      correlationId,
+      operationName,
+      httpMethod: req.method,
+      routePattern: ROUTE_PATTERN,
+      actorRole,
+      outcome,
+      httpStatus,
+      durationMs: Date.now() - requestStartedAt,
+      ...(details.domainError ? { domainError: details.domainError } : {}),
+    });
+  };
+}
 
 /**
  * GET /api/notifications
- * Get notifications for the authenticated user
- * Supports pagination via ?page=&limit= and filtering via ?unreadOnly=true
+ * List notifications for the authenticated user.
+ *
+ * Query params:
+ * - page (default 1)
+ * - limit (1–100, default 20)
+ * - unreadOnly=true
+ * - type (NotificationType enum value)
+ * - priority (NotificationPriority enum value)
  */
-export const GET = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
-
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
-    identifier,
-    RateLimits.READ.limit,
-    RateLimits.READ.window
-  );
-
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+function mapNotificationError(error: {
+  error: string;
+  status?: number;
+  message?: string;
+}) {
+  switch (error.error) {
+    case "not_found":
+      return apiError("Notification not found", HttpStatus.NOT_FOUND);
+    case "forbidden":
+      return apiError("Forbidden", HttpStatus.FORBIDDEN);
+    case "no_update":
+      return apiError("No fields to update", HttpStatus.BAD_REQUEST);
+    default:
+      return apiError(
+        "Notification operation failed",
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
   }
+}
 
-  // Parse query params
-  const { searchParams } = new URL(req.url);
-  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-  const limit = Math.min(
-    100,
-    Math.max(1, parseInt(searchParams.get("limit") || "20", 10))
-  );
-  const skip = (page - 1) * limit;
-  const unreadOnly = searchParams.get("unreadOnly") === "true";
-  const typeFilter = searchParams.get("type"); // info, success, warning, error
+function notificationDomainErrorToHttpStatus(error: {
+  error: string;
+  status?: number;
+}) {
+  switch (error.error) {
+    case "not_found":
+      return HttpStatus.NOT_FOUND;
+    case "forbidden":
+      return HttpStatus.FORBIDDEN;
+    case "no_update":
+      return HttpStatus.BAD_REQUEST;
+    default:
+      return error.status || HttpStatus.INTERNAL_SERVER_ERROR;
+  }
+}
 
-  logger.info("Fetching notifications", {
-    correlationId,
-    userId: dbUserId,
-    page,
-    limit,
-    unreadOnly,
-  });
+export const GET = withAuth(
+  async (req: NextRequest, { dbUserId, userRole }): Promise<NextResponse> => {
+    const requestStartedAt = Date.now();
+    const correlationId = initializeCorrelationId(req);
+    const actorRole = normalizeRole(String(userRole)) ?? String(userRole);
+    const operationName = "list_notifications";
+    const logOutcome = createNotificationsOutcomeLogger(
+      req,
+      correlationId,
+      actorRole,
+      requestStartedAt,
+      operationName,
+    );
 
-  return executeResilient(
-    async () => {
-      const whereClause = {
-        userId: dbUserId,
-        ...(unreadOnly && { read: false }),
-        ...(typeFilter && { type: typeFilter }),
-      };
-
-      const [notifications, total, unreadCount] = await Promise.all([
-        prisma.notification.findMany({
-          where: whereClause,
-          orderBy: {
-            createdAt: "desc",
-          },
-          skip,
-          take: limit,
-        }),
-        prisma.notification.count({ where: whereClause }),
-        prisma.notification.count({
-          where: { userId: dbUserId, read: false },
-        }),
-      ]);
-
-      logger.info("Notifications fetched successfully", {
-        correlationId,
-        userId: dbUserId,
-        count: notifications.length,
-      });
-
-      return {
-        data: notifications,
-        unreadCount,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        },
-      };
-    },
-    {
-      operationName: "get_notifications",
-      successStatus: HttpStatus.OK,
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "notifications-read",
+    );
+    const rateLimitResult = await checkRateLimit(
+      rateLimitKey,
+      RateLimits.READ.limit,
+      RateLimits.READ.window,
+    );
+    if (!rateLimitResult.success) {
+      logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
+      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
-  );
-});
+
+    const { searchParams } = new URL(req.url);
+    const queryValidation = NotificationQuerySchema.safeParse({
+      page: searchParams.get("page") || undefined,
+      limit: searchParams.get("limit") || undefined,
+      unreadOnly: searchParams.get("unreadOnly") || undefined,
+      type: searchParams.get("type") || undefined,
+      priority: searchParams.get("priority") || undefined,
+    });
+
+    if (!queryValidation.success) {
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST);
+      return apiError(
+        "Invalid query parameters",
+        HttpStatus.BAD_REQUEST,
+        queryValidation.error.issues,
+      );
+    }
+
+    const { page, limit, unreadOnly, type, priority } = queryValidation.data;
+
+    const executor = getResilientExecutor();
+    logOutcome("started", HttpStatus.OK);
+    const result = await executor.execute(
+      () =>
+        notificationsService.list(
+          { userId: dbUserId, role: userRole },
+          {
+            page,
+            limit,
+            unreadOnly,
+            type,
+            priority,
+          },
+        ),
+      { operationName },
+    );
+
+    if (!result.success || !result.data) {
+      getClientLogger().error("Failed to fetch notifications", result.error, {
+        correlationId,
+        operationName,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: Date.now() - requestStartedAt,
+      });
+      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to fetch notifications",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    if (!result.data.ok) {
+      const httpStatus = notificationDomainErrorToHttpStatus(result.data);
+      logOutcome("domain_error", httpStatus, {
+        domainError: result.data.error,
+      });
+      return mapNotificationError(result.data);
+    }
+
+    logOutcome("succeeded", HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
+  },
+);
 
 /**
  * PATCH /api/notifications
- * Mark notification(s) as read
- * Body: { id: "uuid" | "all", read?: boolean }
+ * Mark notification(s) as read/unread.
+ *
+ * Body: { id: "uuid" | "all", isRead?: boolean }
+ * - id="all": mark all unread notifications as read
+ * - id=UUID: mark single notification
  */
-export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
-
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
-    identifier,
-    RateLimits.WRITE.limit,
-    RateLimits.WRITE.window
-  );
-
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  const body = await req.json();
-  const validation = updateNotificationSchema.safeParse(body);
-
-  if (!validation.success) {
-    logger.warn("Notification update validation failed", {
+export const PATCH = withAuth(
+  async (req: NextRequest, { dbUserId, userRole }): Promise<NextResponse> => {
+    const requestStartedAt = Date.now();
+    const correlationId = initializeCorrelationId(req);
+    const actorRole = normalizeRole(String(userRole)) ?? String(userRole);
+    const operationName = "mark_notification_read";
+    const logOutcome = createNotificationsOutcomeLogger(
+      req,
       correlationId,
-      userId: dbUserId,
-      errors: validation.error.issues,
-    });
-    return apiError(
-      "Invalid input",
-      HttpStatus.BAD_REQUEST,
-      validation.error.issues
+      actorRole,
+      requestStartedAt,
+      operationName,
     );
-  }
 
-  const { id, read } = validation.data;
-
-  logger.info("Updating notification", {
-    correlationId,
-    userId: dbUserId,
-    notificationId: id,
-    read,
-  });
-
-  return executeResilient(
-    async () => {
-      // If marking all as read (id === "all")
-      if (id === "all") {
-        const result = await prisma.notification.updateMany({
-          where: {
-            userId: dbUserId,
-            read: false,
-          },
-          data: {
-            read: true,
-          },
-        });
-
-        logger.info("All notifications marked as read", {
-          correlationId,
-          userId: dbUserId,
-          count: result.count,
-        });
-        return {
-          message: "All notifications marked as read",
-          count: result.count,
-        };
-      }
-
-      // Mark single notification as read/unread
-      const notification = await prisma.notification.update({
-        where: {
-          id,
-          userId: dbUserId,
-        },
-        data: {
-          read,
-        },
-      });
-
-      logger.info("Notification updated", {
-        correlationId,
-        userId: dbUserId,
-        notificationId: id,
-      });
-      return notification;
-    },
-    {
-      operationName: "update_notification",
-      successStatus: HttpStatus.OK,
+    const sizeError = checkBodySize(req, NOTIFICATION_CONFIG.MAX_BODY_SIZE);
+    if (sizeError) {
+      logOutcome("bad_request", sizeError.status);
+      return sizeError;
     }
-  );
-});
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST);
+      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+    }
+
+    const validation = MarkReadSchema.safeParse(body);
+    if (!validation.success) {
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST);
+      return apiError(
+        "Validation failed",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+      );
+    }
+
+    const { id, isRead } = validation.data;
+
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "notifications-write",
+    );
+    const rateLimitResult = await checkRateLimit(
+      rateLimitKey,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
+    );
+    if (!rateLimitResult.success) {
+      logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
+      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    const executor = getResilientExecutor();
+    logOutcome("started", HttpStatus.OK);
+    const result = await executor.execute(
+      () =>
+        notificationsService.markRead(
+          { userId: dbUserId, role: userRole },
+          { id, isRead },
+        ),
+      { operationName },
+    );
+
+    if (!result.success || !result.data) {
+      getClientLogger().error("Failed to update notification", result.error, {
+        correlationId,
+        operationName,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: Date.now() - requestStartedAt,
+      });
+      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to update notification",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    if (!result.data.ok) {
+      const httpStatus = notificationDomainErrorToHttpStatus(result.data);
+      logOutcome("domain_error", httpStatus, {
+        domainError: result.data.error,
+      });
+      return mapNotificationError(result.data);
+    }
+
+    logOutcome("succeeded", HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
+  },
+  {
+    csrf: {},
+  },
+);
 
 /**
  * DELETE /api/notifications
- * Delete notification(s)
+ * Delete notification(s).
+ *
  * Body: { id: "uuid" | "all" | "read" }
+ * - "all": delete all notifications for the user
+ * - "read": delete only read notifications
+ * - UUID: delete a single notification
  */
-export const DELETE = withAuth(async (req: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(req);
+export const DELETE = withAuth(
+  async (req: NextRequest, { dbUserId, userRole }): Promise<NextResponse> => {
+    const requestStartedAt = Date.now();
+    const correlationId = initializeCorrelationId(req);
+    const actorRole = normalizeRole(String(userRole)) ?? String(userRole);
+    const operationName = "delete_notifications";
+    const logOutcome = createNotificationsOutcomeLogger(
+      req,
+      correlationId,
+      actorRole,
+      requestStartedAt,
+      operationName,
+    );
 
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
-    identifier,
-    RateLimits.WRITE.limit,
-    RateLimits.WRITE.window
-  );
-
-  if (!success) {
-    return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  const body = await req.json();
-  const { id } = body;
-
-  if (!id) {
-    return apiError("Notification ID is required", HttpStatus.BAD_REQUEST);
-  }
-
-  logger.info("Deleting notification(s)", {
-    correlationId,
-    userId: dbUserId,
-    target: id,
-  });
-
-  return executeResilient(
-    async () => {
-      // Delete all notifications
-      if (id === "all") {
-        const result = await prisma.notification.deleteMany({
-          where: { userId: dbUserId },
-        });
-
-        logger.info("All notifications deleted", {
-          correlationId,
-          userId: dbUserId,
-          count: result.count,
-        });
-        return { message: "All notifications deleted", count: result.count };
-      }
-
-      // Delete all read notifications
-      if (id === "read") {
-        const result = await prisma.notification.deleteMany({
-          where: { userId: dbUserId, read: true },
-        });
-
-        logger.info("Read notifications deleted", {
-          correlationId,
-          userId: dbUserId,
-          count: result.count,
-        });
-        return { message: "Read notifications deleted", count: result.count };
-      }
-
-      // Delete single notification
-      await prisma.notification.delete({
-        where: {
-          id,
-          userId: dbUserId,
-        },
-      });
-
-      logger.info("Notification deleted", {
-        correlationId,
-        userId: dbUserId,
-        notificationId: id,
-      });
-      return { message: "Notification deleted" };
-    },
-    {
-      operationName: "delete_notification",
-      successStatus: HttpStatus.OK,
+    const sizeError = checkBodySize(req, NOTIFICATION_CONFIG.MAX_BODY_SIZE);
+    if (sizeError) {
+      logOutcome("bad_request", sizeError.status);
+      return sizeError;
     }
-  );
-});
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST);
+      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+    }
+
+    const validation = BatchDeleteSchema.safeParse(body);
+    if (!validation.success) {
+      logOutcome("bad_request", HttpStatus.BAD_REQUEST);
+      return apiError(
+        "Validation failed",
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+      );
+    }
+
+    const { id } = validation.data;
+
+    const rateLimitKey = getActorRateLimitIdentifier(
+      dbUserId,
+      "notifications-write",
+    );
+    const rateLimitResult = await checkRateLimit(
+      rateLimitKey,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
+    );
+    if (!rateLimitResult.success) {
+      logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
+      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    const executor = getResilientExecutor();
+    logOutcome("started", HttpStatus.OK);
+    const result = await executor.execute(
+      () =>
+        notificationsService.deleteMany(
+          { userId: dbUserId, role: userRole },
+          { id },
+        ),
+      { operationName },
+    );
+
+    if (!result.success || !result.data) {
+      getClientLogger().error(
+        "Failed to delete notification(s)",
+        result.error,
+        {
+          correlationId,
+          operationName,
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          actorRole,
+          outcome: "failed",
+          httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+          durationMs: Date.now() - requestStartedAt,
+        },
+      );
+      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR);
+      return apiError(
+        "Failed to delete notification(s)",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    if (!result.data.ok) {
+      const httpStatus = notificationDomainErrorToHttpStatus(result.data);
+      logOutcome("domain_error", httpStatus, {
+        domainError: result.data.error,
+      });
+      return mapNotificationError(result.data);
+    }
+
+    logOutcome("succeeded", HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
+  },
+  {
+    csrf: {},
+  },
+);

@@ -1,6 +1,6 @@
 import z from "zod";
 
-// Define Product and Category types locally since @repo/product-db doesn't exist yet
+// Define Product and Category types locally since @build/product-db doesn't exist yet
 export type Product = {
   id: string;
   name: string;
@@ -102,14 +102,14 @@ export const ProductFormSchema = z
   .refine(
     (data) => {
       const missingImages = data.colors.filter(
-        (color: string) => !data.images?.[color]
+        (color: string) => !data.images?.[color],
       );
       return missingImages.length === 0;
     },
     {
       message: "Image is required for each selected color!",
       path: ["images"],
-    }
+    },
   );
 
 export type CategoryType = Category;

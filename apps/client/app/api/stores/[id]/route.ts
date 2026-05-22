@@ -1,503 +1,411 @@
-import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
-import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api-response";
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import {
+  getRequestMetadata,
+  extractExpectedVersion,
+  extractExpectedVersionFromIfMatch,
+} from "@/app/lib/api/request-utils";
+import { STORE_CONFIG } from "@/app/lib/config/store.config";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
+import {
+  checkBodySize,
+  checkImageCount,
+  isValidId,
+} from "@/app/lib/api/api-guards";
+import { storesService, UpdateStoreSchema } from "@/app/lib/domains/stores";
+import type { StoreOperationContext } from "@/app/lib/domains/stores";
 
-const logger = getClientLogger();
+type StoreParams = { id: string };
 
-// Store Category enum matching Prisma schema
-const StoreCategoryEnum = z.enum([
-  "hardware",
-  "building_materials",
-  "tiles_and_ceramics",
-  "electrical",
-  "plumbing",
-  "paints_and_finishes",
-  "roofing",
-  "timber_and_wood",
-  "glass_and_aluminum",
-  "kitchen_and_bath",
-  "landscaping",
-  "steel_and_metals",
-  "safety_and_tools",
-  "hvac",
-]);
-
-// Store Type enum matching Prisma schema
-const StoreTypeEnum = z.enum([
-  "retail",
-  "wholesale",
-  "manufacturer",
-  "distributor",
-  "online_only",
-]);
-
-// County enum matching Prisma schema
-const CountyEnum = z.enum([
-  "MOMBASA",
-  "KWALE",
-  "KILIFI",
-  "TANA_RIVER",
-  "LAMU",
-  "TAITA_TAVETA",
-  "GARISSA",
-  "WAJIR",
-  "MANDERA",
-  "MARSABIT",
-  "ISIOLO",
-  "MERU",
-  "THARAKA_NITHI",
-  "EMBU",
-  "KITUI",
-  "MACHAKOS",
-  "MAKUENI",
-  "NYANDARUA",
-  "NYERI",
-  "KIRINYAGA",
-  "MURANGA",
-  "KIAMBU",
-  "TURKANA",
-  "WEST_POKOT",
-  "SAMBURU",
-  "TRANS_NZOIA",
-  "UASIN_GISHU",
-  "ELGEYO_MARAKWET",
-  "NANDI",
-  "BARINGO",
-  "LAIKIPIA",
-  "NAKURU",
-  "NAROK",
-  "KAJIADO",
-  "KERICHO",
-  "BOMET",
-  "KAKAMEGA",
-  "VIHIGA",
-  "BUNGOMA",
-  "BUSIA",
-  "SIAYA",
-  "KISUMU",
-  "HOMA_BAY",
-  "MIGORI",
-  "KISII",
-  "NYAMIRA",
-  "NAIROBI",
-]);
-
-// Helper function to generate URL-safe slug from store name
-function generateSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, "") // Remove special characters
-    .replace(/\s+/g, "-") // Replace spaces with hyphens
-    .replace(/-+/g, "-") // Replace multiple hyphens with single
-    .substring(0, 100); // Limit length
-}
-
-const updateStoreSchema = z
-  .object({
-    name: z.string().min(1).max(100).optional(),
-    slug: z.string().max(100).optional(),
-    description: z.string().max(1000).optional(),
-    address: z.string().min(1).optional(),
-    city: z.string().min(1).optional(),
-    county: CountyEnum.optional(),
-    zipCode: z.string().optional(), // Optional in Prisma schema
-    categories: z.array(StoreCategoryEnum).min(1).optional(),
-    storeType: StoreTypeEnum.optional(),
-    images: z
-      .array(
-        z.object({
-          url: z.string().url(),
-          key: z.string().optional(),
-          caption: z.string().optional(),
-          isMain: z.boolean().optional(),
-          isLogo: z.boolean().optional(),
-          sortOrder: z.number().optional(),
-        })
-      )
-      .optional(),
-  })
-  .refine(
-    (data) => {
-      if (data.images) {
-        return data.images.every(
-          (image) =>
-            image.url.startsWith("https://") || image.url.startsWith("http://")
-        );
-      }
-      return true;
-    },
-    {
-      message: "All image URLs must be valid URLs",
-    }
-  );
-
-/**
- * GET /api/stores/[id]
- * Get a single store by ID
- * Public endpoint - no authentication required
- */
-export async function GET(
+async function checkStoreRateLimit(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const correlationId = initializeCorrelationId(req);
-  const { id } = await params;
-
+  operation: "read" | "write",
+): Promise<NextResponse | null> {
   const identifier = getRateLimitIdentifier(req);
-  const rateLimitResult = await checkRateLimit(
-    `store-read:${identifier}`,
-    RateLimits.READ.limit,
-    RateLimits.READ.window
+  const config = RateLimits[operation.toUpperCase() as keyof typeof RateLimits];
+
+  const result = await checkRateLimit(
+    `store-${operation}:${identifier}`,
+    config.limit,
+    config.window,
   );
 
-  if (!rateLimitResult.success) {
+  if (!result.success) {
     return apiError(
       "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS
+      HttpStatus.TOO_MANY_REQUESTS,
     );
   }
 
-  logger.info("Fetching store by ID", { correlationId, storeId: id });
-
-  return executeResilient(
-    async () => {
-      const store = await prisma.store.findUnique({
-        where: { id },
-        include: {
-          images: {
-            select: {
-              id: true,
-              url: true,
-              key: true,
-              caption: true,
-              isMain: true,
-              isLogo: true,
-              sortOrder: true,
-            },
-            orderBy: { sortOrder: "asc" },
-          },
-          professional: {
-            include: {
-              user: {
-                select: {
-                  firstName: true,
-                  lastName: true,
-                  avatar: true,
-                  email: true,
-                  phone: true,
-                },
-              },
-            },
-          },
-          products: {
-            where: { inStock: true, deletedAt: null },
-            take: 10,
-            orderBy: { createdAt: "desc" },
-            include: {
-              images: {
-                select: {
-                  id: true,
-                  url: true,
-                  isMain: true,
-                  sortOrder: true,
-                },
-                orderBy: { sortOrder: "asc" },
-                take: 1,
-              },
-            },
-          },
-          reviews: {
-            where: { approved: true },
-            take: 5,
-            orderBy: { createdAt: "desc" },
-            include: {
-              reviewer: {
-                select: {
-                  firstName: true,
-                  lastName: true,
-                  avatar: true,
-                },
-              },
-            },
-          },
-          _count: {
-            select: {
-              products: true,
-              reviews: true,
-              orders: true,
-            },
-          },
-        },
-      });
-
-      if (!store) {
-        logger.warn("Store not found", { correlationId, storeId: id });
-        return apiError("Store not found", HttpStatus.NOT_FOUND);
-      }
-
-      // Calculate average rating
-      const reviews = await prisma.review.findMany({
-        where: { storeId: id, approved: true },
-        select: { rating: true },
-      });
-      const avgRating =
-        reviews.length > 0
-          ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
-          : 0;
-
-      logger.info("Store fetched successfully", { correlationId, storeId: id });
-
-      return {
-        ...store,
-        averageRating: Math.round(avgRating * 10) / 10,
-        totalReviews: reviews.length,
-      };
-    },
-    {
-      operationName: "get_store_by_id",
-      successStatus: HttpStatus.OK,
-    }
-  );
+  return null;
 }
 
-/**
- * PATCH /api/stores/[id]
- * Update a store (owner only)
- */
-export const PATCH = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
-    const correlationId = initializeCorrelationId(req);
-    const { id } = params!;
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<StoreParams> },
+): Promise<NextResponse> {
+  const correlationId = initializeCorrelationId(req);
+  const { ipAddress, userAgent } = getRequestMetadata(req);
+  const { id } = await params;
 
-    const identifier = getRateLimitIdentifier(req);
-    const rateLimitResult = await checkRateLimit(
-      `store-write:${identifier}`,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window
+  if (!isValidId(id)) {
+    return apiError("Invalid store ID", HttpStatus.BAD_REQUEST);
+  }
+
+  const rateLimitError = await checkStoreRateLimit(req, "read");
+  if (rateLimitError) {
+    return rateLimitError;
+  }
+
+  const { userId: viewerClerkId } = await auth().catch(() => ({
+    userId: null,
+  }));
+
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    async () =>
+      storesService.getStoreById(id, {
+        viewerClerkId: viewerClerkId ?? undefined,
+        ipAddress,
+        userAgent,
+      }),
+    { operationName: "get_store_by_id" },
+  );
+
+  if (!result.success) {
+    getClientLogger().error("Store fetch failed", result.error, {
+      correlationId,
+      storeId: id,
+    });
+    return apiError("Failed to fetch store", HttpStatus.INTERNAL_SERVER_ERROR);
+  }
+
+  const domainResult = result.data;
+  if (!domainResult) {
+    return apiError("Failed to fetch store", HttpStatus.INTERNAL_SERVER_ERROR);
+  }
+
+  if (!domainResult.ok) {
+    return apiError(
+      domainResult.message || "Store not found",
+      domainResult.status || HttpStatus.NOT_FOUND,
     );
+  }
 
-    if (!rateLimitResult.success) {
+  const response = apiSuccess(domainResult.data, HttpStatus.OK, correlationId);
+  const store = domainResult.data as { version?: number };
+  if (typeof store.version === "number") {
+    response.headers.set("ETag", `"${store.version}"`);
+  }
+
+  return response;
+}
+
+export const PATCH = withAuth<StoreParams>(
+  async (
+    req: NextRequest,
+    context: { dbUserId: string },
+    params?: { id: string },
+  ): Promise<NextResponse> => {
+    const correlationId = initializeCorrelationId(req);
+    const { dbUserId } = context;
+    const { ipAddress, userAgent } = getRequestMetadata(req);
+
+    if (!params?.id || !isValidId(params.id)) {
+      return apiError("Store ID is required", HttpStatus.BAD_REQUEST);
+    }
+
+    const storeId = params.id;
+
+    const rateLimitError = await checkStoreRateLimit(req, "write");
+    if (rateLimitError) return rateLimitError;
+
+    const sizeError = checkBodySize(req, STORE_CONFIG.MAX_BODY_SIZE);
+    if (sizeError) return sizeError;
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+    }
+
+    const expectedVersion = extractExpectedVersion(req, body);
+    if (expectedVersion === null) {
       return apiError(
-        "Too many requests. Please try again later.",
-        HttpStatus.TOO_MANY_REQUESTS
+        "Missing or invalid version for optimistic locking. Provide 'If-Match' header or 'version' in body.",
+        HttpStatus.PRECONDITION_REQUIRED,
       );
     }
 
-    const body = await req.json();
-    const validation = updateStoreSchema.safeParse(body);
-
+    const validation = UpdateStoreSchema.safeParse(body);
     if (!validation.success) {
-      logger.warn("Store update validation failed", {
-        correlationId,
-        storeId: id,
-        errors: validation.error.issues,
-      });
       return apiError(
         "Invalid input",
         HttpStatus.BAD_REQUEST,
-        validation.error.issues
+        validation.error.issues,
       );
     }
 
-    logger.info("Updating store", {
-      correlationId,
-      storeId: id,
-      userId: dbUserId,
-    });
+    const imageError = checkImageCount(
+      validation.data.images,
+      STORE_CONFIG.MAX_IMAGES_PER_REQUEST,
+    );
+    if (imageError) return imageError;
 
-    return executeResilient(
-      async () => {
-        // Verify ownership
-        const existingStore = await prisma.store.findUnique({
-          where: { id },
-          select: { professionalId: true },
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      IdempotencyService.generateKey(dbUserId, "PATCH", {
+        storeId,
+        ...validation.data,
+      });
+
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
+      idempotencyKey,
+      "store",
+      dbUserId,
+      "PATCH",
+      {
+        entityConnect: { store: { connect: { id: storeId } } },
+        ttlHours: STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      },
+    );
+
+    if (idempotencyCheck?.status === "completed") {
+      return apiSuccess(
+        idempotencyCheck.response,
+        HttpStatus.OK,
+        correlationId,
+      );
+    }
+
+    if (idempotencyCheck?.status === "pending") {
+      return apiError(
+        "Request is being processed. Please wait.",
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const operationContext: StoreOperationContext = {
+      correlationId,
+      userId: dbUserId,
+      storeId,
+      ipAddress,
+      userAgent,
+      idempotencyKey,
+    };
+
+    try {
+      const maxRetries = storesService.isOptimisticRetryEnabled(req)
+        ? STORE_CONFIG.OPTIMISTIC_LOCK_MAX_RETRIES
+        : 1;
+
+      let result:
+        | Awaited<ReturnType<typeof storesService.updateStoreOptimistic>>
+        | undefined;
+
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        result = await storesService.updateStoreOptimistic({
+          storeId,
+          actor: { userId: dbUserId, role: "professional" },
+          data: validation.data,
+          context: operationContext,
+          expectedVersion: expectedVersion + attempt,
         });
 
-        if (!existingStore) {
-          logger.warn("Store not found for update", {
-            correlationId,
-            storeId: id,
-          });
+        if (result.ok || result.error !== "conflict") break;
+
+        if (attempt < maxRetries - 1) {
+          await new Promise((resolve) =>
+            setTimeout(
+              resolve,
+              STORE_CONFIG.OPTIMISTIC_LOCK_RETRY_DELAY_MS * (attempt + 1),
+            ),
+          );
+        }
+      }
+
+      if (!result) {
+        throw new Error("Update result missing after retries");
+      }
+
+      if (!result.ok) {
+        await IdempotencyService.fail(idempotencyKey);
+
+        if (result.error === "not_found") {
           return apiError("Store not found", HttpStatus.NOT_FOUND);
         }
 
-        if (existingStore.professionalId !== dbUserId) {
-          logger.warn("Unauthorized store update attempt", {
-            correlationId,
-            storeId: id,
-            userId: dbUserId,
-          });
+        if (result.error === "forbidden") {
           return apiError(
-            "You can only update your own stores",
-            HttpStatus.FORBIDDEN
+            "You do not have permission to update this store",
+            HttpStatus.FORBIDDEN,
           );
         }
 
-        // Separate images from other fields for proper relation handling
-        const {
-          images,
-          name,
-          slug: providedSlug,
-          ...otherData
-        } = validation.data;
-
-        // Handle slug update if name changes
-        // Uses timestamp suffix to guarantee uniqueness without extra queries
-        let newSlug: string | undefined;
-        if (name && !providedSlug) {
-          // Auto-generate new slug from new name with unique suffix
-          newSlug = `${generateSlug(name)}-${Date.now()}`;
-        } else if (providedSlug) {
-          // Use provided slug with timestamp suffix to ensure uniqueness
-          newSlug = `${generateSlug(providedSlug)}-${Date.now()}`;
+        if (result.error === "conflict") {
+          return storesService.buildConflictResponse(
+            "Store was modified. Retry with the latest version.",
+            storeId,
+          );
         }
 
-        const updatedStore = await prisma.store.update({
-          where: { id },
-          data: {
-            ...otherData,
-            ...(name && { name }),
-            ...(newSlug && { slug: newSlug }),
-            // Handle images relation: delete existing and recreate if provided
-            ...(images !== undefined && {
-              images: {
-                deleteMany: {},
-                create: images.map((img, index) => ({
-                  url: img.url,
-                  key: img.key,
-                  caption: img.caption,
-                  isMain: img.isMain ?? index === 0,
-                  isLogo: img.isLogo ?? false,
-                  sortOrder: img.sortOrder ?? index,
-                })),
-              },
-            }),
-          },
-          include: {
-            professional: {
-              include: {
-                user: {
-                  select: {
-                    firstName: true,
-                    lastName: true,
-                  },
-                },
-              },
-            },
-            images: {
-              select: {
-                id: true,
-                url: true,
-                key: true,
-                caption: true,
-                isMain: true,
-                isLogo: true,
-                sortOrder: true,
-              },
-              orderBy: { sortOrder: "asc" },
-            },
-          },
-        });
-
-        logger.info("Store updated successfully", {
-          correlationId,
-          storeId: id,
-        });
-        return apiSuccess(updatedStore);
-      },
-      {
-        operationName: "update_store",
-        successStatus: HttpStatus.OK,
+        return apiError(
+          result.message || "Failed to update store",
+          result.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        );
       }
-    );
-  }
+
+      await safeIdempotencyComplete(idempotencyKey, result.data);
+
+      const response = apiSuccess(result.data, HttpStatus.OK, correlationId);
+      response.headers.set("ETag", `"${result.data.meta.version}"`);
+      return response;
+    } catch (error) {
+      await IdempotencyService.fail(idempotencyKey);
+      getClientLogger().error(
+        "Store update failed",
+        error instanceof Error ? error : new Error(String(error)),
+        { correlationId, storeId },
+      );
+      return apiError(
+        "Failed to update store",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  },
 );
 
-/**
- * DELETE /api/stores/[id]
- * Delete a store (owner only)
- */
-export const DELETE = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
+export const DELETE = withAuth<StoreParams>(
+  async (
+    req: NextRequest,
+    context: { dbUserId: string },
+    params?: { id: string },
+  ): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
-    const { id } = params!;
+    const { dbUserId } = context;
+    const { ipAddress, userAgent } = getRequestMetadata(req);
 
-    const identifier = getRateLimitIdentifier(req);
-    const rateLimitResult = await checkRateLimit(
-      `store-delete:${identifier}`,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window
-    );
+    if (!params?.id || !isValidId(params.id)) {
+      return apiError("Store ID is required", HttpStatus.BAD_REQUEST);
+    }
 
-    if (!rateLimitResult.success) {
+    const storeId = params.id;
+
+    const rateLimitError = await checkStoreRateLimit(req, "write");
+    if (rateLimitError) return rateLimitError;
+
+    const ifMatch = req.headers.get("If-Match");
+    if (!ifMatch) {
       return apiError(
-        "Too many requests. Please try again later.",
-        HttpStatus.TOO_MANY_REQUESTS
+        'Missing If-Match header. Include the store version as: If-Match: "N"',
+        HttpStatus.PRECONDITION_REQUIRED,
       );
     }
 
-    logger.info("Deleting store", {
+    const expectedVersion = extractExpectedVersionFromIfMatch(req);
+    if (expectedVersion === null) {
+      return apiError("Invalid If-Match header value", HttpStatus.BAD_REQUEST);
+    }
+
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      req.headers.get("idempotency-key") ||
+      IdempotencyService.generateKey(dbUserId, "DELETE", { storeId });
+
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
+      idempotencyKey,
+      "store",
+      dbUserId,
+      "DELETE",
+      {
+        entityConnect: { store: { connect: { id: storeId } } },
+        ttlHours: STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
+      },
+    );
+
+    if (idempotencyCheck?.status === "completed") {
+      return apiSuccess(
+        idempotencyCheck.response,
+        HttpStatus.OK,
+        correlationId,
+      );
+    }
+
+    if (idempotencyCheck?.status === "pending") {
+      return apiError("Request already in progress", HttpStatus.CONFLICT);
+    }
+
+    const operationContext: StoreOperationContext = {
       correlationId,
-      storeId: id,
       userId: dbUserId,
-    });
+      storeId,
+      ipAddress,
+      userAgent,
+      idempotencyKey,
+    };
 
-    return executeResilient(
-      async () => {
-        // Verify ownership
-        const existingStore = await prisma.store.findUnique({
-          where: { id },
-          select: { professionalId: true, name: true },
-        });
+    try {
+      const result = await storesService.deleteStoreOptimistic({
+        storeId,
+        actor: { userId: dbUserId, role: "professional" },
+        context: operationContext,
+        expectedVersion,
+      });
 
-        if (!existingStore) {
-          logger.warn("Store not found for deletion", {
-            correlationId,
-            storeId: id,
-          });
+      if (!result.ok) {
+        await IdempotencyService.fail(idempotencyKey);
+
+        if (result.error === "not_found") {
           return apiError("Store not found", HttpStatus.NOT_FOUND);
         }
 
-        if (existingStore.professionalId !== dbUserId) {
-          logger.warn("Unauthorized store deletion attempt", {
-            correlationId,
-            storeId: id,
-            userId: dbUserId,
-          });
+        if (result.error === "forbidden") {
           return apiError(
-            "You can only delete your own stores",
-            HttpStatus.FORBIDDEN
+            "You do not have permission to delete this store",
+            HttpStatus.FORBIDDEN,
           );
         }
 
-        await prisma.store.delete({
-          where: { id },
-        });
+        if (result.error === "conflict") {
+          return storesService.buildConflictResponse(
+            "Store was modified. Retry with the latest version.",
+            storeId,
+          );
+        }
 
-        logger.info("Store deleted successfully", {
-          correlationId,
-          storeId: id,
-          storeName: existingStore.name,
-        });
-        return apiSuccess({ message: "Store deleted successfully", id });
-      },
-      {
-        operationName: "delete_store",
-        successStatus: HttpStatus.OK,
+        return apiError(
+          result.message || "Failed to delete store",
+          result.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        );
       }
-    );
-  }
+
+      await safeIdempotencyComplete(idempotencyKey, result.data);
+      return apiSuccess(result.data, HttpStatus.OK, correlationId);
+    } catch (error) {
+      await IdempotencyService.fail(idempotencyKey);
+      getClientLogger().error(
+        "Store deletion failed",
+        error instanceof Error ? error : new Error(String(error)),
+        { correlationId, storeId },
+      );
+      return apiError(
+        "Failed to delete store",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  },
 );

@@ -2,40 +2,48 @@
  * Intelligent retry logic with exponential backoff and jitter
  */
 
-import { RetryConfig } from './types';
-import { Logger } from './logger';
+import { RetryConfig } from "./types";
+import { Logger } from "./logger";
+import { getDefaultRetryConfig } from "./config";
 
 export class RetryError extends Error {
   constructor(
     message: string,
     public readonly attempts: number,
-    public readonly lastError: Error
+    public readonly lastError: Error,
   ) {
     super(message);
-    this.name = 'RetryError';
+    this.name = "RetryError";
   }
 }
 
-// Default retry configuration
+/**
+ * Default retry configuration
+ * @deprecated Use getDefaultRetryConfig() for environment-aware defaults
+ */
 export const DEFAULT_RETRY_CONFIG: RetryConfig = {
   maxAttempts: 3,
   initialDelayMs: 100,
   maxDelayMs: 10000,
   backoffMultiplier: 2,
   jitterFactor: 0.1, // 10% jitter
-  retryableErrors: ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'NetworkError', 'TimeoutError'],
+  retryableErrors: [
+    "ECONNREFUSED",
+    "ETIMEDOUT",
+    "ENOTFOUND",
+    "NetworkError",
+    "TimeoutError",
+  ],
 };
 
 /**
  * Calculate delay with exponential backoff and jitter
  */
-function calculateDelay(
-  attempt: number,
-  config: RetryConfig
-): number {
-  const exponentialDelay = config.initialDelayMs * Math.pow(config.backoffMultiplier, attempt);
+function calculateDelay(attempt: number, config: RetryConfig): number {
+  const exponentialDelay =
+    config.initialDelayMs * Math.pow(config.backoffMultiplier, attempt);
   const cappedDelay = Math.min(exponentialDelay, config.maxDelayMs);
-  
+
   // Add jitter to prevent thundering herd
   const jitter = cappedDelay * config.jitterFactor * (Math.random() - 0.5) * 2;
   return Math.floor(cappedDelay + jitter);
@@ -53,7 +61,7 @@ function isRetryable(error: Error, config: RetryConfig): boolean {
     (retryableError) =>
       error.name.includes(retryableError) ||
       error.message.includes(retryableError) ||
-      (error as any).code === retryableError
+      (error as any).code === retryableError,
   );
 }
 
@@ -70,8 +78,8 @@ function sleep(ms: number): Promise<void> {
 export async function withRetry<T>(
   operation: () => Promise<T>,
   config: Partial<RetryConfig> = {},
-  operationName: string = 'operation',
-  logger?: Logger
+  operationName: string = "operation",
+  logger?: Logger,
 ): Promise<{ result: T; attempts: number }> {
   const retryConfig = { ...DEFAULT_RETRY_CONFIG, ...config };
   let lastError: Error | undefined;
@@ -79,15 +87,17 @@ export async function withRetry<T>(
   for (let attempt = 0; attempt < retryConfig.maxAttempts; attempt++) {
     try {
       const result = await operation();
-      
+
       if (attempt > 0 && logger) {
-        logger.info(`Operation '${operationName}' succeeded after ${attempt + 1} attempts`);
+        logger.info(
+          `Operation '${operationName}' succeeded after ${attempt + 1} attempts`,
+        );
       }
-      
+
       return { result, attempts: attempt + 1 };
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      
+
       const isLastAttempt = attempt === retryConfig.maxAttempts - 1;
       const shouldRetry = isRetryable(lastError, retryConfig);
 
@@ -100,18 +110,18 @@ export async function withRetry<T>(
               attempts: attempt + 1,
               error: lastError.message,
               retryable: shouldRetry,
-            }
+            },
           );
         }
         throw new RetryError(
           `Operation '${operationName}' failed after ${attempt + 1} attempts: ${lastError.message}`,
           attempt + 1,
-          lastError
+          lastError,
         );
       }
 
       const delayMs = calculateDelay(attempt, retryConfig);
-      
+
       if (logger) {
         logger.debug(
           `Retrying operation '${operationName}' after ${delayMs}ms (attempt ${attempt + 1}/${retryConfig.maxAttempts})`,
@@ -121,7 +131,7 @@ export async function withRetry<T>(
             maxAttempts: retryConfig.maxAttempts,
             delayMs,
             error: lastError.message,
-          }
+          },
         );
       }
 
@@ -133,7 +143,7 @@ export async function withRetry<T>(
   throw new RetryError(
     `Operation '${operationName}' failed after ${retryConfig.maxAttempts} attempts`,
     retryConfig.maxAttempts,
-    lastError!
+    lastError!,
   );
 }
 
@@ -142,13 +152,18 @@ export async function withRetry<T>(
  */
 export function createRetryWrapper(
   config: Partial<RetryConfig> = {},
-  logger?: Logger
+  logger?: Logger,
 ) {
   return async function retryWrapper<T>(
     operation: () => Promise<T>,
-    operationName?: string
+    operationName?: string,
   ): Promise<T> {
-    const { result } = await withRetry(operation, config, operationName, logger);
+    const { result } = await withRetry(
+      operation,
+      config,
+      operationName,
+      logger,
+    );
     return result;
   };
 }

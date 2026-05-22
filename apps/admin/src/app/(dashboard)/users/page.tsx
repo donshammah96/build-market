@@ -1,6 +1,9 @@
 import { getUsers } from "@/actions/admin";
-import { columns, UserData } from "./columns";
+import { getAdminPermissions } from "@/actions/admin/shared";
+import { getUserColumns, UserData } from "./columns";
 import { DataTable } from "@/components/ui/data-table";
+import { UserActionControls } from "./user-action-controls";
+import { UsersFilter } from "./users-filter";
 
 export default async function UsersPage({
   searchParams,
@@ -9,22 +12,77 @@ export default async function UsersPage({
 }) {
   const resolvedSearchParams = await searchParams;
   const page = Number(resolvedSearchParams.page) || 1;
-  const search = typeof resolvedSearchParams.search === "string" ? resolvedSearchParams.search : "";
+  const search =
+    typeof resolvedSearchParams.search === "string"
+      ? resolvedSearchParams.search
+      : "";
+  const role =
+    typeof resolvedSearchParams.role === "string"
+      ? resolvedSearchParams.role
+      : undefined;
+  const verified =
+    resolvedSearchParams.verified === "true"
+      ? true
+      : resolvedSearchParams.verified === "false"
+        ? false
+        : undefined;
+  const sortBy =
+    (resolvedSearchParams.sortBy as "createdAt" | "firstName") || "createdAt";
+  const sortOrder =
+    (resolvedSearchParams.sortOrder as "asc" | "desc") || "desc";
 
-  const response = await getUsers(page, 10, search);
-  
+  const response = await getUsers(
+    page,
+    10,
+    search,
+    role,
+    verified,
+    sortBy,
+    sortOrder,
+  );
+
   if (!response.success || !response.data) {
-     return <div>Failed to load users</div>;
+    throw new Error(response.error || "Failed to load users");
   }
 
+  const { granularRole } = await getAdminPermissions();
+  const canManageUsers = ["SUPER_ADMIN"].includes(granularRole || "");
+  const canDeleteUsers = canManageUsers;
+
   const { users, meta } = response.data;
-  
+
   return (
-    <div className="">
-      <div className="mb-8 px-4 py-2 bg-secondary rounded-md flex justify-between items-center">
-        <h1 className="font-semibold">All Users ({meta.total})</h1>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Users</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <UserActionControls
+              canManageUsers={canManageUsers}
+              mode="buttons"
+              showInvite={true}
+              showRoleActions={false}
+            />
+            <span className="font-semibold px-4 py-2 bg-secondary rounded-md">
+              Total Count: {meta.total}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center justify-between border-b pb-4">
+          <UsersFilter />
+        </div>
       </div>
-      <DataTable columns={columns} data={users as unknown as UserData[]} pageCount={meta.totalPages} />
+      <DataTable
+        columns={getUserColumns({
+          canDeleteUsers,
+          canBulkDeleteUsers: canDeleteUsers,
+          canManageUsers,
+        })}
+        data={users as unknown as UserData[]}
+        pageCount={meta.totalPages}
+      />
     </div>
   );
 }

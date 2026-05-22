@@ -1,6 +1,6 @@
 /**
  * Seller (Property) Dashboard Widgets
- * 
+ *
  * Widgets for realtors and real estate agents.
  */
 

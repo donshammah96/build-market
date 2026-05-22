@@ -1,0 +1,97 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest, NextResponse } from "next/server";
+import { UserRole } from "@build/db";
+import type { AuthContext } from "@/app/lib/api/api-middleware";
+import { GET } from "@/app/api/idea-books/route";
+
+const mockIdeaBooksList = vi.hoisted(() => vi.fn());
+
+const mockAuthContext: AuthContext = {
+  clerkId: "clerk_123",
+  dbUserId: "db_user_123",
+  userRole: UserRole.CLIENT,
+};
+
+vi.mock("@/app/lib/api/api-middleware", () => ({
+  withAuth:
+    (handler: (req: NextRequest, context: AuthContext) => Promise<Response>) =>
+    async (req: NextRequest) =>
+      handler(req, mockAuthContext),
+}));
+
+vi.mock("@/app/lib/api/api-response", () => ({
+  HttpStatus: {
+    OK: 200,
+    BAD_REQUEST: 400,
+    FORBIDDEN: 403,
+    NOT_FOUND: 404,
+    TOO_MANY_REQUESTS: 429,
+    INTERNAL_SERVER_ERROR: 500,
+  },
+  apiError: vi
+    .fn()
+    .mockImplementation((message: string, status: number, details?: unknown) =>
+      NextResponse.json(
+        { success: false, error: message, details },
+        { status },
+      ),
+    ),
+  apiSuccess: vi
+    .fn()
+    .mockImplementation((data: unknown, status = 200) =>
+      NextResponse.json({ success: true, data }, { status }),
+    ),
+}));
+
+vi.mock("@/app/lib/api/rate-limit", () => ({
+  checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
+  getRateLimitIdentifier: vi.fn().mockReturnValue("test-ip"),
+  RateLimits: {
+    READ: { limit: 60, window: 60_000 },
+  },
+}));
+
+vi.mock("@/app/lib/api/resilient-api", () => ({
+  initializeCorrelationId: vi.fn().mockReturnValue("corr-idea-books"),
+  getClientLogger: vi.fn().mockReturnValue({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }),
+  getResilientExecutor: vi.fn().mockReturnValue({
+    execute: vi.fn(async (fn: () => Promise<unknown>) => ({
+      success: true,
+      data: await fn(),
+    })),
+  }),
+}));
+
+vi.mock("@/app/lib/domains/idea-books", () => ({
+  ideaBooksService: {
+    list: mockIdeaBooksList,
+  },
+}));
+
+describe("GET /api/idea-books", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("does not leak internal idea-book messages", async () => {
+    mockIdeaBooksList.mockResolvedValue({
+      ok: false,
+      error: "not_found",
+      message: "Idea book repository cache miss for shard 4",
+      status: 404,
+    });
+
+    const response = await GET(
+      new NextRequest("http://localhost:3500/api/idea-books"),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(payload.error).toBe("Idea book not found");
+  });
+});

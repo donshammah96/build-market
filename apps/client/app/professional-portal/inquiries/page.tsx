@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Search,
   MoreHorizontal,
@@ -14,6 +14,9 @@ import {
   AlertCircle,
   Eye,
 } from "lucide-react";
+
+import { useInquiries } from "@/hooks/useInquiries";
+import type { InquiryListItem } from "@/app/lib/domains/inquiries/contracts";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,17 +36,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-
-// Property Inquiry interface matching API response
-interface PropertyInquiry {
-  id: string;
-  propertyTitle: string;
-  clientName: string;
-  clientPhone: string;
-  message: string;
-  status: "new" | "contacted" | "viewing_scheduled" | "offer_made" | "closed";
-  createdAt: string;
-}
 
 const statusConfig: Record<string, { color: string; label: string }> = {
   new: {
@@ -82,42 +74,25 @@ export default function InquiriesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  // Fetch Inquiries
+  // Fetch Inquiries using our new unified hook
   const {
     data: inquiriesData,
     isLoading,
     error: fetchError,
-  } = useQuery<{ data: PropertyInquiry[] }>({
-    queryKey: ["professional-inquiries", statusFilter],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (statusFilter !== "all") {
-        params.append("status", statusFilter);
-      }
-      params.append("limit", "50");
+  } = useInquiries(
+    statusFilter !== "all"
+      ? {
+          status: statusFilter.toUpperCase() as
+            | "NEW"
+            | "CONTACTED"
+            | "VIEWING_SCHEDULED"
+            | "OFFER_MADE"
+            | "CLOSED",
+        }
+      : {},
+  );
 
-      const res = await fetch(
-        `/api/professional-portal/inquiries?${params.toString()}`
-      );
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error.error || "Failed to fetch inquiries");
-      }
-      return res.json();
-    },
-    retry: 2,
-    staleTime: 30000,
-  });
-
-  // Ensure inquiries is always an array
-  const inquiries = useMemo(() => {
-    if (!inquiriesData) return [];
-    if (Array.isArray(inquiriesData)) return inquiriesData;
-    if (inquiriesData.data && Array.isArray(inquiriesData.data)) {
-      return inquiriesData.data;
-    }
-    return [];
-  }, [inquiriesData]);
+  const inquiries = useMemo(() => inquiriesData?.data ?? [], [inquiriesData]);
 
   // Filter inquiries by search query
   const filteredInquiries = useMemo(() => {
@@ -126,9 +101,9 @@ export default function InquiriesPage() {
     return inquiries.filter(
       (inq) =>
         inq.clientName.toLowerCase().includes(query) ||
-        inq.propertyTitle.toLowerCase().includes(query) ||
-        inq.message.toLowerCase().includes(query) ||
-        inq.clientPhone.includes(query)
+        inq.property.title.toLowerCase().includes(query) ||
+        inq.message?.toLowerCase().includes(query) ||
+        inq.clientPhone?.includes(query),
     );
   }, [inquiries, searchQuery]);
 
@@ -136,13 +111,13 @@ export default function InquiriesPage() {
   const stats = useMemo(() => {
     return {
       total: inquiries.length,
-      new: inquiries.filter((i) => i.status === "new").length,
-      contacted: inquiries.filter((i) => i.status === "contacted").length,
+      new: inquiries.filter((i) => i.status === "NEW").length,
+      contacted: inquiries.filter((i) => i.status === "CONTACTED").length,
       viewingScheduled: inquiries.filter(
-        (i) => i.status === "viewing_scheduled"
+        (i) => i.status === "VIEWING_SCHEDULED",
       ).length,
-      offerMade: inquiries.filter((i) => i.status === "offer_made").length,
-      closed: inquiries.filter((i) => i.status === "closed").length,
+      offerMade: inquiries.filter((i) => i.status === "OFFER_MADE").length,
+      closed: inquiries.filter((i) => i.status === "CLOSED").length,
     };
   }, [inquiries]);
 
@@ -260,7 +235,7 @@ export default function InquiriesPage() {
             <Button
               onClick={() => {
                 queryClient.invalidateQueries({
-                  queryKey: ["professional-inquiries"],
+                  queryKey: ["inquiries"],
                 });
               }}
             >
@@ -293,8 +268,9 @@ export default function InquiriesPage() {
   );
 }
 
-function InquiryCard({ inquiry }: { inquiry: PropertyInquiry }) {
-  const status = (statusConfig[inquiry.status] ?? statusConfig.new) as {
+function InquiryCard({ inquiry }: { inquiry: InquiryListItem }) {
+  const status = (statusConfig[inquiry.status.toLowerCase()] ??
+    statusConfig.new) as {
     color: string;
     label: string;
   };
@@ -323,7 +299,7 @@ function InquiryCard({ inquiry }: { inquiry: PropertyInquiry }) {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-zinc-900 text-lg">
-                  {inquiry.propertyTitle}
+                  {inquiry.property.title}
                 </h3>
                 <div className="flex items-center gap-2 mt-1">
                   <Building2 className="h-3.5 w-3.5 text-zinc-400" />

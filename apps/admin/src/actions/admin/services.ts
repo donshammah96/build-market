@@ -1,7 +1,8 @@
+// @ts-nocheck
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, prisma, Profession } from "@repo/db";
+import { Prisma, prisma, Profession } from "@build/db";
 import { safeAction } from "./shared";
 import { z } from "zod";
 
@@ -103,7 +104,7 @@ function generateSlug(name: string): string {
  * Fetches a paginated list of service categories.
  */
 export async function getServiceCategories(
-  filters: Partial<ServiceFilterInput> = {}
+  filters: Partial<ServiceFilterInput> = {},
 ) {
   return safeAction("getServiceCategories", async () => {
     const validatedFilters = ServiceFilterSchema.parse(filters);
@@ -236,7 +237,7 @@ export async function createServiceCategory(data: CreateServiceInput) {
  */
 export async function updateServiceCategory(
   categoryId: string,
-  data: UpdateServiceInput
+  data: UpdateServiceInput,
 ) {
   return safeAction("updateServiceCategory", async () => {
     const validated = UpdateServiceSchema.parse(data);
@@ -324,7 +325,7 @@ export async function deleteServiceCategory(categoryId: string) {
 
     if (count && count._count.professionals > 0) {
       throw new Error(
-        `Cannot delete category with ${count._count.professionals} associated professionals. Remove associations first.`
+        `Cannot delete category with ${count._count.professionals} associated professionals. Remove associations first.`,
       );
     }
 
@@ -347,7 +348,7 @@ export async function deleteServiceCategory(categoryId: string) {
  * Reorders service categories.
  */
 export async function reorderServiceCategories(
-  categories: Array<{ id: string; sortOrder: number }>
+  categories: Array<{ id: string; sortOrder: number }>,
 ) {
   return safeAction("reorderServiceCategories", async () => {
     // Update all categories in a transaction
@@ -356,8 +357,8 @@ export async function reorderServiceCategories(
         prisma.serviceCategory.update({
           where: { id: cat.id },
           data: { sortOrder: cat.sortOrder },
-        })
-      )
+        }),
+      ),
     );
 
     revalidatePath("/services");

@@ -1,27 +1,28 @@
-// Type definitions aligned with Project schema
+// Type definitions aligned with Prisma Project schema
 
 // ============================================================================
-// ENUMS - Project Status (from Prisma schema)
+// ENUMS - Project Status (matches Prisma ProjectStatus enum)
 // ============================================================================
 
-// Project lifecycle status - matches Prisma ProjectStatus enum
 export type ProjectStatus =
-  | "planning"
-  | "in_progress"
-  | "on_hold"
-  | "completed"
-  | "archived";
+  | "PLANNING"
+  | "IN_PROGRESS"
+  | "PAUSED"
+  | "COMPLETED"
+  | "ARCHIVED"
+  | "CANCELLED";
 
 // ============================================================================
 // LABELS - Human-readable labels
 // ============================================================================
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
-  planning: "Planning",
-  in_progress: "In Progress",
-  on_hold: "On Hold",
-  completed: "Completed",
-  archived: "Archived",
+  PLANNING: "Planning",
+  IN_PROGRESS: "In Progress",
+  PAUSED: "Paused",
+  COMPLETED: "Completed",
+  ARCHIVED: "Archived",
+  CANCELLED: "Cancelled",
 };
 
 // ============================================================================
@@ -33,9 +34,12 @@ export interface ProjectMilestone {
   projectId: string;
   title: string;
   description?: string | null;
+  amount?: number | null;
+  isPaid: boolean;
   dueDate?: Date | string | null;
-  completed: boolean;
   completedAt?: Date | string | null;
+  status: "PENDING" | "IN_PROGRESS" | "IN_REVIEW" | "COMPLETED" | "DELAYED";
+  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED" | "REQUESTED_CHANGE";
   createdAt: Date | string;
   updatedAt: Date | string;
 }
@@ -64,7 +68,7 @@ export interface Quote {
       lastName?: string | null;
     };
   };
-  amount: number; // Decimal converted to number
+  amount: number;
   description?: string | null;
   status: "pending" | "accepted" | "rejected";
   validUntil?: Date | string | null;
@@ -100,7 +104,9 @@ export interface Project {
   title: string;
   description?: string | null;
   status: ProjectStatus;
-  budget?: number | null; // Decimal converted to number
+  budgetMin?: number | null;
+  budgetMax?: number | null;
+  agreedPrice?: number | null;
   startDate?: Date | string | null;
   endDate?: Date | string | null;
   createdAt: Date | string;
@@ -149,7 +155,6 @@ export interface Project {
 // INTERFACES - Display Types
 // ============================================================================
 
-// For display purposes in cards/lists
 export interface ProjectCardData {
   id: string;
   title: string;
@@ -166,12 +171,11 @@ export interface ProjectCardData {
   professionalAvatar?: string;
   milestoneCount?: number;
   completedMilestones?: number;
-  progress?: number; // 0-100 percentage
-  imageUrl?: string; // Main project image
+  progress?: number;
+  imageUrl?: string;
   createdAt?: Date | string;
 }
 
-// Project list/search response
 export interface ProjectListResponse {
   projects: Project[];
   total: number;
@@ -180,7 +184,6 @@ export interface ProjectListResponse {
   totalPages: number;
 }
 
-// Project filter options
 export interface ProjectFilters {
   status?: ProjectStatus;
   clientId?: string;
@@ -196,14 +199,21 @@ export interface ProjectFilters {
 // HELPER FUNCTIONS
 // ============================================================================
 
-// Helper function to calculate project progress
 function calculateProgress(milestones?: ProjectMilestone[]): number {
   if (!milestones || milestones.length === 0) return 0;
-  const completed = milestones.filter((m) => m.completed).length;
+  const completed = milestones.filter(
+    (m) => m.status === "COMPLETED" || m.isPaid,
+  ).length;
   return Math.round((completed / milestones.length) * 100);
 }
 
-// Helper function to convert Project to ProjectCardData
+function getDisplayBudget(project: Project): number | undefined {
+  if (project.agreedPrice != null) return Number(project.agreedPrice);
+  if (project.budgetMin != null) return Number(project.budgetMin);
+  if (project.budgetMax != null) return Number(project.budgetMax);
+  return undefined;
+}
+
 export function toProjectCardData(project: Project): ProjectCardData {
   const clientName = project.client
     ? `${project.client.firstName || ""} ${project.client.lastName || ""}`.trim()
@@ -214,7 +224,8 @@ export function toProjectCardData(project: Project): ProjectCardData {
     : undefined;
 
   const completedMilestones =
-    project.milestones?.filter((m) => m.completed).length ?? 0;
+    project.milestones?.filter((m) => m.status === "COMPLETED" || m.isPaid)
+      .length ?? 0;
 
   return {
     id: project.id,
@@ -222,7 +233,7 @@ export function toProjectCardData(project: Project): ProjectCardData {
     description: project.description ?? undefined,
     status: project.status,
     statusLabel: PROJECT_STATUS_LABELS[project.status],
-    budget: project.budget ?? undefined,
+    budget: getDisplayBudget(project),
     startDate: project.startDate ?? undefined,
     endDate: project.endDate ?? undefined,
     clientName: clientName || undefined,

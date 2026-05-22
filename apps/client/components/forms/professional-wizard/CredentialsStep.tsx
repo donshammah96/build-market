@@ -1,36 +1,105 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import {
-  ShieldCheck,
-  Home,
-  ArrowRight,
-  ArrowLeft,
-  AlertCircle,
-  ExternalLink,
-  Award,
-  Info,
-} from "lucide-react";
+import { BadgeCheck, ShieldCheck, ArrowRight, ArrowLeft } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { getRegulatoryAuthorityCode } from "@/lib/constants/professionOptions";
 import {
   StepComponentProps,
   credentialsStepSchema,
   WIZARD_STYLES,
 } from "./types";
 
-// ============================================================================
-// TYPES
-// ============================================================================
-
 type FormData = z.infer<typeof credentialsStepSchema>;
 
 // ============================================================================
-// MAIN COMPONENT
+// DOMAIN HELPER
+// ============================================================================
+
+/**
+ * Resolves the correct regulatory board details for ALL professions.
+ */
+function getBoardDetails(profession?: string, authorityCode?: string | null) {
+  // 1. Handle specific overrides first
+  if (profession === "REAL_ESTATE_VALUER") {
+    return {
+      abbr: "VRB",
+      fullName: "Valuers Registration Board",
+      placeholder: "e.g., VRB/1234/26",
+      description:
+        "To perform valuations, we must verify your active standing with the VRB.",
+    };
+  }
+  if (profession === "LAND_SURVEYOR") {
+    return {
+      abbr: "ISK",
+      fullName: "Institution of Surveyors of Kenya",
+      placeholder: "e.g., ISK/LS/5678",
+      description:
+        "To provide surveying services, your ISK membership must be validated.",
+    };
+  }
+  if (profession === "REAL_ESTATE_AGENT") {
+    return {
+      abbr: "EARB",
+      fullName: "Estate Agents Registration Board",
+      placeholder: "e.g., EARB/9012",
+      description:
+        "To list properties, we must verify your active registration with the EARB.",
+    };
+  }
+
+  // 2. Handle broader authority groups
+  switch (authorityCode) {
+    case "EBK":
+      return {
+        abbr: "EBK",
+        fullName: "Engineers Board of Kenya",
+        placeholder: "e.g., A3456 or B1234",
+        description:
+          "To offer engineering services, we must verify your active standing with the EBK.",
+      };
+    case "BORAQS":
+      return {
+        abbr: "BORAQS",
+        fullName: "Board of Registration of Architects and Quantity Surveyors",
+        placeholder: "e.g., A/1234 or Q/5678",
+        description:
+          "Please provide your BORAQS registration number to verify your professional standing.",
+      };
+    case "NCA":
+      return {
+        abbr: "NCA",
+        fullName: "National Construction Authority",
+        placeholder: "e.g., NCA1/1234/2026",
+        description:
+          "Contractors and specialized trades must provide their NCA accreditation number.",
+      };
+    case "EPRA":
+      return {
+        abbr: "EPRA",
+        fullName: "Energy and Petroleum Regulatory Authority",
+        placeholder: "e.g., EPRA/EW/12345",
+        description:
+          "Electricians and Solar Technicians must hold a valid EPRA license.",
+      };
+    default:
+      return {
+        abbr: "License",
+        fullName: "Professional Licensing Board",
+        placeholder: "Enter your license number",
+        description: "Please provide your professional registration details.",
+      };
+  }
+}
+
+// ============================================================================
+// COMPONENT
 // ============================================================================
 
 export default function CredentialsStep({
@@ -46,17 +115,23 @@ export default function CredentialsStep({
   } = useForm<FormData>({
     resolver: zodResolver(credentialsStepSchema),
     defaultValues: {
-      earbNumber: data.earbNumber || "",
+      boardRegistrationNumber: data.boardRegistrationNumber || "",
     },
   });
 
+  // Resolve dynamic board info using our domain logic
+  const board = useMemo(() => {
+    const authCode = getRegulatoryAuthorityCode(data.profession || "");
+    return getBoardDetails(data.profession, authCode);
+  }, [data.profession]);
+
   const onSubmit = (formData: FormData) => {
-    onUpdate({ earbNumber: formData.earbNumber });
+    onUpdate({ boardRegistrationNumber: formData.boardRegistrationNumber });
     onNext();
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -64,103 +139,82 @@ export default function CredentialsStep({
         className="text-center"
       >
         <div className="inline-flex items-center justify-center gap-2 mb-4">
-          <Home className="h-8 w-8 text-emerald-500" />
-          <Award className="h-6 w-6 text-amber-400" />
+          <BadgeCheck
+            className="h-8 w-8 text-(--color-onboarding-primary)"
+            aria-hidden="true"
+          />
         </div>
-        <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">
-          Real Estate Credentials
+        <h2 className="font-['Syne'] text-2xl md:text-3xl font-bold leading-[1.1] text-white mb-2 tracking-tight">
+          Verify your Credentials
         </h2>
-        <p className="text-zinc-400 max-w-md mx-auto">
-          As a real estate professional, you need EARB registration to operate
-          in Kenya
-        </p>
+        <p className="text-white/60 max-w-md mx-auto">{board.description}</p>
       </motion.div>
 
-      {/* Info Card */}
+      {/* Main Input Card */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-5"
+        className={WIZARD_STYLES.card}
       >
-        <div className="flex items-start gap-3">
-          <Info className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <h4 className="font-medium text-amber-400 mb-1">
-              Why is EARB Registration Required?
-            </h4>
-            <p className="text-sm text-zinc-400">
-              The Estate Agents Registration Board (EARB) is the regulatory body
-              for real estate agents in Kenya. Registration ensures you&apos;re
-              legally authorized to conduct property transactions.
-            </p>
-            <a
-              href="https://www.earb.go.ke"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm text-amber-400 hover:text-amber-300 mt-2 transition-colors"
-            >
-              Visit EARB Website
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
+        <div className="space-y-6">
+          <div className="bg-onboarding-primary/10 border border-(--color-onboarding-primary)/25 rounded-lg p-4 flex items-start gap-3">
+            <ShieldCheck
+              className="h-5 w-5 text-(--color-onboarding-primary) shrink-0 mt-0.5"
+              aria-hidden="true"
+            />
+            <div className="text-sm text-white/72">
+              Your profile will display a{" "}
+              <span className="text-white font-semibold">
+                {board.abbr} Verified
+              </span>{" "}
+              badge once our team confirms this registration number.
+            </div>
           </div>
-        </div>
-      </motion.div>
 
-      {/* Form Field */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="space-y-6"
-      >
-        <div className="space-y-2">
-          <label className={WIZARD_STYLES.label}>
-            <span className="flex items-center gap-2">
-              EARB Registration Number
-              <span className="text-amber-500">*</span>
-            </span>
-          </label>
-          <div className="relative">
-            <ShieldCheck className="absolute left-3 top-3.5 h-5 w-5 text-amber-500" />
+          <div>
+            <label
+              htmlFor="boardRegistrationNumber"
+              className={WIZARD_STYLES.label}
+            >
+              {board.abbr} Registration Number{" "}
+              <span className="text-(--color-error)" aria-hidden="true">
+                *
+              </span>
+              <span className="sr-only">(required)</span>
+            </label>
+            {/* aria-invalid and aria-describedby wire the error message to the input
+                so screen readers announce the error when the field is focused. */}
             <input
+              id="boardRegistrationNumber"
               type="text"
-              placeholder="e.g. EARB/AGT/2024/12345"
-              {...register("earbNumber")}
+              {...register("boardRegistrationNumber")}
+              placeholder={board.placeholder}
+              aria-invalid={errors.boardRegistrationNumber ? "true" : undefined}
+              aria-describedby={
+                errors.boardRegistrationNumber
+                  ? "boardRegistrationNumber-error"
+                  : undefined
+              }
               className={cn(
                 WIZARD_STYLES.input,
-                "pl-11",
-                "focus:border-amber-400 focus:ring-amber-400",
-                errors.earbNumber && "border-red-500/50"
+                errors.boardRegistrationNumber
+                  ? "border-(--color-error)/50 ring-1 ring-error/50"
+                  : "",
               )}
             />
-          </div>
-          {errors.earbNumber && (
-            <p className={WIZARD_STYLES.error}>
-              <AlertCircle className="h-3 w-3" />
-              {errors.earbNumber.message}
-            </p>
-          )}
-          <p className="text-xs text-zinc-500">
-            This will be verified by our team before your profile is published
-          </p>
-        </div>
-
-        {/* Trust Indicators */}
-        <div className="grid grid-cols-2 gap-4 pt-4">
-          <div className="bg-white/5 border border-white/10 rounded-lg p-4 text-center">
-            <ShieldCheck className="h-6 w-6 text-emerald-400 mx-auto mb-2" />
-            <p className="text-sm font-medium text-white">Verified Badge</p>
-            <p className="text-xs text-zinc-500 mt-1">
-              Earn a verified badge on your profile
-            </p>
-          </div>
-          <div className="bg-white/5 border border-white/10 rounded-lg p-4 text-center">
-            <Award className="h-6 w-6 text-amber-400 mx-auto mb-2" />
-            <p className="text-sm font-medium text-white">Premium Leads</p>
-            <p className="text-xs text-zinc-500 mt-1">
-              Get access to quality property leads
-            </p>
+            {/* aria-live="polite" ensures the error is announced without interrupting
+                the user. The id is referenced by aria-describedby above. */}
+            <div aria-live="polite" aria-atomic="true">
+              {errors.boardRegistrationNumber && (
+                <p
+                  id="boardRegistrationNumber-error"
+                  className={WIZARD_STYLES.error}
+                >
+                  {errors.boardRegistrationNumber.message}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </motion.div>
@@ -169,30 +223,26 @@ export default function CredentialsStep({
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.3 }}
-        className="flex items-center justify-between pt-4"
+        transition={{ delay: 0.2 }}
+        className="flex items-center justify-between pt-3"
       >
         <button
           type="button"
           onClick={onBack}
-          className={cn(
-            WIZARD_STYLES.secondaryButton,
-            "flex items-center gap-2"
-          )}
+          className={WIZARD_STYLES.secondaryButton}
         >
-          <ArrowLeft className="h-4 w-4" />
-          Back
+          <span className="flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4" /> Back
+          </span>
         </button>
-
         <button
           type="submit"
           className={cn(
             WIZARD_STYLES.primaryButton,
-            "max-w-xs flex items-center justify-center gap-2"
+            "max-w-xs flex items-center justify-center gap-2",
           )}
         >
-          Continue
-          <ArrowRight className="h-4 w-4" />
+          Continue <ArrowRight className="h-4 w-4" />
         </button>
       </motion.div>
     </form>

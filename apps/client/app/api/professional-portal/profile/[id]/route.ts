@@ -1,173 +1,91 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
-
-const logger = getClientLogger();
+} from "@/app/lib/api/rate-limit";
+import { isValidId } from "@/app/lib/api/api-guards";
+import { PROFESSIONAL_CONFIG } from "@/app/lib/config/professional.config";
+import { professionalsService } from "@/app/lib/domains/professionals";
 
 /**
  * GET /api/professional-portal/profile/[id]
- * Get a professional's public profile by ID (no auth required)
- * Used for public profile viewing
+ * Get a professional's public profile by ID (no auth required).
+ * Used for public profile viewing.
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const correlationId = initializeCorrelationId(req);
   const { id } = await params;
 
+  if (!isValidId(id)) {
+    return apiError("Invalid professional ID", HttpStatus.BAD_REQUEST);
+  }
+
   const identifier = getRateLimitIdentifier(req);
   const rateLimitResult = await checkRateLimit(
-    `professional_profile:${identifier}`,
+    `profile-detail:${identifier}`,
     RateLimits.READ.limit,
-    RateLimits.READ.window
+    RateLimits.READ.window,
   );
 
   if (!rateLimitResult.success) {
     return apiError(
       "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS
+      HttpStatus.TOO_MANY_REQUESTS,
     );
   }
 
-  logger.info("Fetching professional profile by ID", {
+  getClientLogger().info("Fetching professional profile by ID", {
     correlationId,
     professionalId: id,
   });
 
-  return executeResilient(
-    async () => {
-      const professional = await prisma.professionalProfile.findUnique({
-        where: { userId: id },
-        include: {
-          user: {
-            select: {
-              firstName: true,
-              lastName: true,
-              email: true,
-              avatar: true,
-            },
-          },
-          // Include related services from ServiceCategory
-          services: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              icon: true,
-            },
-          },
-          // Include profile images (main image first)
-          images: {
-            orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }],
-            take: 5,
-            select: {
-              id: true,
-              url: true,
-              caption: true,
-              isMain: true,
-            },
-          },
-          portfolios: {
-            take: 6,
-            orderBy: { createdAt: "desc" },
-            select: {
-              id: true,
-              title: true,
-              description: true,
-              projectType: true,
-              completedAt: true,
-              // Include portfolio images properly
-              images: {
-                orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }],
-                take: 4,
-                select: {
-                  id: true,
-                  url: true,
-                  caption: true,
-                  isMain: true,
-                  isBefore: true,
-                  isAfter: true,
-                },
-              },
-            },
-          },
-          certificates: {
-            where: { verificationStatus: "verified" },
-            select: {
-              id: true,
-              name: true,
-              issuer: true,
-              issueDate: true,
-              expiryDate: true,
-            },
-          },
-          reviews: {
-            where: { approved: true },
-            take: 5,
-            orderBy: { createdAt: "desc" },
-            select: {
-              id: true,
-              rating: true,
-              comment: true,
-              createdAt: true,
-              reviewer: {
-                select: {
-                  firstName: true,
-                  lastName: true,
-                  avatar: true,
-                },
-              },
-            },
-          },
-          _count: {
-            select: {
-              reviews: true,
-              projects: true,
-              portfolios: true,
-            },
-          },
-        },
-      });
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    () => professionalsService.getPublicProfileById(id),
+    {
+      operationName: "get_professional_profile_by_id",
+      cache: {
+        ttl: PROFESSIONAL_CONFIG.DETAIL_CACHE_TTL_MS,
+        staleWhileRevalidate: 10_000,
+      },
+    },
+  );
 
-      if (!professional) {
-        logger.warn("Professional profile not found", {
-          correlationId,
-          professionalId: id,
-        });
-        return apiError("Professional not found", HttpStatus.NOT_FOUND);
-      }
+  if (!result.success) {
+    getClientLogger().error("Professional profile fetch failed", result.error, {
+      correlationId,
+      professionalId: id,
+    });
+    return apiError(
+      "Failed to fetch professional",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
 
-      // Calculate average rating from approved reviews
-      const avgRating =
-        professional.reviews.length > 0
-          ? professional.reviews.reduce((sum, r) => sum + r.rating, 0) /
-            professional.reviews.length
-          : null;
-
-      logger.info("Professional profile fetched successfully", {
+  if (!result.data?.ok) {
+    if (result.data?.error === "not_found") {
+      getClientLogger().warn("Professional not found", {
         correlationId,
         professionalId: id,
       });
-
-      return {
-        ...professional,
-        avgRating: avgRating ? Math.round(avgRating * 10) / 10 : null,
-      };
-    },
-    {
-      operationName: "get_professional_profile_by_id",
-      successStatus: HttpStatus.OK,
+      return apiError("Professional not found", HttpStatus.NOT_FOUND);
     }
-  );
+
+    return apiError(
+      "Failed to fetch professional",
+      result.data?.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  return apiSuccess(result.data.data, HttpStatus.OK);
 }

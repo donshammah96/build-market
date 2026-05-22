@@ -24,7 +24,7 @@ function VerifyContent() {
   const { isLoaded, userId } = useAuth();
   const { user } = useUser();
   const [status, setStatus] = useState<"verifying" | "success" | "error">(
-    "verifying"
+    "verifying",
   );
   const [message, setMessage] = useState("Verifying your email...");
 

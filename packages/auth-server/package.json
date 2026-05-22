@@ -1,0 +1,40 @@
+{
+  "name": "@build/auth-server",
+  "version": "1.0.0",
+  "description": "Server-side auth contracts and utilities",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./roles": {
+      "types": "./src/roles.ts",
+      "default": "./src/roles.ts"
+    },
+    "./password-hash": {
+      "types": "./src/password-hash.ts",
+      "default": "./src/password-hash.ts"
+    },
+    "./session-claims": {
+      "types": "./src/session-claims.ts",
+      "default": "./src/session-claims.ts"
+    },
+    "./check-user-role": {
+      "types": "./src/check-user-role.ts",
+      "default": "./src/check-user-role.ts"
+    }
+  },
+  "scripts": {
+    "lint": "echo \"No lint configured\" && exit 0",
+    "check-types": "tsc --noEmit",
+    "test": "echo \"No tests configured\" && exit 0"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@build/typescript-config": "workspace:*",
+    "@types/node": "^24.8.1",
+    "typescript": "^5.9.3"
+  }
+}

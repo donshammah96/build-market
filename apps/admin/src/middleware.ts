@@ -1,5 +1,12 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { CustomJwtSessionClaims } from "@repo/types";
+import {
+  ADMIN_ROUTE_POLICY_MAP,
+  type AdminAccessRole,
+} from "@/lib/security/authorization-policy";
+import {
+  normalizeAdminAccessRole,
+  parseSessionMetadata,
+} from "@/lib/security/claims";
 
 const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/unauthorized(.*)"]);
 // Dashboard routes that require admin access
@@ -13,27 +20,26 @@ const isDashboardRoute = createRouteMatcher([
 // Verification routes that require verification_admin or admin role
 const isVerificationRoute = createRouteMatcher(["/verifications(.*)"]);
 
-// Helper to check if user has required role
-function hasRole(
-  authObj: any,
-  allowedRoles: string[]
+type MiddlewareAuthObject = {
+  userId: string | null;
+  sessionClaims: unknown;
+  has: (args: { role: string }) => boolean;
+  redirectToSignIn: (args: { returnBackUrl: string }) => Response;
+};
+
+function hasAllowedRole(
+  authObj: MiddlewareAuthObject,
+  allowedRoles: readonly AdminAccessRole[],
 ): boolean {
-  const sessionClaims = authObj.sessionClaims as CustomJwtSessionClaims;
-  const userRole = sessionClaims?.metadata?.role;
-  
-  // Check Clerk's built-in role check first
   for (const role of allowedRoles) {
     if (authObj.has({ role })) {
       return true;
     }
   }
-  
-  // Fallback to metadata role
-  if (userRole && allowedRoles.includes(userRole)) {
-    return true;
-  }
-  
-  return false;
+
+  const metadata = parseSessionMetadata(authObj.sessionClaims);
+  const normalizedRole = normalizeAdminAccessRole(metadata?.role);
+  return normalizedRole ? allowedRoles.includes(normalizedRole) : false;
 }
 
 export default clerkMiddleware(async (auth, req) => {
@@ -42,15 +48,18 @@ export default clerkMiddleware(async (auth, req) => {
   }
 
   const authObj = await auth();
-  
+
   if (!authObj.userId) {
     return authObj.redirectToSignIn({ returnBackUrl: req.url });
   }
 
   // Check verification routes - requires admin or verification_admin
   if (isVerificationRoute(req)) {
-    const isAuthorized = hasRole(authObj, ["admin", "verification_admin"]);
-    
+    const isAuthorized = hasAllowedRole(
+      authObj as MiddlewareAuthObject,
+      ADMIN_ROUTE_POLICY_MAP.verification,
+    );
+
     if (!isAuthorized) {
       return Response.redirect(new URL("/unauthorized", req.url));
     }
@@ -59,8 +68,11 @@ export default clerkMiddleware(async (auth, req) => {
 
   // Check dashboard routes - requires admin role
   if (isDashboardRoute(req)) {
-    const isAuthorized = hasRole(authObj, ["admin"]);
-    
+    const isAuthorized = hasAllowedRole(
+      authObj as MiddlewareAuthObject,
+      ADMIN_ROUTE_POLICY_MAP.dashboard,
+    );
+
     if (!isAuthorized) {
       return Response.redirect(new URL("/unauthorized", req.url));
     }
@@ -68,7 +80,10 @@ export default clerkMiddleware(async (auth, req) => {
   }
 
   // For any other protected route, require at least admin role
-  const isAuthorized = hasRole(authObj, ["admin", "verification_admin"]);
+  const isAuthorized = hasAllowedRole(
+    authObj as MiddlewareAuthObject,
+    ADMIN_ROUTE_POLICY_MAP.defaultProtected,
+  );
   if (!isAuthorized) {
     return Response.redirect(new URL("/unauthorized", req.url));
   }

@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { assertAdmin, type SystemSettingsInput } from "./shared";
 import { SystemSettingsSchema } from "./types";
-import { prisma } from "@repo/db";
+import { prisma } from "@build/db";
+import { invalidateCache } from "@build/db/system-settings";
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -11,8 +13,8 @@ import { prisma } from "@repo/db";
 export type SystemSettings = {
   maintenanceMode: boolean;
   publicSignup: boolean;
-  autoVerifyNCA: boolean;
-  commissionRate: number;
+  enableAutoVerifyNCA: boolean;
+  platformCommission: number;
   supportEmail: string;
   adminEmailAlerts: boolean;
   securityMFA: boolean;
@@ -21,8 +23,8 @@ export type SystemSettings = {
 const DEFAULT_SETTINGS: SystemSettings = {
   maintenanceMode: false,
   publicSignup: true,
-  autoVerifyNCA: false,
-  commissionRate: 10,
+  enableAutoVerifyNCA: false,
+  platformCommission: 10,
   supportEmail: "support@buildmarket.co.ke",
   adminEmailAlerts: true,
   securityMFA: true,
@@ -50,7 +52,8 @@ export async function getSystemSettings(): Promise<SystemSettings | null> {
 
     return {
       ...settings,
-      commissionRate: settings.commissionRate.toNumber(),
+      platformCommission: Number(settings.platformCommission ?? 10),
+      enableAutoVerifyNCA: settings.enableAutoVerifyNCA ?? false,
     };
   } catch (error) {
     console.error("Failed to fetch settings:", error);
@@ -73,23 +76,26 @@ export async function updateSystemSettings(data: SystemSettingsInput) {
       where: { id: "global" },
       update: {
         ...validated,
-        commissionRate: validated.commissionRate,
+        platformCommission: validated.platformCommission,
+        enableAutoVerifyNCA: validated.enableAutoVerifyNCA,
       },
       create: {
         id: "global",
         ...validated,
-        commissionRate: validated.commissionRate,
+        platformCommission: validated.platformCommission,
+        enableAutoVerifyNCA: validated.enableAutoVerifyNCA,
       },
     });
 
+    invalidateCache();
     revalidatePath("/settings");
-    
+
     // Return updated settings for optimistic updates
-    return { 
+    return {
       success: true,
       data: {
         ...settings,
-        commissionRate: Number(settings.commissionRate),
+        platformCommission: Number(settings.platformCommission),
       },
       timestamp: new Date().toISOString(),
     };
@@ -106,7 +112,7 @@ export async function clearSystemCache() {
   try {
     await assertAdmin();
     revalidatePath("/", "layout");
-    return { 
+    return {
       success: true,
       timestamp: new Date().toISOString(),
     };

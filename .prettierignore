@@ -1,0 +1,31 @@
+# Build outputs
+.next/
+dist/
+build/
+out/
+
+# Prisma-generated client
+packages/db/node_modules/
+**/prisma/client/
+**/*.generated.*
+generated/
+
+# Dependencies
+node_modules/
+
+# Lock files (large, machine-generated)
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Turbo / build caches
+.turbo/
+.cache/
+
+# IDE
+.idea/
+.vscode/

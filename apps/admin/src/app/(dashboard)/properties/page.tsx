@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Home, CheckCircle, Clock, Star, TrendingUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PropertiesFilter } from "./properties-filter";
 
 // Property filter types matching the schema enums
 type PropertyType = "SALE" | "RENT" | "LEASE";
@@ -108,6 +109,8 @@ interface PropertiesPageProps {
     verified?: string;
     featured?: string;
     county?: string;
+    sortBy?: string;
+    sortOrder?: string;
   }>;
 }
 
@@ -135,24 +138,14 @@ export default async function PropertiesPage({
     verified,
     featured,
     county: params.county,
+    sortBy:
+      (params.sortBy as "createdAt" | "price" | "title" | "updatedAt") ||
+      "createdAt",
+    sortOrder: (params.sortOrder as "asc" | "desc") || "desc",
   });
 
   if (!response.success || !response.data) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Properties</h1>
-          <p className="text-muted-foreground">
-            Manage property listings and verifications.
-          </p>
-        </div>
-        <div className="p-6 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-700">
-            {response.error || "Failed to load properties"}
-          </p>
-        </div>
-      </div>
-    );
+    throw new Error(response.error || "Failed to load properties");
   }
 
   const { properties, meta } = response.data;
@@ -160,18 +153,23 @@ export default async function PropertiesPage({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Properties</h1>
-          <p className="text-muted-foreground">
-            Manage property listings and verifications.
-          </p>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Properties</h1>
+            <p className="text-muted-foreground">
+              Manage property listings and verifications.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-sm">
+              <Home className="mr-1 h-3 w-3" />
+              {meta.total} total
+            </Badge>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-sm">
-            <Home className="mr-1 h-3 w-3" />
-            {meta.total} total
-          </Badge>
+        <div className="flex items-center justify-between border-b pb-4">
+          <PropertiesFilter />
         </div>
       </div>
 

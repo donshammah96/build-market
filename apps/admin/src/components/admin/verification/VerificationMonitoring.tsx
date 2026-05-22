@@ -32,7 +32,7 @@ export function VerificationMonitoring({
 
   // Calculate time since last update
   const timeSinceUpdate = Math.floor(
-    (Date.now() - lastUpdate.getTime()) / 1000 / 60
+    (Date.now() - lastUpdate.getTime()) / 1000 / 60,
   );
 
   // Poll for updates
@@ -48,7 +48,7 @@ export function VerificationMonitoring({
       try {
         const response = await getVerificationUpdates(
           lastUpdate.toISOString(),
-          "all"
+          "all",
         );
 
         if (response.success && response.data) {

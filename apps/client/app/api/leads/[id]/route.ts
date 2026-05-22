@@ -1,112 +1,68 @@
-import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
-  RateLimits,
   getRateLimitIdentifier,
-} from "@/app/lib/rate-limit";
-
-const logger = getClientLogger();
+  RateLimits,
+} from "@/app/lib/api/rate-limit";
+import { isValidId } from "@/app/lib/api/api-guards";
+import { leadsService } from "@/app/lib/domains/leads";
 
 /**
  * GET /api/leads/[id]
- * Public endpoint to get lead status by ID
- * Used by clients to check their inquiry status
+ * Public endpoint — no authentication required.
+ * Allows clients to check the status of their submitted inquiry.
+ * Returns sanitized data (no PII beyond what the submitter already knows).
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { params }: { params: Promise<{ id: string }> },
+): Promise<NextResponse> {
   const correlationId = initializeCorrelationId(req);
   const { id } = await params;
 
-  const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
-    identifier,
-    RateLimits.READ.limit,
-    RateLimits.READ.window
-  );
+  if (!isValidId(id)) {
+    return apiError("Invalid lead ID", HttpStatus.BAD_REQUEST);
+  }
 
-  if (!success) {
+  const identifier = getRateLimitIdentifier(req);
+  const rateLimitResult = await checkRateLimit(
+    `leads-public-read:${identifier}`,
+    RateLimits.READ.limit,
+    RateLimits.READ.window,
+  );
+  if (!rateLimitResult.success) {
     return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
   }
 
-  logger.info("Fetching lead status", { correlationId, leadId: id });
-
-  return executeResilient(
-    async () => {
-      const lead = await prisma.lead.findUnique({
-        where: { id },
-        select: {
-          id: true,
-          projectType: true,
-          status: true,
-          location: true,
-          createdAt: true,
-          updatedAt: true,
-          professional: {
-            select: {
-              companyName: true,
-              user: {
-                select: {
-                  firstName: true,
-                  lastName: true,
-                },
-              },
-            },
-          },
-        },
-      });
-
-      if (!lead) {
-        logger.warn("Lead not found", { correlationId, leadId: id });
-        return apiError("Lead not found", HttpStatus.NOT_FOUND);
-      }
-
-      // Return sanitized info for public access (no sensitive data)
-      const response = {
-        id: lead.id,
-        projectType: lead.projectType,
-        location: lead.location,
-        status: lead.status,
-        statusLabel: getStatusLabel(lead.status),
-        professionalName:
-          lead.professional.companyName ||
-          `${lead.professional.user.firstName} ${lead.professional.user.lastName}`.trim(),
-        submittedAt: lead.createdAt,
-        lastUpdated: lead.updatedAt,
-      };
-
-      logger.info("Lead status fetched successfully", {
-        correlationId,
-        leadId: id,
-        status: lead.status,
-      });
-      return response;
-    },
+  const executor = getResilientExecutor();
+  const result = await executor.execute(
+    () => leadsService.getPublicLeadStatus(id),
     {
       operationName: "get_public_lead_status",
-      successStatus: HttpStatus.OK,
-    }
+    },
   );
-}
 
-/**
- * Get human-readable status label
- */
-function getStatusLabel(status: string): string {
-  const labels: Record<string, string> = {
-    NEW: "Submitted",
-    CONTACTED: "Under Review",
-    PROPOSAL: "Proposal Sent",
-    WON: "Accepted",
-    LOST: "Closed",
-  };
-  return labels[status] || status;
+  if (!result.success || !result.data) {
+    getClientLogger().error("Failed to fetch lead status", result.error, {
+      correlationId,
+      leadId: id,
+    });
+    return apiError(
+      "Failed to fetch lead status",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  const serviceResult = result.data;
+  if (!serviceResult.ok) {
+    return apiError("Lead not found", HttpStatus.NOT_FOUND);
+  }
+
+  return apiSuccess(serviceResult.data, HttpStatus.OK);
 }

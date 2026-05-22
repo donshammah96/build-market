@@ -1,275 +1,332 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { POST } from '@/app/api/clerk-webhook/route';
-import { NextRequest } from 'next/server';
-import { prisma } from '@repo/db';
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest, NextResponse } from "next/server";
+import { POST } from "@/app/api/clerk-webhook/route";
 
-// Mock dependencies
-vi.mock('@repo/db', () => ({
-  prisma: {
-    $connect: vi.fn().mockResolvedValue(undefined),
-    user: {
-      upsert: vi.fn(),
-      update: vi.fn(),
-    },
+const mockLogger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+
+const mockCheckBodySize = vi.hoisted(() => vi.fn());
+const mockCheckRateLimit = vi.hoisted(() => vi.fn());
+const mockGetRateLimitIdentifier = vi.hoisted(() => vi.fn());
+const mockVerify = vi.hoisted(() => vi.fn());
+const mockHandleUserCreated = vi.hoisted(() => vi.fn());
+const mockHandleUserUpdated = vi.hoisted(() => vi.fn());
+const mockHandleUserDeleted = vi.hoisted(() => vi.fn());
+const mockHandleSessionCreated = vi.hoisted(() => vi.fn());
+const mockClaimWebhookDelivery = vi.hoisted(() => vi.fn());
+const mockMarkWebhookProcessed = vi.hoisted(() => vi.fn());
+const mockReleaseWebhookDelivery = vi.hoisted(() => vi.fn());
+const mockIsWebhookTimestampFresh = vi.hoisted(() => vi.fn());
+const mockEnv = vi.hoisted(() => ({
+  isProd: false,
+  clerk: {
+    webhookSecret: "test_webhook_secret",
+    replayWindowSeconds: 300,
   },
 }));
 
-vi.mock('svix', () => ({
-  Webhook: vi.fn().mockImplementation(() => ({
-    verify: vi.fn().mockReturnValue({
-      type: 'user.created',
-      data: {
-        id: 'clerk_123',
-        email_addresses: [{ email_address: 'test@example.com' }],
-        first_name: 'John',
-        last_name: 'Doe',
-        phone_numbers: [{ phone_number: '1234567890' }],
-      },
-    }),
-  })),
+vi.mock("svix", () => ({
+  Webhook: vi.fn(function MockWebhook() {
+    return {
+      verify: mockVerify,
+    };
+  }),
 }));
 
-vi.mock('@/app/lib/rate-limit', () => ({
-  checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
-  getRateLimitIdentifier: vi.fn().mockReturnValue('webhook-ip'),
+vi.mock("@/app/lib/api/api-response", () => ({
+  HttpStatus: {
+    OK: 200,
+    BAD_REQUEST: 400,
+    UNAUTHORIZED: 401,
+    TOO_MANY_REQUESTS: 429,
+    INTERNAL_SERVER_ERROR: 500,
+    SERVICE_UNAVAILABLE: 503,
+    NOT_FOUND: 404,
+  },
+  apiError: vi
+    .fn()
+    .mockImplementation(
+      (
+        message: string,
+        status: number,
+        details?: unknown,
+        correlationId?: string,
+      ) =>
+        NextResponse.json(
+          { success: false, error: message, details, correlationId },
+          { status },
+        ),
+    ),
+  apiSuccess: vi
+    .fn()
+    .mockImplementation((data: unknown, status = 200, correlationId?: string) =>
+      NextResponse.json({ success: true, data, correlationId }, { status }),
+    ),
+}));
+
+vi.mock("@/app/lib/api/api-guards", () => ({
+  checkBodySize: mockCheckBodySize,
+}));
+
+vi.mock("@/app/lib/api/rate-limit", () => ({
+  checkRateLimit: mockCheckRateLimit,
+  getRateLimitIdentifier: mockGetRateLimitIdentifier,
   RateLimits: {
     WEBHOOK: { limit: 100, window: 60000 },
   },
 }));
 
-vi.mock('@/app/lib/env', () => ({
-  env: {
-    CLERK_WEBHOOK_SECRET: 'test_webhook_secret',
-    NEXT_PUBLIC_APP_URL: 'http://localhost:3500',
+vi.mock("@/app/lib/infrastructure/env", () => ({
+  env: mockEnv,
+}));
+
+vi.mock("@/app/lib/api/resilient-api", () => ({
+  initializeCorrelationId: vi.fn().mockReturnValue("test-correlation-id"),
+  getClientLogger: vi.fn().mockReturnValue(mockLogger),
+}));
+
+vi.mock("@/app/lib/validation/clerk-webhook-validation", () => ({
+  WEBHOOK_CONFIG: {
+    MAX_PAYLOAD_SIZE: 256 * 1024,
+    REQUIRED_HEADERS: ["svix-id", "svix-timestamp", "svix-signature"],
   },
 }));
 
-describe('POST /api/clerk-webhook', () => {
+vi.mock("@/app/lib/integrations/clerk/service", () => ({
+  clerkIntegrationService: {
+    handleUserCreated: mockHandleUserCreated,
+    handleUserUpdated: mockHandleUserUpdated,
+    handleUserDeleted: mockHandleUserDeleted,
+    handleSessionCreated: mockHandleSessionCreated,
+  },
+}));
+
+vi.mock("@/app/lib/infrastructure/webhook-replay", () => ({
+  claimClerkWebhookDelivery: mockClaimWebhookDelivery,
+  isWebhookTimestampFresh: mockIsWebhookTimestampFresh,
+  markClerkWebhookDeliveryProcessed: mockMarkWebhookProcessed,
+  releaseClerkWebhookDelivery: mockReleaseWebhookDelivery,
+}));
+
+function buildRequest(headers?: HeadersInit) {
+  return new NextRequest("http://localhost:3500/api/clerk-webhook", {
+    method: "POST",
+    body: JSON.stringify({ event: "payload" }),
+    headers: {
+      "svix-id": "test-id",
+      "svix-timestamp": Math.floor(Date.now() / 1000).toString(),
+      "svix-signature": "test-signature",
+      ...headers,
+    },
+  });
+}
+
+describe("POST /api/clerk-webhook", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockEnv.isProd = false;
+    mockEnv.clerk.webhookSecret = "test_webhook_secret";
+    mockEnv.clerk.replayWindowSeconds = 300;
+    mockCheckBodySize.mockReturnValue(null);
+    mockGetRateLimitIdentifier.mockReturnValue("webhook-ip");
+    mockCheckRateLimit.mockResolvedValue({ success: true });
+    mockIsWebhookTimestampFresh.mockReturnValue(true);
+    mockClaimWebhookDelivery.mockResolvedValue({
+      status: "accepted",
+      deliveryId: "test-id",
+    });
   });
 
-  it('should handle user.created event successfully', async () => {
-    const mockUser = {
-      id: 'db_user_123',
-      clerkId: 'clerk_123',
-      email: 'test@example.com',
-    };
-
-    vi.mocked(prisma.user.upsert).mockResolvedValue(mockUser as any);
-
-    const request = new NextRequest('http://localhost:3500/api/clerk-webhook', {
-      method: 'POST',
-      body: JSON.stringify({
-        type: 'user.created',
-        data: {
-          id: 'clerk_123',
-          email_addresses: [{ email_address: 'test@example.com' }],
-        },
-      }),
-      headers: {
-        'svix-id': 'test-id',
-        'svix-timestamp': Date.now().toString(),
-        'svix-signature': 'test-signature',
+  it("dispatches user.created events to the integration service", async () => {
+    mockVerify.mockReturnValue({
+      type: "user.created",
+      data: { id: "clerk_123" },
+    });
+    mockHandleUserCreated.mockResolvedValue({
+      ok: true,
+      data: {
+        userId: "db_user_123",
+        message: "User created successfully",
       },
     });
 
-    const response = await POST(request);
-    const data = await response.json();
+    const response = await POST(buildRequest());
+    const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(data.success).toBe(true);
-    expect(prisma.user.upsert).toHaveBeenCalled();
+    expect(mockHandleUserCreated).toHaveBeenCalledWith(
+      { correlationId: "test-correlation-id" },
+      { id: "clerk_123" },
+    );
+    expect(mockMarkWebhookProcessed).toHaveBeenCalledWith("test-id");
+    expect(mockReleaseWebhookDelivery).not.toHaveBeenCalled();
+    expect(payload.data.userId).toBe("db_user_123");
+    expect(response.headers.get("Cache-Control")).toBe("no-store, private");
   });
 
-  it('should handle user.updated event successfully', async () => {
-    const { Webhook } = await import('svix');
-    const mockWebhookInstance = vi.mocked(Webhook).mock.results[0]?.value;
-    if (!mockWebhookInstance) {
-      throw new Error('Webhook mock not initialized');
-    }
-    vi.mocked(mockWebhookInstance.verify).mockReturnValue({
-      type: 'user.updated',
-      data: {
-        id: 'clerk_123',
-        email_addresses: [{ email_address: 'updated@example.com' }],
-      },
-    } as any);
-
-    const mockUser = {
-      id: 'db_user_123',
-      email: 'updated@example.com',
-    };
-
-    vi.mocked(prisma.user.update).mockResolvedValue(mockUser as any);
-
-    const request = new NextRequest('http://localhost:3500/api/clerk-webhook', {
-      method: 'POST',
-      body: JSON.stringify({
-        type: 'user.updated',
-        data: {
-          id: 'clerk_123',
-          email_addresses: [{ email_address: 'updated@example.com' }],
-        },
+  it("rejects requests missing Svix headers before verification", async () => {
+    const response = await POST(
+      buildRequest({
+        "svix-signature": "",
       }),
-      headers: {
-        'svix-id': 'test-id',
-        'svix-timestamp': Date.now().toString(),
-        'svix-signature': 'test-signature',
-      },
-    });
-
-    const response = await POST(request);
-    const data = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(data.success).toBe(true);
-  });
-
-  it('should reject webhook with invalid signature', async () => {
-    const { Webhook } = await import('svix');
-    const mockWebhookInstance = vi.mocked(Webhook).mock.results[0]?.value;
-    if (!mockWebhookInstance) {
-      throw new Error('Webhook mock not initialized');
-    }
-    vi.mocked(mockWebhookInstance.verify).mockImplementation(() => {
-      throw new Error('Invalid signature');
-    });
-
-    const request = new NextRequest('http://localhost:3500/api/clerk-webhook', {
-      method: 'POST',
-      body: JSON.stringify({ type: 'user.created', data: {} }),
-      headers: {
-        'svix-id': 'test-id',
-        'svix-timestamp': Date.now().toString(),
-        'svix-signature': 'invalid-signature',
-      },
-    });
-
-    const response = await POST(request);
-    const data = await response.json();
-
-    expect(response.status).toBe(401);
-    expect(data.success).toBe(false);
-    expect(data.error).toContain('Invalid webhook signature');
-  });
-
-  it('should handle missing required data in webhook payload', async () => {
-    const { Webhook } = await import('svix');
-    const mockWebhookInstance = vi.mocked(Webhook).mock.results[0]?.value;
-    if (!mockWebhookInstance) {
-      throw new Error('Webhook mock not initialized');
-    }
-    vi.mocked(mockWebhookInstance.verify).mockReturnValue({
-      type: 'user.created',
-      data: {
-        id: null, // Missing required ID
-      },
-    } as any);
-
-    const request = new NextRequest('http://localhost:3500/api/clerk-webhook', {
-      method: 'POST',
-      body: JSON.stringify({ type: 'user.created', data: {} }),
-      headers: {
-        'svix-id': 'test-id',
-        'svix-timestamp': Date.now().toString(),
-        'svix-signature': 'test-signature',
-      },
-    });
-
-    const response = await POST(request);
-    const data = await response.json();
+    );
+    const payload = await response.json();
 
     expect(response.status).toBe(400);
-    expect(data.error).toContain('Missing required user data');
+    expect(mockVerify).not.toHaveBeenCalled();
+    expect(mockClaimWebhookDelivery).not.toHaveBeenCalled();
+    expect(mockHandleUserCreated).not.toHaveBeenCalled();
+    expect(payload.error).toContain("Missing webhook signature headers");
   });
 
-  it('should handle database connection failures', async () => {
-    vi.mocked(prisma.$connect).mockRejectedValue(
-      new Error('Database connection failed')
+  it("rejects requests with invalid signatures", async () => {
+    mockVerify.mockImplementation(() => {
+      throw new Error("Invalid signature");
+    });
+
+    const response = await POST(buildRequest());
+    const payload = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(mockClaimWebhookDelivery).not.toHaveBeenCalled();
+    expect(mockHandleUserCreated).not.toHaveBeenCalled();
+    expect(payload.error).toContain("Invalid webhook signature");
+  });
+
+  it("maps integration service failures to the returned status code", async () => {
+    mockVerify.mockReturnValue({
+      type: "user.updated",
+      data: { id: "clerk_missing" },
+    });
+    mockHandleUserUpdated.mockResolvedValue({
+      ok: false,
+      message: "User not found",
+      status: 404,
+    });
+
+    const response = await POST(buildRequest());
+    const payload = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(mockHandleUserUpdated).toHaveBeenCalledWith(
+      { correlationId: "test-correlation-id" },
+      { id: "clerk_missing" },
     );
-
-    const request = new NextRequest('http://localhost:3500/api/clerk-webhook', {
-      method: 'POST',
-      body: JSON.stringify({ type: 'user.created', data: {} }),
-      headers: {
-        'svix-id': 'test-id',
-        'svix-timestamp': Date.now().toString(),
-        'svix-signature': 'test-signature',
-      },
-    });
-
-    const response = await POST(request);
-    const data = await response.json();
-
-    expect(response.status).toBe(503);
-    expect(data.error).toContain('Database connection failed');
+    expect(mockReleaseWebhookDelivery).toHaveBeenCalledWith("test-id");
+    expect(mockMarkWebhookProcessed).not.toHaveBeenCalled();
+    expect(payload.error).toBe("User not found");
   });
 
-  it('should handle duplicate user creation (unique constraint)', async () => {
-    const { Webhook } = await import('svix');
-    const mockWebhookInstance = vi.mocked(Webhook).mock.results[0]?.value;
-    if (!mockWebhookInstance) {
-      throw new Error('Webhook mock not initialized');
-    }
-    vi.mocked(mockWebhookInstance.verify).mockReturnValue({
-      type: 'user.created',
-      data: {
-        id: 'clerk_123',
-        email_addresses: [{ email_address: 'test@example.com' }],
-      },
-    } as any);
-
-    const prismaError = new Error('Unique constraint failed');
-    (prismaError as any).code = 'P2002';
-
-    vi.mocked(prisma.user.upsert).mockRejectedValue(prismaError);
-
-    const request = new NextRequest('http://localhost:3500/api/clerk-webhook', {
-      method: 'POST',
-      body: JSON.stringify({ type: 'user.created', data: {} }),
-      headers: {
-        'svix-id': 'test-id',
-        'svix-timestamp': Date.now().toString(),
-        'svix-signature': 'test-signature',
-      },
+  it("acknowledges duplicate deliveries without reprocessing", async () => {
+    mockVerify.mockReturnValue({
+      type: "user.created",
+      data: { id: "clerk_123" },
+    });
+    mockClaimWebhookDelivery.mockResolvedValue({
+      status: "duplicate",
+      deliveryId: "test-id",
     });
 
-    const response = await POST(request);
-    const data = await response.json();
-
-    expect(response.status).toBe(409);
-    expect(data.error).toContain('User already exists');
-  });
-
-  it('should acknowledge unhandled event types', async () => {
-    const { Webhook } = await import('svix');
-    const mockResult = vi.mocked(Webhook).mock.results[0];
-    if (!mockResult?.value) {
-      throw new Error('Webhook mock not initialized');
-    }
-    const mockWebhookInstance = mockResult.value;
-    vi.mocked(mockWebhookInstance.verify).mockReturnValue({
-      type: 'user.something_else',
-      data: {},
-    } as any);
-
-    const request = new NextRequest('http://localhost:3500/api/clerk-webhook', {
-      method: 'POST',
-      body: JSON.stringify({ type: 'user.something_else', data: {} }),
-      headers: {
-        'svix-id': 'test-id',
-        'svix-timestamp': Date.now().toString(),
-        'svix-signature': 'test-signature',
-      },
-    });
-
-    const response = await POST(request);
-    const data = await response.json();
+    const response = await POST(buildRequest());
+    const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(data.success).toBe(true);
-    expect(data.data.message).toContain('acknowledged');
+    expect(payload.data.deduplicated).toBe(true);
+    expect(mockHandleUserCreated).not.toHaveBeenCalled();
+    expect(mockMarkWebhookProcessed).not.toHaveBeenCalled();
+    expect(mockReleaseWebhookDelivery).not.toHaveBeenCalled();
+  });
+
+  it("rejects stale webhook timestamps before replay claim", async () => {
+    mockIsWebhookTimestampFresh.mockReturnValue(false);
+
+    mockVerify.mockReturnValue({
+      type: "user.created",
+      data: { id: "clerk_123" },
+    });
+
+    const response = await POST(buildRequest());
+    const payload = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(payload.error).toContain("Stale webhook timestamp");
+    expect(mockClaimWebhookDelivery).not.toHaveBeenCalled();
+    expect(mockHandleUserCreated).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 in production when replay protection is unavailable", async () => {
+    mockEnv.isProd = true;
+    mockVerify.mockReturnValue({
+      type: "user.created",
+      data: { id: "clerk_123" },
+    });
+    mockClaimWebhookDelivery.mockRejectedValue(new Error("Redis unavailable"));
+
+    const response = await POST(buildRequest());
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload.error).toContain("Webhook replay protection unavailable");
+    expect(mockHandleUserCreated).not.toHaveBeenCalled();
+  });
+
+  it("releases the replay claim when rate limited after claim", async () => {
+    mockVerify.mockReturnValue({
+      type: "user.created",
+      data: { id: "clerk_123" },
+    });
+    mockClaimWebhookDelivery.mockResolvedValue({
+      status: "accepted",
+      deliveryId: "test-id",
+    });
+    mockCheckRateLimit.mockResolvedValue({
+      success: false,
+      reset: Date.now() + 5000,
+    });
+
+    const response = await POST(buildRequest());
+
+    expect(response.status).toBe(429);
+    expect(mockReleaseWebhookDelivery).toHaveBeenCalledWith("test-id");
+    expect(mockHandleUserCreated).not.toHaveBeenCalled();
+    expect(mockMarkWebhookProcessed).not.toHaveBeenCalled();
+  });
+
+  it("releases the replay claim when handler execution throws", async () => {
+    mockVerify.mockReturnValue({
+      type: "user.created",
+      data: { id: "clerk_123" },
+    });
+    mockHandleUserCreated.mockRejectedValue(new Error("boom"));
+
+    const response = await POST(buildRequest());
+    const payload = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(payload.error).toContain("Webhook processing failed");
+    expect(mockReleaseWebhookDelivery).toHaveBeenCalledWith("test-id");
+    expect(mockMarkWebhookProcessed).not.toHaveBeenCalled();
+  });
+
+  it("acknowledges unhandled event types without dispatching", async () => {
+    mockVerify.mockReturnValue({
+      type: "user.something_else",
+      data: {},
+    });
+
+    const response = await POST(buildRequest());
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockHandleUserCreated).not.toHaveBeenCalled();
+    expect(mockHandleUserUpdated).not.toHaveBeenCalled();
+    expect(mockHandleUserDeleted).not.toHaveBeenCalled();
+    expect(mockHandleSessionCreated).not.toHaveBeenCalled();
+    expect(mockMarkWebhookProcessed).toHaveBeenCalledWith("test-id");
+    expect(payload.data.message).toContain("acknowledged");
   });
 });
-

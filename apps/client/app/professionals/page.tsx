@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  Suspense,
-  memo,
-} from "react";
+import { useState, useCallback, useRef, Suspense, memo, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   Search,
@@ -42,6 +35,8 @@ import {
   useIntersectionObserver,
 } from "@/lib/hooks/usePerformance";
 import { cn } from "@/lib/utils";
+import { useProfessionals } from "@/hooks/useProfessionals";
+import { mapToListCardData } from "@/lib/professionals-mappers";
 
 const SORT_OPTIONS = [
   { value: "rating", label: "Top Rated", icon: Star },
@@ -98,7 +93,7 @@ const EmptyState = memo(function EmptyState({
     <div
       className={cn(
         "text-center py-20 px-4",
-        shouldAnimate && "animate-scale-in"
+        shouldAnimate && "animate-scale-in",
       )}
     >
       <div className="w-20 h-20 bg-zinc-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -150,7 +145,7 @@ const CategoryTabs = memo(function CategoryTabs({
                 "transition-all duration-200 snap-start shrink-0",
                 isSelected
                   ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
-                  : "bg-white text-zinc-600 border border-zinc-200 hover:border-emerald-300 hover:text-emerald-600"
+                  : "bg-white text-zinc-600 border border-zinc-200 hover:border-emerald-300 hover:text-emerald-600",
               )}
             >
               <Icon className="h-4 w-4" />
@@ -287,13 +282,23 @@ function ProfessionalsPageContent() {
     (searchParams.get("sortBy") as "rating" | "experience" | "reviews") ||
     "rating";
 
-  // Local state
+  // Local state (search input debounced from URL)
   const [searchInput, setSearchInput] = useState(urlSearch);
-  const [professionals, setProfessionals] = useState<ProfessionalCardData[]>(
-    []
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  // Fetch professionals via React Query
+  const {
+    data,
+    isLoading: loading,
+    error: queryError,
+    refetch,
+  } = useProfessionals({
+    search: urlSearch,
+    category: urlCategory,
+    sortBy: urlSort,
+  });
+
+  const professionals = useMemo(() => mapToListCardData(data), [data]);
+  const error = queryError?.message ?? null;
 
   // Debounce search
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -320,40 +325,8 @@ function ProfessionalsPageContent() {
         scroll: false,
       });
     },
-    [pathname, router, searchParams]
+    [pathname, router, searchParams],
   );
-
-  // Fetch professionals
-  const fetchProfessionals = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const params = new URLSearchParams();
-      if (urlSearch) params.set("search", urlSearch);
-      if (urlCategory && urlCategory !== "all")
-        params.set("category", urlCategory);
-      if (urlSort) params.set("sortBy", urlSort);
-
-      const response = await fetch(`/api/professionals?${params.toString()}`);
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch professionals");
-      }
-
-      const result = await response.json();
-      setProfessionals(Array.isArray(result) ? result : result.data || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setLoading(false);
-    }
-  }, [urlSearch, urlCategory, urlSort]);
-
-  // Fetch on mount and when filters change
-  useEffect(() => {
-    fetchProfessionals();
-  }, [fetchProfessionals]);
 
   // Handle search input with debounce
   const handleSearchChange = useCallback(
@@ -368,7 +341,7 @@ function ProfessionalsPageContent() {
         updateParams({ search: value || null });
       }, 300);
     },
-    [updateParams]
+    [updateParams],
   );
 
   // Handle category change
@@ -376,7 +349,7 @@ function ProfessionalsPageContent() {
     (slug: string) => {
       updateParams({ category: slug === "all" ? null : slug });
     },
-    [updateParams]
+    [updateParams],
   );
 
   // Handle sort change
@@ -384,7 +357,7 @@ function ProfessionalsPageContent() {
     (value: string) => {
       updateParams({ sortBy: value });
     },
-    [updateParams]
+    [updateParams],
   );
 
   // Clear all filters
@@ -403,7 +376,7 @@ function ProfessionalsPageContent() {
       acc[primaryService].push(prof);
       return acc;
     },
-    {} as Record<string, ProfessionalCardData[]>
+    {} as Record<string, ProfessionalCardData[]>,
   );
 
   return (
@@ -429,7 +402,7 @@ function ProfessionalsPageContent() {
           <div
             className={cn(
               "text-center max-w-3xl mx-auto",
-              heroInView && shouldAnimate && "animate-fade-in-up"
+              heroInView && shouldAnimate && "animate-fade-in-up",
             )}
           >
             <Badge className="mb-4 bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
@@ -535,7 +508,7 @@ function ProfessionalsPageContent() {
           <div
             className={cn(
               "text-center py-20",
-              shouldAnimate && "animate-fade-in"
+              shouldAnimate && "animate-fade-in",
             )}
           >
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -545,7 +518,7 @@ function ProfessionalsPageContent() {
               Something went wrong
             </h3>
             <p className="text-zinc-500 mb-4">{error}</p>
-            <Button onClick={fetchProfessionals} variant="outline">
+            <Button onClick={() => refetch()} variant="outline">
               Try Again
             </Button>
           </div>

@@ -1,4 +1,7 @@
-export { VerificationStatsCards, EntityBreakdown } from "./VerificationStatsCards";
+export {
+  VerificationStatsCards,
+  EntityBreakdown,
+} from "./VerificationStatsCards";
 export { VerificationTabs } from "./VerificationTabs";
 export { VerificationQueue } from "./VerificationQueue";
 export { VerificationDetailView } from "./VerificationDetailView";

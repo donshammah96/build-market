@@ -1,10 +1,16 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { DM_Sans } from "next/font/google";
 import { ToastContainer } from "react-toastify";
 import { QueryProvider } from "@/components/providers/QueryProvider";
+import { CookieConsentProvider } from "@/components/providers/CookieConsentProvider";
+import { PostHogProvider } from "@/app/providers/PostHogProvider";
+import { CookieBanner } from "@/components/gdpr/CookieBanner";
 import { AccessibilityProvider } from "@/components/accessibility";
+import { RouteFocusManager } from "@/components/layout/RouteFocusManager";
+import { env } from "@/app/lib/infrastructure/env"; // Added env import
 
 // Single, distinctive font with multiple weights for better performance
 // DM Sans is modern, geometric, and works well for both headings and body
@@ -30,7 +36,8 @@ export const metadata: Metadata = {
     template: "%s | Build Market",
   },
   description: "Find the best professionals for your building project in Kenya",
-  metadataBase: new URL("https://build-market.vercel.app"),
+
+  metadataBase: new URL(env.appUrl ?? "http://localhost:3500"), // Added metadataBase for correct URL resolution
   icons: {
     icon: "/favicon.ico",
     apple: "/apple-touch-icon.png",
@@ -39,7 +46,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Build Market",
     description: "Find the best professionals for your building project",
-    url: "https://build-market.vercel.app",
+    url: env.appUrl ?? "http://localhost:3500",
     siteName: "Build Market",
     images: [
       {
@@ -72,13 +79,30 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headersList = await headers();
+  const rawNonce = headersList.get("x-nonce");
+
+  // Fail fast in non-prod if the nonce is missing using envConfig properties
+  if (!rawNonce && !env.isProd) {
+    throw new Error(
+      "Missing 'x-nonce' header. Ensure middleware is correctly setting and forwarding the nonce to the request headers.",
+    );
+  }
+
+  // Fallback to undefined instead of an empty string to prevent invalid CSP attributes
+  const nonce = rawNonce || undefined;
+
+  const { auth } = await import("@clerk/nextjs/server");
+  const { userId } = await auth();
+  const isSignedIn = !!userId;
+
   return (
-    <ClerkProvider>
+    <ClerkProvider nonce={nonce} dynamic>
       <html lang="en" className={dmSans.variable}>
         <head>
           {/* Preconnect to critical third-party origins */}
@@ -87,9 +111,16 @@ export default function RootLayout({
           <link rel="dns-prefetch" href="https://res.cloudinary.com" />
         </head>
         <body
-          className={`${dmSans.className} antialiased bg-white`}
+          className={`${dmSans.className} antialiased bg-background text-foreground`}
           suppressHydrationWarning
         >
+          <a
+            href="#main-content"
+            className="sr-only z-100 focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:shadow-lg"
+          >
+            Skip to main content
+          </a>
+
           {/* SVG Filters for Color Blind Modes */}
           <svg
             aria-hidden="true"
@@ -134,19 +165,27 @@ export default function RootLayout({
             </defs>
           </svg>
 
-          <QueryProvider>
-            <AccessibilityProvider>
-              <div id="main-content">{children}</div>
-              <ToastContainer
-                position="bottom-right"
-                autoClose={4000}
-                hideProgressBar={false}
-                closeOnClick
-                pauseOnHover
-                limit={3}
-              />
-            </AccessibilityProvider>
-          </QueryProvider>
+          <PostHogProvider>
+            <QueryProvider>
+              <AccessibilityProvider>
+                <CookieConsentProvider isSignedIn={isSignedIn}>
+                  <RouteFocusManager />
+                  <div id="main-content" tabIndex={-1} className="outline-none">
+                    {children}
+                  </div>
+                  <CookieBanner />
+                  <ToastContainer
+                    position="bottom-right"
+                    autoClose={4000}
+                    hideProgressBar={false}
+                    closeOnClick
+                    pauseOnHover
+                    limit={3}
+                  />
+                </CookieConsentProvider>
+              </AccessibilityProvider>
+            </QueryProvider>
+          </PostHogProvider>
         </body>
       </html>
     </ClerkProvider>

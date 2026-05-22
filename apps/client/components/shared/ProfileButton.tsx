@@ -11,7 +11,7 @@ const ProfileButton = () => {
       <UserButton.MenuItems>
         <UserButton.Action
           label="See Orders"
-          labelIcon={<ShoppingBag className="w-4 h-4"/>}
+          labelIcon={<ShoppingBag className="w-4 h-4" />}
           onClick={() => router.push("/orders")}
         />
       </UserButton.MenuItems>

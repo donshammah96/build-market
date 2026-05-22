@@ -44,9 +44,14 @@ interface ProfessionalProfileEditorProps {
     city?: string | null;
     county?: string | null;
   };
+  canEdit?: boolean;
 }
 
-export function ProfessionalProfileEditor({ userId, initialData }: ProfessionalProfileEditorProps) {
+export function ProfessionalProfileEditor({
+  userId,
+  initialData,
+  canEdit = false,
+}: ProfessionalProfileEditorProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -81,6 +86,8 @@ export function ProfessionalProfileEditor({ userId, initialData }: ProfessionalP
   }
 
   if (!isEditing) {
+    if (!canEdit) return null;
+
     return (
       <Button variant="outline" onClick={() => setIsEditing(true)}>
         Edit Profile
@@ -92,9 +99,11 @@ export function ProfessionalProfileEditor({ userId, initialData }: ProfessionalP
     <div className="border p-4 rounded-lg bg-card">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-medium">Edit Profile</h3>
-        <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>Cancel</Button>
+        <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
+          Cancel
+        </Button>
       </div>
-      
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <FormField
@@ -110,34 +119,34 @@ export function ProfessionalProfileEditor({ userId, initialData }: ProfessionalP
               </FormItem>
             )}
           />
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="licenseNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>License Number</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="yearsExperience"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Years Experience</FormLabel>
-                    <FormControl>
-                      <Input type="number" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <FormField
+              control={form.control}
+              name="licenseNumber"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>License Number</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="yearsExperience"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Years Experience</FormLabel>
+                  <FormControl>
+                    <Input type="number" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
 
           <FormField
@@ -154,34 +163,34 @@ export function ProfessionalProfileEditor({ userId, initialData }: ProfessionalP
             )}
           />
 
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <FormField
-                control={form.control}
-                name="city"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>City</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-               <FormField
-                control={form.control}
-                name="county"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>County</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-           </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="city"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>City</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="county"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>County</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
           <FormField
             control={form.control}

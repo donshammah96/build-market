@@ -1,193 +1,195 @@
-import { NextRequest } from "next/server";
-import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
+import {
+  initializeCorrelationId,
+  getResilientExecutor,
+  getClientLogger,
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { checkBodySize } from "@/app/lib/api/api-guards";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
-  executeResilient,
-  resilientFetch,
-  initializeCorrelationId,
-  getClientLogger,
-} from "@/app/lib/resilient-api";
+  ThreadQuerySchema,
+  CreateThreadSchema,
+  MESSAGING_CONFIG,
+  type MessagingActor,
+  messagingService,
+} from "@/app/lib/domains/messaging";
+import { normalizeRole } from "@/app/lib/security/roles";
 
-const MESSAGING_SERVICE_URL =
-  process.env.MESSAGING_SERVICE_URL || "http://localhost:3010";
-const logger = getClientLogger();
-
-/**
- * Request body schema for creating conversations
- * Aligned with MessageThread model
- */
-const CreateConversationSchema = z.object({
-  participants: z
-    .array(z.string().uuid())
-    .min(2, "At least 2 participants required"),
-  title: z.string().optional(),
-  projectId: z.string().uuid().optional(), // Optional project context
-});
+function toMessagingActor(context: {
+  clerkId: string;
+  dbUserId: string;
+  userRole: unknown;
+}): MessagingActor {
+  return {
+    clerkId: context.clerkId,
+    userId: context.dbUserId,
+    role: normalizeRole(String(context.userRole)) ?? null,
+  };
+}
 
 /**
  * GET /api/messaging/conversations
- * Get all conversations for the authenticated user
  */
-export const GET = withAuth(async (request: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(request);
+export const GET = withAuth(
+  async (req: NextRequest, context): Promise<NextResponse> => {
+    const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
 
-  // Rate limiting
-  const identifier = getRateLimitIdentifier(request);
-  const rateLimitResult = await checkRateLimit(
-    `conversations:${identifier}`,
-    RateLimits.API.limit,
-    RateLimits.API.window
-  );
-
-  if (!rateLimitResult.success) {
-    return apiError(
-      "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `messaging-thread-read:${identifier}`,
+      RateLimits.READ.limit,
+      RateLimits.READ.window,
     );
-  }
-
-  logger.info("Fetching conversations", { correlationId, userId: dbUserId });
-
-  // Execute with resilience patterns
-  return executeResilient(
-    async () => {
-      const data = await resilientFetch(
-        `${MESSAGING_SERVICE_URL}/api/conversations/user/${dbUserId}`,
-        {
-          headers: {
-            "X-User-Id": dbUserId,
-            "X-Correlation-ID": correlationId,
-            "Content-Type": "application/json",
-          },
-          timeout: 8000,
-          retry: true,
-          operationName: "fetch-conversations",
-        }
+    if (!rateLimitResult.success) {
+      return apiError(
+        "Too many requests. Please try again later.",
+        HttpStatus.TOO_MANY_REQUESTS,
       );
-
-      logger.info("Conversations fetched successfully", {
-        correlationId,
-        userId: dbUserId,
-      });
-      return data;
-    },
-    {
-      criticality: "normal",
-      operationName: "get-conversations",
-      cache: {
-        ttl: 10000, // 10s cache
-        staleWhileRevalidate: 5000,
-      },
-      fallback: async () => {
-        logger.warn(
-          "Messaging service unavailable, returning empty conversations",
-          {
-            correlationId,
-            userId: dbUserId,
-          }
-        );
-        return [];
-      },
     }
-  );
-});
+
+    const { searchParams } = new URL(req.url);
+    const rawParams = Object.fromEntries(searchParams.entries());
+    const queryValidation = ThreadQuerySchema.safeParse(rawParams);
+    if (!queryValidation.success) {
+      getClientLogger().warn("Thread query validation failed", {
+        correlationId,
+        errors: queryValidation.error.issues,
+      });
+      return apiError(
+        "Invalid query parameters",
+        HttpStatus.BAD_REQUEST,
+        queryValidation.error.issues,
+      );
+    }
+
+    const query = queryValidation.data;
+
+    const executor = getResilientExecutor();
+    const result = await executor.execute(
+      () => messagingService.listConversations(actor, query),
+      { operationName: "list_threads" },
+    );
+
+    if (!result.success) {
+      getClientLogger().error("Failed to fetch threads", result.error, {
+        correlationId,
+        actorRole: actor.role,
+      });
+      return apiError(
+        "Failed to fetch conversations",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    } else {
+      const serviceResult = result.data;
+      if (!serviceResult || !serviceResult.ok) {
+        return apiError(
+          "Invalid request",
+          serviceResult?.status || HttpStatus.BAD_REQUEST,
+        );
+      }
+      return apiSuccess(serviceResult.data, HttpStatus.OK);
+    }
+  },
+);
 
 /**
  * POST /api/messaging/conversations
- * Create or get a conversation
  */
-export const POST = withAuth(async (request: NextRequest, { dbUserId }) => {
-  const correlationId = initializeCorrelationId(request);
+export const POST = withAuth(
+  async (req: NextRequest, context): Promise<NextResponse> => {
+    const correlationId = initializeCorrelationId(req);
+    const actor = toMessagingActor(context);
 
-  // Rate limiting
-  const identifier = getRateLimitIdentifier(request);
-  const rateLimitResult = await checkRateLimit(
-    `create-conversation:${identifier}`,
-    RateLimits.API.limit,
-    RateLimits.API.window
-  );
+    const sizeError = checkBodySize(req, MESSAGING_CONFIG.MAX_BODY_SIZE);
+    if (sizeError) return sizeError;
 
-  if (!rateLimitResult.success) {
-    return apiError(
-      "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS
-    );
-  }
-
-  try {
-    const body = await request.json();
-
-    // Validate request body
-    const validated = CreateConversationSchema.parse(body);
-
-    // Ensure authenticated user is in participants
-    if (!validated.participants.includes(dbUserId)) {
-      return apiError(
-        "You must be a participant in the conversation",
-        HttpStatus.FORBIDDEN
-      );
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
     }
 
-    logger.info("Creating conversation", {
-      correlationId,
-      userId: dbUserId,
-      participantCount: validated.participants.length,
-    });
-
-    // Execute with resilience - critical operation (no cache, limited retry)
-    return executeResilient(
-      async () => {
-        const data = await resilientFetch(
-          `${MESSAGING_SERVICE_URL}/api/conversations`,
-          {
-            method: "POST",
-            headers: {
-              "X-User-Id": dbUserId,
-              "X-Correlation-ID": correlationId,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(validated),
-            timeout: 8000,
-            retry: true,
-            operationName: "create-conversation",
-          }
-        );
-
-        logger.info("Conversation created successfully", {
-          correlationId,
-          userId: dbUserId,
-        });
-        return data;
-      },
-      {
-        criticality: "normal",
-        operationName: "post-conversation",
-        successStatus: HttpStatus.CREATED,
-      }
-    );
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      logger.warn("Conversation validation failed", {
+    const validation = CreateThreadSchema.safeParse(body);
+    if (!validation.success) {
+      getClientLogger().warn("Create thread validation failed", {
         correlationId,
-        userId: dbUserId,
-        errors: error.issues,
+        errors: validation.error.issues,
       });
       return apiError(
         "Validation failed",
         HttpStatus.BAD_REQUEST,
-        error.issues
+        validation.error.issues,
       );
     }
-    logger.error("Error creating conversation", error as Error, {
-      correlationId,
-      userId: dbUserId,
-    });
-    return apiError("Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);
-  }
-});
+    const input = validation.data;
+
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ||
+      IdempotencyService.generateKey(actor.userId, "POST", {
+        domain: "messaging-thread",
+        participants: [...input.participantIds].sort(),
+        type: input.type,
+      });
+
+    const idempotencyCheck = await IdempotencyService.checkOrCreate(
+      idempotencyKey,
+      "messaging",
+      actor.userId,
+      "POST",
+    );
+    if (idempotencyCheck.status === "completed")
+      return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+    if (idempotencyCheck.status === "pending")
+      return apiError("Request is being processed", HttpStatus.CONFLICT);
+
+    const identifier = getRateLimitIdentifier(req);
+    const rateLimitResult = await checkRateLimit(
+      `messaging-thread-write:${identifier}`,
+      RateLimits.WRITE.limit,
+      RateLimits.WRITE.window,
+    );
+    if (!rateLimitResult.success) {
+      await IdempotencyService.fail(idempotencyKey).catch(() => {});
+      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    const executor = getResilientExecutor();
+    const result = await executor.execute(
+      () => messagingService.createConversation(actor, input),
+      { operationName: "create_thread" },
+    );
+
+    if (!result.success) {
+      await IdempotencyService.fail(idempotencyKey).catch(() => {});
+      getClientLogger().error("Failed to create thread", result.error, {
+        correlationId,
+        actorRole: actor.role,
+      });
+      return apiError(
+        "Failed to create conversation",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    } else {
+      const serviceResult = result.data;
+      if (!serviceResult || !serviceResult.ok) {
+        await IdempotencyService.fail(idempotencyKey).catch(() => {});
+        return apiError(
+          "Invalid request",
+          serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+        );
+      }
+      await safeIdempotencyComplete(idempotencyKey, serviceResult.data);
+      return apiSuccess(serviceResult.data, HttpStatus.CREATED);
+    }
+  },
+);

@@ -210,7 +210,7 @@ export const Property = memo(function Property({
                 <div
                   className={cn(
                     "h-full",
-                    isInView && shouldAnimate && "animate-fade-in-up"
+                    isInView && shouldAnimate && "animate-fade-in-up",
                   )}
                   style={{
                     animationDelay:

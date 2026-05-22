@@ -12,7 +12,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { ColumnDef } from "@tanstack/react-table";
-import { ArrowUpDown, MoreHorizontal, CheckCircle, XCircle, ShieldCheck } from "lucide-react";
+import {
+  ArrowUpDown,
+  MoreHorizontal,
+  CheckCircle,
+  XCircle,
+  ShieldCheck,
+} from "lucide-react";
 import Link from "next/link";
 import { verifyProfessional, rejectProfessional } from "@/actions/admin";
 import { toast } from "react-toastify";
@@ -28,52 +34,74 @@ export type ProfessionalData = {
   yearsExperience: number | null;
   createdAt: Date;
   user: {
-      firstName: string | null;
-      lastName: string | null;
-      email: string;
-      avatar: string | null;
-  }
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+    avatar: string | null;
+  };
 };
 
 export const columns: ColumnDef<ProfessionalData>[] = [
   {
     accessorKey: "companyName",
-    header: "Company",
+    header: ({ column }) => {
+      return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="-ml-4 hover:bg-transparent"
+        >
+          Company
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      );
+    },
     cell: ({ row }) => {
-        const pro = row.original;
-        return (
-            <div className="flex items-center gap-2">
-                <Avatar className="h-9 w-9">
-                    <AvatarImage src={pro.user.avatar || ""} />
-                    <AvatarFallback>{pro.companyName[0]}</AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col">
-                    <span className="font-medium text-sm">{pro.companyName}</span>
-                    <span className="text-xs text-muted-foreground">{pro.user.firstName} {pro.user.lastName}</span>
-                </div>
-            </div>
-        )
-    }
+      const pro = row.original;
+      return (
+        <div className="flex items-center gap-2">
+          <Avatar className="h-9 w-9">
+            <AvatarImage src={pro.user.avatar || ""} />
+            <AvatarFallback>{pro.companyName[0]}</AvatarFallback>
+          </Avatar>
+          <div className="flex flex-col">
+            <span className="font-medium text-sm">{pro.companyName}</span>
+            <span className="text-xs text-muted-foreground">
+              {pro.user.firstName} {pro.user.lastName}
+            </span>
+          </div>
+        </div>
+      );
+    },
   },
   {
     accessorKey: "licenseNumber",
     header: "License",
-     cell: ({ row }) => row.original.licenseNumber || "-"
+    cell: ({ row }) => row.original.licenseNumber || "-",
   },
   {
-      accessorKey: "verified",
-      header: "Status",
-      cell: ({ row }) => {
-          const isVerified = row.original.verified;
-          return (
-              <div className={cn("flex items-center gap-1 text-xs px-2 py-1 rounded-full w-fit", 
-                  isVerified ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
-              )}>
-                  {isVerified ? <ShieldCheck className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                  {isVerified ? "Verified" : "Unverified"}
-              </div>
-          )
-      }
+    accessorKey: "verified",
+    header: "Status",
+    cell: ({ row }) => {
+      const isVerified = row.original.verified;
+      return (
+        <div
+          className={cn(
+            "flex items-center gap-1 text-xs px-2 py-1 rounded-full w-fit",
+            isVerified
+              ? "bg-green-100 text-green-700"
+              : "bg-yellow-100 text-yellow-700",
+          )}
+        >
+          {isVerified ? (
+            <ShieldCheck className="h-3 w-3" />
+          ) : (
+            <XCircle className="h-3 w-3" />
+          )}
+          {isVerified ? "Verified" : "Unverified"}
+        </div>
+      );
+    },
   },
   {
     accessorKey: "createdAt",
@@ -129,7 +157,9 @@ function ProfessionalActionsCell({ pro }: { pro: ProfessionalData }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-        <DropdownMenuItem onClick={() => navigator.clipboard.writeText(pro.userId)}>
+        <DropdownMenuItem
+          onClick={() => navigator.clipboard.writeText(pro.userId)}
+        >
           Copy User ID
         </DropdownMenuItem>
         <DropdownMenuSeparator />

@@ -5,24 +5,51 @@ import "@testing-library/jest-dom/vitest";
 import { useImageUploader } from "@/hooks/useImageUploader";
 import type { ImageField } from "@/hooks/useImageUploader";
 
-// Mock sonner toast
-const mockToast = {
-  loading: vi.fn(() => "loading-toast-id"),
-  success: vi.fn(),
-  error: vi.fn(),
-  dismiss: vi.fn(),
-  warning: vi.fn(),
-};
+// vi.mock factories are hoisted; use vi.hoisted() so mock refs exist at hoist time
+const { mockToast, mockUploadFiles, mockValidateFiles } = vi.hoisted(() => ({
+  mockToast: {
+    loading: vi.fn(() => "loading-toast-id"),
+    success: vi.fn(),
+    error: vi.fn(),
+    dismiss: vi.fn(),
+    warning: vi.fn(),
+  },
+  mockUploadFiles: vi.fn(),
+  mockValidateFiles: vi.fn(),
+}));
 
 vi.mock("sonner", () => ({
   toast: mockToast,
 }));
 
-// Mock the upload service
-const mockUploadFiles = vi.fn();
-const mockValidateFiles = vi.fn();
+vi.mock("@/lib/facades/upload-client", () => ({
+  uploadFiles: (...args: unknown[]) => mockUploadFiles(...args),
+  validateFiles: (...args: unknown[]) => mockValidateFiles(...args),
+  UploadError: class UploadError extends Error {
+    code: string;
+    constructor(message: string, code: string) {
+      super(message);
+      this.code = code;
+    }
+  },
+  UploadErrorCode: {
+    VALIDATION_ERROR: "VALIDATION_ERROR",
+    NETWORK_ERROR: "NETWORK_ERROR",
+    SERVER_ERROR: "SERVER_ERROR",
+    INVALID_RESPONSE: "INVALID_RESPONSE",
+    MAX_RETRIES_EXCEEDED: "MAX_RETRIES_EXCEEDED",
+    ABORTED: "ABORTED",
+    UNKNOWN: "UNKNOWN",
+  },
+  FILE_LIMITS: {
+    IMAGE_MAX_SIZE: 10 * 1024 * 1024,
+    DOCUMENT_MAX_SIZE: 25 * 1024 * 1024,
+    MAX_FILES_PER_UPLOAD: 10,
+  },
+}));
 
-vi.mock("@/lib/services/upload", () => ({
+// Also mock the canonical colocated facade path (Phase 5 migration)
+vi.mock("@/lib/facades/uploads/upload-client", () => ({
   uploadFiles: (...args: unknown[]) => mockUploadFiles(...args),
   validateFiles: (...args: unknown[]) => mockValidateFiles(...args),
   UploadError: class UploadError extends Error {
@@ -65,6 +92,7 @@ describe("useImageUploader", () => {
     vi.clearAllMocks();
     mockUploadFiles.mockResolvedValue({
       urls: ["https://example.com/new.jpg"],
+      assetIds: ["00000000-0000-0000-0000-000000000001"],
     });
     mockValidateFiles.mockImplementation(() => {});
   });
@@ -166,7 +194,7 @@ describe("useImageUploader", () => {
 
       expect(mockAppendImage).toHaveBeenCalledWith(
         { value: "https://example.com/image.jpg" },
-        { shouldFocus: false }
+        { shouldFocus: false },
       );
       expect(result.current.newImageUrl).toBe("");
       expect(mockToast.success).toHaveBeenCalledWith("Image added");
@@ -184,7 +212,9 @@ describe("useImageUploader", () => {
       });
 
       expect(mockAppendImage).not.toHaveBeenCalled();
-      expect(mockToast.error).toHaveBeenCalledWith("Invalid URL format");
+      expect(mockToast.error).toHaveBeenCalledWith(
+        "Image URL must start with https:// or be a local path",
+      );
     });
 
     it("rejects non-HTTPS URL", () => {
@@ -200,7 +230,7 @@ describe("useImageUploader", () => {
 
       expect(mockAppendImage).not.toHaveBeenCalled();
       expect(mockToast.error).toHaveBeenCalledWith(
-        "Image URL must start with https:// or be a local path"
+        "Image URL must start with https:// or be a local path",
       );
     });
 
@@ -217,7 +247,7 @@ describe("useImageUploader", () => {
 
       expect(mockAppendImage).toHaveBeenCalledWith(
         { value: "/uploads/image.jpg" },
-        { shouldFocus: false }
+        { shouldFocus: false },
       );
     });
 
@@ -234,7 +264,7 @@ describe("useImageUploader", () => {
 
       expect(mockAppendImage).not.toHaveBeenCalled();
       expect(mockToast.error).toHaveBeenCalledWith(
-        "This image URL is already added"
+        "This image URL is already added",
       );
     });
 
@@ -288,7 +318,7 @@ describe("useImageUploader", () => {
           emptyImageFields,
           mockAppendImage,
           mockUpdateImage,
-          mockRemoveImage
+          mockRemoveImage,
         );
       });
 
@@ -315,7 +345,7 @@ describe("useImageUploader", () => {
           emptyImageFields,
           mockAppendImage,
           mockUpdateImage,
-          mockRemoveImage
+          mockRemoveImage,
         );
       });
 
@@ -343,13 +373,14 @@ describe("useImageUploader", () => {
           emptyImageFields,
           mockAppendImage,
           mockUpdateImage,
-          mockRemoveImage
+          mockRemoveImage,
         );
       });
 
       await waitFor(() => {
         expect(mockAppendImage).toHaveBeenCalled();
         expect(mockUpdateImage).toHaveBeenCalledWith(0, {
+          assetId: "00000000-0000-0000-0000-000000000001",
           value: "https://example.com/new.jpg",
         });
         expect(mockToast.success).toHaveBeenCalledWith("Added 1 image(s)");
@@ -376,7 +407,7 @@ describe("useImageUploader", () => {
           sampleImageFields, // Already has 2 images
           mockAppendImage,
           mockUpdateImage,
-          mockRemoveImage
+          mockRemoveImage,
         );
       });
 
@@ -406,7 +437,7 @@ describe("useImageUploader", () => {
           emptyImageFields,
           mockAppendImage,
           mockUpdateImage,
-          mockRemoveImage
+          mockRemoveImage,
         );
       });
 
@@ -458,7 +489,7 @@ describe("useImageUploader", () => {
           emptyImageFields,
           mockAppendImage,
           mockUpdateImage,
-          mockRemoveImage
+          mockRemoveImage,
         );
       });
 
@@ -490,7 +521,7 @@ describe("useImageUploader", () => {
           emptyImageFields,
           mockAppendImage,
           mockUpdateImage,
-          mockRemoveImage
+          mockRemoveImage,
         );
       });
 

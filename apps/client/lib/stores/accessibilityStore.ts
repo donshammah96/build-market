@@ -33,7 +33,7 @@ interface AccessibilityState extends AccessibilitySettings {
   setEnhancedFocus: (value: boolean) => void;
   setKeyboardShortcuts: (value: boolean) => void;
   setColorBlindMode: (
-    value: "none" | "protanopia" | "deuteranopia" | "tritanopia"
+    value: "none" | "protanopia" | "deuteranopia" | "tritanopia",
   ) => void;
   setDyslexiaFont: (value: boolean) => void;
   setLineSpacing: (value: "normal" | "relaxed" | "loose") => void;
@@ -100,8 +100,8 @@ export const useAccessibilityStore = create<AccessibilityState>()(
         dyslexiaFont: state.dyslexiaFont,
         lineSpacing: state.lineSpacing,
       }),
-    }
-  )
+    },
+  ),
 );
 
 // Selector hooks for better performance (prevents unnecessary re-renders)

@@ -70,22 +70,20 @@ export function MetricCard({
 
   if (isLoading) {
     return (
-      <Card
-        className={cn("border border-zinc-200 shadow-sm bg-white", className)}
-      >
+      <Card className={cn("border border-border shadow-sm bg-card", className)}>
         <CardContent className="p-6">
-          <div className="animate-pulse space-y-4">
+          <div className="motion-safe:animate-pulse space-y-4">
             <div className="flex justify-between">
-              <div className="h-11 w-11 bg-zinc-200 rounded-xl" />
+              <div className="h-11 w-11 bg-muted rounded-xl" />
               <div className="flex gap-1">
                 {[1, 2, 3, 4, 5, 6, 7].map((i) => (
-                  <div key={i} className="w-1.5 h-8 bg-zinc-200 rounded" />
+                  <div key={i} className="w-1.5 h-8 bg-muted rounded" />
                 ))}
               </div>
             </div>
             <div className="space-y-2">
-              <div className="h-3 w-20 bg-zinc-200 rounded" />
-              <div className="h-8 w-28 bg-zinc-200 rounded" />
+              <div className="h-3 w-20 bg-muted rounded" />
+              <div className="h-8 w-28 bg-muted rounded" />
             </div>
           </div>
         </CardContent>
@@ -98,9 +96,9 @@ export function MetricCard({
       className={cn(
         "relative overflow-hidden transition-all duration-500 group",
         highlight
-          ? "bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-0 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.35)] hover:shadow-[0_25px_60px_-12px_rgba(0,0,0,0.45)] hover:-translate-y-1"
-          : "border border-zinc-200/80 shadow-sm hover:shadow-lg hover:-translate-y-0.5 bg-white/80 backdrop-blur-sm",
-        className
+          ? "bg-gradient-to-br from-foreground via-foreground to-primary border-0 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.35)] hover:shadow-[0_25px_60px_-12px_rgba(0,0,0,0.45)] motion-safe:hover:-translate-y-1"
+          : "border border-border/80 shadow-sm hover:shadow-lg motion-safe:hover:-translate-y-0.5 bg-card/90 backdrop-blur-sm",
+        className,
       )}
     >
       {/* Animated shimmer effect for highlighted cards */}
@@ -121,8 +119,8 @@ export function MetricCard({
             className={cn(
               "p-3 rounded-xl transition-all duration-300",
               highlight
-                ? "bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 text-emerald-400 ring-1 ring-emerald-500/20"
-                : "bg-gradient-to-br from-zinc-100 to-zinc-50 border border-zinc-200/50 text-zinc-500 group-hover:text-zinc-900 group-hover:border-zinc-300"
+                ? "bg-gradient-to-br from-primary/30 to-primary/10 text-primary-foreground ring-1 ring-primary/30"
+                : "bg-gradient-to-br from-muted to-muted/60 border border-border/60 text-muted-foreground group-hover:text-foreground group-hover:border-border",
             )}
           >
             <Icon className="h-5 w-5" />
@@ -137,8 +135,8 @@ export function MetricCard({
                   className={cn(
                     "w-1.5 rounded-t transition-all duration-300",
                     highlight
-                      ? "bg-gradient-to-t from-emerald-500 to-emerald-400"
-                      : "bg-gradient-to-t from-zinc-400 to-zinc-300"
+                      ? "bg-gradient-to-t from-primary to-primary/80"
+                      : "bg-gradient-to-t from-muted-foreground to-muted",
                   )}
                   style={{
                     height: `${h}%`,
@@ -154,7 +152,7 @@ export function MetricCard({
           <p
             className={cn(
               "text-xs font-semibold uppercase tracking-wider mb-1",
-              highlight ? "text-zinc-400" : "text-zinc-500"
+              highlight ? "text-white/70" : "text-muted-foreground",
             )}
           >
             {title}
@@ -163,7 +161,7 @@ export function MetricCard({
             <h3
               className={cn(
                 "text-3xl font-bold tracking-tight",
-                highlight ? "text-white" : "text-zinc-900"
+                highlight ? "text-white" : "text-foreground",
               )}
             >
               {value}
@@ -172,7 +170,7 @@ export function MetricCard({
               <span
                 className={cn(
                   "text-xs font-semibold flex items-center gap-1 px-2 py-1 rounded-full",
-                  getTrendColor()
+                  getTrendColor(),
                 )}
               >
                 <TrendIcon className="h-3 w-3" /> {trend}

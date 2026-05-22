@@ -1,387 +1,359 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
-import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
+import { checkBodySize, isValidId } from "@/app/lib/api/api-guards";
 import {
+  getResilientExecutor,
   initializeCorrelationId,
-  executeResilient,
-  getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { PROPERTY_CONFIG } from "@/app/lib/config/property.config";
+import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
+import { propertiesService } from "@/app/lib/domains/properties";
+import { createDocumentSchema } from "@/app/lib/domains/properties/contracts";
+import {
+  actorRoleLabel,
+  domainErrorCodeToStatus,
+  domainResultToErrorResponse,
+  logPropertiesRouteOutcome,
+  now,
+} from "@/app/api/properties/shared";
 
-const logger = getClientLogger();
+const AUDIT_ACTION_PROFILE_UPDATED = "PROFILE_UPDATED";
 
-const AttachmentTypeEnum = z.enum([
-  "TITLE_DEED",
-  "OFFICIAL_SEARCH",
-  "MANDATE_LETTER",
-]);
-
-const createAttachmentSchema = z.object({
-  fileUrl: z.string().url("Invalid file URL"),
-  fileKey: z.string().optional(),
-  type: AttachmentTypeEnum,
-});
-
-const updateAttachmentSchema = z.object({
-  attachmentId: z.string().uuid(),
-  fileUrl: z.string().url("Invalid file URL"),
-  fileKey: z.string().optional(),
-});
-
-/**
- * GET /api/properties/[id]/documents
- * Get all attachments for a property
- */
 export const GET = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
+  async (req: NextRequest, { dbUserId, userRole }, params) => {
+    const startedAt = now();
     const correlationId = initializeCorrelationId(req);
-    const { id } = params!;
+    const operationName = "get_property_documents";
+    const actorRole = actorRoleLabel(userRole);
+    const propertyId = params!.id;
+
+    if (!isValidId(propertyId)) {
+      const response = apiError(
+        "Invalid property ID",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "propertyDocument",
+        resourceId: propertyId,
+      });
+      return response;
+    }
 
     const identifier = getRateLimitIdentifier(req);
     const { success } = await checkRateLimit(
       identifier,
       RateLimits.READ.limit,
-      RateLimits.READ.window
+      RateLimits.READ.window,
     );
 
     if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+      const response = apiError(
+        "Too many requests",
+        HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+        resourceType: "propertyDocument",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
-    logger.info("Fetching property attachments", {
-      correlationId,
-      propertyId: id,
-    });
-
-    return executeResilient(
-      async () => {
-        // Verify property exists and user owns it
-        const property = await prisma.property.findUnique({
-          where: { id },
-          select: { agentId: true },
-        });
-
-        if (!property) {
-          return apiError("Property not found", HttpStatus.NOT_FOUND);
-        }
-
-        if (property.agentId !== dbUserId) {
-          return apiError("Unauthorized", HttpStatus.FORBIDDEN);
-        }
-
-        const attachments = await prisma.propertyAttachment.findMany({
-          where: { propertyId: id },
-          orderBy: { createdAt: "desc" },
-        });
-
-        logger.info("Property attachments fetched successfully", {
-          correlationId,
-          propertyId: id,
-          count: attachments.length,
-        });
-
-        return { data: attachments };
-      },
-      {
-        operationName: "get_property_attachments",
-        successStatus: HttpStatus.OK,
-      }
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      () =>
+        propertiesService.getPropertyDocuments(propertyId, {
+          userId: dbUserId,
+          role: userRole,
+        }),
+      { operationName },
     );
-  }
+
+    if (!result.success || !result.data) {
+      const response = apiError(
+        "Failed to fetch property documents",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "internal_error",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: now() - startedAt,
+        resourceType: "propertyDocument",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    const domainResult = result.data;
+    if (!domainResult.ok) {
+      const errorResponse = domainResultToErrorResponse(
+        domainResult,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(domainResult.error),
+        durationMs: now() - startedAt,
+        domainError: domainResult.error,
+        resourceType: "propertyDocument",
+        resourceId: propertyId,
+      });
+      return errorResponse!;
+    }
+
+    const response = apiSuccess(
+      domainResult.data,
+      HttpStatus.OK,
+      correlationId,
+    );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "propertyDocument",
+      resourceId: propertyId,
+    });
+    return response;
+  },
 );
 
-/**
- * POST /api/properties/[id]/documents
- * Create a new attachment for a property
- */
 export const POST = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
+  async (req: NextRequest, { dbUserId, userRole }, params) => {
+    const startedAt = now();
     const correlationId = initializeCorrelationId(req);
-    const { id } = params!;
-    const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window
-    );
+    const operationName = "create_property_document";
+    const actorRole = actorRoleLabel(userRole);
+    const propertyId = params!.id;
 
-    if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-    }
-
-    const body = await req.json();
-    const validation = createAttachmentSchema.safeParse(body);
-
-    if (!validation.success) {
-      logger.warn("Attachment creation validation failed", {
-        correlationId,
-        propertyId: id,
-        errors: validation.error.issues,
-      });
-      return apiError(
-        "Invalid input",
+    if (!isValidId(propertyId)) {
+      const response = apiError(
+        "Invalid property ID",
         HttpStatus.BAD_REQUEST,
-        validation.error.issues
-      );
-    }
-
-    // Verify property exists and user owns it
-    const property = await prisma.property.findUnique({
-      where: { id },
-      select: { agentId: true },
-    });
-
-    if (!property) {
-      return apiError("Property not found", HttpStatus.NOT_FOUND);
-    }
-
-    if (property.agentId !== dbUserId) {
-      return apiError("Unauthorized", HttpStatus.FORBIDDEN);
-    }
-
-    const { fileUrl, fileKey, type } = validation.data;
-
-    logger.info("Creating property attachment", {
-      correlationId,
-      propertyId: id,
-      type,
-    });
-
-    return executeResilient(
-      async () => {
-        // Update property status to PENDING when attachments are submitted
-        await prisma.property.update({
-          where: { id },
-          data: {
-            verificationStatus: "PENDING",
-            submittedAt: new Date(),
-          },
-        });
-
-        const attachment = await prisma.propertyAttachment.create({
-          data: {
-            propertyId: id,
-            fileUrl,
-            fileKey: fileKey || null,
-            type,
-            uploadedBy: dbUserId,
-            isVerified: false,
-          },
-        });
-
-        logger.info("Property attachment created successfully", {
-          correlationId,
-          propertyId: id,
-          attachmentId: attachment.id,
-        });
-
-        return attachment;
-      },
-      {
-        operationName: "create_property_attachment",
-        successStatus: HttpStatus.CREATED,
-      }
-    );
-  }
-);
-
-/**
- * PATCH /api/properties/[id]/documents
- * Update/replace an existing attachment
- */
-export const PATCH = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
-    const correlationId = initializeCorrelationId(req);
-    const { id } = params!;
-    const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
-      RateLimits.WRITE.limit,
-      RateLimits.WRITE.window
-    );
-
-    if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
-    }
-
-    const body = await req.json();
-    const validation = updateAttachmentSchema.safeParse(body);
-
-    if (!validation.success) {
-      logger.warn("Attachment update validation failed", {
+        undefined,
         correlationId,
-        propertyId: id,
-        errors: validation.error.issues,
-      });
-      return apiError(
-        "Invalid input",
-        HttpStatus.BAD_REQUEST,
-        validation.error.issues
       );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "propertyDocument",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
-    const { attachmentId, fileUrl, fileKey } = validation.data;
-
-    logger.info("Updating property attachment", {
-      correlationId,
-      propertyId: id,
-      attachmentId,
-    });
-
-    return executeResilient(
-      async () => {
-        // Verify property exists and user owns it
-        const property = await prisma.property.findUnique({
-          where: { id },
-          select: { agentId: true },
-        });
-
-        if (!property) {
-          return apiError("Property not found", HttpStatus.NOT_FOUND);
-        }
-
-        if (property.agentId !== dbUserId) {
-          return apiError("Unauthorized", HttpStatus.FORBIDDEN);
-        }
-
-        // Verify attachment belongs to property
-        const existing = await prisma.propertyAttachment.findUnique({
-          where: { id: attachmentId },
-        });
-
-        if (!existing) {
-          return apiError("Attachment not found", HttpStatus.NOT_FOUND);
-        }
-
-        if (existing.propertyId !== id) {
-          return apiError(
-            "Attachment does not belong to this property",
-            HttpStatus.BAD_REQUEST
-          );
-        }
-
-        // Update attachment and reset verification status
-        const attachment = await prisma.propertyAttachment.update({
-          where: { id: attachmentId },
-          data: {
-            fileUrl,
-            fileKey: fileKey || null,
-            isVerified: false,
-            verifiedAt: null,
-            notes: null,
-          },
-        });
-
-        // Update property status to PENDING when attachments are replaced
-        await prisma.property.update({
-          where: { id },
-          data: {
-            verificationStatus: "PENDING",
-            submittedAt: new Date(),
-          },
-        });
-
-        logger.info("Property attachment updated successfully", {
-          correlationId,
-          propertyId: id,
-          attachmentId: attachment.id,
-        });
-
-        return attachment;
-      },
-      {
-        operationName: "update_property_attachment",
-        successStatus: HttpStatus.OK,
-      }
-    );
-  }
-);
-
-/**
- * DELETE /api/properties/[id]/documents
- * Delete an attachment
- */
-export const DELETE = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
-    const correlationId = initializeCorrelationId(req);
-    const { id } = params!;
-    const { searchParams } = new URL(req.url);
-    const attachmentId = searchParams.get("attachmentId");
-
-    if (!attachmentId) {
-      return apiError("Attachment ID is required", HttpStatus.BAD_REQUEST);
-    }
     const identifier = getRateLimitIdentifier(req);
     const { success } = await checkRateLimit(
       identifier,
       RateLimits.WRITE.limit,
-      RateLimits.WRITE.window
+      RateLimits.WRITE.window,
     );
-
     if (!success) {
-      return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
+      const response = apiError(
+        "Too many requests",
+        HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+        domainError: "limit_exceeded",
+        resourceType: "propertyDocument",
+        resourceId: propertyId,
+      });
+      return response;
     }
 
-    logger.info("Deleting property attachment", {
-      correlationId,
-      propertyId: id,
-      attachmentId,
-    });
+    const bodyError = checkBodySize(req, PROPERTY_CONFIG.MAX_BODY_SIZE);
+    if (bodyError) {
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: bodyError.status,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "propertyDocument",
+        resourceId: propertyId,
+      });
+      return bodyError;
+    }
 
-    return executeResilient(
-      async () => {
-        // Verify property exists and user owns it
-        const property = await prisma.property.findUnique({
-          where: { id },
-          select: { agentId: true },
-        });
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      const response = apiError(
+        "Invalid JSON body",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "propertyDocument",
+        resourceId: propertyId,
+      });
+      return response;
+    }
 
-        if (!property) {
-          return apiError("Property not found", HttpStatus.NOT_FOUND);
-        }
+    const validation = createDocumentSchema.safeParse(body);
+    if (!validation.success) {
+      const response = apiError(
+        validation.error.message,
+        HttpStatus.BAD_REQUEST,
+        validation.error.issues,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
+        domainError: "invalid_input",
+        resourceType: "propertyDocument",
+        resourceId: propertyId,
+      });
+      return response;
+    }
 
-        if (property.agentId !== dbUserId) {
-          return apiError("Unauthorized", HttpStatus.FORBIDDEN);
-        }
-
-        // Verify attachment belongs to property
-        const existing = await prisma.propertyAttachment.findUnique({
-          where: { id: attachmentId },
-        });
-
-        if (!existing) {
-          return apiError("Attachment not found", HttpStatus.NOT_FOUND);
-        }
-
-        if (existing.propertyId !== id) {
-          return apiError(
-            "Attachment does not belong to this property",
-            HttpStatus.BAD_REQUEST
-          );
-        }
-
-        await prisma.propertyAttachment.delete({
-          where: { id: attachmentId },
-        });
-
-        logger.info("Property attachment deleted successfully", {
-          correlationId,
-          propertyId: id,
-          attachmentId,
-        });
-
-        return { success: true };
-      },
-      {
-        operationName: "delete_property_attachment",
-        successStatus: HttpStatus.OK,
-      }
+    const resilientExecutor = getResilientExecutor();
+    const result = await resilientExecutor.execute(
+      () =>
+        propertiesService.addPropertyDocument(
+          propertyId,
+          { userId: dbUserId, role: userRole },
+          validation.data,
+        ),
+      { operationName },
     );
-  }
+
+    if (!result.success || !result.data) {
+      const response = apiError(
+        "Failed to create property document",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        undefined,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "internal_error",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: now() - startedAt,
+        resourceType: "propertyDocument",
+        resourceId: propertyId,
+      });
+      return response;
+    }
+
+    const domainResult = result.data;
+    if (!domainResult.ok) {
+      const errorResponse = domainResultToErrorResponse(
+        domainResult,
+        correlationId,
+      );
+      logPropertiesRouteOutcome({
+        correlationId,
+        operationName,
+        actorRole,
+        outcome: "domain_error",
+        httpStatus: domainErrorCodeToStatus(domainResult.error),
+        durationMs: now() - startedAt,
+        domainError: domainResult.error,
+        resourceType: "propertyDocument",
+        resourceId: propertyId,
+      });
+      return errorResponse!;
+    }
+
+    const documentId =
+      "id" in domainResult.data && typeof domainResult.data.id === "string"
+        ? domainResult.data.id
+        : undefined;
+
+    if (documentId) {
+      ComplianceService.logAdminAction(
+        dbUserId,
+        AUDIT_ACTION_PROFILE_UPDATED,
+        "PropertyDocument",
+        documentId,
+        {
+          propertyId,
+          type: validation.data.type,
+          assetId: validation.data.assetId,
+        },
+      ).catch(() => {});
+    }
+
+    const response = apiSuccess(
+      domainResult.data,
+      HttpStatus.CREATED,
+      correlationId,
+    );
+    logPropertiesRouteOutcome({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: "success",
+      httpStatus: HttpStatus.CREATED,
+      durationMs: now() - startedAt,
+      resourceType: "propertyDocument",
+      resourceId: documentId ?? propertyId,
+    });
+    return response;
+  },
 );

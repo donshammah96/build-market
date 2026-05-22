@@ -1,5 +1,5 @@
 {
-  "name": "@repo/resilience",
+  "name": "@build/resilience",
   "version": "1.0.0",
   "description": "Resilience utilities for distributed systems - timeouts, retries, circuit breakers, caching, and observability",
   "main": "./dist/index.js",
@@ -13,15 +13,18 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "clean": "rm -rf dist",
-    "check-types": "tsc --noEmit"
+    "lint": "echo \"No lint configured\" && exit 0",
+    "check-types": "tsc --noEmit",
+    "test": "echo \"No tests configured\" && exit 0",
+    "clean": "rm -rf dist"
   },
   "dependencies": {
-    "lru-cache": "^11.2.2",
-    "@repo/redis": "workspace:*"
+    "@build/redis": "workspace:*",
+    "lru-cache": "^11.2.2"
   },
   "devDependencies": {
-    "@repo/typescript-config": "workspace:*",
+    "@build/typescript-config": "workspace:*",
+    "@types/node": "^25.7.0",
     "typescript": "^5.9.3"
   }
 }

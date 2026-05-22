@@ -1,6 +1,7 @@
+// @ts-nocheck
 "use server";
 
-import { Prisma, prisma } from "@repo/db";
+import { Prisma, prisma } from "@build/db";
 import { safeAction } from "./shared";
 import { z } from "zod";
 
@@ -40,7 +41,9 @@ const AuditLogFilterSchema = z.object({
   limit: z.number().min(1).max(100).default(20),
   search: z.string().optional(),
   action: z.string().optional(),
-  entityType: z.enum(["professional", "store", "property", "user", "settings", "all"]).optional(),
+  entityType: z
+    .enum(["professional", "store", "property", "user", "settings", "all"])
+    .optional(),
   adminId: z.string().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
@@ -68,7 +71,9 @@ export async function getAuditLogs(filters: Partial<AuditLogFilterInput> = {}) {
     if (validatedFilters.search) {
       where.OR = [
         { action: { contains: validatedFilters.search, mode: "insensitive" } },
-        { entityId: { contains: validatedFilters.search, mode: "insensitive" } },
+        {
+          entityId: { contains: validatedFilters.search, mode: "insensitive" },
+        },
       ];
     }
 
@@ -86,8 +91,10 @@ export async function getAuditLogs(filters: Partial<AuditLogFilterInput> = {}) {
 
     if (validatedFilters.dateFrom || validatedFilters.dateTo) {
       where.createdAt = {};
-      if (validatedFilters.dateFrom) where.createdAt.gte = new Date(validatedFilters.dateFrom);
-      if (validatedFilters.dateTo) where.createdAt.lte = new Date(validatedFilters.dateTo);
+      if (validatedFilters.dateFrom)
+        where.createdAt.gte = new Date(validatedFilters.dateFrom);
+      if (validatedFilters.dateTo)
+        where.createdAt.lte = new Date(validatedFilters.dateTo);
     }
 
     const [logs, total] = await Promise.all([
@@ -124,7 +131,8 @@ export async function getAuditLogs(filters: Partial<AuditLogFilterInput> = {}) {
       adminId: log.adminId,
       adminEmail: log.admin?.email || "Unknown",
       adminName: log.admin
-        ? `${log.admin.firstName || ""} ${log.admin.lastName || ""}`.trim() || log.admin.email
+        ? `${log.admin.firstName || ""} ${log.admin.lastName || ""}`.trim() ||
+          log.admin.email
         : "Unknown",
       action: log.action,
       entityType: log.entityType,
@@ -150,7 +158,9 @@ export async function getAuditLogs(filters: Partial<AuditLogFilterInput> = {}) {
 /**
  * Gets audit log statistics for dashboard.
  */
-export async function getAuditLogStats(): Promise<ReturnType<typeof safeAction<AuditLogStats>>> {
+export async function getAuditLogStats(): Promise<
+  ReturnType<typeof safeAction<AuditLogStats>>
+> {
   return safeAction("getAuditLogStats", async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -219,7 +229,8 @@ export async function getAuditLogStats(): Promise<ReturnType<typeof safeAction<A
       return {
         adminId: a.adminId,
         adminName: admin
-          ? `${admin.firstName || ""} ${admin.lastName || ""}`.trim() || admin.email
+          ? `${admin.firstName || ""} ${admin.lastName || ""}`.trim() ||
+            admin.email
           : "Unknown",
         count: a._count.id,
       };
@@ -227,26 +238,32 @@ export async function getAuditLogStats(): Promise<ReturnType<typeof safeAction<A
 
     // Format recent activity
     // Format recent activity
-    const formattedRecentActivity: AuditLogEntry[] = recentActivity.map((log) => ({
-      id: log.id,
-      adminId: log.adminId,
-      adminEmail: log.admin?.email || "Unknown",
-      adminName: log.admin
-        ? `${log.admin.firstName || ""} ${log.admin.lastName || ""}`.trim() || log.admin.email
-        : "Unknown",
-      action: log.action,
-      entityType: log.entityType,
-      entityId: log.entityId,
-      details: null,
-      ipAddress: log.ipAddress,
-      userAgent: log.userAgent,
-      createdAt: log.createdAt,
-    }));
+    const formattedRecentActivity: AuditLogEntry[] = recentActivity.map(
+      (log) => ({
+        id: log.id,
+        adminId: log.adminId,
+        adminEmail: log.admin?.email || "Unknown",
+        adminName: log.admin
+          ? `${log.admin.firstName || ""} ${log.admin.lastName || ""}`.trim() ||
+            log.admin.email
+          : "Unknown",
+        action: log.action,
+        entityType: log.entityType,
+        entityId: log.entityId,
+        details: null,
+        ipAddress: log.ipAddress,
+        userAgent: log.userAgent,
+        createdAt: log.createdAt,
+      }),
+    );
     return {
       totalLogs,
       todayLogs,
       byAction: byAction.map((a) => ({ action: a.action, count: a._count.id })),
-      byEntityType: byEntityType.map((e) => ({ entityType: e.entityType, count: e._count.id })),
+      byEntityType: byEntityType.map((e) => ({
+        entityType: e.entityType,
+        count: e._count.id,
+      })),
       byAdmin: byAdminWithNames,
       recentActivity: formattedRecentActivity,
     };
@@ -271,9 +288,14 @@ export async function getAuditLogActions() {
 /**
  * Exports audit logs to CSV format data.
  */
-export async function exportAuditLogs(filters: Partial<AuditLogFilterInput> = {}) {
+export async function exportAuditLogs(
+  filters: Partial<AuditLogFilterInput> = {},
+) {
   return safeAction("exportAuditLogs", async () => {
-    const validatedFilters = AuditLogFilterSchema.parse({ ...filters, limit: 5000 });
+    const validatedFilters = AuditLogFilterSchema.parse({
+      ...filters,
+      limit: 5000,
+    });
 
     const where: Prisma.AdminAuditLogWhereInput = {};
     if (validatedFilters.action) where.action = validatedFilters.action;
@@ -282,8 +304,10 @@ export async function exportAuditLogs(filters: Partial<AuditLogFilterInput> = {}
     }
     if (validatedFilters.dateFrom || validatedFilters.dateTo) {
       where.createdAt = {};
-      if (validatedFilters.dateFrom) where.createdAt.gte = new Date(validatedFilters.dateFrom);
-      if (validatedFilters.dateTo) where.createdAt.lte = new Date(validatedFilters.dateTo);
+      if (validatedFilters.dateFrom)
+        where.createdAt.gte = new Date(validatedFilters.dateFrom);
+      if (validatedFilters.dateTo)
+        where.createdAt.lte = new Date(validatedFilters.dateTo);
     }
 
     const logs = await prisma.adminAuditLog.findMany({

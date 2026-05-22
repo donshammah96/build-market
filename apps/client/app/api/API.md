@@ -1,187 +1,286 @@
-# Build Market Client API Documentation
+# Client API Reference
 
-## Overview
+## Purpose
 
-This document describes the REST API endpoints available in the Build Market client application. All endpoints follow RESTful conventions and return consistent JSON responses.
+This document is the top-level reference for the `apps/client` API surface.
 
-## Base Response Format
+It is intentionally architectural and route-family oriented, not an exhaustive replacement for each vertical README. Use it to understand the API contract shape, auth model, endpoint families, and the current ownership model. For route-by-route behavior inside a vertical, defer to the slice README in that folder.
 
-### Success Response
+## Core API Rules
+
+- All route handlers return the shared success or error envelope.
+- Clerk is the runtime authentication source for authenticated requests.
+- Domain services, not routes, own resource authorization and business rules.
+- Authenticated adapters should pass full actor context into the domain layer.
+- Mutations should use shared idempotency and rate-limit primitives where the slice requires them.
+
+## Base Response Contract
+
+### Success
+
 ```json
 {
   "success": true,
-  "data": { ... },
-  "timestamp": "2025-12-15T10:00:00.000Z",
-  "correlationId": "abc-123-def-456"
+  "data": {},
+  "timestamp": "2026-03-11T00:00:00.000Z",
+  "correlationId": "abc-123"
 }
 ```
 
-### Error Response
+### Error
+
 ```json
 {
   "success": false,
   "error": "Error message",
-  "details": { ... },
-  "timestamp": "2025-12-15T10:00:00.000Z",
-  "correlationId": "abc-123-def-456"
+  "timestamp": "2026-03-11T00:00:00.000Z",
+  "correlationId": "abc-123"
 }
 ```
 
----
+Notes:
 
-## Authentication
+- `correlationId` should be present on both success and error responses for operational tracing.
+- some routes may include `details` for validation or structured adapter failures, but the envelope stays consistent.
 
-Most endpoints require authentication via Clerk. Pass the session token in requests. Unauthenticated requests return `401 Unauthorized`.
+## Authentication Modes
 
----
+### Public
 
-## Endpoints
+No authenticated actor is required.
 
-### Health Check
+Examples:
 
-| Method | Path | Auth | Rate Limit |
-|--------|------|------|------------|
-| GET | `/api/health` | No | - |
+- health checks
+- public professionals and property discovery
+- public lead submission and public lead status
 
-Returns service health with database and messaging service status.
+### Authenticated
 
----
+Uses Clerk session identity plus database user resolution.
 
-### User Profile
+Examples:
 
-| Method | Path | Auth | Rate Limit | Description |
-|--------|------|------|------------|-------------|
-| GET | `/api/user/profile` | Yes | READ | Get authenticated user's profile |
-| PATCH | `/api/user/profile` | Yes | WRITE | Update basic profile fields |
-| PATCH | `/api/user/profile/complete` | Yes | WRITE | Complete/update full profile |
+- user profile and compliance
+- messaging
+- professional portal routes
+- authenticated CRM flows
 
----
+### Clerk-Authenticated Pre-Materialization
 
-### Professionals
+Some onboarding routes allow a valid Clerk user before the database user is fully materialized.
 
-| Method | Path | Auth | Rate Limit | Description |
-|--------|------|------|------------|-------------|
-| GET | `/api/professionals` | No | READ | List verified professionals |
-| GET | `/api/professionals/[id]` | No | READ | Get professional details |
+Examples:
 
-**Query Parameters (GET /api/professionals):**
-- `search` - Search by name/company (max 100 chars)
-- `category` - Filter by service category
-- `sortBy` - `rating` | `experience` | `reviews`
+- `/api/onboarding/**`
+- `/api/onboarding/uploads`
 
----
+These routes are intentionally Clerk-first so onboarding is not blocked by webhook timing.
 
-### Properties
+### Internal or Webhook
 
-| Method | Path | Auth | Rate Limit | Description |
-|--------|------|------|------------|-------------|
-| GET | `/api/properties` | No | READ | List available properties |
-| GET | `/api/properties/[id]` | No | READ | Get property details with similar listings |
+Uses internal secret or signature verification rather than Clerk session auth.
 
-**Query Parameters (GET /api/properties):**
-- `type` - Filter by type: `SALE` | `RENT` | `LEASE`
-- `category` - Filter by category: `RESIDENTIAL` | `COMMERCIAL` | `LAND` | `INDUSTRIAL`
-- `location` - Search by location (max 100 chars)
-- `minPrice` - Minimum price filter
-- `maxPrice` - Maximum price filter
-- `beds` - Minimum bedrooms filter
-- `featured` - Filter featured properties: `true`
-- `sortBy` - `price_asc` | `price_desc` | `newest` | `oldest`
-- `limit` - Results per page (default: 20, max: 50)
-- `offset` - Pagination offset
+Examples:
 
----
+- `/api/internal/**`
+- `/api/clerk-webhook`
 
-### Professional Portal
+## Endpoint Families
 
-| Method | Path | Auth | Rate Limit | Description |
-|--------|------|------|------------|-------------|
-| GET | `/api/professional-portal/profile` | Yes | READ | Get professional profile |
-| PATCH | `/api/professional-portal/profile` | Yes | WRITE | Update professional profile |
-| GET | `/api/professional-portal/projects` | Yes | READ | List professional's projects |
-| POST | `/api/professional-portal/projects` | Yes | WRITE | Create new project |
-| GET | `/api/professional-portal/leads` | Yes | READ | List leads |
-| POST | `/api/professional-portal/leads` | Yes | WRITE | Create lead |
-| GET | `/api/professional-portal/calendar` | Yes | READ | Get calendar events |
-| GET | `/api/professional-portal/finance/stats` | Yes | READ | Get financial statistics |
-| GET | `/api/professional-portal/finance/transactions` | Yes | READ | List transactions |
-| POST | `/api/professional-portal/finance/withdraw` | Yes | WRITE | Request withdrawal |
+This section groups the primary route families by responsibility and ownership model.
 
----
+### Health and Diagnostics
 
-### Messaging
+- `/api/health`
+- `/api/metrics`
 
-| Method | Path | Auth | Rate Limit | Description |
-|--------|------|------|------------|-------------|
-| GET | `/api/messaging` | No | - | Health check |
-| GET | `/api/messaging/conversations` | Yes | API | List user's conversations |
-| POST | `/api/messaging/conversations` | Yes | API | Create conversation |
-| GET | `/api/messaging/conversations/[id]` | Yes | API | Get conversation |
-| POST | `/api/messaging/messages` | Yes | API | Send message |
+Purpose:
 
----
+- service health
+- dependency checks
+- runtime diagnostics
 
-### Leads (Public)
+### Identity, Profile, and Compliance
 
-| Method | Path | Auth | Rate Limit | Description |
-|--------|------|------|------------|-------------|
-| POST | `/api/leads` | No | WRITE | Submit inquiry to professional |
+- `/api/user/profile`
+- `/api/user/profile/complete`
+- `/api/user/consent`
+- `/api/user/export`
+- `/api/user/rectification`
+- `/api/user/deletion`
 
----
+Ownership model:
 
-### Uploads
-
-| Method | Path | Auth | Rate Limit | Description |
-|--------|------|------|------------|-------------|
-| POST | `/api/uploads` | Yes (DB User) | WRITE | Upload files (requires existing user) |
-| POST | `/api/onboarding/uploads` | Yes (Clerk) | WRITE | Upload files during onboarding |
-
-> **Note:** `/api/onboarding/uploads` only requires Clerk authentication and does NOT require the user to exist in the database. This allows file uploads during the onboarding flow before the user record is created.
-
----
+- thin adapters over `app/lib/domains/user-profile/**`
 
 ### Onboarding
 
-| Method | Path | Auth | Rate Limit | Description |
-|--------|------|------|------------|-------------|
-| POST | `/api/onboarding` | Yes (Clerk) | AUTH | Complete user onboarding |
-| POST | `/api/onboarding/skip` | Yes (Clerk) | AUTH | Skip onboarding (homeowners) |
+- `/api/onboarding`
+- `/api/onboarding/skip`
+- `/api/onboarding/skip-professional`
+- `/api/onboarding/professional/complete`
+- `/api/onboarding/uploads`
 
-> **Important:** Onboarding endpoints use Clerk authentication directly and will **create the user** in the database if they don't exist (upsert behavior). This ensures the onboarding flow works even if the Clerk webhook hasn't fired yet.
+Ownership model:
 
-### Webhooks
+- routes own Clerk-first auth, rate limiting, idempotency, and request parsing
+- domain orchestration lives in `app/lib/domains/user-profile/onboarding.ts`
 
-| Method | Path | Auth | Rate Limit | Description |
-|--------|------|------|------------|-------------|
-| POST | `/api/clerk-webhook` | HMAC | WEBHOOK | Clerk user sync webhook |
+### Public Discovery
 
----
+- `/api/professionals/**`
+- `/api/properties/**`
+- `/api/stores/**`
+- `/api/idea-books/**`
 
-## Rate Limits
+Purpose:
 
-| Tier | Limit | Window |
-|------|-------|--------|
-| AUTH | 5 requests | 1 minute |
-| API | 30 requests | 1 minute |
-| READ | 100 requests | 1 minute |
-| WRITE | 10 requests | 1 minute |
-| WEBHOOK | 100 requests | 1 minute |
+- public or semi-public read models for marketplace discovery
 
-Exceeded limits return `429 Too Many Requests`.
+Implementation note:
 
----
+- even public reads should preserve thin-adapter patterns and avoid route-local business logic
 
-## HTTP Status Codes
+### Professional Portal
 
-| Code | Description |
-|------|-------------|
-| 200 | Success |
-| 201 | Created |
-| 400 | Bad Request (validation error) |
-| 401 | Unauthorized |
-| 403 | Forbidden |
-| 404 | Not Found |
-| 409 | Conflict |
-| 429 | Too Many Requests |
-| 500 | Internal Server Error |
-| 503 | Service Unavailable |
+- `/api/professional-portal/profile/**`
+- `/api/professional-portal/projects/**`
+- `/api/professional-portal/portfolio/**`
+- `/api/professional-portal/leads/**`
+- `/api/professional-portal/inquiries/**`
+- `/api/professional-portal/pipeline`
+- `/api/professional-portal/finance/**`
+- `/api/professional-portal/calendar/**`
+- `/api/professional-portal/licenses/**`
+- `/api/professional-portal/certificates/**`
+
+Ownership model:
+
+- actor-aware domain services
+- domain-owned role and ownership checks
+- explicit `403`, `404`, and `409` mappings where needed
+
+### CRM
+
+- `/api/leads`
+- `/api/leads/[id]`
+- `/api/professional-portal/leads/**`
+- `/api/professional-portal/inquiries/**`
+- `/api/professional-portal/pipeline`
+
+Ownership model:
+
+- `app/lib/domains/leads/**`
+- `app/lib/domains/inquiries/**`
+- `app/lib/domains/pipeline/**`
+
+Important behavior:
+
+- public lead submission stays anonymous-safe
+- professional CRM routes require actor-aware domain enforcement
+- pipeline is a read model but still authorization-sensitive
+
+### Messaging
+
+- `/api/messaging`
+- `/api/messaging/conversations/**`
+- `/api/messaging/messages/**`
+
+Ownership model:
+
+- `app/lib/domains/messaging/**`
+
+Important behavior:
+
+- conversation membership and sender checks live in the domain
+- route adapters should preserve `forbidden` versus `not_found` semantics when the domain distinguishes them
+
+### Uploads and Assets
+
+- `/api/uploads`
+- `/api/onboarding/uploads`
+
+Purpose:
+
+- authenticated and onboarding-safe asset ingestion
+
+Implementation note:
+
+- onboarding upload behavior is intentionally less strict about pre-existing DB user materialization than standard authenticated uploads
+
+### Shared Projects API
+
+- `/api/projects`
+- `/api/projects/[id]`
+
+Status:
+
+- implemented but rollout-gated through the generic projects flags
+
+Important note:
+
+- gating must be enforced both in the canonical projects client and in `lib/projects-client.ts`
+
+## Auth and Rate-Limit Matrix
+
+| Family                       | Auth Mode                   | Common Rate Tier                     |
+| ---------------------------- | --------------------------- | ------------------------------------ |
+| Public discovery             | Public                      | `READ`                               |
+| Authenticated reads          | Clerk + DB actor            | `READ`                               |
+| Authenticated mutations      | Clerk + DB actor            | `WRITE`                              |
+| Onboarding                   | Clerk-first                 | `AUTH` or `WRITE` depending on route |
+| Exports and heavy compliance | Clerk + DB actor            | `EXPORT`                             |
+| Webhooks                     | Signature / internal secret | `WEBHOOK`                            |
+
+Current shared tiers:
+
+- `AUTH`: 5 requests per minute
+- `EXPORT`: 5 requests per hour
+- `WRITE`: 10 requests per minute
+- `READ`: 100 requests per minute
+- `WEBHOOK`: 100 requests per minute
+
+## Domain Ownership Expectations
+
+For migrated slices, the following should be true:
+
+- routes do not implement resource policy inline
+- routes do not directly orchestrate Prisma for business behavior
+- server actions use `secureAction` for validation and actor resolution
+- domains return normalized result contracts
+- repositories stay persistence-only
+
+If a slice does not yet follow this pattern, treat it as migration debt rather than precedent.
+
+## Status Codes
+
+| Code | Meaning                                                        |
+| ---- | -------------------------------------------------------------- |
+| 200  | successful read or mutation                                    |
+| 201  | resource created                                               |
+| 207  | partial success for bulk operations where explicitly supported |
+| 400  | validation or malformed request                                |
+| 401  | unauthenticated                                                |
+| 403  | authenticated but forbidden                                    |
+| 404  | resource not found                                             |
+| 409  | idempotency or optimistic-lock conflict                        |
+| 429  | rate limited                                                   |
+| 500  | unexpected server failure                                      |
+| 503  | dependency or service unavailable                              |
+
+## What This Document Does Not Do
+
+This file does not attempt to enumerate every single route parameter or payload across the app. The vertical READMEs remain the source of truth for slice-specific behavior.
+
+Start here, then drill into the relevant slice documentation:
+
+- `app/api/messaging/README.md`
+- `app/api/properties/README.md`
+- `app/api/stores/README.md`
+- `app/api/professional-portal/projects/README.md`
+- `app/api/leads/README.md`
+
+## Summary
+
+The top-level API contract in `apps/client` is no longer best understood as a list of independent route handlers. It is a set of transport adapters over canonical domain slices with shared auth, resilience, error, and result semantics. This file is the index to that model.

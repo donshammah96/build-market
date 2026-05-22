@@ -1,0 +1,5 @@
+-- AlterEnum
+ALTER TYPE "AuditAction" ADD VALUE 'DATA_RECTIFIED';
+
+-- AlterEnum
+ALTER TYPE "LegalBasis" ADD VALUE 'GDPR_ARTICLE_16';

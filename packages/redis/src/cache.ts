@@ -1,14 +1,25 @@
-import { getRedisClient } from "./client";
-import type { CacheOptions, Serializer } from "./types";
+/**
+ * Redis-backed cache using the Upstash REST client.
+ *
+ * The public API of RedisCache and the redisCache helpers is unchanged from
+ * the previous ioredis-based version — callers require no migration.
+ *
+ * Note on invalidatePattern / clear: the @upstash/redis client supports SCAN
+ * but not KEYS. Pattern-based invalidation uses SCAN under the hood to stay
+ * within Upstash's command allowlist. For very large keyspaces, prefer
+ * explicit key deletion or TTL-based expiry over wildcard invalidation.
+ */
 
-// Default JSON serializer
+import { getRedisClient } from "./client.js";
+import type { CacheOptions, Serializer } from "./types.js";
+
 const jsonSerializer: Serializer<unknown> = {
   serialize: (value) => JSON.stringify(value),
   deserialize: (raw) => JSON.parse(raw),
 };
 
 /**
- * Redis-backed cache with typed get/set operations
+ * Redis-backed cache with typed get/set operations.
  */
 export class RedisCache<T = unknown> {
   private readonly prefix: string;
@@ -17,10 +28,10 @@ export class RedisCache<T = unknown> {
 
   constructor(
     namespace: string,
-    options: CacheOptions & { serializer?: Serializer<T> } = {}
+    options: CacheOptions & { serializer?: Serializer<T> } = {},
   ) {
     this.prefix = options.prefix ? `${options.prefix}:${namespace}` : namespace;
-    this.defaultTtl = options.ttl ?? 3600; // 1 hour default
+    this.defaultTtl = options.ttl ?? 3600;
     this.serializer = (options.serializer ?? jsonSerializer) as Serializer<T>;
   }
 
@@ -28,47 +39,38 @@ export class RedisCache<T = unknown> {
     return `${this.prefix}:${key}`;
   }
 
-  /**
-   * Get a value from cache
-   */
   async get(key: string): Promise<T | null> {
     const redis = getRedisClient();
-    const fullKey = this.buildKey(key);
-
-    const raw = await redis.get(fullKey);
+    const raw = await redis.get<string>(this.buildKey(key));
     if (!raw) return null;
 
     try {
       return this.serializer.deserialize(raw);
     } catch (err) {
-      console.error(`[RedisCache] Failed to deserialize key ${fullKey}:`, err);
+      console.error(
+        `[RedisCache] Failed to deserialize key ${this.buildKey(key)}:`,
+        err,
+      );
       return null;
     }
   }
 
-  /**
-   * Set a value in cache
-   */
   async set(key: string, value: T, ttl?: number): Promise<void> {
     const redis = getRedisClient();
-    const fullKey = this.buildKey(key);
     const serialized = this.serializer.serialize(value);
     const expiry = ttl ?? this.defaultTtl;
 
     if (expiry > 0) {
-      await redis.setex(fullKey, expiry, serialized);
+      await redis.setex(this.buildKey(key), expiry, serialized);
     } else {
-      await redis.set(fullKey, serialized);
+      await redis.set(this.buildKey(key), serialized);
     }
   }
 
-  /**
-   * Get value from cache, or compute and store it if missing
-   */
   async getOrSet(
     key: string,
     fetcher: () => Promise<T>,
-    ttl?: number
+    ttl?: number,
   ): Promise<T> {
     const cached = await this.get(key);
     if (cached !== null) {
@@ -80,64 +82,64 @@ export class RedisCache<T = unknown> {
     return value;
   }
 
-  /**
-   * Delete a specific key
-   */
   async delete(key: string): Promise<boolean> {
     const redis = getRedisClient();
-    const fullKey = this.buildKey(key);
-    const deleted = await redis.del(fullKey);
+    const deleted = await redis.del(this.buildKey(key));
     return deleted > 0;
   }
 
   /**
-   * Delete all keys matching a pattern in this namespace
-   * Use with caution in production!
+   * Delete all keys matching a pattern in this namespace using SCAN.
+   *
+   * KEYS is not available on Upstash; this iterates via SCAN instead.
+   * Avoid calling this on large keyspaces in hot paths — it makes multiple
+   * round trips proportional to the number of matching keys.
    */
   async invalidatePattern(pattern: string): Promise<number> {
     const redis = getRedisClient();
     const fullPattern = this.buildKey(pattern);
+    let deleted = 0;
+    let cursor = 0;
 
-    const keys = await redis.keys(fullPattern);
-    if (keys.length === 0) return 0;
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, {
+        match: fullPattern,
+        count: 100,
+      });
 
-    return redis.del(...keys);
+      cursor = Number(nextCursor);
+
+      if (keys.length > 0) {
+        // @upstash/redis del accepts an array
+        deleted += await redis.del(...(keys as [string, ...string[]]));
+      }
+    } while (cursor !== 0);
+
+    return deleted;
   }
 
-  /**
-   * Clear all keys in this namespace
-   */
   async clear(): Promise<number> {
     return this.invalidatePattern("*");
   }
 
-  /**
-   * Check if a key exists
-   */
   async exists(key: string): Promise<boolean> {
     const redis = getRedisClient();
-    const fullKey = this.buildKey(key);
-    const result = await redis.exists(fullKey);
+    const result = await redis.exists(this.buildKey(key));
     return result === 1;
   }
 
-  /**
-   * Get remaining TTL for a key (in seconds)
-   */
   async getTtl(key: string): Promise<number> {
     const redis = getRedisClient();
-    const fullKey = this.buildKey(key);
-    return redis.ttl(fullKey);
+    return redis.ttl(this.buildKey(key));
   }
 }
 
 /**
- * Simple key-value helpers for one-off operations
+ * Simple key-value helpers for one-off operations outside a named namespace.
  */
 export const redisCache = {
   async get<T>(key: string): Promise<T | null> {
-    const redis = getRedisClient();
-    const raw = await redis.get(key);
+    const raw = await getRedisClient().get<string>(key);
     if (!raw) return null;
     return JSON.parse(raw) as T;
   },
@@ -153,8 +155,7 @@ export const redisCache = {
   },
 
   async delete(key: string): Promise<boolean> {
-    const redis = getRedisClient();
-    const result = await redis.del(key);
+    const result = await getRedisClient().del(key);
     return result > 0;
   },
 };

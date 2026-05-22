@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Bell, Loader2 } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,64 +12,28 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: "info" | "success" | "warning" | "error";
-  read: boolean;
-  link?: string;
-  createdAt: string;
-}
+import {
+  useNotifications,
+  useMarkNotificationRead,
+} from "@/hooks/useNotifications";
+import type { NotificationListItem } from "@/lib/facades/notifications-client";
 
 export function NotificationsPopover() {
   const [open, setOpen] = useState(false);
-  const queryClient = useQueryClient();
   const router = useRouter();
 
-  const { data: notifications, isLoading } = useQuery<Notification[]>({
-    queryKey: ["notifications"],
-    queryFn: async () => {
-      const res = await fetch("/api/notifications");
-      if (!res.ok) throw new Error("Failed to fetch notifications");
-      const json = await res.json();
-      // API returns { success: true, data: { data: notifications[], unreadCount, pagination } }
-      // Ensure we always return an array, even if the structure is unexpected
-      const notificationsArray = Array.isArray(json.data?.data)
-        ? json.data.data
-        : Array.isArray(json.data)
-          ? json.data
-          : [];
-      return notificationsArray;
-    },
-    // Refetch every minute to keep notifications fresh
-    refetchInterval: 60000,
+  const { data, isLoading } = useNotifications({
+    limit: 20,
+    unreadOnly: false,
   });
+  const markAsReadMutation = useMarkNotificationRead();
 
-  const markAsReadMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch("/api/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      if (!res.ok) throw new Error("Failed to update notification");
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
-    },
-  });
+  const notifications = data?.data ?? [];
+  const unreadCount = data?.unreadCount ?? 0;
 
-  // Ensure notifications is an array before calling filter
-  const unreadCount = Array.isArray(notifications)
-    ? notifications.filter((n) => !n.read).length
-    : 0;
-
-  const handleNotificationClick = (notification: Notification) => {
-    if (!notification.read) {
-      markAsReadMutation.mutate(notification.id);
+  const handleNotificationClick = (notification: NotificationListItem) => {
+    if (!notification.isRead) {
+      markAsReadMutation.mutate({ id: notification.id });
     }
     if (notification.link) {
       setOpen(false);
@@ -79,7 +42,7 @@ export function NotificationsPopover() {
   };
 
   const handleMarkAllRead = () => {
-    markAsReadMutation.mutate("all");
+    markAsReadMutation.mutate({ id: "all" });
   };
 
   return (
@@ -129,21 +92,23 @@ export function NotificationsPopover() {
                   key={notification.id}
                   className={cn(
                     "w-full text-left px-4 py-3 hover:bg-zinc-50 transition-colors flex gap-3",
-                    !notification.read && "bg-blue-50/30"
+                    !notification.isRead && "bg-blue-50/30",
                   )}
                   onClick={() => handleNotificationClick(notification)}
                 >
                   <div
                     className={cn(
                       "h-2 w-2 mt-1.5 rounded-full flex-shrink-0",
-                      !notification.read ? "bg-blue-500" : "bg-transparent"
+                      !notification.isRead ? "bg-blue-500" : "bg-transparent",
                     )}
                   />
                   <div className="flex-1 space-y-1">
                     <p
                       className={cn(
                         "text-sm font-medium leading-none",
-                        !notification.read ? "text-zinc-900" : "text-zinc-600"
+                        !notification.isRead
+                          ? "text-zinc-900"
+                          : "text-zinc-600",
                       )}
                     >
                       {notification.title}

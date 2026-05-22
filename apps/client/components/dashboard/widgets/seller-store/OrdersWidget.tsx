@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
 import {
   Clock,
   ChevronRight,
@@ -39,27 +41,27 @@ const STATUS_CONFIG = {
   pending: {
     label: "Pending",
     icon: Clock,
-    color: "bg-amber-50 text-amber-700 border-amber-200",
+    color: "bg-muted text-muted-foreground border-border",
   },
   processing: {
     label: "Processing",
     icon: Package,
-    color: "bg-blue-50 text-blue-700 border-blue-200",
+    color: "bg-primary/10 text-primary border-primary/30",
   },
   shipped: {
     label: "Shipped",
     icon: Truck,
-    color: "bg-purple-50 text-purple-700 border-purple-200",
+    color: "bg-accent text-accent-foreground border-border",
   },
   delivered: {
     label: "Delivered",
     icon: CheckCircle2,
-    color: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    color: "bg-secondary text-secondary-foreground border-border",
   },
   cancelled: {
     label: "Cancelled",
     icon: XCircle,
-    color: "bg-red-50 text-red-700 border-red-200",
+    color: "bg-destructive/10 text-destructive border-destructive/20",
   },
 } as const;
 
@@ -95,20 +97,22 @@ function OrderItem({ order }: OrderItemProps) {
   };
 
   return (
-    <div className="p-4 hover:bg-zinc-50/50 transition-colors group flex items-center gap-4">
+    <div className="p-4 hover:bg-muted/60 motion-safe:transition-colors group flex items-center gap-4">
       {/* Status Icon */}
       <div
         className={cn(
           "p-2 rounded-lg border",
           order.status === "pending"
-            ? "bg-amber-50 border-amber-200"
-            : "bg-zinc-50 border-zinc-200"
+            ? "bg-muted border-border"
+            : "bg-muted/60 border-border",
         )}
       >
         <StatusIcon
           className={cn(
             "h-4 w-4",
-            order.status === "pending" ? "text-amber-600" : "text-zinc-500"
+            order.status === "pending"
+              ? "text-foreground"
+              : "text-muted-foreground",
           )}
         />
       </div>
@@ -116,19 +120,19 @@ function OrderItem({ order }: OrderItemProps) {
       {/* Order Details */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <h4 className="text-sm font-semibold text-zinc-900 truncate">
+          <h4 className="text-sm font-semibold text-foreground truncate">
             {order.customerName}
           </h4>
-          <span className="text-[10px] text-zinc-400 shrink-0">
+          <span className="text-[10px] text-muted-foreground shrink-0">
             {formatTime(order.createdAt)}
           </span>
         </div>
         <div className="flex items-center gap-2 mt-1">
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-muted-foreground">
             {order.items} item{order.items > 1 ? "s" : ""}
           </span>
-          <span className="text-zinc-300">•</span>
-          <span className="text-xs font-medium text-zinc-900">
+          <span className="text-border">•</span>
+          <span className="text-xs font-medium text-foreground">
             {formatPrice(order.total)}
           </span>
         </div>
@@ -139,7 +143,7 @@ function OrderItem({ order }: OrderItemProps) {
         variant="outline"
         className={cn(
           "text-[10px] font-medium border shrink-0",
-          statusConfig.color
+          statusConfig.color,
         )}
       >
         {statusConfig.label}
@@ -154,22 +158,25 @@ function OrderItem({ order }: OrderItemProps) {
 
 function OrdersWidgetSkeleton() {
   return (
-    <Card className="border border-zinc-200 shadow-sm overflow-hidden bg-white">
-      <CardHeader className="border-b border-zinc-100 py-5 px-6">
-        <div className="flex items-center gap-2 animate-pulse">
-          <div className="h-5 w-28 bg-zinc-200 rounded" />
-          <div className="h-5 w-16 bg-zinc-200 rounded-full" />
+    <Card className="border border-border shadow-sm overflow-hidden bg-card">
+      <CardHeader className="border-b border-border py-5 px-6">
+        <div className="flex items-center gap-2 motion-safe:animate-pulse">
+          <div className="h-5 w-28 bg-muted rounded" />
+          <div className="h-5 w-16 bg-muted rounded-full" />
         </div>
       </CardHeader>
-      <div className="divide-y divide-zinc-100">
+      <div className="divide-y divide-border">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="p-4 flex items-center gap-4 animate-pulse">
-            <div className="h-10 w-10 bg-zinc-200 rounded-lg" />
+          <div
+            key={i}
+            className="p-4 flex items-center gap-4 motion-safe:animate-pulse"
+          >
+            <div className="h-10 w-10 bg-muted rounded-lg" />
             <div className="flex-1 space-y-2">
-              <div className="h-4 w-32 bg-zinc-200 rounded" />
-              <div className="h-3 w-24 bg-zinc-200 rounded" />
+              <div className="h-4 w-32 bg-muted rounded" />
+              <div className="h-3 w-24 bg-muted rounded" />
             </div>
-            <div className="h-5 w-16 bg-zinc-200 rounded" />
+            <div className="h-5 w-16 bg-muted rounded" />
           </div>
         ))}
       </div>
@@ -187,6 +194,9 @@ export function OrdersWidget({
   pendingCount,
   className,
 }: OrdersWidgetProps) {
+  const router = useRouter();
+  const [isViewOrdersPending, startViewOrdersTransition] = useTransition();
+
   if (isLoading) {
     return <OrdersWidgetSkeleton />;
   }
@@ -194,43 +204,49 @@ export function OrdersWidget({
   const displayPendingCount =
     pendingCount ?? orders.filter((o) => o.status === "pending").length;
 
+  const handleViewOrders = () => {
+    startViewOrdersTransition(() => {
+      router.push("/professional-portal/orders");
+    });
+  };
+
   return (
     <Card
       className={cn(
-        "border border-zinc-200 shadow-sm overflow-hidden bg-white",
-        className
+        "border border-border shadow-sm overflow-hidden bg-card",
+        className,
       )}
     >
-      <CardHeader className="border-b border-zinc-100 py-5 px-6 flex flex-row items-center justify-between">
+      <CardHeader className="border-b border-border py-5 px-6 flex flex-row items-center justify-between">
         <div className="flex items-center gap-2">
-          <CardTitle className="text-base font-bold text-zinc-900">
+          <CardTitle className="text-base font-bold text-foreground">
             Recent Orders
           </CardTitle>
           {displayPendingCount > 0 && (
-            <div className="h-5 px-2 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold flex items-center">
+            <div className="h-5 px-2 rounded-full bg-muted text-foreground text-[10px] font-bold flex items-center">
               {displayPendingCount} PENDING
             </div>
           )}
         </div>
         <Link
           href="/professional-portal/orders"
-          className="text-xs font-medium text-zinc-500 hover:text-zinc-900 flex items-center gap-1 group"
+          className="text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded-sm min-h-11 px-2 py-1.5 inline-flex items-center gap-1 group motion-safe:transition-colors motion-safe:active:scale-[0.98]"
         >
           View All{" "}
-          <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+          <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 motion-safe:transition-transform" />
         </Link>
       </CardHeader>
 
       {orders.length === 0 ? (
         <div className="p-12 text-center">
-          <ShoppingCart className="h-12 w-12 text-zinc-200 mx-auto mb-3" />
-          <p className="text-sm text-zinc-500">No orders yet</p>
-          <p className="text-xs text-zinc-400 mt-1">
+          <ShoppingCart className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">No orders yet</p>
+          <p className="text-xs text-muted-foreground mt-1">
             Orders from customers will appear here
           </p>
         </div>
       ) : (
-        <div className="divide-y divide-zinc-100">
+        <div className="divide-y divide-border">
           {orders.slice(0, 5).map((order) => (
             <OrderItem key={order.id} order={order} />
           ))}
@@ -238,17 +254,17 @@ export function OrdersWidget({
       )}
 
       {orders.length > 0 && (
-        <div className="p-4 border-t border-zinc-100">
+        <div className="p-4 border-t border-border">
           <Button
             variant="ghost"
             size="sm"
-            className="w-full text-xs text-zinc-500 hover:text-zinc-900"
-            asChild
+            className="w-full text-xs text-muted-foreground hover:text-foreground min-h-11 motion-safe:active:scale-[0.98]"
+            isLoading={isViewOrdersPending}
+            loadingText="Opening..."
+            onClick={handleViewOrders}
           >
-            <Link href="/professional-portal/orders">
-              View All Orders
-              <ChevronRight className="h-3 w-3 ml-1" />
-            </Link>
+            View All Orders
+            <ChevronRight className="h-3 w-3 ml-1" />
           </Button>
         </div>
       )}

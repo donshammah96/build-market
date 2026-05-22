@@ -7,6 +7,37 @@ import { DayPicker } from "react-day-picker";
 import { cn } from "./utils";
 import { buttonVariants } from "./button";
 
+type NavIconProps = {
+  className?: string;
+};
+
+type ChevronSlotProps = NavIconProps & {
+  orientation?: "left" | "right";
+};
+
+/**
+ * DayPicker has changed navigation slot names across major versions:
+ * - v8: IconLeft / IconRight
+ * - v9+: Chevron({ orientation })
+ *
+ * We provide both shapes and cast once at the boundary so this component stays
+ * source-compatible while the dependency version shifts.
+ */
+const calendarComponents = {
+  IconLeft: ({ className, ...iconProps }: NavIconProps) => (
+    <ChevronLeft className={cn("size-4", className)} {...iconProps} />
+  ),
+  IconRight: ({ className, ...iconProps }: NavIconProps) => (
+    <ChevronRight className={cn("size-4", className)} {...iconProps} />
+  ),
+  Chevron: ({ className, orientation, ...iconProps }: ChevronSlotProps) =>
+    orientation === "right" ? (
+      <ChevronRight className={cn("size-4", className)} {...iconProps} />
+    ) : (
+      <ChevronLeft className={cn("size-4", className)} {...iconProps} />
+    ),
+} as React.ComponentProps<typeof DayPicker>["components"];
+
 function Calendar({
   className,
   classNames,
@@ -59,14 +90,7 @@ function Calendar({
         day_hidden: "invisible",
         ...classNames,
       }}
-      components={{
-        IconLeft: ({ className, ...props }) => (
-          <ChevronLeft className={cn("size-4", className)} {...props} />
-        ),
-        IconRight: ({ className, ...props }) => (
-          <ChevronRight className={cn("size-4", className)} {...props} />
-        ),
-      }}
+      components={calendarComponents}
       {...props}
     />
   );

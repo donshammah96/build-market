@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, prisma } from "@repo/db";
-import { safeAction } from "./shared";
-import { PaginationSchema, UpdateProfileSchema } from "./types";
+import { Prisma, prisma, County } from "@build/db";
+import { safeAction, safeVerificationAction, logAdminAction } from "./shared";
+import { UpdateProfileSchema } from "./types";
 
 // ============================================================================
 // Types
@@ -16,14 +16,48 @@ export type ProfessionalWithUser = Prisma.ProfessionalProfileGetPayload<{
 export type ProfessionalDetails = Prisma.ProfessionalProfileGetPayload<{
   include: {
     user: true;
-    certificates: true;
+    documents: {
+      select: {
+        id: true;
+        title: true;
+        fileUrl: true;
+        issuer: true;
+        expiryDate: true;
+      };
+    };
     portfolios: true;
     reviews: true;
-    orders: {
-      include: { payments: true };
+    offeredServices: {
+      select: {
+        service: {
+          select: {
+            id: true;
+            name: true;
+            slug: true;
+            icon: true;
+          };
+        };
+      };
+    };
+    projects: {
+      include: { client: true };
     };
   };
-}>;
+}> & {
+  services: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    icon: string | null;
+  }>;
+  certificates: Array<{
+    id: string;
+    name: string;
+    fileUrl: string;
+    issuer: string | null;
+    expiryDate: Date | null;
+  }>;
+};
 
 // ============================================================================
 // List & Details Actions
@@ -32,29 +66,42 @@ export type ProfessionalDetails = Prisma.ProfessionalProfileGetPayload<{
 /**
  * Fetches a paginated list of professional profiles.
  * Searchable by company name or user email.
+ * Filterable by verified status.
+ * Sortable by createdAt or companyName.
  */
-export async function getProfessionals(page = 1, limit = 10, search = "") {
+export async function getProfessionals(
+  page = 1,
+  limit = 10,
+  search = "",
+  verified?: boolean,
+  sortBy: "createdAt" | "companyName" = "createdAt",
+  sortOrder: "asc" | "desc" = "desc",
+) {
   return safeAction("getProfessionals", async () => {
-    const valid = PaginationSchema.parse({ page, limit, search });
-    const skip = (valid.page - 1) * valid.limit;
+    const skip = (page - 1) * limit;
 
-    const where: Prisma.ProfessionalProfileWhereInput = valid.search
-      ? {
-          OR: [
-            { companyName: { contains: valid.search, mode: "insensitive" } },
-            {
-              user: { email: { contains: valid.search, mode: "insensitive" } },
-            },
-          ],
-        }
-      : {};
+    const where: Prisma.ProfessionalProfileWhereInput = {
+      ...(search && {
+        OR: [
+          { companyName: { contains: search, mode: "insensitive" } },
+          { user: { email: { contains: search, mode: "insensitive" } } },
+          { user: { firstName: { contains: search, mode: "insensitive" } } },
+          { user: { lastName: { contains: search, mode: "insensitive" } } },
+        ],
+      }),
+      ...(verified !== undefined && { verified }),
+    };
+
+    const orderBy: Prisma.ProfessionalProfileOrderByWithRelationInput = {
+      [sortBy === "companyName" ? "companyName" : "createdAt"]: sortOrder,
+    };
 
     const [professionals, total] = await Promise.all([
       prisma.professionalProfile.findMany({
         where,
         skip,
-        take: valid.limit,
-        orderBy: { createdAt: "desc" },
+        take: limit,
+        orderBy,
         include: { user: true },
       }),
       prisma.professionalProfile.count({ where }),
@@ -64,9 +111,9 @@ export async function getProfessionals(page = 1, limit = 10, search = "") {
       professionals,
       meta: {
         total,
-        page: valid.page,
-        limit: valid.limit,
-        totalPages: Math.ceil(total / valid.limit),
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
       },
     };
   });
@@ -81,15 +128,27 @@ export async function getProfessionalDetails(userId: string) {
       where: { userId },
       include: {
         user: true,
-        certificates: true,
-        portfolios: true,
-        reviews: true,
-        services: {
+        documents: {
           select: {
             id: true,
-            name: true,
-            slug: true,
-            icon: true,
+            title: true,
+            fileUrl: true,
+            issuer: true,
+            expiryDate: true,
+          },
+        },
+        portfolios: true,
+        reviews: true,
+        offeredServices: {
+          select: {
+            service: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                icon: true,
+              },
+            },
           },
         },
         projects: {
@@ -101,7 +160,20 @@ export async function getProfessionalDetails(userId: string) {
     });
 
     if (!professional) throw new Error("Professional profile not found");
-    return professional;
+
+    const details: ProfessionalDetails = {
+      ...professional,
+      services: professional.offeredServices.map((item) => item.service),
+      certificates: professional.documents.map((document) => ({
+        id: document.id,
+        name: document.title,
+        fileUrl: document.fileUrl || "",
+        issuer: document.issuer,
+        expiryDate: document.expiryDate,
+      })),
+    };
+
+    return details;
   });
 }
 
@@ -114,55 +186,89 @@ export async function getProfessionalDetails(userId: string) {
  * Returns the updated profile for optimistic UI updates.
  */
 export async function verifyProfessional(userId: string) {
-  return safeAction("verifyProfessional", async () => {
-    const professional = await prisma.professionalProfile.update({
-      where: { userId },
-      data: { verified: true },
-      include: {
-        user: {
-          select: { email: true, firstName: true, lastName: true },
+  return safeVerificationAction(
+    "verifyProfessional",
+    async ({ adminUserId }) => {
+      const professional = await prisma.professionalProfile.update({
+        where: { userId },
+        data: {
+          verified: true,
+          verificationStatus: "VERIFIED",
+          verifiedAt: new Date(),
+          verifiedById: adminUserId,
         },
-      },
-    });
+        include: {
+          user: {
+            select: { email: true, firstName: true, lastName: true },
+          },
+        },
+      });
 
-    revalidatePath("/professionals");
+      // Log audit event
+      await logAdminAction({
+        userId: adminUserId,
+        action: "VERIFY_PROFESSIONAL",
+        targetType: "professional",
+        targetId: userId,
+        details: { newStatus: "VERIFIED" },
+      });
 
-    // Return full entity for optimistic updates
-    return {
-      userId: professional.userId,
-      verified: true,
-      companyName: professional.companyName,
-      user: professional.user,
-    };
-  });
+      revalidatePath("/professionals");
+
+      // Return full entity for optimistic updates
+      return {
+        userId: professional.userId,
+        verified: true,
+        companyName: professional.companyName,
+        user: professional.user,
+      };
+    },
+  );
 }
 
 /**
  * Marks a professional as unverified/rejected.
  * Returns the updated profile for optimistic UI updates.
  */
-export async function rejectProfessional(userId: string) {
-  return safeAction("rejectProfessional", async () => {
-    const professional = await prisma.professionalProfile.update({
-      where: { userId },
-      data: { verified: false },
-      include: {
-        user: {
-          select: { email: true, firstName: true, lastName: true },
+export async function rejectProfessional(userId: string, reason?: string) {
+  return safeVerificationAction(
+    "rejectProfessional",
+    async ({ adminUserId }) => {
+      const professional = await prisma.professionalProfile.update({
+        where: { userId },
+        data: {
+          verified: false,
+          verificationStatus: "REJECTED",
+          verificationNotes: reason,
         },
-      },
-    });
+        include: {
+          user: {
+            select: { email: true, firstName: true, lastName: true },
+          },
+        },
+      });
 
-    revalidatePath("/professionals");
+      // Log audit event
+      await logAdminAction({
+        userId: adminUserId,
+        action: "REJECT_PROFESSIONAL",
+        targetType: "professional",
+        targetId: userId,
+        reason,
+        details: { newStatus: "REJECTED" },
+      });
 
-    // Return full entity for optimistic updates
-    return {
-      userId: professional.userId,
-      verified: false,
-      companyName: professional.companyName,
-      user: professional.user,
-    };
-  });
+      revalidatePath("/professionals");
+
+      // Return full entity for optimistic updates
+      return {
+        userId: professional.userId,
+        verified: false,
+        companyName: professional.companyName,
+        user: professional.user,
+      };
+    },
+  );
 }
 
 // ============================================================================
@@ -175,22 +281,39 @@ export async function rejectProfessional(userId: string) {
  */
 export async function updateProfessionalProfile(
   userId: string,
-  formData: unknown
+  formData: unknown,
 ) {
   return safeAction("updateProfessionalProfile", async () => {
     const data = UpdateProfileSchema.parse(formData);
 
+    const normalizedCounty =
+      data.county && Object.values(County).includes(data.county as County)
+        ? (data.county as County)
+        : undefined;
+
+    const updateData: Prisma.ProfessionalProfileUpdateInput = {
+      ...(data.companyName !== undefined
+        ? { companyName: data.companyName }
+        : {}),
+      ...(data.yearsExperience !== undefined
+        ? { yearsExperience: data.yearsExperience }
+        : {}),
+      ...(data.bio !== undefined ? { bio: data.bio } : {}),
+      ...(data.website !== undefined ? { website: data.website || null } : {}),
+      ...(data.city !== undefined ? { city: data.city } : {}),
+      ...(normalizedCounty !== undefined ? { county: normalizedCounty } : {}),
+      ...(data.country !== undefined ? { country: data.country } : {}),
+    };
+
     const professional = await prisma.professionalProfile.update({
       where: { userId },
-      data,
+      data: updateData,
       select: {
         userId: true,
         companyName: true,
-        licenseNumber: true,
         yearsExperience: true,
         bio: true,
         website: true,
-        services: true,
         city: true,
         county: true,
         country: true,
@@ -214,11 +337,11 @@ export async function updateProfessionalProfile(
  */
 export async function deleteCertificate(certificateId: string) {
   return safeAction("deleteCertificate", async () => {
-    const certificate = await prisma.certificate.delete({
+    const certificate = await prisma.professionalDocument.delete({
       where: { id: certificateId },
       select: {
         id: true,
-        name: true,
+        title: true,
         professionalId: true,
       },
     });
@@ -229,7 +352,7 @@ export async function deleteCertificate(certificateId: string) {
     return {
       deleted: true,
       certificateId: certificate.id,
-      certificateName: certificate.name,
+      certificateName: certificate.title,
     };
   });
 }

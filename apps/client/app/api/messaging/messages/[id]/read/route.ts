@@ -1,73 +1,87 @@
-import { NextRequest } from "next/server";
-import { withAuth } from "@/app/lib/api-middleware";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
+import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
-  resilientFetch,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { isValidId } from "@/app/lib/api/api-guards";
+import {
+  type MessagingActor,
+  messagingService,
+} from "@/app/lib/domains/messaging";
+import { normalizeRole } from "@/app/lib/security/roles";
 
-const MESSAGING_SERVICE_URL =
-  process.env.MESSAGING_SERVICE_URL || "http://localhost:3010";
-const logger = getClientLogger();
+type MessageParams = { id: string };
+
+function toMessagingActor(context: {
+  clerkId: string;
+  dbUserId: string;
+  userRole: unknown;
+}): MessagingActor {
+  return {
+    clerkId: context.clerkId,
+    userId: context.dbUserId,
+    role: normalizeRole(String(context.userRole)) ?? null,
+  };
+}
 
 /**
  * POST /api/messaging/messages/[id]/read
- * Mark a message as read
+ * Create a read receipt for a specific message.
+ * The user must be a participant in the message's thread.
  */
-export const POST = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params) => {
+export const POST = withAuth<MessageParams>(
+  async (req: NextRequest, context, params): Promise<NextResponse> => {
     const correlationId = initializeCorrelationId(req);
-    const { id: messageId } = params!;
+    const actor = toMessagingActor(context);
+
+    if (!params?.id || !isValidId(params.id)) {
+      return apiError("Invalid message ID", HttpStatus.BAD_REQUEST);
+    }
+    const messageId = params.id;
 
     const identifier = getRateLimitIdentifier(req);
-    const { success } = await checkRateLimit(
-      identifier,
+    const rateLimitResult = await checkRateLimit(
+      `messaging-read:${identifier}`,
       RateLimits.WRITE.limit,
-      RateLimits.WRITE.window
+      RateLimits.WRITE.window,
     );
-
-    if (!success) {
+    if (!rateLimitResult.success) {
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Marking message as read", {
-      correlationId,
-      messageId,
-      userId: dbUserId,
-    });
-
-    return executeResilient(
-      async () => {
-        const data = await resilientFetch(
-          `${MESSAGING_SERVICE_URL}/api/messages/${messageId}/read`,
-          {
-            method: "POST",
-            headers: {
-              "X-User-Id": dbUserId,
-              "X-Correlation-ID": correlationId,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ userId: dbUserId }),
-            timeout: 5000,
-            retry: false,
-            operationName: "mark-message-read",
-          }
-        );
-
-        logger.info("Message marked as read", { correlationId, messageId });
-        return data;
-      },
-      {
-        operationName: "post-message-read",
-        successStatus: HttpStatus.OK,
-      }
+    const executor = getResilientExecutor();
+    const result = await executor.execute(
+      () => messagingService.markMessageAsRead(actor, messageId),
+      { operationName: "mark_message_read" },
     );
-  }
+
+    if (!result.success) {
+      getClientLogger().error("Failed to mark message as read", result.error, {
+        correlationId,
+        messageId,
+      });
+      return apiError(
+        "Failed to mark as read",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const serviceResult = result.data;
+    if (!serviceResult || !serviceResult.ok) {
+      return apiError(
+        "Invalid request",
+        serviceResult?.status ?? HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return apiSuccess(serviceResult.data, HttpStatus.OK);
+  },
 );

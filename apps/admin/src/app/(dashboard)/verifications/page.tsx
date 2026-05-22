@@ -1,10 +1,10 @@
 import { Suspense } from "react";
 import { getPendingVerifications, getVerificationStats } from "@/actions/admin";
+import { getAdminPermissions } from "@/actions/admin/shared";
 import type { VerificationStatus } from "@/actions/admin/types";
 import { VerificationStatsCards } from "@/components/admin/verification/VerificationStatsCards";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
+import { ActionErrorState } from "@/components/ui/action-error-state";
 import { VerificationQueueWrapper } from "@/app/(dashboard)/verifications/VerificationQueueWrapper";
 
 export const dynamic = "force-dynamic";
@@ -51,7 +51,7 @@ export default async function VerificationsPage({
   const page = parseInt(params.page || "1", 10);
 
   // Fetch stats and initial queue data in parallel
-  const [statsResponse, queueResponse] = await Promise.all([
+  const [statsResponse, queueResponse, permissions] = await Promise.all([
     getVerificationStats(),
     getPendingVerifications({
       entityType: activeTab,
@@ -59,7 +59,12 @@ export default async function VerificationsPage({
       page,
       limit: 20,
     }),
+    getAdminPermissions(),
   ]);
+
+  const canVerify = ["SUPER_ADMIN", "VERIFICATION_SPECIALIST"].includes(
+    permissions.granularRole || "",
+  );
 
   const hasStatsError = !statsResponse.success;
   const hasQueueError = !queueResponse.success;
@@ -80,12 +85,10 @@ export default async function VerificationsPage({
       {/* Stats Cards */}
       <Suspense fallback={<StatsLoading />}>
         {hasStatsError ? (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Failed to load verification statistics. {statsResponse.error}
-            </AlertDescription>
-          </Alert>
+          <ActionErrorState
+            title="Unable to load verification statistics"
+            description={`Failed to load verification statistics. ${statsResponse.error || "Unknown error"}`}
+          />
         ) : (
           <VerificationStatsCards stats={statsResponse.data!} />
         )}
@@ -94,16 +97,15 @@ export default async function VerificationsPage({
       {/* Tabs and Queue */}
       <Suspense fallback={<QueueLoading />}>
         {hasQueueError ? (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Failed to load verification queue. {queueResponse.error}
-            </AlertDescription>
-          </Alert>
+          <ActionErrorState
+            title="Unable to load verification queue"
+            description={`Failed to load verification queue. ${queueResponse.error || "Unknown error"}`}
+          />
         ) : queueResponse.data ? (
           <VerificationQueueWrapper
             activeTab={activeTab}
             status={status}
+            canVerify={canVerify}
             queueData={queueResponse.data}
           />
         ) : null}

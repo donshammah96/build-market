@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
+// SECURITY_PERSISTENCE_ALLOWLIST: Stores non-sensitive wizard draft state in localStorage.
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -26,64 +28,9 @@ export interface OnboardingWizardProps {
   onComplete: () => void | Promise<void>;
   onStepChange?: (stepIndex: number) => void;
   initialStep?: number;
-  storageKey?: string; // For localStorage draft saving
   className?: string;
   showProgress?: boolean;
   allowSkipOptional?: boolean;
-}
-
-// ============================================================================
-// HOOKS
-// ============================================================================
-
-/**
- * Hook for managing wizard draft in localStorage
- */
-function useWizardDraft<T>(storageKey: string | undefined, defaultValue: T) {
-  const [draft, setDraft] = useState<T>(defaultValue);
-
-  // Load draft on mount
-  useEffect(() => {
-    if (!storageKey) return;
-
-    try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        setDraft(JSON.parse(saved));
-      }
-    } catch (e) {
-      console.warn("Failed to load wizard draft:", e);
-    }
-  }, [storageKey]);
-
-  // Save draft function
-  const saveDraft = useCallback(
-    (data: T) => {
-      setDraft(data);
-      if (storageKey) {
-        try {
-          localStorage.setItem(storageKey, JSON.stringify(data));
-        } catch (e) {
-          console.warn("Failed to save wizard draft:", e);
-        }
-      }
-    },
-    [storageKey]
-  );
-
-  // Clear draft function
-  const clearDraft = useCallback(() => {
-    setDraft(defaultValue);
-    if (storageKey) {
-      try {
-        localStorage.removeItem(storageKey);
-      } catch (e) {
-        console.warn("Failed to clear wizard draft:", e);
-      }
-    }
-  }, [storageKey, defaultValue]);
-
-  return { draft, saveDraft, clearDraft };
 }
 
 // ============================================================================
@@ -123,16 +70,16 @@ function StepIndicator({
               onClick={() => isClickable && onStepClick?.(index)}
               disabled={!isClickable}
               className={cn(
-                "relative flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2",
+                "relative flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-focus-ring) focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                 isActive &&
-                  "border-emerald-500 bg-emerald-500 text-white shadow-lg shadow-emerald-500/25",
+                  "border-(--color-onboarding-primary) bg-(--color-onboarding-primary) text-[oklch(0.08_0.016_222)] shadow-[0_10px_25px_-12px_var(--color-onboarding-primary)]",
                 isCompleted &&
                   !isActive &&
-                  "border-emerald-500 bg-emerald-100 text-emerald-600 cursor-pointer hover:bg-emerald-200",
+                  "border-(--color-success) bg-success/15 text-(--color-success) cursor-pointer hover:bg-success/20",
                 !isActive &&
                   !isCompleted &&
-                  "border-zinc-200 bg-white text-zinc-400",
-                isClickable && !isActive && "cursor-pointer"
+                  "border-onboarding-ink/25 bg-(--color-onboarding-surface) text-onboarding-ink/55",
+                isClickable && !isActive && "cursor-pointer",
               )}
               aria-label={`Step ${index + 1}: ${step.title}${isCompleted ? " (completed)" : ""}${isActive ? " (current)" : ""}`}
               aria-current={isActive ? "step" : undefined}
@@ -149,7 +96,9 @@ function StepIndicator({
               <div
                 className={cn(
                   "w-12 h-0.5 mx-2 transition-colors duration-300",
-                  isPast || isCompleted ? "bg-emerald-500" : "bg-zinc-200"
+                  isPast || isCompleted
+                    ? "bg-(--color-onboarding-primary)"
+                    : "bg-onboarding-ink/20",
                 )}
                 aria-hidden="true"
               />
@@ -171,6 +120,7 @@ interface StepContentProps {
   direction: "forward" | "backward";
   children: React.ReactNode;
   prefersReducedMotion: boolean;
+  headingRef: React.RefObject<HTMLHeadingElement | null>;
 }
 
 function StepContent({
@@ -179,6 +129,7 @@ function StepContent({
   direction,
   children,
   prefersReducedMotion,
+  headingRef,
 }: StepContentProps) {
   const variants = {
     enter: (direction: "forward" | "backward") => ({
@@ -214,27 +165,32 @@ function StepContent({
       {/* Step Header */}
       <div className="text-center mb-8">
         {step.icon && (
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-onboarding-primary/16 text-(--color-onboarding-primary) mb-4">
             {step.icon}
           </div>
         )}
-        <h2 id={`step-${step.id}`} className="text-2xl font-bold text-zinc-900">
+        <h2
+          ref={headingRef}
+          tabIndex={-1}
+          id={`step-${step.id}`}
+          className="text-2xl font-bold text-(--color-onboarding-ink)"
+        >
           {step.title}
         </h2>
         {step.description && (
-          <p className="text-zinc-500 mt-2 max-w-md mx-auto">
+          <p className="text-onboarding-ink/62 mt-2 max-w-md mx-auto">
             {step.description}
           </p>
         )}
         {step.optional && (
-          <span className="inline-block mt-2 text-xs font-medium px-2 py-1 rounded-full bg-zinc-100 text-zinc-500">
+          <span className="inline-block mt-2 text-xs font-medium px-2 py-1 rounded-full bg-onboarding-ink/12 text-onboarding-ink/72">
             Optional
           </span>
         )}
       </div>
 
       {/* Step Content */}
-      <div className="min-h-[300px]">{children}</div>
+      <div className="min-h-75">{children}</div>
     </motion.div>
   );
 }
@@ -249,7 +205,6 @@ export function OnboardingWizard({
   onComplete,
   onStepChange,
   initialStep = 0,
-  storageKey,
   className,
   showProgress = true,
   allowSkipOptional = true,
@@ -261,6 +216,7 @@ export function OnboardingWizard({
   const [isCompleting, setIsCompleting] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
 
   // Reduced motion detection
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
@@ -273,20 +229,18 @@ export function OnboardingWizard({
     return () => mediaQuery.removeEventListener("change", handler);
   }, []);
 
-  // Draft saving
-  const { saveDraft, clearDraft } = useWizardDraft(storageKey, {
-    currentStep: 0,
-  });
-
-  // Save current step to draft when it changes
-  useEffect(() => {
-    saveDraft({ currentStep });
-  }, [currentStep, saveDraft]);
-
   // Notify parent of step change
   useEffect(() => {
     onStepChange?.(currentStep);
   }, [currentStep, onStepChange]);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      stepHeadingRef.current?.focus({ preventScroll: true });
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [currentStep]);
 
   // Progress percentage
   const progressPercentage = ((currentStep + 1) / steps.length) * 100;
@@ -323,13 +277,12 @@ export function OnboardingWizard({
       setIsCompleting(true);
       try {
         await onComplete();
-        clearDraft();
       } catch (e) {
         console.error("Failed to complete wizard:", e);
       }
       setIsCompleting(false);
     }
-  }, [currentStep, steps, onComplete, clearDraft]);
+  }, [currentStep, steps, onComplete]);
 
   // Go to previous step
   const goBack = useCallback(() => {
@@ -347,7 +300,7 @@ export function OnboardingWizard({
         setCurrentStep(index);
       }
     },
-    [currentStep, completedSteps]
+    [currentStep, completedSteps],
   );
 
   // Skip optional step
@@ -400,7 +353,7 @@ export function OnboardingWizard({
       allowSkipOptional,
       isValidating,
       isCompleting,
-    ]
+    ],
   );
 
   const currentStepData = steps[currentStep];
@@ -425,11 +378,11 @@ export function OnboardingWizard({
         <div className="mb-6">
           <Progress
             value={progressPercentage}
-            className="h-2 bg-zinc-100"
-            indicatorClassName="bg-emerald-500 transition-all duration-300"
+            className="h-2 bg-onboarding-ink/16"
+            indicatorClassName="bg-(--color-onboarding-primary) transition-all duration-300"
           />
           <p
-            className="text-xs text-zinc-500 mt-2 text-center"
+            className="text-xs text-onboarding-ink/62 mt-2 text-center"
             aria-live="polite"
           >
             Step {currentStep + 1} of {steps.length}
@@ -453,20 +406,21 @@ export function OnboardingWizard({
           isActive={true}
           direction={direction}
           prefersReducedMotion={prefersReducedMotion}
+          headingRef={stepHeadingRef}
         >
           {children[currentStep]}
         </StepContent>
       </AnimatePresence>
 
       {/* Navigation Buttons */}
-      <div className="flex items-center justify-between mt-8 pt-6 border-t border-zinc-100">
+      <div className="flex items-center justify-between mt-8 pt-6 border-t border-onboarding-ink/12">
         {/* Back Button */}
         <Button
           type="button"
           variant="ghost"
           onClick={goBack}
           disabled={isFirstStep || isValidating || isCompleting}
-          className="text-zinc-600 hover:text-zinc-900"
+          className="text-onboarding-ink/72 hover:text-(--color-onboarding-ink)"
           aria-label="Go to previous step"
         >
           <ChevronLeft className="h-4 w-4 mr-2" aria-hidden="true" />
@@ -481,7 +435,7 @@ export function OnboardingWizard({
               variant="ghost"
               onClick={skipStep}
               disabled={isValidating || isCompleting}
-              className="text-zinc-500 hover:text-zinc-700"
+              className="text-onboarding-ink/62 hover:text-onboarding-ink/82"
             >
               Skip
             </Button>
@@ -492,7 +446,7 @@ export function OnboardingWizard({
             type="button"
             onClick={goNext}
             disabled={isValidating || isCompleting}
-            className="bg-zinc-900 hover:bg-zinc-800 text-white min-w-[120px]"
+            className="bg-(--color-onboarding-primary) text-[oklch(0.08_0.016_222)] hover:brightness-105 min-w-30"
             aria-label={isLastStep ? "Complete profile" : "Go to next step"}
           >
             {isValidating || isCompleting ? (

@@ -1,53 +1,43 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@repo/db";
 import { z } from "zod";
-import { withAuth } from "@/app/lib/api-middleware";
-import { generateUniqueSlug } from "@/lib/utils";
-import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api-response";
+import { withRole } from "@/app/lib/api/api-middleware";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
   initializeCorrelationId,
-  executeResilient,
+  getResilientExecutor,
   getClientLogger,
-} from "@/app/lib/resilient-api";
+} from "@/app/lib/api/resilient-api";
 import {
   checkRateLimit,
   getRateLimitIdentifier,
   RateLimits,
-} from "@/app/lib/rate-limit";
+} from "@/app/lib/api/rate-limit";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { checkBodySize } from "@/app/lib/api/api-guards";
+import { professionalSettingsService } from "@/app/lib/domains/professional-settings";
+import { ProfessionSchema } from "@/app/lib/validation/profile-validation";
 
-const logger = getClientLogger();
+// Allowed sort fields to prevent arbitrary column injection
+const ALLOWED_SORT_FIELDS = [
+  "createdAt",
+  "name",
+  "sortOrder",
+  "updatedAt",
+] as const;
+type SortField = (typeof ALLOWED_SORT_FIELDS)[number];
 
-// Profession enum matching Prisma schema
-const ProfessionEnum = z.enum([
-  "architect",
-  "interior_designer",
-  "contractor",
-  "civil_engineer",
-  "electrician",
-  "plumber",
-  "carpenter",
-  "mason",
-  "painter",
-  "roofer",
-  "landscaper",
-  "hvac_technician",
-  "surveyor",
-  "project_manager",
-  "real_estate_agent",
-  "quantity_surveyor",
-  "structural_engineer",
-  "welder",
-  "tiler",
-  "glazier",
-  "other",
-]);
-
-// Validation schemas
+// Validation schemas — use z.nativeEnum() with Prisma enums per conventions
 const createServiceSchema = z.object({
   name: z.string().min(1, "Service name is required").max(100),
   description: z.string().max(500).optional(),
   icon: z.string().max(100).optional(),
-  professionType: ProfessionEnum.optional(),
+  imageUrl: z.string().url().max(500).optional(),
+  professionType: ProfessionSchema.optional(),
+  sortOrder: z.number().int().min(0).optional(),
+  isFeatured: z.boolean().optional(),
+  metaTitle: z.string().max(150).optional(),
+  metaDescription: z.string().max(300).optional(),
+  keywords: z.array(z.string().max(50)).max(20).optional(),
 });
 
 const querySchema = z.object({
@@ -55,24 +45,8 @@ const querySchema = z.object({
   limit: z.string().regex(/^\d+$/).optional().default("10"),
   sort: z.string().optional().default("createdAt:desc"),
   search: z.string().optional().default(""),
-  professionType: ProfessionEnum.optional(),
+  professionType: ProfessionSchema.optional(),
 });
-
-// Optimized select for service list queries
-const serviceListSelect = {
-  id: true,
-  name: true,
-  slug: true,
-  description: true,
-  icon: true,
-  professionType: true,
-  createdAt: true,
-  _count: {
-    select: {
-      professionals: true,
-    },
-  },
-} as const;
 
 /**
  * GET /api/services
@@ -81,18 +55,19 @@ const serviceListSelect = {
  */
 export async function GET(request: NextRequest) {
   const correlationId = initializeCorrelationId(request);
+  const logger = getClientLogger();
 
   const identifier = getRateLimitIdentifier(request);
   const { success } = await checkRateLimit(
     `services-read:${identifier}`,
     RateLimits.READ.limit,
-    RateLimits.READ.window
+    RateLimits.READ.window,
   );
 
   if (!success) {
     return apiError(
       "Too many requests. Please try again later.",
-      HttpStatus.TOO_MANY_REQUESTS
+      HttpStatus.TOO_MANY_REQUESTS,
     );
   }
 
@@ -114,89 +89,78 @@ export async function GET(request: NextRequest) {
     return apiError(
       "Invalid query parameters",
       HttpStatus.BAD_REQUEST,
-      queryValidation.error.issues
+      queryValidation.error.issues,
     );
   }
 
   const { page, limit, sort, search, professionType } = queryValidation.data;
   const pageNum = parseInt(page);
   const limitNum = Math.min(parseInt(limit), 50);
-  const skip = (pageNum - 1) * limitNum;
 
-  // Parse sort parameter
-  const [sortField = "createdAt", sortDirection] = sort.split(":");
-  const orderBy = {
-    [sortField]: sortDirection === "asc" ? "asc" : "desc",
-  };
+  // Parse and validate sort parameter
+  const [rawSortField = "createdAt", sortDirection] = sort.split(":");
+  const sortField: SortField = ALLOWED_SORT_FIELDS.includes(
+    rawSortField as SortField,
+  )
+    ? (rawSortField as SortField)
+    : "createdAt";
+  const sortDirectionValue = sortDirection === "asc" ? "asc" : "desc";
 
-  return executeResilient(
-    async () => {
-      // Build where clause dynamically
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const where: any = {};
-
-      if (search) {
-        where.OR = [
-          { name: { contains: search, mode: "insensitive" } },
-          { description: { contains: search, mode: "insensitive" } },
-        ];
-      }
-
-      if (professionType) {
-        where.professionType = professionType;
-      }
-
-      const [services, total] = await Promise.all([
-        prisma.serviceCategory.findMany({
-          where,
-          skip,
-          take: limitNum,
-          orderBy,
-          select: serviceListSelect,
-        }),
-        prisma.serviceCategory.count({ where }),
-      ]);
-
-      logger.info("Services fetched successfully", {
-        correlationId,
-        count: services.length,
-        total,
-      });
-
-      return {
-        services,
-        pagination: {
-          page: pageNum,
-          limit: limitNum,
-          total,
-          totalPages: Math.ceil(total / limitNum),
-        },
-      };
-    },
-    {
-      operationName: "get_services",
-      successStatus: HttpStatus.OK,
-    }
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    () =>
+      professionalSettingsService.listServiceCategoriesPage({
+        page: pageNum,
+        limit: limitNum,
+        sortField,
+        sortDirection: sortDirectionValue,
+        search: search || undefined,
+        professionType,
+      }),
+    { operationName: "get_services" },
   );
+
+  if (!result.success) {
+    return apiError(
+      "Failed to fetch services",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+  if (!result.data?.ok) {
+    return apiError(
+      "Failed to fetch services",
+      result.data?.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  return apiSuccess(result.data.data);
 }
 
 /**
  * POST /api/services
  * Create a new service category
- * Admin only endpoint
+ * Admin only endpoint — protected by withRole middleware
  */
-export const POST = withAuth(async (request: NextRequest, { dbUserId }) => {
+export const POST = withRole(["ADMIN"])(async (
+  request: NextRequest,
+  { dbUserId },
+) => {
   const correlationId = initializeCorrelationId(request);
+  const logger = getClientLogger();
 
   const { success } = await checkRateLimit(
     getRateLimitIdentifier(request),
     RateLimits.WRITE.limit,
-    RateLimits.WRITE.window
+    RateLimits.WRITE.window,
   );
 
   if (!success) {
     return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
   }
+
+  // Body size guard
+  const sizeError = checkBodySize(request);
+  if (sizeError) return sizeError;
 
   const body = await request.json();
   const validation = createServiceSchema.safeParse(body);
@@ -204,81 +168,110 @@ export const POST = withAuth(async (request: NextRequest, { dbUserId }) => {
   if (!validation.success) {
     logger.warn("Service creation validation failed", {
       correlationId,
-      userId: dbUserId,
+      actorRole: "ADMIN",
       errors: validation.error.issues,
     });
     return apiError(
       "Invalid input",
       HttpStatus.BAD_REQUEST,
-      validation.error.issues
+      validation.error.issues,
     );
   }
 
-  const { name, description, icon, professionType } = validation.data;
+  const {
+    name,
+    description,
+    icon,
+    imageUrl,
+    professionType,
+    sortOrder,
+    isFeatured,
+    metaTitle,
+    metaDescription,
+    keywords,
+  } = validation.data;
+
+  // Idempotency check
+  const idempotencyKey =
+    request.headers.get("Idempotency-Key") ||
+    IdempotencyService.generateKey(dbUserId, "POST:service", { name });
+  const idempotencyCheck = await IdempotencyService.checkOrCreate(
+    idempotencyKey,
+    "service",
+    dbUserId,
+    "POST",
+  );
+
+  if (idempotencyCheck?.status === "completed") {
+    return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+  }
+  if (idempotencyCheck?.status === "pending") {
+    return apiError("Request already in progress", HttpStatus.CONFLICT);
+  }
 
   logger.info("Creating service category", {
     correlationId,
-    userId: dbUserId,
+    actorRole: "ADMIN",
     name,
   });
 
-  return executeResilient(
-    async () => {
-      // Check if user is admin
-      const user = await prisma.user.findUnique({
-        where: { id: dbUserId },
-        select: { role: true },
-      });
-
-      if (!user || user.role !== "admin") {
-        logger.warn("Non-admin tried to create service", {
-          correlationId,
-          userId: dbUserId,
-        });
-        return apiError(
-          "Only administrators can create service categories",
-          HttpStatus.FORBIDDEN
-        );
-      }
-
-      // Check for duplicate name
-      const existing = await prisma.serviceCategory.findUnique({
-        where: { name },
-        select: { id: true },
-      });
-
-      if (existing) {
-        return apiError(
-          "A service with this name already exists",
-          HttpStatus.CONFLICT
-        );
-      }
-
-      // Generate unique slug
-      const slug = await generateUniqueSlug("serviceCategory", name);
-
-      const service = await prisma.serviceCategory.create({
-        data: {
-          name,
-          slug,
-          description,
-          icon,
-          professionType,
-        },
-        select: serviceListSelect,
-      });
-
-      logger.info("Service category created successfully", {
-        correlationId,
-        userId: dbUserId,
-        serviceId: service.id,
-      });
-
-      return apiSuccess(service, HttpStatus.CREATED);
-    },
-    {
-      operationName: "create_service",
-      successStatus: HttpStatus.CREATED,
-    }
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    () =>
+      professionalSettingsService.createServiceCategory({
+        name,
+        description,
+        icon,
+        imageUrl,
+        professionType,
+        sortOrder,
+        isFeatured,
+        metaTitle,
+        metaDescription,
+        keywords,
+      }),
+    { operationName: "create_service" },
   );
+
+  if (!result.success || !result.data) {
+    await IdempotencyService.fail(idempotencyKey);
+    return apiError(
+      "Failed to create service category",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  if (!result.data.ok) {
+    await IdempotencyService.fail(idempotencyKey);
+    if (result.data.error === "conflict") {
+      return apiError(
+        "A service with this name already exists",
+        HttpStatus.CONFLICT,
+      );
+    }
+    return apiError(
+      "Failed to create service category",
+      result.data.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+
+  const service = result.data.data;
+
+  logger.info("Service category created successfully", {
+    correlationId,
+    actorRole: "ADMIN",
+    serviceId: service.id,
+  });
+
+  try {
+    await IdempotencyService.complete(idempotencyKey, service);
+  } catch (error) {
+    await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
+    logger.error(
+      "Idempotency completion failed",
+      error instanceof Error ? error : new Error(String(error)),
+      { correlationId, outcome: "idempotency_complete_failed" },
+    );
+  }
+  return apiSuccess(service, HttpStatus.CREATED);
 });

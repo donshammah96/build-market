@@ -19,9 +19,7 @@ import {
   FormMessage,
 } from "./ui/form";
 import { Input } from "./ui/input";
-import {
-
-} from "@/components/ui/select";
+import {} from "@/components/ui/select";
 import { Button } from "./ui/button";
 
 const formSchema = z.object({
@@ -62,9 +60,7 @@ const EditUser = () => {
                     <FormControl>
                       <Input {...field} />
                     </FormControl>
-                    <FormDescription>
-                      Enter user full name.
-                    </FormDescription>
+                    <FormDescription>Enter user full name.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

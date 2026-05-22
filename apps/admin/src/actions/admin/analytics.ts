@@ -1,6 +1,11 @@
 "use server";
 
-import { prisma } from "@repo/db";
+import {
+  OrderStatus,
+  PaymentStatus,
+  TransactionStatus,
+  prisma,
+} from "@build/db";
 import { safeAction } from "./shared";
 import { z } from "zod";
 
@@ -176,22 +181,25 @@ export async function getPlatformAnalytics(): Promise<
       pendingPayoutsData,
     ] = await Promise.all([
       prisma.payment.aggregate({
-        where: { status: "success" },
-        _sum: { amount: true },
-      }),
-      prisma.payment.aggregate({
-        where: { status: "success", createdAt: { gte: startOfMonth } },
+        where: { status: PaymentStatus.SUCCESS },
         _sum: { amount: true },
       }),
       prisma.payment.aggregate({
         where: {
-          status: "success",
+          status: PaymentStatus.SUCCESS,
+          createdAt: { gte: startOfMonth },
+        },
+        _sum: { amount: true },
+      }),
+      prisma.payment.aggregate({
+        where: {
+          status: PaymentStatus.SUCCESS,
           createdAt: { gte: startOfLastMonth, lte: endOfLastMonth },
         },
         _sum: { amount: true },
       }),
       prisma.order.aggregate({
-        where: { status: { in: ["delivered", "paid"] } },
+        where: { status: { in: [OrderStatus.DELIVERED, OrderStatus.PAID] } },
         _avg: { totalAmount: true },
       }),
       prisma.professionalTransaction.aggregate({
@@ -200,11 +208,11 @@ export async function getPlatformAnalytics(): Promise<
       }),
     ]);
 
-    const totalRevenue = Number(totalRevenueData._sum.amount || 0);
-    const revenueThisMonth = Number(revenueThisMonthData._sum.amount || 0);
-    const revenueLastMonth = Number(revenueLastMonthData._sum.amount || 0);
-    const avgOrderValue = Number(avgOrderValueData._avg.totalAmount || 0);
-    const pendingPayouts = Number(pendingPayoutsData._sum.amount || 0);
+    const totalRevenue = Number(totalRevenueData._sum?.amount ?? 0);
+    const revenueThisMonth = Number(revenueThisMonthData._sum?.amount ?? 0);
+    const revenueLastMonth = Number(revenueLastMonthData._sum?.amount ?? 0);
+    const avgOrderValue = Number(avgOrderValueData._avg?.totalAmount ?? 0);
+    const pendingPayouts = Number(pendingPayoutsData._sum?.amount ?? 0);
 
     // Engagement metrics (simplified - in production, use analytics service)
     const [activeUsersToday, activeUsersThisWeek] = await Promise.all([
@@ -241,7 +249,7 @@ export async function getPlatformAnalytics(): Promise<
         professionalsLastMonth,
         professionalGrowthRate: calculateGrowthRate(
           professionalsThisMonth,
-          professionalsLastMonth
+          professionalsLastMonth,
         ),
         leadsThisMonth,
         leadsLastMonth,
@@ -253,7 +261,7 @@ export async function getPlatformAnalytics(): Promise<
         revenueLastMonth,
         revenueGrowthRate: calculateGrowthRate(
           revenueThisMonth,
-          revenueLastMonth
+          revenueLastMonth,
         ),
         avgOrderValue,
         pendingPayouts,
@@ -279,7 +287,7 @@ export async function getPlatformAnalytics(): Promise<
  */
 export async function getMetricTimeSeries(
   metric: "users" | "professionals" | "leads" | "orders" | "revenue",
-  period: AnalyticsPeriod = "30d"
+  period: AnalyticsPeriod = "30d",
 ): Promise<ReturnType<typeof safeAction<TimeSeriesData[]>>> {
   return safeAction("getMetricTimeSeries", async () => {
     const { start, end } = getDateRange(period);
@@ -319,12 +327,12 @@ export async function getMetricTimeSeries(
         case "revenue": {
           const revenueData = await prisma.payment.aggregate({
             where: {
-              status: "success",
+              status: PaymentStatus.SUCCESS,
               createdAt: { gte: dayStart, lte: dayEnd },
             },
             _sum: { amount: true },
           });
-          value = Number(revenueData._sum.amount || 0);
+          value = Number(revenueData._sum?.amount ?? 0);
           break;
         }
       }
@@ -345,7 +353,7 @@ export async function getMetricTimeSeries(
  * Gets geographic distribution of users/professionals.
  */
 export async function getGeographicDistribution(
-  entityType: "users" | "professionals" | "stores" | "properties"
+  entityType: "users" | "professionals" | "stores" | "properties",
 ): Promise<
   ReturnType<typeof safeAction<Array<{ county: string; count: number }>>>
 > {
@@ -418,7 +426,7 @@ export async function getGeographicDistribution(
  */
 export async function getTopProfessionals(
   metric: "leads" | "reviews" | "revenue" | "projects",
-  limit: number = 10
+  limit: number = 10,
 ): Promise<
   ReturnType<
     typeof safeAction<
@@ -475,7 +483,7 @@ export async function getTopProfessionals(
         });
         const filteredReviewStats = reviewStats.filter(
           (r): r is typeof r & { professionalId: string } =>
-            r.professionalId !== null
+            r.professionalId !== null,
         );
         const reviewProfIds = filteredReviewStats.map((r) => r.professionalId);
         const reviewProfs = await prisma.professionalProfile.findMany({
@@ -509,7 +517,7 @@ export async function getTopProfessionals(
         });
         results = projectCounts.map((p) => {
           const prof = projectProfs.find(
-            (pr) => pr.userId === p.professionalId
+            (pr) => pr.userId === p.professionalId,
           );
           return {
             userId: p.professionalId!,
@@ -525,7 +533,7 @@ export async function getTopProfessionals(
         const revenueTotals = await prisma.professionalTransaction.groupBy({
           by: ["professionalId"],
           _sum: { amount: true },
-          where: { status: "COMPLETED", type: "INCOME" },
+          where: { status: TransactionStatus.SUCCESS, type: "INCOME" },
           orderBy: { _sum: { amount: "desc" } },
           take: limit,
         });
@@ -540,7 +548,7 @@ export async function getTopProfessionals(
             userId: r.professionalId,
             companyName: prof?.companyName || "Unknown",
             verified: prof?.verified || false,
-            value: Number(r._sum.amount || 0),
+            value: Number(r._sum?.amount ?? 0),
           };
         });
         break;

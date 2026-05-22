@@ -19,6 +19,7 @@ import {
   Star,
   Trash2,
   Home,
+  ArrowUpDown,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -44,7 +45,18 @@ const typeColors: Record<string, string> = {
 export const columns: ColumnDef<PropertyData>[] = [
   {
     accessorKey: "title",
-    header: "Property",
+    header: ({ column }) => {
+      return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="-ml-4 hover:bg-transparent"
+        >
+          Property
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      );
+    },
     cell: ({ row }) => {
       const property = row.original;
       return (
@@ -77,7 +89,18 @@ export const columns: ColumnDef<PropertyData>[] = [
   },
   {
     accessorKey: "price",
-    header: "Price",
+    header: ({ column }) => {
+      return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="-ml-4 hover:bg-transparent"
+        >
+          Price
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      );
+    },
     cell: ({ row }) => {
       const property = row.original;
       return (

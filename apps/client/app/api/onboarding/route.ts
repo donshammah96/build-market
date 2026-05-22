@@ -1,287 +1,328 @@
-import { NextRequest } from "next/server";
-import { auth, currentUser } from "@clerk/nextjs/server";
-import { prisma } from "@repo/db";
-import { County, Profession } from "@prisma/client";
-import { OnboardingSchema } from "@repo/types";
-import { z } from "zod";
-import { apiError, HttpStatus } from "@/app/lib/api-response";
-import {
-  initializeCorrelationId,
-  executeResilient,
-  getClientLogger,
-} from "@/app/lib/resilient-api";
-import {
-  checkRateLimit,
-  getRateLimitIdentifier,
-  RateLimits,
-} from "@/app/lib/rate-limit";
-import { clerkClient } from "@clerk/nextjs/server";
-
-const logger = getClientLogger();
-
 /**
  * POST /api/onboarding
- * Complete user onboarding by setting role and creating profile.
+ * app/api/onboarding/route.ts
  *
- * This endpoint uses Clerk auth directly (not withAuth middleware) because
- * the user may not exist in the database yet. It will create the user if needed.
+ * KEY CHANGES FROM ORIGINAL:
+ *
+ * 1. CLERK UPDATE ORDERING FIX (critical)
+ *    Original: domain logic → safeIdempotencyComplete() → Clerk update
+ *    Fixed:    domain logic → Clerk update → safeIdempotencyComplete()
+ *
+ *    If Clerk update ran after complete() and failed silently, any retry
+ *    returned the cached "completed" response without re-attempting the Clerk
+ *    update. The user ended up with DB isOnboarded=true but stale Clerk
+ *    metadata, breaking every middleware auth check on next page load.
+ *
+ * 2. SHARED CLERK HELPER replaces the duplicated:
+ *    (await clerkClient()) as unknown as ClerkMetadataClient
+ *    That double cast bypassed TypeScript completely. All five routes had it.
  */
-export async function POST(req: NextRequest) {
+
+import { NextRequest, NextResponse } from "next/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
+import { OnboardingSchema } from "@build/types";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
+import {
+  initializeCorrelationId,
+  getResilientExecutor,
+  getClientLogger,
+} from "@/app/lib/api/resilient-api";
+import {
+  checkRateLimit,
+  getActorRateLimitIdentifier,
+  RateLimits,
+} from "@/app/lib/api/rate-limit";
+import { checkBodySize } from "@/app/lib/api/api-guards";
+import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
+import {
+  type ClerkUserProfile,
+  userProfileOnboardingService,
+} from "@/app/lib/domains/user-profile";
+import {
+  CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
+  finalizeClerkOnboardingTransition,
+} from "@/app/lib/domains/user-profile/clerk-metadata";
+import { logOnboardingRouteOutcome, now } from "@/app/api/onboarding/shared";
+import { normalizeRole } from "@/app/lib/security/roles";
+
+const MAX_BODY_SIZE = 1024 * 1024; // 1MB
+const ROUTE_PATTERN = "/api/onboarding";
+const OPERATION_NAME = "complete_onboarding";
+
+const ONBOARDING_ERROR_MESSAGE_MAP: Partial<Record<string, string>> = {
+  conflict: "Onboarding already completed",
+  invalid_input: "Invalid or expired document uploads",
+  invalid_state: "Invalid onboarding state",
+  forbidden: "Forbidden",
+  not_found: "User not found",
+  internal: "Onboarding failed",
+};
+
+function mapOutcomeFromStatus(status: number): string {
+  if (status === HttpStatus.BAD_REQUEST) return "bad_request";
+  if (status === HttpStatus.UNAUTHORIZED) return "unauthorized";
+  if (status === HttpStatus.FORBIDDEN) return "forbidden";
+  if (status === HttpStatus.CONFLICT) return "conflict";
+  if (status === HttpStatus.TOO_MANY_REQUESTS) return "rate_limited";
+  return "failed";
+}
+
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  const startedAt = now();
   const correlationId = initializeCorrelationId(req);
+  let actorRole: "unknown" | "CLIENT" | "PROFESSIONAL" = "unknown";
 
+  type LogOutcomeFields = {
+    reason?: string;
+    source?: string;
+    domainError?: string;
+    completedRole?: string;
+    errors?: string[];
+  };
+
+  const logOutcome = (
+    outcome: string,
+    httpStatus: number,
+    fields?: LogOutcomeFields,
+  ) => {
+    getClientLogger().info("Onboarding adapter outcome", {
+      correlationId,
+      operationName: OPERATION_NAME,
+      httpMethod: req.method,
+      routePattern: ROUTE_PATTERN,
+      actorRole,
+      outcome,
+      httpStatus,
+      durationMs: now() - startedAt,
+      ...(fields?.reason ? { reason: fields.reason } : {}),
+      ...(fields?.source ? { source: fields.source } : {}),
+      ...(fields?.domainError ? { domainError: fields.domainError } : {}),
+      ...(fields?.completedRole ? { completedRole: fields.completedRole } : {}),
+      ...(fields?.errors ? { errors: fields.errors } : {}),
+    });
+    logOnboardingRouteOutcome({
+      correlationId,
+      operationName: OPERATION_NAME,
+      actorRole,
+      outcome:
+        httpStatus >= 500
+          ? "internal_error"
+          : httpStatus === HttpStatus.TOO_MANY_REQUESTS
+            ? "rate_limited"
+            : httpStatus >= 400
+              ? "domain_error"
+              : "success",
+      httpStatus,
+      durationMs: now() - startedAt,
+      domainError: fields?.domainError,
+    });
+  };
+
+  const { userId: clerkId } = await auth();
+  if (!clerkId) {
+    logOutcome("unauthorized", HttpStatus.UNAUTHORIZED);
+    return apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED);
+  }
+
+  const rateLimitResult = await checkRateLimit(
+    getActorRateLimitIdentifier(clerkId, "onboarding-submit"),
+    RateLimits.AUTH.limit,
+    RateLimits.AUTH.window,
+  );
+  if (!rateLimitResult.success) {
+    logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
+    return apiError(
+      "Too many requests. Please try again later.",
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
+  const sizeError = checkBodySize(req, MAX_BODY_SIZE);
+  if (sizeError) {
+    logOutcome("bad_request", 413, {
+      reason: "body_too_large",
+    });
+    return sizeError;
+  }
+
+  let body: unknown;
   try {
-    // Get Clerk user ID
-    const { userId: clerkId } = await auth();
+    body = await req.json();
+  } catch {
+    logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
+      reason: "invalid_json",
+    });
+    return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+  }
 
-    if (!clerkId) {
-      return apiError("Unauthorized. Please sign in.", HttpStatus.UNAUTHORIZED);
-    }
-
-    // Rate limiting
-    const identifier = getRateLimitIdentifier(req);
-    const rateLimitResult = await checkRateLimit(
-      `onboarding:${identifier}`,
-      RateLimits.AUTH.limit,
-      RateLimits.AUTH.window
+  const validation = OnboardingSchema.safeParse(body);
+  if (!validation.success) {
+    const validationErrorFields = validation.error.issues.map((issue) =>
+      issue.path.join("."),
     );
 
-    if (!rateLimitResult.success) {
-      return apiError(
-        "Too many requests. Please try again later.",
-        HttpStatus.TOO_MANY_REQUESTS
-      );
-    }
+    getClientLogger().warn("Onboarding validation failed", {
+      correlationId,
+      actorRole: "unknown",
+      errors: validationErrorFields,
+    });
+    logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
+      reason: "validation_failed",
+      errors: validationErrorFields,
+    });
+    return apiError(
+      "Validation failed",
+      HttpStatus.BAD_REQUEST,
+      validationErrorFields,
+    );
+  }
 
-    // Parse and validate request body
-    let validatedData;
-    try {
-      const body = await req.json();
-      validatedData = OnboardingSchema.parse(body);
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        logger.warn("Onboarding validation failed", {
-          correlationId,
-          clerkId,
-          errors: err.issues,
-        });
-        return apiError(
-          "Validation failed",
-          HttpStatus.BAD_REQUEST,
-          err.issues
-        );
-      }
-      throw err;
-    }
+  const validatedData = validation.data;
+  const { role } = validatedData;
+  const resolvedActorRole = normalizeRole(role);
 
-    const { role } = validatedData;
+  if (
+    !resolvedActorRole ||
+    (resolvedActorRole !== "CLIENT" && resolvedActorRole !== "PROFESSIONAL")
+  ) {
+    logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
+      reason: "invalid_role",
+    });
+    return apiError("Invalid onboarding role", HttpStatus.BAD_REQUEST);
+  }
+  actorRole = resolvedActorRole;
 
-    logger.info("Processing onboarding", { correlationId, clerkId, role });
+  const idempotencyKey =
+    req.headers.get("Idempotency-Key") ||
+    IdempotencyService.generateKey(clerkId, "POST", {
+      domain: "onboarding",
+      role: resolvedActorRole,
+    });
 
-    // Get Clerk user data to create/update database user
-    const clerkUserData = await currentUser();
-    if (!clerkUserData) {
-      return apiError(
-        "Could not retrieve user data from Clerk",
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
-    }
+  const idempotencyCheck = await IdempotencyService.checkOrCreate(
+    idempotencyKey,
+    "onboarding",
+    clerkId,
+    "POST",
+  );
+  if (idempotencyCheck.status === "completed") {
+    logOutcome("succeeded", HttpStatus.OK, {
+      source: "idempotency_cache",
+    });
+    return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+  }
+  if (idempotencyCheck.status === "pending") {
+    logOutcome("conflict", HttpStatus.CONFLICT, {
+      reason: "idempotency_pending",
+    });
+    return apiError(
+      "Onboarding is being processed. Please wait.",
+      HttpStatus.CONFLICT,
+    );
+  }
 
-    return executeResilient(
-      async () => {
-        // Use transaction with extended timeout for database operations
-        const result = await prisma.$transaction(
-          async (tx) => {
-            // Create or update user - handles the case where webhook didn't fire
-            const user = await tx.user.upsert({
-              where: { clerkId },
-              create: {
-                clerkId,
-                email: clerkUserData.emailAddresses[0]?.emailAddress || "",
-                firstName: clerkUserData.firstName || null,
-                lastName: clerkUserData.lastName || null,
-                phone: clerkUserData.phoneNumbers?.[0]?.phoneNumber || null,
-                role,
-                isProfileComplete: true,
-              },
-              update: {
-                role,
-                isProfileComplete: true,
-              },
-            });
+  const clerkUserData = (await currentUser()) as ClerkUserProfile | null;
+  if (!clerkUserData) {
+    await IdempotencyService.fail(idempotencyKey);
+    logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
+      reason: "clerk_user_unavailable",
+    });
+    return apiError(
+      "Could not retrieve user data from Clerk",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
 
-            // Create or update profile based on role
-            if (role === "client") {
-              // Access properties with type assertion since schema was updated
-              // but TypeScript may be using cached types
-              const clientData = validatedData as typeof validatedData & {
-                county: string;
-                city?: string;
-                address?: string;
-                zipCode?: string;
-              };
+  const resilientExecutor = getResilientExecutor();
+  const result = await resilientExecutor.execute(
+    async () =>
+      userProfileOnboardingService.completeOnboarding({
+        actor: { clerkId, correlationId, role: resolvedActorRole },
+        clerkUser: clerkUserData,
+        data: validatedData,
+      }),
+    { operationName: OPERATION_NAME },
+  );
 
-              const {
-                projectType,
-                projectLocation,
-                estimatedBudget,
-                description,
-              } = validatedData;
-
-              // Extract location fields with proper typing
-              const county = clientData.county;
-              const city = clientData.city;
-              const address = clientData.address;
-              const zipCode = clientData.zipCode;
-
-              const preferences = {
-                projectType,
-                projectLocation,
-                estimatedBudget,
-                description,
-              };
-
-              await tx.clientProfile.upsert({
-                where: { userId: user.id },
-                update: {
-                  preferences,
-                  county: county as County,
-                  city: city || null,
-                  address: address || null,
-                  zipCode: zipCode || null,
-                },
-                create: {
-                  userId: user.id,
-                  county: county as County,
-                  city: city || null,
-                  address: address || null,
-                  zipCode: zipCode || null,
-                  preferences,
-                },
-              });
-            } else if (role === "professional") {
-              const {
-                profession,
-                companyName,
-                licenseNumber,
-                yearsExperience,
-                portfolio,
-                website,
-                bio,
-                certificatesUrls,
-                idDocumentsUrls,
-              } = validatedData;
-
-              // Type assertion for profession enum
-              const professionEnum = profession as Profession;
-
-              const professionalProfile = await tx.professionalProfile.upsert({
-                where: { userId: user.id },
-                update: {
-                  profession: professionEnum,
-                  companyName,
-                  licenseNumber,
-                  yearsExperience,
-                  website,
-                  bio,
-                  portfolioUrl: portfolio,
-                  verified: false,
-                },
-                create: {
-                  userId: user.id,
-                  profession: professionEnum,
-                  companyName,
-                  licenseNumber,
-                  yearsExperience,
-                  website,
-                  bio,
-                  portfolioUrl: portfolio,
-                  verified: false,
-                },
-              });
-
-              // Handle certificates and documents
-              const certPromises = (certificatesUrls || []).map((url) =>
-                tx.certificate.create({
-                  data: {
-                    name: "Professional Certificate",
-                    issuer: "Self-reported",
-                    fileUrl: url,
-                    professionalId: professionalProfile.userId,
-                  },
-                })
-              );
-
-              const idPromises = (idDocumentsUrls || []).map((url) =>
-                tx.certificate.create({
-                  data: {
-                    name: "ID Document",
-                    issuer: "Government/Official",
-                    fileUrl: url,
-                    professionalId: professionalProfile.userId,
-                  },
-                })
-              );
-
-              await Promise.all([...certPromises, ...idPromises]);
-            }
-
-            return user;
-          },
-          {
-            // Extended timeout for slow database connections
-            maxWait: 10000, // 10 seconds max wait to acquire connection
-            timeout: 30000, // 30 seconds transaction timeout
-          }
-        );
-
-        logger.info("Onboarding completed successfully", {
-          correlationId,
-          userId: result.id,
-          role,
-        });
-
-        // Update Clerk publicMetadata so middleware can access role without DB calls
-        try {
-          const client = await clerkClient();
-          await client.users.updateUserMetadata(clerkId, {
-            publicMetadata: {
-              role: result.role,
-              isOnboarded: true,
-            },
-          });
-          logger.info("Clerk metadata updated", {
-            correlationId,
-            clerkId,
-            role: result.role,
-          });
-        } catch (clerkError) {
-          // Log but don't fail the request - DB is the source of truth
-          logger.error(
-            "Failed to update Clerk metadata",
-            clerkError instanceof Error
-              ? clerkError
-              : new Error(String(clerkError)),
-            { correlationId, clerkId }
-          );
-        }
-
-        return {
-          userId: result.id,
-          role: result.role,
-          isProfileComplete: result.isProfileComplete,
-        };
-      },
+  if (!result.success || !result.data) {
+    await IdempotencyService.fail(idempotencyKey);
+    getClientLogger().error(
+      "Onboarding adapter outcome",
+      result.error instanceof Error
+        ? result.error
+        : new Error("Onboarding execution failed"),
       {
-        operationName: "complete_onboarding",
-        successStatus: HttpStatus.OK,
-      }
-    );
-  } catch (error) {
-    logger.error(
-      "Onboarding error",
-      error instanceof Error ? error : new Error(String(error)),
-      { correlationId }
+        correlationId,
+        operationName: OPERATION_NAME,
+        httpMethod: req.method,
+        routePattern: ROUTE_PATTERN,
+        actorRole,
+        outcome: "failed",
+        httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
+        durationMs: now() - startedAt,
+        reason: "executor_failure",
+      },
     );
     return apiError("Onboarding failed", HttpStatus.INTERNAL_SERVER_ERROR);
   }
+
+  if (!result.data.ok) {
+    await IdempotencyService.fail(idempotencyKey);
+    const status = result.data.status || HttpStatus.INTERNAL_SERVER_ERROR;
+    const safeMessage =
+      ONBOARDING_ERROR_MESSAGE_MAP[result.data.error ?? ""] ||
+      "Onboarding failed";
+
+    logOutcome(mapOutcomeFromStatus(status), status, {
+      reason: "domain_error",
+      domainError: result.data.error || "unknown",
+    });
+    return apiError(safeMessage, status);
+  }
+
+  const responseData = result.data.data;
+  const clerkRole = responseData.role as string;
+
+  // ORDERING INVARIANT: Clerk update BEFORE safeIdempotencyComplete().
+  // If Clerk ran after and failed, any retry returns cached success and
+  // permanently skips the Clerk update, leaving the middleware token stale.
+  try {
+    await finalizeClerkOnboardingTransition({
+      clerkId,
+      metadata: {
+        role: clerkRole,
+        isOnboarded: true,
+        status:
+          clerkRole === "PROFESSIONAL" ? "PENDING_VERIFICATION" : "ACTIVE",
+      },
+      context: { correlationId, operation: OPERATION_NAME },
+      onFailure: () => IdempotencyService.fail(idempotencyKey),
+    });
+  } catch {
+    logOutcome("failed", HttpStatus.SERVICE_UNAVAILABLE, {
+      reason: "clerk_metadata_sync_failed",
+    });
+    return apiError(
+      CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+  }
+
+  await safeIdempotencyComplete(idempotencyKey, responseData, {
+    correlationId,
+    operationName: OPERATION_NAME,
+    httpMethod: req.method,
+    routePattern: ROUTE_PATTERN,
+    actorRole,
+    httpStatus: HttpStatus.OK,
+    durationMs: now() - startedAt,
+    resourceType: "onboarding",
+  });
+
+  logOutcome("succeeded", HttpStatus.OK, {
+    completedRole: responseData.role,
+  });
+
+  return apiSuccess(responseData, HttpStatus.OK);
 }

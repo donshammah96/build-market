@@ -1,17 +1,36 @@
-import { connect, NatsConnection, JetStreamClient, JetStreamManager } from "nats";
+import {
+  connect,
+  NatsConnection,
+  JetStreamClient,
+  JetStreamManager,
+} from "nats";
 import type { NatsConfig, NatsClient } from "./types";
 
 /**
- * Default NATS configuration
+ * Connection health metrics
  */
-const defaultConfig: NatsConfig = {
-  servers: process.env.NATS_URL || "localhost:4222",
-  name: process.env.NATS_CLIENT_NAME || "build-market",
-  reconnect: true,
-  maxReconnectAttempts: -1, // Infinite reconnection attempts
-  reconnectTimeWait: 2000,
-  timeout: 10000,
-};
+interface ConnectionMetrics {
+  reconnectAttempts: number;
+  lastReconnectAt?: Date;
+  lastDisconnectAt?: Date;
+  totalDisconnects: number;
+  connectedAt?: Date;
+  errors: Array<{ timestamp: Date; error: string }>;
+}
+
+/**
+ * Connection status information
+ */
+export interface ConnectionStatus {
+  connected: boolean;
+  server?: string;
+  metrics: ConnectionMetrics;
+  config: {
+    servers: string | string[];
+    name: string;
+    environment: string;
+  };
+}
 
 /**
  * Singleton NATS client instance
@@ -19,9 +38,53 @@ const defaultConfig: NatsConfig = {
 let natsClient: NatsClient | null = null;
 
 /**
- * Merge user config with defaults
+ * Connection health metrics
+ */
+let connectionMetrics: ConnectionMetrics = {
+  reconnectAttempts: 0,
+  totalDisconnects: 0,
+  errors: [],
+};
+
+/**
+ * Verbose logging flag
+ */
+let verboseLogging = false;
+
+/**
+ * Get environment-aware default configuration
+ */
+function getDefaultConfig(): NatsConfig {
+  const env = process.env.NODE_ENV || "development";
+  const isProd = env === "production";
+
+  return {
+    servers: process.env.NATS_URL || "nats://localhost:4222",
+    name: process.env.NATS_CLIENT_NAME || `build-market-${env}`,
+    reconnect: true,
+    maxReconnectAttempts: parseInt(
+      process.env.NATS_MAX_RECONNECT_ATTEMPTS || "-1",
+      10,
+    ),
+    reconnectTimeWait: parseInt(
+      process.env.NATS_RECONNECT_TIME_WAIT || (isProd ? "2000" : "1000"),
+      10,
+    ),
+    timeout: parseInt(
+      process.env.NATS_TIMEOUT || (isProd ? "10000" : "5000"),
+      10,
+    ),
+    token: process.env.NATS_TOKEN,
+    user: process.env.NATS_USER,
+    pass: process.env.NATS_PASS,
+  };
+}
+
+/**
+ * Merge user config with environment-aware defaults
  */
 function mergeConfig(config?: Partial<NatsConfig>): NatsConfig {
+  const defaultConfig = getDefaultConfig();
   return {
     ...defaultConfig,
     ...config,
@@ -30,20 +93,74 @@ function mergeConfig(config?: Partial<NatsConfig>): NatsConfig {
 }
 
 /**
+ * Log helper with verbose mode support
+ */
+function log(
+  level: "info" | "warn" | "error",
+  message: string,
+  data?: unknown,
+) {
+  const timestamp = new Date().toISOString();
+  const prefix = `[NATS ${timestamp}]`;
+
+  switch (level) {
+    case "info":
+      if (verboseLogging) {
+        console.log(prefix, message, data || "");
+      }
+      break;
+    case "warn":
+      console.warn(prefix, message, data || "");
+      break;
+    case "error":
+      console.error(prefix, message, data || "");
+      // Track errors in metrics (keep last 50)
+      connectionMetrics.errors.push({
+        timestamp: new Date(),
+        error:
+          typeof data === "string"
+            ? data
+            : (() => {
+                try {
+                  return JSON.stringify(data);
+                } catch {
+                  return String(data);
+                }
+              })(),
+      });
+      if (connectionMetrics.errors.length > 50) {
+        connectionMetrics.errors.shift();
+      }
+      break;
+  }
+}
+
+/**
  * Create a new NATS connection with JetStream support
  * Uses singleton pattern - returns existing connection if available
+ *
+ * @param config - Optional configuration to override defaults
+ * @param options - Additional options like verbose logging
  */
 export async function createNatsClient(
-  config?: Partial<NatsConfig>
+  config?: Partial<NatsConfig>,
+  options?: { verbose?: boolean },
 ): Promise<NatsClient> {
   // Return existing client if connected
   if (natsClient && natsClient.isConnected()) {
+    log("info", "Reusing existing NATS connection");
     return natsClient;
   }
 
+  // Set verbose logging
+  verboseLogging = options?.verbose ?? process.env.NODE_ENV === "development";
+
   const mergedConfig = mergeConfig(config);
 
-  console.log(`[NATS] Connecting to ${mergedConfig.servers}...`);
+  log("info", `Connecting to ${mergedConfig.servers}...`, {
+    name: mergedConfig.name,
+    environment: process.env.NODE_ENV,
+  });
 
   try {
     // Build connection options
@@ -61,33 +178,43 @@ export async function createNatsClient(
     // Add authentication if provided
     if (mergedConfig.token) {
       connectionOptions.token = mergedConfig.token;
+      log("info", "Using token authentication");
     }
     if (mergedConfig.user && mergedConfig.pass) {
       connectionOptions.user = mergedConfig.user;
       connectionOptions.pass = mergedConfig.pass;
+      log("info", "Using user/password authentication");
     }
 
     // Connect to NATS
     const nc: NatsConnection = await connect(connectionOptions);
 
-    console.log(`[NATS] Connected to ${nc.getServer()}`);
+    connectionMetrics.connectedAt = new Date();
+    log("info", `Connected to ${nc.getServer()}`);
 
     // Get JetStream client and manager
     const js: JetStreamClient = nc.jetstream();
     const jsm: JetStreamManager = await nc.jetstreamManager();
 
-    // Create client wrapper
+    // Create client wrapper with enhanced methods
     natsClient = {
       connection: nc,
       jetstream: js,
       jetstreamManager: jsm,
       close: async () => {
-        console.log("[NATS] Closing connection...");
-        await nc.drain();
-        natsClient = null;
-        console.log("[NATS] Connection closed");
+        log("info", "Closing connection...");
+        try {
+          await nc.drain();
+          natsClient = null;
+          log("info", "Connection closed gracefully");
+        } catch (error) {
+          log("error", "Error during connection close", error);
+          throw error;
+        }
       },
       isConnected: () => !nc.isClosed(),
+      getStatus: () => getConnectionStatus(),
+      getMetrics: () => ({ ...connectionMetrics }),
     };
 
     // Handle connection events
@@ -95,24 +222,45 @@ export async function createNatsClient(
       for await (const status of nc.status()) {
         switch (status.type) {
           case "disconnect":
-            console.log(`[NATS] Disconnected from ${status.data}`);
+            connectionMetrics.lastDisconnectAt = new Date();
+            connectionMetrics.totalDisconnects++;
+            log("warn", `Disconnected from ${status.data}`);
             break;
+
           case "reconnect":
-            console.log(`[NATS] Reconnected to ${status.data}`);
+            connectionMetrics.reconnectAttempts++;
+            connectionMetrics.lastReconnectAt = new Date();
+            log("info", `Reconnected to ${status.data}`, {
+              attempts: connectionMetrics.reconnectAttempts,
+            });
             break;
+
           case "error":
-            console.error(`[NATS] Error:`, status.data);
+            log("error", "Connection error", status.data);
             break;
+
           case "ldm":
-            console.log("[NATS] Server signaled lame duck mode");
+            log(
+              "warn",
+              "Server signaled lame duck mode - preparing for shutdown",
+            );
+            break;
+
+          case "reconnecting":
+            log("info", "Attempting to reconnect...");
             break;
         }
       }
-    })().catch(console.error);
+    })().catch((error) => {
+      log("error", "Error in status handler", error);
+    });
+
+    // Register graceful shutdown handlers
+    registerShutdownHandlers();
 
     return natsClient;
   } catch (error) {
-    console.error("[NATS] Connection failed:", error);
+    log("error", "Connection failed", error);
     throw error;
   }
 }
@@ -123,7 +271,7 @@ export async function createNatsClient(
 export function getNatsClient(): NatsClient {
   if (!natsClient || !natsClient.isConnected()) {
     throw new Error(
-      "[NATS] Client not connected. Call createNatsClient() first."
+      "[NATS] Client not connected. Call createNatsClient() first.",
     );
   }
   return natsClient;
@@ -134,6 +282,35 @@ export function getNatsClient(): NatsClient {
  */
 export function isNatsConnected(): boolean {
   return natsClient !== null && natsClient.isConnected();
+}
+
+/**
+ * Get detailed connection status and health metrics
+ */
+export function getConnectionStatus(): ConnectionStatus {
+  const defaultConfig = getDefaultConfig();
+
+  return {
+    connected: isNatsConnected(),
+    server: natsClient?.connection.getServer(),
+    metrics: { ...connectionMetrics },
+    config: {
+      servers: defaultConfig.servers,
+      name: defaultConfig.name || "build-market",
+      environment: process.env.NODE_ENV || "development",
+    },
+  };
+}
+
+/**
+ * Reset connection metrics (useful for testing)
+ */
+export function resetMetrics(): void {
+  connectionMetrics = {
+    reconnectAttempts: 0,
+    totalDisconnects: 0,
+    errors: [],
+  };
 }
 
 /**
@@ -151,10 +328,59 @@ export async function closeNatsConnection(): Promise<void> {
  */
 export async function createServiceClient(
   serviceName: string,
-  config?: Partial<NatsConfig>
+  config?: Partial<NatsConfig>,
+  options?: { verbose?: boolean },
 ): Promise<NatsClient> {
-  return createNatsClient({
-    ...config,
-    name: `${serviceName}-${process.env.NODE_ENV || "development"}`,
+  return createNatsClient(
+    {
+      ...config,
+      name: `${serviceName}-${process.env.NODE_ENV || "development"}`,
+    },
+    options,
+  );
+}
+
+/**
+ * Register graceful shutdown handlers for process termination
+ * Ensures NATS connections are properly drained before exit
+ */
+let shutdownHandlersRegistered = false;
+
+function registerShutdownHandlers(): void {
+  if (shutdownHandlersRegistered || typeof process === "undefined") {
+    return;
+  }
+
+  shutdownHandlersRegistered = true;
+
+  const gracefulShutdown = async (signal: string) => {
+    log("info", `Received ${signal}, initiating graceful shutdown...`);
+    try {
+      await closeNatsConnection();
+      log("info", "NATS connection closed successfully");
+      process.exit(0);
+    } catch (error) {
+      log("error", "Error during graceful shutdown", error);
+      process.exit(1);
+    }
+  };
+
+  // Handle termination signals
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+  // Handle uncaught errors
+  process.on("uncaughtException", async (error) => {
+    log("error", "Uncaught exception", error);
+    await closeNatsConnection();
+    process.exit(1);
   });
+
+  process.on("unhandledRejection", async (reason) => {
+    log("error", "Unhandled rejection", reason);
+    await closeNatsConnection();
+    process.exit(1);
+  });
+
+  log("info", "Graceful shutdown handlers registered");
 }
