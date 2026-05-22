@@ -1,9 +1,15 @@
-// @ts-nocheck
 import Image from "next/image";
 import { Card, CardContent, CardFooter, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
-import { OrderType, ProductsType } from "@build/types";
+import { ProductsType } from "@build/types";
 import { auth } from "@clerk/nextjs/server";
+
+export type OrderType = {
+  _id: string;
+  email: string;
+  status: string;
+  totalAmount: number;
+};
 
 const CardList = async ({ title }: { title: string }) => {
   let products: ProductsType = [];
@@ -39,15 +45,17 @@ const CardList = async ({ title }: { title: string }) => {
 
   return (
     <div className="">
-      <h1 className="text-lg font-medium mb-6">{title}</h1>
+      <h1 className="text-lg font-medium mb-6 text-(--admin-color-text-primary)">
+        {title}
+      </h1>
       <div className="flex flex-col gap-2">
         {title === "Popular Products"
           ? products.map((item: ProductsType[number]) => (
               <Card
                 key={item.id}
-                className="flex-row items-center justify-between gap-4 p-4"
+                className="flex-row items-center justify-between gap-4 p-4 bg-(--admin-surface-card) hover:bg-(--admin-surface-card-hover) transition-colors shadow-(--admin-shadow-sm) border-(--admin-data-border) rounded-(--admin-radius-md)"
               >
-                <div className="w-12 h-12 rounded-sm relative overflow-hidden">
+                <div className="w-12 h-12 rounded-(--admin-radius-sm) relative overflow-hidden border border-(--admin-data-border)">
                   <Image
                     src={
                       Object.values(item.images as Record<string, string>)[0] ||
@@ -59,25 +67,32 @@ const CardList = async ({ title }: { title: string }) => {
                   />
                 </div>
                 <CardContent className="flex-1 p-0">
-                  <CardTitle className="text-sm font-medium">
+                  <CardTitle className="text-sm font-medium text-(--admin-color-text-primary)">
                     {item.name}
                   </CardTitle>
                 </CardContent>
-                <CardFooter className="p-0">${item.price}K</CardFooter>
+                <CardFooter className="p-0 text-(--admin-color-text-primary) font-semibold">
+                  ${item.price}K
+                </CardFooter>
               </Card>
             ))
           : orders.map((item) => (
               <Card
                 key={item._id}
-                className="flex-row items-center justify-between gap-4 p-4"
+                className="flex-row items-center justify-between gap-4 p-4 bg-(--admin-surface-card) hover:bg-(--admin-surface-card-hover) transition-colors shadow-(--admin-shadow-sm) border-(--admin-data-border) rounded-(--admin-radius-md)"
               >
                 <CardContent className="flex-1 p-0">
-                  <CardTitle className="text-sm font-medium">
+                  <CardTitle className="text-sm font-medium text-(--admin-color-text-primary)">
                     {item.email}
                   </CardTitle>
-                  <Badge variant="secondary">{item.status}</Badge>
+                  <Badge
+                    variant="secondary"
+                    className="bg-(--admin-status-pending-bg) text-(--admin-status-pending-fg) border-(--admin-status-pending-border)"
+                  >
+                    {item.status}
+                  </Badge>
                 </CardContent>
-                <CardFooter className="p-0">
+                <CardFooter className="p-0 text-(--admin-color-text-primary) font-semibold">
                   ${item.totalAmount / 100}
                 </CardFooter>
               </Card>

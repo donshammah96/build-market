@@ -1,5 +1,35 @@
 # apps/admin Changelog
 
+## [2026-05-22] Phase 6 & 7 Overhaul: Leads, Services, & Professionals Slices with UI Token Hardening
+
+### Added (Phase 6 & 7 Overhaul)
+
+- **Domain/Leads**: Created a dedicated domain slice under `src/lib/domains/leads/` (`contracts.ts`, `repository.ts`, `service.ts`, and full unit tests) with complete business capabilities (`VIEW_CONTENT` for reads, and action capability gates checked via `requireAdminCapability` for updates/deletions).
+- **Domain/Services**: Created a dedicated domain slice under `src/lib/domains/services/` (`contracts.ts`, `repository.ts`, `service.ts`, and full unit tests) ensuring a clean database adapter split.
+- **Domain/Professionals**: Created a dedicated domain slice under `src/lib/domains/professionals/` (`contracts.ts`, `repository.ts`, `service.ts`, and full unit tests) that correctly maps nullable schema fields like `yearsExperience`, `city`, and `country` to prevent type mismatches.
+- **Compliance Queue Route Hardening**: Hardened `/api/admin/compliance/queue-status` route in `src/actions/admin/compliance/queue-status/route.ts` with standard Clerk authentication validation, correlation logging, and active profile verification. Added a dedicated test suite in `__tests__/compliance-queue-status.test.ts`.
+
+### Changed (Phase 6 & 7 Overhaul)
+
+- **Actions/Leads**: Refactored `src/actions/admin/leads.ts` to utilize `safeAction` and `leadsService`. Removed direct Prisma database access, incorporated `safeParse` for strict validation, and wired declarative `auditLog` annotations for mutations (`updateLead`, `deleteLead`).
+- **Actions/Services**: Refactored `src/actions/admin/services.ts` to fully delegate all actions (`getServices`, `getServiceDetails`, `createService`, `updateService`, `deleteService`) to `servicesService`, removing legacy `@ts-nocheck` and raw Prisma imports.
+- **Actions/Professionals**: Refactored `src/actions/admin/professionals.ts` to delegate actions to `professionalsService`. Implemented dynamic field sanitization via `omitUndefined` to seamlessly handle `exactOptionalPropertyTypes: true` compiler rules.
+- **UI/CardList & UI/AppBarChart**: Removed legacied `// @ts-nocheck` comments. Formulated explicit type parameters describing microservice API models, and migrated styling classes to use Tailwind CSS v4 native parentheses variables `(--var)` instead of old brackets `[var(--var)]`.
+- **UI/AddUser**: Refactored styling to use modern parentheses theme shortcuts `focus:bg-(--admin-surface-input-focus)`. Identified and resolved a whitespace CSS parsing typo in sibling label nodes.
+
+### Tests (Phase 6 & 7 Overhaul)
+
+- Added complete action and domain test files for all three slices, achieving a comprehensive Vitest verification with **326 passing unit tests across 39 files**.
+
+**Files changed:** `apps/admin/src/actions/admin/compliance/queue-status/route.ts`, `apps/admin/src/actions/admin/leads.ts`, `apps/admin/src/actions/admin/professionals.ts`, `apps/admin/src/actions/admin/services.ts`, `apps/admin/src/components/AddUser.tsx`, `apps/admin/src/components/AppBarChart.tsx`, `apps/admin/src/components/CardList.tsx`, `apps/admin/src/lib/domains/professionals/service.ts`, `apps/admin/src/lib/observability/operation-names.ts`, `apps/admin/src/lib/security/authorization-policy.ts`, `__tests__/compliance-queue-status.test.ts` [NEW], `src/lib/domains/leads/` [NEW], `src/lib/domains/services/` [NEW], `src/lib/domains/professionals/` [NEW]
+
+**Drift reduction:** directPrismaInActions −3 files; zodParseDrift −3 call sites; `@ts-nocheck` −3 files; unstructuredLogging −1 route.
+
+**Verification:**
+
+- `pnpm run check-types` → pass.
+- `pnpm run test` → pass; 39 files passed, 326 of 326 tests passed.
+
 ## [2026-05-21] Finance/Analytics + Stores/Properties Action Slice
 
 ### Added (Finance/Analytics + Stores/Properties Action Slice)

@@ -19,7 +19,6 @@ import {
   FormMessage,
 } from "./ui/form";
 import { Input } from "./ui/input";
-import {} from "@/components/ui/select";
 import { Button } from "./ui/button";
 import { useAuth } from "@clerk/nextjs";
 import { useMutation } from "@tanstack/react-query";
@@ -67,9 +66,11 @@ const AddUser = () => {
   });
 
   return (
-    <SheetContent>
+    <SheetContent className="bg-(--admin-surface-card) border-l-(--admin-data-border)">
       <SheetHeader>
-        <SheetTitle className="mb-4">Add User</SheetTitle>
+        <SheetTitle className="mb-4 text-(--admin-color-text-primary) font-semibold text-xl">
+          Add User
+        </SheetTitle>
         <SheetDescription asChild>
           <Form {...form}>
             <form
@@ -81,12 +82,19 @@ const AddUser = () => {
                 name="firstName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>First Name</FormLabel>
+                    <FormLabel className="text-(--admin-color-text-primary) font-medium">
+                      First Name
+                    </FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input
+                        {...field}
+                        className="bg-(--admin-surface-input) border-(--admin-data-border) focus:bg-(--admin-surface-input-focus) text-(--admin-color-text-primary) rounded-(--admin-radius-md) focus:border-(--admin-color-accent)"
+                      />
                     </FormControl>
-                    <FormDescription>Enter user first name.</FormDescription>
-                    <FormMessage />
+                    <FormDescription className="text-(--admin-color-text-muted)">
+                      Enter user first name.
+                    </FormDescription>
+                    <FormMessage className="text-(--admin-color-danger)" />
                   </FormItem>
                 )}
               />
@@ -95,12 +103,19 @@ const AddUser = () => {
                 name="lastName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Last Name</FormLabel>
+                    <FormLabel className="text-(--admin-color-text-primary) font-medium">
+                      Last Name
+                    </FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input
+                        {...field}
+                        className="bg-(--admin-surface-input) border-(--admin-data-border) focus:bg-(--admin-surface-input-focus) text-(--admin-color-text-primary) rounded-(--admin-radius-md) focus:border-(--admin-color-accent)"
+                      />
                     </FormControl>
-                    <FormDescription>Enter user last name.</FormDescription>
-                    <FormMessage />
+                    <FormDescription className="text-(--admin-color-text-muted)">
+                      Enter user last name.
+                    </FormDescription>
+                    <FormMessage className="text-(--admin-color-danger)" />
                   </FormItem>
                 )}
               />
@@ -109,12 +124,19 @@ const AddUser = () => {
                 name="username"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Username</FormLabel>
+                    <FormLabel className="text-(--admin-color-text-primary) font-medium">
+                      Username
+                    </FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input
+                        {...field}
+                        className="bg-(--admin-surface-input) border-(--admin-data-border) focus:bg-(--admin-surface-input-focus) text-(--admin-color-text-primary) rounded-(--admin-radius-md) focus:border-(--admin-color-accent)"
+                      />
                     </FormControl>
-                    <FormDescription>Enter username.</FormDescription>
-                    <FormMessage />
+                    <FormDescription className="text-(--admin-color-text-muted)">
+                      Enter username.
+                    </FormDescription>
+                    <FormMessage className="text-(--admin-color-danger)" />
                   </FormItem>
                 )}
               />
@@ -123,7 +145,9 @@ const AddUser = () => {
                 name="emailAddress"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email Addresses</FormLabel>
+                    <FormLabel className="text-(--admin-color-text-primary) font-medium">
+                      Email Addresses
+                    </FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -135,12 +159,13 @@ const AddUser = () => {
                             .filter((email) => email);
                           field.onChange(emails);
                         }}
+                        className="bg-(--admin-surface-input) border-(--admin-data-border) focus:bg-(--admin-surface-input-focus) text-(--admin-color-text-primary) rounded-(--admin-radius-md) focus:border-(--admin-color-accent)"
                       />
                     </FormControl>
-                    <FormDescription>
+                    <FormDescription className="text-(--admin-color-text-muted)">
                       Only admin can see your email.
                     </FormDescription>
-                    <FormMessage />
+                    <FormMessage className="text-(--admin-color-danger)" />
                   </FormItem>
                 )}
               />
@@ -149,19 +174,27 @@ const AddUser = () => {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel className="text-(--admin-color-text-primary) font-medium">
+                      Password
+                    </FormLabel>
                     <FormControl>
-                      <Input {...field} type="password" />
+                      <Input
+                        {...field}
+                        type="password"
+                        className="bg-(--admin-surface-input) border-(--admin-data-border) focus:bg-(--admin-surface-input-focus) text-(--admin-color-text-primary) rounded-(--admin-radius-md) focus:border-(--admin-color-accent)"
+                      />
                     </FormControl>
-                    <FormDescription>Enter user password.</FormDescription>
-                    <FormMessage />
+                    <FormDescription className="text-(--admin-color-text-muted)">
+                      Enter user password.
+                    </FormDescription>
+                    <FormMessage className="text-(--admin-color-danger)" />
                   </FormItem>
                 )}
               />
               <Button
                 type="submit"
                 disabled={mutation.isPending}
-                className="disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-(--admin-color-accent) hover:bg-(--admin-color-accent-hover) text-(--admin-color-accent-foreground) rounded-(--admin-radius-md) transition-colors shadow-(--admin-shadow-sm) disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {mutation.isPending ? "Submitting..." : "Submit"}
               </Button>
