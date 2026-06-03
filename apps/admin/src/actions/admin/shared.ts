@@ -3,7 +3,7 @@
 import { AdminRole, UserRole } from "@build/db";
 import { securityRepository } from "@/lib/security/repository";
 import { auth } from "@clerk/nextjs/server";
-import { syncUserRole } from "../../lib/auth-sync";
+import { syncUserRole } from "@/lib/auth-sync";
 import {
   getAdminActionPolicy,
   requireAdminCapability,
