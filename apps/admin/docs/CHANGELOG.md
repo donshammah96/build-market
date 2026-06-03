@@ -1,5 +1,24 @@
 # apps/admin Changelog
 
+## [2026-06-04] Refactoring & Drift Reduction (Actions Drift Reduction)
+
+### Changed
+
+- **Security Repository**: Created [repository.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/security/repository.ts) to isolate all Prisma database queries used by auth and auditing helpers.
+- **Actions/Shared**: Refactored [shared.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/shared.ts) to remove all direct database queries, delegating database execution entirely to `securityRepository`.
+- **Compliance Queue Status Route**: Refactored [route.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/compliance/queue-status/route.ts) to utilize the canonical `resolveAdminRouteActor` helper, completely eliminating direct Prisma access.
+- **Verify Professional Route**: Hardened [route.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/verify-professional/route.ts) to resolve route authentication with `resolveAdminRouteActor`, delegate database updates to `professionalsService`, handle validation with `safeParse`, and write declarative audit logs.
+- **Onboarding Remediation Action**: Refactored [onboarding-remediation.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/onboarding-remediation.ts) to access `INTERNAL_API_SECRET` through `adminEnvConfig`, and updated the test suite to use a dynamic environment mock.
+
+**Drift reduction:** directPrismaInActions: 0; zodParseDrift: 0; missingAuditLog: 0; adminEnvBoundaryDrift: −3.
+
+**Verification:**
+
+- `pnpm run admin:check-types` → pass.
+- `pnpm run admin:lint` → pass with 148 warnings (0 errors).
+- `pnpm run admin:check-env-contract` → pass; 59 keys.
+- `pnpm run admin:test:all` → pass; 46 files passed, 366 of 366 tests passed.
+
 ## [2026-05-22] Phase 6 Overhaul: Dashboard, Projects, Settings, & GDPR Action Overhaul
 
 ### Added (Phase 6 Overhaul)

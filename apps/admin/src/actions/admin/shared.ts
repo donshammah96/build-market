@@ -1,6 +1,7 @@
 "use server";
 
-import { AdminRole, UserRole, prisma } from "@build/db";
+import { AdminRole, UserRole } from "@build/db";
+import { securityRepository } from "@/lib/security/repository";
 import { auth } from "@clerk/nextjs/server";
 import { syncUserRole } from "../../lib/auth-sync";
 import {
@@ -96,10 +97,7 @@ export async function assertVerificationAdmin(): Promise<{
     console.warn("Role sync warning", error);
   });
 
-  const user = await prisma.user.findUnique({
-    where: { clerkId },
-    select: { id: true, role: true },
-  });
+  const user = await securityRepository.findUserForVerificationAdmin(clerkId);
 
   if (!user) {
     throw new Error("Unauthorized: User not found in database");
@@ -150,19 +148,7 @@ export async function getAdminPermissions(): Promise<AdminPermissions> {
     };
   }
 
-  const user = await prisma.user.findUnique({
-    where: { clerkId },
-    select: {
-      id: true,
-      role: true,
-      adminProfile: {
-        select: {
-          role: true,
-          isActive: true,
-        },
-      },
-    },
-  });
+  const user = await securityRepository.findUserPermissions(clerkId);
 
   if (!user) {
     return {
@@ -199,13 +185,8 @@ export async function requireAdminGranularRole(
   allowedRoles: readonly string[],
   adminUserId: string,
 ): Promise<string> {
-  const profile = await prisma.adminProfile.findUnique({
-    where: { userId: adminUserId },
-    select: {
-      role: true,
-      isActive: true,
-    },
-  });
+  const profile =
+    await securityRepository.findAdminProfileForGranularRole(adminUserId);
 
   if (!profile) {
     throw new Error("Forbidden: Admin profile is not configured");
@@ -292,19 +273,7 @@ async function resolveAdminActor(): Promise<
 
   await syncUserRole().catch(() => undefined);
 
-  const user = await prisma.user.findUnique({
-    where: { clerkId },
-    select: {
-      id: true,
-      role: true,
-      adminProfile: {
-        select: {
-          role: true,
-          isActive: true,
-        },
-      },
-    },
-  });
+  const user = await securityRepository.findUserForAdminActor(clerkId);
 
   if (!user || user.role !== UserRole.ADMIN) {
     return {
@@ -683,21 +652,7 @@ export async function logAdminAction(data: {
   details?: unknown;
   reason?: string;
 }) {
-  const user = await prisma.user.findUnique({
-    where: { id: data.userId },
-    select: {
-      id: true,
-      email: true,
-      firstName: true,
-      lastName: true,
-      role: true,
-      adminProfile: {
-        select: {
-          role: true,
-        },
-      },
-    },
-  });
+  const user = await securityRepository.findUserForAudit(data.userId);
 
   if (!user) {
     return;
@@ -714,22 +669,20 @@ export async function logAdminAction(data: {
     },
   };
 
-  await prisma.adminAuditLog.create({
-    data: {
-      adminId: user.id,
-      adminName:
-        [user.firstName, user.lastName].filter(Boolean).join(" ") ||
-        "System Admin",
-      adminEmail: user.email,
-      adminRole: user.adminProfile?.role
-        ? String(user.adminProfile.role)
-        : String(user.role),
-      action: data.action,
-      targetType: data.targetType,
-      targetId: data.targetId,
-      details: immutableDetails,
-      ...omitUndefined({ reason: data.reason }),
-    },
+  await securityRepository.createAdminAuditLog({
+    adminId: user.id,
+    adminName:
+      [user.firstName, user.lastName].filter(Boolean).join(" ") ||
+      "System Admin",
+    adminEmail: user.email,
+    adminRole: user.adminProfile?.role
+      ? String(user.adminProfile.role)
+      : String(user.role),
+    action: data.action,
+    targetType: data.targetType,
+    targetId: data.targetId,
+    details: immutableDetails,
+    ...omitUndefined({ reason: data.reason }),
   });
 }
 

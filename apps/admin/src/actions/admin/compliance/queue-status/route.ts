@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { prisma } from "@build/db";
+import { resolveAdminRouteActor } from "@/lib/security/route-auth";
+import type { AdminLogEvent } from "@/lib/infrastructure/logger";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 import { getAdminLogger } from "@/lib/infrastructure/logger";
 import { initializeAdminCorrelationId } from "@/lib/infrastructure/correlation";
@@ -17,64 +17,18 @@ export async function GET(req: NextRequest) {
   const requestStartedAt = Date.now();
 
   try {
-    const { userId: clerkId } = await auth();
+    const authResult = await resolveAdminRouteActor(
+      correlationId,
+      "get_compliance_queue_status",
+      (fields) => logger.warn(fields as AdminLogEvent),
+      requestStartedAt,
+    );
 
-    if (!clerkId) {
-      logger.warn({
-        correlationId,
-        operationName: "get_compliance_queue_status",
-        adminRole: "unknown",
-        outcome: "unauthorized",
-        durationMs: Date.now() - requestStartedAt,
-      });
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!authResult.authorized) {
+      return authResult.response;
     }
 
-    const user = await prisma.user.findUnique({
-      where: { clerkId },
-      select: {
-        role: true,
-        id: true,
-        adminProfile: { select: { role: true, isActive: true } },
-      },
-    });
-
-    if (!user) {
-      logger.warn({
-        correlationId,
-        operationName: "get_compliance_queue_status",
-        adminRole: "unknown",
-        outcome: "unauthorized",
-        durationMs: Date.now() - requestStartedAt,
-      });
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const isAdmin = user.role === "ADMIN";
-    const hasActiveProfile = user.adminProfile?.isActive === true;
-
-    if (!isAdmin || !hasActiveProfile) {
-      const isDev = adminEnvConfig.NODE_ENV === "development";
-      const devBypass = adminEnvConfig.DEV_ADMIN_BYPASS;
-
-      if (!isDev || !devBypass) {
-        logger.warn({
-          correlationId,
-          operationName: "get_compliance_queue_status",
-          adminRole: user.adminProfile?.role
-            ? String(user.adminProfile.role)
-            : "unknown",
-          outcome: "forbidden",
-          durationMs: Date.now() - requestStartedAt,
-          errorCode: "FORBIDDEN",
-        });
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-    }
-
-    const adminRole = user.adminProfile?.role
-      ? String(user.adminProfile.role)
-      : "unknown";
+    const { actor, adminRoleStr: adminRole } = authResult;
 
     const [incidentStats, notificationStats, auditStats] = await Promise.all([
       incidentQueue.getJobCounts(

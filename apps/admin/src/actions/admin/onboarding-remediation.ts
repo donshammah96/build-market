@@ -1,5 +1,6 @@
 "use server";
 
+import { adminEnvConfig } from "@/lib/infrastructure/env";
 import {
   callClientApi,
   requireAdminGranularRole,
@@ -55,7 +56,7 @@ export type AdminOnboardingIdempotencyReconcileResult = {
 };
 
 function getInternalRemediationSecret(): string {
-  const secret = process.env.INTERNAL_API_SECRET;
+  const secret = adminEnvConfig.INTERNAL_API_SECRET;
   if (!secret) {
     throw new Error("Internal onboarding remediation secret is not configured");
   }

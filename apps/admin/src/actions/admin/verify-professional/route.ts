@@ -1,5 +1,4 @@
-import { NextRequest } from "next/server";
-import { prisma } from "@build/db";
+import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { apiError, apiSuccess, HttpStatus } from "@/lib/api/api-response";
 import {
@@ -8,6 +7,10 @@ import {
 } from "@/lib/api/resilient-api";
 import { AuthContext, withAdminRole } from "@/lib/api/api-middleware";
 import { AdminRole } from "@build/db";
+import { resolveAdminRouteActor } from "@/lib/security/route-auth";
+import { professionalsService } from "@/lib/domains/professionals/service";
+import { logAdminAction } from "../shared";
+import type { AdminLogEvent } from "@/lib/infrastructure/logger";
 
 const logger = getClientLogger();
 
@@ -24,25 +27,29 @@ const verifySchema = z.object({
  * Request body:
  * - professionalId: The user ID of the professional
  * - verified: true to verify, false to unverify
- *
- * IMPORTANT: In production, this endpoint should be protected with proper admin authentication.
- * For development purposes, it checks for an admin role in Clerk metadata.
  */
 export const POST = withAdminRole([AdminRole.SUPER_ADMIN])(async (
   request: NextRequest,
   context: AuthContext,
 ) => {
-  const { dbUserId } = context;
   const correlationId = initializeCorrelationId(request);
+  const requestStartedAt = Date.now();
 
   try {
-    // Check if user is admin (in production, implement proper admin check)
-    const user = await prisma.adminProfile.findUnique({
-      where: { userId: dbUserId },
-      select: { role: true, isActive: true },
-    });
+    const authResult = await resolveAdminRouteActor(
+      correlationId,
+      "verify_professional",
+      (fields) => logger.warn(String(fields.message), fields),
+      requestStartedAt,
+    );
 
-    if (!user || user.role !== AdminRole.SUPER_ADMIN || !user.isActive) {
+    if (!authResult.authorized) {
+      return authResult.response;
+    }
+
+    const { actor } = authResult;
+
+    if (actor.adminRole !== AdminRole.SUPER_ADMIN) {
       return apiError(
         "Forbidden. Admin access required.",
         HttpStatus.FORBIDDEN,
@@ -50,25 +57,51 @@ export const POST = withAdminRole([AdminRole.SUPER_ADMIN])(async (
     }
 
     // Parse and validate request body
-    const body = await request.json();
-    const { professionalId, verified } = verifySchema.parse(body);
+    const body = await request.json().catch(() => null);
+    const parsed = verifySchema.safeParse(body);
 
-    // Update the professional profile
-    const professional = await prisma.professionalProfile.update({
-      where: { userId: professionalId },
-      data: { verified },
-      include: {
-        user: {
-          select: { email: true, firstName: true, lastName: true },
-        },
+    if (!parsed.success) {
+      return apiError(
+        "Validation failed",
+        HttpStatus.BAD_REQUEST,
+        parsed.error.issues,
+      );
+    }
+
+    const { professionalId, verified } = parsed.data;
+
+    // Update the professional profile using service boundary
+    const result = verified
+      ? await professionalsService.verifyProfessional(actor, professionalId)
+      : await professionalsService.rejectProfessional(
+          actor,
+          professionalId,
+          "Verification revoked by administrator",
+        );
+
+    if (!result.ok) {
+      return apiError(result.message, HttpStatus.BAD_REQUEST);
+    }
+
+    const professional = result.data;
+
+    // Record audit trail entry per ADR-ADMIN-008
+    await logAdminAction({
+      userId: actor.dbUserId,
+      action: verified ? "VERIFY_PROFESSIONAL" : "REJECT_PROFESSIONAL",
+      targetType: "professional",
+      targetId: professionalId,
+      details: {
+        companyName: professional.companyName,
+        verified,
       },
-    });
+    }).catch(() => undefined);
 
     logger.info("Professional verification status updated", {
       correlationId,
       professionalId,
       verified,
-      updatedBy: dbUserId,
+      updatedBy: actor.dbUserId,
     });
 
     return apiSuccess({
@@ -82,14 +115,6 @@ export const POST = withAdminRole([AdminRole.SUPER_ADMIN])(async (
       },
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return apiError(
-        "Validation failed",
-        HttpStatus.BAD_REQUEST,
-        error.issues,
-      );
-    }
-
     logger.error(
       "Failed to update verification status",
       error instanceof Error ? error : new Error(String(error)),

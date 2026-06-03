@@ -35,6 +35,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Admin Action Layer**: Refactored the `apps/admin` action layer to eliminate direct Prisma queries by creating a new `securityRepository`, refactored route handlers to use `resolveAdminRouteActor` and Zod `safeParse`, and resolved environment boundary violations in `onboarding-remediation.ts` using `adminEnvConfig`.
+
 - **Documentation/Runbooks**: Replaced ad hoc terminal command examples with root-script or root-relative forms across `.github/copilot-instructions.md`, `apps/client/MESSAGING_API_SETUP.md`, `README.md`, `apps/client/__tests__/setup-integration.md`, and `packages/db/SETUP_DATABASE.md`; updated `.github/prompts/plan-gitBranchSplit.prompt.md` to use `Push-Location`/`Pop-Location`; and aligned `docs/TERMINAL_RUNBOOK.md` plus `scripts/README.md` with the canonical wrapper invocation pattern so workflow docs no longer teach `cd ... && ...` or other stateful shell usage.
 
 - **Env Templates/Utility Scripts**: Added `REDIS_FAMILY=4` guidance to `apps/client/.env.local.example` and `apps/client/.env.example` so local Redis overrides can force IPv4 when needed, and updated `scripts/clear-users.ps1` to run `clear-users.ts` via `pnpm -C <repo-root>` instead of mutating the caller's working directory with `Set-Location`.

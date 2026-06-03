@@ -12,6 +12,16 @@ vi.mock("../shared", () => ({
   requireAdminGranularRole: mocks.requireAdminGranularRole,
 }));
 
+const mockEnv = vi.hoisted(() => ({
+  INTERNAL_API_SECRET: "test-secret" as string | undefined,
+}));
+
+vi.mock("@/lib/infrastructure/env", () => ({
+  get adminEnvConfig() {
+    return mockEnv;
+  },
+}));
+
 import {
   onboardingClerkSync,
   onboardingIdempotencyReconcile,
@@ -22,7 +32,7 @@ describe("admin onboarding remediation actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    process.env.INTERNAL_API_SECRET = "test-secret";
+    mockEnv.INTERNAL_API_SECRET = "test-secret";
 
     mocks.safeAction.mockImplementation(
       async (
@@ -135,7 +145,7 @@ describe("admin onboarding remediation actions", () => {
   });
 
   it("fails closed when remediation secret is missing", async () => {
-    delete process.env.INTERNAL_API_SECRET;
+    mockEnv.INTERNAL_API_SECRET = undefined;
 
     const response = await onboardingReconcile("user_123");
 
