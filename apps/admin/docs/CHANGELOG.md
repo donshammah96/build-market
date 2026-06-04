@@ -13,11 +13,11 @@
 - **Environment Boundaries**: Annotated public auth services and bootstrap scripts with inline same-line `// bootstrap-only:` comments in [AddUser.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/AddUser.tsx) and [sync-clerk-users.ts](file:///c:/Users/User/build-market/apps/admin/scripts/sync-clerk-users.ts).
 - **CORS API Route Helper**: Refactored [cors.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/api/cors.ts) to utilize `adminEnvConfig` and removed `@ts-nocheck`.
 - **Type Safety Overhaul**: Removed `@ts-nocheck` directives from and fully compiled:
-  - [analytics/page.tsx](file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/analytics/page.tsx)
-  - [audit/page.tsx](file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/audit/page.tsx)
-  - [leads/page.tsx](file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/leads/page.tsx)
-  - [page.tsx](file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/page.tsx)
-  - [services/[id]/page.tsx](file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/services/[id]/page.tsx)
+  - [analytics/page.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/analytics/page.tsx>)
+  - [audit/page.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/audit/page.tsx>)
+  - [leads/page.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/leads/page.tsx>)
+  - [page.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/page.tsx>)
+  - [services/[id]/page.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/services/[id]/page.tsx>)
 - **Leads Filters**: Fixed leads page compilation errors by casting source/project type filters to database enums (`LeadSource` and `ProjectType`) imported from `@build/db`.
 
 ### Removed
@@ -33,19 +33,20 @@
 **Files changed:** `apps/admin/scripts/report-security-drift.mjs`, `apps/admin/scripts/sync-clerk-users.ts`, `apps/admin/src/app/(dashboard)/analytics/page.tsx`, `apps/admin/src/app/(dashboard)/audit/page.tsx`, `apps/admin/src/app/(dashboard)/leads/page.tsx`, `apps/admin/src/app/(dashboard)/page.tsx`, `apps/admin/src/app/(dashboard)/services/[id]/page.tsx`, `apps/admin/src/app/layout.tsx`, `apps/admin/src/components/AddUser.tsx`, `apps/admin/src/components/CardList.tsx`, `apps/admin/src/lib/api/cors.ts`, `apps/admin/src/actions/admin/types.ts`, `apps/admin/src/actions/admin/shared.ts`, `apps/admin/src/lib/services/*` [DELETED]
 
 **Verification:**
+
 - `pnpm run admin:check-types` → pass (exit 0)
 - `pnpm run admin:report-security-drift:strict` → pass (exit 0, 0 findings)
 - `pnpm run admin:test:all` → pass (368 of 368 tests passed)
 
 ## [2026-06-04] Phase 8 — Audit Log Implementation
 
-### Added
+### Added (Phase 8 — Audit Log Implementation)
 
 - **Audit Domain**: Implemented `recordAdminAuditEvent` in [service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/audit/service.ts) to log all declarative admin action events to the database.
 - **Audit Domain**: Extended [repository.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/audit/repository.ts) with `createAuditLog` to write audit entries.
 - **Audit Domain**: Defined `AdminAuditEvent` canonical interface in [contracts.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/audit/contracts.ts) and updated type signatures to handle strict `exactOptionalPropertyTypes: true` rules.
 
-### Changed
+### Changed (Phase 8 — Audit Log Implementation)
 
 - **Actions**: Hardened `safeAction` and `safeVerificationAction` in [shared.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/shared.ts) to automatically record declarative audits for both success and failure outcomes (forbidden, unauthenticated, rate-limited, session-stale, and internal error).
 - **ADR Foundation**: Updated statuses to `Accepted` for all remaining proposed ADRs (`ADR-ADMIN-003`, `ADR-ADMIN-004`, `ADR-ADMIN-005`, `ADR-ADMIN-006`, `ADR-ADMIN-007`, `ADR-ADMIN-008`).
