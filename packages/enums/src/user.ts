@@ -102,6 +102,14 @@ export const ADMIN_ROLES = [
   "AUDITOR",
 ] as const;
 
+export const AdminRole = {
+  SUPER_ADMIN: "SUPER_ADMIN",
+  CONTENT_MODERATOR: "CONTENT_MODERATOR",
+  SUPPORT_AGENT: "SUPPORT_AGENT",
+  FINANCE_MANAGER: "FINANCE_MANAGER",
+  AUDITOR: "AUDITOR",
+} as const;
+
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
 export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {

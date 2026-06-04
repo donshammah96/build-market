@@ -191,7 +191,7 @@ export default function UserDashboardPage() {
 
               {activeProject ? (
                 <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
-                  <div className="grid grid-cols-1 md:grid-cols-5 min-h-[280px]">
+                  <div className="grid grid-cols-1 md:grid-cols-5 min-h-70">
                     {/* Image Side */}
                     <div className="md:col-span-2 relative h-64 md:h-full bg-zinc-100">
                       <Image
@@ -335,7 +335,7 @@ export default function UserDashboardPage() {
                 {ideaBooks.map((book) => (
                   <Link href={getIdeaBookUrl(book.id)} key={book.id}>
                     <div className="group cursor-pointer">
-                      <div className="relative aspect-[4/3] rounded-xl overflow-hidden mb-3 bg-zinc-100">
+                      <div className="relative aspect-4/3 rounded-xl overflow-hidden mb-3 bg-zinc-100">
                         <Image
                           src={book.coverImage || PLACEHOLDER_IMAGE}
                           alt={book.title}
@@ -363,7 +363,7 @@ export default function UserDashboardPage() {
                 {/* Add New Idea Book Card */}
                 <Link
                   href={ROUTES.ideaBooks}
-                  className="flex flex-col items-center justify-center aspect-[4/3] rounded-xl border-2 border-dashed border-zinc-200 hover:border-emerald-500 hover:bg-emerald-50/50 transition-all group"
+                  className="flex flex-col items-center justify-center aspect-4/3 rounded-xl border-2 border-dashed border-zinc-200 hover:border-emerald-500 hover:bg-emerald-50/50 transition-all group"
                 >
                   <div className="h-10 w-10 rounded-full bg-zinc-100 text-zinc-400 flex items-center justify-center mb-3 group-hover:bg-white group-hover:text-emerald-600 group-hover:shadow-sm">
                     <Plus className="h-5 w-5" />
@@ -433,7 +433,7 @@ export default function UserDashboardPage() {
                         {/* Timeline Dot */}
                         <div
                           className={cn(
-                            "absolute -left-[21px] top-0 h-2.5 w-2.5 rounded-full border-2 border-white shadow-sm",
+                            "absolute -left-5.25 top-0 h-2.5 w-2.5 rounded-full border-2 border-white shadow-sm",
                             activity.type === "message"
                               ? "bg-blue-500"
                               : activity.type === "order"

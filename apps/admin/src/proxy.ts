@@ -7,6 +7,7 @@ import {
   normalizeAdminAccessRole,
   parseSessionMetadata,
 } from "@/lib/security/claims";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
 
 const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/unauthorized(.*)"]);
 // Dashboard routes that require admin access
@@ -45,6 +46,13 @@ function hasAllowedRole(
 export default clerkMiddleware(async (auth, req) => {
   if (isPublicRoute(req)) {
     return; // Allow public routes
+  }
+
+  const isDev = adminEnvConfig.NODE_ENV === "development";
+  const devBypass = adminEnvConfig.DEV_ADMIN_BYPASS;
+
+  if (isDev && devBypass) {
+    return; // Allow access to all pages under dev bypass
   }
 
   const authObj = await auth();

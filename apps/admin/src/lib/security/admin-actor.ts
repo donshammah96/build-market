@@ -1,4 +1,4 @@
-import type { AdminRole } from "@build/db";
+import type { AdminRole } from "@build/enums";
 
 export type AdminActor = {
   clerkId: string;

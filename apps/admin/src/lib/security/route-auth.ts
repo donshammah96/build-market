@@ -31,6 +31,32 @@ export async function resolveAdminRouteActor(
   logWarn: (fields: Record<string, unknown>) => void,
   requestStartedAt: number,
 ): Promise<AuthRouteResult> {
+  const isDev = adminEnvConfig.NODE_ENV === "development";
+  const devBypass = adminEnvConfig.DEV_ADMIN_BYPASS;
+
+  if (isDev && devBypass) {
+    const dbAdmin = await prisma.user.findFirst({
+      where: { role: "ADMIN" },
+      select: {
+        id: true,
+        clerkId: true,
+        adminProfile: { select: { role: true } },
+      },
+    });
+
+    return {
+      authorized: true,
+      actor: {
+        dbUserId: dbAdmin?.id || "11111111-1111-1111-1111-111111111111",
+        clerkId: dbAdmin?.clerkId || "admin_buildmarket_001",
+        adminRole: (dbAdmin?.adminProfile?.role as any) || "SUPER_ADMIN",
+      },
+      adminRoleStr: dbAdmin?.adminProfile?.role
+        ? String(dbAdmin.adminProfile.role)
+        : "SUPER_ADMIN",
+    };
+  }
+
   const { userId: clerkId } = await auth();
 
   if (!clerkId) {

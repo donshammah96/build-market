@@ -31,7 +31,7 @@ export default function ClientSignUpPage() {
             className="object-cover opacity-40"
             priority
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/60 to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-t from-zinc-900 via-zinc-900/60 to-transparent" />
         </div>
 
         {/* Logo - positioned relative to the entire panel */}
@@ -69,7 +69,7 @@ export default function ClientSignUpPage() {
 
       {/* --- Right Panel: Sign Up Form --- */}
       <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 bg-zinc-50 lg:bg-white">
-        <div className="w-full max-w-[440px] space-y-8">
+        <div className="w-full max-w-110 space-y-8">
           {/* Mobile Header */}
           <div className="lg:hidden text-center mb-8">
             <Link href="/" className="inline-flex items-center gap-2 mb-6">

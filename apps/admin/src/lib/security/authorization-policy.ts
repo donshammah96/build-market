@@ -1,4 +1,4 @@
-import { AdminRole } from "@build/db";
+import { AdminRole } from "@build/enums";
 import type { AdminActor } from "./admin-actor";
 
 export type Result<T, E> =

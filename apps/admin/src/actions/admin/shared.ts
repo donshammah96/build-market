@@ -89,6 +89,20 @@ export async function assertVerificationAdmin(): Promise<{
   dbUserId: string;
   role: ActionActorRole;
 }> {
+  const isDev = adminEnvConfig.NODE_ENV === "development";
+  const devBypass = adminEnvConfig.DEV_ADMIN_BYPASS;
+
+  if (isDev && devBypass) {
+    const dbAdmin = await securityRepository.findUserPermissions(
+      "admin_buildmarket_001",
+    );
+    return {
+      clerkId: dbAdmin?.clerkId || "admin_buildmarket_001",
+      dbUserId: dbAdmin?.id || "11111111-1111-1111-1111-111111111111",
+      role: "admin",
+    };
+  }
+
   const { userId: clerkId, sessionClaims } = await auth();
 
   if (!clerkId) {
@@ -140,6 +154,22 @@ export async function assertAdmin(): Promise<{
 }
 
 export async function getAdminPermissions(): Promise<AdminPermissions> {
+  const isDev = adminEnvConfig.NODE_ENV === "development";
+  const devBypass = adminEnvConfig.DEV_ADMIN_BYPASS;
+
+  if (isDev && devBypass) {
+    const dbAdmin = await securityRepository.findUserPermissions(
+      "admin_buildmarket_001",
+    );
+    return {
+      role: "admin",
+      granularRole: "SUPER_ADMIN",
+      canAccess: true,
+      dbUserId: dbAdmin?.id || "11111111-1111-1111-1111-111111111111",
+      clerkId: dbAdmin?.clerkId || "admin_buildmarket_001",
+    };
+  }
+
   const { userId: clerkId, sessionClaims } = await auth();
 
   if (!clerkId) {
@@ -264,6 +294,28 @@ async function resolveAdminActor(): Promise<
   | { success: true; actor: AdminActor; sessionClaims: unknown }
   | { success: false; error: AdminActionError }
 > {
+  const isDev = adminEnvConfig.NODE_ENV === "development";
+  const devBypass = adminEnvConfig.DEV_ADMIN_BYPASS;
+
+  if (isDev && devBypass) {
+    const dbAdmin = await securityRepository.findUserPermissions(
+      "admin_buildmarket_001",
+    );
+    return {
+      success: true,
+      actor: {
+        clerkId: dbAdmin?.clerkId || "admin_buildmarket_001",
+        dbUserId: dbAdmin?.id || "11111111-1111-1111-1111-111111111111",
+        adminRole: AdminRole.SUPER_ADMIN,
+      },
+      sessionClaims: {
+        metadata: {
+          role: "admin",
+        },
+      },
+    };
+  }
+
   const { userId: clerkId, sessionClaims } = await auth();
 
   if (!clerkId) {
