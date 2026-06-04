@@ -12,6 +12,7 @@ export async function findUserPermissions(clerkId: string) {
     where: { clerkId },
     select: {
       id: true,
+      clerkId: true,
       role: true,
       adminProfile: {
         select: {

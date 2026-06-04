@@ -136,6 +136,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build workspace packages
+        run: pnpm tsc --build tsconfig.json
+
       - name: Admin type check
         run: pnpm run admin:check-types
 

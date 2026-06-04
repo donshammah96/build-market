@@ -1,12 +1,24 @@
 # apps/admin Changelog
 
+## [2026-06-05] Build & Type Safety Fixes
+
+### Changed
+
+- **CI Pipeline**: Added workspace packages build step (`pnpm tsc --build tsconfig.json`) prior to type checking in [.github/workflows/ci.yml](file:///c:/Users/User/build-market/.github/workflows/ci.yml) to resolve typescript project reference compilation issues (`TS6305` and `TS2307`).
+- **Security Repository**: Selected `clerkId: true` in `findUserPermissions()` query inside [repository.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/security/repository.ts) to provide the Clerk identifier expected by development-only bypass blocks in admin actions.
+
+**Verification:**
+
+- `pnpm run admin:check-types` → pass (exit 0)
+- `pnpm run admin:test:all` → pass (368 of 368 tests passed)
+
 ## [2026-06-04] Phase 12 — Security Hardening Pass
 
 ### Added
 
 - **Mass-Assignment Protection**: Enforced strict schemas on mutation actions by appending `.strict()` to `UpdateProfileSchema` and `SystemSettingsSchema` in [types.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/types.ts).
 
-### Changed
+### Changed (Phase 12 — Security Hardening Pass)
 
 - **Security Drift Script**: Refactored [report-security-drift.mjs](file:///c:/Users/User/build-market/apps/admin/scripts/report-security-drift.mjs) to exclude routes/shared/types files from action checks, ignore signatures in log safety rules, and support ignoring system stub/log/sync files in unstructured logging.
 - **Environment Boundaries**: Migrated direct `process.env` references in [layout.tsx](file:///c:/Users/User/build-market/apps/admin/src/app/layout.tsx) and [CardList.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/CardList.tsx) to use `adminEnvConfig`.
