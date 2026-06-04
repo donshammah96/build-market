@@ -105,3 +105,27 @@ export type AuditDomainError = {
   code: AuditDomainErrorCode;
   message: string;
 };
+
+export type AdminAuditEvent = {
+  actor: {
+    dbUserId: string;
+    clerkId: string;
+    adminRole: AdminRole;
+  };
+  operationName: string;
+  correlationId: string;
+  targetResourceType?: string | undefined;
+  targetResourceId?: string | undefined;
+  outcome:
+    | "success"
+    | "domain_error"
+    | "internal_error"
+    | "unauthorized"
+    | "forbidden"
+    | "rate_limited"
+    | "session_stale";
+  details?: Record<string, unknown> | undefined;
+  reason?: string | undefined;
+  ipAddress?: string | undefined;
+  userAgent?: string | undefined;
+};

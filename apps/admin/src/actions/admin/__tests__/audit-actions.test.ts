@@ -39,6 +39,7 @@ const auditServiceMock = vi.hoisted(() => ({
     getAuditLogStats: vi.fn(),
     getDistinctActions: vi.fn(),
     exportAuditLogs: vi.fn(),
+    recordAdminAuditEvent: vi.fn().mockResolvedValue(undefined),
   },
 }));
 

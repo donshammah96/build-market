@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted on 2026-06-04 by Phase 2 implementation in `chore/admin-overhaul/tooling`.
 
 ## Context
 

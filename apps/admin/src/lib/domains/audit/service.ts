@@ -12,9 +12,13 @@ import type {
   AuditLogQuery,
   AuditLogSortOrder,
   AuditLogStats,
+  AdminAuditEvent,
 } from "./contracts";
 import { AUDIT_EXPORT_MAX_ROWS } from "./contracts";
 import { auditRepository } from "./repository";
+import { securityRepository } from "@/lib/security/repository";
+import { AuditStatus, AuditSeverity } from "@build/db";
+import { getAdminLogger } from "@/lib/infrastructure/logger";
 
 const SORT_ORDER = ["asc", "desc"] as const;
 
@@ -214,10 +218,101 @@ export async function exportAuditLogs(
   return ok({ data, count: data.length });
 }
 
+/**
+ * Appends a canonical audit log event to the database.
+ * This method is non-blocking, safe to fail, and catches all internal errors.
+ */
+export async function recordAdminAuditEvent(
+  event: AdminAuditEvent,
+): Promise<void> {
+  const logger = getAdminLogger();
+
+  try {
+    const user = await securityRepository.findUserForAudit(
+      event.actor.dbUserId,
+    );
+    if (!user) {
+      logger.warn({
+        correlationId: event.correlationId,
+        operationName: "record_admin_audit_event",
+        adminRole: String(event.actor.adminRole),
+        outcome: "domain_error",
+        durationMs: 0,
+        errorMessage: `Admin user ${event.actor.dbUserId} not found for audit logging`,
+      });
+      return;
+    }
+
+    // Map outcome to AuditStatus
+    let status: AuditStatus = AuditStatus.SUCCESS;
+    if (event.outcome === "unauthorized" || event.outcome === "forbidden") {
+      status = AuditStatus.DENIED;
+    } else if (event.outcome !== "success") {
+      status = AuditStatus.FAILURE;
+    }
+
+    // Map severity based on outcome or action details
+    let severity: AuditSeverity = AuditSeverity.INFO;
+    if (event.outcome === "internal_error") {
+      severity = AuditSeverity.CRITICAL;
+    } else if (
+      event.outcome === "forbidden" ||
+      event.outcome === "session_stale" ||
+      event.outcome === "rate_limited" ||
+      /delete|remove|suspend|reject/i.test(event.operationName)
+    ) {
+      severity = AuditSeverity.WARNING;
+    }
+
+    const immutableDetails = {
+      ...(event.details ?? {}),
+      _audit: {
+        immutable: true,
+        schemaVersion: 1,
+        loggedAt: new Date().toISOString(),
+        correlationId: event.correlationId,
+        outcome: event.outcome,
+      },
+    };
+
+    await auditRepository.createAuditLog({
+      adminId: user.id,
+      adminName:
+        [user.firstName, user.lastName].filter(Boolean).join(" ") ||
+        "System Admin",
+      adminEmail: user.email,
+      adminRole: user.adminProfile?.role
+        ? String(user.adminProfile.role)
+        : String(user.role),
+      action: event.operationName,
+      severity,
+      status,
+      targetId: event.targetResourceId ?? "global",
+      targetType: event.targetResourceType ?? "admin_action",
+      details: immutableDetails,
+      reason: event.reason ?? null,
+      ipAddress: event.ipAddress ?? null,
+      userAgent: event.userAgent ?? null,
+      requestId: event.correlationId,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    logger.error({
+      correlationId: event.correlationId,
+      operationName: "record_admin_audit_event",
+      adminRole: String(event.actor.adminRole),
+      outcome: "internal_error",
+      durationMs: 0,
+      errorMessage: message,
+    });
+  }
+}
+
 export const auditService = {
   buildAuditLogQuery,
   listAuditLogPage,
   getAuditLogStats,
   getDistinctActions,
   exportAuditLogs,
+  recordAdminAuditEvent,
 };

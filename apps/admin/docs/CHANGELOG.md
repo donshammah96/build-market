@@ -1,5 +1,25 @@
 # apps/admin Changelog
 
+## [2026-06-04] Phase 8 — Audit Log Implementation
+
+### Added
+
+- **Audit Domain**: Implemented `recordAdminAuditEvent` in [service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/audit/service.ts) to log all declarative admin action events to the database.
+- **Audit Domain**: Extended [repository.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/audit/repository.ts) with `createAuditLog` to write audit entries.
+- **Audit Domain**: Defined `AdminAuditEvent` canonical interface in [contracts.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/audit/contracts.ts) and updated type signatures to handle strict `exactOptionalPropertyTypes: true` rules.
+
+### Changed
+
+- **Actions**: Hardened `safeAction` and `safeVerificationAction` in [shared.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/shared.ts) to automatically record declarative audits for both success and failure outcomes (forbidden, unauthenticated, rate-limited, session-stale, and internal error).
+- **ADR Foundation**: Updated statuses to `Accepted` for all remaining proposed ADRs (`ADR-ADMIN-003`, `ADR-ADMIN-004`, `ADR-ADMIN-005`, `ADR-ADMIN-006`, `ADR-ADMIN-007`, `ADR-ADMIN-008`).
+
+**Files changed:** `apps/admin/docs/adr/*`, `apps/admin/src/actions/admin/shared.ts`, `apps/admin/src/actions/admin/__tests__/audit-actions.test.ts`, `apps/admin/src/lib/domains/audit/contracts.ts`, `apps/admin/src/lib/domains/audit/repository.ts`, `apps/admin/src/lib/domains/audit/service.ts`, `apps/admin/src/lib/domains/audit/__tests__/service.test.ts`, `apps/admin/src/lib/infrastructure/logger.ts`  
+**Verification:**
+
+- `pnpm run admin:check-types` → pass (exit 0)
+- `pnpm run admin:report-security-drift` → pass
+- `pnpm run admin:test:all` → pass (368 of 368 tests passed)
+
 ## [2026-06-04] Track A Phase 6 — GDPR & Data Export Slice Refactoring
 
 ### Changed

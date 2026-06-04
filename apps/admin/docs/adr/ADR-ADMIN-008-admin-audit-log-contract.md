@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted on 2026-06-04 by Phase 8 implementation in `feat/admin-overhaul/audit-log`.
 
 ## Context
 

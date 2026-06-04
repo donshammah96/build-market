@@ -171,6 +171,16 @@ export async function findForExport(
   });
 }
 
+export async function createAuditLog(
+  data: Prisma.AdminAuditLogUncheckedCreateInput,
+): Promise<AuditLogEntry> {
+  const row = await prisma.adminAuditLog.create({
+    data,
+    select: AUDIT_LOG_SELECT,
+  });
+  return mapAuditLog(row);
+}
+
 export const auditRepository = {
   listAuditLogs,
   countAuditLogs,
@@ -181,4 +191,5 @@ export const auditRepository = {
   listRecentAuditLogs,
   findDistinctActions,
   findForExport,
+  createAuditLog,
 };

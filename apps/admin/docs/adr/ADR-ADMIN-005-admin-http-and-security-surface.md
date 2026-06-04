@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted on 2026-06-04 by Phase 12 validation in `security/admin-overhaul/hardening-pass`.
 
 ## Context
 

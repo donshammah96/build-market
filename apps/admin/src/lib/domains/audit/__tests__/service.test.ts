@@ -8,6 +8,16 @@ const dbMock = vi.hoisted(() => ({
     FINANCE_MANAGER: "FINANCE_MANAGER",
     AUDITOR: "AUDITOR",
   } as const,
+  AuditStatus: {
+    SUCCESS: "SUCCESS",
+    FAILURE: "FAILURE",
+    DENIED: "DENIED",
+  } as const,
+  AuditSeverity: {
+    INFO: "INFO",
+    WARNING: "WARNING",
+    CRITICAL: "CRITICAL",
+  } as const,
 }));
 
 const repositoryMock = vi.hoisted(() => ({
@@ -20,14 +30,25 @@ const repositoryMock = vi.hoisted(() => ({
   listRecentAuditLogs: vi.fn(),
   findDistinctActions: vi.fn(),
   findForExport: vi.fn(),
+  createAuditLog: vi.fn(),
+}));
+
+const securityRepositoryMock = vi.hoisted(() => ({
+  findUserForAudit: vi.fn(),
 }));
 
 vi.mock("@build/db", () => ({
   AdminRole: dbMock.AdminRole,
+  AuditStatus: dbMock.AuditStatus,
+  AuditSeverity: dbMock.AuditSeverity,
 }));
 
 vi.mock("../repository", () => ({
   auditRepository: repositoryMock,
+}));
+
+vi.mock("@/lib/security/repository", () => ({
+  securityRepository: securityRepositoryMock,
 }));
 
 import type { AuditActor } from "../contracts";
@@ -37,6 +58,7 @@ import {
   getAuditLogStats,
   getDistinctActions,
   listAuditLogPage,
+  recordAdminAuditEvent,
 } from "../service";
 
 function actor(
@@ -280,5 +302,79 @@ describe("audit domain service", () => {
     // The service must always call findForExport regardless of caller limit input
     expect(result.ok).toBe(true);
     expect(repositoryMock.findForExport).toHaveBeenCalledOnce();
+  });
+
+  // ---------------------------------------------------------------------------
+  // recordAdminAuditEvent
+  // ---------------------------------------------------------------------------
+
+  describe("recordAdminAuditEvent", () => {
+    it("successfully creates an audit log when user exists", async () => {
+      securityRepositoryMock.findUserForAudit.mockResolvedValue({
+        id: "admin_user_id",
+        firstName: "Test",
+        lastName: "Admin",
+        email: "admin@test.com",
+        role: "ADMIN",
+        adminProfile: { role: "SUPER_ADMIN" },
+      });
+
+      repositoryMock.createAuditLog.mockResolvedValue({ id: "log_inserted" });
+
+      await recordAdminAuditEvent({
+        actor: {
+          dbUserId: "admin_user_id",
+          clerkId: "clerk_123",
+          adminRole: "SUPER_ADMIN",
+        },
+        operationName: "delete_user",
+        correlationId: "correlation_123",
+        targetResourceType: "user",
+        targetResourceId: "target_user_id",
+        outcome: "success",
+        details: { foo: "bar" },
+        reason: "Request by owner",
+        ipAddress: "127.0.0.1",
+        userAgent: "Mozilla/5.0",
+      });
+
+      expect(securityRepositoryMock.findUserForAudit).toHaveBeenCalledWith(
+        "admin_user_id",
+      );
+      expect(repositoryMock.createAuditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          adminId: "admin_user_id",
+          adminName: "Test Admin",
+          adminEmail: "admin@test.com",
+          adminRole: "SUPER_ADMIN",
+          action: "delete_user",
+          severity: "WARNING",
+          status: "SUCCESS",
+          targetId: "target_user_id",
+          targetType: "user",
+          reason: "Request by owner",
+          ipAddress: "127.0.0.1",
+          userAgent: "Mozilla/5.0",
+          requestId: "correlation_123",
+        }),
+      );
+    });
+
+    it("fails silently when user is not found", async () => {
+      securityRepositoryMock.findUserForAudit.mockResolvedValue(null);
+
+      await recordAdminAuditEvent({
+        actor: {
+          dbUserId: "missing_user",
+          clerkId: "clerk_123",
+          adminRole: "SUPER_ADMIN",
+        },
+        operationName: "delete_user",
+        correlationId: "correlation_123",
+        outcome: "success",
+      });
+
+      expect(repositoryMock.createAuditLog).not.toHaveBeenCalled();
+    });
   });
 });

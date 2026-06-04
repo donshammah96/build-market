@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted on 2026-06-04 by Phase 6 implementation in `feat/admin-overhaul/ui-tokens` and subsequent UI hardening.
 
 ## Context
 

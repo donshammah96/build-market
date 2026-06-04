@@ -4,8 +4,8 @@
 
 ## Active Phase
 
-**Phase:** Track A Phase 6 — GDPR & Data Export Slice Refactoring (complete)
-**Status:** Completed and fully verified the GDPR and Data Export slice refactoring. Replaced direct environment variable reads (`process.env`), legacy logging (`console.*`), and TypeScript silences (`// @ts-nocheck`) in all GDPR encryption, services, jobs, and worker layers with `adminEnvConfig` and structured `logger` instances. Solved S3Client structural typing conflicts in the background jobs and processors. Drift counts: `directPrismaInActions` and `zodParseDrift` remain at 0; `unstructuredLogging` is reduced to 14 (all exempt). Verified check-types, lint, env contract, and test suite successfully (366/366 passing tests).
+**Phase:** Phase 8 — Audit Log Implementation (complete)
+**Status:** Completed and fully verified the Audit Log implementation. Defined the `AdminAuditEvent` canonical interface and structured the audit log domain (repository and service layers) to write append-only audit records to the database. Hardened `safeAction` and `safeVerificationAction` to automatically log execution outcomes (including forbidden capability, session stale, rate-limiting, and internal exceptions) declarative of success/failure states. Verified check-types, env contract, and all tests successfully (368/368 passing tests).
 
 **Completed:**
 
@@ -30,6 +30,8 @@
 - Dashboard, Projects, Settings, & GDPR Action Overhaul added: implemented full domain slices (`dashboard`, `projects`, `settings`, `gdpr`) to eliminate direct Prisma database access, legacy validation throws, and unstructured logs. Migrated all associated server actions and routes using `safeAction`, enforcing recentAuth (180s) and audit logging on Tier 1 settings mutations, and achieved 100% test coverage with 366 passing tests.
 - Refactoring & Drift Reduction completed: resolved direct Prisma access in the action layer, eliminated action-layer Zod `.parse()` calls, ensured audit compliance for high-risk verify route files, and reduced environment boundary drift.
 - Track A Phase 6 GDPR/data export slice completed: migrated S3/R2 settings, queue workers, job orchestrator, encryption methods, and notification email services off `process.env` and unstructured log outputs, replacing them with type-safe `adminEnvConfig` variables and `StructuredLogger` events.
+- Phase 8 — Audit Log Implementation completed: implemented robust domain-level audit logging and automatic safeAction integration with 368 passing tests. Added dynamic mapping of actor profile information and client request metadata, resolving exactOptionalPropertyTypes compilation checks.
+
 
 **Remaining steps:**
 
@@ -56,12 +58,12 @@ Status codes: compliant, known defect, unaudited/in progress, N/A.
 
 1. `ADM-001` | Severity: Critical | Action boundary still permits direct Prisma access in remaining action files (Resolved: 0 direct Prisma files in actions).
 2. `ADM-002` | Severity: Critical | Action-layer `.parse()` remains in 1 call site (Resolved: 0 parse call sites in actions).
-3. `ADM-003` | Severity: Critical | `safeAction` now resolves a canonical `AdminActor`, but remaining legacy action slices still need Phase 5 migration to consume actor/policy options consistently.
-4. `ADM-004` | Severity: High | Direct env reads remain in 66 drift findings (down from 69).
-5. `ADM-005` | Severity: High | `@ts-nocheck` remains in 10 source files.
-6. `ADM-006` | Severity: High | Unstructured logging has been resolved in all updated slices, remaining legacy code still has structured-logging drift.
+3. `ADM-003` | Severity: Critical | `safeAction` now resolves a canonical `AdminActor`, but remaining legacy action slices still need Phase 5 migration to consume actor/policy options consistently (Resolved: Completed Phase 8 integration).
+4. `ADM-004` | Severity: High | Direct env reads remain in 5 drift findings (down from 66).
+5. `ADM-005` | Severity: High | `@ts-nocheck` remains in 7 source files (down from 10).
+6. `ADM-006` | Severity: High | Unstructured logging has been resolved in all updated slices, remaining legacy code still has 14 structured-logging drift findings (all exempt).
 7. `ADM-007` | Severity: High | Strict TypeScript gate remains fully stabilized.
-8. `ADM-008` | Severity: Medium | Vitest aliasing and stale role expectations are fully verified; root admin suite is solid with 366 green tests.
+8. `ADM-008` | Severity: Medium | Vitest aliasing and stale role expectations are fully verified; root admin suite is solid with 368 green tests.
 9. `ADM-009` | Severity: Medium | ESLint passes but still reports known warnings.
 10. `ADM-010` | Severity: Medium | High-risk verify route files are completely audit-logged (Resolved: 0 missing audit logs).
 
@@ -79,11 +81,11 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 
 ## Latest Verification
 
-- `pnpm run admin:check-types` → pass.
+- `pnpm run admin:check-types` → pass (exit 0).
 - `pnpm run admin:lint` → pass with known warnings backlog.
 - `pnpm run admin:check-env-contract` → pass; 59 boundary keys.
-- `pnpm run admin:report-security-drift` → pass with improved drift counts.
-- `pnpm run admin:test:all` → pass; 46 files passed, 366 of 366 tests passed.
+- `pnpm run admin:report-security-drift` → pass with improved drift counts (env boundary: 5, direct Prisma: 0, unsafe mutations: 11, parse: 0, tsNoCheck: 7, unstructured logging: 14, log safety: 2, missing audit log: 0).
+- `pnpm run admin:test:all` → pass; 46 files passed, 368 of 368 tests passed.
 
 ## Completed Phases
 
@@ -101,6 +103,7 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 12. Leads, Services, & Professionals Action Overhaul with UI Hardening - completed 2026-05-22.
 13. Refactoring & Drift Reduction (Actions Drift Reduction) - completed 2026-06-04.
 14. Track A Phase 6 GDPR/data export slice - completed 2026-06-04.
+15. Phase 8 Audit Log - completed 2026-06-04; checkpoint tag `admin-overhaul/phase-8-complete`.
 
 ## Rollback Contracts
 

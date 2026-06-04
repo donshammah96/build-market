@@ -69,8 +69,8 @@ export type AdminLogEvent = {
 // ---------------------------------------------------------------------------
 
 export interface AdminLogger {
-  info(event: AdminLogEvent): void;
-  warn(event: AdminLogEvent): void;
+  info(event: AdminLogEvent & { errorMessage?: string }): void;
+  warn(event: AdminLogEvent & { errorMessage?: string }): void;
   error(event: AdminLogEvent & { errorMessage?: string }): void;
 }
 
