@@ -82,6 +82,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **GDPR Export Service Tests**: Fixed path traversal test failure on Linux/POSIX CI environment by using explicit, cross-platform path resolution testing (`path.posix` and `path.win32`) to validate traversal containment check patterns regardless of the host OS environment. Modified [export.service.test.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/gdpr/services/__tests__/export.service.test.ts).
+
 - **Redis/Terminal Diagnostics**: Fixed the Redis healthcheck investigation path by separating shell contamination from runtime failure. Updated `packages/redis/src/types.ts`, `packages/redis/src/client.ts`, and `packages/redis/src/healthcheck.ts` to support `REDIS_FAMILY=4|6` and report the selected address family in connection status output. This mitigates the observed timeout against `redis-11708.c341.af-south-1-1.ec2.cloud.redislabs.com` on hosts where dual-stack DNS resolution prefers an unreachable IPv6/NAT64 path; with `REDIS_FAMILY=4`, the healthcheck succeeds.
 
 - **Architecture/Frontend**: Removed `@prisma/client` from the client-facing `ProfessionalForm.tsx` component, replacing it with the central `@build/enums` package to prevent leaking server bundles into the client context.
