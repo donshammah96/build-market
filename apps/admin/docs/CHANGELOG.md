@@ -23,7 +23,7 @@
 
 ## [2026-06-04] Refactoring & Drift Reduction (Actions Drift Reduction)
 
-### Changed
+### Changed (Refactoring & Drift Reduction (Actions Drift Reduction))
 
 - **Security Repository**: Created [repository.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/security/repository.ts) to isolate all Prisma database queries used by auth and auditing helpers.
 - **Actions/Shared**: Refactored [shared.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/shared.ts) to remove all direct database queries, delegating database execution entirely to `securityRepository`.
