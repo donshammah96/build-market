@@ -22,7 +22,7 @@
 
 ## [2026-06-04] Track A Phase 6 — GDPR & Data Export Slice Refactoring
 
-### Changed
+### Changed (Track A Phase 6 — GDPR & Data Export Slice Refactoring)
 
 - **GDPR Encryption**: Integrated `adminEnvConfig` into [field-encryption.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/gdpr/encryption/field-encryption.ts) and replaced unstructured `console` logging with structured `StructuredLogger`.
 - **GDPR Prisma Extension**: Removed `@ts-nocheck` and added proper TypeScript typings in [prisma-extension.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/gdpr/encryption/prisma-extension.ts).
