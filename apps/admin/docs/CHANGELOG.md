@@ -1,5 +1,26 @@
 # apps/admin Changelog
 
+## [2026-06-04] Track A Phase 6 — GDPR & Data Export Slice Refactoring
+
+### Changed
+
+- **GDPR Encryption**: Integrated `adminEnvConfig` into [field-encryption.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/gdpr/encryption/field-encryption.ts) and replaced unstructured `console` logging with structured `StructuredLogger`.
+- **GDPR Prisma Extension**: Removed `@ts-nocheck` and added proper TypeScript typings in [prisma-extension.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/gdpr/encryption/prisma-extension.ts).
+- **GDPR Services**: Added type safety to [export.service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/gdpr/services/export.service.ts) and integrated `StructuredLogger` into [anonymization.service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/gdpr/services/anonymization.service.ts).
+- **GDPR Jobs & Schedulers**: Migrated [anonymization-batch.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/anonymization-batch.ts), [asset-cleanup.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/asset-cleanup.ts), [data-retention.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/data-retention.ts), and [export-cleanup.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/export-cleanup.ts) off `process.env` and unstructured logs, replacing them with `adminEnvConfig` and structured `logger`. Refactored `s3Client` type issues using structural compatibility casting (`S3Sender`).
+- **GDPR Queue Workers**: Refactored [incident.worker.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/workers/compliance/incident.worker.ts), [notification.worker.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/workers/compliance/notification.worker.ts), [processor.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/workers/export/processor.ts), and [worker.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/workers/export/worker.ts) to utilize `adminEnvConfig` and structured loggers.
+- **Job Orchestrator**: Refactored [index.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/index.ts) to migrate all 14 unstructured log statements to `StructuredLogger` with active `correlationId` tracking.
+- **Notifications**: Replaced direct env reads in [email.service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/notifications/email.service.ts) with validated `adminEnvConfig` variables.
+
+**Files changed:** `apps/admin/src/lib/gdpr/encryption/field-encryption.ts`, `apps/admin/src/lib/gdpr/encryption/prisma-extension.ts`, `apps/admin/src/lib/gdpr/encryption/__tests__/field-encryption.test.ts`, `apps/admin/src/lib/gdpr/services/anonymization.service.ts`, `apps/admin/src/lib/gdpr/services/export.service.ts`, `apps/admin/src/lib/notifications/email.service.ts`, `apps/admin/src/lib/jobs/anonymization-batch.ts`, `apps/admin/src/lib/jobs/asset-cleanup.ts`, `apps/admin/src/lib/jobs/data-retention.ts`, `apps/admin/src/lib/jobs/export-cleanup.ts`, `apps/admin/src/lib/jobs/index.ts`, `apps/admin/src/lib/workers/compliance/incident.worker.ts`, `apps/admin/src/lib/workers/compliance/notification.worker.ts`, `apps/admin/src/lib/workers/export/processor.ts`, `apps/admin/src/lib/workers/export/worker.ts`, `apps/admin/src/actions/admin/verify/route.ts`, `apps/admin/src/lib/security/repository.ts`  
+**Verification:**
+
+- `pnpm run admin:check-types` → pass (exit 0)
+- `pnpm run admin:lint` → pass with 94 warnings (0 errors)
+- `pnpm run admin:check-env-contract` → pass; 59 keys
+- `pnpm run admin:report-security-drift` → pass; unstructuredLogging reduced to 14 (all exempt)
+- `pnpm run admin:test:all` → pass; 46 files passed, 366 of 366 tests passed
+
 ## [2026-06-04] Refactoring & Drift Reduction (Actions Drift Reduction)
 
 ### Changed

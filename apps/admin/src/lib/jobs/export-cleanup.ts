@@ -4,19 +4,14 @@ import { createRedisConnection } from "@/lib/queues/redis-connection";
 import { prisma } from "@build/db";
 import { ExportProcessor } from "@/lib/workers/export/processor";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
 
 const logger = new StructuredLogger("export-cleanup-job");
 
 // Configuration from environment variables
-const CLEANUP_CRON_PATTERN = process.env.EXPORT_CLEANUP_CRON || "0 2 * * *"; // Default: 2 AM daily
-const CLEANUP_BATCH_SIZE = parseInt(
-  process.env.EXPORT_CLEANUP_BATCH_SIZE || "100",
-  10,
-);
-const CLEANUP_MAX_RETRIES = parseInt(
-  process.env.EXPORT_CLEANUP_MAX_RETRIES || "3",
-  10,
-);
+const CLEANUP_CRON_PATTERN = adminEnvConfig.EXPORT_CLEANUP_CRON ?? "0 2 * * *"; // Default: 2 AM daily
+const CLEANUP_BATCH_SIZE = adminEnvConfig.EXPORT_CLEANUP_BATCH_SIZE ?? 100;
+const CLEANUP_MAX_RETRIES = adminEnvConfig.EXPORT_CLEANUP_MAX_RETRIES ?? 3;
 
 const cleanupQueue = new Queue("maintenance-jobs", {
   connection: createRedisConnection() as any,

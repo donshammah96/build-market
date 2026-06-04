@@ -4,8 +4,8 @@
 
 ## Active Phase
 
-**Phase:** Refactoring & Drift Reduction (Actions Drift Reduction) (complete)
-**Status:** Completed and fully verified the actions refactoring and security drift reduction. Created a new security repository (`src/lib/security/repository.ts`) to encapsulate all auth and auditing queries, removing direct Prisma access in the action layer. Refactored compliance queue-status and verify-professional routes to use `resolveAdminRouteActor`, Zod `safeParse` instead of `.parse()`, and verified audit trail compliance. Resolved env boundary drift in `onboarding-remediation.ts` using `adminEnvConfig`. Drift counts: `directPrismaInActions` and `zodParseDrift` are at 0. Verified type check, ESLint, env contract, and test suite successfully (366/366 passing tests).
+**Phase:** Track A Phase 6 — GDPR & Data Export Slice Refactoring (complete)
+**Status:** Completed and fully verified the GDPR and Data Export slice refactoring. Replaced direct environment variable reads (`process.env`), legacy logging (`console.*`), and TypeScript silences (`// @ts-nocheck`) in all GDPR encryption, services, jobs, and worker layers with `adminEnvConfig` and structured `logger` instances. Solved S3Client structural typing conflicts in the background jobs and processors. Drift counts: `directPrismaInActions` and `zodParseDrift` remain at 0; `unstructuredLogging` is reduced to 14 (all exempt). Verified check-types, lint, env contract, and test suite successfully (366/366 passing tests).
 
 **Completed:**
 
@@ -29,6 +29,7 @@
 - Leads, Services, & Professionals Action Overhaul with UI Hardening added: implemented full domain slices (`leads`, `services`, `professionals`) to completely eliminate direct Prisma access and unstructured log traces from their server actions. Upgraded UI layers (`CardList.tsx`, `AppBarChart.tsx`, `AddUser.tsx`) to utilize native Tailwind CSS v4 parentheses design tokens `(--variable)`, fully resolving legacy compile silences (`// @ts-nocheck`). Hardened `/api/admin/compliance/queue-status` route with robust profile authorization checks, structured log wrappers, and test suites.
 - Dashboard, Projects, Settings, & GDPR Action Overhaul added: implemented full domain slices (`dashboard`, `projects`, `settings`, `gdpr`) to eliminate direct Prisma database access, legacy validation throws, and unstructured logs. Migrated all associated server actions and routes using `safeAction`, enforcing recentAuth (180s) and audit logging on Tier 1 settings mutations, and achieved 100% test coverage with 366 passing tests.
 - Refactoring & Drift Reduction completed: resolved direct Prisma access in the action layer, eliminated action-layer Zod `.parse()` calls, ensured audit compliance for high-risk verify route files, and reduced environment boundary drift.
+- Track A Phase 6 GDPR/data export slice completed: migrated S3/R2 settings, queue workers, job orchestrator, encryption methods, and notification email services off `process.env` and unstructured log outputs, replacing them with type-safe `adminEnvConfig` variables and `StructuredLogger` events.
 
 **Remaining steps:**
 
@@ -99,6 +100,7 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 11. Finance/Analytics + Stores/Properties Action Slice - completed 2026-05-21.
 12. Leads, Services, & Professionals Action Overhaul with UI Hardening - completed 2026-05-22.
 13. Refactoring & Drift Reduction (Actions Drift Reduction) - completed 2026-06-04.
+14. Track A Phase 6 GDPR/data export slice - completed 2026-06-04.
 
 ## Rollback Contracts
 
@@ -114,4 +116,4 @@ Phase 10 flags are runtime-readable through `adminEnvConfig`; toggling them requ
 
 ## Next Priority
 
-Complete the Track A Phase 6 GDPR/data export slice, followed by the Phase 12 Security Hardening Pass (enforcing strict ASVS L2 controls, step-up authentication, rate limits, mass assignment schema protection, anti-caching, and resolving all remaining security and environment boundary drift findings).
+Complete the Phase 12 Security Hardening Pass (enforcing strict ASVS L2 controls, step-up authentication, rate limits, mass assignment schema protection, anti-caching, and resolving all remaining security and environment boundary drift findings).

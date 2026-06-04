@@ -1,6 +1,8 @@
-// @ts-nocheck
 import { prisma, Prisma } from "@build/db";
 import { AssetCleanupService } from "./asset-cleanup.service";
+import { StructuredLogger } from "@build/resilience";
+
+const logger = new StructuredLogger("anonymization-service");
 
 export class AnonymizationService {
   /**
@@ -145,7 +147,10 @@ export class AnonymizationService {
         });
       } catch (error) {
         // Continue with next user if one fails
-        console.error(`Failed to anonymize user ${user.id}:`, error);
+        logger.error(
+          `Failed to anonymize user ${user.id}`,
+          error instanceof Error ? error : new Error(String(error)),
+        );
       }
     }
 
@@ -190,9 +195,9 @@ export class AnonymizationService {
         data: {
           actorId: userId,
           actorType: "USER",
-          actorEmail: actor?.email,
-          actorFirstName: actor?.firstName,
-          actorLastName: actor?.lastName,
+          actorEmail: actor?.email ?? null,
+          actorFirstName: actor?.firstName ?? null,
+          actorLastName: actor?.lastName ?? null,
           action: "ACCOUNT_DEACTIVATED",
           entityType: "User",
           entityId: userId,

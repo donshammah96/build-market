@@ -1,6 +1,5 @@
-// @ts-nocheck
 import { Prisma } from "@prisma/client";
-import { FieldEncryption } from "./encryption";
+import { FieldEncryption } from "./field-encryption";
 
 /**
  * Map of [ModelName] -> [FieldName] -> 'deterministic' | 'randomized'
@@ -34,7 +33,10 @@ const ENCRYPTED_FIELDS: Record<
 /**
  * Traverse object and encrypt fields defined in ENCRYPTED_FIELDS
  */
-function encryptParams(model: string, data: any) {
+function encryptParams(
+  model: string,
+  data: Record<string, any> | null | undefined,
+): void {
   if (!data || typeof data !== "object") return;
 
   const fields = ENCRYPTED_FIELDS[model];
@@ -46,7 +48,7 @@ function encryptParams(model: string, data: any) {
         fields[key] === "deterministic"
           ? FieldEncryption.encryptDeterministic(value)
           : FieldEncryption.encryptRandomized(value);
-    } else if (typeof value === "object") {
+    } else if (typeof value === "object" && value !== null) {
       encryptParams(model, value); // Recurse for nested writes (e.g. create with connect)
     }
   }
@@ -55,7 +57,10 @@ function encryptParams(model: string, data: any) {
 /**
  * Encrypt values in 'where' clause for deterministic fields
  */
-function encryptWhere(model: string, where: any) {
+function encryptWhere(
+  model: string,
+  where: Record<string, any> | null | undefined,
+): void {
   if (!where || typeof where !== "object") return;
 
   const fields = ENCRYPTED_FIELDS[model];
@@ -93,7 +98,7 @@ function encryptWhere(model: string, where: any) {
 /**
  * Traverse result and decrypt fields
  */
-function decryptResult(model: string, data: any) {
+function decryptResult(model: string, data: any): void {
   if (!data || typeof data !== "object") return;
 
   const fields = ENCRYPTED_FIELDS[model];

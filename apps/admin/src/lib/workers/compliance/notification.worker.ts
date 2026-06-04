@@ -4,6 +4,9 @@ import { UserNotificationJobData } from "@/lib/queues/compliance.queue";
 import { prisma } from "@build/db";
 import { sendEmail } from "@/lib/infrastructure/mailer";
 import { sendSMS } from "@/lib/infrastructure/sms";
+import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
+
+const logger = new StructuredLogger("notification-worker");
 
 export const notificationWorker = new Worker<UserNotificationJobData>(
   "compliance-notifications",
@@ -18,9 +21,17 @@ export const notificationWorker = new Worker<UserNotificationJobData>(
       totalBatches,
     } = job.data;
 
-    console.log(
-      `[NotificationWorker] Processing batch ${batchNumber}/${totalBatches} for incident ${incidentId}`,
-    );
+    const correlationId = CorrelationIdManager.generate();
+    CorrelationIdManager.set(correlationId);
+
+    logger.info("Processing notification batch", {
+      correlationId,
+      incidentId,
+      batchNumber,
+      totalBatches,
+      channel,
+      userCount: userIds.length,
+    });
 
     // Get user contact details
     const users = await prisma.user.findMany({
@@ -86,9 +97,10 @@ export const notificationWorker = new Worker<UserNotificationJobData>(
 
             results.sent++;
           } catch (error) {
-            console.error(
-              `[NotificationWorker] Failed to notify ${user.id}:`,
-              error,
+            logger.error(
+              "Failed to notify user",
+              error instanceof Error ? error : new Error(String(error)),
+              { correlationId, userId: user.id, channel },
             );
             results.failed++;
 
@@ -130,6 +142,14 @@ export const notificationWorker = new Worker<UserNotificationJobData>(
       });
     }
 
+    logger.info("Notification batch completed", {
+      correlationId,
+      incidentId,
+      batchNumber,
+      totalBatches,
+      results,
+    });
+
     return {
       batch: batchNumber,
       totalBatches,
@@ -155,15 +175,19 @@ function personalizeContent(
 
 // Event handlers
 notificationWorker.on("completed", (job: Job) => {
-  console.log(
-    `[NotificationWorker] Completed batch ${job.data.batchNumber}:`,
-    job.returnvalue,
-  );
+  logger.info("Notification batch job completed", {
+    jobId: job.id,
+    batchNumber: job.data.batchNumber,
+  });
 });
 
 notificationWorker.on("failed", (job: Job | undefined, err: Error) => {
-  console.error(
-    `[NotificationWorker] Batch ${job?.data.batchNumber} failed:`,
-    err,
+  logger.error(
+    "Notification batch job failed",
+    err instanceof Error ? err : new Error(String(err)),
+    {
+      jobId: job?.id,
+      batchNumber: job?.data.batchNumber,
+    },
   );
 });

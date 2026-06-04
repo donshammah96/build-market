@@ -12,40 +12,48 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
-// Mock environment variables before importing the module
-const mockEnv = {
-  ENCRYPTION_KEY_V1: "a".repeat(64), // Valid 32-byte hex key
-  ENCRYPTION_KEY_V2: "b".repeat(64), // Second key for rotation
-  CURRENT_KEY_VERSION: "v1",
-  ENCRYPTION_MIGRATION_MODE: "false",
+const mockEnvConfig = {
+  ENCRYPTION_KEY_V1: "a".repeat(64) as string | undefined, // Valid 32-byte hex key
+  ENCRYPTION_KEY_V2: "b".repeat(64) as string | undefined, // Second key for rotation
+  CURRENT_KEY_VERSION: "v1" as string | undefined,
+  ENCRYPTION_MIGRATION_MODE: false,
   LEGACY_FORMAT_DEADLINE: new Date(
     Date.now() + 90 * 24 * 60 * 60 * 1000,
-  ).toISOString(),
+  ).toISOString() as string | undefined,
+  ENCRYPTION_KEY: undefined as string | undefined,
 };
 
-// Store original env
-const originalEnv = { ...process.env };
+vi.mock("@/lib/infrastructure/env", () => ({
+  get adminEnvConfig() {
+    return mockEnvConfig;
+  },
+}));
 
 describe("FieldEncryption", () => {
   beforeEach(() => {
     // Reset module cache to allow re-importing with new env
     vi.resetModules();
-    // Set mock environment
-    Object.assign(process.env, mockEnv);
+    // Reset mock environment
+    mockEnvConfig.ENCRYPTION_KEY_V1 = "a".repeat(64);
+    mockEnvConfig.ENCRYPTION_KEY_V2 = "b".repeat(64);
+    mockEnvConfig.CURRENT_KEY_VERSION = "v1";
+    mockEnvConfig.ENCRYPTION_MIGRATION_MODE = false;
+    mockEnvConfig.LEGACY_FORMAT_DEADLINE = new Date(
+      Date.now() + 90 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    mockEnvConfig.ENCRYPTION_KEY = undefined;
   });
 
   afterEach(() => {
-    // Restore original environment
-    process.env = { ...originalEnv };
     vi.resetModules();
   });
 
   describe("Key Configuration", () => {
     it("should throw error when no encryption keys are configured", async () => {
       // Remove all encryption keys
-      delete process.env.ENCRYPTION_KEY_V1;
-      delete process.env.ENCRYPTION_KEY_V2;
-      delete process.env.ENCRYPTION_KEY;
+      mockEnvConfig.ENCRYPTION_KEY_V1 = undefined;
+      mockEnvConfig.ENCRYPTION_KEY_V2 = undefined;
+      mockEnvConfig.ENCRYPTION_KEY = undefined;
 
       await expect(async () => {
         await import("../field-encryption");
@@ -53,7 +61,7 @@ describe("FieldEncryption", () => {
     });
 
     it("should throw error when key is not 64 hex characters", async () => {
-      process.env.ENCRYPTION_KEY_V1 = "tooshort";
+      mockEnvConfig.ENCRYPTION_KEY_V1 = "tooshort";
 
       await expect(async () => {
         await import("../field-encryption");
@@ -61,7 +69,7 @@ describe("FieldEncryption", () => {
     });
 
     it("should throw error when CURRENT_KEY_VERSION is not configured", async () => {
-      process.env.CURRENT_KEY_VERSION = "v3"; // v3 key doesn't exist
+      mockEnvConfig.CURRENT_KEY_VERSION = "v3"; // v3 key doesn't exist
 
       await expect(async () => {
         await import("../field-encryption");
@@ -69,9 +77,9 @@ describe("FieldEncryption", () => {
     });
 
     it("should load legacy ENCRYPTION_KEY as v1 fallback", async () => {
-      delete process.env.ENCRYPTION_KEY_V1;
-      process.env.ENCRYPTION_KEY = "c".repeat(64);
-      process.env.CURRENT_KEY_VERSION = "v1";
+      mockEnvConfig.ENCRYPTION_KEY_V1 = undefined;
+      mockEnvConfig.ENCRYPTION_KEY = "c".repeat(64);
+      mockEnvConfig.CURRENT_KEY_VERSION = "v1";
 
       const { FieldEncryption } = await import("../field-encryption");
       const metadata = FieldEncryption.getMetadata();
@@ -293,7 +301,7 @@ describe("FieldEncryption", () => {
 
   describe("Error Handling", () => {
     it("should throw DecryptionError in production mode on failure", async () => {
-      process.env.ENCRYPTION_MIGRATION_MODE = "false";
+      mockEnvConfig.ENCRYPTION_MIGRATION_MODE = false;
 
       const { FieldEncryption, DecryptionError } =
         await import("../field-encryption");
@@ -306,7 +314,7 @@ describe("FieldEncryption", () => {
     });
 
     it("should return original in migration mode on failure", async () => {
-      process.env.ENCRYPTION_MIGRATION_MODE = "true";
+      mockEnvConfig.ENCRYPTION_MIGRATION_MODE = true;
       vi.resetModules();
 
       const { FieldEncryption } = await import("../field-encryption");

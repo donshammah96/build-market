@@ -31,6 +31,9 @@ import {
   assetCleanupQueue,
 } from "./asset-cleanup";
 import { Worker } from "bullmq";
+import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
+
+const logger = new StructuredLogger("job-orchestrator");
 
 // Track all workers for graceful shutdown
 let workers: Worker[] = [];
@@ -55,11 +58,11 @@ export interface GDPRJobOrchestrator {
  */
 export async function initializeAllSchedulers(): Promise<void> {
   if (isInitialized) {
-    console.log("[JobOrchestrator] Already initialized, skipping");
+    logger.info("Already initialized, skipping");
     return;
   }
 
-  console.log("[JobOrchestrator] Initializing all GDPR schedulers...");
+  logger.info("Initializing all GDPR schedulers");
 
   try {
     // 1. Schedule all jobs
@@ -70,7 +73,7 @@ export async function initializeAllSchedulers(): Promise<void> {
       scheduleAssetCleanup(),
     ]);
 
-    console.log("[JobOrchestrator] All jobs scheduled");
+    logger.info("All jobs scheduled");
 
     // 2. Create workers
     workers = [
@@ -80,15 +83,16 @@ export async function initializeAllSchedulers(): Promise<void> {
       createAssetCleanupWorker(),
     ];
 
-    console.log("[JobOrchestrator] All workers created");
+    logger.info("All workers created");
 
     isInitialized = true;
 
-    console.log(
-      "[JobOrchestrator] GDPR job orchestrator initialized successfully",
-    );
+    logger.info("GDPR job orchestrator initialized successfully");
   } catch (error) {
-    console.error("[JobOrchestrator] Failed to initialize schedulers:", error);
+    logger.error(
+      "Failed to initialize schedulers",
+      error instanceof Error ? error : new Error(String(error)),
+    );
     throw error;
   }
 }
@@ -98,11 +102,11 @@ export async function initializeAllSchedulers(): Promise<void> {
  */
 export async function shutdownAllSchedulers(): Promise<void> {
   if (!isInitialized) {
-    console.log("[JobOrchestrator] Not initialized, nothing to shutdown");
+    logger.info("Not initialized, nothing to shutdown");
     return;
   }
 
-  console.log("[JobOrchestrator] Shutting down all GDPR schedulers...");
+  logger.info("Shutting down all GDPR schedulers");
 
   try {
     // Close all workers
@@ -111,7 +115,10 @@ export async function shutdownAllSchedulers(): Promise<void> {
         try {
           await worker.close();
         } catch (error) {
-          console.error("[JobOrchestrator] Error closing worker:", error);
+          logger.error(
+            "Error closing worker",
+            error instanceof Error ? error : new Error(String(error)),
+          );
         }
       }),
     );
@@ -126,9 +133,12 @@ export async function shutdownAllSchedulers(): Promise<void> {
     workers = [];
     isInitialized = false;
 
-    console.log("[JobOrchestrator] All schedulers shut down");
+    logger.info("All schedulers shut down");
   } catch (error) {
-    console.error("[JobOrchestrator] Error during shutdown:", error);
+    logger.error(
+      "Error during shutdown",
+      error instanceof Error ? error : new Error(String(error)),
+    );
     throw error;
   }
 }
@@ -190,6 +200,9 @@ export async function triggerJob(
     | "anonymization-batch"
     | "asset-cleanup",
 ): Promise<{ success: boolean; jobId?: string; error?: string }> {
+  const correlationId = CorrelationIdManager.generate();
+  CorrelationIdManager.set(correlationId);
+
   try {
     let queue;
     let jobName;
@@ -227,15 +240,21 @@ export async function triggerJob(
       },
     );
 
-    console.log(
-      `[JobOrchestrator] Manually triggered ${jobType} job: ${job.id}`,
-    );
+    logger.info("Manually triggered job", {
+      correlationId,
+      jobType,
+      jobId: job.id,
+    });
 
     return job.id
       ? { success: true, jobId: String(job.id) }
       : { success: true };
   } catch (error) {
-    console.error(`[JobOrchestrator] Failed to trigger ${jobType}:`, error);
+    logger.error(
+      "Failed to trigger job",
+      error instanceof Error ? error : new Error(String(error)),
+      { correlationId, jobType },
+    );
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

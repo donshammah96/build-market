@@ -67,7 +67,9 @@ export async function findUserForAudit(userId: string) {
   });
 }
 
-export async function createAdminAuditLog(data: Prisma.AdminAuditLogUncheckedCreateInput) {
+export async function createAdminAuditLog(
+  data: Prisma.AdminAuditLogUncheckedCreateInput,
+) {
   return prisma.adminAuditLog.create({
     data,
   });

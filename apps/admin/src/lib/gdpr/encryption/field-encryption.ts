@@ -1,4 +1,8 @@
 import crypto from "crypto";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { StructuredLogger } from "@build/resilience";
+
+const logger = new StructuredLogger("gdpr-field-encryption");
 
 // ============================================
 // GDPR Field-Level Encryption with Key Rotation Support
@@ -9,14 +13,14 @@ const IV_LENGTH = 12; // GCM standard IV size
 
 // Key versioning for rotation support
 // Format: v{version}:iv:authTag:encrypted (new) or iv:authTag:encrypted (legacy)
-const CURRENT_KEY_VERSION = process.env.CURRENT_KEY_VERSION || "v1";
-const LEGACY_FORMAT_DEADLINE = process.env.LEGACY_FORMAT_DEADLINE
-  ? new Date(process.env.LEGACY_FORMAT_DEADLINE)
+const CURRENT_KEY_VERSION = adminEnvConfig.CURRENT_KEY_VERSION || "v1";
+const LEGACY_FORMAT_DEADLINE = adminEnvConfig.LEGACY_FORMAT_DEADLINE
+  ? new Date(adminEnvConfig.LEGACY_FORMAT_DEADLINE)
   : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000); // 90 days from now
 
 // Migration mode allows decryption to return original on failure (for data migration)
 const ENCRYPTION_MIGRATION_MODE =
-  process.env.ENCRYPTION_MIGRATION_MODE === "true";
+  adminEnvConfig.ENCRYPTION_MIGRATION_MODE === true;
 
 /**
  * Encryption key registry supporting multiple versions for rotation
@@ -37,7 +41,9 @@ function loadEncryptionKeys(): void {
 
   for (const version of keyVersions) {
     const envVar = `ENCRYPTION_KEY_${version.toUpperCase()}`;
-    const keyHex = process.env[envVar];
+    const keyHex = adminEnvConfig[envVar as keyof typeof adminEnvConfig] as
+      | string
+      | undefined;
 
     if (keyHex) {
       if (keyHex.length !== 64) {
@@ -56,7 +62,7 @@ function loadEncryptionKeys(): void {
   }
 
   // Fallback: Check legacy ENCRYPTION_KEY for backwards compatibility
-  const legacyKey = process.env.ENCRYPTION_KEY;
+  const legacyKey = adminEnvConfig.ENCRYPTION_KEY;
   if (legacyKey && !ENCRYPTION_KEYS["v1"]) {
     if (legacyKey.length !== 64) {
       throw new Error(
@@ -65,9 +71,8 @@ function loadEncryptionKeys(): void {
       );
     }
     ENCRYPTION_KEYS["v1"] = Buffer.from(legacyKey, "hex");
-    console.warn(
-      "[FieldEncryption] Using legacy ENCRYPTION_KEY. " +
-        "Please migrate to ENCRYPTION_KEY_V1 for key rotation support.",
+    logger.warn(
+      "Using legacy ENCRYPTION_KEY. Please migrate to ENCRYPTION_KEY_V1 for key rotation support.",
     );
   }
 
@@ -152,7 +157,10 @@ export class FieldEncryption {
       // Format: version:iv:authTag:encrypted
       return `${CURRENT_KEY_VERSION}:${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted}`;
     } catch (error) {
-      console.error("[FieldEncryption] Encryption error:", error);
+      logger.error(
+        "Encryption failed",
+        error instanceof Error ? error : new Error(String(error)),
+      );
       throw new Error("Encryption failed");
     }
   }
@@ -176,7 +184,10 @@ export class FieldEncryption {
       // Format: version:iv:authTag:encrypted
       return `${CURRENT_KEY_VERSION}:${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted}`;
     } catch (error) {
-      console.error("[FieldEncryption] Encryption error:", error);
+      logger.error(
+        "Encryption failed",
+        error instanceof Error ? error : new Error(String(error)),
+      );
       throw new Error("Encryption failed");
     }
   }
@@ -211,15 +222,13 @@ export class FieldEncryption {
 
         // Warn about legacy format usage
         if (new Date() > LEGACY_FORMAT_DEADLINE) {
-          console.error(
-            "[FieldEncryption] CRITICAL: Legacy encryption format detected after deadline. " +
-              "Run key rotation migration script immediately.",
+          logger.error(
+            "Legacy encryption format detected after deadline. Run key rotation migration script immediately.",
+            new Error("Legacy encryption format deadline exceeded"),
           );
         } else {
-          console.warn(
-            "[FieldEncryption] Legacy encryption format detected. " +
-              `Support ends on ${LEGACY_FORMAT_DEADLINE.toISOString()}. ` +
-              "Run key rotation migration script.",
+          logger.warn(
+            `Legacy encryption format detected. Support ends on ${LEGACY_FORMAT_DEADLINE.toISOString()}. Run key rotation migration script.`,
           );
         }
       } else {
@@ -243,12 +252,15 @@ export class FieldEncryption {
 
       return decrypted;
     } catch (error) {
-      console.error("[FieldEncryption] Decryption error:", error);
+      logger.error(
+        "Decryption failed",
+        error instanceof Error ? error : new Error(String(error)),
+      );
 
       // In migration mode, return original to allow mixed data handling
       if (ENCRYPTION_MIGRATION_MODE) {
-        console.warn(
-          "[FieldEncryption] Migration mode: returning original value on decryption failure",
+        logger.warn(
+          "Migration mode: returning original value on decryption failure",
         );
         return encryptedText;
       }
