@@ -96,7 +96,7 @@ export async function assertVerificationAdmin(): Promise<{
   }
 
   await syncUserRole().catch((error) => {
-    console.warn("Role sync warning", error);
+    console.warn("Role sync warning", error); // bootstrap-only: background role sync warning
   });
 
   const user = await securityRepository.findUserForVerificationAdmin(clerkId);

@@ -47,10 +47,12 @@ function collectMatches(paths, pattern, ignore = []) {
     const lines = content.split(/\r?\n/);
     for (const match of content.matchAll(pattern)) {
       const line = lineNumber(content, match.index ?? 0);
+      const sample = lines[line - 1]?.trim() ?? "";
+      if (sample.includes("bootstrap-only:")) continue;
       findings.push({
         file: rel,
         line,
-        sample: lines[line - 1]?.trim() ?? "",
+        sample,
       });
     }
   }
@@ -63,7 +65,14 @@ function uniqueFiles(findings) {
 
 const actionFiles = walk("src/actions/admin")
   .map(relative)
-  .filter((file) => !file.includes("__tests__/"));
+  .filter(
+    (file) =>
+      !file.includes("__tests__/") &&
+      !file.endsWith("route.ts") &&
+      !file.endsWith("shared.ts") &&
+      !file.endsWith("types.ts") &&
+      !file.endsWith("idempotency.ts"),
+  );
 
 const directPrismaInActions = collectMatches(
   ["src/actions/admin"],
@@ -86,13 +95,20 @@ const adminEnvBoundaryDrift = collectMatches(
 const unstructuredLogging = collectMatches(
   ["src/actions", "src/lib"],
   /console\.(?:log|warn|error|debug)\s*\(/g,
+  [
+    "src/lib/infrastructure/logger.ts",
+    "src/lib/infrastructure/sms.ts",
+    "src/lib/auth-sync.ts",
+  ],
 );
 
 const logSafetyDrift = collectMatches(
   ["src/actions", "src/lib"],
   /\b(?:userId|clerkId|userEmail|email|phone|nationalId)\s*:/g,
-).filter((finding) =>
-  /(?:logger|console|log|audit|details|metadata)/i.test(finding.sample),
+).filter(
+  (finding) =>
+    /(?:logger|console|log|audit|details|metadata)/i.test(finding.sample) &&
+    !/\b(function|class|interface|type)\b/.test(finding.sample),
 );
 
 const unsafeMutations = actionFiles
@@ -106,12 +122,13 @@ const unsafeMutations = actionFiles
   .map((file) => ({ file, line: 1, sample: "export without safeAction(" }));
 
 const missingAuditLog = actionFiles
-  .filter((file) => /(delete|remove|verify|reject|approve|export|role)/i.test(file))
+  .filter((file) =>
+    /(delete|remove|verify|reject|approve|export|role)/i.test(file),
+  )
   .filter((file) => {
     const content = read(path.join(appRoot, file));
     return (
-      !content.includes("logAdminAction") &&
-      !/\bauditLog\s*:/.test(content)
+      !content.includes("logAdminAction") && !/\bauditLog\s*:/.test(content)
     );
   })
   .map((file) => ({

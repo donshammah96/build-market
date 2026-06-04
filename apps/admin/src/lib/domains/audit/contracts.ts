@@ -49,6 +49,7 @@ export type AuditLogEntry = {
   userAgent: string | null;
   requestId: string | null;
   createdAt: Date;
+  details?: Record<string, unknown> | null;
 };
 
 export type AuditLogPage = {

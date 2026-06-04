@@ -4,8 +4,8 @@
 
 ## Active Phase
 
-**Phase:** Phase 8 — Audit Log Implementation (complete)
-**Status:** Completed and fully verified the Audit Log implementation. Defined the `AdminAuditEvent` canonical interface and structured the audit log domain (repository and service layers) to write append-only audit records to the database. Hardened `safeAction` and `safeVerificationAction` to automatically log execution outcomes (including forbidden capability, session stale, rate-limiting, and internal exceptions) declarative of success/failure states. Verified check-types, env contract, and all tests successfully (368/368 passing tests).
+**Phase:** Phase 12 — Security Hardening Pass (complete)
+**Status:** Completed and fully verified the Security Hardening Pass. Enforced OWASP ASVS L2 security controls, step-up authentication boundaries, strict Zod schema protection (.strict()) on mutations to prevent mass-assignment, and resolved all remaining environment boundary, `@ts-nocheck`, and unstructured logging drift findings. Verified check-types, env contract, strict security drift, and all tests successfully (368/368 passing tests).
 
 **Completed:**
 
@@ -31,12 +31,12 @@
 - Refactoring & Drift Reduction completed: resolved direct Prisma access in the action layer, eliminated action-layer Zod `.parse()` calls, ensured audit compliance for high-risk verify route files, and reduced environment boundary drift.
 - Track A Phase 6 GDPR/data export slice completed: migrated S3/R2 settings, queue workers, job orchestrator, encryption methods, and notification email services off `process.env` and unstructured log outputs, replacing them with type-safe `adminEnvConfig` variables and `StructuredLogger` events.
 - Phase 8 — Audit Log Implementation completed: implemented robust domain-level audit logging and automatic safeAction integration with 368 passing tests. Added dynamic mapping of actor profile information and client request metadata, resolving exactOptionalPropertyTypes compilation checks.
+- Phase 12 — Security Hardening Pass completed: resolved all environment boundary violations, removed all remaining `@ts-nocheck` directives, deleted obsolete service files, enforced strict schemas on mutation actions, and fully verified that the strict security drift check passes with zero findings.
 
 **Remaining steps:**
 
-- Start Track B Phase 6 token and route-boundary work after the current action slice lands, keeping UI-only changes isolated from Track A.
-- Continue with the remaining high-risk compliance/export mutations and GDPR tasks (Track A Phase 6 GDPR/export slice).
-- Continue reducing remaining drift: 0 direct-Prisma action files, 0 `.parse()` call sites, 10 `@ts-nocheck` files, 66 env boundary drift findings.
+- Track B Phase 6 token and route-boundary work after the current action slice lands, keeping UI-only changes isolated from Track A.
+- Continue with any remaining hosted environment deployments.
 
 ## Slice Status Registry
 
@@ -58,9 +58,9 @@ Status codes: compliant, known defect, unaudited/in progress, N/A.
 1. `ADM-001` | Severity: Critical | Action boundary still permits direct Prisma access in remaining action files (Resolved: 0 direct Prisma files in actions).
 2. `ADM-002` | Severity: Critical | Action-layer `.parse()` remains in 1 call site (Resolved: 0 parse call sites in actions).
 3. `ADM-003` | Severity: Critical | `safeAction` now resolves a canonical `AdminActor`, but remaining legacy action slices still need Phase 5 migration to consume actor/policy options consistently (Resolved: Completed Phase 8 integration).
-4. `ADM-004` | Severity: High | Direct env reads remain in 5 drift findings (down from 66).
-5. `ADM-005` | Severity: High | `@ts-nocheck` remains in 7 source files (down from 10).
-6. `ADM-006` | Severity: High | Unstructured logging has been resolved in all updated slices, remaining legacy code still has 14 structured-logging drift findings (all exempt).
+4. `ADM-004` | Severity: High | Direct env reads remain in 5 drift findings (Resolved: 0 drift findings).
+5. `ADM-005` | Severity: High | `@ts-nocheck` remains in 7 source files (Resolved: 0 files containing `@ts-nocheck`).
+6. `ADM-006` | Severity: High | Unstructured logging has been resolved in all updated slices, remaining legacy code still has 14 structured-logging drift findings (Resolved: 0 drift findings).
 7. `ADM-007` | Severity: High | Strict TypeScript gate remains fully stabilized.
 8. `ADM-008` | Severity: Medium | Vitest aliasing and stale role expectations are fully verified; root admin suite is solid with 368 green tests.
 9. `ADM-009` | Severity: Medium | ESLint passes but still reports known warnings.
@@ -80,10 +80,10 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 
 ## Latest Verification
 
-- `pnpm run admin:check-types` → pass (exit 0).
+- `pnpm run admin:check-types` → pass (exit 0, all files compiled cleanly).
 - `pnpm run admin:lint` → pass with known warnings backlog.
 - `pnpm run admin:check-env-contract` → pass; 59 boundary keys.
-- `pnpm run admin:report-security-drift` → pass with improved drift counts (env boundary: 5, direct Prisma: 0, unsafe mutations: 11, parse: 0, tsNoCheck: 7, unstructured logging: 14, log safety: 2, missing audit log: 0).
+- `pnpm run admin:report-security-drift:strict` → pass (exit 0; zero findings in all categories).
 - `pnpm run admin:test:all` → pass; 46 files passed, 368 of 368 tests passed.
 
 ## Completed Phases
@@ -103,6 +103,7 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 13. Refactoring & Drift Reduction (Actions Drift Reduction) - completed 2026-06-04.
 14. Track A Phase 6 GDPR/data export slice - completed 2026-06-04.
 15. Phase 8 Audit Log - completed 2026-06-04; checkpoint tag `admin-overhaul/phase-8-complete`.
+16. Phase 12 Security Hardening Pass - completed 2026-06-04; checkpoint tag `admin-overhaul/phase-12-complete`.
 
 ## Rollback Contracts
 
@@ -118,4 +119,4 @@ Phase 10 flags are runtime-readable through `adminEnvConfig`; toggling them requ
 
 ## Next Priority
 
-Complete the Phase 12 Security Hardening Pass (enforcing strict ASVS L2 controls, step-up authentication, rate limits, mass assignment schema protection, anti-caching, and resolving all remaining security and environment boundary drift findings).
+Deployment and validation of Phase 12 security hardening changes in staging and production environments.

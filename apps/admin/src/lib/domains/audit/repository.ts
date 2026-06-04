@@ -18,6 +18,7 @@ const AUDIT_LOG_SELECT = {
   userAgent: true,
   requestId: true,
   createdAt: true,
+  details: true,
 } satisfies Prisma.AdminAuditLogSelect;
 
 const AUDIT_EXPORT_SELECT = {
@@ -84,6 +85,7 @@ function mapAuditLog(row: AuditLogRow): AuditLogEntry {
     userAgent: row.userAgent,
     requestId: row.requestId,
     createdAt: row.createdAt,
+    details: row.details ? (row.details as Record<string, unknown>) : null,
   };
 }
 

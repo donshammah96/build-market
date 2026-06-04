@@ -3,6 +3,7 @@ import { Card, CardContent, CardFooter, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { ProductsType } from "@build/types";
 import { auth } from "@clerk/nextjs/server";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
 
 export type OrderType = {
   _id: string;
@@ -20,7 +21,7 @@ const CardList = async ({ title }: { title: string }) => {
 
   if (title === "Popular Products") {
     products = await fetch(
-      `${process.env.NEXT_PUBLIC_PRODUCT_SERVICE_URL}/products?limit=5&popular=true`,
+      `${adminEnvConfig.NEXT_PUBLIC_PRODUCT_SERVICE_URL}/products?limit=5&popular=true`,
     ).then((res) => {
       if (!res.ok) {
         throw new Error("Failed to fetch popular products!");
@@ -29,7 +30,7 @@ const CardList = async ({ title }: { title: string }) => {
     });
   } else {
     orders = await fetch(
-      `${process.env.NEXT_PUBLIC_ORDER_SERVICE_URL}/orders?limit=5`,
+      `${adminEnvConfig.NEXT_PUBLIC_ORDER_SERVICE_URL}/orders?limit=5`,
       {
         headers: {
           Authorization: `Bearer ${token}`,

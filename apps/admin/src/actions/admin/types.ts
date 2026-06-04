@@ -168,34 +168,38 @@ export const PaginationSchema = z.object({
   search: z.string().optional(),
 });
 
-export const UpdateProfileSchema = z.object({
-  companyName: z.string().min(2).optional(),
-  licenseNumber: z.string().optional(),
-  yearsExperience: z.number().min(0).optional(),
-  bio: z.string().max(1000).optional(),
-  website: z.string().url().optional().or(z.literal("")),
-  servicesOffered: z.array(z.string()).optional(),
-  city: z.string().optional(),
-  county: z.string().optional(),
-  country: z.string().optional(),
-});
+export const UpdateProfileSchema = z
+  .object({
+    companyName: z.string().min(2).optional(),
+    licenseNumber: z.string().optional(),
+    yearsExperience: z.number().min(0).optional(),
+    bio: z.string().max(1000).optional(),
+    website: z.string().url().optional().or(z.literal("")),
+    servicesOffered: z.array(z.string()).optional(),
+    city: z.string().optional(),
+    county: z.string().optional(),
+    country: z.string().optional(),
+  })
+  .strict();
 
-export const SystemSettingsSchema = z.object({
-  maintenanceMode: z.boolean(),
-  publicSignup: z.boolean(),
-  enableAutoVerifyNCA: z.boolean(),
-  enableAutoVerifyEPRA: z.boolean(),
-  enableAutoVerifyBORAQS: z.boolean(),
-  enforceProfessionalLicenses: z.boolean(),
-  enforcePropertyDocuments: z.boolean(),
-  enableLandRegistryCheck: z.boolean(),
-  enforceStorePermits: z.boolean(),
-  requireTaxCompliance: z.boolean(),
-  platformCommission: z.number().min(0).max(100),
-  supportEmail: z.string().email(),
-  adminEmailAlerts: z.boolean(),
-  securityMFA: z.boolean(),
-});
+export const SystemSettingsSchema = z
+  .object({
+    maintenanceMode: z.boolean(),
+    publicSignup: z.boolean(),
+    enableAutoVerifyNCA: z.boolean(),
+    enableAutoVerifyEPRA: z.boolean(),
+    enableAutoVerifyBORAQS: z.boolean(),
+    enforceProfessionalLicenses: z.boolean(),
+    enforcePropertyDocuments: z.boolean(),
+    enableLandRegistryCheck: z.boolean(),
+    enforceStorePermits: z.boolean(),
+    requireTaxCompliance: z.boolean(),
+    platformCommission: z.number().min(0).max(100),
+    supportEmail: z.string().email(),
+    adminEmailAlerts: z.boolean(),
+    securityMFA: z.boolean(),
+  })
+  .strict();
 
 // ============================================================================
 // Verification Schemas
