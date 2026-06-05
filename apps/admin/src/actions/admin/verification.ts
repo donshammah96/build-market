@@ -30,20 +30,6 @@ import {
   parseBatchVerifyDocuments,
 } from "./types";
 
-export type {
-  EntityType,
-  VerificationAction,
-  DocumentAction,
-  VerificationStatus,
-  VerificationQueueItem,
-  VerificationStats,
-  VerificationDetails,
-  VerificationFilterInput,
-  VerifyEntityInput,
-  VerifyDocumentInput,
-  BatchVerifyDocumentsInput,
-} from "./types";
-
 const VERIFICATION_IDEMPOTENCY_TTL_HOURS = 0.25;
 const IdempotencyKeySchema = z
   .string()

@@ -8,21 +8,14 @@ import { AdminOperationName } from "@/lib/observability/operation-names";
 import { propertiesService } from "@/lib/domains/properties/service";
 import type {
   PropertyStatusValue,
-  PropertyDetailResult,
   PropertyFilterInput as DomainPropertyFilterInput,
   PropertyUpdateInput as DomainPropertyUpdateInput,
 } from "@/lib/domains/properties/contracts";
 import { omitUndefined } from "@/lib/utils";
-export type { PropertyListItem } from "@/lib/domains/properties/contracts";
-export type PropertyDetails = PropertyDetailResult;
-
-// ============================================================================
-// Schemas
-// ============================================================================
 
 const PropertyFilterSchema = z.object({
   page: z.number().min(1).default(1),
-  limit: z.number().min(1).max(100).default(10),
+  limit: z.number().min(1).max(1000).default(10),
   search: z.string().optional(),
   type: z.enum(["SALE", "RENT", "LEASE"]).optional(),
   category: z
@@ -62,9 +55,8 @@ const UpdatePropertySchema = z.object({
   featured: z.boolean().optional(),
 });
 
-export type PropertyFilterInput = z.infer<typeof PropertyFilterSchema>;
-export type UpdatePropertyInput = z.infer<typeof UpdatePropertySchema>;
-export type { PropertyStatusValue };
+type PropertyFilterInput = z.infer<typeof PropertyFilterSchema>;
+type UpdatePropertyInput = z.infer<typeof UpdatePropertySchema>;
 
 // ============================================================================
 // Actions

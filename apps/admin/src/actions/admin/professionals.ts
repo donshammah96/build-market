@@ -6,12 +6,6 @@ import { safeAction, safeVerificationAction } from "./shared";
 import { omitUndefined } from "@/lib/utils";
 import { UpdateProfileSchema } from "./types";
 import { professionalsService } from "@/lib/domains/professionals/service";
-import type {
-  ProfessionalDetails,
-  ProfessionalListItem as ProfessionalWithUser,
-} from "@/lib/domains/professionals/contracts";
-
-export type { ProfessionalDetails, ProfessionalWithUser };
 
 function parseActionInput<T>(
   schema: z.ZodType<T>,

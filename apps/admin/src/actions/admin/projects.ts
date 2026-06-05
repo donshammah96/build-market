@@ -3,27 +3,10 @@
 import { z } from "zod";
 import { safeAction } from "./shared";
 import { projectsService } from "@/lib/domains/projects/service";
-import type {
-  ProjectDetails,
-  ProjectFilterInput,
-  ProjectListItem,
-  ProjectPageResult,
-} from "@/lib/domains/projects/contracts";
-
-export type {
-  ProjectListItem,
-  ProjectDetails,
-  ProjectFilterInput,
-  ProjectPageResult,
-};
-
-// ============================================================================
-// Schemas
-// ============================================================================
 
 const ProjectFilterSchema = z.object({
   page: z.number().min(1).default(1),
-  limit: z.number().min(1).max(100).default(10),
+  limit: z.number().min(1).max(1000).default(10),
   search: z.string().default(""),
 });
 
@@ -39,15 +22,6 @@ function parseActionInput<T>(
   return result.data;
 }
 
-// ============================================================================
-// Actions
-// ============================================================================
-
-/**
- * Fetches a paginated list of projects.
- * Searchable by title or description.
- * Budget is converted from Decimal to number for JSON serialization.
- */
 export async function getProjects(page = 1, limit = 10, search = "") {
   return safeAction("getProjects", async ({ actor }) => {
     const valid = parseActionInput(

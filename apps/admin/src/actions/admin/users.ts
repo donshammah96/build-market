@@ -5,16 +5,8 @@ import { revalidatePath } from "next/cache";
 import { clerkClient } from "@clerk/nextjs/server";
 import { safeAction } from "./shared";
 import { runWithIdempotency } from "./idempotency";
-import {
-  usersRepository,
-  usersService,
-  type AdminUserDetails,
-  type AdminUserListItem,
-} from "@/lib/domains/users";
+import { usersRepository, usersService } from "@/lib/domains/users";
 import { omitUndefined } from "@/lib/utils";
-
-export type UserWithProfile = AdminUserListItem;
-export type UserDetails = AdminUserDetails;
 
 const USER_IDEMPOTENCY_TTL_HOURS = 0.25;
 const NonEmptyStringSchema = z.string().trim().min(1);

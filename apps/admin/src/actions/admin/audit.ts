@@ -5,23 +5,6 @@ import { auditService } from "@/lib/domains/audit/service";
 import type { AuditLogInput } from "@/lib/domains/audit/contracts";
 import { AdminOperationName } from "@/lib/observability/operation-names";
 
-// ============================================================================
-// Re-export domain types for page-layer consumption
-// ============================================================================
-
-export type {
-  AuditLogEntry,
-  AuditLogStats,
-  AuditLogPage,
-  AuditExportPage,
-  AuditExportEntry,
-  AuditLogInput,
-} from "@/lib/domains/audit/contracts";
-
-// ============================================================================
-// Actions
-// ============================================================================
-
 /**
  * Fetches a paginated, filtered list of audit log entries.
  * Capability: VIEW_FINANCIALS (SUPER_ADMIN, FINANCE_MANAGER, AUDITOR).

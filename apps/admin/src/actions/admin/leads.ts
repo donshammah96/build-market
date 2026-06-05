@@ -6,21 +6,13 @@ import { LeadSource, LeadStatus, ProjectType } from "@build/db";
 import { safeAction } from "./shared";
 import { leadsService } from "@/lib/domains/leads/service";
 import type {
-  LeadDetails,
   LeadFilterInput,
-  LeadListItem,
   UpdateLeadInput,
 } from "@/lib/domains/leads/contracts";
 
-export type { LeadListItem, LeadDetails, LeadFilterInput, UpdateLeadInput };
-
-// ============================================================================
-// Schemas
-// ============================================================================
-
 const LeadFilterSchema = z.object({
   page: z.number().min(1).default(1),
-  limit: z.number().min(1).max(100).default(10),
+  limit: z.number().min(1).max(1000).default(10),
   search: z.string().optional(),
   status: z.nativeEnum(LeadStatus).optional(),
   source: z.nativeEnum(LeadSource).optional(),

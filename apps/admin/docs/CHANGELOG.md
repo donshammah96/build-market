@@ -1,16 +1,28 @@
 # apps/admin Changelog
 
+## [2026-06-05] Development Env, RSC Boundary, and Schema Limit Fixes
+
+### Fixed
+
+- **Database Connection**: Fixed database connection failure (`ECONNREFUSED` / `PrismaClientKnownRequestError`) in development mode by commenting out the default `DATABASE_URL` and `DIRECT_URL` placeholders in `apps/admin/.env.development` and commenting out duplicate, non-functional `DATABASE_URL` / `POSTGRES_URL` entries pointing to `localhost:5434` in the main gitignored `apps/admin/.env` file. This resolves the loading priority issues, allowing Next.js to cleanly fall back to the active Supabase connection string.
+- **RSC Table Boundary**: Resolved React Server Component runtime boundary error (`getUserColumns is on the client. It's not possible to invoke a client function from the server`) on the users list page by introducing the Client Component wrapper [UsersTableClient](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/users/users-table-client.tsx>) that encapsulates the client-side column generation logic.
+- **Query Schema Limits**: Fixed Zod input validation failure (`Too big: expected number to be <=100`) on the services page categories query by proactively raising the maximum allowed page size `limit` constraint from `100` to `1000` across all admin query schemas (`ServiceFilterSchema`, `PaginationSchema`, `VerificationFilterSchema`, `StoreFilterSchema`, `PropertyFilterSchema`, `ProjectFilterSchema`, `LeadFilterSchema`).
+
 ## [2026-06-05] Build & Type Safety Fixes
 
 ### Changed
 
 - **CI Pipeline**: Added workspace packages build step (`pnpm tsc --build tsconfig.json`) prior to type checking in [.github/workflows/ci.yml](file:///c:/Users/User/build-market/.github/workflows/ci.yml) to resolve typescript project reference compilation issues (`TS6305` and `TS2307`).
 - **Security Repository**: Selected `clerkId: true` in `findUserPermissions()` query inside [repository.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/security/repository.ts) to provide the Clerk identifier expected by development-only bypass blocks in admin actions.
+- **Actions Type Exports**: Rerouted action-layer type exports in `src/actions/admin/index.ts` to fetch directly from domain contracts or from `types.ts` (non-action, normal TS modules), removing all type exports from `"use server"` action files themselves to resolve Next.js Turbopack client-stub compilation failures.
+- **Actions Cleanup**: Cleaned up `"use server"` action files by removing all `export type` declarations from `analytics.ts`, `dashboard.ts`, `users.ts`, `professionals.ts`, `projects.ts`, `settings.ts`, `services.ts`, `stores.ts`, `properties.ts`, `leads.ts`, `audit.ts`, `verification.ts`, and `onboarding-remediation.ts`.
+- **Centralized Types**: Consolidated onboarding remediation and filter types into the non-action module `types.ts`.
+- **Table Imports**: Adjusted table column components to import types directly from the central actions index `@/actions/admin`.
 
 **Verification:**
 
-- `pnpm run admin:check-types` → pass (exit 0)
-- `pnpm run admin:test:all` → pass (368 of 368 tests passed)
+- `pnpm run check-types` (in `apps/admin`) → pass (exit 0)
+- `pnpm run test` (in `apps/admin`) → pass (369 of 369 tests passed)
 
 ## [2026-06-04] Phase 12 — Security Hardening Pass
 

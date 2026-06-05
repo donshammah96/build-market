@@ -2,9 +2,6 @@
 
 import { safeAction } from "./shared";
 import { dashboardService } from "@/lib/domains/dashboard/service";
-import type { DashboardStats } from "@/lib/domains/dashboard/contracts";
-
-export type { DashboardStats };
 
 /**
  * Fetches platform-wide statistics for the admin dashboard.

@@ -164,7 +164,7 @@ export interface VerificationDetails {
 
 export const PaginationSchema = z.object({
   page: z.number().min(1).default(1),
-  limit: z.number().min(1).max(100).default(10),
+  limit: z.number().min(1).max(1000).default(10),
   search: z.string().optional(),
 });
 
@@ -213,7 +213,7 @@ export const VerificationFilterSchema = z.object({
     .enum(["UNVERIFIED", "PENDING", "VERIFIED", "REJECTED", "NEEDS_CORRECTION"])
     .default("PENDING"),
   page: z.number().min(1).default(1),
-  limit: z.number().min(1).max(100).default(20),
+  limit: z.number().min(1).max(1000).default(20),
   sortBy: z.enum(["submittedAt", "createdAt"]).default("submittedAt"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
@@ -333,3 +333,47 @@ export function parseBatchVerifyDocuments(
 
   return result.data;
 }
+
+// ============================================================================
+// Onboarding Remediation Types
+// ============================================================================
+
+export type AdminOnboardingReconciliationResult = {
+  userId: string;
+  clerkId: string;
+  db: {
+    role: string | null;
+    status: string | null;
+    isOnboarded: boolean | null;
+    isProfileComplete: boolean | null;
+  };
+  clerk: {
+    role: string | null;
+    status: string | null;
+    isOnboarded: boolean | null;
+    isProfileComplete: boolean | null;
+  };
+  mismatches: Array<"role" | "status" | "isOnboarded" | "isProfileComplete">;
+  inSync: boolean;
+  pendingOnboardingIdempotencyKeys: number;
+};
+
+export type AdminOnboardingClerkSyncResult = {
+  userId: string;
+  clerkId: string;
+  metadata: {
+    role: string;
+    isOnboarded: true;
+    status?: string;
+    isProfileComplete?: true;
+  };
+  synced: true;
+};
+
+export type AdminOnboardingIdempotencyReconcileResult = {
+  key: string;
+  scope: string;
+  previousStatus: "PENDING";
+  currentStatus: "FAILED";
+  reconciled: true;
+};

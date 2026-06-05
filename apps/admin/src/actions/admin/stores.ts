@@ -14,16 +14,13 @@ import type {
 } from "@/lib/domains/stores/contracts";
 import { omitUndefined } from "@/lib/utils";
 
-export type { StoreListItem };
-export type StoreDetails = StoreDetailResult;
-
 // ============================================================================
 // Schemas
 // ============================================================================
 
 const StoreFilterSchema = z.object({
   page: z.number().min(1).default(1),
-  limit: z.number().min(1).max(100).default(10),
+  limit: z.number().min(1).max(1000).default(10),
   search: z.string().optional(),
   verified: z.boolean().optional(),
   featured: z.boolean().optional(),
@@ -45,14 +42,10 @@ const UpdateStoreSchema = z.object({
   // phone, email, website intentionally excluded — not in Store model
 });
 
-export type StoreFilterInput = z.infer<typeof StoreFilterSchema>;
-export type UpdateStoreInput = z.infer<typeof UpdateStoreSchema>;
+type StoreFilterInput = z.infer<typeof StoreFilterSchema>;
+type UpdateStoreInput = z.infer<typeof UpdateStoreSchema>;
 
 const STORE_MUTATION_IDEMPOTENCY_TTL_HOURS = 0.25;
-
-// ============================================================================
-// Actions
-// ============================================================================
 
 /**
  * Fetches a paginated list of stores with filtering and sorting.

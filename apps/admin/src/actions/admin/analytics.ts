@@ -4,35 +4,11 @@ import { safeAction } from "./shared";
 import { AdminOperationName } from "@/lib/observability/operation-names";
 import { financeService } from "@/lib/domains/finance/service";
 import type {
-  AnalyticsInput,
   AnalyticsPeriod,
   GeoEntityType,
-  GeoDistributionEntry,
-  PlatformAnalyticsResult,
-  TimeSeriesEntry,
   TimeSeriesMetric,
-  TopProfessionalEntry,
   TopProfessionalMetric,
 } from "@/lib/domains/finance/contracts";
-
-// Re-export domain types so callers don't need to reach into the domain
-export type {
-  PlatformAnalyticsResult,
-  TimeSeriesEntry,
-  GeoDistributionEntry,
-  TopProfessionalEntry,
-};
-export type {
-  AnalyticsPeriod,
-  TimeSeriesMetric,
-  GeoEntityType,
-  TopProfessionalMetric,
-  AnalyticsInput,
-};
-
-export type PlatformAnalytics = PlatformAnalyticsResult;
-export type TimeSeriesData = TimeSeriesEntry[];
-export type AnalyticsFilterInput = AnalyticsInput;
 
 // ============================================================================
 // Actions

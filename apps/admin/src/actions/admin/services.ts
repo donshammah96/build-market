@@ -6,27 +6,13 @@ import { safeAction } from "./shared";
 import { servicesService } from "@/lib/domains/services/service";
 import type {
   CreateServiceInput,
-  ServiceCategoryDetails,
-  ServiceCategoryListItem,
   ServiceFilterInput,
   UpdateServiceInput,
 } from "@/lib/domains/services/contracts";
 
-export type {
-  ServiceCategoryListItem,
-  ServiceCategoryDetails,
-  ServiceFilterInput,
-  CreateServiceInput,
-  UpdateServiceInput,
-};
-
-// ============================================================================
-// Schemas
-// ============================================================================
-
 const ServiceFilterSchema = z.object({
   page: z.number().min(1).default(1),
-  limit: z.number().min(1).max(100).default(20),
+  limit: z.number().min(1).max(1000).default(20),
   search: z.string().optional(),
   professionType: z.string().optional(),
   isActive: z.boolean().optional(),

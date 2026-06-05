@@ -7,52 +7,17 @@ import {
   safeAction,
   type ActionResponse,
 } from "./shared";
+import type {
+  AdminOnboardingReconciliationResult,
+  AdminOnboardingClerkSyncResult,
+  AdminOnboardingIdempotencyReconcileResult,
+} from "./types";
 
 const ONBOARDING_REMEDIATION_ALLOWED_ROLES = ["SUPER_ADMIN"] as const;
 
 type RemediationActorPayload = {
   userId: string;
   adminRole: string;
-};
-
-export type AdminOnboardingReconciliationResult = {
-  userId: string;
-  clerkId: string;
-  db: {
-    role: string | null;
-    status: string | null;
-    isOnboarded: boolean | null;
-    isProfileComplete: boolean | null;
-  };
-  clerk: {
-    role: string | null;
-    status: string | null;
-    isOnboarded: boolean | null;
-    isProfileComplete: boolean | null;
-  };
-  mismatches: Array<"role" | "status" | "isOnboarded" | "isProfileComplete">;
-  inSync: boolean;
-  pendingOnboardingIdempotencyKeys: number;
-};
-
-export type AdminOnboardingClerkSyncResult = {
-  userId: string;
-  clerkId: string;
-  metadata: {
-    role: string;
-    isOnboarded: true;
-    status?: string;
-    isProfileComplete?: true;
-  };
-  synced: true;
-};
-
-export type AdminOnboardingIdempotencyReconcileResult = {
-  key: string;
-  scope: string;
-  previousStatus: "PENDING";
-  currentStatus: "FAILED";
-  reconciled: true;
 };
 
 function getInternalRemediationSecret(): string {

@@ -4,13 +4,6 @@ import { z } from "zod";
 import { safeAction } from "./shared";
 import { SystemSettingsSchema } from "./types";
 import { settingsService } from "@/lib/domains/settings/service";
-import type { SystemSettings } from "@/lib/domains/settings/contracts";
-
-export type { SystemSettings };
-
-// ============================================================================
-// Helpers
-// ============================================================================
 
 function parseActionInput<T>(
   schema: z.ZodType<T>,
@@ -23,10 +16,6 @@ function parseActionInput<T>(
   }
   return result.data;
 }
-
-// ============================================================================
-// Actions
-// ============================================================================
 
 /**
  * Get current system settings.
