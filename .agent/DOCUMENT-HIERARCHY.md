@@ -95,6 +95,21 @@
 │  apps/client/docs/CHANGELOG.md                              │
 │  Any route-family README or domain-level doc                │
 │                                                             │
+│  apps/admin/docs/PROGRESS-SUMMARY.md                        │
+│    → active phase, slice status, next priority              │
+│  apps/admin/docs/CHANGELOG.md                               │
+│    → overhaul milestones and hardening history              │
+│  apps/admin/docs/DEFECTS.md                                 │
+│    → open defect registry (ADM-001 through ADM-020)         │
+│  apps/admin/docs/VERIFICATION.md                            │
+│    → verification commands, gate policy, latest results     │
+│  apps/admin/docs/ROLLBACK-CONTRACTS.md                      │
+│    → feature flag rollback table and retirement checklist   │
+│  apps/admin/docs/CONTRIBUTING.md                            │
+│    → contributor how-to: slice, action, flag checklists     │
+│  apps/admin/docs/ARCHITECTURE-AUTOPSY.md                    │
+│    → staff-level audit; 23 findings; P0–P3 roadmap          │
+│                                                             │
 │  What belongs here: implementation detail scoped to a       │
 │  single vertical or module. May add specificity to          │
 │  higher-tier rules but must not weaken them.                │
@@ -175,22 +190,27 @@ When a lower-tier document contradicts a higher-tier document:
 
 ## Ownership Map
 
-| Question                                           | Primary Document                                           |
-| -------------------------------------------------- | ---------------------------------------------------------- |
-| Why does a rule exist?                             | Tier 0 ADR (client or admin scope as applicable)           |
-| What are the repo-wide rules?                      | `.github/copilot-instructions.md`                          |
-| How should I structure a new `apps/client` domain? | `.agent/API-TO-FRONTEND-ARCHITECTURE.md`                   |
-| What UI invariants apply to a form or component?   | `.agent/API-TO-FRONTEND-ARCHITECTURE.md` Section 3         |
-| How should I structure a new `apps/admin` domain?  | `.agent/ADMIN-ARCHITECTURE.md`                             |
-| What are the admin auth and capability rules?      | `ADR-ADMIN-001` + `.agent/ADMIN-ARCHITECTURE.md` Section 2 |
-| What are the admin layer boundary rules?           | `ADR-ADMIN-002` + `.agent/ADMIN-ARCHITECTURE.md` Section 3 |
-| What is the current admin overhaul status?         | `apps/admin/docs/PROGRESS-SUMMARY.md`                      |
-| What admin milestones have shipped?                | `apps/admin/docs/CHANGELOG.md`                             |
-| How do I review a system-level proposal?           | `staff-architecture-lens.prompt.md`                        |
-| How do I audit a component or form implementation? | `ui-implementation-standard.prompt.md`                     |
-| What is the current client migration status?       | `apps/client/docs/PROGRESS-SUMMARY.md`                     |
-| What client architectural milestones have shipped? | `apps/client/docs/CHANGELOG.md`                            |
-| How does a specific domain slice work?             | Domain-local `README.md`                                   |
+| Question                                                  | Primary Document                                           |
+| --------------------------------------------------------- | ---------------------------------------------------------- |
+| Why does a rule exist?                                    | Tier 0 ADR (client or admin scope as applicable)           |
+| What are the repo-wide rules?                             | `.github/copilot-instructions.md`                          |
+| How should I structure a new `apps/client` domain?        | `.agent/API-TO-FRONTEND-ARCHITECTURE.md`                   |
+| What UI invariants apply to a form or component?          | `.agent/API-TO-FRONTEND-ARCHITECTURE.md` Section 3         |
+| How should I structure a new `apps/admin` domain?         | `.agent/ADMIN-ARCHITECTURE.md`                             |
+| What are the admin auth and capability rules?             | `ADR-ADMIN-001` + `.agent/ADMIN-ARCHITECTURE.md` Section 2 |
+| What are the admin layer boundary rules?                  | `ADR-ADMIN-002` + `.agent/ADMIN-ARCHITECTURE.md` Section 3 |
+| What is the current admin overhaul status?                | `apps/admin/docs/PROGRESS-SUMMARY.md`                      |
+| What admin milestones have shipped?                       | `apps/admin/docs/CHANGELOG.md`                             |
+| What are the open admin architectural defects?            | `apps/admin/docs/DEFECTS.md`                               |
+| How do I verify the admin app is clean before merging?    | `apps/admin/docs/VERIFICATION.md`                          |
+| How do I roll back or retire an admin feature flag?       | `apps/admin/docs/ROLLBACK-CONTRACTS.md` + `ADR-ADMIN-009`  |
+| How do I add a new admin domain slice, action, or flag?   | `apps/admin/docs/CONTRIBUTING.md`                          |
+| What are the structural findings and improvement roadmap? | `apps/admin/docs/ARCHITECTURE-AUTOPSY.md`                  |
+| How do I review a system-level proposal?                  | `staff-architecture-lens.prompt.md`                        |
+| How do I audit a component or form implementation?        | `ui-implementation-standard.prompt.md`                     |
+| What is the current client migration status?              | `apps/client/docs/PROGRESS-SUMMARY.md`                     |
+| What client architectural milestones have shipped?        | `apps/client/docs/CHANGELOG.md`                            |
+| How does a specific domain slice work?                    | Domain-local `README.md`                                   |
 
 ---
 
@@ -200,8 +220,13 @@ When a lower-tier document contradicts a higher-tier document:
 - `.agent/API-TO-FRONTEND-ARCHITECTURE.md` — `apps/client` canonical architecture
 - `.agent/ADMIN-ARCHITECTURE.md` — `apps/admin` canonical architecture
 - `apps/client/docs/adr/` — all accepted client ADRs
-- `apps/admin/docs/adr/` — all accepted admin ADRs
+- `apps/admin/docs/adr/` — all accepted admin ADRs (ADR-ADMIN-001 through ADR-ADMIN-009; each now includes Alternatives Considered and Revision History)
 - `apps/client/docs/PROGRESS-SUMMARY.md` — current client migration queue and slice status
 - `apps/client/docs/CHANGELOG.md` — client architectural milestones and hardening history
-- `apps/admin/docs/PROGRESS-SUMMARY.md` — current admin overhaul phase and slice status
+- `apps/admin/docs/PROGRESS-SUMMARY.md` — current admin overhaul phase, slice status, and next priority
 - `apps/admin/docs/CHANGELOG.md` — admin overhaul milestones and hardening history
+- `apps/admin/docs/DEFECTS.md` — open defect registry (ADM-001 through ADM-020) with severity, class, and owner
+- `apps/admin/docs/VERIFICATION.md` — verification commands, gate policy, and latest results
+- `apps/admin/docs/ROLLBACK-CONTRACTS.md` — feature flag rollback contracts, irreversible-state tracker, retirement checklist
+- `apps/admin/docs/CONTRIBUTING.md` — contributor guide: domain slice, action, and feature flag checklists
+- `apps/admin/docs/ARCHITECTURE-AUTOPSY.md` — staff-level architectural audit; 23 findings; P0–P3 improvement roadmap

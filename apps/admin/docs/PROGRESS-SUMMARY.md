@@ -1,46 +1,26 @@
 # apps/admin Overhaul Progress Summary
 
-> Read this document before continuing the admin overhaul. `apps/admin/docs/progress/REFACTOR-PROMPT.md` remains the source prompt; this file is the canonical execution surface for current phase state, open defects, and verification.
+> This document tracks the current phase, slice status, and next priority. For supporting detail, see:
+>
+> - **Open/resolved defects** → [`DEFECTS.md`](DEFECTS.md)
+> - **Verification commands & latest results** → [`VERIFICATION.md`](VERIFICATION.md)
+> - **Feature flag rollback contracts** → [`ROLLBACK-CONTRACTS.md`](ROLLBACK-CONTRACTS.md)
+> - **How to contribute** → [`CONTRIBUTING.md`](CONTRIBUTING.md)
+> - **Architecture autopsy findings** → [`ARCHITECTURE-AUTOPSY.md`](ARCHITECTURE-AUTOPSY.md)
+
+---
 
 ## Active Phase
 
-**Phase:** Phase 12 — Security Hardening Pass (complete)
-**Status:** Completed and fully verified the Security Hardening Pass. Enforced OWASP ASVS L2 security controls, step-up authentication boundaries, strict Zod schema protection (.strict()) on mutations to prevent mass-assignment, and resolved all remaining environment boundary, `@ts-nocheck`, and unstructured logging drift findings. Verified check-types, env contract, strict security drift, and all tests successfully (368/368 passing tests).
+**Phase:** Post-Phase-12 — Architecture Autopsy & Documentation Hardening (in progress)
 
-**Completed:**
+**Status:** Phase 12 Security Hardening Pass completed and fully verified (368/368 tests, zero drift findings, zero type errors). Documentation findings from the architecture autopsy (F-Doc1, F-Doc2, F-Doc3) implemented on 2026-06-05.
 
-- Phase 0 autopsy report created at `apps/admin/docs/progress/AUTOPSY-REPORT.md`.
-- Phase 1 ADR foundation created under `apps/admin/docs/adr/`.
-- Phase 2 tooling scaffold added: env boundary module, env templates, env contract checker, security drift reporter, root/admin scripts, tightened TypeScript/ESLint config, admin CI jobs, and changelog guard.
-- Phase 3 auth hardening foundation added: canonical `AdminActor`, hardened `safeAction`, typed `errorDetails`, capability policy map, high-risk registry, recent-auth enforcement, actor-scoped rate limits, and policy tests.
-- Phase 10 feature flag foundation added and tagged: env-driven v2 flags, route gates, sidebar route switching, rollback docs, and feature-flag tests.
-- Phase 4 users domain slice added: users contracts, repository, service, typed results, read-action service wiring, and users domain tests.
-- Phase 4 verification domain slice added: verification contracts, repository, service, typed results, policy checks, queue/stat tests, and repository contract tests.
-- Phase 4 content domain slice added: content contracts, repository, service, typed results, policy checks, moderation queue tests, and repository contract tests.
-- Phase 4 finance domain slice added: finance contracts, repository, service, typed results, policy checks, overview tests, and repository contract tests.
-- Phase 4 audit domain slice added: audit contracts, repository, service, typed results, policy checks, audit page/stat tests, and repository contract tests.
-- Phase 4 checkpoint merged on `integration/admin-overhaul` and tagged `admin-overhaul/phase-4-complete`.
-- Phase 5 users action slice added and merged; tag `admin-overhaul/phase-5-complete` pushed.
-- Phase 5 verification action slice added, merged, and bug-fixed.
-- Phase 7 (Track C) observability foundation: structured logger, correlation threading, typed `AdminOperationName` registry (40+ ops), `safeAction`/`safeVerificationAction` integration. Tag `admin-overhaul/phase-7-complete` pushed.
-- Track A — Phase 5 Audit/Export Action Slice added: migrated `audit.ts` and `compliance/route.ts`; extended audit domain contracts/repository/service with export and distinct-action support; 8 new action-boundary tests + 8 new service tests. Drift: −1 direct-Prisma action file, −2 `.parse()`, −1 `@ts-nocheck`, −3 unstructured logs.
-- Track B UI token system: `tokens.css` with 100+ design tokens, dark mode overrides, skeleton animation; `globals.css` import; `loading.tsx` for 4 v2 route segments.
-- Finance/Analytics + Stores/Properties Action Slice added: implemented full `stores` and `properties` domain layers (contracts, repository, service), extended `finance` domain for advanced analytics, and rewrote analytics, stores, and properties actions using `safeAction` to eliminate direct Prisma, `@ts-nocheck`, and legacy logging. Achieved 100% test coverage with zero type check or runtime regressions.
-- Leads, Services, & Professionals Action Overhaul with UI Hardening added: implemented full domain slices (`leads`, `services`, `professionals`) to completely eliminate direct Prisma access and unstructured log traces from their server actions. Upgraded UI layers (`CardList.tsx`, `AppBarChart.tsx`, `AddUser.tsx`) to utilize native Tailwind CSS v4 parentheses design tokens `(--variable)`, fully resolving legacy compile silences (`// @ts-nocheck`). Hardened `/api/admin/compliance/queue-status` route with robust profile authorization checks, structured log wrappers, and test suites.
-- Dashboard, Projects, Settings, & GDPR Action Overhaul added: implemented full domain slices (`dashboard`, `projects`, `settings`, `gdpr`) to eliminate direct Prisma database access, legacy validation throws, and unstructured logs. Migrated all associated server actions and routes using `safeAction`, enforcing recentAuth (180s) and audit logging on Tier 1 settings mutations, and achieved 100% test coverage with 366 passing tests.
-- Refactoring & Drift Reduction completed: resolved direct Prisma access in the action layer, eliminated action-layer Zod `.parse()` calls, ensured audit compliance for high-risk verify route files, and reduced environment boundary drift.
-- Track A Phase 6 GDPR/data export slice completed: migrated S3/R2 settings, queue workers, job orchestrator, encryption methods, and notification email services off `process.env` and unstructured log outputs, replacing them with type-safe `adminEnvConfig` variables and `StructuredLogger` events.
-- Phase 8 — Audit Log Implementation completed: implemented robust domain-level audit logging and automatic safeAction integration with 368 passing tests. Added dynamic mapping of actor profile information and client request metadata, resolving exactOptionalPropertyTypes compilation checks.
-- Phase 12 — Security Hardening Pass completed: resolved all environment boundary violations, removed all remaining `@ts-nocheck` directives, deleted obsolete service files, enforced strict schemas on mutation actions, and fully verified that the strict security drift check passes with zero findings.
-
-**Remaining steps:**
-
-- Track B Phase 6 token and route-boundary work after the current action slice lands, keeping UI-only changes isolated from Track A.
-- Continue with any remaining hosted environment deployments.
+---
 
 ## Slice Status Registry
 
-Status codes: compliant, known defect, unaudited/in progress, N/A.
+Status codes: `compliant` · `known defect` · `unaudited/in progress` · `N/A`
 
 | Slice                        | Tier | Auth/Policy | Actions   | Domain/Repo | Tests     | Observability | Overall   |
 | ---------------------------- | ---- | ----------- | --------- | ----------- | --------- | ------------- | --------- |
@@ -53,70 +33,36 @@ Status codes: compliant, known defect, unaudited/in progress, N/A.
 | leads/services/professionals | T2   | compliant   | compliant | compliant   | compliant | compliant     | compliant |
 | UI shell/components          | T3   | N/A         | N/A       | N/A         | compliant | N/A           | compliant |
 
-## Open Defects
-
-1. `ADM-001` | Severity: Critical | Action boundary still permits direct Prisma access in remaining action files (Resolved: 0 direct Prisma files in actions).
-2. `ADM-002` | Severity: Critical | Action-layer `.parse()` remains in 1 call site (Resolved: 0 parse call sites in actions).
-3. `ADM-003` | Severity: Critical | `safeAction` now resolves a canonical `AdminActor`, but remaining legacy action slices still need Phase 5 migration to consume actor/policy options consistently (Resolved: Completed Phase 8 integration).
-4. `ADM-004` | Severity: High | Direct env reads remain in 5 drift findings (Resolved: 0 drift findings).
-5. `ADM-005` | Severity: High | `@ts-nocheck` remains in 7 source files (Resolved: 0 files containing `@ts-nocheck`).
-6. `ADM-006` | Severity: High | Unstructured logging has been resolved in all updated slices, remaining legacy code still has 14 structured-logging drift findings (Resolved: 0 drift findings).
-7. `ADM-007` | Severity: High | Strict TypeScript gate remains fully stabilized.
-8. `ADM-008` | Severity: Medium | Vitest aliasing and stale role expectations are fully verified; root admin suite is solid with 368 green tests.
-9. `ADM-009` | Severity: Medium | ESLint passes but still reports known warnings.
-10. `ADM-010` | Severity: Medium | High-risk verify route files are completely audit-logged (Resolved: 0 missing audit logs).
-
-## Verification Command Reference
-
-```bash
-pnpm run admin:check-types
-pnpm run admin:lint
-pnpm run admin:check-env-contract
-pnpm run admin:report-security-drift
-pnpm run admin:report-security-drift:strict
-pnpm run admin:test:all
-pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
-```
-
-## Latest Verification
-
-- `pnpm run admin:check-types` → pass (exit 0, all files compiled cleanly).
-- `pnpm run admin:lint` → pass with known warnings backlog.
-- `pnpm run admin:check-env-contract` → pass; 59 boundary keys.
-- `pnpm run admin:report-security-drift:strict` → pass (exit 0; zero findings in all categories).
-- `pnpm run admin:test:all` → pass; 46 files passed, 368 of 368 tests passed.
+---
 
 ## Completed Phases
 
-1. Phase 0 Autopsy - completed 2026-05-15.
-2. Phase 1 ADR Foundation - completed 2026-05-15 with ADRs in Proposed status.
-3. Phase 2 Tooling Scaffold - installed 2026-05-15; compile/test gates are green.
-4. Phase 3 Auth Hardening - completed 2026-05-18; checkpoint tag `admin-overhaul/phase-3-complete`.
-5. Phase 10 Feature Flags - completed 2026-05-18; checkpoint tag `admin-overhaul/phase-10-complete`.
-6. Phase 4 Domain/Repository Layer - completed 2026-05-18; checkpoint tag `admin-overhaul/phase-4-complete`.
-7. Phase 5 Users Action Slice - merged 2026-05-21; checkpoint tag `admin-overhaul/phase-5-complete`.
-8. Phase 5 Verification Action Slice - merged 2026-05-21.
-9. Phase 7 (Track C) Observability Foundation - completed 2026-05-21.
-10. Track A — Phase 5 Audit/Export Action Slice - completed 2026-05-21.
-11. Finance/Analytics + Stores/Properties Action Slice - completed 2026-05-21.
-12. Leads, Services, & Professionals Action Overhaul with UI Hardening - completed 2026-05-22.
-13. Refactoring & Drift Reduction (Actions Drift Reduction) - completed 2026-06-04.
-14. Track A Phase 6 GDPR/data export slice - completed 2026-06-04.
-15. Phase 8 Audit Log - completed 2026-06-04; checkpoint tag `admin-overhaul/phase-8-complete`.
-16. Phase 12 Security Hardening Pass - completed 2026-06-04; checkpoint tag `admin-overhaul/phase-12-complete`.
+| Phase             | Description                                          | Completed  | Tag                                |
+| ----------------- | ---------------------------------------------------- | ---------- | ---------------------------------- |
+| Phase 0           | Autopsy Report                                       | 2026-05-15 | —                                  |
+| Phase 1           | ADR Foundation                                       | 2026-05-15 | —                                  |
+| Phase 2           | Tooling Scaffold                                     | 2026-05-15 | —                                  |
+| Phase 3           | Auth Hardening                                       | 2026-05-18 | `admin-overhaul/phase-3-complete`  |
+| Phase 10          | Feature Flags                                        | 2026-05-18 | `admin-overhaul/phase-10-complete` |
+| Phase 4           | Domain/Repository Layer                              | 2026-05-18 | `admin-overhaul/phase-4-complete`  |
+| Phase 5           | Users Action Slice                                   | 2026-05-21 | `admin-overhaul/phase-5-complete`  |
+| Phase 5           | Verification Action Slice                            | 2026-05-21 | —                                  |
+| Phase 7 (Track C) | Observability Foundation                             | 2026-05-21 | `admin-overhaul/phase-7-complete`  |
+| Track A Phase 5   | Audit/Export Action Slice                            | 2026-05-21 | —                                  |
+| —                 | Finance/Analytics + Stores/Properties Slice          | 2026-05-21 | —                                  |
+| —                 | Leads/Services/Professionals Overhaul + UI Hardening | 2026-05-22 | —                                  |
+| —                 | Refactoring & Drift Reduction                        | 2026-06-04 | —                                  |
+| Track A Phase 6   | GDPR/Data Export Slice                               | 2026-06-04 | —                                  |
+| Phase 8           | Audit Log Implementation                             | 2026-06-04 | `admin-overhaul/phase-8-complete`  |
+| Phase 12          | Security Hardening Pass                              | 2026-06-04 | `admin-overhaul/phase-12-complete` |
+| —                 | Documentation Hardening (F-Doc1, F-Doc2, F-Doc3)     | 2026-06-05 | —                                  |
 
-## Rollback Contracts
-
-Phase 10 flags are runtime-readable through `adminEnvConfig`; toggling them requires the platform environment to expose the new value to the Next.js runtime. In hosted environments that freeze env at process start, redeploy or restart after changing the variable.
-
-| Flag                          | Disable with                                       | Rollback effect                                                                              | Data caveat                             | Changelog note                                               |
-| ----------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------ |
-| `admin_v2_user_management`    | `NEXT_PUBLIC_ADMIN_FF_V2_USER_MANAGEMENT=false`    | `/users-v2` redirects to `/users`; sidebar links return to `/users`.                         | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
-| `admin_v2_verification_queue` | `NEXT_PUBLIC_ADMIN_FF_V2_VERIFICATION_QUEUE=false` | `/verifications-v2` redirects to `/verifications`; sidebar links return to `/verifications`. | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
-| `admin_v2_finance_dashboard`  | `NEXT_PUBLIC_ADMIN_FF_V2_FINANCE_DASHBOARD=false`  | `/analytics-v2` redirects to `/analytics`; sidebar links return to `/analytics`.             | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
-| `admin_v2_audit_log_ui`       | `NEXT_PUBLIC_ADMIN_FF_V2_AUDIT_LOG_UI=false`       | `/audit-v2` redirects to `/audit`; sidebar links return to `/audit`.                         | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
-| `admin_v2_structured_logging` | `NEXT_PUBLIC_ADMIN_FF_V2_STRUCTURED_LOGGING=false` | Later structured logging UI/behavior remains disabled.                                       | No irreversible data state in Phase 10. | Add rollback entry under Phase 10 if disabled after release. |
+---
 
 ## Next Priority
 
-Deployment and validation of Phase 12 security hardening changes in staging and production environments.
+1. **P0 (Immediate):** Resolve ADM-011, ADM-012, ADM-013 from `DEFECTS.md` — delete `safeVerificationAction`, remove legacy auth helper exports, remove `logAdminAction` parallel audit path.
+2. **Deployment:** Validate Phase 12 security hardening changes in staging and production environments.
+3. **P1:** Split `shared.ts`, de-duplicate `parseActionInput`, standardise `Result` discriminant.
+
+See `ARCHITECTURE-AUTOPSY.md` for the full priority roadmap (P0–P3).

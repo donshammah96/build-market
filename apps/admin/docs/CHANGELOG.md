@@ -1,5 +1,35 @@
 # apps/admin Changelog
 
+## [2026-06-05] Architecture Autopsy & Documentation Hardening (F-Doc1, F-Doc2, F-Doc3)
+
+### Added
+
+- **Architecture Autopsy**: Created [`docs/ARCHITECTURE-AUTOPSY.md`](ARCHITECTURE-AUTOPSY.md) — a full staff-level architectural audit of `apps/admin` at the Phase 12 baseline. Covers file/folder hierarchy, layer boundary analysis, 23 findings across classes A (architectural), B (structural), C (design pattern), and D (cosmetic/ergonomic), an ordered improvement table (I-1 through I-23, P0–P3), and a priority roadmap.
+- **Contributor Guide**: Created [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) — an 8-section how-to for new contributors covering the layer model, step-by-step domain slice creation, step-by-step action authoring (with full `safeAction`/idempotency/audit rules), feature flag lifecycle, test naming conventions, observability and security pre-merge checklists, and the full verification command sequence.
+- **Defects Registry**: Created [`docs/DEFECTS.md`](DEFECTS.md) — extracted from `PROGRESS-SUMMARY.md`. Contains resolved defects ADM-001–ADM-010 (Phase 0–12) and new autopsy findings ADM-011–ADM-020 with severity, class, status, and owner.
+- **Verification Reference**: Created [`docs/VERIFICATION.md`](VERIFICATION.md) — extracted from `PROGRESS-SUMMARY.md`. Contains all verification commands, a what-each-command-checks table, gate policy (no suppression allowed), and Phase 12 verification results.
+- **Rollback Contracts**: Created [`docs/ROLLBACK-CONTRACTS.md`](ROLLBACK-CONTRACTS.md) — extracted from `PROGRESS-SUMMARY.md`. Contains the active feature flag rollback table, an irreversible-state tracker, and a step-by-step flag retirement checklist linked to ADR-ADMIN-009.
+
+### Changed
+
+- **All 9 ADRs extended** ([ADR-ADMIN-001](adr/ADR-ADMIN-001-admin-authentication-and-authorization-model.md) through [ADR-ADMIN-009](adr/ADR-ADMIN-009-admin-strangler-fig-and-feature-flag-strategy.md)):
+  - Added `## Alternatives Considered` to each ADR (3 alternatives per ADR, each with an explicit rejection rationale explaining _why_ the alternative was declined).
+  - Added `## Revision History` to each ADR (date-stamped table of acceptance and amendments, including Phase 12 ASVS L2 audit updates).
+  - **ADR-ADMIN-009** additionally received: Migration Criteria section (30-day stability window, feature parity, test coverage, observability requirements), a step-by-step retirement checklist (8 steps), and a per-flag owner table.
+- **`PROGRESS-SUMMARY.md` slimmed** — reduced from 123 to ~60 lines. Retains only: active phase status, slice status registry, completed phases table, and next priority. All extracted sections now have dedicated, focused documents with cross-links.
+
+**Files changed:**
+
+- `apps/admin/docs/ARCHITECTURE-AUTOPSY.md` [NEW]
+- `apps/admin/docs/CONTRIBUTING.md` [NEW]
+- `apps/admin/docs/DEFECTS.md` [NEW]
+- `apps/admin/docs/VERIFICATION.md` [NEW]
+- `apps/admin/docs/ROLLBACK-CONTRACTS.md` [NEW]
+- `apps/admin/docs/PROGRESS-SUMMARY.md` [SLIMMED]
+- `apps/admin/docs/adr/ADR-ADMIN-001` through `ADR-ADMIN-009` [EXTENDED]
+
+---
+
 ## [2026-06-05] Development Env, RSC Boundary, and Schema Limit Fixes
 
 ### Fixed
@@ -10,7 +40,7 @@
 
 ## [2026-06-05] Build & Type Safety Fixes
 
-### Changed
+### Changed (Build & Type Safety Fixes)
 
 - **CI Pipeline**: Added workspace packages build step (`pnpm tsc --build tsconfig.json`) prior to type checking in [.github/workflows/ci.yml](file:///c:/Users/User/build-market/.github/workflows/ci.yml) to resolve typescript project reference compilation issues (`TS6305` and `TS2307`).
 - **Security Repository**: Selected `clerkId: true` in `findUserPermissions()` query inside [repository.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/security/repository.ts) to provide the Clerk identifier expected by development-only bypass blocks in admin actions.
@@ -26,7 +56,7 @@
 
 ## [2026-06-04] Phase 12 — Security Hardening Pass
 
-### Added
+### Added (Phase 12 — Security Hardening Pass)
 
 - **Mass-Assignment Protection**: Enforced strict schemas on mutation actions by appending `.strict()` to `UpdateProfileSchema` and `SystemSettingsSchema` in [types.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/types.ts).
 
