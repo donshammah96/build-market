@@ -201,7 +201,7 @@ NATS_MAX_RECONNECT_ATTEMPTS=-1
 
 ## Breaking Changes
 
-### None!
+### None
 
 The implementation is **100% backward compatible**:
 

@@ -10,7 +10,7 @@ const sc = StringCodec();
 export class JetStreamProducer {
   private client: NatsClient | null = null;
   private serviceName: string;
-  private config?: Partial<NatsConfig>;
+  private config?: Partial<NatsConfig> | undefined;
 
   constructor(serviceName: string, config?: Partial<NatsConfig>) {
     this.serviceName = serviceName;
@@ -55,11 +55,16 @@ export class JetStreamProducer {
     }
 
     if (options?.expect) {
-      pubOpts.expect = {
-        lastMsgID: options.expect.lastMsgId,
-        lastSequence: options.expect.lastSequence,
-        streamName: options.expect.streamName,
-      };
+      pubOpts.expect = {};
+      if (options.expect.lastMsgId !== undefined) {
+        pubOpts.expect.lastMsgID = options.expect.lastMsgId;
+      }
+      if (options.expect.lastSequence !== undefined) {
+        pubOpts.expect.lastSequence = options.expect.lastSequence;
+      }
+      if (options.expect.streamName !== undefined) {
+        pubOpts.expect.streamName = options.expect.streamName;
+      }
     }
 
     if (options?.headers) {

@@ -1,4 +1,4 @@
-import { AdminRole } from "@build/db";
+import { AdminRole } from "@build/enums";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 
 export const AdminFeatureFlag = {

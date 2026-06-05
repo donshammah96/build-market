@@ -80,15 +80,47 @@ function isStaticBuildPhase(): boolean {
   );
 }
 
+function cleanEnv(
+  rawEnv: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(rawEnv)) {
+    if (value === undefined) continue;
+
+    // Strip surrounding quotes if present
+    let cleanedValue = value.trim();
+    if (
+      (cleanedValue.startsWith('"') && cleanedValue.endsWith('"')) ||
+      (cleanedValue.startsWith("'") && cleanedValue.endsWith("'"))
+    ) {
+      cleanedValue = cleanedValue.slice(1, -1).trim();
+    }
+
+    // Convert empty strings to undefined (omitted)
+    if (cleanedValue === "") {
+      continue;
+    }
+
+    // Normalize specific fields
+    if (key === "QUEUE_PROVIDER") {
+      cleanedValue = cleanedValue.toLowerCase();
+    }
+
+    env[key] = cleanedValue;
+  }
+  return env;
+}
+
 function validateAdminEnv(): AdminEnvConfig {
-  const parsed = adminEnvSchema.safeParse(process.env);
+  const cleanedEnv = cleanEnv(process.env);
+  const parsed = adminEnvSchema.safeParse(cleanedEnv);
 
   if (parsed.success) {
     return parsed.data;
   }
 
   if (isStaticBuildPhase()) {
-    return adminEnvSchema.partial().parse(process.env) as AdminEnvConfig;
+    return adminEnvSchema.partial().parse(cleanedEnv) as AdminEnvConfig;
   }
 
   const details = parsed.error.issues

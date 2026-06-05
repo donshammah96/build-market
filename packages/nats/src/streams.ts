@@ -24,7 +24,7 @@ function isNotFoundError(error: unknown): boolean {
  * Stream management utilities for JetStream
  */
 export class StreamManager {
-  private config?: Partial<NatsConfig>;
+  private config?: Partial<NatsConfig> | undefined;
 
   constructor(config?: Partial<NatsConfig>) {
     this.config = config;

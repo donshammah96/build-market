@@ -33,7 +33,7 @@ export class JetStreamConsumer {
   private client: NatsClient | null = null;
   private serviceName: string;
   private groupName: string;
-  private config?: Partial<NatsConfig>;
+  private config?: Partial<NatsConfig> | undefined;
   private consumers: Consumer[] = [];
   private running: boolean = false;
 

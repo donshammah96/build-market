@@ -1,8 +1,20 @@
 # apps/admin Changelog
 
-## [2026-06-05] Architecture Autopsy & Documentation Hardening (F-Doc1, F-Doc2, F-Doc3)
+## [2026-06-05] Copilot Instructions Sync & Workspace Type-Checking Fixes
 
 ### Added
+
+- **Copilot Instructions**: Registered `.github/instructions/apps-admin-adr-authoring.instructions.md` under scoped instruction map.
+- **Key Commands**: Documented strict drift command `pnpm run admin:report-security-drift:strict`.
+- **Admin Hard Rules**: Documented explicit deprecations for legacy helpers `assertAdmin` (ADM-012), `safeVerificationAction` (ADM-011), and `logAdminAction` (ADM-013).
+
+### Fixed
+
+- **TypeScript Compilation**: Resolved multiple `exactOptionalPropertyTypes` type mismatch failures in `@build/nats` (`client.ts`, `producer.ts`, `consumer.ts`, `streams.ts`) to allow workspace type check and Next.js builds to compile cleanly.
+
+## [2026-06-05] Architecture Autopsy & Documentation Hardening (F-Doc1, F-Doc2, F-Doc3)
+
+### Added (Architecture Autopsy & Documentation Hardening (F-Doc1, F-Doc2, F-Doc3))
 
 - **Architecture Autopsy**: Created [`docs/ARCHITECTURE-AUTOPSY.md`](ARCHITECTURE-AUTOPSY.md) — a full staff-level architectural audit of `apps/admin` at the Phase 12 baseline. Covers file/folder hierarchy, layer boundary analysis, 23 findings across classes A (architectural), B (structural), C (design pattern), and D (cosmetic/ergonomic), an ordered improvement table (I-1 through I-23, P0–P3), and a priority roadmap.
 - **Contributor Guide**: Created [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) — an 8-section how-to for new contributors covering the layer model, step-by-step domain slice creation, step-by-step action authoring (with full `safeAction`/idempotency/audit rules), feature flag lifecycle, test naming conventions, observability and security pre-merge checklists, and the full verification command sequence.
@@ -32,7 +44,7 @@
 
 ## [2026-06-05] Development Env, RSC Boundary, and Schema Limit Fixes
 
-### Fixed
+### Fixed (Development Env, RSC Boundary, and Schema Limit)
 
 - **Database Connection**: Fixed database connection failure (`ECONNREFUSED` / `PrismaClientKnownRequestError`) in development mode by commenting out the default `DATABASE_URL` and `DIRECT_URL` placeholders in `apps/admin/.env.development` and commenting out duplicate, non-functional `DATABASE_URL` / `POSTGRES_URL` entries pointing to `localhost:5434` in the main gitignored `apps/admin/.env` file. This resolves the loading priority issues, allowing Next.js to cleanly fall back to the active Supabase connection string.
 - **RSC Table Boundary**: Resolved React Server Component runtime boundary error (`getUserColumns is on the client. It's not possible to invoke a client function from the server`) on the users list page by introducing the Client Component wrapper [UsersTableClient](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/users/users-table-client.tsx>) that encapsulates the client-side column generation logic.

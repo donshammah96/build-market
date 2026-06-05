@@ -3,7 +3,7 @@ description: "Use for Postman collection-level post-response test script generat
 applyTo: "**/*-post-c-pm-*"
 ---
 
-Last aligned with canonical on: 2026-04-04.
+Last aligned with canonical on: 2026-06-05.
 
 ## Instructions
 

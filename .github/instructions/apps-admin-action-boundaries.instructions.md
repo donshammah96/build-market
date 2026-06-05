@@ -5,7 +5,7 @@ applyTo: "apps/admin/src/actions/admin/**"
 
 # Admin Action Boundary
 
-Last aligned with canonical on: 2026-15-05.
+Last aligned with canonical on: 2026-06-05.
 
 ## Scope
 
@@ -23,7 +23,7 @@ When existing server action conventions conflict with rules here, follow this fi
 
 ### Patterns
 
-1. Use safeAction and assertAdmin patterns for protected flows.
+1. All authenticated admin mutations must use the safeAction wrapper. Do not use legacy assertAdmin or assertVerificationAdmin helpers.
 2. Keep admin action implementations consistent with existing server action conventions.
 
 ### Role Enforcement

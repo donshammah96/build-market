@@ -58,7 +58,7 @@ function getDefaultConfig(): NatsConfig {
   const env = process.env.NODE_ENV || "development";
   const isProd = env === "production";
 
-  return {
+  const config: NatsConfig = {
     servers: process.env.NATS_URL || "nats://localhost:4222",
     name: process.env.NATS_CLIENT_NAME || `build-market-${env}`,
     reconnect: true,
@@ -74,10 +74,19 @@ function getDefaultConfig(): NatsConfig {
       process.env.NATS_TIMEOUT || (isProd ? "10000" : "5000"),
       10,
     ),
-    token: process.env.NATS_TOKEN,
-    user: process.env.NATS_USER,
-    pass: process.env.NATS_PASS,
   };
+
+  if (process.env.NATS_TOKEN !== undefined) {
+    config.token = process.env.NATS_TOKEN;
+  }
+  if (process.env.NATS_USER !== undefined) {
+    config.user = process.env.NATS_USER;
+  }
+  if (process.env.NATS_PASS !== undefined) {
+    config.pass = process.env.NATS_PASS;
+  }
+
+  return config;
 }
 
 /**
@@ -168,12 +177,23 @@ export async function createNatsClient(
       servers: Array.isArray(mergedConfig.servers)
         ? mergedConfig.servers
         : [mergedConfig.servers],
-      name: mergedConfig.name,
-      reconnect: mergedConfig.reconnect,
-      maxReconnectAttempts: mergedConfig.maxReconnectAttempts,
-      reconnectTimeWait: mergedConfig.reconnectTimeWait,
-      timeout: mergedConfig.timeout,
     };
+
+    if (mergedConfig.name !== undefined) {
+      connectionOptions.name = mergedConfig.name;
+    }
+    if (mergedConfig.reconnect !== undefined) {
+      connectionOptions.reconnect = mergedConfig.reconnect;
+    }
+    if (mergedConfig.maxReconnectAttempts !== undefined) {
+      connectionOptions.maxReconnectAttempts = mergedConfig.maxReconnectAttempts;
+    }
+    if (mergedConfig.reconnectTimeWait !== undefined) {
+      connectionOptions.reconnectTimeWait = mergedConfig.reconnectTimeWait;
+    }
+    if (mergedConfig.timeout !== undefined) {
+      connectionOptions.timeout = mergedConfig.timeout;
+    }
 
     // Add authentication if provided
     if (mergedConfig.token) {
@@ -290,9 +310,8 @@ export function isNatsConnected(): boolean {
 export function getConnectionStatus(): ConnectionStatus {
   const defaultConfig = getDefaultConfig();
 
-  return {
+  const status: ConnectionStatus = {
     connected: isNatsConnected(),
-    server: natsClient?.connection.getServer(),
     metrics: { ...connectionMetrics },
     config: {
       servers: defaultConfig.servers,
@@ -300,6 +319,13 @@ export function getConnectionStatus(): ConnectionStatus {
       environment: process.env.NODE_ENV || "development",
     },
   };
+
+  const server = natsClient?.connection.getServer();
+  if (server !== undefined) {
+    status.server = server;
+  }
+
+  return status;
 }
 
 /**

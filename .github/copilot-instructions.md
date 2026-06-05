@@ -43,6 +43,7 @@ Deconstructed instruction map:
 - `apps-client-testing-risk.instructions.md` for `apps/client/__tests__/**`
 - `apps-client-adr-authoring.instructions.md` for `apps/client/docs/adr/**`
 - `apps-admin-action-boundaries.instructions.md` for `apps/admin/src/actions/admin/**` — governs `safeAction` wrapper, `AdminActor` forwarding, `.safeParse()` validation, domain service delegation, and declarative audit log requirements
+- `apps-admin-adr-authoring.instructions.md` for `apps/admin/docs/adr/**` — governs admin ADR structure, verification commands, rollout sequence, and data-migration notes
 
 Governance:
 
@@ -75,6 +76,7 @@ pnpm run client:tsc-noemit
 pnpm run admin:check-types
 pnpm run admin:check-env-contract
 pnpm run admin:report-security-drift
+pnpm run admin:report-security-drift:strict
 pnpm run admin:test:all
 ```
 
@@ -312,7 +314,7 @@ Core components: `JetStreamProducer`, `JetStreamConsumer`, `StreamManager`, `cre
 
 > **Canonical architecture guide:** `.agent/ADMIN-ARCHITECTURE.md` — read this before touching `apps/admin` code.
 > **Admin ADR precedent:** `apps/admin/docs/adr/ADR-ADMIN-001` through `ADR-ADMIN-009`
-> **Current overhaul state:** `apps/admin/docs/PROGRESS-SUMMARY.md` (Phases 0–5 complete; Phases 6–12 queued)
+> **Current overhaul state:** `apps/admin/docs/PROGRESS-SUMMARY.md` (Phases 0–12 complete; post-Phase-12 autopsy defects/cleanup queued)
 
 `apps/admin` differs materially from `apps/client`. It is a Next.js app with a `src/` layout that uses server actions as its primary interaction model, not the browser-facade + API-route pattern of the client app.
 
@@ -363,6 +365,9 @@ New admin behavior ships behind `AdminFeatureFlag` values. Old routes remain fun
 5. High-risk operations must have declarative `auditLog` in `safeAction`.
 6. Direct `process.env` reads in non-bootstrap files are a security drift finding.
 7. Do not apply `apps/client` resilience, Redis, or NATS patterns in `apps/admin` — the admin app does not use them.
+8. Use `safeAction` for mutations and `resolveAdminRouteActor()` for route handlers. Never use legacy `assertAdmin` or `assertVerificationAdmin` helpers (tracked as ADM-012).
+9. Never use `safeVerificationAction`; use `safeAction` instead (tracked as ADM-011).
+10. Never use `logAdminAction`; use the declarative `safeAction` `auditLog` option instead (tracked as ADM-013).
 
 ## Staff Engineer Mandate
 
@@ -476,4 +481,4 @@ Enforcement rules:
 - A PR that changes architecture without updating the relevant ADR is blocked at review.
 - Completed progress docs must be moved to `docs/archive/` — not left in `docs/progress/` as stale snapshots.
 - Ephemeral notes must never be referenced from code, ADRs, or living documents.
-- Completions must be summarized in `apps/client/docs/CHANGELOG.md`.
+- Completions must be summarized in `apps/client/docs/CHANGELOG.md` for any changes that touches apps/client, and `apps/admin/docs/CHANGELOG.md` for any changes that touches apps/admin.
