@@ -59,7 +59,17 @@ const sharedMock = vi.hoisted(() => ({
       }
     },
   ),
-  logAdminAction: vi.fn().mockResolvedValue(undefined),
+  parseActionInput: vi.fn(
+    (schema: { safeParse: (input: unknown) => unknown }, input: unknown) => {
+      const result = schema.safeParse(input) as
+        | { success: true; data: unknown }
+        | { success: false; error: { issues: Array<{ message?: string }> } };
+      if (!result.success) {
+        throw new Error(result.error.issues[0]?.message ?? "Invalid input");
+      }
+      return result.data;
+    },
+  ),
 }));
 
 vi.mock("@clerk/nextjs/server", () => ({
@@ -70,7 +80,7 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
-vi.mock("@/lib/config/store.config", () => ({
+vi.mock("@/lib/domains/stores/store.config", () => ({
   STORE_CONFIG: {
     IDEMPOTENCY_KEY_TTL_HOURS: 1,
   },

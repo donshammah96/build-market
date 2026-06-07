@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { VerificationStatus } from "@build/db";
-import { safeAction, safeVerificationAction } from "./shared";
-import { AdminOperationName } from "@/lib/observability/operation-names";
+import { safeAction } from "@/_core/safe-action";
+import { AdminOperationName } from "@/lib/infrastructure/operation-names";
 import { propertiesService } from "@/lib/domains/properties/service";
 import type {
   PropertyStatusValue,
@@ -147,10 +147,10 @@ export async function updateProperty(
 
 /**
  * Toggles property featured status.
- * Requires MANAGE_CONTENT capability (uses safeVerificationAction for freshness).
+ * Requires MANAGE_CONTENT capability.
  */
 export async function togglePropertyFeatured(propertyId: string) {
-  return safeVerificationAction(
+  return safeAction(
     AdminOperationName.TOGGLE_PROPERTY_FEATURED,
     async ({ actor }) => {
       const result = await propertiesService.togglePropertyFeatured(
@@ -185,7 +185,7 @@ export async function togglePropertyFeatured(propertyId: string) {
  * Requires MANAGE_VERIFICATION capability. Enforces 300s session freshness.
  */
 export async function verifyProperty(propertyId: string, notes?: string) {
-  return safeVerificationAction(
+  return safeAction(
     AdminOperationName.VERIFY_PROPERTY,
     async ({ actor }) => {
       const result = await propertiesService.verifyProperty(
@@ -219,7 +219,7 @@ export async function verifyProperty(propertyId: string, notes?: string) {
  * Requires MANAGE_VERIFICATION capability. Enforces 300s session freshness.
  */
 export async function rejectProperty(propertyId: string, reason: string) {
-  return safeVerificationAction(
+  return safeAction(
     AdminOperationName.REJECT_PROPERTY,
     async ({ actor }) => {
       const result = await propertiesService.rejectProperty(
@@ -254,7 +254,7 @@ export async function changePropertyStatus(
   propertyId: string,
   status: PropertyStatusValue,
 ) {
-  return safeVerificationAction(
+  return safeAction(
     AdminOperationName.CHANGE_PROPERTY_STATUS,
     async ({ actor }) => {
       const result = await propertiesService.changePropertyStatus(

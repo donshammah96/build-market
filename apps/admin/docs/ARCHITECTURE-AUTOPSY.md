@@ -930,35 +930,52 @@ docs/
 
 The following improvements are ordered by systemic impact. Each is classified by effort (S/M/L) and risk (Low/Med/High).
 
-| ID   | Finding | Action                                                                       | Effort | Risk | Priority |
-| ---- | ------- | ---------------------------------------------------------------------------- | ------ | ---- | -------- |
-| I-1  | F-A1    | Delete `safeVerificationAction`; migrate call sites to `safeAction`          | S      | Low  | **P0**   |
-| I-2  | F-A2    | Deprecate and delete legacy auth helpers (`assertAdmin`, etc.)               | S      | Low  | **P0**   |
-| I-3  | F-A3    | Remove `logAdminAction`; migrate remaining call sites to declarative audit   | S      | Low  | **P0**   |
-| I-4  | F-S1    | Split `shared.ts` into `_core/{safe-action, client-api, actor-resolver}`     | M      | Low  | **P1**   |
-| I-5  | F-A6    | Extract `parseActionInput` to shared export; remove 7 duplicates             | S      | Low  | **P1**   |
-| I-6  | F-D1    | Standardise `Result<T, E>` on `ok` discriminant; update security layer       | M      | Med  | **P1**   |
-| I-7  | F-A4    | Extract `NavigationSidebar`; move badge count to `Suspense` boundary         | M      | Low  | **P1**   |
-| I-8  | F-S3    | Consolidate `lib/gdpr/` into `domains/gdpr/`                                 | M      | Low  | **P2**   |
-| I-9  | F-S4    | Move `lib/services/verification/` into `domains/verification/internal/`      | M      | Low  | **P2**   |
-| I-10 | F-D2    | Replace `entity: Record<string, any>` with discriminated union               | M      | Med  | **P2**   |
-| I-11 | F-S6    | Reorganise `components/` root; delete orphaned `AppSidebar`, `Navbar`        | S      | Low  | **P2**   |
-| I-12 | F-D4    | Add capability-based nav item visibility                                     | M      | Low  | **P2**   |
-| I-13 | F-D3    | Add `RETIREMENT.md` for v2 shadow routes with migration criteria             | S      | Low  | **P2**   |
-| I-14 | F-S2    | Enforce flat-file rule in action layer; collapse single-file sub-directories | M      | Low  | **P3**   |
-| I-15 | F-A5    | Move domain configs into their domain slice                                  | S      | Low  | **P3**   |
-| I-16 | F-S7    | Collapse single-file folders (`errors/`, `users/`, `observability/`)         | S      | Low  | **P3**   |
-| I-17 | F-O1    | Memoize logger at module-load time                                           | S      | Low  | **P3**   |
-| I-18 | F-O2    | Remove layout-level `syncUserRole()`                                         | S      | Low  | **P3**   |
-| I-19 | F-T1    | Consolidate test root structure                                              | S      | Low  | **P3**   |
-| I-20 | F-T2    | Add component-level tests for `AddUser`, `EditUser`, nav visibility          | M      | Low  | **P3**   |
-| I-21 | F-Doc2  | ~~Write `docs/CONTRIBUTING.md` with new-slice checklist~~ ✅ Done            | M      | None | **P3**   |
-| I-22 | F-Doc3  | ~~Split `PROGRESS-SUMMARY.md` into focused documents~~ ✅ Done               | S      | None | **P3**   |
-| I-23 | F-S5    | Audit `lib/validation/`; delete orphaned schemas                             | M      | Low  | **P3**   |
+**Implementation update (2026-06-05):** The first architecture autopsy implementation pass has landed and been verified. The original findings below are retained for traceability; implementation status is summarized here.
+
+| Status    | Items                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Done      | I-1, I-2, I-3, I-4, I-5, I-6, I-7, I-8, I-9, I-10, I-11, I-12, I-13, I-14, I-15, I-16, I-17, I-18, I-19, I-20, I-23, F-O3 |
+| Remaining | —                                                                                                                         |
+
+**All autopsy items are now resolved.** Verification evidence: `admin:check-types` passed, `admin:test:all` passed with 49 files and 378/378 tests, `admin:report-security-drift:strict` passed with zero findings, and `admin:lint` passed with 79 known warnings and 0 errors.
+
+| ID   | Finding | Action                                                                                                                        | Effort | Risk | Priority |
+| ---- | ------- | ----------------------------------------------------------------------------------------------------------------------------- | ------ | ---- | -------- |
+| I-1  | F-A1    | Delete `safeVerificationAction`; migrate call sites to `safeAction`                                                           | S      | Low  | **P0**   |
+| I-2  | F-A2    | Deprecate and delete legacy auth helpers (`assertAdmin`, etc.)                                                                | S      | Low  | **P0**   |
+| I-3  | F-A3    | Remove `logAdminAction`; migrate remaining call sites to declarative audit                                                    | S      | Low  | **P0**   |
+| I-4  | F-S1    | Split `shared.ts` into `_core/{safe-action, client-api, actor-resolver}`                                                      | M      | Low  | **P1**   |
+| I-5  | F-A6    | Extract `parseActionInput` to shared export; remove 7 duplicates                                                              | S      | Low  | **P1**   |
+| I-6  | F-D1    | Standardise `Result<T, E>` on `ok` discriminant; update security layer                                                        | M      | Med  | **P1**   |
+| I-7  | F-A4    | Extract `NavigationSidebar`; move badge count to `Suspense` boundary                                                          | M      | Low  | **P1**   |
+| I-8  | F-S3    | Consolidate `lib/gdpr/` into `domains/gdpr/`                                                                                  | M      | Low  | **P2**   |
+| I-9  | F-S4    | Move `lib/services/verification/` into `domains/verification/internal/`                                                       | M      | Low  | **P2**   |
+| I-10 | F-D2    | Replace `entity: Record<string, any>` with discriminated union                                                                | M      | Med  | **P2**   |
+| I-11 | F-S6    | Reorganise `components/` root; delete orphaned `AppSidebar`, `Navbar`                                                         | S      | Low  | **P2**   |
+| I-12 | F-D4    | Add capability-based nav item visibility                                                                                      | M      | Low  | **P2**   |
+| I-13 | F-D3    | ~~Add `RETIREMENT.md` for v2 shadow routes with migration criteria~~ ✅ Done                                                  | S      | Low  | **P2**   |
+| I-14 | F-S2    | ~~Enforce flat-file rule in action layer; collapse single-file sub-directories~~ ✅ Done (documented route-handler exemption) | M      | Low  | **P3**   |
+| I-15 | F-A5    | ~~Move domain configs into their domain slice~~ ✅ Done                                                                       | S      | Low  | **P3**   |
+| I-16 | F-S7    | ~~Collapse single-file folders (`errors/`, `users/`, `observability/`)~~ ✅ Done                                              | S      | Low  | **P3**   |
+| I-17 | F-O1    | ~~Memoize logger at module-load time~~ ✅ Done                                                                                | S      | Low  | **P3**   |
+| I-18 | F-O2    | ~~Remove layout-level `syncUserRole()`~~ ✅ Done                                                                              | S      | Low  | **P3**   |
+| I-19 | F-T1    | ~~Consolidate test root structure~~ ✅ Done                                                                                   | S      | Low  | **P3**   |
+| I-20 | F-T2    | ~~Add component-level tests for `AddUser`, `EditUser`, nav visibility~~ ✅ Done                                               | M      | Low  | **P3**   |
+| I-21 | F-Doc2  | ~~Write `docs/CONTRIBUTING.md` with new-slice checklist~~ ✅ Done                                                             | M      | None | **P3**   |
+| I-22 | F-Doc3  | ~~Split `PROGRESS-SUMMARY.md` into focused documents~~ ✅ Done                                                                | S      | None | **P3**   |
+| I-23 | F-S5    | ~~Audit `lib/validation/`; delete orphaned schemas~~ ✅ Done (README + deprecation notice)                                    | M      | Low  | **P3**   |
 
 ---
 
 ## 12. Priority Roadmap
+
+**Current status (2026-06-07):** All autopsy items are complete. P0 through P3 have been fully resolved. The remaining open items from the table above (I-13, I-14, I-23) were resolved in the 2026-06-07 pass:
+
+- **I-13:** `docs/RETIREMENT.md` created with per-flag migration criteria, feature-parity gate, and retirement checklist for all four v2 shadow routes.
+- **I-14:** `src/actions/admin/README.md` created documenting the flat-file rule and the architectural constraint that exempts Next.js `route.ts` API handlers from the single-file-folder collapse policy.
+- **I-23:** `src/lib/validation/README.md` created with a full audit confirming all 18 schemas are orphaned (zero active imports), a per-file status table, and a deletion runbook.
+
+**Next active priorities:** Deploy remaining changes to staging. Perform the scheduled deletion of `src/lib/validation/` after final import verification. Implement v2 route pages for the four stub routes and begin their 30-day production stability window per `docs/RETIREMENT.md`.
 
 ### P0 — Dead Code & Footgun Removal (immediate)
 

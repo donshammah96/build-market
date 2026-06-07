@@ -203,7 +203,7 @@ describe("updateProperty action", () => {
 });
 
 // ============================================================================
-// verifyProperty (safeVerificationAction — requires fresh auth_time)
+// verifyProperty (policy-driven safeAction freshness)
 // ============================================================================
 
 describe("verifyProperty action", () => {

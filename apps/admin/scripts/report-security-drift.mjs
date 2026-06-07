@@ -68,6 +68,7 @@ const actionFiles = walk("src/actions/admin")
   .filter(
     (file) =>
       !file.includes("__tests__/") &&
+      !file.startsWith("src/actions/admin/_core/") &&
       !file.endsWith("route.ts") &&
       !file.endsWith("shared.ts") &&
       !file.endsWith("types.ts") &&

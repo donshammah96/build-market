@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "@/lib/errors/result";
+import { err, ok, type Result } from "@/lib/result";
 import {
   AdminCapability,
   requireAdminCapability,
@@ -18,7 +18,7 @@ import { leadsRepository } from "./repository";
 
 function requireViewContent(actor: LeadsActor): Result<true, LeadsDomainError> {
   const policy = requireAdminCapability(actor, AdminCapability.VIEW_CONTENT);
-  if (!policy.success) {
+  if (!policy.ok) {
     return err({
       code: "LEADS_POLICY_DENIED",
       message: "Admin capability denied",
@@ -31,7 +31,7 @@ function requireManageContent(
   actor: LeadsActor,
 ): Result<true, LeadsDomainError> {
   const policy = requireAdminCapability(actor, AdminCapability.MANAGE_CONTENT);
-  if (!policy.success) {
+  if (!policy.ok) {
     return err({
       code: "LEADS_POLICY_DENIED",
       message: "Admin capability denied",
@@ -42,7 +42,7 @@ function requireManageContent(
 
 function requireExportData(actor: LeadsActor): Result<true, LeadsDomainError> {
   const policy = requireAdminCapability(actor, AdminCapability.EXPORT_DATA);
-  if (!policy.success) {
+  if (!policy.ok) {
     return err({
       code: "LEADS_POLICY_DENIED",
       message: "Admin capability denied",

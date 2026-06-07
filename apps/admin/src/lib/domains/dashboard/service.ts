@@ -1,5 +1,5 @@
 import { AdminRole } from "@build/db";
-import { err, ok, type Result } from "@/lib/errors/result";
+import { err, ok, type Result } from "@/lib/result";
 import {
   AdminCapability,
   requireAdminCapability,
@@ -15,7 +15,7 @@ function requireViewStats(
   actor: DashboardActor,
 ): Result<true, DashboardDomainError> {
   const policy = requireAdminCapability(actor, AdminCapability.VIEW_FINANCIALS);
-  if (!policy.success && actor.adminRole !== AdminRole.SUPPORT_AGENT) {
+  if (!policy.ok && actor.adminRole !== AdminRole.SUPPORT_AGENT) {
     return err({
       code: "DASHBOARD_POLICY_DENIED",
       message: "Admin capability denied",

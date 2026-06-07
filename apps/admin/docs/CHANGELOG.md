@@ -1,14 +1,156 @@
 # apps/admin Changelog
 
-## [2026-06-05] Copilot Instructions Sync & Workspace Type-Checking Fixes
+## [2026-06-07] v2 shadow route UI tests
 
 ### Added
+
+- Added v2-specific UI tests for the four shadow routes:
+  - **`users-v2/__tests__/page.test.tsx`**: Happy path and error state tests.
+  - **`verifications-v2/__tests__/page.test.tsx`**: Happy path and error state tests, including validation of capability-aware badge rendering.
+  - **`analytics-v2/__tests__/page.test.tsx`**: Happy path and error state tests, validating platform overview and financial card rendering.
+  - **`audit-v2/__tests__/page.test.tsx`**: Happy path and error state tests, verifying stats calculations and filtered audit log item listings.
+
+### Changed
+
+- Updated `docs/RETIREMENT.md` to reflect complete test coverage status for all four flags.
+- Updated `docs/PROGRESS-SUMMARY.md` next priorities to mark the UI tests task as completed.
+
+## [2026-06-07] v2 Route Independent Page Implementations
+
+### Added (v2 Route Implementations)
+
+- **`users-v2/page.tsx`**: Replaced pass-through re-export stub with an independent page that owns its own data fetching, filtering, pagination, and rendering (full feature parity with v1). Adds `data-v2-route="users"` attribute for observability test hooks.
+- **`verifications-v2/page.tsx`**: Replaced stub with independent page. v2 enhancement: capability-aware admin role badge in queue header (resolves the "capability-aware queue filtering" item from `RETIREMENT.md`). Adds `data-v2-route="verifications"`.
+- **`analytics-v2/page.tsx`**: Replaced stub with independent page covering all 8 overview stat cards, revenue panel, verification queue summary, top professionals, and geographic distribution. Adds `data-v2-route="analytics"`.
+- **`audit-v2/page.tsx`**: Replaced stub with independent page covering stats cards, full audit trail log list with filters, details expansion, and pagination. Adds `data-v2-route="audit"`.
+
+### Documentation
+
+- Updated `docs/RETIREMENT.md`: All four per-flag status tables updated from **Stub** → **Independent implementation** / **Feature parity confirmed**. Next step for each flag is enabling in production to begin the 30-day stability window.
+- Updated `docs/PROGRESS-SUMMARY.md`: Next Priority updated to reflect implementations done; production flag enablement is the remaining step.
+
+### Verification
+
+- `pnpm check-types` → pass (zero TypeScript errors).
+- All four v2 route layouts continue to redirect to v1 when their respective feature flags are off — no production behaviour change.
+
+---
+
+## [2026-06-07] Final Autopsy Completion Pass (I-13, I-14, I-23)
+
+### Added (Final Autopsy Completion Pass)
+
+- **`docs/RETIREMENT.md`**: Created v2 route retirement tracker documenting per-flag migration criteria, feature-parity gate (4 criteria), current status for all four v2 shadow routes (`users-v2`, `verifications-v2`, `analytics-v2`, `audit-v2`), and a per-flag retirement checklist. Implements I-13 / F-D3.
+- **`src/actions/admin/README.md`**: Created action layer structure guide documenting the flat-file rule, the Next.js route-handler architectural constraint that exempts `route.ts` directories from the collapse policy, and a table of all exempt API route handlers. Implements I-14 / F-S2.
+- **`src/lib/validation/README.md`**: Created deprecation notice for `lib/validation/` confirming all 18 schemas are orphaned (zero active imports), with a per-file audit table and deletion runbook. Implements I-23 / F-S5.
+
+### Removed
+
+- Deleted orphaned `lib/validation/` schemas.
+
+### Verification (Final Autopsy Completion Pass)
+
+- `pnpm run check-types` -> pass (no new TypeScript errors introduced).
+- No runtime logic changed — this pass adds only documentation files.
+
+### Autopsy Items Resolved: P2 Remainder & P3
+
+- I-13 / F-D3: Create `RETIREMENT.md` for v2 shadow routes with migration criteria.
+- I-14 / F-S2: Document flat-file rule; exempt Next.js route handlers from collapse policy.
+- I-23 / F-S5: Audit `lib/validation/`; document all 18 schemas as orphaned with deletion runbook.
+
+---
+
+## [2026-06-07] P2 & P3 Autopsy Refactoring Pass
+
+### Added (P2 & P3 Autopsy Refactoring Pass)
+
+- **Component-Level Unit Tests**: Added unit tests for `NavigationSidebar` (`navigation-sidebar.test.tsx`), `AddUser` (`AddUser.test.tsx`), and `EditUser` (`EditUser.test.tsx`) asserting role-based capability gating, form rendering, custom submissions, validation checks, and mutation handlers.
+
+### Changed (P2 & P3 Autopsy Refactoring Pass)
+
+- **GDPR Domain Consolidation**: Consolidated GDPR-related services, encryption components, and tests (e.g. Compliance, Consent, Anonymization, Export, Asset Cleanup, and Field Encryption) into the dedicated `domains/gdpr/` directory.
+- **Verification Domain Consolidation**: Consolidated internal verification services and tests (Notification, Audit, Entity Verification) into `domains/verification/internal/`.
+- **Idempotency Service Relocation**: Moved the action-layer idempotency service to `lib/infrastructure/idempotency.service.ts` and its test.
+- **Domain Configuration Colocation**: Relocated document, lead, portfolio, professional, project, property, and store configurations from the shared `lib/config/` directory into their respective domain slice folders.
+- **Single-File Folder Cleanups**: Collapsed single-file folders (`errors/`, `users/`, `observability/`) into corresponding core paths (`lib/result.ts`, `domains/users/user-roles.ts`, and `lib/infrastructure/operation-names.ts`).
+- **Component Directory Organization**: Reorganized user forms (moving `AddUser` and `EditUser` to `components/admin/users/`), charts (`components/charts/`), and common layout helpers (`components/layout/`).
+- **Test Suite Reorganization**: Moved action integration tests under `src/actions/admin/__tests__/` and centralized domain services tests.
+
+### Verification (P2 & P3 Autopsy Refactoring Pass)
+
+- `pnpm run check-types` -> pass.
+- `pnpm run test:all` -> pass; 49 files passed, 378 of 378 tests passed.
+- `pnpm run report-security-drift:strict` -> pass; zero findings in all categories.
+- `pnpm run lint` -> pass with 79 known warnings, 0 errors.
+
+### Autopsy Items Resolved
+
+- I-8 / ADM-018: Consolidate `lib/gdpr/` into `domains/gdpr/`.
+- I-9 / ADM-019: Move `lib/services/verification/` into `domains/verification/internal/`.
+- I-15: Move domain configs into their domain slice.
+- I-16: Collapse single-file folders (`errors/`, `users/`, `observability/`).
+- I-19: Consolidate test root structure.
+- I-20: Add component-level tests for `AddUser`, `EditUser`, nav visibility.
+
+## [2026-06-05] Architecture Autopsy Implementation Pass
+
+### Added (Architecture Autopsy Implementation Pass)
+
+- **Action Core Modules**: Split the former `src/actions/admin/shared.ts` god-file into focused `_core` modules for action execution, actor resolution, declarative audit recording, client API calls, DB-resolved permissions, and reusable validation.
+- **Navigation Sidebar**: Added `src/components/admin/navigation-sidebar.tsx` as a server component with capability-based navigation visibility and a Suspense-wrapped verification badge.
+- **Typed Verification Details**: Added per-entity detail types for professional, store, and property verification details in both the domain contract and action surface.
+- **Typed Compliance Queue Payloads**: Added discriminated incident metadata and typed audit metadata payloads for compliance queue jobs.
+
+### Changed (Architecture Autopsy Implementation Pass)
+
+- **Canonical Action Boundary**: Removed `safeVerificationAction` and migrated verification-sensitive actions to `safeAction`, relying on the policy map for capability, session freshness, rate limiting, and audit behavior.
+- **Legacy Helper Removal**: Removed legacy public helper exports (`assertAdmin`, `assertVerificationAdmin`, `requireAdminGranularRole`, and `logAdminAction`) from the admin action surface.
+- **Audit Path Consolidation**: Migrated legacy verification route audit writes from `logAdminAction` to `auditService.recordAdminAuditEvent`.
+- **Parser De-duplication**: Replaced duplicated `parseActionInput` helpers across action slices with the shared `_core/validation.ts` helper.
+- **Security Result Contract**: Standardized `requireAdminCapability()` on the canonical `{ ok: true | false }` result discriminant from `src/lib/errors/result.ts`.
+- **Dashboard Shell**: Reduced `(dashboard)/layout.tsx` to shell composition, removed layout-level `syncUserRole()`, sourced role display from DB-resolved permissions, and moved nav and verification badge loading into `NavigationSidebar`.
+- **Security Drift Reporter**: Updated `report-security-drift.mjs` so action infrastructure files under `src/actions/admin/_core/` are not misclassified as unsafe mutations.
+- **Verification Detail UI**: Updated `VerificationDetailView` to narrow on the discriminated `VerificationDetails.entityType` union instead of reading from `Record<string, any>`.
+
+### Removed (Architecture Autopsy Implementation Pass)
+
+- **Orphaned Components**: Deleted unused `src/components/AppSidebar.tsx` and `src/components/Navbar.tsx`.
+- **Duplicate Execution Primitive**: Deleted `safeVerificationAction`.
+- **Parallel Audit Helper**: Deleted the action-layer `logAdminAction` path.
+
+### Verification (Architecture Autopsy Implementation Pass)
+
+- `pnpm run admin:check-types` -> pass.
+- `pnpm run admin:test:all` -> pass; 46 files passed, 369 of 369 tests passed.
+- `pnpm run admin:report-security-drift:strict` -> pass; zero findings in all categories.
+- `pnpm run admin:lint` -> pass with 79 known warnings, 0 errors.
+
+### Autopsy Items Resolved: P0 & P1
+
+- I-1 / ADM-011: Delete `safeVerificationAction`.
+- I-2 / ADM-012: Remove legacy auth helper exports.
+- I-3 / ADM-013: Remove `logAdminAction` parallel audit path.
+- I-4 / ADM-014: Split `shared.ts` into focused `_core` modules.
+- I-5 / ADM-015: De-duplicate `parseActionInput`.
+- I-6 / ADM-016: Standardize security `Result` on `ok`.
+- I-7 / ADM-017: Extract `NavigationSidebar` and Suspense badge loading.
+- I-10 / ADM-020: Replace verification detail `Record<string, any>` with a discriminated union.
+- I-11: Delete orphaned `AppSidebar` and `Navbar`.
+- I-12: Add capability-based nav item visibility.
+- I-17: Memoize the admin logger at module load.
+- I-18: Remove layout-level `syncUserRole()`.
+- F-O3: Type compliance queue metadata payloads.
+
+## [2026-06-05] Copilot Instructions Sync & Workspace Type-Checking Fixes
+
+### Added (Copilot Instructions Sync & Workspace Type-Checking Fixes)
 
 - **Copilot Instructions**: Registered `.github/instructions/apps-admin-adr-authoring.instructions.md` under scoped instruction map.
 - **Key Commands**: Documented strict drift command `pnpm run admin:report-security-drift:strict`.
 - **Admin Hard Rules**: Documented explicit deprecations for legacy helpers `assertAdmin` (ADM-012), `safeVerificationAction` (ADM-011), and `logAdminAction` (ADM-013).
 
-### Fixed
+### Fixed (Copilot Instructions Sync & Workspace Type-Checking Fixes)
 
 - **TypeScript Compilation**: Resolved multiple `exactOptionalPropertyTypes` type mismatch failures in `@build/nats` (`client.ts`, `producer.ts`, `consumer.ts`, `streams.ts`) to allow workspace type check and Next.js builds to compile cleanly.
 
@@ -22,7 +164,7 @@
 - **Verification Reference**: Created [`docs/VERIFICATION.md`](VERIFICATION.md) — extracted from `PROGRESS-SUMMARY.md`. Contains all verification commands, a what-each-command-checks table, gate policy (no suppression allowed), and Phase 12 verification results.
 - **Rollback Contracts**: Created [`docs/ROLLBACK-CONTRACTS.md`](ROLLBACK-CONTRACTS.md) — extracted from `PROGRESS-SUMMARY.md`. Contains the active feature flag rollback table, an irreversible-state tracker, and a step-by-step flag retirement checklist linked to ADR-ADMIN-009.
 
-### Changed
+### Changed (Architecture Autopsy & Documentation Hardening (F-Doc1, F-Doc2, F-Doc3))
 
 - **All 9 ADRs extended** ([ADR-ADMIN-001](adr/ADR-ADMIN-001-admin-authentication-and-authorization-model.md) through [ADR-ADMIN-009](adr/ADR-ADMIN-009-admin-strangler-fig-and-feature-flag-strategy.md)):
   - Added `## Alternatives Considered` to each ADR (3 alternatives per ADR, each with an explicit rejection rationale explaining _why_ the alternative was declined).
@@ -86,7 +228,7 @@
   - [services/[id]/page.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/services/[id]/page.tsx>)
 - **Leads Filters**: Fixed leads page compilation errors by casting source/project type filters to database enums (`LeadSource` and `ProjectType`) imported from `@build/db`.
 
-### Removed
+### Removed (Phase 12 — Security Hardening Pass)
 
 - **Legacy Services**: Deleted obsolete, unused legacy files containing `@ts-nocheck` directives and outdated database models under `src/lib/services/`:
   - `store-operations.service.ts`

@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "@/lib/errors/result";
+import { err, ok, type Result } from "@/lib/result";
 import {
   AdminCapability,
   requireAdminCapability,
@@ -14,7 +14,7 @@ import { gdprRepository } from "./repository";
 
 function requireExportData(actor: GdprActor): Result<true, GdprDomainError> {
   const policy = requireAdminCapability(actor, AdminCapability.EXPORT_DATA);
-  if (!policy.success) {
+  if (!policy.ok) {
     return err({
       code: "GDPR_POLICY_DENIED",
       message: "Admin capability denied",

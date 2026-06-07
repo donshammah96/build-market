@@ -1,6 +1,6 @@
 import type { AdminRole, Prisma, UserRole } from "@build/db";
 import type { AdminActor } from "@/lib/security/admin-actor";
-import type { AssignableUserRole } from "@/lib/users/user-roles";
+import type { AssignableUserRole } from "./user-roles";
 
 export type AdminUserActor = AdminActor;
 

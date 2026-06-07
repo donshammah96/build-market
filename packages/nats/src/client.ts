@@ -186,7 +186,8 @@ export async function createNatsClient(
       connectionOptions.reconnect = mergedConfig.reconnect;
     }
     if (mergedConfig.maxReconnectAttempts !== undefined) {
-      connectionOptions.maxReconnectAttempts = mergedConfig.maxReconnectAttempts;
+      connectionOptions.maxReconnectAttempts =
+        mergedConfig.maxReconnectAttempts;
     }
     if (mergedConfig.reconnectTimeWait !== undefined) {
       connectionOptions.reconnectTimeWait = mergedConfig.reconnectTimeWait;

@@ -1,9 +1,9 @@
 "use server";
 
-import { safeAction } from "./shared";
+import { safeAction } from "@/_core/safe-action";
 import { auditService } from "@/lib/domains/audit/service";
 import type { AuditLogInput } from "@/lib/domains/audit/contracts";
-import { AdminOperationName } from "@/lib/observability/operation-names";
+import { AdminOperationName } from "@/lib/infrastructure/operation-names";
 
 /**
  * Fetches a paginated, filtered list of audit log entries.

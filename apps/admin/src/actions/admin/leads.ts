@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { LeadSource, LeadStatus, ProjectType } from "@build/db";
-import { safeAction } from "./shared";
+import { safeAction } from "@/_core/safe-action";
+import { parseActionInput } from "@/_core/validation";
 import { leadsService } from "@/lib/domains/leads/service";
 import type {
   LeadFilterInput,
@@ -31,20 +32,6 @@ const UpdateLeadSchema = z.object({
   notes: z.string().optional(),
   followUpDate: z.string().datetime().optional().nullable(),
 });
-
-function parseActionInput<T>(
-  schema: z.ZodType<T>,
-  input: unknown,
-  fallbackMessage: string,
-): T {
-  const result = schema.safeParse(input);
-
-  if (!result.success) {
-    throw new Error(result.error.issues[0]?.message ?? fallbackMessage);
-  }
-
-  return result.data;
-}
 
 // ============================================================================
 // Actions

@@ -1,9 +1,6 @@
 import { AdminRole } from "@build/enums";
 import type { AdminActor } from "./admin-actor";
-
-export type Result<T, E> =
-  | { success: true; data: T }
-  | { success: false; error: E };
+import { err, ok, type Result } from "@/lib/result";
 
 export type AdminAccessRole = "admin" | "verification_admin";
 
@@ -30,7 +27,7 @@ export type AdminPolicyErrorCode =
   | "ADMIN_POLICY_UNKNOWN_CAPABILITY";
 
 export type AdminPolicyError = {
-  code: AdminPolicyErrorCode;
+  error: AdminPolicyErrorCode;
   message: string;
   capability: AdminCapability;
 };
@@ -299,32 +296,26 @@ export function requireAdminCapability(
   capability: AdminCapability,
 ): Result<true, AdminPolicyError> {
   if (actor.adminRole === AdminRole.SUPER_ADMIN) {
-    return { success: true, data: true };
+    return ok(true);
   }
 
   const allowedRoles = ADMIN_CAPABILITY_ROLE_MAP[capability];
 
   if (!allowedRoles) {
-    return {
-      success: false,
-      error: {
-        code: "ADMIN_POLICY_UNKNOWN_CAPABILITY",
-        message: "Unknown admin capability",
-        capability,
-      },
-    };
+    return err({
+      error: "ADMIN_POLICY_UNKNOWN_CAPABILITY",
+      message: "Unknown admin capability",
+      capability,
+    });
   }
 
   if (!allowedRoles.includes(actor.adminRole)) {
-    return {
-      success: false,
-      error: {
-        code: "ADMIN_POLICY_DENIED",
-        message: "Admin capability denied",
-        capability,
-      },
-    };
+    return err({
+      error: "ADMIN_POLICY_DENIED",
+      message: "Admin capability denied",
+      capability,
+    });
   }
 
-  return { success: true, data: true };
+  return ok(true);
 }

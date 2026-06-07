@@ -10,7 +10,7 @@
 import { Queue, Worker, Job } from "bullmq";
 import { createRedisConnection } from "@/lib/queues/redis-connection";
 import { prisma } from "@build/db";
-import { AssetCleanupService } from "@/lib/gdpr/services/asset-cleanup.service";
+import { AssetCleanupService } from "@/lib/domains/gdpr/asset-cleanup/service";
 import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import { adminEnvConfig } from "@/lib/infrastructure/env";

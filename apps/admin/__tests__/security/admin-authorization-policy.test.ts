@@ -106,15 +106,13 @@ describe("admin authorization policy", () => {
         const result = requireAdminCapability(actorWithRole(role), capability);
 
         if (role === AdminRole.SUPER_ADMIN || allowedRoles.includes(role)) {
-          expect(result.success).toBe(true);
+          expect(result.ok).toBe(true);
         } else {
           expect(result).toEqual({
-            success: false,
-            error: {
-              code: "ADMIN_POLICY_DENIED",
-              message: "Admin capability denied",
-              capability,
-            },
+            ok: false,
+            error: "ADMIN_POLICY_DENIED",
+            message: "Admin capability denied",
+            capability,
           });
         }
       }
@@ -125,7 +123,7 @@ describe("admin authorization policy", () => {
     for (const capability of Object.values(AdminCapability)) {
       expect(
         requireAdminCapability(actorWithRole(AdminRole.SUPER_ADMIN), capability)
-          .success,
+          .ok,
       ).toBe(true);
     }
 
@@ -133,7 +131,7 @@ describe("admin authorization policy", () => {
       requireAdminCapability(
         actorWithRole(AdminRole.FINANCE_MANAGER),
         AdminCapability.MANAGE_USERS,
-      ).success,
+      ).ok,
     ).toBe(false);
   });
 

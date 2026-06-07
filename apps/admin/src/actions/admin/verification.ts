@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { runWithIdempotency } from "./idempotency";
-import { safeAction } from "./shared";
+import { safeAction } from "./_core/safe-action";
+import { parseActionInput } from "./_core/validation";
 import {
   verificationService,
   type VerificationQueueItem as DomainVerificationQueueItem,
@@ -51,20 +52,6 @@ const BatchEntitySchema = z
     reason: z.string().optional(),
   })
   .strict();
-
-function parseActionInput<T>(
-  schema: z.ZodType<T>,
-  input: unknown,
-  fallbackMessage: string,
-): T {
-  const result = schema.safeParse(input);
-
-  if (!result.success) {
-    throw new Error(result.error.issues[0]?.message ?? fallbackMessage);
-  }
-
-  return result.data;
-}
 
 function mapQueueItem(
   item: DomainVerificationQueueItem,

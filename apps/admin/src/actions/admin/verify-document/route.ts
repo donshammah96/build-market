@@ -15,8 +15,8 @@ import {
   getClientLogger,
   initializeCorrelationId,
 } from "@/lib/api/resilient-api";
+import { auditService } from "@/lib/domains/audit/service";
 import { verificationService } from "@/lib/domains/verification";
-import { logAdminAction } from "../shared";
 
 const logger = getClientLogger();
 const DocumentTypeSchema = z
@@ -105,21 +105,25 @@ export const POST = withAdminRole([
           throw new Error(result.message);
         }
 
-        await logAdminAction({
-          userId: actor.dbUserId,
-          action: "BATCH_VERIFY_DOCUMENTS",
-          targetType: "document",
-          targetId: "batch",
-          details: {
-            total: parsed.data.documents.length,
-            summary: result.data.summary,
-          },
-        }).catch((err) =>
-          logger.error(
-            "Failed to write audit log",
-            err instanceof Error ? err : new Error(String(err)),
-          ),
-        );
+        await auditService
+          .recordAdminAuditEvent({
+            actor,
+            operationName: "BATCH_VERIFY_DOCUMENTS",
+            correlationId,
+            targetResourceType: "document",
+            targetResourceId: "batch",
+            outcome: "success",
+            details: {
+              total: parsed.data.documents.length,
+              summary: result.data.summary,
+            },
+          })
+          .catch((err) =>
+            logger.error(
+              "Failed to write audit log",
+              err instanceof Error ? err : new Error(String(err)),
+            ),
+          );
 
         logger.info("Batch document verification completed", {
           correlationId,
@@ -145,23 +149,27 @@ export const POST = withAdminRole([
         throw new Error(result.message);
       }
 
-      await logAdminAction({
-        userId: actor.dbUserId,
-        action: "VERIFY_DOCUMENT",
-        targetType: parsed.data.documentType,
-        targetId: parsed.data.documentId,
-        details: {
-          documentType: parsed.data.documentType,
-          requestedAction: parsed.data.action,
-          ...(parsed.data.notes ? { notes: parsed.data.notes } : {}),
-        },
-        ...(parsed.data.notes ? { reason: parsed.data.notes } : {}),
-      }).catch((err) =>
-        logger.error(
-          "Failed to write audit log",
-          err instanceof Error ? err : new Error(String(err)),
-        ),
-      );
+      await auditService
+        .recordAdminAuditEvent({
+          actor,
+          operationName: "VERIFY_DOCUMENT",
+          correlationId,
+          targetResourceType: parsed.data.documentType,
+          targetResourceId: parsed.data.documentId,
+          outcome: "success",
+          details: {
+            documentType: parsed.data.documentType,
+            requestedAction: parsed.data.action,
+            ...(parsed.data.notes ? { notes: parsed.data.notes } : {}),
+          },
+          reason: parsed.data.notes,
+        })
+        .catch((err) =>
+          logger.error(
+            "Failed to write audit log",
+            err instanceof Error ? err : new Error(String(err)),
+          ),
+        );
 
       logger.info("Document verification completed", {
         correlationId,

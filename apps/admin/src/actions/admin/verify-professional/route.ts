@@ -8,8 +8,8 @@ import {
 import { AuthContext, withAdminRole } from "@/lib/api/api-middleware";
 import { AdminRole } from "@build/db";
 import { resolveAdminRouteActor } from "@/lib/security/route-auth";
+import { auditService } from "@/lib/domains/audit/service";
 import { professionalsService } from "@/lib/domains/professionals/service";
-import { logAdminAction } from "../shared";
 import type { AdminLogEvent } from "@/lib/infrastructure/logger";
 
 const logger = getClientLogger();
@@ -85,17 +85,20 @@ export const POST = withAdminRole([AdminRole.SUPER_ADMIN])(async (
 
     const professional = result.data;
 
-    // Record audit trail entry per ADR-ADMIN-008
-    await logAdminAction({
-      userId: actor.dbUserId,
-      action: verified ? "VERIFY_PROFESSIONAL" : "REJECT_PROFESSIONAL",
-      targetType: "professional",
-      targetId: professionalId,
-      details: {
-        companyName: professional.companyName,
-        verified,
-      },
-    }).catch(() => undefined);
+    await auditService
+      .recordAdminAuditEvent({
+        actor,
+        operationName: verified ? "VERIFY_PROFESSIONAL" : "REJECT_PROFESSIONAL",
+        correlationId,
+        targetResourceType: "professional",
+        targetResourceId: professionalId,
+        outcome: "success",
+        details: {
+          companyName: professional.companyName,
+          verified,
+        },
+      })
+      .catch(() => undefined);
 
     logger.info("Professional verification status updated", {
       correlationId,

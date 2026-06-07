@@ -1,7 +1,8 @@
 "use server";
 
 import { z } from "zod";
-import { safeAction } from "./shared";
+import { safeAction } from "@/_core/safe-action";
+import { parseActionInput } from "./_core/validation";
 import { projectsService } from "@/lib/domains/projects/service";
 
 const ProjectFilterSchema = z.object({
@@ -9,18 +10,6 @@ const ProjectFilterSchema = z.object({
   limit: z.number().min(1).max(1000).default(10),
   search: z.string().default(""),
 });
-
-function parseActionInput<T>(
-  schema: z.ZodType<T>,
-  input: unknown,
-  fallbackMessage: string,
-): T {
-  const result = schema.safeParse(input);
-  if (!result.success) {
-    throw new Error(result.error.issues[0]?.message ?? fallbackMessage);
-  }
-  return result.data;
-}
 
 export async function getProjects(page = 1, limit = 10, search = "") {
   return safeAction("getProjects", async ({ actor }) => {

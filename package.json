@@ -88,7 +88,9 @@
     "node": "24.x",
     "pnpm": ">=11"
   },
-  "dependencies": {},
+  "dependencies": {
+    "js-cookie": "3.0.6"
+  },
   "pnpm": {
     "onlyBuiltDependencies": [
       "@clerk/shared",

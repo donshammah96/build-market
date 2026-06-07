@@ -68,8 +68,7 @@ export const POST = withAdminRole([
         throw new Error("Unauthorized: Admin role missing");
       }
 
-      // Audit log is created downstream in verificationService.verifyEntity
-      // (delegates to logAdminAction / createAuditLog)
+      // Audit log is created downstream in verificationService.verifyEntity.
       const result = await verificationService.verifyEntity(
         {
           clerkId: context.clerkId,

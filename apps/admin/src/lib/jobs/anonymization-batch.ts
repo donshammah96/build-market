@@ -10,7 +10,7 @@
 import { Queue, Worker, Job } from "bullmq";
 import { createRedisConnection } from "@/lib/queues/redis-connection";
 import { prisma } from "@build/db";
-import { AnonymizationService } from "@/lib/gdpr/services/anonymization.service";
+import { AnonymizationService } from "@/lib/domains/gdpr/anonymization/service";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 

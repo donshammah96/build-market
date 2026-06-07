@@ -1,7 +1,7 @@
 // src/lib/queues/compliance.queue.ts
 import { Queue } from "bullmq";
 import { createRedisConnection } from "./redis-connection";
-import { AuditAction, IncidentSeverity } from "@prisma/client";
+import { AuditAction, IncidentSeverity, type Prisma } from "@prisma/client";
 
 // Queue instances
 export const incidentQueue = new Queue<IncidentJobData>("security-incidents", {
@@ -49,16 +49,55 @@ export const auditQueue = new Queue<AuditJobData>("audit-logs", {
 });
 
 // Job Data Types
-export interface IncidentJobData {
-  incidentId: string;
-  type:
-    | "EMERGENCY_PROTOCOL"
-    | "ODPC_NOTIFICATION"
-    | "USER_NOTIFICATION"
-    | "ESCALATION";
-  severity: IncidentSeverity;
-  metadata?: Record<string, any>;
-}
+export type EmergencyProtocolMetadata = {
+  affectedCounty?: string;
+  affectedUserIds?: string[];
+  protectiveMeasures?: string[];
+};
+
+export type OdpcNotificationMetadata = {
+  attempt?: number;
+  deadlineAt?: string;
+  lastFailure?: string;
+};
+
+export type UserNotificationMetadata = {
+  channel?: "EMAIL" | "SMS" | "PUSH";
+  batchNumber?: number;
+  totalBatches?: number;
+};
+
+export type EscalationMetadata = {
+  escalationReason?: string;
+  dpoEmail?: string;
+  ticketId?: string;
+};
+
+export type IncidentJobData =
+  | {
+      incidentId: string;
+      type: "EMERGENCY_PROTOCOL";
+      severity: IncidentSeverity;
+      metadata?: EmergencyProtocolMetadata;
+    }
+  | {
+      incidentId: string;
+      type: "ODPC_NOTIFICATION";
+      severity: IncidentSeverity;
+      metadata?: OdpcNotificationMetadata;
+    }
+  | {
+      incidentId: string;
+      type: "USER_NOTIFICATION";
+      severity: IncidentSeverity;
+      metadata?: UserNotificationMetadata;
+    }
+  | {
+      incidentId: string;
+      type: "ESCALATION";
+      severity: IncidentSeverity;
+      metadata?: EscalationMetadata;
+    };
 
 export interface UserNotificationJobData {
   incidentId: string;
@@ -78,6 +117,14 @@ export interface UserNotificationJobData {
   totalBatches?: number;
 }
 
+export type AuditJobMetadata = {
+  correlationId?: string;
+  requestId?: string;
+  source?: "admin" | "client" | "system" | "api";
+  reason?: string;
+  [key: string]: Prisma.InputJsonValue | undefined;
+};
+
 export interface AuditJobData {
   actorId?: string;
   actorType: "USER" | "ADMIN" | "SYSTEM" | "API_KEY";
@@ -87,8 +134,8 @@ export interface AuditJobData {
   action: AuditAction;
   entityType: string;
   entityId: string;
-  changes?: { old?: any; new?: any };
-  metadata?: Record<string, any>;
+  changes?: { old?: Prisma.InputJsonValue; new?: Prisma.InputJsonValue };
+  metadata?: AuditJobMetadata;
   ipAddress?: string;
   userAgent?: string;
   legalBasis?:

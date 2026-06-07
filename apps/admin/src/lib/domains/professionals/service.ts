@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "@/lib/errors/result";
+import { err, ok, type Result } from "@/lib/result";
 import {
   AdminCapability,
   requireAdminCapability,
@@ -17,7 +17,7 @@ function requireViewContent(
   actor: ProfessionalsActor,
 ): Result<true, ProfessionalsDomainError> {
   const policy = requireAdminCapability(actor, AdminCapability.VIEW_CONTENT);
-  if (!policy.success) {
+  if (!policy.ok) {
     return err({
       code: "PROFESSIONALS_POLICY_DENIED",
       message: "Admin capability denied",
@@ -30,7 +30,7 @@ function requireManageContent(
   actor: ProfessionalsActor,
 ): Result<true, ProfessionalsDomainError> {
   const policy = requireAdminCapability(actor, AdminCapability.MANAGE_CONTENT);
-  if (!policy.success) {
+  if (!policy.ok) {
     return err({
       code: "PROFESSIONALS_POLICY_DENIED",
       message: "Admin capability denied",
@@ -46,7 +46,7 @@ function requireManageVerification(
     actor,
     AdminCapability.MANAGE_VERIFICATION,
   );
-  if (!policy.success) {
+  if (!policy.ok) {
     return err({
       code: "PROFESSIONALS_POLICY_DENIED",
       message: "Admin capability denied",

@@ -46,15 +46,29 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 
 ## Latest Verification Results
 
-> **Phase 12 — Security Hardening Pass (2026-06-04)**
+> **P2 & P3 Autopsy Refactoring Pass (2026-06-07)**
 
-| Check                                | Result  | Notes                                       |
-| ------------------------------------ | ------- | ------------------------------------------- |
-| `admin:check-types`                  | ✅ Pass | Exit 0. All files compiled cleanly.         |
-| `admin:lint`                         | ✅ Pass | Pass with known warnings backlog (ADM-009). |
-| `admin:check-env-contract`           | ✅ Pass | 59 boundary keys confirmed.                 |
-| `admin:report-security-drift:strict` | ✅ Pass | Exit 0. Zero findings in all categories.    |
-| `admin:test:all`                     | ✅ Pass | 46 files. 368 of 368 tests passed.          |
+| Check                                | Result | Notes                                        |
+| ------------------------------------ | ------ | -------------------------------------------- |
+| `admin:check-types`                  | Pass   | Exit 0. All files compiled cleanly.          |
+| `admin:lint`                         | Pass   | Exit 0. 79 known warnings remain, 0 errors.  |
+| `admin:check-env-contract`           | N/A    | Not rerun in this pass; no env keys changed. |
+| `admin:report-security-drift:strict` | Pass   | Exit 0. Zero findings in all categories.     |
+| `admin:test:all`                     | Pass   | 49 files. 378 of 378 tests passed.           |
+
+---
+
+## Previous Verification Snapshot
+
+> **Architecture Autopsy Implementation Pass (2026-06-05)**
+
+| Check                                | Result | Notes                                        |
+| ------------------------------------ | ------ | -------------------------------------------- |
+| `admin:check-types`                  | Pass   | Exit 0. All files compiled cleanly.          |
+| `admin:lint`                         | Pass   | Exit 0. 79 known warnings remain, 0 errors.  |
+| `admin:check-env-contract`           | N/A    | Not rerun in this pass; no env keys changed. |
+| `admin:report-security-drift:strict` | Pass   | Exit 0. Zero findings in all categories.     |
+| `admin:test:all`                     | Pass   | 46 files. 369 of 369 tests passed.           |
 
 ---
 
@@ -68,4 +82,4 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 | Lint                    | Must exit 0. Known warnings tracked in `DEFECTS.md` do not block merge. |
 | Env contract            | Must exit 0 when env variables were added or removed.                   |
 
-> If any gate fails, the PR is blocked until the root cause is fixed — not suppressed.
+> If any gate fails, the PR is blocked until the root cause is fixed, not suppressed.

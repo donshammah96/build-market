@@ -2,21 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { safeAction, safeVerificationAction } from "./shared";
+import { safeAction } from "@/_core/safe-action";
 import { runWithIdempotency } from "./idempotency";
-import { AdminOperationName } from "@/lib/observability/operation-names";
+import { AdminOperationName } from "@/lib/infrastructure/operation-names";
 import { storesService } from "@/lib/domains/stores/service";
 import type {
-  StoreListItem,
-  StoreDetailResult,
   StoreFilterInput as DomainStoreFilterInput,
   StoreUpdateInput as DomainStoreUpdateInput,
 } from "@/lib/domains/stores/contracts";
 import { omitUndefined } from "@/lib/utils";
-
-// ============================================================================
-// Schemas
-// ============================================================================
 
 const StoreFilterSchema = z.object({
   page: z.number().min(1).default(1),
@@ -168,7 +162,7 @@ export async function verifyStore(
   idempotencyKey: string,
   notes?: string,
 ) {
-  return safeVerificationAction(
+  return safeAction(
     AdminOperationName.VERIFY_STORE,
     async ({ actor, adminUserId }) => {
       return runWithIdempotency({
@@ -218,7 +212,7 @@ export async function rejectStore(
   idempotencyKey: string,
   notes?: string,
 ) {
-  return safeVerificationAction(
+  return safeAction(
     AdminOperationName.REJECT_STORE,
     async ({ actor, adminUserId }) => {
       return runWithIdempotency({

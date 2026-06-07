@@ -1,6 +1,6 @@
 "use server";
 
-import { safeAction } from "./shared";
+import { safeAction } from "@/_core/safe-action";
 import { dashboardService } from "@/lib/domains/dashboard/service";
 
 /**

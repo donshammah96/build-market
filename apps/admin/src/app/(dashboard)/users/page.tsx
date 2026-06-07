@@ -1,5 +1,5 @@
 import { getUsers } from "@/actions/admin";
-import { getAdminPermissions } from "@/actions/admin/shared";
+import { getAdminPermissions } from "@/actions/admin/_core/permissions";
 import { UserData } from "./columns";
 import { UsersTableClient } from "./users-table-client";
 import { UserActionControls } from "./user-action-controls";

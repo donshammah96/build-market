@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "@/lib/errors/result";
+import { err, ok, type Result } from "@/lib/result";
 import {
   AdminCapability,
   requireAdminCapability,
@@ -37,10 +37,10 @@ function requireAuditReadCapability(
 ): Result<true, AuditDomainError> {
   // Audit log reads: VIEW_FINANCIALS (SUPER_ADMIN, FINANCE_MANAGER, AUDITOR)
   const policy = requireAdminCapability(actor, AdminCapability.VIEW_FINANCIALS);
-  if (!policy.success) {
+  if (!policy.ok) {
     return err({
       code: "AUDIT_POLICY_DENIED",
-      message: policy.error.message,
+      message: policy.message,
     });
   }
   return ok(true);
@@ -51,10 +51,10 @@ function requireAuditExportCapability(
 ): Result<true, AuditDomainError> {
   // Exports: EXPORT_DATA (SUPER_ADMIN, AUDITOR only — Tier 1)
   const policy = requireAdminCapability(actor, AdminCapability.EXPORT_DATA);
-  if (!policy.success) {
+  if (!policy.ok) {
     return err({
       code: "AUDIT_POLICY_DENIED",
-      message: policy.error.message,
+      message: policy.message,
     });
   }
   return ok(true);

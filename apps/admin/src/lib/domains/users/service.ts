@@ -2,12 +2,12 @@ import {
   AdminCapability,
   requireAdminCapability,
 } from "@/lib/security/authorization-policy";
-import { err, ok, type Result } from "@/lib/errors/result";
+import { err, ok, type Result } from "@/lib/result";
 import {
   ASSIGNABLE_USER_ROLES,
   isAssignableUserRole,
   type AssignableUserRole,
-} from "@/lib/users/user-roles";
+} from "./user-roles";
 import type {
   AdminUserDetails,
   AdminUserActor,
@@ -56,7 +56,7 @@ function requireManageUsers(
 ): Result<true, UsersDomainError> {
   const result = requireAdminCapability(actor, AdminCapability.MANAGE_USERS);
 
-  if (result.success) {
+  if (result.ok) {
     return ok(true);
   }
 

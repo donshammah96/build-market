@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "@/lib/errors/result";
+import { err, ok, type Result } from "@/lib/result";
 import {
   AdminCapability,
   requireAdminCapability,
@@ -44,10 +44,10 @@ function requireFinanceCapability(
   actor: FinanceActor,
 ): Result<true, FinanceDomainError> {
   const policy = requireAdminCapability(actor, AdminCapability.VIEW_FINANCIALS);
-  if (!policy.success) {
+  if (!policy.ok) {
     return err({
       code: "FINANCE_POLICY_DENIED",
-      message: policy.error.message,
+      message: policy.message,
     });
   }
   return ok(true);

@@ -54,6 +54,62 @@ export type VerificationStatus =
   | "REJECTED"
   | "NEEDS_CORRECTION";
 
+export type VerificationPersonSummary = {
+  id?: string;
+  email?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  phone?: string | null;
+};
+
+export type ProfessionalEntityDetail = {
+  companyName?: string | null;
+  profession?: string | null;
+  licenseNumber?: string | null;
+  yearsExperience?: number | null;
+  city?: string | null;
+  county?: string | null;
+  website?: string | null;
+  bio?: string | null;
+  description?: string | null;
+  user?: VerificationPersonSummary;
+  [key: string]: unknown;
+};
+
+export type StoreEntityDetail = {
+  name?: string | null;
+  storeType?: string | null;
+  city?: string | null;
+  county?: string | null;
+  address?: string | null;
+  description?: string | null;
+  owner?: VerificationPersonSummary;
+  professional?: { user?: VerificationPersonSummary };
+  _count?: {
+    products?: number;
+    orders?: number;
+    reviews?: number;
+  };
+  [key: string]: unknown;
+};
+
+export type PropertyEntityDetail = {
+  title?: string | null;
+  type?: string | null;
+  category?: string | null;
+  price?: number | string | null;
+  location?: string | null;
+  county?: string | null;
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  size?: number | null;
+  bio?: string | null;
+  description?: string | null;
+  owner?: VerificationPersonSummary;
+  agent?: { user?: VerificationPersonSummary };
+  [key: string]: unknown;
+};
+
 export interface VerificationQueueItem {
   entityType: EntityType;
   entityId: string;
@@ -114,8 +170,7 @@ export interface VerificationStats {
   period?: "today" | "week" | "month" | "all" | undefined;
 }
 
-export interface VerificationDetails {
-  entityType: EntityType;
+type VerificationDetailsBase = {
   entityId: string;
   status: VerificationStatus;
   verifiedAt?: string | undefined;
@@ -130,8 +185,6 @@ export interface VerificationDetails {
   verificationNotes?: string | undefined;
   rejectionReason?: string | undefined;
   submittedAt?: string | undefined;
-  // Entity-specific details
-  entity: Record<string, any>;
   documents?:
     | Array<{
         id: string;
@@ -156,7 +209,21 @@ export interface VerificationDetails {
         };
       }>
     | undefined;
-}
+};
+
+export type VerificationDetails =
+  | (VerificationDetailsBase & {
+      entityType: "professional";
+      entity: ProfessionalEntityDetail;
+    })
+  | (VerificationDetailsBase & {
+      entityType: "store";
+      entity: StoreEntityDetail;
+    })
+  | (VerificationDetailsBase & {
+      entityType: "property";
+      entity: PropertyEntityDetail;
+    });
 
 // ============================================================================
 // Schemas

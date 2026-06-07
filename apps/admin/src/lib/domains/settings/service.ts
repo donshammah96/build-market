@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "@/lib/errors/result";
+import { err, ok, type Result } from "@/lib/result";
 import {
   AdminCapability,
   requireAdminCapability,
@@ -20,7 +20,7 @@ function requireSystemAdmin(
     actor,
     AdminCapability.SYSTEM_ADMIN_ONLY,
   );
-  if (!policy.success) {
+  if (!policy.ok) {
     return err({
       code: "SETTINGS_POLICY_DENIED",
       message: "Admin capability denied",

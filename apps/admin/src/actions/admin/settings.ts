@@ -1,21 +1,9 @@
 "use server";
 
-import { z } from "zod";
-import { safeAction } from "./shared";
+import { safeAction } from "@/_core/safe-action";
+import { parseActionInput } from "./_core/validation";
 import { SystemSettingsSchema } from "./types";
 import { settingsService } from "@/lib/domains/settings/service";
-
-function parseActionInput<T>(
-  schema: z.ZodType<T>,
-  input: unknown,
-  fallbackMessage: string,
-): T {
-  const result = schema.safeParse(input);
-  if (!result.success) {
-    throw new Error(result.error.issues[0]?.message ?? fallbackMessage);
-  }
-  return result.data;
-}
 
 /**
  * Get current system settings.

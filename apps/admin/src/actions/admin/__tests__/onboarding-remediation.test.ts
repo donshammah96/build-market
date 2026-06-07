@@ -3,13 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   safeAction: vi.fn(),
   callClientApi: vi.fn(),
-  requireAdminGranularRole: vi.fn(),
 }));
 
 vi.mock("../shared", () => ({
   safeAction: mocks.safeAction,
   callClientApi: mocks.callClientApi,
-  requireAdminGranularRole: mocks.requireAdminGranularRole,
 }));
 
 const mockEnv = vi.hoisted(() => ({
@@ -39,13 +37,13 @@ describe("admin onboarding remediation actions", () => {
         _actionName: string,
         fn: (ctx: {
           adminUserId: string;
-          adminRole: "admin";
+          adminRole: "SUPER_ADMIN";
         }) => Promise<unknown>,
       ) => {
         try {
           const data = await fn({
             adminUserId: "admin_user_1",
-            adminRole: "admin",
+            adminRole: "SUPER_ADMIN",
           });
           return { success: true, data, timestamp: new Date().toISOString() };
         } catch (error) {
@@ -60,7 +58,6 @@ describe("admin onboarding remediation actions", () => {
       },
     );
 
-    mocks.requireAdminGranularRole.mockResolvedValue("SUPER_ADMIN");
     mocks.callClientApi.mockResolvedValue({
       success: true,
       data: { ok: true },
@@ -71,10 +68,6 @@ describe("admin onboarding remediation actions", () => {
     const response = await onboardingReconcile("user_123");
 
     expect(response.success).toBe(true);
-    expect(mocks.requireAdminGranularRole).toHaveBeenCalledWith(
-      ["SUPER_ADMIN"],
-      "admin_user_1",
-    );
     expect(mocks.callClientApi).toHaveBeenCalledWith(
       "/api/internal/onboarding-remediation/reconcile",
       expect.objectContaining({

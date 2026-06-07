@@ -52,6 +52,17 @@ const sharedMock = vi.hoisted(() => ({
       }
     },
   ),
+  parseActionInput: vi.fn(
+    (schema: { safeParse: (input: unknown) => unknown }, input: unknown) => {
+      const result = schema.safeParse(input) as
+        | { success: true; data: unknown }
+        | { success: false; error: { issues: Array<{ message?: string }> } };
+      if (!result.success) {
+        throw new Error(result.error.issues[0]?.message ?? "Invalid input");
+      }
+      return result.data;
+    },
+  ),
 }));
 
 vi.mock("next/cache", () => ({

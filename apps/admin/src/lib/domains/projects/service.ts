@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "@/lib/errors/result";
+import { err, ok, type Result } from "@/lib/result";
 import {
   AdminCapability,
   requireAdminCapability,
@@ -16,7 +16,7 @@ function requireViewContent(
   actor: ProjectsActor,
 ): Result<true, ProjectsDomainError> {
   const policy = requireAdminCapability(actor, AdminCapability.VIEW_CONTENT);
-  if (!policy.success) {
+  if (!policy.ok) {
     return err({
       code: "PROJECTS_POLICY_DENIED",
       message: "Admin capability denied",

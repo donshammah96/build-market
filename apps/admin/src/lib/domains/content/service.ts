@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "@/lib/errors/result";
+import { err, ok, type Result } from "@/lib/result";
 import {
   AdminCapability,
   requireAdminCapability,
@@ -33,10 +33,10 @@ function requireContentCapability(
   actor: ContentActor,
 ): Result<true, ContentDomainError> {
   const policy = requireAdminCapability(actor, AdminCapability.MANAGE_CONTENT);
-  if (!policy.success) {
+  if (!policy.ok) {
     return err({
       code: "CONTENT_POLICY_DENIED",
-      message: policy.error.message,
+      message: policy.message,
     });
   }
   return ok(true);

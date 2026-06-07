@@ -2,26 +2,29 @@ import {
   AdminCapability,
   requireAdminCapability,
 } from "@/lib/security/authorization-policy";
-import { err, ok, type Result } from "@/lib/errors/result";
-import { getAuditHistory } from "@/lib/services/verification/audit-service";
-import { notifyVerificationResult } from "@/lib/services/verification/notification.service";
+import { err, ok, type Result } from "@/lib/result";
+import { getAuditHistory } from "./internal/audit-service";
+import { notifyVerificationResult } from "./internal/notification.service";
 import {
   getProfessionalVerificationDetails,
   verifyProfessional,
-} from "@/lib/services/verification/professional-verification.service";
+} from "./internal/professional-verification.service";
 import {
   getPropertyVerificationDetails,
   verifyProperty,
-} from "@/lib/services/verification/property-verification.service";
+} from "./internal/property-verification.service";
 import {
   getStoreVerificationDetails,
   verifyStore,
-} from "@/lib/services/verification/store-verification.service";
-import type { VerificationRequest } from "@/lib/services/verification/types";
+} from "./internal/store-verification.service";
+import type { VerificationRequest } from "./internal/types";
 import type {
   BatchVerifyDocumentsInput,
   BatchVerifyEntitiesInput,
   PrismaVerificationStatus,
+  ProfessionalEntityDetail,
+  PropertyEntityDetail,
+  StoreEntityDetail,
   VerificationDetails,
   VerificationActor,
   VerificationDomainError,
@@ -84,8 +87,8 @@ function requireVerificationCapability(
     AdminCapability.MANAGE_VERIFICATION,
   );
 
-  if (!policy.success) {
-    return err(policyDenied(policy.error.message));
+  if (!policy.ok) {
+    return err(policyDenied(policy.message));
   }
 
   return ok(true);
@@ -363,8 +366,8 @@ function mapProfessionalDetails(
     ...(details.verificationNotes
       ? { verificationNotes: details.verificationNotes }
       : {}),
-    entity: details as unknown as Record<string, unknown>,
-    documents: details.documents.map((document) => ({
+    entity: details as unknown as ProfessionalEntityDetail,
+    documents: details.documents.map((document: any) => ({
       id: document.id,
       type: String(document.category),
       fileUrl: document.fileUrl ?? "",
@@ -399,7 +402,7 @@ function mapStoreDetails(
     ...(details.rejectionReason
       ? { rejectionReason: details.rejectionReason }
       : {}),
-    entity: details as unknown as Record<string, unknown>,
+    entity: details as unknown as StoreEntityDetail,
     documents: [],
     auditHistory: auditHistory.map(mapAuditEntry),
   };
@@ -430,8 +433,8 @@ function mapPropertyDetails(
     ...(details.rejectionReason
       ? { rejectionReason: details.rejectionReason }
       : {}),
-    entity: details as unknown as Record<string, unknown>,
-    documents: details.documents.map((document) => ({
+    entity: details as unknown as PropertyEntityDetail,
+    documents: details.documents.map((document: any) => ({
       id: document.id,
       type: String(document.type),
       fileUrl: document.url ?? "",

@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Admin**: Added v2-specific UI tests (happy path + one error state per route) for the four shadow routes (`users-v2`, `verifications-v2`, `analytics-v2`, `audit-v2`) to satisfy the Test Coverage gate in `RETIREMENT.md`.
+- **Admin**: Added unit tests for `NavigationSidebar` (`navigation-sidebar.test.tsx`), `AddUser` (`AddUser.test.tsx`), and `EditUser` (`EditUser.test.tsx`) components, verifying role-based navigation gating and form mutations.
+- **Admin**: Created `docs/RETIREMENT.md` with per-flag migration criteria, 4-criterion retirement gate, and per-flag status tables for all four `apps/admin` v2 shadow routes (I-13 / F-D3).
+- **Admin**: Created `src/actions/admin/README.md` documenting the flat-file rule and Next.js route-handler exemption from the single-file-folder collapse policy (I-14 / F-S2).
+- **Admin**: Created `src/lib/validation/README.md` confirming all 18 validation schemas are orphaned and documenting the deletion runbook (I-23 / F-S5).
+- **Admin**: Replaced all four v2 route pass-through stubs (`users-v2`, `verifications-v2`, `analytics-v2`, `audit-v2`) with independent page implementations that own their own data fetching and rendering, satisfying the Feature Parity Confirmed gate in `RETIREMENT.md`. Adds `data-v2-route` attributes for observability test hooks. `verifications-v2` gains a capability-aware admin role badge in the queue header.
+
+### Removed
+
+- **Admin**: Deleted orphaned `lib/validation/` schemas.
+
 - **Developer Workflow**: Added a terminal hardening toolchain for deterministic command execution. Introduced the repo runbook in `docs/TERMINAL_RUNBOOK.md`, the clean PowerShell wrapper in `scripts/invoke-clean.ps1`, wrapper usage notes in `scripts/README.md`, stable root scripts in `package.json` (`redis:healthcheck`, `redis:audit`, `admin:check-types`, `queue-server:check-types`, `client:tsc-noemit`, `client:test:*`, `db:migrate:deploy`, `db:generate`, `db:seed`), and a reduced task surface in `.vscode/tasks.json` so recurring validation no longer depends on shared-shell cwd state, duplicate task variants, or inline shell logic.
 
 - **Security/Governance Tests**: Added focused store mutation governance coverage in `stores-actions.test.ts` for strict idempotency key enforcement, replay behavior, and immutable-audit-backed mutation paths.
@@ -35,6 +46,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Admin**: Consolidated GDPR services under `domains/gdpr/`, verification-internal services under `domains/verification/internal/`, and relocated domain configurations and single-file folders in `apps/admin` (autopsy refactoring items I-8, I-9, I-15, I-16, I-19).
 - **Admin Action Layer**: Refactored the `apps/admin` action layer to eliminate direct Prisma queries by creating a new `securityRepository`, refactored route handlers to use `resolveAdminRouteActor` and Zod `safeParse`, and resolved environment boundary violations in `onboarding-remediation.ts` using `adminEnvConfig`.
 
 - **Documentation/Runbooks**: Replaced ad hoc terminal command examples with root-script or root-relative forms across `.github/copilot-instructions.md`, `apps/client/MESSAGING_API_SETUP.md`, `README.md`, `apps/client/__tests__/setup-integration.md`, and `packages/db/SETUP_DATABASE.md`; updated `.github/prompts/plan-gitBranchSplit.prompt.md` to use `Push-Location`/`Pop-Location`; and aligned `docs/TERMINAL_RUNBOOK.md` plus `scripts/README.md` with the canonical wrapper invocation pattern so workflow docs no longer teach `cd ... && ...` or other stateful shell usage.

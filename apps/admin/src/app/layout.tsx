@@ -44,14 +44,14 @@ export default async function RootLayout({
   if (!clerkPublishableKey) {
     return (
       <html lang="en" suppressHydrationWarning>
-        <body className="antialiased">{children}</body>
+        <body className="antialiased" suppressHydrationWarning>{children}</body>
       </html>
     );
   }
   return (
     <ClerkProvider publishableKey={clerkPublishableKey}>
       <html lang="en" suppressHydrationWarning>
-        <body className="antialiased">{children}</body>
+        <body className="antialiased" suppressHydrationWarning>{children}</body>
       </html>
     </ClerkProvider>
   );

@@ -1,7 +1,7 @@
 "use server";
 
-import { safeAction } from "./shared";
-import { AdminOperationName } from "@/lib/observability/operation-names";
+import { safeAction } from "@/_core/safe-action";
+import { AdminOperationName } from "@/lib/infrastructure/operation-names";
 import { financeService } from "@/lib/domains/finance/service";
 import type {
   AnalyticsPeriod,
@@ -9,10 +9,6 @@ import type {
   TimeSeriesMetric,
   TopProfessionalMetric,
 } from "@/lib/domains/finance/contracts";
-
-// ============================================================================
-// Actions
-// ============================================================================
 
 /**
  * Gets comprehensive platform analytics.

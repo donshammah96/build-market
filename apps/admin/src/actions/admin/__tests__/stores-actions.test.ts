@@ -97,7 +97,7 @@ function mockActorAs(role: string) {
 }
 
 function mockVerificationActorAs(role: string) {
-  // safeVerificationAction checks auth_time for freshness (maxAgeSeconds: 300)
+  // safeAction checks auth_time for freshness on verification policies.
   const freshAuthTime = Math.floor(Date.now() / 1000);
   clerkMock.auth.mockResolvedValue({
     userId: "clerk_test",
@@ -217,7 +217,7 @@ describe("updateStore action", () => {
 });
 
 // ============================================================================
-// verifyStore (safeVerificationAction — needs fresh auth_time)
+// verifyStore (policy-driven safeAction freshness)
 // ============================================================================
 
 describe("verifyStore action", () => {

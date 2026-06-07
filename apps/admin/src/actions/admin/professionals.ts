@@ -2,24 +2,11 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { safeAction, safeVerificationAction } from "./shared";
+import { safeAction } from "@/_core/safe-action";
+import { parseActionInput } from "./_core/validation";
 import { omitUndefined } from "@/lib/utils";
 import { UpdateProfileSchema } from "./types";
 import { professionalsService } from "@/lib/domains/professionals/service";
-
-function parseActionInput<T>(
-  schema: z.ZodType<T>,
-  input: unknown,
-  fallbackMessage: string,
-): T {
-  const result = schema.safeParse(input);
-
-  if (!result.success) {
-    throw new Error(result.error.issues[0]?.message ?? fallbackMessage);
-  }
-
-  return result.data;
-}
 
 // ============================================================================
 // List & Details Actions
@@ -86,7 +73,7 @@ export async function getProfessionalDetails(userId: string) {
  * Returns the updated profile for optimistic UI updates.
  */
 export async function verifyProfessional(userId: string) {
-  return safeVerificationAction(
+  return safeAction(
     "verifyProfessional",
     async ({ actor }) => {
       const parsedUserId = parseActionInput(
@@ -122,7 +109,7 @@ export async function verifyProfessional(userId: string) {
  * Returns the updated profile for optimistic UI updates.
  */
 export async function rejectProfessional(userId: string, reason?: string) {
-  return safeVerificationAction(
+  return safeAction(
     "rejectProfessional",
     async ({ actor }) => {
       const parsedUserId = parseActionInput(

@@ -55,22 +55,13 @@ vi.mock("../repository", () => ({
 }));
 
 vi.mock(
-  "@/lib/services/verification/professional-verification.service",
+  "../internal/professional-verification.service",
   () => professionalServiceMock,
 );
-vi.mock(
-  "@/lib/services/verification/store-verification.service",
-  () => storeServiceMock,
-);
-vi.mock(
-  "@/lib/services/verification/property-verification.service",
-  () => propertyServiceMock,
-);
-vi.mock(
-  "@/lib/services/verification/notification.service",
-  () => notificationServiceMock,
-);
-vi.mock("@/lib/services/verification/audit-service", () => auditServiceMock);
+vi.mock("../internal/store-verification.service", () => storeServiceMock);
+vi.mock("../internal/property-verification.service", () => propertyServiceMock);
+vi.mock("../internal/notification.service", () => notificationServiceMock);
+vi.mock("../internal/audit-service", () => auditServiceMock);
 
 import type { VerificationActor } from "../contracts";
 import {
