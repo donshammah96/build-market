@@ -69,6 +69,13 @@ const adminEnvSchema = z.object({
   NEXT_PUBLIC_ADMIN_FF_V2_FINANCE_DASHBOARD: booleanString,
   NEXT_PUBLIC_ADMIN_FF_V2_AUDIT_LOG_UI: booleanString,
   NEXT_PUBLIC_ADMIN_FF_V2_STRUCTURED_LOGGING: booleanString,
+  NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE: booleanString,
+  LICENSE_EXPIRY_CRON: z.string().min(1).optional(),
+  LICENSE_EXPIRY_BATCH_SIZE: z.coerce.number().int().positive().optional(),
+  NATS_URL: z.string().min(1).optional(),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().min(1).optional(),
+  OTEL_SERVICE_NAME: z.string().min(1).optional(),
+  OTEL_RESOURCE_ATTRIBUTES: z.string().min(1).optional(),
 });
 
 export type AdminEnvConfig = z.infer<typeof adminEnvSchema>;

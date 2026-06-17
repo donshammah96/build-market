@@ -22,21 +22,40 @@ export interface AuditLogData {
   userAgent?: string | undefined;
 }
 
-export async function createAuditLog(data: AuditLogData): Promise<void> {
+export async function createAuditLog(
+  data: AuditLogData,
+  tx?: any,
+): Promise<void> {
+  const db = tx || prisma;
   try {
-    const admin = await prisma.user?.findUnique?.({
-      where: { id: data.adminId },
-      select: { firstName: true, lastName: true, email: true, role: true },
-    });
+    const admin =
+      data.adminId === "SYSTEM"
+        ? null
+        : await db.user?.findUnique?.({
+            where: { id: data.adminId },
+            select: {
+              firstName: true,
+              lastName: true,
+              email: true,
+              role: true,
+            },
+          });
 
-    await prisma.adminAuditLog.create({
+    await db.adminAuditLog.create({
       data: {
         adminId: data.adminId,
-        adminName: admin
-          ? `${admin.firstName} ${admin.lastName}`.trim()
-          : "Unknown Admin",
-        adminEmail: admin?.email || "unknown@admin",
-        adminRole: admin?.role || "ADMIN",
+        adminName:
+          data.adminId === "SYSTEM"
+            ? "SYSTEM"
+            : admin
+              ? `${admin.firstName} ${admin.lastName}`.trim()
+              : "Unknown Admin",
+        adminEmail:
+          data.adminId === "SYSTEM"
+            ? "system@buildmarket"
+            : admin?.email || "unknown@admin",
+        adminRole:
+          data.adminId === "SYSTEM" ? "SUPER_ADMIN" : admin?.role || "ADMIN",
         action: data.action,
         targetType: data.entityType,
         targetId: data.entityId,

@@ -51,6 +51,22 @@ export async function notifyVerificationResult(
       await sendToNotificationService(result, recipientUserId);
     }
 
+    const user = await prisma.user.findUnique({
+      where: { id: recipientUserId },
+      select: { email: true, firstName: true, lastName: true },
+    });
+    const userEmail = user?.email || "";
+    const userName = user
+      ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
+      : "";
+
+    // Publish to NATS - non-blocking
+    publishVerificationEvent(result, userEmail, userName).catch((err) =>
+      logger.error("Failed to publish NATS verification event", err as Error, {
+        entityId: result.entityId,
+      }),
+    );
+
     logger.info("Verification notification sent", {
       entityType: result.entityType,
       entityId: result.entityId,
@@ -234,6 +250,10 @@ export async function publishVerificationEvent(
   try {
     const producer = await getNatsProducer();
 
+    if (result.entityType === "license") {
+      return;
+    }
+
     // Build verification event payload
     const event: VerificationEvent = {
       entityType: result.entityType,
@@ -278,9 +298,6 @@ export async function publishVerificationEvent(
         entityId: result.entityId,
       },
     );
-
-    // Queue for retry - don't throw to prevent blocking verification flow
-    await queueFailedNotification(result, userEmail, error as Error);
   }
 }
 

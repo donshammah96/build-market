@@ -4,33 +4,12 @@ import {
   JetStreamClient,
   JetStreamManager,
 } from "nats";
-import type { NatsConfig, NatsClient } from "./types";
-
-/**
- * Connection health metrics
- */
-interface ConnectionMetrics {
-  reconnectAttempts: number;
-  lastReconnectAt?: Date;
-  lastDisconnectAt?: Date;
-  totalDisconnects: number;
-  connectedAt?: Date;
-  errors: Array<{ timestamp: Date; error: string }>;
-}
-
-/**
- * Connection status information
- */
-export interface ConnectionStatus {
-  connected: boolean;
-  server?: string;
-  metrics: ConnectionMetrics;
-  config: {
-    servers: string | string[];
-    name: string;
-    environment: string;
-  };
-}
+import type {
+  NatsConfig,
+  NatsClient,
+  ConnectionMetrics,
+  ConnectionStatus,
+} from "./types";
 
 /**
  * Singleton NATS client instance

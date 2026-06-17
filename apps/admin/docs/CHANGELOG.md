@@ -1,8 +1,25 @@
 # apps/admin Changelog
 
+## [2026-06-15] License Verification Workflow, Distributed Safety & OpenTelemetry Integration
+
+### Added (License Verification Workflow, Distributed Safety & OpenTelemetry Integration)
+
+- **OpenTelemetry APM Pipeline:** Configured OpenTelemetry `NodeSDK` at `apps/admin/src/lib/infrastructure/otel.ts` and dynamic runtime registry hook `apps/admin/src/instrumentation.ts` to capture and forward Prisma query traces and HTTP requests to Datadog.
+- **License Expiry Maintenance Job:** Implemented daily 1 AM BullMQ scheduler at `apps/admin/src/lib/jobs/license-expiry.ts` to transition past-due licenses to `EXPIRED` status and emit 30-day pre-expiry warning event streams (`license.expiring_soon`).
+- **Feature-Gated License Verification Queue:** Added `NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE` gate at action/UI layers to control display of the license queue inside `VerificationQueue.tsx`.
+- **License Verification Service:** Created `license-verification.service.ts` to handle admin verification updates, transitioning status and outputting declarative audit log records.
+
+### Changed (License Verification Workflow, Distributed Safety & OpenTelemetry Integration)
+
+- **Distributed Context Propagation:** Integrated trace context injection/extraction headers into NATS publish/subscribe handlers to maintain trace visibility across distributed services.
+- **Deadlock Prevention sorting:** Modified `batchVerifyEntities` and `batchVerifyDocuments` inside `verification/service.ts` to lexicographically sort target UUID lists before execution to prevent deadlock lock-waits.
+- **Atomic State Transactions:** Standardized database mutations inside `license-verification.service.ts` to run inside a unified sequential `$transaction` block, ensuring strict lock-acquisition order.
+
+---
+
 ## [2026-06-07] v2 shadow route UI tests
 
-### Added
+### Added (v2 shadow route UI tests)
 
 - Added v2-specific UI tests for the four shadow routes:
   - **`users-v2/__tests__/page.test.tsx`**: Happy path and error state tests.
@@ -10,7 +27,7 @@
   - **`analytics-v2/__tests__/page.test.tsx`**: Happy path and error state tests, validating platform overview and financial card rendering.
   - **`audit-v2/__tests__/page.test.tsx`**: Happy path and error state tests, verifying stats calculations and filtered audit log item listings.
 
-### Changed
+### Changed (v2 shadow route UI tests)
 
 - Updated `docs/RETIREMENT.md` to reflect complete test coverage status for all four flags.
 - Updated `docs/PROGRESS-SUMMARY.md` next priorities to mark the UI tests task as completed.

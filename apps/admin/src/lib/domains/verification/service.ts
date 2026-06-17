@@ -17,7 +17,9 @@ import {
   getStoreVerificationDetails,
   verifyStore,
 } from "./internal/store-verification.service";
+import { verifyLicense as verifyLicenseInternal } from "./internal/license-verification.service";
 import type { VerificationRequest } from "./internal/types";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
 import type {
   BatchVerifyDocumentsInput,
   BatchVerifyEntitiesInput,
@@ -41,11 +43,19 @@ import type {
   VerificationStatsPeriod,
   VerifyDocumentInput,
   VerifyEntityInput,
+  VerifyLicenseInput,
+  LicenseSummary,
 } from "./contracts";
 import { PRISMA_VERIFICATION_STATUSES } from "./contracts";
 import { verificationRepository } from "./repository";
 
-const ENTITY_TYPES = ["all", "professional", "store", "property"] as const;
+const ENTITY_TYPES = [
+  "all",
+  "professional",
+  "store",
+  "property",
+  "license",
+] as const;
 const STATUSES = [
   "UNVERIFIED",
   "PENDING",
@@ -170,6 +180,17 @@ async function listQueueForEntity(
     return { items, total };
   }
 
+  if (query.entityType === "license") {
+    if (!adminEnvConfig.NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE) {
+      return { items: [], total: 0 };
+    }
+    const [items, total] = await Promise.all([
+      verificationRepository.listLicenseQueue(query),
+      verificationRepository.countLicenseQueue(query.status),
+    ]);
+    return { items, total };
+  }
+
   const [items, total] = await Promise.all([
     verificationRepository.listPropertyQueue(query),
     verificationRepository.countPropertyQueue(query.status),
@@ -220,7 +241,9 @@ export async function listVerificationQueue(
     });
   }
 
-  const [professionals, stores, properties] = await Promise.all([
+  const showLicenseQueue =
+    adminEnvConfig.NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE;
+  const [professionals, stores, properties, licenses] = await Promise.all([
     verificationRepository.listProfessionalQueue({
       ...query,
       status: query.status,
@@ -230,9 +253,15 @@ export async function listVerificationQueue(
       ...query,
       status: query.status,
     }),
+    showLicenseQueue
+      ? verificationRepository.listLicenseQueue({
+          ...query,
+          status: query.status,
+        })
+      : Promise.resolve([]),
   ]);
   const combined = sortQueueItems(
-    [...professionals, ...stores, ...properties],
+    [...professionals, ...stores, ...properties, ...licenses],
     query.sortBy,
     query.sortOrder,
   );
@@ -587,7 +616,12 @@ export async function batchVerifyDocuments(
     error?: string;
   }> = [];
 
-  for (const document of input.documents) {
+  // Sort documents lexicographically by documentId to prevent database transaction deadlocks
+  const sortedDocuments = [...input.documents].sort((a, b) =>
+    a.documentId.localeCompare(b.documentId),
+  );
+
+  for (const document of sortedDocuments) {
     try {
       const result = await verificationRepository.updateDocumentVerification({
         ...document,
@@ -645,7 +679,12 @@ export async function batchVerifyEntities(
     error?: string;
   }> = [];
 
-  for (const entity of input.entities) {
+  // Sort entities lexicographically by entityId to prevent database transaction deadlocks
+  const sortedEntities = [...input.entities].sort((a, b) =>
+    a.entityId.localeCompare(b.entityId),
+  );
+
+  for (const entity of sortedEntities) {
     const result = await verifyEntity(actor, {
       ...entity,
       action: input.action,
@@ -708,6 +747,72 @@ export async function getVerificationStats(
   });
 }
 
+export async function verifyLicense(
+  actor: VerificationActor,
+  input: VerifyLicenseInput,
+  metadata?: {
+    ipAddress?: string | undefined;
+    userAgent?: string | undefined;
+  },
+): Promise<Result<LicenseSummary, VerificationDomainError>> {
+  const capability = requireVerificationCapability(actor);
+  if (!capability.ok) return capability;
+
+  if (!adminEnvConfig.NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE) {
+    return err(
+      policyDenied("License verification queue is disabled by feature flag"),
+    );
+  }
+
+  try {
+    const requestData: any = {
+      licenseId: input.licenseId,
+      action: input.action,
+      adminId: actor.dbUserId,
+    };
+    if (input.notes !== undefined) requestData.notes = input.notes;
+    if (input.reason !== undefined) requestData.reason = input.reason;
+    if (metadata?.ipAddress !== undefined)
+      requestData.ipAddress = metadata.ipAddress;
+    if (metadata?.userAgent !== undefined)
+      requestData.userAgent = metadata.userAgent;
+
+    const result = await verifyLicenseInternal(requestData);
+
+    const recipientUserId = result.professionalId;
+    await notifyVerificationResult(
+      {
+        success: true,
+        entityType: "professional",
+        entityId: result.professionalId,
+        previousStatus: result.previousStatus,
+        newStatus: result.newStatus,
+        message: result.message,
+        ...(result.verifiedAt ? { verifiedAt: result.verifiedAt } : {}),
+        ...(input.reason ? { reason: input.reason } : {}),
+        ...(input.notes ? { notes: input.notes } : {}),
+      },
+      recipientUserId,
+    );
+
+    return ok({
+      licenseId: result.licenseId,
+      authority: result.authority,
+      licenseNumber: result.licenseNumber,
+      previousStatus: result.previousStatus,
+      newStatus: result.newStatus,
+      message: result.message,
+      ...(result.verifiedAt ? { verifiedAt: result.verifiedAt } : {}),
+    });
+  } catch (error) {
+    return err({
+      code: "VERIFICATION_REPOSITORY_ERROR",
+      message:
+        error instanceof Error ? error.message : "License verification failed",
+    });
+  }
+}
+
 export const verificationService = {
   buildVerificationQueueQuery,
   listVerificationQueue,
@@ -715,6 +820,7 @@ export const verificationService = {
   getVerificationStats,
   getVerificationDetails,
   verifyEntity,
+  verifyLicense,
   verifyDocument,
   batchVerifyDocuments,
   batchVerifyEntities,

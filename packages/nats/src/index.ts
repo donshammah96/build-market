@@ -33,6 +33,7 @@ export type {
   MessagePayload,
   PublishOptions,
   VerificationEvent,
+  LicenseVerificationEvent,
   UserEvent,
   OrderEvent,
   ProjectEvent,

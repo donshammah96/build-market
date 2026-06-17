@@ -6,7 +6,11 @@ export type VerificationActor = {
   adminRole: AdminRole;
 };
 
-export type VerificationEntityType = "professional" | "store" | "property";
+export type VerificationEntityType =
+  | "professional"
+  | "store"
+  | "property"
+  | "license";
 export type VerificationQueueEntityType = VerificationEntityType | "all";
 export type VerificationQueueStatus =
   | "UNVERIFIED"
@@ -63,6 +67,7 @@ export type VerificationQueueItem = {
   city?: string | null;
   county?: string | null;
   location?: string | null;
+  licenseId?: string;
 };
 
 export type VerificationQueuePage = {
@@ -126,6 +131,13 @@ export type VerifyEntityInput = {
   reason?: string | undefined;
 };
 
+export type VerifyLicenseInput = {
+  licenseId: string;
+  action: VerificationEntityAction;
+  notes?: string | undefined;
+  reason?: string | undefined;
+};
+
 export type VerifyDocumentInput = {
   documentType: VerificationDocumentType;
   documentId: string;
@@ -165,6 +177,16 @@ export type VerificationEntitySummary = {
   verifiedAt?: Date | undefined;
   reason?: string | undefined;
   notes?: string | undefined;
+};
+
+export type LicenseSummary = {
+  licenseId: string;
+  authority: string;
+  licenseNumber: string;
+  previousStatus: VerificationStatus;
+  newStatus: VerificationStatus;
+  message: string;
+  verifiedAt?: Date | undefined;
 };
 
 export type VerificationDocumentDetails = {
@@ -281,7 +303,9 @@ export type VerificationDomainErrorCode =
   | "VERIFICATION_INVALID_FILTER"
   | "VERIFICATION_POLICY_DENIED"
   | "VERIFICATION_REPOSITORY_ERROR"
-  | "VERIFICATION_NOT_FOUND";
+  | "VERIFICATION_NOT_FOUND"
+  | "VERIFICATION_LICENSE_NOT_FOUND"
+  | "VERIFICATION_INVALID_TRANSITION";
 
 export type VerificationDomainError = {
   code: VerificationDomainErrorCode;

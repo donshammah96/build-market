@@ -248,6 +248,14 @@ export async function initializeStreams(
       storage: "file",
       maxAge: 24 * 60 * 60 * 1000000000, // 24 hours
     },
+    {
+      name: "LICENSES",
+      subjects: ["license.>"],
+      retention: "limits",
+      storage: "file",
+      maxAge: 30 * 24 * 60 * 60 * 1000000000, // 30 days
+      duplicateWindow: 120000000000,
+    },
   ];
 
   console.log("[NATS Streams] Initializing streams...");

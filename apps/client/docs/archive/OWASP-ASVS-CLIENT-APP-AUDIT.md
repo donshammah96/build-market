@@ -333,7 +333,6 @@ All file upload routes must enforce the following, in order, before any storage 
 **Recommended change — `API-TO-FRONTEND-ARCHITECTURE.md` Section 5.6.4 (`operationName` Convention) — add:**
 
 > `operationName` must always be a compile-time string literal or a value drawn from a slice-level enum of known operation names. It must never be derived from request parameters, path segments, body fields, or any runtime user input.
-
 > `resourceId` in log events must be validated as a UUID before inclusion. If the value does not match UUID format, log `resourceId: "[invalid-format]"` instead of the raw value. This prevents log injection via crafted resource ID values in path parameters.
 
 ---
@@ -465,7 +464,7 @@ Per-actor rate limit keys must be derived from `actor.userId` after successful a
 
 `next.config.ts` must define the following response headers for all routes:
 
-```
+```text
 X-Content-Type-Options: nosniff
 X-Frame-Options: SAMEORIGIN
 Referrer-Policy: strict-origin-when-cross-origin

@@ -42,13 +42,14 @@ Retirement steps:
 5. Update `ROLLBACK-CONTRACTS.md` to mark the flag as retired.
 6. Add a changelog entry under the relevant phase.
 
-| Flag                          | v2 Route            | Retirement Owner | Status      |
-| ----------------------------- | ------------------- | ---------------- | ----------- |
-| `admin_v2_user_management`    | `/users-v2`         | TBD              | In progress |
-| `admin_v2_verification_queue` | `/verifications-v2` | TBD              | In progress |
-| `admin_v2_finance_dashboard`  | `/analytics-v2`     | TBD              | In progress |
-| `admin_v2_audit_log_ui`       | `/audit-v2`         | TBD              | In progress |
-| `admin_v2_structured_logging` | N/A (behaviour)     | TBD              | In progress |
+| Flag                                  | v2 Route            | Retirement Owner | Status      |
+| ------------------------------------- | ------------------- | ---------------- | ----------- |
+| `admin_v2_user_management`            | `/users-v2`         | TBD              | In progress |
+| `admin_v2_verification_queue`         | `/verifications-v2` | TBD              | In progress |
+| `admin_v2_finance_dashboard`          | `/analytics-v2`     | TBD              | In progress |
+| `admin_v2_audit_log_ui`               | `/audit-v2`         | TBD              | In progress |
+| `admin_v2_structured_logging`         | N/A (behaviour)     | TBD              | In progress |
+| `admin_ff_license_verification_queue` | N/A (behaviour)     | TBD              | In progress |
 
 ## Consequences
 

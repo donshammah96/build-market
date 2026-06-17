@@ -17,10 +17,16 @@ const repositoryMock = vi.hoisted(() => ({
   countStoreQueue: vi.fn(),
   listPropertyQueue: vi.fn(),
   countPropertyQueue: vi.fn(),
+  listLicenseQueue: vi.fn(),
+  countLicenseQueue: vi.fn(),
   countVerificationStatus: vi.fn(),
   findStoreOwnerId: vi.fn(),
   findPropertyOwnerId: vi.fn(),
   updateDocumentVerification: vi.fn(),
+}));
+
+const licenseServiceMock = vi.hoisted(() => ({
+  verifyLicense: vi.fn(),
 }));
 
 const professionalServiceMock = vi.hoisted(() => ({
@@ -60,10 +66,12 @@ vi.mock(
 );
 vi.mock("../internal/store-verification.service", () => storeServiceMock);
 vi.mock("../internal/property-verification.service", () => propertyServiceMock);
+vi.mock("../internal/license-verification.service", () => licenseServiceMock);
 vi.mock("../internal/notification.service", () => notificationServiceMock);
 vi.mock("../internal/audit-service", () => auditServiceMock);
 
 import type { VerificationActor } from "../contracts";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
 import {
   batchVerifyDocuments,
   batchVerifyEntities,
@@ -74,6 +82,7 @@ import {
   normalizeStatsPeriod,
   verifyDocument,
   verifyEntity,
+  verifyLicense,
 } from "../service";
 
 function actor(
@@ -344,6 +353,41 @@ describe("verification domain service", () => {
     });
   });
 
+  it("sorts entities lexicographically by entityId to prevent deadlocks", async () => {
+    professionalServiceMock.verifyProfessional.mockResolvedValue({
+      previousStatus: "PENDING",
+      newStatus: "VERIFIED",
+      message: "Professional verified",
+    });
+
+    const callOrder: string[] = [];
+    professionalServiceMock.verifyProfessional.mockImplementation(
+      async (req) => {
+        callOrder.push(req.entityId);
+        return {
+          previousStatus: "PENDING",
+          newStatus: "VERIFIED",
+          message: "Professional verified",
+        };
+      },
+    );
+
+    const result = await batchVerifyEntities(
+      actor(dbMock.AdminRole.SUPER_ADMIN),
+      {
+        entities: [
+          { entityType: "professional", entityId: "user_z" },
+          { entityType: "professional", entityId: "user_a" },
+          { entityType: "professional", entityId: "user_m" },
+        ],
+        action: "VERIFY",
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(callOrder).toEqual(["user_a", "user_m", "user_z"]);
+  });
+
   it("loads normalized verification details", async () => {
     professionalServiceMock.getProfessionalVerificationDetails.mockResolvedValue(
       {
@@ -417,6 +461,122 @@ describe("verification domain service", () => {
       total: 2,
       successful: 1,
       failed: 1,
+    });
+  });
+
+  it("sorts documents lexicographically by documentId to prevent deadlocks", async () => {
+    repositoryMock.updateDocumentVerification.mockResolvedValue({
+      documentType: "professional_document",
+      documentId: "doc_dummy",
+      targetEntityType: "professional",
+      targetEntityId: "user_1",
+      status: "APPROVED",
+      message: "Document approved successfully",
+    });
+
+    const callOrder: string[] = [];
+    repositoryMock.updateDocumentVerification.mockImplementation(
+      async (req) => {
+        callOrder.push(req.documentId);
+        return {
+          documentType: req.documentType,
+          documentId: req.documentId,
+          targetEntityType: "professional",
+          targetEntityId: "user_1",
+          status: "APPROVED",
+          message: "Document approved successfully",
+        };
+      },
+    );
+
+    const result = await batchVerifyDocuments(
+      actor(dbMock.AdminRole.SUPER_ADMIN),
+      {
+        documents: [
+          {
+            documentType: "professional_document",
+            documentId: "doc_z",
+            action: "APPROVE",
+          },
+          {
+            documentType: "professional_document",
+            documentId: "doc_a",
+            action: "APPROVE",
+          },
+          {
+            documentType: "professional_document",
+            documentId: "doc_m",
+            action: "APPROVE",
+          },
+        ],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(callOrder).toEqual(["doc_a", "doc_m", "doc_z"]);
+  });
+
+  describe("verifyLicense", () => {
+    it("delegates to the internal verifyLicense service", async () => {
+      const originalFlag =
+        adminEnvConfig.NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE;
+      // @ts-ignore - mutate config for test
+      adminEnvConfig.NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE = true;
+
+      licenseServiceMock.verifyLicense.mockResolvedValue({
+        licenseId: "lic_1",
+        authority: "NCA",
+        licenseNumber: "NCA-123",
+        professionalId: "prof_1",
+        previousStatus: "PENDING",
+        newStatus: "VERIFIED",
+        message: "License verified successfully",
+        verifiedAt: new Date("2026-05-18T00:00:00.000Z"),
+      });
+
+      const result = await verifyLicense(actor(dbMock.AdminRole.SUPER_ADMIN), {
+        licenseId: "lic_1",
+        action: "VERIFY",
+      });
+
+      expect(result).toEqual({
+        ok: true,
+        data: expect.objectContaining({
+          licenseId: "lic_1",
+          newStatus: "VERIFIED",
+        }),
+      });
+
+      expect(licenseServiceMock.verifyLicense).toHaveBeenCalled();
+      expect(
+        notificationServiceMock.notifyVerificationResult,
+      ).toHaveBeenCalled();
+
+      // @ts-ignore
+      adminEnvConfig.NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE =
+        originalFlag;
+    });
+
+    it("returns error if license queue is disabled by feature flag", async () => {
+      const originalFlag =
+        adminEnvConfig.NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE;
+      // @ts-ignore
+      adminEnvConfig.NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE = false;
+
+      const result = await verifyLicense(actor(dbMock.AdminRole.SUPER_ADMIN), {
+        licenseId: "lic_1",
+        action: "VERIFY",
+      });
+
+      expect(result).toEqual({
+        ok: false,
+        code: "VERIFICATION_POLICY_DENIED",
+        message: "License verification queue is disabled by feature flag",
+      });
+
+      // @ts-ignore
+      adminEnvConfig.NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE =
+        originalFlag;
     });
   });
 });

@@ -21,12 +21,14 @@ import type {
   VerificationDetails,
   VerificationFilterInput,
   VerifyEntityInput,
+  VerifyLicenseInput,
   VerifyDocumentInput,
   BatchVerifyDocumentsInput,
 } from "./types";
 import {
   parseVerificationFilter,
   parseVerifyEntity,
+  parseVerifyLicense,
   parseVerifyDocument,
   parseBatchVerifyDocuments,
 } from "./types";
@@ -42,7 +44,12 @@ const BatchEntitySchema = z
       .array(
         z
           .object({
-            entityType: z.enum(["professional", "store", "property"]),
+            entityType: z.enum([
+              "professional",
+              "store",
+              "property",
+              "license",
+            ]),
             entityId: z.string().uuid(),
           })
           .strict(),
@@ -500,4 +507,64 @@ export async function getVerificationUpdates(
       timestamp: now,
     };
   });
+}
+
+export async function verifyLicense(
+  input: VerifyLicenseInput,
+  idempotencyKey: string,
+): Promise<ActionResponse<{ newStatus: VerificationStatus; message: string }>> {
+  return safeAction(
+    "verifyLicense",
+    async ({ actor, adminUserId }) => {
+      const validated = parseVerifyLicense(input);
+      const parsedIdempotencyKey = parseActionInput(
+        IdempotencyKeySchema,
+        idempotencyKey,
+        "Idempotency-Key is required",
+      );
+
+      return runWithIdempotency({
+        adminUserId,
+        actionName: "verifyLicense",
+        idempotencyKey: parsedIdempotencyKey,
+        resourceId: `license:${validated.licenseId}:${validated.action}`,
+        ttlHours: VERIFICATION_IDEMPOTENCY_TTL_HOURS,
+        run: async () => {
+          const result = await verificationService.verifyLicense(
+            actor,
+            validated,
+          );
+
+          if (!result.ok) {
+            throw new Error(result.message);
+          }
+
+          revalidatePath("/verifications");
+          revalidatePath(`/verifications/license/${validated.licenseId}`);
+
+          return {
+            newStatus: result.data.newStatus as VerificationStatus,
+            message: result.data.message,
+          };
+        },
+      });
+    },
+    {
+      auditLog: {
+        operation: "VERIFY_LICENSE",
+        resourceType: "professional_license",
+        getTargetId: () => input?.licenseId ?? "unknown",
+        getDetails: ({ data }) => {
+          const result = data as { newStatus: string; message: string };
+          return {
+            requestedAction: input?.action,
+            ...(input?.reason ? { reason: input.reason } : {}),
+            ...(input?.notes ? { notes: input.notes } : {}),
+            newStatus: result.newStatus,
+          };
+        },
+        getReason: () => input?.reason,
+      },
+    },
+  );
 }

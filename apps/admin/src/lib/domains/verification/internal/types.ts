@@ -5,7 +5,12 @@
 
 import { VerificationStatus } from "@build/db";
 
-export type EntityType = "professional" | "store" | "property" | "certificate";
+export type EntityType =
+  | "professional"
+  | "store"
+  | "property"
+  | "certificate"
+  | "license";
 
 export type VerificationAction =
   | "VERIFY"

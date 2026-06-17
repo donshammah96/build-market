@@ -44,7 +44,7 @@ export type PaginationMeta = {
 // Verification Types
 // ============================================================================
 
-export type EntityType = "professional" | "store" | "property";
+export type EntityType = "professional" | "store" | "property" | "license";
 export type VerificationAction = "VERIFY" | "REJECT" | "REQUEST_CORRECTION";
 export type DocumentAction = "APPROVE" | "REJECT";
 export type VerificationStatus =
@@ -52,7 +52,9 @@ export type VerificationStatus =
   | "PENDING"
   | "VERIFIED"
   | "REJECTED"
-  | "NEEDS_CORRECTION";
+  | "NEEDS_CORRECTION"
+  | "EXPIRED"
+  | "SUSPENDED";
 
 export type VerificationPersonSummary = {
   id?: string;
@@ -274,10 +276,18 @@ export const SystemSettingsSchema = z
 
 export const VerificationFilterSchema = z.object({
   entityType: z
-    .enum(["all", "professional", "store", "property"])
+    .enum(["all", "professional", "store", "property", "license"])
     .default("all"),
   status: z
-    .enum(["UNVERIFIED", "PENDING", "VERIFIED", "REJECTED", "NEEDS_CORRECTION"])
+    .enum([
+      "UNVERIFIED",
+      "PENDING",
+      "VERIFIED",
+      "REJECTED",
+      "NEEDS_CORRECTION",
+      "EXPIRED",
+      "SUSPENDED",
+    ])
     .default("PENDING"),
   page: z.number().min(1).default(1),
   limit: z.number().min(1).max(1000).default(20),
@@ -286,8 +296,15 @@ export const VerificationFilterSchema = z.object({
 });
 
 export const VerifyEntitySchema = z.object({
-  entityType: z.enum(["professional", "store", "property"]),
+  entityType: z.enum(["professional", "store", "property", "license"]),
   entityId: z.string().uuid(),
+  action: z.enum(["VERIFY", "REJECT", "REQUEST_CORRECTION"]),
+  notes: z.string().optional(),
+  reason: z.string().optional(),
+});
+
+export const VerifyLicenseSchema = z.object({
+  licenseId: z.string().uuid(),
   action: z.enum(["VERIFY", "REJECT", "REQUEST_CORRECTION"]),
   notes: z.string().optional(),
   reason: z.string().optional(),
@@ -338,6 +355,7 @@ export type SystemSettingsInput = z.infer<typeof SystemSettingsSchema>;
 export type UpdateProfileInput = z.infer<typeof UpdateProfileSchema>;
 export type VerificationFilterInput = z.infer<typeof VerificationFilterSchema>;
 export type VerifyEntityInput = z.infer<typeof VerifyEntitySchema>;
+export type VerifyLicenseInput = z.infer<typeof VerifyLicenseSchema>;
 export type VerifyDocumentInput = z.infer<typeof VerifyDocumentSchema>;
 export type BatchVerifyDocumentsInput = z.infer<
   typeof BatchVerifyDocumentsSchema
@@ -367,6 +385,18 @@ export function parseVerifyEntity(input: unknown): VerifyEntityInput {
   if (!result.success) {
     throw new Error(
       result.error.issues[0]?.message ?? "Invalid verification payload",
+    );
+  }
+
+  return result.data;
+}
+
+export function parseVerifyLicense(input: unknown): VerifyLicenseInput {
+  const result = VerifyLicenseSchema.strict().safeParse(input);
+
+  if (!result.success) {
+    throw new Error(
+      result.error.issues[0]?.message ?? "Invalid license verification payload",
     );
   }
 

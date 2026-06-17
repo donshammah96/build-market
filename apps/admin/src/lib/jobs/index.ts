@@ -30,6 +30,11 @@ import {
   createAssetCleanupWorker,
   assetCleanupQueue,
 } from "./asset-cleanup";
+import {
+  scheduleLicenseExpiry,
+  createLicenseExpiryWorker,
+  licenseExpiryQueue,
+} from "./license-expiry";
 import { Worker } from "bullmq";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 
@@ -71,6 +76,7 @@ export async function initializeAllSchedulers(): Promise<void> {
       scheduleDataRetentionEnforcement(),
       scheduleAnonymizationBatch(),
       scheduleAssetCleanup(),
+      scheduleLicenseExpiry(),
     ]);
 
     logger.info("All jobs scheduled");
@@ -81,6 +87,7 @@ export async function initializeAllSchedulers(): Promise<void> {
       createDataRetentionWorker(),
       createAnonymizationBatchWorker(),
       createAssetCleanupWorker(),
+      createLicenseExpiryWorker(),
     ];
 
     logger.info("All workers created");
@@ -128,6 +135,7 @@ export async function shutdownAllSchedulers(): Promise<void> {
       retentionQueue.close(),
       anonymizationQueue.close(),
       assetCleanupQueue.close(),
+      licenseExpiryQueue.close(),
     ]);
 
     workers = [];
@@ -155,6 +163,7 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
     { name: "Data Retention", queue: retentionQueue },
     { name: "Anonymization Batch", queue: anonymizationQueue },
     { name: "Asset Cleanup", queue: assetCleanupQueue },
+    { name: "License Expiry", queue: licenseExpiryQueue },
   ];
 
   for (const { name, queue } of queues) {
@@ -198,7 +207,8 @@ export async function triggerJob(
     | "export-cleanup"
     | "data-retention"
     | "anonymization-batch"
-    | "asset-cleanup",
+    | "asset-cleanup"
+    | "license-expiry",
 ): Promise<{ success: boolean; jobId?: string; error?: string }> {
   const correlationId = CorrelationIdManager.generate();
   CorrelationIdManager.set(correlationId);
@@ -227,6 +237,10 @@ export async function triggerJob(
           success: false,
           error: "Export cleanup manual trigger not available",
         };
+      case "license-expiry":
+        queue = licenseExpiryQueue;
+        jobName = "expire-pending-licenses";
+        break;
       default:
         return { success: false, error: `Unknown job type: ${jobType}` };
     }
@@ -287,6 +301,7 @@ export async function healthCheck(): Promise<{
     "data-retention",
     "anonymization",
     "asset-cleanup",
+    "license-expiry",
   ] as const;
   for (let i = 0; i < workers.length; i++) {
     const worker = workers[i];
@@ -319,4 +334,5 @@ export {
   scheduleDataRetentionEnforcement,
   scheduleAnonymizationBatch,
   scheduleAssetCleanup,
+  scheduleLicenseExpiry,
 };

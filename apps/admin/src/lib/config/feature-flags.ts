@@ -7,6 +7,7 @@ export const AdminFeatureFlag = {
   ADMIN_V2_FINANCE_DASHBOARD: "admin_v2_finance_dashboard",
   ADMIN_V2_AUDIT_LOG_UI: "admin_v2_audit_log_ui",
   ADMIN_V2_STRUCTURED_LOGGING: "admin_v2_structured_logging",
+  ADMIN_FF_LICENSE_VERIFICATION_QUEUE: "admin_ff_license_verification_queue",
 } as const;
 
 export type AdminFeatureFlag =
@@ -23,6 +24,8 @@ const FLAG_ENV_KEYS = {
     "NEXT_PUBLIC_ADMIN_FF_V2_AUDIT_LOG_UI",
   [AdminFeatureFlag.ADMIN_V2_STRUCTURED_LOGGING]:
     "NEXT_PUBLIC_ADMIN_FF_V2_STRUCTURED_LOGGING",
+  [AdminFeatureFlag.ADMIN_FF_LICENSE_VERIFICATION_QUEUE]:
+    "NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE",
 } as const satisfies Record<AdminFeatureFlag, keyof typeof adminEnvConfig>;
 
 export function isAdminFeatureEnabled(

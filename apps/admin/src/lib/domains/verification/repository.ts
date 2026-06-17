@@ -203,6 +203,65 @@ export async function countPropertyQueue(
   });
 }
 
+export async function listLicenseQueue(
+  query: VerificationQueueQuery & { status: PrismaVerificationStatus },
+): Promise<VerificationQueueItem[]> {
+  const rows = await prisma.professionalLicense.findMany({
+    where: { status: query.status },
+    select: {
+      id: true,
+      authority: true,
+      licenseNumber: true,
+      status: true,
+      createdAt: true,
+      validFrom: true,
+      validUntil: true,
+      professional: {
+        select: {
+          userId: true,
+          companyName: true,
+          user: {
+            select: {
+              email: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: query.sortOrder },
+    skip: query.entityType === "license" ? query.skip : 0,
+    ...(query.entityType === "license" ? { take: query.limit } : {}),
+  });
+
+  return rows.map((license) => ({
+    entityType: "license",
+    entityId: license.id,
+    name: `${license.authority} - ${license.licenseNumber}`,
+    status: license.status,
+    submittedAt: license.createdAt,
+    createdAt: license.createdAt,
+    owner: {
+      id: license.professional.userId,
+      email: license.professional.user.email,
+      firstName: license.professional.user.firstName,
+      lastName: license.professional.user.lastName,
+      phone: license.professional.user.phone,
+    },
+    licenseId: license.id,
+  }));
+}
+
+export async function countLicenseQueue(
+  status: PrismaVerificationStatus,
+): Promise<number> {
+  return prisma.professionalLicense.count({
+    where: { status },
+  });
+}
+
 export async function countVerificationStatus(
   model: "professional" | "store" | "property",
   status: PrismaVerificationStatus,
@@ -330,6 +389,8 @@ export const verificationRepository = {
   countStoreQueue,
   listPropertyQueue,
   countPropertyQueue,
+  listLicenseQueue,
+  countLicenseQueue,
   countVerificationStatus,
   findStoreOwnerId,
   findPropertyOwnerId,

@@ -26,6 +26,27 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
+## [2026-06-15] License Verification Event-Driven Architecture & NATS Resilience
+
+### Added (License Verification Event-Driven Architecture & NATS Resilience)
+
+- **License Verification Event Publisher:** Implemented lazy-initialized NATS publishing integration at `apps/client/app/lib/integrations/license-events.ts` to emit `license.submitted` and other license event payloads.
+- **Automatic Verification Consumer:** Added consumer worker `apps/client/app/workers/license-auto-verify.consumer.ts` subscribing to `license.auto_verify_requested` and performing simulated external NCA/EBK background checking.
+
+### Changed (NATS Worker & Integrations)
+
+- **License Creation Publishing Hook:** Integrated lazy-initialized NATS publishing inside `createLicense()` (`apps/client/app/lib/domains/licenses/service.ts`) to publish a `license.submitted` event when a professional submits a license.
+- **Worker Type-Safety Refactor:** Replaced all loose `any` variables and signatures in `apps/client/app/workers/license-auto-verify.consumer.ts` with explicit, strongly typed generics like `MessagePayload<unknown>`, `JetStreamConsumer`, and `JetStreamProducer`.
+- **Extracted Decisional Path Handlers:** Refactored the core verification routing loop in the auto-verify consumer, extracting the success/failure states into isolated `handleVerificationSuccess` and `handleVerificationFailure` helper functions.
+- **Deduplication Hardening:** Configured deterministic `msgId` structures matching `${licenseId}-${correlationId}` for published events to leverage NATS' JetStream duplicate window.
+- **Resilience Heartbeats:** Introduced `msg.working()` calls to periodically reset the consumer's ack wait timer before commencing simulated external I/O delays.
+- **Teardown Operations:** Configured dual-disconnect sequences in `stopLicenseAutoVerifyConsumer` to clean up both the worker consumer and publisher instances gracefully.
+
+### Fixed (NATS Worker & Integrations)
+
+- **Contravariance Type Resolution:** Resolved a TypeScript compilation error in `license-auto-verify.consumer.ts` by ensuring the handler interface parameter maps to `MessagePayload<unknown>` and is cast safely internally to `LicenseVerificationEvent`.
+- **Publisher Options Sync:** Fixed `license-events.ts` to utilize the renamed `retryDelayMs` property in client-side publish invocations instead of the legacy `retryDelay` field.
+
 ## [2026-05-14] Infrastructure, Tests & Routing Remediation
 
 ### Changed (Infrastructure & Routing)
@@ -428,7 +449,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [2026-04-30] Turborepo Environment Variable Passthrough Fix
 
-### Fixed
+### Fixed (Turborepo Environment Variable Passthrough Fix)
 
 - **Vercel Build Warnings (`turbo.json`).**
   Vercel reported 18 environment variables that were set in the project dashboard but missing from `turbo.json`, causing them to be unavailable during the build phase (`@build/queue-server#build`, etc.). Added all flagged variables (e.g., `CORS_ALLOWED_ORIGINS`, `ENCRYPTION_KEY_V1`, `RATE_LIMIT_BACKEND`) to `globalEnv` and `build.env` arrays. Also preemptively added the new Supabase variables (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DIRECT_URL`) to ensure they pass through without triggering strict-mode warnings.
@@ -472,7 +493,7 @@ pnpm run client:check-env-contract
 
 ## [2026-04-30] Supabase Integration & CI Hardening
 
-### Added
+### Added (Supabase Integration & CI Hardening)
 
 - **Supabase as production PostgreSQL provider (`packages/db`).**
   Migrated from a local/Neon Postgres target to Supabase Supavisor (managed, serverless-safe pooler). All 25 existing Prisma migration files were applied to the Supabase project (`ewbnznoprzlqtcoxvjai`) via `prisma migrate deploy` with zero schema changes.

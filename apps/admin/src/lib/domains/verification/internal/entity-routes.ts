@@ -50,6 +50,12 @@ export const ENTITY_ROUTES: Record<EntityType, EntityRouteConfig> = {
     verificationRoute: "/professional-portal/settings?tab=certificates",
     statusQueryKey: "status",
   },
+  license: {
+    managementRoute: "/professional-portal/settings",
+    entityDetailRoute: (id) => `/professional-portal/settings?tab=verification`,
+    verificationRoute: "/professional-portal/settings?tab=verification",
+    statusQueryKey: "status",
+  },
 };
 
 /**
