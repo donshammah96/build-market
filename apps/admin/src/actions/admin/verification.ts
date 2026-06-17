@@ -3,8 +3,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { runWithIdempotency } from "./idempotency";
-import { safeAction } from "./_core/safe-action";
-import { parseActionInput } from "./_core/validation";
+import { safeAction } from "@/_core/safe-action";
+import { parseActionInput } from "@/_core/validation";
 import {
   verificationService,
   type VerificationQueueItem as DomainVerificationQueueItem,

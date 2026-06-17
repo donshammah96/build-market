@@ -5,8 +5,31 @@ const mocks = vi.hoisted(() => ({
   callClientApi: vi.fn(),
 }));
 
-vi.mock("../shared", () => ({
+const dbMock = vi.hoisted(() => ({
+  AdminRole: {
+    SUPER_ADMIN: "SUPER_ADMIN",
+    SUPPORT_AGENT: "SUPPORT_AGENT",
+    CONTENT_MODERATOR: "CONTENT_MODERATOR",
+  } as const,
+  UserRole: { ADMIN: "ADMIN" } as const,
+}));
+
+vi.mock("@build/db", () => ({
+  AdminRole: dbMock.AdminRole,
+  UserRole: dbMock.UserRole,
+  prisma: {},
+}));
+
+vi.mock("../_core/safe-action", () => ({
   safeAction: mocks.safeAction,
+}));
+vi.mock("../_core/client-api", () => ({
+  callClientApi: mocks.callClientApi,
+}));
+vi.mock("@/_core/safe-action", () => ({
+  safeAction: mocks.safeAction,
+}));
+vi.mock("@/_core/client-api", () => ({
   callClientApi: mocks.callClientApi,
 }));
 

@@ -8,6 +8,21 @@ const usersServiceMock = vi.hoisted(() => ({
   prepareResetUserCredentials: vi.fn(),
 }));
 
+const dbMock = vi.hoisted(() => ({
+  AdminRole: {
+    SUPER_ADMIN: "SUPER_ADMIN",
+    SUPPORT_AGENT: "SUPPORT_AGENT",
+    CONTENT_MODERATOR: "CONTENT_MODERATOR",
+  } as const,
+  UserRole: { ADMIN: "ADMIN" } as const,
+}));
+
+vi.mock("@build/db", () => ({
+  AdminRole: dbMock.AdminRole,
+  UserRole: dbMock.UserRole,
+  prisma: {},
+}));
+
 const usersRepositoryMock = vi.hoisted(() => ({
   deleteUserById: vi.fn(),
   markPasswordResetRequired: vi.fn(),
@@ -92,7 +107,18 @@ vi.mock("../idempotency", () => ({
   ),
 }));
 
-vi.mock("../shared", () => sharedMock);
+vi.mock("../_core/safe-action", () => ({
+  safeAction: sharedMock.safeAction,
+}));
+vi.mock("../_core/validation", () => ({
+  parseActionInput: sharedMock.parseActionInput,
+}));
+vi.mock("@/_core/safe-action", () => ({
+  safeAction: sharedMock.safeAction,
+}));
+vi.mock("@/_core/validation", () => ({
+  parseActionInput: sharedMock.parseActionInput,
+}));
 
 vi.mock("@/lib/domains/users", () => ({
   usersService: usersServiceMock,

@@ -7,6 +7,26 @@ const verificationServiceMock = vi.hoisted(() => ({
   batchVerifyEntities: vi.fn(),
 }));
 
+const dbMock = vi.hoisted(() => ({
+  AdminRole: {
+    SUPER_ADMIN: "SUPER_ADMIN",
+    SUPPORT_AGENT: "SUPPORT_AGENT",
+    CONTENT_MODERATOR: "CONTENT_MODERATOR",
+  } as const,
+  UserRole: { ADMIN: "ADMIN" } as const,
+}));
+
+vi.mock("@build/db", () => ({
+  AdminRole: dbMock.AdminRole,
+  UserRole: dbMock.UserRole,
+  prisma: {},
+}));
+
+vi.mock("@clerk/nextjs/server", () => ({
+  auth: vi.fn(),
+  clerkClient: vi.fn(),
+}));
+
 const sharedMock = vi.hoisted(() => ({
   safeAction: vi.fn(
     async (
@@ -75,7 +95,18 @@ vi.mock("../idempotency", () => ({
   ),
 }));
 
-vi.mock("../shared", () => sharedMock);
+vi.mock("../_core/safe-action", () => ({
+  safeAction: sharedMock.safeAction,
+}));
+vi.mock("../_core/validation", () => ({
+  parseActionInput: sharedMock.parseActionInput,
+}));
+vi.mock("@/_core/safe-action", () => ({
+  safeAction: sharedMock.safeAction,
+}));
+vi.mock("@/_core/validation", () => ({
+  parseActionInput: sharedMock.parseActionInput,
+}));
 
 vi.mock("@/lib/domains/verification", () => ({
   verificationService: verificationServiceMock,
@@ -87,7 +118,7 @@ import {
   verifyDocument,
   verifyEntity,
 } from "../verification";
-import { safeAction } from "../shared";
+import { safeAction } from "@/_core/safe-action";
 
 const IDEMPOTENCY_KEY = "idem-key-1";
 

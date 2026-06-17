@@ -46,6 +46,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Admin**: Standardized core server action and validation imports in `verification.ts` and test suites (`verification-actions.test.ts`, `users-actions.test.ts`, `onboarding-remediation.test.ts`) to use canonical `@/_core/...` and relative `../_core/...` path alias mocks.
 - **Admin**: Consolidated GDPR services under `domains/gdpr/`, verification-internal services under `domains/verification/internal/`, and relocated domain configurations and single-file folders in `apps/admin` (autopsy refactoring items I-8, I-9, I-15, I-16, I-19).
 - **Admin Action Layer**: Refactored the `apps/admin` action layer to eliminate direct Prisma queries by creating a new `securityRepository`, refactored route handlers to use `resolveAdminRouteActor` and Zod `safeParse`, and resolved environment boundary violations in `onboarding-remediation.ts` using `adminEnvConfig`.
 
