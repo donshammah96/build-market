@@ -29,9 +29,13 @@ async function getNatsProducer(): Promise<JetStreamProducer | null> {
  * Fire-and-forget: never throws — failures are structured-logged only.
  */
 export async function publishLicenseEvent(
-  event: LicenseVerificationEvent,
+  event: Omit<LicenseVerificationEvent, "timestamp"> & { timestamp?: string },
   opts?: { correlationId?: string },
 ): Promise<void> {
+  const fullEvent: LicenseVerificationEvent = {
+    ...event,
+    timestamp: event.timestamp ?? new Date().toISOString(),
+  };
   try {
     const producer = await getNatsProducer();
     if (!producer) {
@@ -45,11 +49,11 @@ export async function publishLicenseEvent(
       return;
     }
 
-    const subject = `license.${event.action}`;
-    const msgId = `${event.licenseId}-${Date.now()}`;
+    const subject = `license.${fullEvent.action}`;
+    const msgId = `${fullEvent.licenseId}-${Date.now()}`;
 
     // Publish to NATS
-    await producer.publishWithRetry(subject, event, {
+    await producer.publishWithRetry(subject, fullEvent, {
       msgId,
       maxRetries: 3,
       retryDelayMs: 1000,
@@ -57,17 +61,17 @@ export async function publishLicenseEvent(
 
     getClientLogger().info("License verification event published to NATS", {
       subject,
-      licenseId: event.licenseId,
-      action: event.action,
-      correlationId: opts?.correlationId || event.correlationId,
+      licenseId: fullEvent.licenseId,
+      action: fullEvent.action,
+      correlationId: opts?.correlationId || fullEvent.correlationId,
     });
   } catch (error) {
     getClientLogger().error(
       "Failed to publish license verification event to NATS",
       error as Error,
       {
-        licenseId: event.licenseId,
-        action: event.action,
+        licenseId: fullEvent.licenseId,
+        action: fullEvent.action,
       },
     );
   }
