@@ -117,7 +117,6 @@ export const licensesService = {
       newStatus: "PENDING",
       action: "submitted",
       correlationId: actor.correlationId ?? "",
-      timestamp: new Date().toISOString(),
       ...(result.data.validUntil ? { validUntil: result.data.validUntil } : {}),
     }).catch(() => {
       // Silently handled/logged inside the adapter
