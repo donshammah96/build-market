@@ -26,6 +26,16 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
+## [Unreleased]
+
+### Changed (Testing)
+
+- **PropertyForm tests:** Replaced fragile full-tree HTML snapshots in `PropertyForm` component tests with robust semantic accessibility assertions.
+
+### Security (Vulnerability Resolution)
+
+- **Security**: Resolved moderate security vulnerability GHSA-cmwh-pvxp-8882 by pinning `dompurify` dependency version to `>=3.4.11` in `pnpm-workspace.yaml`.
+
 ## [2026-06-15] License Verification Event-Driven Architecture & NATS Resilience
 
 ### Added (License Verification Event-Driven Architecture & NATS Resilience)

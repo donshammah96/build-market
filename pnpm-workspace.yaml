@@ -64,7 +64,7 @@ overrides:
   "@clerk/express": ">=2.1.6"
   yaml: ">=2.8.3"
   next: "16.2.6"
-  dompurify: ">=3.4.0"
+  dompurify: ">=3.4.11"
   axios: ">=1.15.0"
   protobufjs: ">=8.0.2"
   postcss: "8.5.14"

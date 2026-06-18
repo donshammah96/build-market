@@ -46,6 +46,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Client**: Replaced fragile full-tree HTML snapshots in `PropertyForm` component tests with robust semantic accessibility assertions.
 - **Admin**: Standardized core server action and validation imports in `verification.ts` and test suites (`verification-actions.test.ts`, `users-actions.test.ts`, `onboarding-remediation.test.ts`) to use canonical `@/_core/...` and relative `../_core/...` path alias mocks.
 - **Admin**: Consolidated GDPR services under `domains/gdpr/`, verification-internal services under `domains/verification/internal/`, and relocated domain configurations and single-file folders in `apps/admin` (autopsy refactoring items I-8, I-9, I-15, I-16, I-19).
 - **Admin Action Layer**: Refactored the `apps/admin` action layer to eliminate direct Prisma queries by creating a new `securityRepository`, refactored route handlers to use `resolveAdminRouteActor` and Zod `safeParse`, and resolved environment boundary violations in `onboarding-remediation.ts` using `adminEnvConfig`.
@@ -92,6 +93,10 @@ All notable changes to this project will be documented in this file.
 - **Onboarding**: Extracted reusable `LegalCheckbox` sub-component in `ReviewStep.tsx` to eliminate duplicated checkbox markup.
 - **Frontend (Settings)**: Updated the profile completion payload in `settings/complete-profile/page.tsx` to filter out any documents that are missing an `uploadId`.
 - **API (Onboarding)**: Relaxed the Zod schema validation for professional document categories in `POST /api/onboarding/professional/complete` to structurally accept generic strings rather than strict enums.
+
+### Security
+
+- **Security**: Resolved moderate security vulnerability GHSA-cmwh-pvxp-8882 by pinning `dompurify` dependency version to `>=3.4.11` in `pnpm-workspace.yaml`.
 
 ### Fixed
 
