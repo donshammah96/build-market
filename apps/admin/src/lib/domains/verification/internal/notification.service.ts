@@ -280,7 +280,7 @@ export async function publishVerificationEvent(
     await producer.publishWithRetry(subject, event, {
       msgId: `${result.entityType}-${result.entityId}-${Date.now()}`,
       maxRetries: 3,
-      retryDelay: 1000,
+      retryDelayMs: 1000,
     });
 
     logger.info("Verification event published to NATS", {

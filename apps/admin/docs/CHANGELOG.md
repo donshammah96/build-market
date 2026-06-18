@@ -1,5 +1,21 @@
 # apps/admin Changelog
 
+## [2026-06-18] CI & Security Drift Fixes
+
+### Fixed (CI & Security Drift Fixes)
+
+- **TypeScript build error (`TS2561`)**: Corrected a property name typo in [`notification.service.ts`](../src/lib/domains/verification/internal/notification.service.ts) — `retryDelay` → `retryDelayMs` — to match the `PublishOptions & { maxRetries?: number; retryDelayMs?: number }` type accepted by `producer.publishWithRetry`. This was blocking `pnpm tsc --build tsconfig.json` and the Vercel deployment pipeline.
+- **Prettier format violation**: Reformatted [`instrumentation.ts`](../src/instrumentation.ts) to satisfy `format:check`. The original inline `// bootstrap-only:` comment on the `if` opening-brace line was rejected by Prettier; the fix uses a multi-line `if` form that co-locates the comment on the condition line, keeping it on the same line as the `process.env` reference.
+- **Security drift regression**: The Prettier reformat initially moved the `// bootstrap-only:` comment to its own line above the `if`, breaking the `adminEnvBoundaryDrift` exemption check in `report-security-drift.mjs` (which exempts a `process.env` hit only when `bootstrap-only:` appears on the **same line** as the reference). Resolved by adopting a Prettier-compatible multi-line `if` that keeps the annotation co-located with the `process.env.NEXT_RUNTIME` condition.
+
+### Verification (CI & Security Drift Fixes)
+
+- `pnpm tsc --build tsconfig.json` → pass (zero TypeScript errors).
+- `pnpm run format:check` → pass (all files use Prettier code style).
+- `pnpm admin:report-security-drift:strict` → pass; all eight categories at 0 findings.
+
+---
+
 ## [2026-06-15] License Verification Workflow, Distributed Safety & OpenTelemetry Integration
 
 ### Added (License Verification Workflow, Distributed Safety & OpenTelemetry Integration)
