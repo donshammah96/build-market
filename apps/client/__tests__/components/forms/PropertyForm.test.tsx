@@ -36,11 +36,7 @@ const mockUploadForCredential = vi.fn();
 vi.mock("@/lib/facades/upload-client", () => ({
   uploadForCredential: (...args: unknown[]) => mockUploadForCredential(...args),
 }));
-
-const normalizeSnapshotMarkup = (markup: string) =>
-  markup
-    .replace(/_r_[a-z0-9_:-]+/gi, "__ID__")
-    .replace(/radix-[a-z0-9_:-]+/gi, "radix-__ID__");
+// normalizeSnapshotMarkup helper removed (snapshots replaced with semantic assertions)
 
 // Mock next/image
 vi.mock("next/image", () => ({
@@ -378,14 +374,100 @@ describe("PropertyForm", () => {
     });
   });
 
-  describe("Snapshot", () => {
-    it("matches snapshot for default state", () => {
-      const { container } = render(<PropertyForm onSubmit={mockOnSubmit} />);
-      expect(normalizeSnapshotMarkup(container.innerHTML)).toMatchSnapshot();
+  describe("Semantic Structure & State", () => {
+    it("renders the form with correct default states and semantic structure", () => {
+      render(<PropertyForm onSubmit={mockOnSubmit} />);
+
+      // Verify the main sections are present with correct semantic headings
+      expect(
+        screen.getByRole("heading", { name: "Basic Details" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Location" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Property Specifications" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Property Images" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Verification Documents" }),
+      ).toBeInTheDocument();
+
+      // Verify Basic Details section controls
+      expect(screen.getByLabelText(/property title/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/property title/i)).toHaveValue("");
+
+      const typeCombobox = screen.getByRole("combobox", {
+        name: /property type/i,
+      });
+      expect(typeCombobox).toBeInTheDocument();
+      expect(typeCombobox).toHaveTextContent("For Sale");
+
+      const tenureCombobox = screen.getByRole("combobox", { name: /tenure/i });
+      expect(tenureCombobox).toBeInTheDocument();
+      expect(tenureCombobox).toHaveTextContent("Freehold");
+
+      const categoryCombobox = screen.getByRole("combobox", {
+        name: /category/i,
+      });
+      expect(categoryCombobox).toBeInTheDocument();
+      expect(categoryCombobox).toHaveTextContent("Residential");
+
+      expect(screen.getByLabelText(/price/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/price/i)).toHaveValue(null);
+
+      const currencyCombobox = screen.getByRole("combobox", {
+        name: /currency/i,
+      });
+      expect(currencyCombobox).toBeInTheDocument();
+      expect(currencyCombobox).toHaveTextContent("KES - Kenyan Shilling");
+
+      expect(screen.getByLabelText(/description/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/description/i)).toHaveValue("");
+
+      // Verify Location section controls
+      expect(screen.getByLabelText(/^location/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^location/i)).toHaveValue("");
+      expect(screen.getByLabelText(/street address/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/street address/i)).toHaveValue("");
+      expect(screen.getByLabelText(/city\/constituency/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/city\/constituency/i)).toHaveValue("");
+      expect(screen.getByLabelText(/neighbourhood/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/neighbourhood/i)).toHaveValue("");
+
+      const countyCombobox = screen.getByRole("combobox", { name: /county/i });
+      expect(countyCombobox).toBeInTheDocument();
+      expect(countyCombobox).toHaveTextContent("Select County");
+
+      expect(screen.getByLabelText(/latitude/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/latitude/i)).toHaveValue(null);
+      expect(screen.getByLabelText(/longitude/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/longitude/i)).toHaveValue(null);
+
+      // Verify Specifications section controls
+      expect(screen.getByLabelText(/bedrooms/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/bedrooms/i)).toHaveValue(null);
+      expect(screen.getByLabelText(/bathrooms/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/bathrooms/i)).toHaveValue(null);
+      expect(screen.getByLabelText(/area \(sq ft\)/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/area \(sq ft\)/i)).toHaveValue(null);
+      expect(screen.getByLabelText(/plot size \(sq ft\)/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/plot size \(sq ft\)/i)).toHaveValue(null);
+      expect(
+        screen.getByLabelText(/land reference number/i),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText(/land reference number/i)).toHaveValue("");
+
+      // Verify main submit button
+      expect(
+        screen.getByRole("button", { name: /create property/i }),
+      ).toBeInTheDocument();
     });
 
-    it("matches snapshot for editing state", () => {
-      const { container } = render(
+    it("populates default values and sets button text in editing state", () => {
+      render(
         <PropertyForm
           onSubmit={mockOnSubmit}
           isEditing
@@ -393,10 +475,40 @@ describe("PropertyForm", () => {
             title: "Existing Property",
             price: 200000,
             currency: "KES",
+            type: "RENT" as const,
+            category: "COMMERCIAL" as const,
+            tenure: "LEASEHOLD" as const,
+            county: "MOMBASA" as const,
+            location: "Nyali",
           }}
         />,
       );
-      expect(normalizeSnapshotMarkup(container.innerHTML)).toMatchSnapshot();
+
+      // Assert basic values are populated
+      expect(screen.getByLabelText(/property title/i)).toHaveValue(
+        "Existing Property",
+      );
+      expect(screen.getByLabelText(/price/i)).toHaveValue(200000);
+      expect(screen.getByLabelText(/^location/i)).toHaveValue("Nyali");
+
+      // Assert combobox selections are matching passed default values
+      expect(
+        screen.getByRole("combobox", { name: /property type/i }),
+      ).toHaveTextContent("For Rent");
+      expect(
+        screen.getByRole("combobox", { name: /tenure/i }),
+      ).toHaveTextContent("Leasehold");
+      expect(
+        screen.getByRole("combobox", { name: /category/i }),
+      ).toHaveTextContent("Commercial");
+      expect(
+        screen.getByRole("combobox", { name: /county/i }),
+      ).toHaveTextContent("Mombasa");
+
+      // Assert submit button has correct label
+      expect(
+        screen.getByRole("button", { name: /save changes/i }),
+      ).toBeInTheDocument();
     });
   });
 });
