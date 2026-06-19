@@ -21,7 +21,7 @@ import { notFound } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ProfessionalProfileEditor } from "@/components/admin/professional-profile-editor";
 import { CertificateManager } from "@/components/admin/certificate-manager";
-import { getAdminPermissions } from "@/actions/admin/shared";
+import { getAdminPermissions } from "@/actions/admin/_core/permissions";
 
 type ProfessionalDetailView = {
   userId: string;

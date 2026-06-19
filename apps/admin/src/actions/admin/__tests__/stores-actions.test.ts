@@ -1,195 +1,307 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// ============================================================================
+// Hoisted mocks — safeAction requires Clerk auth + Prisma user lookup
+// ============================================================================
+
+const dbMock = vi.hoisted(() => ({
+  AdminRole: {
+    SUPER_ADMIN: "SUPER_ADMIN",
+    FINANCE_MANAGER: "FINANCE_MANAGER",
+    AUDITOR: "AUDITOR",
+    CONTENT_MODERATOR: "CONTENT_MODERATOR",
+    SUPPORT_AGENT: "SUPPORT_AGENT",
+  } as const,
+  UserRole: { ADMIN: "ADMIN" } as const,
+  VerificationStatus: {
+    PENDING: "PENDING",
+    VERIFIED: "VERIFIED",
+    REJECTED: "REJECTED",
+  } as const,
+}));
+
+const prismaMock = vi.hoisted(() => ({
+  user: { findUnique: vi.fn() },
+}));
+
+const clerkMock = vi.hoisted(() => ({
+  auth: vi.fn(),
+}));
+
+const rateLimitMock = vi.hoisted(() => ({
+  checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+const storesServiceMock = vi.hoisted(() => ({
+  storesService: {
+    listStorePage: vi.fn(),
+    getStoreDetail: vi.fn(),
+    getStoreStats: vi.fn(),
+    updateStore: vi.fn(),
+    toggleStoreFeatured: vi.fn(),
+    verifyStore: vi.fn(),
+    rejectStore: vi.fn(),
+    deleteStore: vi.fn(),
+    buildStoreListQuery: vi.fn(),
+  },
+}));
 
 vi.mock("@build/db", () => ({
-  prisma: {
-    store: {
-      findUnique: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-    },
-    idempotencyKey: {
-      findUnique: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-    },
+  AdminRole: dbMock.AdminRole,
+  UserRole: dbMock.UserRole,
+  VerificationStatus: dbMock.VerificationStatus,
+  prisma: prismaMock,
+}));
+vi.mock("@clerk/nextjs/server", () => ({ auth: clerkMock.auth }));
+vi.mock("@/lib/api/rate-limit", () => rateLimitMock);
+vi.mock("@/lib/domains/stores/service", () => storesServiceMock);
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/config/feature-flags", () => ({
+  AdminFeatureFlag: {
+    ADMIN_V2_STRUCTURED_LOGGING: "admin_v2_structured_logging",
   },
-  County: {},
-  StoreType: {},
-  StoreCategory: {},
+  isAdminFeatureEnabled: vi.fn().mockReturnValue(false),
 }));
-
-vi.mock("next/cache", () => ({
-  revalidatePath: vi.fn(),
-}));
-
-vi.mock("@/lib/config/store.config", () => ({
-  STORE_CONFIG: {
-    IDEMPOTENCY_KEY_TTL_HOURS: 1,
-  },
-}));
-
-vi.mock("../../../lib/services/idempotency.service", () => ({
-  IdempotencyService: {
-    generateKey: vi.fn().mockReturnValue("scoped-idempotency-key"),
-    checkOrCreate: vi.fn().mockResolvedValue({ status: "new" }),
-    complete: vi.fn().mockResolvedValue(undefined),
-    fail: vi.fn().mockResolvedValue(undefined),
-  },
-}));
-
-vi.mock("../shared", () => ({
-  safeAction: vi.fn(
-    async (
-      _name: string,
-      fn: (context: {
-        adminUserId: string;
-        adminRole: "admin";
-      }) => Promise<unknown>,
-    ) => {
-      try {
-        const data = await fn({
-          adminUserId: "admin_user_1",
-          adminRole: "admin",
-        });
-        return { success: true, data, timestamp: new Date().toISOString() };
-      } catch (error) {
-        return {
-          success: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "An unexpected error occurred",
-        };
-      }
-    },
+vi.mock("../idempotency", () => ({
+  runWithIdempotency: vi.fn(async <T>(params: { run: () => Promise<T> }) =>
+    params.run(),
   ),
-  safeVerificationAction: vi.fn(
-    async (
-      _name: string,
-      fn: (context: {
-        adminUserId: string;
-        adminRole: "admin" | "verification_admin";
-      }) => Promise<unknown>,
-    ) => {
-      try {
-        const data = await fn({
-          adminUserId: "admin_user_1",
-          adminRole: "admin",
-        });
-        return { success: true, data, timestamp: new Date().toISOString() };
-      } catch (error) {
-        return {
-          success: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "An unexpected error occurred",
-        };
-      }
-    },
-  ),
-  logAdminAction: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { prisma } from "@build/db";
-import { deleteStore, toggleStoreFeatured, verifyStore } from "../stores";
-import { logAdminAction } from "../shared";
-import { IdempotencyService } from "../../../lib/services/idempotency.service";
+// ============================================================================
+// Imports (after mocks)
+// ============================================================================
 
-const IDEMPOTENCY_KEY = "idem-key-1";
+import {
+  getStores,
+  getStoreDetails,
+  updateStore,
+  verifyStore,
+  rejectStore,
+  deleteStore,
+} from "../stores";
 
-describe("admin stores actions governance", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(IdempotencyService.checkOrCreate).mockResolvedValue({
-      status: "new",
+const mockService = storesServiceMock.storesService;
+
+// ============================================================================
+// Auth helpers
+// ============================================================================
+
+function mockActorAs(role: string) {
+  clerkMock.auth.mockResolvedValue({ userId: "clerk_test", sessionClaims: {} });
+  prismaMock.user.findUnique.mockResolvedValue({
+    id: "user_1",
+    role: dbMock.UserRole.ADMIN,
+    adminProfile: { role, isActive: true },
+  });
+}
+
+function mockVerificationActorAs(role: string) {
+  // safeAction checks auth_time for freshness on verification policies.
+  const freshAuthTime = Math.floor(Date.now() / 1000);
+  clerkMock.auth.mockResolvedValue({
+    userId: "clerk_test",
+    sessionClaims: { auth_time: freshAuthTime },
+  });
+  prismaMock.user.findUnique.mockResolvedValue({
+    id: "user_1",
+    role: dbMock.UserRole.ADMIN,
+    adminProfile: { role, isActive: true },
+  });
+}
+
+// ============================================================================
+// getStores
+// ============================================================================
+
+describe("getStores action", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns page result on service success", async () => {
+    mockActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
+    mockService.listStorePage.mockResolvedValue({
+      ok: true,
+      data: {
+        stores: [],
+        meta: { total: 0, page: 1, limit: 10, totalPages: 0 },
+        filters: {},
+      },
     });
+    const result = await getStores();
+    expect(result.success).toBe(true);
   });
 
-  it("rejects verifyStore when idempotency key is missing", async () => {
-    const response = await verifyStore("store_1", "   ");
-
-    expect(response.success).toBe(false);
-    expect(response.error).toBe("Idempotency-Key is required");
-    expect(prisma.store.findUnique).not.toHaveBeenCalled();
-    expect(prisma.store.update).not.toHaveBeenCalled();
-    expect(logAdminAction).not.toHaveBeenCalled();
+  it("rejects invalid filter (page < 1)", async () => {
+    const result = await getStores({ page: -1 });
+    expect(result.success).toBe(false);
   });
 
-  it("returns cached response for verifyStore replay", async () => {
-    vi.mocked(IdempotencyService.checkOrCreate).mockResolvedValue({
-      status: "completed",
-      response: {
-        verified: true,
+  it("propagates service error", async () => {
+    mockActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
+    mockService.listStorePage.mockResolvedValue({
+      ok: false,
+      code: "STORES_POLICY_DENIED",
+      message: "denied",
+    });
+    const result = await getStores();
+    expect(result.success).toBe(false);
+  });
+
+  it("returns UNAUTHORIZED when not authenticated", async () => {
+    clerkMock.auth.mockResolvedValue({ userId: null });
+    const result = await getStores();
+    expect(result.success).toBe(false);
+  });
+});
+
+// ============================================================================
+// getStoreDetails
+// ============================================================================
+
+describe("getStoreDetails action", () => {
+  it("returns store detail on success", async () => {
+    mockActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
+    mockService.getStoreDetail.mockResolvedValue({
+      ok: true,
+      data: { id: "s1", name: "Test" },
+    });
+    const result = await getStoreDetails("s1");
+    expect(result.success).toBe(true);
+  });
+
+  it("propagates STORES_NOT_FOUND", async () => {
+    mockActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
+    mockService.getStoreDetail.mockResolvedValue({
+      ok: false,
+      code: "STORES_NOT_FOUND",
+      message: "Store not found",
+    });
+    const result = await getStoreDetails("s1");
+    expect(result.success).toBe(false);
+  });
+});
+
+// ============================================================================
+// updateStore
+// ============================================================================
+
+describe("updateStore action", () => {
+  it("rejects empty name (fails safeParse min(1))", async () => {
+    const result = await updateStore("s1", { name: "" });
+    expect(result.success).toBe(false);
+  });
+
+  it("delegates valid data to service", async () => {
+    mockVerificationActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
+    mockService.updateStore.mockResolvedValue({
+      ok: true,
+      data: {
+        updated: true,
         store: {
-          id: "store_1",
-          name: "Cached Store",
+          id: "s1",
+          name: "New",
           verified: true,
+          featured: false,
+          updatedAt: new Date(),
         },
       },
     });
+    const result = await updateStore("s1", { name: "New" });
+    expect(result.success).toBe(true);
+    expect(mockService.updateStore).toHaveBeenCalledWith(
+      expect.any(Object),
+      "s1",
+      { name: "New" },
+    );
+  });
+});
 
-    const response = await verifyStore("store_1", IDEMPOTENCY_KEY);
+// ============================================================================
+// verifyStore (policy-driven safeAction freshness)
+// ============================================================================
 
-    expect(response.success).toBe(true);
-    expect(response.data).toEqual({
-      verified: true,
-      store: {
-        id: "store_1",
-        name: "Cached Store",
+describe("verifyStore action", () => {
+  it("delegates to service with storeId and notes", async () => {
+    mockVerificationActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
+    mockService.verifyStore.mockResolvedValue({
+      ok: true,
+      data: {
         verified: true,
+        store: { id: "s1", name: "Test", verified: true },
+        oldStatus: "PENDING",
+        notes: "ok",
       },
     });
-    expect(prisma.store.findUnique).not.toHaveBeenCalled();
-    expect(prisma.store.update).not.toHaveBeenCalled();
-    expect(logAdminAction).not.toHaveBeenCalled();
-  });
-
-  it("applies idempotent toggleStoreFeatured mutation", async () => {
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      featured: false,
-    } as never);
-    vi.mocked(prisma.store.update).mockResolvedValue({
-      id: "store_1",
-      name: "Store A",
-      featured: true,
-    } as never);
-
-    const response = await toggleStoreFeatured("store_1", IDEMPOTENCY_KEY);
-
-    expect(response.success).toBe(true);
-    expect(prisma.store.update).toHaveBeenCalled();
-    expect(IdempotencyService.complete).toHaveBeenCalled();
-    expect(logAdminAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "admin_user_1",
-        action: "FEATURE_STORE",
-        targetType: "store",
-        targetId: "store_1",
-      }),
+    const result = await verifyStore("s1", "idem-1", "ok");
+    expect(result.success).toBe(true);
+    expect(mockService.verifyStore).toHaveBeenCalledWith(
+      expect.any(Object),
+      "s1",
+      "ok",
     );
   });
 
-  it("applies idempotent deleteStore mutation with audit", async () => {
-    vi.mocked(prisma.store.delete).mockResolvedValue({
-      id: "store_1",
-      name: "Store A",
-    } as never);
+  it("rejects stale session with SESSION_STALE", async () => {
+    const staleAuthTime = Math.floor(Date.now() / 1000) - 400;
+    clerkMock.auth.mockResolvedValue({
+      userId: "clerk_test",
+      sessionClaims: { auth_time: staleAuthTime },
+    });
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: "user_1",
+      role: dbMock.UserRole.ADMIN,
+      adminProfile: {
+        role: dbMock.AdminRole.CONTENT_MODERATOR,
+        isActive: true,
+      },
+    });
+    const result = await verifyStore("s1", "idem-stale", "notes");
+    expect(result.success).toBe(false);
+  });
+});
 
-    const response = await deleteStore("store_1", IDEMPOTENCY_KEY);
+// ============================================================================
+// rejectStore
+// ============================================================================
 
-    expect(response.success).toBe(true);
-    expect(prisma.store.delete).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "store_1" } }),
+describe("rejectStore action", () => {
+  it("delegates reason to service", async () => {
+    mockVerificationActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
+    mockService.rejectStore.mockResolvedValue({
+      ok: true,
+      data: {
+        rejected: true,
+        store: { id: "s1", name: "Test", verified: false },
+        oldStatus: "PENDING",
+      },
+    });
+    const result = await rejectStore("s1", "Missing docs", "idem-2");
+    expect(result.success).toBe(true);
+    expect(mockService.rejectStore).toHaveBeenCalledWith(
+      expect.any(Object),
+      "s1",
+      "Missing docs",
+      undefined,
     );
-    expect(logAdminAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "admin_user_1",
-        action: "DELETE_STORE",
-        targetType: "store",
-        targetId: "store_1",
-      }),
+  });
+});
+
+// ============================================================================
+// deleteStore
+// ============================================================================
+
+describe("deleteStore action", () => {
+  it("delegates to service", async () => {
+    mockVerificationActorAs(dbMock.AdminRole.CONTENT_MODERATOR);
+    mockService.deleteStore.mockResolvedValue({
+      ok: true,
+      data: { deleted: true, storeId: "s1", storeName: "Deleted" },
+    });
+    const result = await deleteStore("s1", "idem-3");
+    expect(result.success).toBe(true);
+    expect(mockService.deleteStore).toHaveBeenCalledWith(
+      expect.any(Object),
+      "s1",
     );
   });
 });

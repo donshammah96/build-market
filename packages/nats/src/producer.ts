@@ -1,8 +1,28 @@
 import { StringCodec, headers, PubAck } from "nats";
+import { propagation, context } from "@opentelemetry/api";
 import { getNatsClient, createNatsClient } from "./client";
 import type { NatsClient, NatsConfig, PublishOptions } from "./types";
 
 const sc = StringCodec();
+
+function buildHeaders(customHeaders?: Record<string, string>) {
+  const h = headers();
+  if (customHeaders) {
+    for (const [key, value] of Object.entries(customHeaders)) {
+      h.append(key, value);
+    }
+  }
+  try {
+    propagation.inject(context.active(), h, {
+      set: (carrier, key, value) => {
+        carrier.set(key, value);
+      },
+    });
+  } catch {
+    // OTel not initialized or context injection failed
+  }
+  return h;
+}
 
 /**
  * JetStream Producer for publishing messages
@@ -10,7 +30,7 @@ const sc = StringCodec();
 export class JetStreamProducer {
   private client: NatsClient | null = null;
   private serviceName: string;
-  private config?: Partial<NatsConfig>;
+  private config?: Partial<NatsConfig> | undefined;
 
   constructor(serviceName: string, config?: Partial<NatsConfig>) {
     this.serviceName = serviceName;
@@ -55,20 +75,19 @@ export class JetStreamProducer {
     }
 
     if (options?.expect) {
-      pubOpts.expect = {
-        lastMsgID: options.expect.lastMsgId,
-        lastSequence: options.expect.lastSequence,
-        streamName: options.expect.streamName,
-      };
+      pubOpts.expect = {};
+      if (options.expect.lastMsgId !== undefined) {
+        pubOpts.expect.lastMsgID = options.expect.lastMsgId;
+      }
+      if (options.expect.lastSequence !== undefined) {
+        pubOpts.expect.lastSequence = options.expect.lastSequence;
+      }
+      if (options.expect.streamName !== undefined) {
+        pubOpts.expect.streamName = options.expect.streamName;
+      }
     }
 
-    if (options?.headers) {
-      const h = headers();
-      for (const [key, value] of Object.entries(options.headers)) {
-        h.append(key, value);
-      }
-      pubOpts.headers = h;
-    }
+    pubOpts.headers = buildHeaders(options?.headers);
 
     try {
       const ack = await js.publish(subject, payload, pubOpts);
@@ -105,25 +124,26 @@ export class JetStreamProducer {
   async publishWithRetry<T extends object>(
     subject: string,
     message: T,
-    options?: PublishOptions & { maxRetries?: number; retryDelay?: number },
+    options?: PublishOptions & { maxRetries?: number; retryDelayMs?: number },
   ): Promise<PubAck> {
     const maxRetries = options?.maxRetries ?? 3;
-    const retryDelay = options?.retryDelay ?? 1000;
+    const retryDelayMs = options?.retryDelayMs ?? 1000;
     let lastError: Error | null = null;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         return await this.publish(subject, message, options);
       } catch (error) {
         lastError = error as Error;
         console.warn(
-          `[NATS Producer] Publish attempt ${attempt}/${maxRetries} failed:`,
+          `[NATS Producer] Publish attempt ${attempt + 1}/${maxRetries} failed:`,
           error,
         );
-        if (attempt < maxRetries) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, retryDelay * attempt),
-          );
+        if (attempt < maxRetries - 1) {
+          // Exponential back-off with randomized jitter
+          const delay =
+            retryDelayMs * Math.pow(2, attempt) + Math.random() * 500;
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
     }
@@ -174,6 +194,7 @@ export async function publishMessage<T extends object>(
   const pubOpts: Parameters<typeof client.jetstream.publish>[2] = {};
   if (options?.msgId) pubOpts.msgID = options.msgId;
   if (options?.timeout) pubOpts.timeout = options.timeout;
+  pubOpts.headers = buildHeaders(options?.headers);
 
   return client.jetstream.publish(subject, payload, pubOpts);
 }

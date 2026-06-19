@@ -5,7 +5,7 @@ applyTo: "apps/client/**"
 
 # Client Environment Access Boundary
 
-Last aligned with canonical on: 2026-04-04.
+Last aligned with canonical on: 2026-06-05.
 
 ## Scope
 

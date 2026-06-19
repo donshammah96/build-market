@@ -20,7 +20,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import type { StoreListItem } from "@/actions/admin/stores";
+import type { StoreListItem } from "@/actions/admin";
 
 export type StoreData = StoreListItem;
 

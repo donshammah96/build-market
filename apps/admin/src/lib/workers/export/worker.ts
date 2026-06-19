@@ -4,6 +4,9 @@ import { ExportJobData } from "@/lib/queues/export.queue";
 import { ExportProcessor } from "./processor";
 import { prisma } from "@build/db";
 import { sendExportReadyEmail } from "@/lib/notifications/email.service";
+import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
+
+const logger = new StructuredLogger("export-worker");
 
 const processor = new ExportProcessor();
 
@@ -11,10 +14,14 @@ export const exportWorker = new Worker<ExportJobData>(
   "gdpr-data-export",
   async (job: Job<ExportJobData>) => {
     const { exportId, userId } = job.data;
+    const correlationId = CorrelationIdManager.generate();
+    CorrelationIdManager.set(correlationId);
 
-    console.log(
-      `[ExportWorker] Starting export ${exportId} for user ${userId}`,
-    );
+    logger.info("Starting data export", {
+      correlationId,
+      exportId,
+      jobId: job.id,
+    });
 
     try {
       await job.updateProgress(10);
@@ -29,9 +36,10 @@ export const exportWorker = new Worker<ExportJobData>(
       }
 
       if (exportRecord.status === "CANCELLED") {
-        console.log(
-          `[ExportWorker] Export ${exportId} was cancelled, skipping`,
-        );
+        logger.info("Export was cancelled, skipping", {
+          correlationId,
+          exportId,
+        });
         return { status: "cancelled" };
       }
 
@@ -70,28 +78,41 @@ export const exportWorker = new Worker<ExportJobData>(
               new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
           );
 
-          console.log(
-            `[ExportWorker] Sent export ready email to ${user.email}`,
-          );
+          logger.info("Export ready email sent", {
+            correlationId,
+            exportId,
+          });
         }
       } catch (emailError) {
         // Don't fail the job if email fails - export is still successful
-        console.error(
-          `[ExportWorker] Failed to send export ready email:`,
-          emailError,
+        logger.error(
+          "Failed to send export ready email",
+          emailError instanceof Error
+            ? emailError
+            : new Error(String(emailError)),
+          { correlationId, exportId },
         );
       }
 
       await job.updateProgress(100);
 
-      console.log(`[ExportWorker] Completed export ${exportId}`);
+      logger.info("Data export completed", {
+        correlationId,
+        exportId,
+        fileSize: result.fileSize,
+      });
+
       return {
         status: "completed",
         fileSize: result.fileSize,
         fileUrl: result.fileUrl,
       };
     } catch (error) {
-      console.error(`[ExportWorker] Failed export ${exportId}:`, error);
+      logger.error(
+        "Data export failed",
+        error instanceof Error ? error : new Error(String(error)),
+        { correlationId, exportId, jobId: job.id },
+      );
 
       // Update export status to FAILED
       await prisma.dataExport.update({
@@ -121,13 +142,20 @@ export const exportWorker = new Worker<ExportJobData>(
 
 // Event handlers for monitoring
 exportWorker.on("completed", (job: Job) => {
-  console.log(`[ExportWorker] Job ${job.id} completed`);
+  logger.info("Job completed", { jobId: job.id });
 });
 
 exportWorker.on("failed", (job: Job | undefined, err: Error) => {
-  console.error(`[ExportWorker] Job ${job?.id} failed:`, err);
+  logger.error(
+    "Job failed",
+    err instanceof Error ? err : new Error(String(err)),
+    { jobId: job?.id },
+  );
 });
 
 exportWorker.on("error", (err: Error) => {
-  console.error("[ExportWorker] Worker error:", err);
+  logger.error(
+    "Worker error",
+    err instanceof Error ? err : new Error(String(err)),
+  );
 });

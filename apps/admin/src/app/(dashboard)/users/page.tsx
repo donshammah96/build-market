@@ -1,7 +1,7 @@
 import { getUsers } from "@/actions/admin";
-import { getAdminPermissions } from "@/actions/admin/shared";
-import { getUserColumns, UserData } from "./columns";
-import { DataTable } from "@/components/ui/data-table";
+import { getAdminPermissions } from "@/actions/admin/_core/permissions";
+import { UserData } from "./columns";
+import { UsersTableClient } from "./users-table-client";
 import { UserActionControls } from "./user-action-controls";
 import { UsersFilter } from "./users-filter";
 
@@ -74,14 +74,11 @@ export default async function UsersPage({
           <UsersFilter />
         </div>
       </div>
-      <DataTable
-        columns={getUserColumns({
-          canDeleteUsers,
-          canBulkDeleteUsers: canDeleteUsers,
-          canManageUsers,
-        })}
-        data={users as unknown as UserData[]}
-        pageCount={meta.totalPages}
+      <UsersTableClient
+        users={users as unknown as UserData[]}
+        totalPages={meta.totalPages}
+        canDeleteUsers={canDeleteUsers}
+        canManageUsers={canManageUsers}
       />
     </div>
   );

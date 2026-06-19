@@ -1,39 +1,66 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../../lib/services/idempotency.service", () => ({
-  IdempotencyService: {
-    generateKey: vi.fn().mockReturnValue("scoped-idempotency-key"),
-    checkOrCreate: vi.fn().mockResolvedValue({ status: "new" }),
-    complete: vi.fn().mockResolvedValue(undefined),
-    fail: vi.fn().mockResolvedValue(undefined),
-  },
+const verificationServiceMock = vi.hoisted(() => ({
+  verifyEntity: vi.fn(),
+  verifyDocument: vi.fn(),
+  batchVerifyDocuments: vi.fn(),
+  batchVerifyEntities: vi.fn(),
 }));
 
-vi.mock("next/cache", () => ({
-  revalidatePath: vi.fn(),
+const dbMock = vi.hoisted(() => ({
+  AdminRole: {
+    SUPER_ADMIN: "SUPER_ADMIN",
+    SUPPORT_AGENT: "SUPPORT_AGENT",
+    CONTENT_MODERATOR: "CONTENT_MODERATOR",
+  } as const,
+  UserRole: { ADMIN: "ADMIN" } as const,
 }));
 
-vi.mock("@/lib/config/store.config", () => ({
-  STORE_CONFIG: {
-    IDEMPOTENCY_KEY_TTL_HOURS: 1,
-  },
+vi.mock("@build/db", () => ({
+  AdminRole: dbMock.AdminRole,
+  UserRole: dbMock.UserRole,
+  prisma: {},
 }));
 
-vi.mock("../shared", () => ({
-  safeVerificationAction: vi.fn(
+vi.mock("@clerk/nextjs/server", () => ({
+  auth: vi.fn(),
+  clerkClient: vi.fn(),
+}));
+
+const sharedMock = vi.hoisted(() => ({
+  safeAction: vi.fn(
     async (
       _name: string,
       fn: (context: {
         adminUserId: string;
-        adminRole: "admin" | "verification_admin";
+        adminRole: string;
+        actor: {
+          clerkId: string;
+          dbUserId: string;
+          adminRole: string;
+        };
+        correlationId: string;
+        requestStartedAt: number;
       }) => Promise<unknown>,
     ) => {
       try {
         const data = await fn({
           adminUserId: "admin_user_1",
-          adminRole: "admin",
+          adminRole: "SUPER_ADMIN",
+          actor: {
+            clerkId: "clerk_admin_1",
+            dbUserId: "admin_user_1",
+            adminRole: "SUPER_ADMIN",
+          },
+          correlationId: "corr_1",
+          requestStartedAt: Date.now(),
         });
-        return { success: true, data, timestamp: new Date().toISOString() };
+
+        return {
+          success: true,
+          data,
+          timestamp: new Date().toISOString(),
+        };
       } catch (error) {
         return {
           success: false,
@@ -45,11 +72,44 @@ vi.mock("../shared", () => ({
       }
     },
   ),
-  callClientApi: vi.fn(),
-  requireAdminGranularRole: vi
-    .fn()
-    .mockResolvedValue("VERIFICATION_SPECIALIST"),
-  logAdminAction: vi.fn().mockResolvedValue(undefined),
+  parseActionInput: vi.fn(
+    (schema: { safeParse: (input: unknown) => unknown }, input: unknown) => {
+      const result = schema.safeParse(input) as
+        | { success: true; data: unknown }
+        | { success: false; error: { issues: Array<{ message?: string }> } };
+      if (!result.success) {
+        throw new Error(result.error.issues[0]?.message ?? "Invalid input");
+      }
+      return result.data;
+    },
+  ),
+}));
+
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+}));
+
+vi.mock("../idempotency", () => ({
+  runWithIdempotency: vi.fn(async <T>(params: { run: () => Promise<T> }) =>
+    params.run(),
+  ),
+}));
+
+vi.mock("../_core/safe-action", () => ({
+  safeAction: sharedMock.safeAction,
+}));
+vi.mock("../_core/validation", () => ({
+  parseActionInput: sharedMock.parseActionInput,
+}));
+vi.mock("@/_core/safe-action", () => ({
+  safeAction: sharedMock.safeAction,
+}));
+vi.mock("@/_core/validation", () => ({
+  parseActionInput: sharedMock.parseActionInput,
+}));
+
+vi.mock("@/lib/domains/verification", () => ({
+  verificationService: verificationServiceMock,
 }));
 
 import {
@@ -58,30 +118,26 @@ import {
   verifyDocument,
   verifyEntity,
 } from "../verification";
-import { callClientApi, logAdminAction } from "../shared";
-import { IdempotencyService } from "../../../lib/services/idempotency.service";
+import { safeAction } from "@/_core/safe-action";
 
 const IDEMPOTENCY_KEY = "idem-key-1";
 
-describe("admin verification actions audit contract", () => {
+describe("admin verification actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(IdempotencyService.checkOrCreate).mockResolvedValue({
-      status: "new",
-    });
-    vi.mocked(IdempotencyService.complete).mockResolvedValue(undefined);
-    vi.mocked(IdempotencyService.fail).mockResolvedValue(undefined);
   });
 
-  it("logs immutable audit payload for verifyEntity", async () => {
-    vi.mocked(callClientApi).mockResolvedValue({
-      success: true,
-      message: "Entity verified",
+  it("verifies an entity through the verification domain and attaches declarative audit metadata", async () => {
+    verificationServiceMock.verifyEntity.mockResolvedValue({
+      ok: true,
       data: {
+        entityType: "professional",
+        entityId: "11111111-1111-4111-8111-111111111111",
+        previousStatus: "PENDING",
         newStatus: "VERIFIED",
         message: "Entity verified",
       },
-    } as never);
+    });
 
     const response = await verifyEntity(
       {
@@ -95,27 +151,39 @@ describe("admin verification actions audit contract", () => {
     );
 
     expect(response.success).toBe(true);
-    expect(logAdminAction).toHaveBeenCalledWith(
+    expect(verificationServiceMock.verifyEntity).toHaveBeenCalledWith(
       expect.objectContaining({
-        userId: "admin_user_1",
-        action: "VERIFY_ENTITY",
-        targetType: "professional",
-        targetId: "11111111-1111-4111-8111-111111111111",
-        reason: "documents complete",
-        details: expect.objectContaining({
-          requestedAction: "VERIFY",
-          newStatus: "VERIFIED",
+        dbUserId: "admin_user_1",
+      }),
+      expect.objectContaining({
+        entityType: "professional",
+        action: "VERIFY",
+      }),
+    );
+    expect(safeAction).toHaveBeenCalledWith(
+      "verifyEntity",
+      expect.any(Function),
+      expect.objectContaining({
+        auditLog: expect.objectContaining({
+          operation: "VERIFY_ENTITY",
+          resourceType: "professional",
         }),
       }),
     );
   });
 
-  it("logs immutable audit payload for verifyDocument", async () => {
-    vi.mocked(callClientApi).mockResolvedValue({
-      success: true,
-      message: "Document approved",
-      data: {},
-    } as never);
+  it("verifies a document through the domain service", async () => {
+    verificationServiceMock.verifyDocument.mockResolvedValue({
+      ok: true,
+      data: {
+        documentType: "professional_document",
+        documentId: "22222222-2222-4222-8222-222222222222",
+        targetEntityType: "professional",
+        targetEntityId: "pro_1",
+        status: "APPROVED",
+        message: "Document approved successfully",
+      },
+    });
 
     const response = await verifyDocument(
       {
@@ -128,24 +196,22 @@ describe("admin verification actions audit contract", () => {
     );
 
     expect(response.success).toBe(true);
-    expect(logAdminAction).toHaveBeenCalledWith(
+    expect(verificationServiceMock.verifyDocument).toHaveBeenCalled();
+    expect(safeAction).toHaveBeenCalledWith(
+      "verifyDocument",
+      expect.any(Function),
       expect.objectContaining({
-        userId: "admin_user_1",
-        action: "VERIFY_DOCUMENT",
-        targetType: "document",
-        targetId: "22222222-2222-4222-8222-222222222222",
-        reason: "document is valid",
-        details: expect.objectContaining({
-          documentType: "professional_document",
-          requestedAction: "APPROVE",
+        auditLog: expect.objectContaining({
+          operation: "VERIFY_DOCUMENT",
+          resourceType: "professional_document",
         }),
       }),
     );
   });
 
-  it("logs immutable audit payload for batchVerifyDocuments", async () => {
-    vi.mocked(callClientApi).mockResolvedValue({
-      success: true,
+  it("batch verifies documents through the domain service", async () => {
+    verificationServiceMock.batchVerifyDocuments.mockResolvedValue({
+      ok: true,
       data: {
         summary: { total: 2, successful: 2, failed: 0 },
         results: [
@@ -158,9 +224,8 @@ describe("admin verification actions audit contract", () => {
             success: true,
           },
         ],
-        errors: [],
       },
-    } as never);
+    });
 
     const response = await batchVerifyDocuments(
       {
@@ -182,22 +247,28 @@ describe("admin verification actions audit contract", () => {
     );
 
     expect(response.success).toBe(true);
-    expect(logAdminAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "admin_user_1",
-        action: "BATCH_VERIFY_DOCUMENTS",
-        targetType: "document",
-        targetId: "batch",
-        details: expect.objectContaining({
-          total: 2,
-          summary: { total: 2, successful: 2, failed: 0 },
-        }),
-      }),
-    );
+    expect(verificationServiceMock.batchVerifyDocuments).toHaveBeenCalled();
   });
 
-  it("logs immutable audit payload for batchVerifyEntities", async () => {
-    vi.mocked(callClientApi).mockResolvedValue({ success: true } as never);
+  it("batch verifies entities through the domain service", async () => {
+    verificationServiceMock.batchVerifyEntities.mockResolvedValue({
+      ok: true,
+      data: {
+        summary: { total: 2, successful: 2, failed: 0 },
+        results: [
+          {
+            entityType: "professional",
+            entityId: "55555555-5555-4555-8555-555555555555",
+            success: true,
+          },
+          {
+            entityType: "store",
+            entityId: "66666666-6666-4666-8666-666666666666",
+            success: true,
+          },
+        ],
+      },
+    });
 
     const response = await batchVerifyEntities(
       [
@@ -216,24 +287,25 @@ describe("admin verification actions audit contract", () => {
     );
 
     expect(response.success).toBe(true);
-    expect(logAdminAction).toHaveBeenCalledWith(
+    expect(verificationServiceMock.batchVerifyEntities).toHaveBeenCalled();
+    expect(safeAction).toHaveBeenCalledWith(
+      "batchVerifyEntities",
+      expect.any(Function),
       expect.objectContaining({
-        userId: "admin_user_1",
-        action: "BATCH_VERIFY_ENTITIES",
-        targetType: "verification",
-        targetId: "batch",
-        reason: "batch review completed",
-        details: expect.objectContaining({
-          requestedAction: "VERIFY",
-          total: 2,
-          successful: 2,
-          failed: 0,
+        auditLog: expect.objectContaining({
+          operation: "BATCH_VERIFY_ENTITIES",
         }),
       }),
     );
   });
 
-  it("does not emit audit log when verifyEntity validation fails", async () => {
+  it("rejects verification when a rejection reason is missing", async () => {
+    verificationServiceMock.verifyEntity.mockResolvedValue({
+      ok: false,
+      code: "VERIFICATION_REPOSITORY_ERROR",
+      message: "Reason is required for REJECT action",
+    });
+
     const response = await verifyEntity(
       {
         entityType: "professional",
@@ -245,8 +317,8 @@ describe("admin verification actions audit contract", () => {
     );
 
     expect(response.success).toBe(false);
-    expect(response.error).toBe("Reason is required when rejecting");
-    expect(logAdminAction).not.toHaveBeenCalled();
+    expect(response.error).toBe("Reason is required for REJECT action");
+    expect(verificationServiceMock.verifyEntity).toHaveBeenCalledTimes(1);
   });
 
   it("rejects verification mutation when idempotency key is missing", async () => {
@@ -261,34 +333,6 @@ describe("admin verification actions audit contract", () => {
 
     expect(response.success).toBe(false);
     expect(response.error).toBe("Idempotency-Key is required");
-    expect(callClientApi).not.toHaveBeenCalled();
-    expect(logAdminAction).not.toHaveBeenCalled();
-  });
-
-  it("returns cached response on completed idempotency key replay", async () => {
-    vi.mocked(IdempotencyService.checkOrCreate).mockResolvedValue({
-      status: "completed",
-      response: {
-        newStatus: "VERIFIED",
-        message: "cached replay response",
-      },
-    });
-
-    const response = await verifyEntity(
-      {
-        entityType: "professional",
-        entityId: "99999999-9999-4999-8999-999999999999",
-        action: "VERIFY",
-      },
-      IDEMPOTENCY_KEY,
-    );
-
-    expect(response.success).toBe(true);
-    expect(response.data).toEqual({
-      newStatus: "VERIFIED",
-      message: "cached replay response",
-    });
-    expect(callClientApi).not.toHaveBeenCalled();
-    expect(logAdminAction).not.toHaveBeenCalled();
+    expect(verificationServiceMock.verifyEntity).not.toHaveBeenCalled();
   });
 });

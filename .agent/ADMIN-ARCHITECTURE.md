@@ -8,7 +8,7 @@ Use it when:
 - migrating an action slice from direct Prisma to the domain service boundary
 - auditing an existing action or route against the hardened action architecture
 
-This is not a generic pattern library. It is the repo-specific source of truth for how `apps/admin` should be structured after the Phase 0–5 overhaul.
+This is not a generic pattern library. It is the repo-specific source of truth for how `apps/admin` is structured after the Phase 0–12 overhaul.
 
 ## Scope And Precedence
 
@@ -57,11 +57,13 @@ Browser / Server Component
 ```text
 HTTP Request
   -> Route Handler (src/app/api/admin/<resource>/route.ts)
-  -> assertAdmin() + capability check
+  -> resolveAdminRouteActor() + capability check
   -> Domain Service (src/lib/domains/<slice>/service.ts)
   -> Repository (src/lib/domains/<slice>/repository.ts)
   -> @build/db
 ```
+
+> `assertAdmin()` is the legacy actor-resolution helper used by routes that predate the Phase 3 hardening. All new route handlers must use `resolveAdminRouteActor()`. Existing callers are tracked as ADM-012 in `apps/admin/docs/DEFECTS.md`.
 
 ### Architectural Rules
 
@@ -73,6 +75,8 @@ HTTP Request
 6. Zod `.safeParse()` is mandatory in action adapters. `.parse()` is prohibited — it escapes as an unstructured 500.
 7. Direct Prisma access in action files is a tracked critical defect. It must be migrated in the relevant domain phase.
 8. The admin overhaul uses a strangler-fig pattern: new behavior ships behind `AdminFeatureFlag` values; old routes remain functional until documented retirement.
+9. All env reads go through `adminEnvConfig` from `src/lib/infrastructure/env.ts`. Direct `process.env` is a boundary violation.
+10. Mutation inputs use Zod `.strict()` to prevent mass-assignment. Never use `.passthrough()` on admin mutation schemas.
 
 ---
 
@@ -116,11 +120,7 @@ if (actor.adminRole === "ADMIN") { ... }
 4. Enforces policy-provided recent-auth windows for high-risk operations (Tier 1: 180s, Tier 2: 300s).
 5. Applies actor-scoped rate limits.
 6. Optionally attaches declarative `auditLog` metadata for high-risk ops.
-7. Emits a structured validation-error event and returns a typed error result on resolution failure — it does not throw.
-
-### `assertAdmin()` Helper
-
-`assertAdmin()` resolves the canonical `AdminActor` or returns a typed unauthorized result. Use it in route handlers that cannot use `safeAction` (e.g., API routes used by verification workflows).
+7. Emits a structured log event and returns a typed error result on resolution failure — it does not throw.
 
 ### Session Freshness
 
@@ -143,10 +143,12 @@ Responsibilities:
 
 - wrap mutations in `safeAction` (always)
 - validate input with `.safeParse()` — never `.parse()`
+- use `.strict()` on mutation schemas to prevent mass-assignment
 - construct and forward full `AdminActor` context into the domain
 - map `Result<T, AdminDomainError>` outcomes to serialization-safe action responses
 - call `revalidatePath()` or `revalidateTag()` after successful mutations
 - attach declarative `auditLog` for high-risk operations
+- pass idempotency keys to `runWithIdempotency` on all state-changing mutations
 
 Must not own:
 
@@ -181,7 +183,7 @@ Repositories must not own:
 ### Trust Boundaries
 
 - The action layer treats all input as untrusted until `.safeParse()` validation succeeds.
-- The domain layer treats `AdminActor` as trusted only when resolved through `safeAction` or `assertAdmin()` — never from request body fields.
+- The domain layer treats `AdminActor` as trusted only when resolved through `safeAction` or `resolveAdminRouteActor()` — never from request body fields.
 - The repository layer uses only Prisma parameterized query APIs. Raw SQL with user-controlled interpolation is prohibited.
 
 ---
@@ -268,11 +270,11 @@ type AdminStructuredLogEvent = {
 
 ### `operationName` Convention
 
-Same rules as `apps/client` (see Section 5.6.4 of `API-TO-FRONTEND-ARCHITECTURE.md`):
+Stable `<verb>_<resource>` format: `delete_user`, `approve_verification`, `export_user_data`.
 
-- Stable `<verb>_<resource>` format: `delete_user`, `approve_verification`, `export_user_data`.
 - Renaming is a breaking observability change — requires coordinated dashboard update.
-- Must be compile-time static (string literal or enum value), never derived from request params or input.
+- Must be compile-time static (string literal or registered `AdminOperationName` constant), never derived from request params or input.
+- All operation names must be registered in `src/lib/observability/operation-names.ts`.
 
 ---
 
@@ -316,9 +318,10 @@ New admin behavior is introduced behind typed `AdminFeatureFlag` values. Flags a
 1. New v2 behavior ships under a flag-gated route (e.g., `/users-v2`) or conditional layout.
 2. Old routes remain functional while the flag is disabled.
 3. Rollback is performed by disabling the flag — any phase that cannot roll back by flag alone documents the irreversible data or schema state.
-4. Retirement steps are documented in `apps/admin/docs/PROGRESS-SUMMARY.md` before the flag is removed.
+4. Retirement criteria (30-day stability, feature parity, test coverage, observability) are documented in `apps/admin/docs/adr/ADR-ADMIN-009`.
+5. Rollback variables, retirement steps, and irreversible-state tracking live in `apps/admin/docs/ROLLBACK-CONTRACTS.md`.
 
-### Rollback Variables (Phase 10 flags)
+### Active Flags (Phase 10)
 
 | Flag                          | Disable with                                       | Rollback effect                                   |
 | ----------------------------- | -------------------------------------------------- | ------------------------------------------------- |
@@ -326,6 +329,8 @@ New admin behavior is introduced behind typed `AdminFeatureFlag` values. Flags a
 | `admin_v2_verification_queue` | `NEXT_PUBLIC_ADMIN_FF_V2_VERIFICATION_QUEUE=false` | `/verifications-v2` redirects to `/verifications` |
 | `admin_v2_finance_dashboard`  | `NEXT_PUBLIC_ADMIN_FF_V2_FINANCE_DASHBOARD=false`  | `/analytics-v2` redirects to `/analytics`         |
 | `admin_v2_audit_log_ui`       | `NEXT_PUBLIC_ADMIN_FF_V2_AUDIT_LOG_UI=false`       | `/audit-v2` redirects to `/audit`                 |
+
+See `apps/admin/docs/ROLLBACK-CONTRACTS.md` for the full rollback contracts and retirement checklist.
 
 ---
 
@@ -356,11 +361,13 @@ Reject these during review:
 6. Missing `auditLog` in `safeAction` for high-risk operations (role changes, deletion, data export, verification overrides, manual payment operations).
 7. Mutation routes and actions missing a `safeAction` wrapper. Unauthenticated admin mutations are a critical security defect.
 8. Business logic (policy, orchestration, role checks) embedded in the action adapter instead of the domain service.
-9. Direct Prisma from an action file for mutations, bypassing the repository boundary.
+9. Mutation schemas without `.strict()` — `.passthrough()` on a mutation schema allows mass-assignment and is prohibited.
 10. A new admin feature shipped without an `AdminFeatureFlag` when the feature is part of the strangler-fig overhaul — new behavior must be flag-gated until verified.
-11. `console.log`, `console.error`, or string-interpolated log calls in action or domain adapter code. Use the structured admin logger.
+11. `console.log`, `console.error`, or string-interpolated log calls in action or domain adapter code. Use the structured admin logger via `getAdminLogger()`.
 12. Log events including `userId`, `clerkId`, `userEmail`, `email`, `phone`, `nationalId`, request body payloads, or response body content.
 13. An action or domain service that skips the `Result<T, AdminDomainError>` pattern and throws directly for expected business failures (`forbidden`, `not_found`, `invalid_state`).
+14. `operationName` values not registered in `src/lib/observability/operation-names.ts`. All operation names must be compile-time constants from the registry.
+15. `safeVerificationAction` instead of `safeAction` for new verification-domain actions. `safeVerificationAction` is a deprecated duplicate tracked as ADM-011 in `apps/admin/docs/DEFECTS.md`.
 
 ---
 
@@ -392,7 +399,7 @@ pnpm run admin:check-env-contract
 # Security drift report (permissive — pass with known backlog)
 pnpm run admin:report-security-drift
 
-# Security drift report (strict — must be zero for a clean phase)
+# Security drift report (strict — must be zero; gate for all merges)
 pnpm run admin:report-security-drift:strict
 
 # Run all admin test suites
@@ -402,66 +409,95 @@ pnpm run admin:test:all
 pnpm -C apps/admin exec vitest run src/lib/domains/<slice>/__tests__/ src/actions/admin/__tests__/<slice>-actions.test.ts --pool=threads --maxWorkers=1
 ```
 
+See `apps/admin/docs/VERIFICATION.md` for the gate policy, what-each-command-checks table, and latest verification results.
+
 ---
 
 ## 11. Admin Overhaul Phase Map
 
 > Read `apps/admin/docs/PROGRESS-SUMMARY.md` as the live execution surface before starting any admin work. This section is the structural map; the progress summary is the current state.
 
-| Phase               | Scope                                                                                                           | Status                        |
-| ------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| Phase 0             | Autopsy — critical/high findings catalogued                                                                     | Complete                      |
-| Phase 1             | ADR Foundation — ADR-ADMIN-001 through ADR-ADMIN-009                                                            | Complete                      |
-| Phase 2             | Tooling Scaffold — env boundary, drift reporter, tightened TypeScript/ESLint, admin CI                          | Complete                      |
-| Phase 3             | Auth Hardening — canonical `AdminActor`, hardened `safeAction`, capability policy, high-risk registry           | Complete                      |
-| Phase 10            | Feature Flag Foundation — env-driven `AdminFeatureFlag`, v2 route gates, rollback docs                          | Complete                      |
-| Phase 4             | Domain/Repository Layer — users, verification, content, finance, audit domains                                  | Complete                      |
-| Phase 5 (partial)   | Action Slice Migration — users, verification actions migrated                                                   | Implemented, pending PR merge |
-| Phase 5 (remaining) | Action Slice Migration — audit/GDPR, finance, content, stores/properties/projects, leads/services/professionals | Queued                        |
-| Phase 6             | Token and Route Boundary                                                                                        | Queued                        |
-| Phase 7             | Observability — structured logging, PII log key removal                                                         | Queued                        |
-| Phases 8–9          | Additional hardening                                                                                            | Queued                        |
+| Phase               | Scope                                                                                   | Status   |
+| ------------------- | --------------------------------------------------------------------------------------- | -------- |
+| Phase 0             | Autopsy — critical/high findings catalogued                                             | Complete |
+| Phase 1             | ADR Foundation — ADR-ADMIN-001 through ADR-ADMIN-009                                    | Complete |
+| Phase 2             | Tooling Scaffold — env boundary, drift reporter, tightened TypeScript/ESLint, admin CI  | Complete |
+| Phase 3             | Auth Hardening — canonical `AdminActor`, `safeAction`, capability policy                | Complete |
+| Phase 10            | Feature Flag Foundation — env-driven `AdminFeatureFlag`, v2 route gates, rollback docs  | Complete |
+| Phase 4             | Domain/Repository Layer — all 13 domain slices                                          | Complete |
+| Phase 5             | Action Slice Migration — all slices migrated to `safeAction` + domain service           | Complete |
+| Phase 7 (Track C)   | Observability Foundation — structured logger, correlation threading, operation registry | Complete |
+| Track A (Phase 5/6) | Audit/Export, Finance, Stores, Leads, GDPR action slices                                | Complete |
+| Phase 8             | Audit Log Implementation — declarative `safeAction` audit integration                   | Complete |
+| Phase 12            | Security Hardening Pass — ASVS L2, mass-assignment, zero drift findings                 | Complete |
+| Post-Phase-12       | Architecture Autopsy & Documentation Hardening (F-Doc1, F-Doc2, F-Doc3)                 | Complete |
 
 ### Slice Status (from `apps/admin/docs/PROGRESS-SUMMARY.md`)
 
-| Slice                        | Auth/Policy  | Actions      | Domain/Repo  | Tests       | Observability | Overall      |
-| ---------------------------- | ------------ | ------------ | ------------ | ----------- | ------------- | ------------ |
-| users                        | compliant    | compliant    | compliant    | compliant   | known defect  | in progress  |
-| verification                 | compliant    | compliant    | compliant    | compliant   | known defect  | in progress  |
-| audit                        | known defect | known defect | in progress  | compliant   | known defect  | in progress  |
-| GDPR/export                  | in progress  | N/A          | known defect | in progress | known defect  | known defect |
-| finance/analytics            | known defect | known defect | in progress  | compliant   | known defect  | in progress  |
-| stores/properties/projects   | known defect | known defect | in progress  | compliant   | known defect  | in progress  |
-| leads/services/professionals | known defect | known defect | in progress  | in progress | known defect  | known defect |
-| UI shell/components          | N/A          | N/A          | N/A          | in progress | N/A           | in progress  |
+All slices reached full compliance at Phase 12 completion.
+
+| Slice                        | Auth/Policy | Actions   | Domain/Repo | Tests     | Observability | Overall   |
+| ---------------------------- | ----------- | --------- | ----------- | --------- | ------------- | --------- |
+| users                        | compliant   | compliant | compliant   | compliant | compliant     | compliant |
+| verification                 | compliant   | compliant | compliant   | compliant | compliant     | compliant |
+| audit                        | compliant   | compliant | compliant   | compliant | compliant     | compliant |
+| GDPR/export                  | compliant   | compliant | compliant   | compliant | compliant     | compliant |
+| finance/analytics            | compliant   | compliant | compliant   | compliant | compliant     | compliant |
+| stores/properties/projects   | compliant   | compliant | compliant   | compliant | compliant     | compliant |
+| leads/services/professionals | compliant   | compliant | compliant   | compliant | compliant     | compliant |
+| UI shell/components          | N/A         | N/A       | N/A         | compliant | N/A           | compliant |
 
 ---
 
-## 12. Admin Reference Files
+## 12. Open Defects & Next Priority Work
 
-| File                                         | Purpose                                                                                          |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `apps/admin/docs/adr/ADR-ADMIN-001`          | Auth and authorization model — `AdminActor`, `AdminRole`, freshness tiers                        |
-| `apps/admin/docs/adr/ADR-ADMIN-002`          | Action boundary and layer structure — adapter/domain/repository import direction                 |
-| `apps/admin/docs/adr/ADR-ADMIN-003`          | Observability contract — structured log fields, PII exclusions                                   |
-| `apps/admin/docs/adr/ADR-ADMIN-004`          | Data classification — Class A–D handling in logging, UI, and export                              |
-| `apps/admin/docs/adr/ADR-ADMIN-005`          | HTTP and security surface                                                                        |
-| `apps/admin/docs/adr/ADR-ADMIN-006`          | Env access boundary — `adminEnvConfig`, bootstrap exceptions                                     |
-| `apps/admin/docs/adr/ADR-ADMIN-007`          | UI component contract                                                                            |
-| `apps/admin/docs/adr/ADR-ADMIN-008`          | Audit log contract — mandatory operations, append-only, declarative `safeAction` integration     |
-| `apps/admin/docs/adr/ADR-ADMIN-009`          | Strangler-fig and feature flag strategy — `AdminFeatureFlag`, v2 gates, rollback-by-flag         |
-| `apps/admin/docs/PROGRESS-SUMMARY.md`        | Live execution surface — current phase, open defects, slice status, verification results         |
-| `apps/admin/docs/CHANGELOG.md`               | Admin overhaul architectural milestones                                                          |
-| `apps/admin/docs/progress/AUTOPSY-REPORT.md` | Phase 0 autopsy — original critical and high-severity findings                                   |
-| `src/lib/security/authorization-policy.ts`   | `AdminCapability` map and `requireAdminCapability()` implementation                              |
-| `src/actions/admin/users.ts`                 | Reference: migrated action slice with `safeAction`, domain service delegation, declarative audit |
-| `src/actions/admin/verification.ts`          | Reference: migrated action slice with domain-service-backed queue/stats/details/mutations        |
-| `src/lib/domains/users/`                     | Reference: domain contracts, repository, service for the users slice                             |
-| `src/lib/domains/verification/`              | Reference: domain contracts, repository, service for the verification slice                      |
+> **Source of truth:** `apps/admin/docs/DEFECTS.md`
+
+The following high-priority defects from the Post-Phase-12 autopsy have not yet been resolved. Reject PRs that worsen these findings.
+
+| ID      | Severity | Description                                                   | Priority |
+| ------- | -------- | ------------------------------------------------------------- | -------- |
+| ADM-011 | High     | `safeVerificationAction` is a near-duplicate of `safeAction`  | P0       |
+| ADM-012 | High     | Legacy auth helpers still exported from `shared.ts` (footgun) | P0       |
+| ADM-013 | High     | `logAdminAction` is a parallel, schema-divergent audit path   | P0       |
+| ADM-014 | Medium   | `shared.ts` is a 952-line god-file                            | P1       |
+| ADM-015 | Medium   | `parseActionInput` duplicated across 8 action files           | P1       |
+| ADM-016 | Medium   | `Result<T, E>` discriminant inconsistency (`ok` vs `success`) | P1       |
+
+See `apps/admin/docs/DEFECTS.md` for the full registry (ADM-011 through ADM-020) and `apps/admin/docs/ARCHITECTURE-AUTOPSY.md` for the complete improvement roadmap (I-1 through I-23, P0–P3).
 
 ---
 
-## 13. Related Documentation
+## 13. Admin Reference Files
+
+| File                                       | Purpose                                                                                          |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `apps/admin/docs/adr/ADR-ADMIN-001`        | Auth and authorization model — `AdminActor`, `AdminRole`, freshness tiers                        |
+| `apps/admin/docs/adr/ADR-ADMIN-002`        | Action boundary and layer structure — adapter/domain/repository import direction                 |
+| `apps/admin/docs/adr/ADR-ADMIN-003`        | Observability contract — structured log fields, PII exclusions                                   |
+| `apps/admin/docs/adr/ADR-ADMIN-004`        | Data classification — Class A–D handling in logging, UI, and export                              |
+| `apps/admin/docs/adr/ADR-ADMIN-005`        | HTTP and security surface — CSRF, cache control, CSP, webhook integrity                          |
+| `apps/admin/docs/adr/ADR-ADMIN-006`        | Env access boundary — `adminEnvConfig`, bootstrap exceptions                                     |
+| `apps/admin/docs/adr/ADR-ADMIN-007`        | UI component contract — state variants, accessibility invariants, design tokens                  |
+| `apps/admin/docs/adr/ADR-ADMIN-008`        | Audit log contract — mandatory operations, append-only, declarative `safeAction` integration     |
+| `apps/admin/docs/adr/ADR-ADMIN-009`        | Strangler-fig and feature flag strategy — `AdminFeatureFlag`, v2 gates, retirement criteria      |
+| `apps/admin/docs/PROGRESS-SUMMARY.md`      | Live execution surface — active phase, slice status, completed phases, next priority             |
+| `apps/admin/docs/DEFECTS.md`               | Open defect registry with severity, class, status, and owner (ADM-001 through ADM-020)           |
+| `apps/admin/docs/VERIFICATION.md`          | Verification commands, gate policy, and latest test/drift/type-check results                     |
+| `apps/admin/docs/ROLLBACK-CONTRACTS.md`    | Feature flag rollback table, irreversible-state tracker, and retirement checklist                |
+| `apps/admin/docs/CONTRIBUTING.md`          | Contributor how-to — domain slice, action, feature flag checklists, test conventions             |
+| `apps/admin/docs/ARCHITECTURE-AUTOPSY.md`  | Staff-level architectural audit — 23 findings, improvement table, priority roadmap (P0–P3)       |
+| `apps/admin/docs/CHANGELOG.md`             | Admin overhaul architectural milestones                                                          |
+| `src/lib/security/authorization-policy.ts` | `AdminCapability` map and `requireAdminCapability()` implementation                              |
+| `src/lib/observability/operation-names.ts` | Typed `AdminOperationName` registry — all valid operation name constants                         |
+| `src/actions/admin/users.ts`               | Reference: migrated action slice with `safeAction`, domain service delegation, declarative audit |
+| `src/actions/admin/verification.ts`        | Reference: migrated action slice with domain-service-backed queue/stats/details/mutations        |
+| `src/lib/domains/users/`                   | Reference: domain contracts, repository, service for the users slice                             |
+| `src/lib/domains/verification/`            | Reference: domain contracts, repository, service for the verification slice                      |
+
+---
+
+## 14. Related Documentation
 
 - `.agent/API-TO-FRONTEND-ARCHITECTURE.md` — canonical architecture for `apps/client`
 - `.agent/DOCUMENT-HIERARCHY.md` — conflict-resolution algorithm for all repo docs

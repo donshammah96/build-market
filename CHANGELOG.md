@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Admin**: Added v2-specific UI tests (happy path + one error state per route) for the four shadow routes (`users-v2`, `verifications-v2`, `analytics-v2`, `audit-v2`) to satisfy the Test Coverage gate in `RETIREMENT.md`.
+- **Admin**: Added unit tests for `NavigationSidebar` (`navigation-sidebar.test.tsx`), `AddUser` (`AddUser.test.tsx`), and `EditUser` (`EditUser.test.tsx`) components, verifying role-based navigation gating and form mutations.
+- **Admin**: Created `docs/RETIREMENT.md` with per-flag migration criteria, 4-criterion retirement gate, and per-flag status tables for all four `apps/admin` v2 shadow routes (I-13 / F-D3).
+- **Admin**: Created `src/actions/admin/README.md` documenting the flat-file rule and Next.js route-handler exemption from the single-file-folder collapse policy (I-14 / F-S2).
+- **Admin**: Created `src/lib/validation/README.md` confirming all 18 validation schemas are orphaned and documenting the deletion runbook (I-23 / F-S5).
+- **Admin**: Replaced all four v2 route pass-through stubs (`users-v2`, `verifications-v2`, `analytics-v2`, `audit-v2`) with independent page implementations that own their own data fetching and rendering, satisfying the Feature Parity Confirmed gate in `RETIREMENT.md`. Adds `data-v2-route` attributes for observability test hooks. `verifications-v2` gains a capability-aware admin role badge in the queue header.
+
+### Removed
+
+- **Admin**: Deleted orphaned `lib/validation/` schemas.
+
 - **Developer Workflow**: Added a terminal hardening toolchain for deterministic command execution. Introduced the repo runbook in `docs/TERMINAL_RUNBOOK.md`, the clean PowerShell wrapper in `scripts/invoke-clean.ps1`, wrapper usage notes in `scripts/README.md`, stable root scripts in `package.json` (`redis:healthcheck`, `redis:audit`, `admin:check-types`, `queue-server:check-types`, `client:tsc-noemit`, `client:test:*`, `db:migrate:deploy`, `db:generate`, `db:seed`), and a reduced task surface in `.vscode/tasks.json` so recurring validation no longer depends on shared-shell cwd state, duplicate task variants, or inline shell logic.
 
 - **Security/Governance Tests**: Added focused store mutation governance coverage in `stores-actions.test.ts` for strict idempotency key enforcement, replay behavior, and immutable-audit-backed mutation paths.
@@ -34,6 +45,11 @@ All notable changes to this project will be documented in this file.
 - **GDPR**: Added cookie consent system — `CookieConsentProvider` context with localStorage + backend sync, `CookieBanner` slide-up component (Accept All / Customize / Reject All), and `/legal/cookie-settings` granular management page.
 
 ### Changed
+
+- **Client**: Replaced fragile full-tree HTML snapshots in `PropertyForm` component tests with robust semantic accessibility assertions.
+- **Admin**: Standardized core server action and validation imports in `verification.ts` and test suites (`verification-actions.test.ts`, `users-actions.test.ts`, `onboarding-remediation.test.ts`) to use canonical `@/_core/...` and relative `../_core/...` path alias mocks.
+- **Admin**: Consolidated GDPR services under `domains/gdpr/`, verification-internal services under `domains/verification/internal/`, and relocated domain configurations and single-file folders in `apps/admin` (autopsy refactoring items I-8, I-9, I-15, I-16, I-19).
+- **Admin Action Layer**: Refactored the `apps/admin` action layer to eliminate direct Prisma queries by creating a new `securityRepository`, refactored route handlers to use `resolveAdminRouteActor` and Zod `safeParse`, and resolved environment boundary violations in `onboarding-remediation.ts` using `adminEnvConfig`.
 
 - **Documentation/Runbooks**: Replaced ad hoc terminal command examples with root-script or root-relative forms across `.github/copilot-instructions.md`, `apps/client/MESSAGING_API_SETUP.md`, `README.md`, `apps/client/__tests__/setup-integration.md`, and `packages/db/SETUP_DATABASE.md`; updated `.github/prompts/plan-gitBranchSplit.prompt.md` to use `Push-Location`/`Pop-Location`; and aligned `docs/TERMINAL_RUNBOOK.md` plus `scripts/README.md` with the canonical wrapper invocation pattern so workflow docs no longer teach `cd ... && ...` or other stateful shell usage.
 
@@ -78,7 +94,18 @@ All notable changes to this project will be documented in this file.
 - **Frontend (Settings)**: Updated the profile completion payload in `settings/complete-profile/page.tsx` to filter out any documents that are missing an `uploadId`.
 - **API (Onboarding)**: Relaxed the Zod schema validation for professional document categories in `POST /api/onboarding/professional/complete` to structurally accept generic strings rather than strict enums.
 
+### Security
+
+- **Security**: Resolved moderate security vulnerability GHSA-cmwh-pvxp-8882 by pinning `dompurify` dependency version to `>=3.4.11` in `pnpm-workspace.yaml`.
+
 ### Fixed
+
+- **Client**: Resolved security check failure (`mapperNormalizationDrift`) in [service.ts](file:///c:/Users/User/build-market/apps/client/app/lib/domains/licenses/service.ts) by removing the redundant `timestamp` inline Date serialization from the `publishLicenseEvent` payload, letting the event publisher default it internally.
+- **Admin App**: Fixed database connection failure (`ECONNREFUSED` / `PrismaClientKnownRequestError`) in development mode by commenting out the default `DATABASE_URL` and `DIRECT_URL` placeholders in `apps/admin/.env.development` and commenting out the duplicate, non-functional `DATABASE_URL` / `POSTGRES_URL` entries pointing to `localhost:5434` at line 50 in the main `apps/admin/.env` file. This resolves the loading priority issues, allowing Next.js to cleanly fall back to the active Supabase connection string.
+- **Admin App**: Resolved React Server Component runtime boundary error (`getUserColumns is on the client. It's not possible to invoke a client function from the server`) on the users list page by introducing the Client Component wrapper [UsersTableClient](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/users/users-table-client.tsx>) that encapsulates the client-side column generation logic.
+- **Admin App**: Fixed Zod input validation failure (`Too big: expected number to be <=100`) on the services page categories query by proactively raising the maximum allowed page size `limit` constraint from `100` to `1000` across all admin query schemas (`ServiceFilterSchema`, `PaginationSchema`, `VerificationFilterSchema`, `StoreFilterSchema`, `PropertyFilterSchema`, `ProjectFilterSchema`, `LeadFilterSchema`).
+
+- **GDPR Export Service Tests**: Fixed path traversal test failure on Linux/POSIX CI environment by using explicit, cross-platform path resolution testing (`path.posix` and `path.win32`) to validate traversal containment check patterns regardless of the host OS environment. Modified [export.service.test.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/gdpr/services/__tests__/export.service.test.ts).
 
 - **Redis/Terminal Diagnostics**: Fixed the Redis healthcheck investigation path by separating shell contamination from runtime failure. Updated `packages/redis/src/types.ts`, `packages/redis/src/client.ts`, and `packages/redis/src/healthcheck.ts` to support `REDIS_FAMILY=4|6` and report the selected address family in connection status output. This mitigates the observed timeout against `redis-11708.c341.af-south-1-1.ec2.cloud.redislabs.com` on hosts where dual-stack DNS resolution prefers an unreachable IPv6/NAT64 path; with `REDIS_FAMILY=4`, the healthcheck succeeds.
 

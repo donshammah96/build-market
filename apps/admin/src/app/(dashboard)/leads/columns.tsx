@@ -20,7 +20,7 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 import Link from "next/link";
-import type { LeadListItem } from "@/actions/admin/leads";
+import type { LeadListItem } from "@/actions/admin";
 
 export type LeadData = LeadListItem;
 

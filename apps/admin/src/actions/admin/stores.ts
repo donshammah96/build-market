@@ -1,100 +1,20 @@
-// @ts-nocheck
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, prisma, County, StoreType, StoreCategory } from "@build/db";
-import { safeAction, safeVerificationAction, logAdminAction } from "./shared";
-import { runWithIdempotency } from "./idempotency";
 import { z } from "zod";
-
-// ============================================================================
-// Types
-// ============================================================================
-
-export type StoreListItem = {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  city: string;
-  county: string | null;
-  categories: string[];
-  storeType: string;
-  verified: boolean;
-  featured: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-  owner: {
-    id: string;
-    email: string;
-    firstName: string | null;
-    lastName: string | null;
-    companyName: string;
-  } | null;
-  _count: {
-    products: number;
-    orders: number;
-  };
-};
-
-export type StoreDetails = {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  address: string;
-  city: string;
-  county: string | null;
-  zipCode: string | null;
-  phone: string | null;
-  email: string | null;
-  website: string | null;
-  categories: string[];
-  storeType: string;
-  verified: boolean;
-  featured: boolean;
-  verificationStatus: string;
-  verifiedAt: Date | null;
-  rejectionReason: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-  owner: {
-    userId: string;
-    companyName: string;
-    user: {
-      id: string;
-      email: string;
-      firstName: string | null;
-      lastName: string | null;
-      avatar: string | null;
-    };
-  } | null;
-  images: Array<{
-    id: string;
-    url: string;
-    caption: string | null;
-    isMain: boolean;
-  }>;
-  products: Array<{
-    id: string;
-    name: string;
-    price: number;
-    status: string;
-  }>;
-  _count: {
-    products: number;
-    orders: number;
-    reviews: number;
-  };
-};
-
-// ============================================================================
-// Schemas
-// ============================================================================
+import { safeAction } from "@/_core/safe-action";
+import { runWithIdempotency } from "./idempotency";
+import { AdminOperationName } from "@/lib/infrastructure/operation-names";
+import { storesService } from "@/lib/domains/stores/service";
+import type {
+  StoreFilterInput as DomainStoreFilterInput,
+  StoreUpdateInput as DomainStoreUpdateInput,
+} from "@/lib/domains/stores/contracts";
+import { omitUndefined } from "@/lib/utils";
 
 const StoreFilterSchema = z.object({
   page: z.number().min(1).default(1),
-  limit: z.number().min(1).max(100).default(10),
+  limit: z.number().min(1).max(1000).default(10),
   search: z.string().optional(),
   verified: z.boolean().optional(),
   featured: z.boolean().optional(),
@@ -112,396 +32,179 @@ const UpdateStoreSchema = z.object({
   city: z.string().optional(),
   county: z.string().optional(),
   zipCode: z.string().optional(),
-  phone: z.string().optional(),
-  email: z.string().email().optional(),
-  website: z.string().url().optional().or(z.literal("")),
   featured: z.boolean().optional(),
+  // phone, email, website intentionally excluded — not in Store model
 });
 
-export type StoreFilterInput = z.infer<typeof StoreFilterSchema>;
-export type UpdateStoreInput = z.infer<typeof UpdateStoreSchema>;
+type StoreFilterInput = z.infer<typeof StoreFilterSchema>;
+type UpdateStoreInput = z.infer<typeof UpdateStoreSchema>;
 
 const STORE_MUTATION_IDEMPOTENCY_TTL_HOURS = 0.25;
 
-// ============================================================================
-// Actions
-// ============================================================================
-
 /**
  * Fetches a paginated list of stores with filtering and sorting.
- * Includes owner info and aggregate counts.
+ * Requires VIEW_CONTENT capability.
  */
 export async function getStores(filters: Partial<StoreFilterInput> = {}) {
-  return safeAction("getStores", async () => {
-    const validatedFilters = StoreFilterSchema.parse(filters);
-    const skip = (validatedFilters.page - 1) * validatedFilters.limit;
-
-    // Build where clause
-    const where: Prisma.StoreWhereInput = {};
-
-    if (validatedFilters.search) {
-      where.OR = [
-        { name: { contains: validatedFilters.search, mode: "insensitive" } },
-        {
-          description: {
-            contains: validatedFilters.search,
-            mode: "insensitive",
-          },
-        },
-        { city: { contains: validatedFilters.search, mode: "insensitive" } },
-        {
-          professional: {
-            companyName: {
-              contains: validatedFilters.search,
-              mode: "insensitive",
-            },
-          },
-        },
-      ];
+  return safeAction(AdminOperationName.LIST_STORES, async ({ actor }) => {
+    const parsed = StoreFilterSchema.safeParse(filters);
+    if (!parsed.success) {
+      throw new Error(parsed.error.issues[0]?.message ?? "Invalid filter");
     }
 
-    if (validatedFilters.verified !== undefined) {
-      where.verified = validatedFilters.verified;
-    }
-
-    if (validatedFilters.featured !== undefined) {
-      where.featured = validatedFilters.featured;
-    }
-
-    if (validatedFilters.county) {
-      where.county = validatedFilters.county as County;
-    }
-
-    if (validatedFilters.category) {
-      where.categories = { has: validatedFilters.category as StoreCategory };
-    }
-
-    if (validatedFilters.storeType) {
-      where.storeType = validatedFilters.storeType as StoreType;
-    }
-
-    const [stores, total] = await Promise.all([
-      prisma.store.findMany({
-        where,
-        skip,
-        take: validatedFilters.limit,
-        orderBy: { [validatedFilters.sortBy]: validatedFilters.sortOrder },
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          description: true,
-          city: true,
-          county: true,
-          categories: true,
-          storeType: true,
-          verified: true,
-          featured: true,
-          createdAt: true,
-          updatedAt: true,
-          professional: {
-            select: {
-              userId: true,
-              companyName: true,
-              user: {
-                select: {
-                  id: true,
-                  email: true,
-                  firstName: true,
-                  lastName: true,
-                },
-              },
-            },
-          },
-          _count: {
-            select: {
-              products: true,
-              orders: true,
-            },
-          },
-        },
-      }),
-      prisma.store.count({ where }),
-    ]);
-
-    // Transform to flatten owner info
-    const formattedStores: StoreListItem[] = stores.map((store) => ({
-      ...store,
-      owner: store.professional
-        ? {
-            id: store.professional.userId,
-            email: store.professional.user.email,
-            firstName: store.professional.user.firstName,
-            lastName: store.professional.user.lastName,
-            companyName: store.professional.companyName,
-          }
-        : null,
-    }));
-
-    return {
-      stores: formattedStores,
-      meta: {
-        total,
-        page: validatedFilters.page,
-        limit: validatedFilters.limit,
-        totalPages: Math.ceil(total / validatedFilters.limit),
-      },
-      filters: validatedFilters,
-    };
+    const result = await storesService.listStorePage(
+      actor,
+      omitUndefined(parsed.data) as unknown as DomainStoreFilterInput,
+    );
+    if (!result.ok) throw new Error(result.message ?? result.code);
+    return result.data;
   });
 }
 
 /**
- * Fetches complete store details with all related data.
+ * Fetches complete store details.
+ * Requires VIEW_CONTENT capability.
  */
 export async function getStoreDetails(storeId: string) {
-  return safeAction("getStoreDetails", async () => {
-    const store = await prisma.store.findUnique({
-      where: { id: storeId },
-      include: {
-        professional: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                firstName: true,
-                lastName: true,
-                avatar: true,
-              },
-            },
-          },
-        },
-        images: {
-          select: {
-            id: true,
-            url: true,
-            caption: true,
-            isMain: true,
-          },
-          orderBy: { sortOrder: "asc" },
-        },
-        products: {
-          select: {
-            id: true,
-            name: true,
-            price: true,
-            inStock: true,
-          },
-          take: 10,
-          orderBy: { createdAt: "desc" },
-        },
-        _count: {
-          select: {
-            products: true,
-            orders: true,
-            reviews: true,
-          },
-        },
-      },
-    });
+  return safeAction(AdminOperationName.GET_STORE_DETAIL, async ({ actor }) => {
+    const result = await storesService.getStoreDetail(actor, storeId);
+    if (!result.ok) throw new Error(result.message ?? result.code);
+    return result.data;
+  });
+}
 
-    if (!store) throw new Error("Store not found");
-
-    // Transform the store to match StoreDetails type
-    const storeDetails: StoreDetails = {
-      id: store.id,
-      name: store.name,
-      slug: store.slug,
-      description: store.description,
-      address: store.address,
-      city: store.city,
-      county: store.county || "Unknown",
-      zipCode: store.zipCode,
-      phone: null,
-      email: null,
-      website: null,
-      categories: store.categories,
-      storeType: store.storeType,
-      verified: store.verified,
-      featured: store.featured,
-      verificationStatus: store.verificationStatus,
-      verifiedAt: store.verifiedAt,
-      rejectionReason: store.rejectionReason,
-      createdAt: store.createdAt,
-      updatedAt: store.updatedAt,
-      images: store.images,
-      products: store.products.map((p) => ({
-        id: p.id,
-        name: p.name,
-        price: Number(p.price),
-        status: p.inStock ? "available" : "out_of_stock",
-      })),
-      owner: store.professional,
-      _count: store._count,
-    };
-
-    return storeDetails;
+/**
+ * Gets store statistics for the dashboard.
+ * Requires VIEW_CONTENT capability.
+ */
+export async function getStoreStats() {
+  return safeAction(AdminOperationName.GET_STORE_STATS, async ({ actor }) => {
+    const result = await storesService.getStoreStats(actor);
+    if (!result.ok) throw new Error(result.message ?? result.code);
+    return result.data;
   });
 }
 
 /**
  * Updates store information.
- * Returns updated store for optimistic UI updates.
+ * Requires MANAGE_CONTENT capability.
  */
 export async function updateStore(storeId: string, data: UpdateStoreInput) {
-  return safeAction("updateStore", async () => {
-    const validated = UpdateStoreSchema.parse(data);
+  return safeAction(AdminOperationName.UPDATE_STORE, async ({ actor }) => {
+    const parsed = UpdateStoreSchema.safeParse(data);
+    if (!parsed.success) {
+      throw new Error(parsed.error.issues[0]?.message ?? "Invalid update data");
+    }
 
-    // Transform validated data for Prisma, casting county to enum and removing fields that don't exist
-    const updateData: Prisma.StoreUpdateInput = {};
-
-    if (validated.name !== undefined) updateData.name = validated.name;
-    if (validated.description !== undefined)
-      updateData.description = validated.description;
-    if (validated.address !== undefined) updateData.address = validated.address;
-    if (validated.city !== undefined) updateData.city = validated.city;
-    if (validated.county !== undefined)
-      updateData.county = validated.county as County;
-    if (validated.zipCode !== undefined) updateData.zipCode = validated.zipCode;
-    if (validated.featured !== undefined)
-      updateData.featured = validated.featured;
-    // Note: phone, email, website are not in Store model, so they're ignored
-
-    const store = await prisma.store.update({
-      where: { id: storeId },
-      data: updateData,
-      select: {
-        id: true,
-        name: true,
-        verified: true,
-        featured: true,
-        updatedAt: true,
-      },
-    });
+    const result = await storesService.updateStore(
+      actor,
+      storeId,
+      omitUndefined(parsed.data) as unknown as DomainStoreUpdateInput,
+    );
+    if (!result.ok) throw new Error(result.message ?? result.code);
 
     revalidatePath("/stores");
     revalidatePath(`/stores/${storeId}`);
 
-    return {
-      updated: true,
-      store,
-    };
+    return result.data;
   });
 }
 
 /**
  * Toggles store featured status.
+ * Requires MANAGE_CONTENT capability.
  */
 export async function toggleStoreFeatured(
   storeId: string,
   idempotencyKey: string,
 ) {
-  return safeAction("toggleStoreFeatured", async ({ adminUserId }) => {
-    return runWithIdempotency({
-      adminUserId,
-      actionName: "toggleStoreFeatured",
-      idempotencyKey,
-      resourceId: storeId,
-      ttlHours: STORE_MUTATION_IDEMPOTENCY_TTL_HOURS,
-      run: async () => {
-        const store = await prisma.store.findUnique({
-          where: { id: storeId },
-          select: { featured: true },
-        });
+  return safeAction(
+    AdminOperationName.TOGGLE_STORE_FEATURED,
+    async ({ actor, adminUserId }) => {
+      return runWithIdempotency({
+        adminUserId,
+        actionName: "toggleStoreFeatured",
+        idempotencyKey,
+        resourceId: storeId,
+        ttlHours: STORE_MUTATION_IDEMPOTENCY_TTL_HOURS,
+        run: async () => {
+          const result = await storesService.toggleStoreFeatured(
+            actor,
+            storeId,
+          );
+          if (!result.ok) throw new Error(result.message ?? result.code);
 
-        if (!store) throw new Error("Store not found");
-
-        const updated = await prisma.store.update({
-          where: { id: storeId },
-          data: { featured: !store.featured },
-          select: { id: true, name: true, featured: true },
-        });
-
-        await logAdminAction({
-          userId: adminUserId,
-          action: updated.featured ? "FEATURE_STORE" : "UNFEATURE_STORE",
-          targetType: "store",
-          targetId: storeId,
-          details: { featured: updated.featured },
-        });
-
-        revalidatePath("/stores");
-
-        return {
-          toggled: true,
-          store: updated,
-        };
+          revalidatePath("/stores");
+          return result.data;
+        },
+      });
+    },
+    {
+      auditLog: {
+        operation: "TOGGLE_STORE_FEATURED",
+        resourceType: "store",
+        getTargetId: () => storeId,
+        getDetails: ({ data }) => {
+          const result = data as { store?: { featured?: boolean } } | undefined;
+          return { storeId, featured: result?.store?.featured };
+        },
       },
-    });
-  });
+    },
+  );
 }
 
 /**
  * Verifies a store.
+ * Requires MANAGE_VERIFICATION capability. Enforces 300s session freshness.
  */
 export async function verifyStore(
   storeId: string,
   idempotencyKey: string,
   notes?: string,
 ) {
-  return safeVerificationAction("verifyStore", async ({ adminUserId }) => {
-    return runWithIdempotency({
-      adminUserId,
-      actionName: "verifyStore",
-      idempotencyKey,
-      resourceId: storeId,
-      ttlHours: STORE_MUTATION_IDEMPOTENCY_TTL_HOURS,
-      run: async () => {
-        const currentStore = await prisma.store.findUnique({
-          where: { id: storeId },
-          select: { verificationStatus: true },
-        });
+  return safeAction(
+    AdminOperationName.VERIFY_STORE,
+    async ({ actor, adminUserId }) => {
+      return runWithIdempotency({
+        adminUserId,
+        actionName: "verifyStore",
+        idempotencyKey,
+        resourceId: storeId,
+        ttlHours: STORE_MUTATION_IDEMPOTENCY_TTL_HOURS,
+        run: async () => {
+          const result = await storesService.verifyStore(actor, storeId, notes);
+          if (!result.ok) throw new Error(result.message ?? result.code);
 
-        const store = await prisma.store.update({
-          where: { id: storeId },
-          data: {
-            verified: true,
-            verificationStatus: "VERIFIED",
-            verifiedAt: new Date(),
-            rejectionReason: null,
-          },
-          include: {
-            professional: {
-              select: {
-                companyName: true,
-                user: { select: { email: true } },
-              },
-            },
-          },
-        });
-
-        await logAdminAction({
-          userId: adminUserId,
-          action: "VERIFY_STORE",
-          targetType: "store",
-          targetId: storeId,
-          details: {
-            oldStatus: currentStore?.verificationStatus || null,
+          revalidatePath("/stores");
+          revalidatePath("/verifications");
+          return result.data;
+        },
+      });
+    },
+    {
+      auditLog: {
+        operation: "VERIFY_STORE",
+        resourceType: "store",
+        getTargetId: () => storeId,
+        getDetails: ({ data }) => {
+          const result = data as
+            | { oldStatus?: string | null; notes?: string | null }
+            | undefined;
+          return {
+            storeId,
+            oldStatus: result?.oldStatus,
             newStatus: "VERIFIED",
-            reason: notes || null,
-            metadata: { storeName: store.name },
-          },
-        });
-
-        revalidatePath("/stores");
-        revalidatePath("/verifications");
-
-        return {
-          verified: true,
-          store: {
-            id: store.id,
-            name: store.name,
-            verified: store.verified,
-          },
-        };
+            notes: result?.notes,
+          };
+        },
       },
-    });
-  });
+    },
+  );
 }
 
 /**
  * Rejects store verification.
+ * Requires MANAGE_VERIFICATION capability. Enforces 300s session freshness.
  */
 export async function rejectStore(
   storeId: string,
@@ -509,147 +212,84 @@ export async function rejectStore(
   idempotencyKey: string,
   notes?: string,
 ) {
-  return safeVerificationAction("rejectStore", async ({ adminUserId }) => {
-    return runWithIdempotency({
-      adminUserId,
-      actionName: "rejectStore",
-      idempotencyKey,
-      resourceId: storeId,
-      ttlHours: STORE_MUTATION_IDEMPOTENCY_TTL_HOURS,
-      run: async () => {
-        if (!reason) throw new Error("Rejection reason is required");
+  return safeAction(
+    AdminOperationName.REJECT_STORE,
+    async ({ actor, adminUserId }) => {
+      return runWithIdempotency({
+        adminUserId,
+        actionName: "rejectStore",
+        idempotencyKey,
+        resourceId: storeId,
+        ttlHours: STORE_MUTATION_IDEMPOTENCY_TTL_HOURS,
+        run: async () => {
+          const result = await storesService.rejectStore(
+            actor,
+            storeId,
+            reason,
+            notes,
+          );
+          if (!result.ok) throw new Error(result.message ?? result.code);
 
-        const currentStore = await prisma.store.findUnique({
-          where: { id: storeId },
-          select: { verificationStatus: true, name: true },
-        });
-
-        if (!currentStore) throw new Error("Store not found");
-
-        const store = await prisma.store.update({
-          where: { id: storeId },
-          data: {
-            verified: false,
-            verificationStatus: "REJECTED",
-            rejectionReason: reason,
-          },
-          select: { id: true, name: true, verified: true },
-        });
-
-        await logAdminAction({
-          userId: adminUserId,
-          action: "REJECT_STORE",
-          targetType: "store",
-          targetId: storeId,
-          reason,
-          details: {
-            oldStatus: currentStore?.verificationStatus || null,
+          revalidatePath("/stores");
+          revalidatePath("/verifications");
+          return result.data;
+        },
+      });
+    },
+    {
+      auditLog: {
+        operation: "REJECT_STORE",
+        resourceType: "store",
+        getTargetId: () => storeId,
+        getDetails: ({ data }) => {
+          const result = data as { oldStatus?: string | null } | undefined;
+          return {
+            storeId,
+            oldStatus: result?.oldStatus,
             newStatus: "REJECTED",
-            reason: notes || null,
-            metadata: { storeName: store.name },
-          },
-        });
-
-        revalidatePath("/stores");
-        revalidatePath("/verifications");
-
-        return {
-          rejected: true,
-          store,
-        };
+            reason,
+            notes: notes ?? null,
+          };
+        },
+        getReason: () => reason,
       },
-    });
-  });
+    },
+  );
 }
 
 /**
  * Deletes a store.
- * Warning: This is a destructive action.
+ * Requires MANAGE_CONTENT capability.
  */
 export async function deleteStore(storeId: string, idempotencyKey: string) {
-  return safeAction("deleteStore", async ({ adminUserId }) => {
-    return runWithIdempotency({
-      adminUserId,
-      actionName: "deleteStore",
-      idempotencyKey,
-      resourceId: storeId,
-      ttlHours: STORE_MUTATION_IDEMPOTENCY_TTL_HOURS,
-      run: async () => {
-        const store = await prisma.store.delete({
-          where: { id: storeId },
-          select: { id: true, name: true },
-        });
+  return safeAction(
+    AdminOperationName.DELETE_STORE,
+    async ({ actor, adminUserId }) => {
+      return runWithIdempotency({
+        adminUserId,
+        actionName: "deleteStore",
+        idempotencyKey,
+        resourceId: storeId,
+        ttlHours: STORE_MUTATION_IDEMPOTENCY_TTL_HOURS,
+        run: async () => {
+          const result = await storesService.deleteStore(actor, storeId);
+          if (!result.ok) throw new Error(result.message ?? result.code);
 
-        await logAdminAction({
-          userId: adminUserId,
-          action: "DELETE_STORE",
-          targetType: "store",
-          targetId: store.id,
-          details: {
-            storeName: store.name,
-          },
-        });
-
-        revalidatePath("/stores");
-
-        return {
-          deleted: true,
-          storeId: store.id,
-          storeName: store.name,
-        };
-      },
-    });
-  });
-}
-
-/**
- * Gets store statistics for dashboard.
- */
-export async function getStoreStats() {
-  return safeAction("getStoreStats", async () => {
-    const [
-      totalStores,
-      verifiedStores,
-      pendingStores,
-      featuredStores,
-      storesByCategory,
-      storesByCounty,
-      recentStores,
-    ] = await Promise.all([
-      prisma.store.count(),
-      prisma.store.count({ where: { verified: true } }),
-      prisma.store.count({ where: { verificationStatus: "PENDING" } }),
-      prisma.store.count({ where: { featured: true } }),
-      prisma.store.groupBy({
-        by: ["categories"],
-        _count: { id: true },
-      }),
-      prisma.store.groupBy({
-        by: ["county"],
-        _count: { id: true },
-        orderBy: { _count: { id: "desc" } },
-        take: 10,
-      }),
-      prisma.store.findMany({
-        take: 5,
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          name: true,
-          verified: true,
-          createdAt: true,
+          revalidatePath("/stores");
+          return result.data;
         },
-      }),
-    ]);
-
-    return {
-      total: totalStores,
-      verified: verifiedStores,
-      pending: pendingStores,
-      featured: featuredStores,
-      byCategory: storesByCategory,
-      byCounty: storesByCounty,
-      recent: recentStores,
-    };
-  });
+      });
+    },
+    {
+      auditLog: {
+        operation: "DELETE_STORE",
+        resourceType: "store",
+        getTargetId: () => storeId,
+        getDetails: ({ data }) => {
+          const result = data as { storeName?: string } | undefined;
+          return { storeId, storeName: result?.storeName };
+        },
+      },
+    },
+  );
 }

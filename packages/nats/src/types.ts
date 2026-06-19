@@ -119,7 +119,12 @@ export interface MessagePayload<T = unknown> {
  * Publisher options
  */
 export interface PublishOptions {
-  /** Message ID for deduplication */
+  /**
+   * Message ID for deduplication.
+   * Crucial for the JetStream idempotency contract (duplicate window verification).
+   * Messages published with the same msgId within the stream's duplicateWindow
+   * will be discarded as duplicates by NATS, guaranteeing once-only ingestion.
+   */
   msgId?: string;
   /** Expected last message ID */
   expect?: {
@@ -189,7 +194,7 @@ export const StreamPresets = {
     subjects: ["verification.>"],
     retention: "limits" as const,
     storage: "file" as const,
-    maxAge: 7 * 24 * 60 * 60 * 1000000000, // 7 days in nanoseconds
+    maxAge: 7 * 24 * 60 * 60 * 1_000_000_000, // 7 days in nanoseconds
     replicas: 1,
   },
   /** User events stream */
@@ -198,7 +203,7 @@ export const StreamPresets = {
     subjects: ["user.>"],
     retention: "limits" as const,
     storage: "file" as const,
-    maxAge: 30 * 24 * 60 * 60 * 1000000000, // 30 days
+    maxAge: 30 * 24 * 60 * 60 * 1_000_000_000, // 30 days
     replicas: 1,
   },
   /** Order events stream */
@@ -207,7 +212,7 @@ export const StreamPresets = {
     subjects: ["order.>"],
     retention: "limits" as const,
     storage: "file" as const,
-    maxAge: 90 * 24 * 60 * 60 * 1000000000, // 90 days
+    maxAge: 90 * 24 * 60 * 60 * 1_000_000_000, // 90 days
     replicas: 1,
   },
   /** Project events stream */
@@ -216,7 +221,7 @@ export const StreamPresets = {
     subjects: ["project.>"],
     retention: "limits" as const,
     storage: "file" as const,
-    maxAge: 90 * 24 * 60 * 60 * 1000000000, // 90 days
+    maxAge: 90 * 24 * 60 * 60 * 1_000_000_000, // 90 days
     replicas: 1,
   },
   /** Notification events stream (work queue - delete after processing) */
@@ -225,7 +230,17 @@ export const StreamPresets = {
     subjects: ["notification.>"],
     retention: "workqueue" as const,
     storage: "file" as const,
-    maxAge: 24 * 60 * 60 * 1000000000, // 24 hours
+    maxAge: 24 * 60 * 60 * 1_000_000_000, // 24 hours
+    replicas: 1,
+  },
+  /** License events stream */
+  LICENSES: {
+    name: "LICENSES",
+    subjects: ["license.>"],
+    retention: "limits" as const,
+    storage: "file" as const,
+    maxAge: 30 * 24 * 60 * 60 * 1_000_000_000, // 30 days in nanoseconds
+    duplicateWindow: 120_000_000_000, // 2-minute dedup window
     replicas: 1,
   },
 } as const;
@@ -243,6 +258,32 @@ export interface VerificationEvent {
   verifiedAt?: string;
   reason?: string;
   notes?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface LicenseVerificationEvent {
+  licenseId: string;
+  professionalId: string;
+  authority: string; // LicenseAuthority enum value
+  licenseNumber: string;
+  previousStatus: string; // VerificationStatus
+  newStatus: string; // VerificationStatus
+  action:
+    | "submitted"
+    | "auto_verify_requested"
+    | "auto_verified"
+    | "auto_verify_failed"
+    | "verified"
+    | "rejected"
+    | "needs_correction"
+    | "resubmitted"
+    | "expired"
+    | "expiring_soon";
+  adminId?: string; // present on admin-initiated transitions
+  verificationMethod?: "MANUAL" | "API_NCA" | "API_EBK" | "SYSTEM";
+  correlationId: string;
+  timestamp: string; // ISO 8601
+  validUntil?: string; // ISO 8601, for expiry scheduling
   metadata?: Record<string, unknown>;
 }
 

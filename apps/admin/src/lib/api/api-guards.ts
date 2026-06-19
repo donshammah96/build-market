@@ -6,7 +6,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { apiError, HttpStatus } from "./api-response";
-import { STORE_CONFIG } from "../config/store.config";
+import { STORE_CONFIG } from "@/lib/domains/stores/store.config";
 
 /**
  * Guard: reject requests where Content-Length exceeds the given limit.

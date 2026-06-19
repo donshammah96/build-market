@@ -4,7 +4,9 @@ packages:
 
 allowBuilds:
   "@clerk/shared": true
+  "@prisma/client": true
   "@prisma/engines": true
+  bcrypt: true
   core-js: true
   cypress: true
   esbuild: true
@@ -27,7 +29,52 @@ auditConfig:
     # which is a dev-time Prisma Studio dep, never in production request paths.
     - GHSA-92pp-h63x-v22m
 
-onlyBuiltDependencies:
-  - "@prisma/client"
-  - "@prisma/engines"
-  - prisma
+overrides:
+  "@opentelemetry/core": "2.8.0"
+  ioredis: "5.11.1"
+  js-cookie: "3.0.6"
+  "@clerk/shared>js-cookie": "3.0.6"
+  "@clerk/backend>js-cookie": "3.0.6"
+  "@clerk/nextjs>js-cookie": "3.0.6"
+  "@clerk/react>js-cookie": "3.0.6"
+  ws: ">=8.20.1"
+  "engine.io-client>ws": ">=8.20.1"
+  "socket.io-client>ws": ">=8.20.1"
+  "@hono/node-server": ">=2.0.2"
+  "ajv@^6.12.0": "6.14.0"
+  "brace-expansion@^2.0.0": "2.0.3"
+  defu: ">=6.1.5"
+  effect: ">=3.20.0"
+  fast-uri: ">=3.1.2"
+  fast-xml-builder: ">=1.1.7"
+  fast-xml-parser: ">=5.7.0"
+  uuid: "11.1.1"
+  "bullmq>uuid": "11.1.1"
+  hono: ">=4.12.18"
+  lodash: ">=4.18.0"
+  mailparser: ">=3.9.3"
+  "minimatch@^3.0.0": "3.1.5"
+  "minimatch@^9.0.0": "9.0.9"
+  nodemailer: ">=8.0.5"
+  path-to-regexp: ">=8.4.0"
+  "picomatch@^2.3.0": "2.3.2"
+  "picomatch@^4.0.0": "4.0.4"
+  qs: ">=6.14.2"
+  "rollup@^4.0.0": "4.60.1"
+  "@clerk/express": ">=2.1.6"
+  yaml: ">=2.8.3"
+  next: "16.2.6"
+  dompurify: ">=3.4.11"
+  axios: ">=1.15.0"
+  protobufjs: ">=8.0.2"
+  postcss: "8.5.14"
+  "next>postcss": "8.5.14"
+  "admin>next": "16.2.6"
+
+packageExtensions:
+  "@clerk/shared@*":
+    dependencies:
+      js-cookie: 3.0.6
+
+patchedDependencies:
+  uri-js: patches/uri-js.patch

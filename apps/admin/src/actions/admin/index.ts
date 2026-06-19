@@ -18,7 +18,7 @@ export type {
 
 // Dashboard
 export { getDashboardStats } from "./dashboard";
-export type { DashboardStats } from "./dashboard";
+export type { DashboardStats } from "@/lib/domains/dashboard/contracts";
 
 // Users
 export {
@@ -30,7 +30,10 @@ export {
   resetUserCredentials,
   assignUserRole,
 } from "./users";
-export type { UserWithProfile, UserDetails } from "./users";
+export type {
+  AdminUserListItem as UserWithProfile,
+  AdminUserDetails as UserDetails,
+} from "@/lib/domains/users";
 
 // Professionals
 export {
@@ -42,13 +45,16 @@ export {
   deleteCertificate,
 } from "./professionals";
 export type {
-  ProfessionalWithUser,
   ProfessionalDetails,
-} from "./professionals";
+  ProfessionalListItem as ProfessionalWithUser,
+} from "@/lib/domains/professionals/contracts";
 
 // Projects
 export { getProjects, getProjectDetails } from "./projects";
-export type { ProjectListItem, ProjectDetails } from "./projects";
+export type {
+  ProjectListItem,
+  ProjectDetails,
+} from "@/lib/domains/projects/contracts";
 
 // Settings
 export {
@@ -56,7 +62,7 @@ export {
   updateSystemSettings,
   clearSystemCache,
 } from "./settings";
-export type { SystemSettings } from "./settings";
+export type { SystemSettings } from "@/lib/domains/settings/contracts";
 
 // Onboarding Remediation
 export {
@@ -68,7 +74,7 @@ export type {
   AdminOnboardingReconciliationResult,
   AdminOnboardingClerkSyncResult,
   AdminOnboardingIdempotencyReconcileResult,
-} from "./onboarding-remediation";
+} from "./types";
 
 // Verification
 export {
@@ -93,7 +99,7 @@ export type {
   VerifyEntityInput,
   VerifyDocumentInput,
   BatchVerifyDocumentsInput,
-} from "./verification";
+} from "./types";
 
 // Stores
 export {
@@ -108,10 +114,10 @@ export {
 } from "./stores";
 export type {
   StoreListItem,
-  StoreDetails,
+  StoreDetailResult as StoreDetails,
   StoreFilterInput,
-  UpdateStoreInput,
-} from "./stores";
+  StoreUpdateInput as UpdateStoreInput,
+} from "@/lib/domains/stores/contracts";
 
 // Properties
 export {
@@ -127,10 +133,10 @@ export {
 } from "./properties";
 export type {
   PropertyListItem,
-  PropertyDetails,
+  PropertyDetailResult as PropertyDetails,
   PropertyFilterInput,
-  UpdatePropertyInput,
-} from "./properties";
+  PropertyUpdateInput as UpdatePropertyInput,
+} from "@/lib/domains/properties/contracts";
 
 // Leads
 export {
@@ -147,7 +153,7 @@ export type {
   LeadDetails,
   LeadFilterInput,
   UpdateLeadInput,
-} from "./leads";
+} from "@/lib/domains/leads/contracts";
 
 // Service Categories
 export {
@@ -166,7 +172,7 @@ export type {
   ServiceFilterInput,
   CreateServiceInput,
   UpdateServiceInput,
-} from "./services";
+} from "@/lib/domains/services/contracts";
 
 // Audit Logs
 export {
@@ -178,8 +184,11 @@ export {
 export type {
   AuditLogEntry,
   AuditLogStats,
-  AuditLogFilterInput,
-} from "./audit";
+  AuditLogPage,
+  AuditExportPage,
+  AuditExportEntry,
+  AuditLogInput,
+} from "@/lib/domains/audit/contracts";
 
 // Analytics
 export {
@@ -189,8 +198,9 @@ export {
   getTopProfessionals,
 } from "./analytics";
 export type {
-  PlatformAnalytics,
-  TimeSeriesData,
+  PlatformAnalyticsResult as PlatformAnalytics,
   AnalyticsPeriod,
-  AnalyticsFilterInput,
-} from "./analytics";
+  AnalyticsInput as AnalyticsFilterInput,
+} from "@/lib/domains/finance/contracts";
+import type { TimeSeriesEntry } from "@/lib/domains/finance/contracts";
+export type TimeSeriesData = TimeSeriesEntry[];

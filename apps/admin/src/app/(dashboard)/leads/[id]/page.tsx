@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { UpdateStatusButton } from "@/components/admin/leads/UpdateStatusButton";
 import { LeadActions } from "@/components/admin/leads/LeadActions";
-import { getAdminPermissions } from "@/actions/admin/shared";
+import { getAdminPermissions } from "@/actions/admin/_core/permissions";
 
 interface LeadDetailPageProps {
   params: Promise<{ id: string }>;

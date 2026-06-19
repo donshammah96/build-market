@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, integration/admin-overhaul, release/*]
   pull_request:
     branches: [main, develop]
 
@@ -62,6 +62,97 @@ jobs:
             } else {
               core.info("Client changelog guard passed.");
             }
+
+  admin-changelog-guard:
+    name: Admin Changelog Guard
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Require admin changelog update for admin code changes
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pull_number = context.payload.pull_request.number;
+
+            const files = await github.paginate(
+              github.rest.pulls.listFiles,
+              { owner, repo, pull_number, per_page: 100 },
+            );
+
+            const adminCodeChanged = files.some((f) =>
+              f.filename.startsWith("apps/admin/") &&
+              !f.filename.startsWith("apps/admin/docs/"),
+            );
+            const changelogUpdated = files.some(
+              (f) =>
+                f.filename === "apps/admin/docs/CHANGELOG.md" &&
+                f.status !== "removed",
+            );
+
+            if (adminCodeChanged && !changelogUpdated) {
+              core.setFailed(
+                "apps/admin code changed but apps/admin/docs/CHANGELOG.md was not updated.",
+              );
+            } else {
+              core.info("Admin changelog guard passed.");
+            }
+
+  admin-validate:
+    name: Admin Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
+      CLERK_SECRET_KEY: sk_test_ci_placeholder
+      CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
+      DATABASE_URL: "postgresql://ci:stub@localhost:5432/build_market_ci"
+      DIRECT_URL: "postgresql://ci:stub@localhost:5432/build_market_ci"
+      NEXT_PUBLIC_APP_URL: http://localhost:3005
+      APP_URL: http://localhost:3005
+      CLIENT_APP_URL: http://localhost:3500
+      INTERNAL_API_SECRET: ci-secret
+      S3_DISABLED: "true"
+      ENABLE_NOTIFICATION_SERVICE: "false"
+      QUEUE_PROVIDER: memory
+      ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace packages
+        run: pnpm tsc --build tsconfig.json
+
+      - name: Admin type check
+        run: pnpm run admin:check-types
+
+      - name: Admin lint
+        run: pnpm run admin:lint
+
+      - name: Admin env contract check
+        run: pnpm run admin:check-env-contract
+
+      - name: Admin security drift report
+        run: pnpm run admin:report-security-drift:strict
+
+      - name: Admin tests
+        run: pnpm run admin:test:all
 
   validate:
     name: Validate

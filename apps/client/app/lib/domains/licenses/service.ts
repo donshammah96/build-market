@@ -1,6 +1,7 @@
 import { err, ok } from "@/app/lib/errors/result";
 import { normalizeRole } from "@/app/lib/security/roles";
 import { licensesRepository } from "./repository";
+import { publishLicenseEvent } from "@/app/lib/integrations/license-events";
 import type {
   CreateLicenseInput,
   UpdateLicenseInput,
@@ -105,6 +106,22 @@ export const licensesService = {
         status: 409,
       });
     }
+
+    // Publish submitted event to NATS (fire-and-forget)
+    publishLicenseEvent({
+      licenseId: result.data.id,
+      professionalId: actor.userId,
+      authority: data.authority,
+      licenseNumber: data.licenseNumber,
+      previousStatus: "PENDING",
+      newStatus: "PENDING",
+      action: "submitted",
+      correlationId: actor.correlationId ?? "",
+      ...(result.data.validUntil ? { validUntil: result.data.validUntil } : {}),
+    }).catch(() => {
+      // Silently handled/logged inside the adapter
+    });
+
     return ok(result.data);
   },
 

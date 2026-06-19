@@ -8,25 +8,39 @@ import {
 import { prisma } from "@build/db";
 import { sendEmail } from "@/lib/infrastructure/mailer";
 import { IncidentSeverity } from "@prisma/client";
+import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
+import { adminEnvConfig } from "@/lib/infrastructure/env";
+
+const logger = new StructuredLogger("incident-worker");
 
 export const incidentWorker = new Worker<IncidentJobData>(
   "security-incidents",
   async (job: Job<IncidentJobData>) => {
     const { incidentId, type, severity, metadata } = job.data;
+    const correlationId = CorrelationIdManager.generate();
+    CorrelationIdManager.set(correlationId);
 
-    console.log(
-      `[IncidentWorker] Processing ${type} for incident ${incidentId}`,
-    );
+    logger.info("Processing incident job", {
+      correlationId,
+      incidentId,
+      type,
+      severity,
+    });
 
     switch (type) {
       case "EMERGENCY_PROTOCOL":
-        return await handleEmergencyProtocol(incidentId, job);
+        return await handleEmergencyProtocol(incidentId, job, correlationId);
 
       case "ODPC_NOTIFICATION":
-        return await notifyODPC(incidentId, job);
+        return await notifyODPC(incidentId, job, correlationId);
 
       case "ESCALATION":
-        return await escalateToDPO(incidentId, severity, metadata);
+        return await escalateToDPO(
+          incidentId,
+          severity,
+          metadata,
+          correlationId,
+        );
 
       default:
         throw new Error(`Unknown incident job type: ${type}`);
@@ -42,7 +56,11 @@ export const incidentWorker = new Worker<IncidentJobData>(
   },
 );
 
-async function handleEmergencyProtocol(incidentId: string, job: Job) {
+async function handleEmergencyProtocol(
+  incidentId: string,
+  job: Job,
+  correlationId: string,
+) {
   await job.updateProgress(10);
 
   const incident = await prisma.securityIncident.findUnique({
@@ -55,7 +73,10 @@ async function handleEmergencyProtocol(incidentId: string, job: Job) {
 
   // Skip if already handled
   if (incident.odpcNotified && incident.usersNotified) {
-    console.log(`[EmergencyProtocol] Incident ${incidentId} already handled`);
+    logger.info("Incident already handled, skipping", {
+      correlationId,
+      incidentId,
+    });
     return { status: "already_handled" };
   }
 
@@ -85,7 +106,7 @@ async function handleEmergencyProtocol(incidentId: string, job: Job) {
 
   // 2. If CRITICAL, immediately freeze affected accounts or take protective action
   if (incident.severity === "CRITICAL") {
-    await executeProtectiveMeasures(incident);
+    await executeProtectiveMeasures(incident, correlationId);
   }
 
   await job.updateProgress(80);
@@ -131,7 +152,7 @@ async function handleEmergencyProtocol(incidentId: string, job: Job) {
   };
 }
 
-async function notifyODPC(incidentId: string, job: Job) {
+async function notifyODPC(incidentId: string, job: Job, correlationId: string) {
   await job.updateProgress(10);
 
   const incident = await prisma.securityIncident.findUnique({
@@ -143,7 +164,7 @@ async function notifyODPC(incidentId: string, job: Job) {
   }
 
   // Format ODPC Notification (Legal Requirement: 72 hours)
-  const odpcEmail = process.env.ODPC_EMAIL || "dataprotection@odpc.go.ke";
+  const odpcEmail = adminEnvConfig.ODPC_EMAIL ?? "dataprotection@odpc.go.ke";
   const subject = `DATA BREACH NOTIFICATION - ${incident.classification} - ${incidentId}`;
 
   const body = `
@@ -205,11 +226,14 @@ This notification is submitted within 72 hours as required by Section 43 of the 
 
     await job.updateProgress(100);
 
+    logger.info("ODPC notified successfully", { correlationId, incidentId });
+
     return { status: "odpc_notified", notifiedAt: new Date().toISOString() };
   } catch (error) {
-    console.error(
-      `[ODPC Notification] Failed for incident ${incidentId}:`,
-      error,
+    logger.error(
+      "ODPC notification failed",
+      error instanceof Error ? error : new Error(String(error)),
+      { correlationId, incidentId },
     );
 
     // Update incident with failure info but don't mark as notified
@@ -235,9 +259,10 @@ async function escalateToDPO(
   incidentId: string,
   severity: IncidentSeverity,
   metadata: any,
+  correlationId: string,
 ) {
   // Send urgent notification to internal DPO/Security team
-  const dpoEmail = process.env.DPO_EMAIL || "security@buildmarket.co.ke";
+  const dpoEmail = adminEnvConfig.DPO_EMAIL ?? "security@buildmarket.co.ke";
 
   await sendEmail({
     to: dpoEmail,
@@ -251,13 +276,19 @@ async function escalateToDPO(
     `,
   });
 
+  logger.info("Incident escalated to DPO", {
+    correlationId,
+    incidentId,
+    severity,
+  });
+
   // Create high-priority ticket in your system (e.g., Jira, Linear)
   // await createSecurityTicket(incidentId, severity);
 
   return { status: "escalated" };
 }
 
-async function executeProtectiveMeasures(incident: any) {
+async function executeProtectiveMeasures(incident: any, correlationId: string) {
   // Critical incident actions:
 
   // 1. Force password reset for affected users
@@ -288,7 +319,10 @@ async function executeProtectiveMeasures(incident: any) {
     // await revokeAllApiKeys();
   }
 
-  console.log(`[ProtectiveMeasures] Executed for incident ${incident.id}`);
+  logger.info("Protective measures executed", {
+    correlationId,
+    incidentId: incident.id,
+  });
 }
 
 async function identifyAffectedUsers(incident: any): Promise<string[]> {
@@ -351,17 +385,21 @@ For questions, contact our DPO at dpo@buildmarket.co.ke
 
 Reference: ${incident.id}
     `,
-    actionUrl: `${process.env.APP_URL}/security/reset-password?incident=${incident.id}`,
+    actionUrl: `${adminEnvConfig.APP_URL}/security/reset-password?incident=${incident.id}`,
   };
 }
 
 // Event handlers
 incidentWorker.on("completed", (job: Job) => {
-  console.log(`[IncidentWorker] Completed job ${job.id}`);
+  logger.info("Job completed", { jobId: job.id });
 });
 
 incidentWorker.on("failed", (job: Job | undefined, err: Error) => {
-  console.error(`[IncidentWorker] Job ${job?.id} failed:`, err);
+  logger.error(
+    "Job failed",
+    err instanceof Error ? err : new Error(String(err)),
+    { jobId: job?.id, severity: job?.data.severity },
+  );
 
   // Alert on-call engineer if critical
   if (job?.data.severity === "CRITICAL") {

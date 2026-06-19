@@ -24,7 +24,7 @@ function isNotFoundError(error: unknown): boolean {
  * Stream management utilities for JetStream
  */
 export class StreamManager {
-  private config?: Partial<NatsConfig>;
+  private config?: Partial<NatsConfig> | undefined;
 
   constructor(config?: Partial<NatsConfig>) {
     this.config = config;
@@ -247,6 +247,14 @@ export async function initializeStreams(
       retention: "workqueue",
       storage: "file",
       maxAge: 24 * 60 * 60 * 1000000000, // 24 hours
+    },
+    {
+      name: "LICENSES",
+      subjects: ["license.>"],
+      retention: "limits",
+      storage: "file",
+      maxAge: 30 * 24 * 60 * 60 * 1000000000, // 30 days
+      duplicateWindow: 120000000000,
     },
   ];
 

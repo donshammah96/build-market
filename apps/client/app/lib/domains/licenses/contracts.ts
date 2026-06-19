@@ -24,6 +24,7 @@ export type LicenseActor = {
   clerkId?: string;
   userId: string;
   role?: AppRole | string | null;
+  correlationId?: string;
 };
 
 export type LicenseDomainErrorCode =

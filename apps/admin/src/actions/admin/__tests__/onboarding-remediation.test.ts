@@ -3,13 +3,44 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   safeAction: vi.fn(),
   callClientApi: vi.fn(),
-  requireAdminGranularRole: vi.fn(),
 }));
 
-vi.mock("../shared", () => ({
+const dbMock = vi.hoisted(() => ({
+  AdminRole: {
+    SUPER_ADMIN: "SUPER_ADMIN",
+    SUPPORT_AGENT: "SUPPORT_AGENT",
+    CONTENT_MODERATOR: "CONTENT_MODERATOR",
+  } as const,
+  UserRole: { ADMIN: "ADMIN" } as const,
+}));
+
+vi.mock("@build/db", () => ({
+  AdminRole: dbMock.AdminRole,
+  UserRole: dbMock.UserRole,
+  prisma: {},
+}));
+
+vi.mock("../_core/safe-action", () => ({
   safeAction: mocks.safeAction,
+}));
+vi.mock("../_core/client-api", () => ({
   callClientApi: mocks.callClientApi,
-  requireAdminGranularRole: mocks.requireAdminGranularRole,
+}));
+vi.mock("@/_core/safe-action", () => ({
+  safeAction: mocks.safeAction,
+}));
+vi.mock("@/_core/client-api", () => ({
+  callClientApi: mocks.callClientApi,
+}));
+
+const mockEnv = vi.hoisted(() => ({
+  INTERNAL_API_SECRET: "test-secret" as string | undefined,
+}));
+
+vi.mock("@/lib/infrastructure/env", () => ({
+  get adminEnvConfig() {
+    return mockEnv;
+  },
 }));
 
 import {
@@ -22,20 +53,20 @@ describe("admin onboarding remediation actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    process.env.INTERNAL_API_SECRET = "test-secret";
+    mockEnv.INTERNAL_API_SECRET = "test-secret";
 
     mocks.safeAction.mockImplementation(
       async (
         _actionName: string,
         fn: (ctx: {
           adminUserId: string;
-          adminRole: "admin";
+          adminRole: "SUPER_ADMIN";
         }) => Promise<unknown>,
       ) => {
         try {
           const data = await fn({
             adminUserId: "admin_user_1",
-            adminRole: "admin",
+            adminRole: "SUPER_ADMIN",
           });
           return { success: true, data, timestamp: new Date().toISOString() };
         } catch (error) {
@@ -50,7 +81,6 @@ describe("admin onboarding remediation actions", () => {
       },
     );
 
-    mocks.requireAdminGranularRole.mockResolvedValue("SUPER_ADMIN");
     mocks.callClientApi.mockResolvedValue({
       success: true,
       data: { ok: true },
@@ -61,10 +91,6 @@ describe("admin onboarding remediation actions", () => {
     const response = await onboardingReconcile("user_123");
 
     expect(response.success).toBe(true);
-    expect(mocks.requireAdminGranularRole).toHaveBeenCalledWith(
-      ["SUPER_ADMIN"],
-      "admin_user_1",
-    );
     expect(mocks.callClientApi).toHaveBeenCalledWith(
       "/api/internal/onboarding-remediation/reconcile",
       expect.objectContaining({
@@ -135,7 +161,7 @@ describe("admin onboarding remediation actions", () => {
   });
 
   it("fails closed when remediation secret is missing", async () => {
-    delete process.env.INTERNAL_API_SECRET;
+    mockEnv.INTERNAL_API_SECRET = undefined;
 
     const response = await onboardingReconcile("user_123");
 

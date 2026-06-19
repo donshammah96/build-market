@@ -13,7 +13,7 @@ if (fs.existsSync(envPath)) {
       const key = parts[0]?.trim();
       const val = parts.slice(1).join("=").trim().replace(/"/g, "");
       if (key && val) {
-        process.env[key] = val;
+        process.env[key] = val; // bootstrap-only: script environment setup
       }
     }
   });
