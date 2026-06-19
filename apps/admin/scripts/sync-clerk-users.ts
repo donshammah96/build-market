@@ -1,30 +1,14 @@
-import { PrismaClient, UserRole } from "@build/db";
-import fs from "fs";
+import dotenv from "dotenv";
 import path from "path";
+import { fileURLToPath } from "url";
 
-// Load .env manually since we are running via tsx
-const envPath = path.resolve(process.cwd(), "apps/admin/.env");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const envPath = path.resolve(__dirname, "../.env");
 console.log("Loading env from:", envPath);
-if (fs.existsSync(envPath)) {
-  const envConfig = fs.readFileSync(envPath, "utf8");
-  envConfig.split("\n").forEach((line) => {
-    const parts = line.split("=");
-    if (parts.length >= 2) {
-      const key = parts[0]?.trim();
-      const val = parts.slice(1).join("=").trim().replace(/"/g, "");
-      if (key && val) {
-        process.env[key] = val; // bootstrap-only: script environment setup
-      }
-    }
-  });
-} else {
-  console.error("No .env file found at", envPath);
-}
-
-const prisma = new PrismaClient();
+dotenv.config({ path: envPath });
 
 async function main() {
-  // Dynamic import to ensure env vars are loaded first
+  const { prisma, UserRole, AdminRole } = await import("@build/db");
   const { clerkClient } = await import("@clerk/nextjs/server");
 
   console.log("Fetching users from Clerk...");
@@ -58,7 +42,13 @@ async function main() {
           firstName: u.firstName,
           lastName: u.lastName,
           avatar: u.imageUrl,
-          role: UserRole.CLIENT,
+          role: UserRole.ADMIN,
+          adminProfile: {
+            create: {
+              role: AdminRole.SUPER_ADMIN,
+              isActive: true,
+            },
+          },
         },
       });
     }
@@ -66,11 +56,9 @@ async function main() {
     console.log("Sync complete.");
   } catch (error) {
     console.error("Error fetching/syncing users:", error);
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
-main()
-  .catch((e) => console.error(e))
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main().catch((e) => console.error(e));

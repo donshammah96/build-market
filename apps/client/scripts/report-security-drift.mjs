@@ -34,7 +34,7 @@ const GENERAL_SCAN_PATHS = [
   "components",
   "hooks",
   "lib",
-  "proxy.ts",
+  "middleware.ts",
   "next.config.ts",
   "instrumentation.ts",
   "sentry.client.config.ts",
@@ -48,7 +48,7 @@ const SERVER_SCAN_PATHS = [
   "app/lib",
   "app/jobs",
   "app/workers",
-  "proxy.ts",
+  "middleware.ts",
 ];
 
 const DIRECT_ENV_PATTERN = /process\.env(?:\.|\[)/g;

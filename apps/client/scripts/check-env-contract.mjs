@@ -9,7 +9,7 @@ const SCAN_PATHS = [
   path.join(APP_ROOT, "app"),
   path.join(APP_ROOT, "lib"),
   path.join(APP_ROOT, "hooks"),
-  path.join(APP_ROOT, "proxy.ts"),
+  path.join(APP_ROOT, "middleware.ts"),
   path.join(APP_ROOT, "next.config.ts"),
 ];
 
