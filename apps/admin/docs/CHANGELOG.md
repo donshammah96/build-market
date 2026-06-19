@@ -1,5 +1,20 @@
 # apps/admin Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Clerk Satellite Configuration:** Added `NEXT_PUBLIC_CLERK_IS_SATELLITE`, `NEXT_PUBLIC_CLERK_DOMAIN`, and `NEXT_PUBLIC_CLERK_SIGN_IN_URL` environment variables in `apps/admin/.env.development` and `apps/admin/.env.test` for satellite domain authentication support.
+- **TSConfig References:** Added `@build/enums` reference path in `tsconfig.json`.
+
+### Changed
+
+- **Vercel Build Command:** Modified `vercel.json` build command to compile referenced projects using `pnpm tsc --build tsconfig.json` before running next.js build to avoid build-time dependency resolution issues.
+- **Queue Provider Resolution:** Simplified `CURRENT_PROVIDER` logic in `notification-queue.ts` to map both `redis` and `bullmq` env values to `QueueProvider.REDIS`.
+- **Code Cleanup:** Removed unused imports (`adminEnvConfig`, `AdminLogEvent`, `NextResponse`, `AdminRole`, `superAdmin`) and unused destructuring assignments across several route handlers, contracts, and tests.
+
+---
+
 ## [2026-06-18] CI & Security Drift Fixes
 
 ### Fixed (CI & Security Drift Fixes)

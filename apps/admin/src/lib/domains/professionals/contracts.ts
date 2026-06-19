@@ -1,4 +1,4 @@
-import { AdminRole, County, VerificationStatus } from "@build/db";
+import { County, VerificationStatus } from "@build/db";
 import type { AdminActor } from "@/lib/security/admin-actor";
 
 export type ProfessionalsActor = AdminActor;

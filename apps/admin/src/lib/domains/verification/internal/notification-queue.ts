@@ -39,13 +39,10 @@ export enum QueueProvider {
 
 // Current Provider Selection
 const CURRENT_PROVIDER: QueueProvider =
-  adminEnvConfig.QUEUE_PROVIDER === "redis"
+  adminEnvConfig.QUEUE_PROVIDER === "redis" ||
+  adminEnvConfig.QUEUE_PROVIDER === "bullmq"
     ? QueueProvider.REDIS
-    : adminEnvConfig.QUEUE_PROVIDER === "bullmq"
-      ? QueueProvider.REDIS
-      : adminEnvConfig.QUEUE_PROVIDER === "memory"
-        ? QueueProvider.MEMORY
-        : QueueProvider.MEMORY;
+    : QueueProvider.MEMORY;
 
 // Maximum retry attempts before moving to dead letter
 const MAX_RETRY_ATTEMPTS = 3;

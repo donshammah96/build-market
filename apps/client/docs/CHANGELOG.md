@@ -32,6 +32,10 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 - **PropertyForm tests:** Replaced fragile full-tree HTML snapshots in `PropertyForm` component tests with robust semantic accessibility assertions.
 
+### Fixed (Testing)
+
+- **Route Guards Test:** Corrected middleware import path in `route-guards.test.ts` from `@/proxy` to `@/middleware` to resolve import errors following the Next.js middleware file convention migration.
+
 ### Security (Vulnerability Resolution)
 
 - **Security**: Resolved moderate security vulnerability GHSA-cmwh-pvxp-8882 by pinning `dompurify` dependency version to `>=3.4.11` in `pnpm-workspace.yaml`.

@@ -35,6 +35,7 @@
     { "path": "../../packages/resilience" },
     { "path": "../../packages/db" },
     { "path": "../../packages/types" },
+    { "path": "../../packages/enums" },
     { "path": "../../packages/redis" },
     { "path": "../../packages/nats" },
     { "path": "../../packages/auth-server" },

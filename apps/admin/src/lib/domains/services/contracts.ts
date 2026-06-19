@@ -1,4 +1,4 @@
-import { AdminRole, Profession } from "@build/db";
+import { Profession } from "@build/db";
 import type { AdminActor } from "@/lib/security/admin-actor";
 
 export type ServicesActor = AdminActor;

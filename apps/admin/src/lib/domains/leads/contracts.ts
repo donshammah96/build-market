@@ -1,4 +1,4 @@
-import { AdminRole, LeadSource, LeadStatus, ProjectType } from "@build/db";
+import { LeadSource, LeadStatus, ProjectType } from "@build/db";
 import type { AdminActor } from "@/lib/security/admin-actor";
 
 export type LeadsActor = AdminActor;

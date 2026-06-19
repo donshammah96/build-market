@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAdminRouteActor } from "@/lib/security/route-auth";
 import type { AdminLogEvent } from "@/lib/infrastructure/logger";
-import { adminEnvConfig } from "@/lib/infrastructure/env";
 import { getAdminLogger } from "@/lib/infrastructure/logger";
 import { initializeAdminCorrelationId } from "@/lib/infrastructure/correlation";
 import {
@@ -28,7 +27,7 @@ export async function GET(req: NextRequest) {
       return authResult.response;
     }
 
-    const { actor, adminRoleStr: adminRole } = authResult;
+    const { adminRoleStr: adminRole } = authResult;
 
     const [incidentStats, notificationStats, auditStats] = await Promise.all([
       incidentQueue.getJobCounts(
