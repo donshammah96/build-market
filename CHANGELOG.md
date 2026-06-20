@@ -54,6 +54,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Admin**: Standardized env templates and configuration files by renaming `GDPR_ERASURE_CRON_PATTERN` to `GDPR_ERASURE_CRON` in `.env.development`, `.env.example`, and `.env.test`.
+- **Admin**: Cleaned up unused imports (`Prisma`, `StructuredLogger`) and unused `logger` in the GDPR erasure service ([service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/gdpr/erasure/service.ts)).
 - **Client**: Replaced fragile full-tree HTML snapshots in `PropertyForm` component tests with robust semantic accessibility assertions.
 - **Admin**: Standardized core server action and validation imports in `verification.ts` and test suites (`verification-actions.test.ts`, `users-actions.test.ts`, `onboarding-remediation.test.ts`) to use canonical `@/_core/...` and relative `../_core/...` path alias mocks.
 - **Admin**: Consolidated GDPR services under `domains/gdpr/`, verification-internal services under `domains/verification/internal/`, and relocated domain configurations and single-file folders in `apps/admin` (autopsy refactoring items I-8, I-9, I-15, I-16, I-19).

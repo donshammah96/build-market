@@ -1,10 +1,7 @@
-import { prisma, Prisma } from "@build/db";
+import { prisma } from "@build/db";
 import { AssetCleanupService } from "../asset-cleanup/service";
-import { StructuredLogger } from "@build/resilience";
 import { createHash } from "crypto";
 import { clerkClient } from "@clerk/nextjs/server";
-
-const logger = new StructuredLogger("erasure-service");
 
 export class ErasureService {
   /**
