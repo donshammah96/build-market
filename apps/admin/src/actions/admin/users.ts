@@ -8,6 +8,7 @@ import { parseActionInput } from "@/_core/validation";
 import { runWithIdempotency } from "./idempotency";
 import { usersRepository, usersService } from "@/lib/domains/users";
 import { omitUndefined } from "@/lib/utils";
+import { performGdprErasure } from "@/lib/jobs/gdpr-erasure";
 
 const USER_IDEMPOTENCY_TTL_HOURS = 0.25;
 const NonEmptyStringSchema = z.string().trim().min(1);
@@ -503,6 +504,38 @@ const UnsuspendUserSchema = z
   })
   .strict();
 
+const BanUserSchema = z
+  .object({
+    userId: NonEmptyStringSchema,
+    reason: z.string().trim().optional(),
+  })
+  .strict();
+
+const UnbanUserSchema = z
+  .object({
+    userId: NonEmptyStringSchema,
+  })
+  .strict();
+
+const DeactivateUserSchema = z
+  .object({
+    userId: NonEmptyStringSchema,
+  })
+  .strict();
+
+const ArchiveUserSchema = z
+  .object({
+    userId: NonEmptyStringSchema,
+    reason: z.string().trim().optional(),
+  })
+  .strict();
+
+const UnarchiveUserSchema = z
+  .object({
+    userId: NonEmptyStringSchema,
+  })
+  .strict();
+
 /**
  * Suspends a user account.
  *
@@ -680,6 +713,400 @@ export async function unsuspendUser(
           return {
             previousStatus: result.previousStatus,
             unsuspended: result.unsuspended,
+          };
+        },
+      },
+    },
+  );
+}
+
+export async function banUser(
+  input: { userId: string; reason?: string },
+  idempotencyKey: string,
+) {
+  return safeAction(
+    "banUser",
+    async ({ actor, adminUserId }) => {
+      const parsedInput = parseActionInput(
+        BanUserSchema,
+        input,
+        "Valid ban payload is required",
+      );
+      const parsedIdempotencyKey = parseActionInput(
+        IdempotencyKeySchema,
+        idempotencyKey,
+        "Idempotency-Key is required",
+      );
+
+      return runWithIdempotency({
+        adminUserId,
+        actionName: "banUser",
+        idempotencyKey: parsedIdempotencyKey,
+        resourceId: parsedInput.userId,
+        ttlHours: USER_IDEMPOTENCY_TTL_HOURS,
+        run: async () => {
+          const result = await usersService.prepareBanUser(actor, {
+            userId: parsedInput.userId,
+            ...(parsedInput.reason !== undefined
+              ? { reason: parsedInput.reason }
+              : {}),
+          });
+
+          if (!result.ok) {
+            throw new Error(result.message);
+          }
+
+          const user = result.data;
+
+          await usersRepository.updateUserStatus(user.id, "BANNED");
+
+          const client = await clerkClient();
+          await client.users.updateUserMetadata(user.clerkId, {
+            publicMetadata: {
+              status: "BANNED",
+            },
+          });
+
+          revalidatePath("/users");
+          revalidatePath(`/users/${user.id}`);
+
+          return {
+            banned: true,
+            userId: user.id,
+            email: user.email,
+            previousStatus: user.status,
+          };
+        },
+      });
+    },
+    {
+      auditLog: {
+        operation: "BAN_USER",
+        resourceType: "user",
+        getTargetId: ({ data }) => {
+          const result = data as { userId: string };
+          return result.userId;
+        },
+        getDetails: ({ data }) => {
+          const result = data as {
+            previousStatus: string;
+            banned: boolean;
+          };
+          return {
+            previousStatus: result.previousStatus,
+            banned: result.banned,
+          };
+        },
+      },
+    },
+  );
+}
+
+export async function unbanUser(
+  input: { userId: string },
+  idempotencyKey: string,
+) {
+  return safeAction(
+    "unbanUser",
+    async ({ actor, adminUserId }) => {
+      const parsedInput = parseActionInput(
+        UnbanUserSchema,
+        input,
+        "Valid unban payload is required",
+      );
+      const parsedIdempotencyKey = parseActionInput(
+        IdempotencyKeySchema,
+        idempotencyKey,
+        "Idempotency-Key is required",
+      );
+
+      return runWithIdempotency({
+        adminUserId,
+        actionName: "unbanUser",
+        idempotencyKey: parsedIdempotencyKey,
+        resourceId: parsedInput.userId,
+        ttlHours: USER_IDEMPOTENCY_TTL_HOURS,
+        run: async () => {
+          const result = await usersService.prepareUnbanUser(actor, {
+            userId: parsedInput.userId,
+          });
+
+          if (!result.ok) {
+            throw new Error(result.message);
+          }
+
+          const user = result.data;
+
+          await usersRepository.updateUserStatus(user.id, "ACTIVE");
+
+          const client = await clerkClient();
+          await client.users.updateUserMetadata(user.clerkId, {
+            publicMetadata: {
+              status: "ACTIVE",
+            },
+          });
+
+          revalidatePath("/users");
+          revalidatePath(`/users/${user.id}`);
+
+          return {
+            unbanned: true,
+            userId: user.id,
+            email: user.email,
+            previousStatus: user.status,
+          };
+        },
+      });
+    },
+    {
+      auditLog: {
+        operation: "UNBAN_USER",
+        resourceType: "user",
+        getTargetId: ({ data }) => {
+          const result = data as { userId: string };
+          return result.userId;
+        },
+        getDetails: ({ data }) => {
+          const result = data as {
+            previousStatus: string;
+            unbanned: boolean;
+          };
+          return {
+            previousStatus: result.previousStatus,
+            unbanned: result.unbanned,
+          };
+        },
+      },
+    },
+  );
+}
+
+export async function deactivateUser(
+  input: { userId: string },
+  idempotencyKey: string,
+) {
+  return safeAction(
+    "deactivateUser",
+    async ({ actor, adminUserId }) => {
+      const parsedInput = parseActionInput(
+        DeactivateUserSchema,
+        input,
+        "Valid deactivation payload is required",
+      );
+      const parsedIdempotencyKey = parseActionInput(
+        IdempotencyKeySchema,
+        idempotencyKey,
+        "Idempotency-Key is required",
+      );
+
+      return runWithIdempotency({
+        adminUserId,
+        actionName: "deactivateUser",
+        idempotencyKey: parsedIdempotencyKey,
+        resourceId: parsedInput.userId,
+        ttlHours: USER_IDEMPOTENCY_TTL_HOURS,
+        run: async () => {
+          const result = await usersService.prepareDeactivateUser(actor, {
+            userId: parsedInput.userId,
+          });
+
+          if (!result.ok) {
+            throw new Error(result.message);
+          }
+
+          const user = result.data;
+
+          await performGdprErasure(user.id);
+
+          revalidatePath("/users");
+          revalidatePath(`/users/${user.id}`);
+
+          return {
+            deactivated: true,
+            userId: user.id,
+            email: user.email,
+            previousStatus: user.status,
+          };
+        },
+      });
+    },
+    {
+      auditLog: {
+        operation: "DEACTIVATE_USER",
+        resourceType: "user",
+        getTargetId: ({ data }) => {
+          const result = data as { userId: string };
+          return result.userId;
+        },
+        getDetails: ({ data }) => {
+          const result = data as {
+            previousStatus: string;
+            deactivated: boolean;
+          };
+          return {
+            previousStatus: result.previousStatus,
+            deactivated: result.deactivated,
+          };
+        },
+      },
+    },
+  );
+}
+
+export async function archiveUser(
+  input: { userId: string; reason?: string },
+  idempotencyKey: string,
+) {
+  return safeAction(
+    "archiveUser",
+    async ({ actor, adminUserId }) => {
+      const parsedInput = parseActionInput(
+        ArchiveUserSchema,
+        input,
+        "Valid archive payload is required",
+      );
+      const parsedIdempotencyKey = parseActionInput(
+        IdempotencyKeySchema,
+        idempotencyKey,
+        "Idempotency-Key is required",
+      );
+
+      return runWithIdempotency({
+        adminUserId,
+        actionName: "archiveUser",
+        idempotencyKey: parsedIdempotencyKey,
+        resourceId: parsedInput.userId,
+        ttlHours: USER_IDEMPOTENCY_TTL_HOURS,
+        run: async () => {
+          const result = await usersService.prepareArchiveUser(actor, {
+            userId: parsedInput.userId,
+            ...(parsedInput.reason !== undefined
+              ? { reason: parsedInput.reason }
+              : {}),
+          });
+
+          if (!result.ok) {
+            throw new Error(result.message);
+          }
+
+          const user = result.data;
+
+          await usersRepository.updateUserStatus(user.id, "ARCHIVED");
+
+          const client = await clerkClient();
+          await client.users.updateUserMetadata(user.clerkId, {
+            publicMetadata: {
+              status: "ARCHIVED",
+            },
+          });
+
+          revalidatePath("/users");
+          revalidatePath(`/users/${user.id}`);
+
+          return {
+            archived: true,
+            userId: user.id,
+            email: user.email,
+            previousStatus: user.status,
+          };
+        },
+      });
+    },
+    {
+      auditLog: {
+        operation: "ARCHIVE_USER",
+        resourceType: "user",
+        getTargetId: ({ data }) => {
+          const result = data as { userId: string };
+          return result.userId;
+        },
+        getDetails: ({ data }) => {
+          const result = data as {
+            previousStatus: string;
+            archived: boolean;
+          };
+          return {
+            previousStatus: result.previousStatus,
+            archived: result.archived,
+          };
+        },
+      },
+    },
+  );
+}
+
+export async function unarchiveUser(
+  input: { userId: string },
+  idempotencyKey: string,
+) {
+  return safeAction(
+    "unarchiveUser",
+    async ({ actor, adminUserId }) => {
+      const parsedInput = parseActionInput(
+        UnarchiveUserSchema,
+        input,
+        "Valid unarchive payload is required",
+      );
+      const parsedIdempotencyKey = parseActionInput(
+        IdempotencyKeySchema,
+        idempotencyKey,
+        "Idempotency-Key is required",
+      );
+
+      return runWithIdempotency({
+        adminUserId,
+        actionName: "unarchiveUser",
+        idempotencyKey: parsedIdempotencyKey,
+        resourceId: parsedInput.userId,
+        ttlHours: USER_IDEMPOTENCY_TTL_HOURS,
+        run: async () => {
+          const result = await usersService.prepareUnarchiveUser(actor, {
+            userId: parsedInput.userId,
+          });
+
+          if (!result.ok) {
+            throw new Error(result.message);
+          }
+
+          const user = result.data;
+
+          await usersRepository.updateUserStatus(user.id, "ACTIVE");
+
+          const client = await clerkClient();
+          await client.users.updateUserMetadata(user.clerkId, {
+            publicMetadata: {
+              status: "ACTIVE",
+            },
+          });
+
+          revalidatePath("/users");
+          revalidatePath(`/users/${user.id}`);
+
+          return {
+            unarchived: true,
+            userId: user.id,
+            email: user.email,
+            previousStatus: user.status,
+          };
+        },
+      });
+    },
+    {
+      auditLog: {
+        operation: "UNARCHIVE_USER",
+        resourceType: "user",
+        getTargetId: ({ data }) => {
+          const result = data as { userId: string };
+          return result.userId;
+        },
+        getDetails: ({ data }) => {
+          const result = data as {
+            previousStatus: string;
+            unarchived: boolean;
+          };
+          return {
+            previousStatus: result.previousStatus,
+            unarchived: result.unarchived,
           };
         },
       },

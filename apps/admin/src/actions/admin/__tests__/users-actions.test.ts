@@ -8,6 +8,11 @@ const usersServiceMock = vi.hoisted(() => ({
   prepareResetUserCredentials: vi.fn(),
   prepareSuspendUser: vi.fn(),
   prepareUnsuspendUser: vi.fn(),
+  prepareBanUser: vi.fn(),
+  prepareUnbanUser: vi.fn(),
+  prepareDeactivateUser: vi.fn(),
+  prepareArchiveUser: vi.fn(),
+  prepareUnarchiveUser: vi.fn(),
 }));
 
 const dbMock = vi.hoisted(() => ({
@@ -18,6 +23,12 @@ const dbMock = vi.hoisted(() => ({
   } as const,
   UserRole: { ADMIN: "ADMIN" } as const,
 }));
+
+const gdprErasureMock = vi.hoisted(() => ({
+  performGdprErasure: vi.fn(),
+}));
+
+vi.mock("@/lib/jobs/gdpr-erasure", () => gdprErasureMock);
 
 vi.mock("@build/db", () => ({
   AdminRole: dbMock.AdminRole,
@@ -138,6 +149,11 @@ import {
   resetUserCredentials,
   suspendUser,
   unsuspendUser,
+  banUser,
+  unbanUser,
+  deactivateUser,
+  archiveUser,
+  unarchiveUser,
 } from "../users";
 import { safeAction } from "../shared";
 
@@ -652,6 +668,246 @@ describe("admin suspend / unsuspend user actions", () => {
         userId: "user_1",
         email: "user@example.com",
         previousStatus: "SUSPENDED",
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // banUser
+  // ---------------------------------------------------------------------------
+  describe("banUser", () => {
+    it("propagates service denial without database or Clerk side effects", async () => {
+      usersServiceMock.prepareBanUser.mockResolvedValue({
+        ok: false,
+        error: "SELF_BAN_DENIED",
+        message: "Cannot ban your own account",
+      });
+
+      const response = await banUser(
+        { userId: "admin_user_1" },
+        IDEMPOTENCY_KEY,
+      );
+
+      expect(response.success).toBe(false);
+      expect(response.error).toBe("Cannot ban your own account");
+      expect(usersRepositoryMock.updateUserStatus).not.toHaveBeenCalled();
+      expect(clerkClient).not.toHaveBeenCalled();
+    });
+
+    it("updates DB status to BANNED and syncs Clerk metadata", async () => {
+      usersServiceMock.prepareBanUser.mockResolvedValue({
+        ok: true,
+        data: suspendTarget,
+      });
+
+      const updateUserMetadata = vi.fn().mockResolvedValue({});
+      vi.mocked(clerkClient).mockResolvedValue({
+        users: { updateUserMetadata },
+      } as never);
+
+      const response = await banUser(
+        { userId: "user_1", reason: "Malicious activities" },
+        IDEMPOTENCY_KEY,
+      );
+
+      expect(response.success).toBe(true);
+      expect(usersRepositoryMock.updateUserStatus).toHaveBeenCalledWith(
+        "user_1",
+        "BANNED",
+      );
+      expect(updateUserMetadata).toHaveBeenCalledWith("clerk_1", {
+        publicMetadata: { status: "BANNED" },
+      });
+      expect(revalidatePath).toHaveBeenCalledWith("/users");
+      expect(revalidatePath).toHaveBeenCalledWith("/users/user_1");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // unbanUser
+  // ---------------------------------------------------------------------------
+  describe("unbanUser", () => {
+    const bannedTarget = {
+      id: "user_1",
+      clerkId: "clerk_1",
+      email: "user@example.com",
+      status: "BANNED",
+    };
+
+    it("propagates service denial", async () => {
+      usersServiceMock.prepareUnbanUser.mockResolvedValue({
+        ok: false,
+        error: "INVALID_INPUT",
+        message: "User is not currently banned",
+      });
+
+      const response = await unbanUser({ userId: "user_1" }, IDEMPOTENCY_KEY);
+
+      expect(response.success).toBe(false);
+      expect(response.error).toBe("User is not currently banned");
+    });
+
+    it("updates DB status to ACTIVE and syncs Clerk metadata", async () => {
+      usersServiceMock.prepareUnbanUser.mockResolvedValue({
+        ok: true,
+        data: bannedTarget,
+      });
+
+      const updateUserMetadata = vi.fn().mockResolvedValue({});
+      vi.mocked(clerkClient).mockResolvedValue({
+        users: { updateUserMetadata },
+      } as never);
+
+      const response = await unbanUser({ userId: "user_1" }, IDEMPOTENCY_KEY);
+
+      expect(response.success).toBe(true);
+      expect(usersRepositoryMock.updateUserStatus).toHaveBeenCalledWith(
+        "user_1",
+        "ACTIVE",
+      );
+      expect(updateUserMetadata).toHaveBeenCalledWith("clerk_1", {
+        publicMetadata: { status: "ACTIVE" },
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // deactivateUser
+  // ---------------------------------------------------------------------------
+  describe("deactivateUser", () => {
+    it("propagates service denial", async () => {
+      usersServiceMock.prepareDeactivateUser.mockResolvedValue({
+        ok: false,
+        error: "SELF_DEACTIVATE_DENIED",
+        message: "Cannot deactivate your own account",
+      });
+
+      const response = await deactivateUser(
+        { userId: "admin_user_1" },
+        IDEMPOTENCY_KEY,
+      );
+
+      expect(response.success).toBe(false);
+      expect(response.error).toBe("Cannot deactivate your own account");
+      expect(gdprErasureMock.performGdprErasure).not.toHaveBeenCalled();
+    });
+
+    it("triggers GDPR erasure immediately", async () => {
+      usersServiceMock.prepareDeactivateUser.mockResolvedValue({
+        ok: true,
+        data: suspendTarget,
+      });
+
+      const response = await deactivateUser(
+        { userId: "user_1" },
+        IDEMPOTENCY_KEY,
+      );
+
+      expect(response.success).toBe(true);
+      expect(gdprErasureMock.performGdprErasure).toHaveBeenCalledWith("user_1");
+      expect(revalidatePath).toHaveBeenCalledWith("/users");
+      expect(revalidatePath).toHaveBeenCalledWith("/users/user_1");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // archiveUser
+  // ---------------------------------------------------------------------------
+  describe("archiveUser", () => {
+    it("propagates service denial", async () => {
+      usersServiceMock.prepareArchiveUser.mockResolvedValue({
+        ok: false,
+        error: "SELF_ARCHIVE_DENIED",
+        message: "Cannot archive your own account",
+      });
+
+      const response = await archiveUser(
+        { userId: "admin_user_1" },
+        IDEMPOTENCY_KEY,
+      );
+
+      expect(response.success).toBe(false);
+      expect(response.error).toBe("Cannot archive your own account");
+      expect(usersRepositoryMock.updateUserStatus).not.toHaveBeenCalled();
+    });
+
+    it("updates DB status to ARCHIVED and syncs Clerk metadata", async () => {
+      usersServiceMock.prepareArchiveUser.mockResolvedValue({
+        ok: true,
+        data: suspendTarget,
+      });
+
+      const updateUserMetadata = vi.fn().mockResolvedValue({});
+      vi.mocked(clerkClient).mockResolvedValue({
+        users: { updateUserMetadata },
+      } as never);
+
+      const response = await archiveUser(
+        { userId: "user_1", reason: "Regulatory freeze" },
+        IDEMPOTENCY_KEY,
+      );
+
+      expect(response.success).toBe(true);
+      expect(usersRepositoryMock.updateUserStatus).toHaveBeenCalledWith(
+        "user_1",
+        "ARCHIVED",
+      );
+      expect(updateUserMetadata).toHaveBeenCalledWith("clerk_1", {
+        publicMetadata: { status: "ARCHIVED" },
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // unarchiveUser
+  // ---------------------------------------------------------------------------
+  describe("unarchiveUser", () => {
+    const archivedTarget = {
+      id: "user_1",
+      clerkId: "clerk_1",
+      email: "user@example.com",
+      status: "ARCHIVED",
+    };
+
+    it("propagates service denial", async () => {
+      usersServiceMock.prepareUnarchiveUser.mockResolvedValue({
+        ok: false,
+        error: "INVALID_INPUT",
+        message: "User is not currently archived",
+      });
+
+      const response = await unarchiveUser(
+        { userId: "user_1" },
+        IDEMPOTENCY_KEY,
+      );
+
+      expect(response.success).toBe(false);
+      expect(response.error).toBe("User is not currently archived");
+    });
+
+    it("updates DB status to ACTIVE and syncs Clerk metadata", async () => {
+      usersServiceMock.prepareUnarchiveUser.mockResolvedValue({
+        ok: true,
+        data: archivedTarget,
+      });
+
+      const updateUserMetadata = vi.fn().mockResolvedValue({});
+      vi.mocked(clerkClient).mockResolvedValue({
+        users: { updateUserMetadata },
+      } as never);
+
+      const response = await unarchiveUser(
+        { userId: "user_1" },
+        IDEMPOTENCY_KEY,
+      );
+
+      expect(response.success).toBe(true);
+      expect(usersRepositoryMock.updateUserStatus).toHaveBeenCalledWith(
+        "user_1",
+        "ACTIVE",
+      );
+      expect(updateUserMetadata).toHaveBeenCalledWith("clerk_1", {
+        publicMetadata: { status: "ACTIVE" },
       });
     });
   });

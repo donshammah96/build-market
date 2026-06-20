@@ -21,6 +21,11 @@ import type {
   NormalizedInviteUserInput,
   SuspendUserInput,
   UnsuspendUserInput,
+  BanUserInput,
+  UnbanUserInput,
+  DeactivateUserInput,
+  ArchiveUserInput,
+  UnarchiveUserInput,
   UsersDomainError,
   UserCredentialsTarget,
   UserIdentityTarget,
@@ -367,6 +372,13 @@ export async function prepareSuspendUser(
       return err({ error: "USER_NOT_FOUND", message: "User not found" });
     }
 
+    if (user.status === "DEACTIVATED") {
+      return err({
+        error: "DEACTIVATED_USER_REVERT_DENIED",
+        message: "Cannot change the status of a deactivated user",
+      });
+    }
+
     if (user.status === "SUSPENDED") {
       return err({
         error: "INVALID_INPUT",
@@ -403,10 +415,246 @@ export async function prepareUnsuspendUser(
       return err({ error: "USER_NOT_FOUND", message: "User not found" });
     }
 
+    if (user.status === "DEACTIVATED") {
+      return err({
+        error: "DEACTIVATED_USER_REVERT_DENIED",
+        message: "Cannot change the status of a deactivated user",
+      });
+    }
+
     if (user.status !== "SUSPENDED") {
       return err({
         error: "INVALID_INPUT",
         message: "User is not currently suspended",
+      });
+    }
+
+    return ok(user);
+  } catch (error) {
+    return err(toDomainError(error));
+  }
+}
+
+export async function prepareBanUser(
+  actor: AdminUserActor,
+  input: BanUserInput,
+): Promise<Result<UserStatusTarget, UsersDomainError>> {
+  const authResult = requireManageUsers(actor);
+
+  if (!authResult.ok) {
+    return authResult;
+  }
+
+  const userId = input.userId.trim();
+
+  if (!userId) {
+    return err({ error: "INVALID_INPUT", message: "User ID is required" });
+  }
+
+  if (userId === actor.dbUserId) {
+    return err({
+      error: "SELF_BAN_DENIED",
+      message: "Cannot ban your own account",
+    });
+  }
+
+  try {
+    const user = await repository.findUserStatusTarget(userId);
+
+    if (!user) {
+      return err({ error: "USER_NOT_FOUND", message: "User not found" });
+    }
+
+    if (user.status === "DEACTIVATED") {
+      return err({
+        error: "DEACTIVATED_USER_REVERT_DENIED",
+        message: "Cannot change the status of a deactivated user",
+      });
+    }
+
+    if (user.status === "BANNED") {
+      return err({
+        error: "INVALID_INPUT",
+        message: "User is already banned",
+      });
+    }
+
+    return ok(user);
+  } catch (error) {
+    return err(toDomainError(error));
+  }
+}
+
+export async function prepareUnbanUser(
+  actor: AdminUserActor,
+  input: UnbanUserInput,
+): Promise<Result<UserStatusTarget, UsersDomainError>> {
+  const authResult = requireManageUsers(actor);
+
+  if (!authResult.ok) {
+    return authResult;
+  }
+
+  const userId = input.userId.trim();
+
+  if (!userId) {
+    return err({ error: "INVALID_INPUT", message: "User ID is required" });
+  }
+
+  try {
+    const user = await repository.findUserStatusTarget(userId);
+
+    if (!user) {
+      return err({ error: "USER_NOT_FOUND", message: "User not found" });
+    }
+
+    if (user.status === "DEACTIVATED") {
+      return err({
+        error: "DEACTIVATED_USER_REVERT_DENIED",
+        message: "Cannot change the status of a deactivated user",
+      });
+    }
+
+    if (user.status !== "BANNED") {
+      return err({
+        error: "INVALID_INPUT",
+        message: "User is not currently banned",
+      });
+    }
+
+    return ok(user);
+  } catch (error) {
+    return err(toDomainError(error));
+  }
+}
+
+export async function prepareDeactivateUser(
+  actor: AdminUserActor,
+  input: DeactivateUserInput,
+): Promise<Result<UserStatusTarget, UsersDomainError>> {
+  const authResult = requireManageUsers(actor);
+
+  if (!authResult.ok) {
+    return authResult;
+  }
+
+  const userId = input.userId.trim();
+
+  if (!userId) {
+    return err({ error: "INVALID_INPUT", message: "User ID is required" });
+  }
+
+  if (userId === actor.dbUserId) {
+    return err({
+      error: "SELF_DEACTIVATE_DENIED",
+      message: "Cannot deactivate your own account",
+    });
+  }
+
+  try {
+    const user = await repository.findUserStatusTarget(userId);
+
+    if (!user) {
+      return err({ error: "USER_NOT_FOUND", message: "User not found" });
+    }
+
+    if (user.status === "DEACTIVATED") {
+      return err({
+        error: "INVALID_INPUT",
+        message: "User is already deactivated",
+      });
+    }
+
+    return ok(user);
+  } catch (error) {
+    return err(toDomainError(error));
+  }
+}
+
+export async function prepareArchiveUser(
+  actor: AdminUserActor,
+  input: ArchiveUserInput,
+): Promise<Result<UserStatusTarget, UsersDomainError>> {
+  const authResult = requireManageUsers(actor);
+
+  if (!authResult.ok) {
+    return authResult;
+  }
+
+  const userId = input.userId.trim();
+
+  if (!userId) {
+    return err({ error: "INVALID_INPUT", message: "User ID is required" });
+  }
+
+  if (userId === actor.dbUserId) {
+    return err({
+      error: "SELF_ARCHIVE_DENIED",
+      message: "Cannot archive your own account",
+    });
+  }
+
+  try {
+    const user = await repository.findUserStatusTarget(userId);
+
+    if (!user) {
+      return err({ error: "USER_NOT_FOUND", message: "User not found" });
+    }
+
+    if (user.status === "DEACTIVATED") {
+      return err({
+        error: "DEACTIVATED_USER_REVERT_DENIED",
+        message: "Cannot change the status of a deactivated user",
+      });
+    }
+
+    if (user.status === "ARCHIVED") {
+      return err({
+        error: "INVALID_INPUT",
+        message: "User is already archived",
+      });
+    }
+
+    return ok(user);
+  } catch (error) {
+    return err(toDomainError(error));
+  }
+}
+
+export async function prepareUnarchiveUser(
+  actor: AdminUserActor,
+  input: UnarchiveUserInput,
+): Promise<Result<UserStatusTarget, UsersDomainError>> {
+  const authResult = requireManageUsers(actor);
+
+  if (!authResult.ok) {
+    return authResult;
+  }
+
+  const userId = input.userId.trim();
+
+  if (!userId) {
+    return err({ error: "INVALID_INPUT", message: "User ID is required" });
+  }
+
+  try {
+    const user = await repository.findUserStatusTarget(userId);
+
+    if (!user) {
+      return err({ error: "USER_NOT_FOUND", message: "User not found" });
+    }
+
+    if (user.status === "DEACTIVATED") {
+      return err({
+        error: "DEACTIVATED_USER_REVERT_DENIED",
+        message: "Cannot change the status of a deactivated user",
+      });
+    }
+
+    if (user.status !== "ARCHIVED") {
+      return err({
+        error: "INVALID_INPUT",
+        message: "User is not currently archived",
       });
     }
 

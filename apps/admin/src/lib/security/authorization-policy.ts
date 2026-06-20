@@ -228,6 +228,13 @@ export const ADMIN_ACTION_POLICY_MAP = {
     "users",
   ),
   assignUserRole: strictMutationPolicy(AdminCapability.MANAGE_USERS, "users"),
+  suspendUser: strictMutationPolicy(AdminCapability.MANAGE_USERS, "users"),
+  unsuspendUser: strictMutationPolicy(AdminCapability.MANAGE_USERS, "users"),
+  banUser: strictMutationPolicy(AdminCapability.MANAGE_USERS, "users"),
+  unbanUser: strictMutationPolicy(AdminCapability.MANAGE_USERS, "users"),
+  deactivateUser: strictMutationPolicy(AdminCapability.MANAGE_USERS, "users"),
+  archiveUser: strictMutationPolicy(AdminCapability.MANAGE_USERS, "users"),
+  unarchiveUser: strictMutationPolicy(AdminCapability.MANAGE_USERS, "users"),
   verifyEntity: strictMutationPolicy(
     AdminCapability.MANAGE_VERIFICATION,
     "verification",

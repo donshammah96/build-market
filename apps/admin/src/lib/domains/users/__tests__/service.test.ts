@@ -39,6 +39,11 @@ import {
   prepareResetUserCredentials,
   prepareSuspendUser,
   prepareUnsuspendUser,
+  prepareBanUser,
+  prepareUnbanUser,
+  prepareDeactivateUser,
+  prepareArchiveUser,
+  prepareUnarchiveUser,
 } from "../service";
 
 function actor(
@@ -440,6 +445,245 @@ describe("users domain service", () => {
       );
 
       expect(result).toEqual({ ok: true, data: suspendedTarget });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // prepareBanUser
+  // ---------------------------------------------------------------------------
+  describe("prepareBanUser", () => {
+    const activeTarget = {
+      id: "user_1",
+      clerkId: "clerk_1",
+      email: "user@example.com",
+      status: "ACTIVE",
+    };
+
+    it("prevents self-ban", async () => {
+      const result = await prepareBanUser(actor(dbMock.AdminRole.SUPER_ADMIN), {
+        userId: "admin_1",
+      });
+      expect(result.ok).toBe(false);
+      expect(result).toMatchObject({
+        error: "SELF_BAN_DENIED",
+      });
+    });
+
+    it("prevents banning already banned users", async () => {
+      repositoryMock.findUserStatusTarget.mockResolvedValue({
+        ...activeTarget,
+        status: "BANNED",
+      });
+      const result = await prepareBanUser(actor(dbMock.AdminRole.SUPER_ADMIN), {
+        userId: "user_1",
+      });
+      expect(result.ok).toBe(false);
+      expect(result).toMatchObject({
+        error: "INVALID_INPUT",
+      });
+    });
+
+    it("prevents status changes on deactivated users", async () => {
+      repositoryMock.findUserStatusTarget.mockResolvedValue({
+        ...activeTarget,
+        status: "DEACTIVATED",
+      });
+      const result = await prepareBanUser(actor(dbMock.AdminRole.SUPER_ADMIN), {
+        userId: "user_1",
+      });
+      expect(result.ok).toBe(false);
+      expect(result).toMatchObject({
+        error: "DEACTIVATED_USER_REVERT_DENIED",
+      });
+    });
+
+    it("allows valid ban", async () => {
+      repositoryMock.findUserStatusTarget.mockResolvedValue(activeTarget);
+      const result = await prepareBanUser(actor(dbMock.AdminRole.SUPER_ADMIN), {
+        userId: "user_1",
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data).toEqual(activeTarget);
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // prepareUnbanUser
+  // ---------------------------------------------------------------------------
+  describe("prepareUnbanUser", () => {
+    const bannedTarget = {
+      id: "user_1",
+      clerkId: "clerk_1",
+      email: "user@example.com",
+      status: "BANNED",
+    };
+
+    it("prevents unbanning non-banned users", async () => {
+      repositoryMock.findUserStatusTarget.mockResolvedValue({
+        ...bannedTarget,
+        status: "ACTIVE",
+      });
+      const result = await prepareUnbanUser(
+        actor(dbMock.AdminRole.SUPER_ADMIN),
+        { userId: "user_1" },
+      );
+      expect(result.ok).toBe(false);
+      expect(result).toMatchObject({
+        error: "INVALID_INPUT",
+      });
+    });
+
+    it("allows valid unban", async () => {
+      repositoryMock.findUserStatusTarget.mockResolvedValue(bannedTarget);
+      const result = await prepareUnbanUser(
+        actor(dbMock.AdminRole.SUPER_ADMIN),
+        { userId: "user_1" },
+      );
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data).toEqual(bannedTarget);
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // prepareDeactivateUser
+  // ---------------------------------------------------------------------------
+  describe("prepareDeactivateUser", () => {
+    const activeTarget = {
+      id: "user_1",
+      clerkId: "clerk_1",
+      email: "user@example.com",
+      status: "ACTIVE",
+    };
+
+    it("prevents self-deactivation", async () => {
+      const result = await prepareDeactivateUser(
+        actor(dbMock.AdminRole.SUPER_ADMIN),
+        { userId: "admin_1" },
+      );
+      expect(result.ok).toBe(false);
+      expect(result).toMatchObject({
+        error: "SELF_DEACTIVATE_DENIED",
+      });
+    });
+
+    it("prevents deactivating already deactivated users", async () => {
+      repositoryMock.findUserStatusTarget.mockResolvedValue({
+        ...activeTarget,
+        status: "DEACTIVATED",
+      });
+      const result = await prepareDeactivateUser(
+        actor(dbMock.AdminRole.SUPER_ADMIN),
+        { userId: "user_1" },
+      );
+      expect(result.ok).toBe(false);
+      expect(result).toMatchObject({
+        error: "INVALID_INPUT",
+      });
+    });
+
+    it("allows valid deactivation", async () => {
+      repositoryMock.findUserStatusTarget.mockResolvedValue(activeTarget);
+      const result = await prepareDeactivateUser(
+        actor(dbMock.AdminRole.SUPER_ADMIN),
+        { userId: "user_1" },
+      );
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data).toEqual(activeTarget);
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // prepareArchiveUser
+  // ---------------------------------------------------------------------------
+  describe("prepareArchiveUser", () => {
+    const activeTarget = {
+      id: "user_1",
+      clerkId: "clerk_1",
+      email: "user@example.com",
+      status: "ACTIVE",
+    };
+
+    it("prevents self-archive", async () => {
+      const result = await prepareArchiveUser(
+        actor(dbMock.AdminRole.SUPER_ADMIN),
+        { userId: "admin_1" },
+      );
+      expect(result.ok).toBe(false);
+      expect(result).toMatchObject({
+        error: "SELF_ARCHIVE_DENIED",
+      });
+    });
+
+    it("prevents archiving already archived users", async () => {
+      repositoryMock.findUserStatusTarget.mockResolvedValue({
+        ...activeTarget,
+        status: "ARCHIVED",
+      });
+      const result = await prepareArchiveUser(
+        actor(dbMock.AdminRole.SUPER_ADMIN),
+        { userId: "user_1" },
+      );
+      expect(result.ok).toBe(false);
+      expect(result).toMatchObject({
+        error: "INVALID_INPUT",
+      });
+    });
+
+    it("allows valid archive", async () => {
+      repositoryMock.findUserStatusTarget.mockResolvedValue(activeTarget);
+      const result = await prepareArchiveUser(
+        actor(dbMock.AdminRole.SUPER_ADMIN),
+        { userId: "user_1" },
+      );
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data).toEqual(activeTarget);
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // prepareUnarchiveUser
+  // ---------------------------------------------------------------------------
+  describe("prepareUnarchiveUser", () => {
+    const archivedTarget = {
+      id: "user_1",
+      clerkId: "clerk_1",
+      email: "user@example.com",
+      status: "ARCHIVED",
+    };
+
+    it("prevents unarchiving non-archived users", async () => {
+      repositoryMock.findUserStatusTarget.mockResolvedValue({
+        ...archivedTarget,
+        status: "ACTIVE",
+      });
+      const result = await prepareUnarchiveUser(
+        actor(dbMock.AdminRole.SUPER_ADMIN),
+        { userId: "user_1" },
+      );
+      expect(result.ok).toBe(false);
+      expect(result).toMatchObject({
+        error: "INVALID_INPUT",
+      });
+    });
+
+    it("allows valid unarchive", async () => {
+      repositoryMock.findUserStatusTarget.mockResolvedValue(archivedTarget);
+      const result = await prepareUnarchiveUser(
+        actor(dbMock.AdminRole.SUPER_ADMIN),
+        { userId: "user_1" },
+      );
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data).toEqual(archivedTarget);
+      }
     });
   });
 });

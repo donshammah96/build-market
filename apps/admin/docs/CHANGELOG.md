@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Banned, Deactivated, and Archived User Statuses**: Implemented validators and transitions in [service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/users/service.ts) and [users.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/users.ts) for `BANNED`, `DEACTIVATED`, and `ARCHIVED` statuses, preventing self-mutations and locking operations on deactivated accounts.
+- **GDPR Compliance Erasure Helper**: Created a dedicated anonymization helper in [gdpr-erasure.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/gdpr-erasure.ts) that hashes the user email (`deactivated-hash@deleted.local`), nullifies profile data, soft-deletes professional stores, schedules asset deletion, and deletes the Clerk profile.
 - **Unauthorized Sign-In Flow:** Implemented a new `/unauthorized-sign-in` public route and page ([page.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(auth)/unauthorized-sign-in/page.tsx>)) that displays tailored restriction notices (Account Suspended, Account Banned, etc.) and auto-signs out blocked sessions on mount.
 - **Blocked-User Middleware Gate:** Added a middleware validation step in [middleware.ts](file:///c:/Users/User/build-market/apps/admin/src/middleware.ts) checking user status claims to redirect suspended, banned, deactivated, or archived users to the unauthorized sign-in page.
 - **User Suspension Server Actions:** Added `suspendUser` and `unsuspendUser` safe mutations in [users.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/users.ts) to toggle DB user status, synchronize state to Clerk `publicMetadata`, check action policies (requiring `recentAuth`), and write append-only audit log records.
