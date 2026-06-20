@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useClerk } from "@clerk/nextjs";
 import { ShieldAlert, LogOut, ArrowLeft, Building2 } from "lucide-react";
@@ -72,7 +72,7 @@ const SIGN_IN_URL = "/sign-in";
 // Component
 // ---------------------------------------------------------------------------
 
-const UnauthorizedSignInPage = () => {
+const UnauthorizedSignInContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { signOut } = useClerk();
@@ -202,4 +202,18 @@ const UnauthorizedSignInPage = () => {
   );
 };
 
-export default UnauthorizedSignInPage;
+export default function UnauthorizedSignInPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-zinc-900 flex items-center justify-center p-4">
+          <div className="text-center text-zinc-400">
+            Loading security checks...
+          </div>
+        </div>
+      }
+    >
+      <UnauthorizedSignInContent />
+    </Suspense>
+  );
+}

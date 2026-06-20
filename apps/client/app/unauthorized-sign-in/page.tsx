@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useClerk } from "@clerk/nextjs";
 import { ShieldX, LogIn, LifeBuoy, Building2 } from "lucide-react";
@@ -69,7 +69,7 @@ const SUPPORT_EMAIL = "support@buildmarket.app";
 // Component
 // ---------------------------------------------------------------------------
 
-export default function UnauthorizedSignInPage() {
+function UnauthorizedSignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { signOut } = useClerk();
@@ -201,5 +201,21 @@ export default function UnauthorizedSignInPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function UnauthorizedSignInPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+          <div className="text-center text-zinc-400">
+            Loading security checks...
+          </div>
+        </div>
+      }
+    >
+      <UnauthorizedSignInContent />
+    </Suspense>
   );
 }
