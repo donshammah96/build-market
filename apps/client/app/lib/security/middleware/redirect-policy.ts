@@ -47,3 +47,12 @@ export function redirectToProfessionalSignupClosed(
 ): NextResponse {
   return NextResponse.redirect(new URL("/sign-up?pro=closed", req.url));
 }
+
+export function redirectToUnauthorizedSignIn(
+  req: NextRequest,
+  reason: string,
+): NextResponse {
+  const url = new URL("/unauthorized-sign-in", req.url);
+  url.searchParams.set("reason", reason);
+  return NextResponse.redirect(url);
+}

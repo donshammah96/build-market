@@ -19,9 +19,12 @@ import type {
   ListUsersResult,
   NormalizedAssignUserRoleInput,
   NormalizedInviteUserInput,
+  SuspendUserInput,
+  UnsuspendUserInput,
   UsersDomainError,
   UserCredentialsTarget,
   UserIdentityTarget,
+  UserStatusTarget,
 } from "./contracts";
 import * as repository from "./repository";
 
@@ -326,6 +329,85 @@ export async function prepareResetUserCredentials(
 
     if (!user) {
       return err({ error: "USER_NOT_FOUND", message: "User not found" });
+    }
+
+    return ok(user);
+  } catch (error) {
+    return err(toDomainError(error));
+  }
+}
+
+export async function prepareSuspendUser(
+  actor: AdminUserActor,
+  input: SuspendUserInput,
+): Promise<Result<UserStatusTarget, UsersDomainError>> {
+  const authResult = requireManageUsers(actor);
+
+  if (!authResult.ok) {
+    return authResult;
+  }
+
+  const userId = input.userId.trim();
+
+  if (!userId) {
+    return err({ error: "INVALID_INPUT", message: "User ID is required" });
+  }
+
+  if (userId === actor.dbUserId) {
+    return err({
+      error: "SELF_SUSPEND_DENIED",
+      message: "Cannot suspend your own account",
+    });
+  }
+
+  try {
+    const user = await repository.findUserStatusTarget(userId);
+
+    if (!user) {
+      return err({ error: "USER_NOT_FOUND", message: "User not found" });
+    }
+
+    if (user.status === "SUSPENDED") {
+      return err({
+        error: "INVALID_INPUT",
+        message: "User is already suspended",
+      });
+    }
+
+    return ok(user);
+  } catch (error) {
+    return err(toDomainError(error));
+  }
+}
+
+export async function prepareUnsuspendUser(
+  actor: AdminUserActor,
+  input: UnsuspendUserInput,
+): Promise<Result<UserStatusTarget, UsersDomainError>> {
+  const authResult = requireManageUsers(actor);
+
+  if (!authResult.ok) {
+    return authResult;
+  }
+
+  const userId = input.userId.trim();
+
+  if (!userId) {
+    return err({ error: "INVALID_INPUT", message: "User ID is required" });
+  }
+
+  try {
+    const user = await repository.findUserStatusTarget(userId);
+
+    if (!user) {
+      return err({ error: "USER_NOT_FOUND", message: "User not found" });
+    }
+
+    if (user.status !== "SUSPENDED") {
+      return err({
+        error: "INVALID_INPUT",
+        message: "User is not currently suspended",
+      });
     }
 
     return ok(user);

@@ -19,6 +19,7 @@ import {
   redirectToProfessionalSignupClosed,
   redirectToRegistrationClosed,
   redirectToSignIn,
+  redirectToUnauthorizedSignIn,
 } from "@/app/lib/security/middleware/redirect-policy";
 import { resolveSystemSettings } from "@/app/lib/security/middleware/system-settings-resolver";
 import { logMiddlewareDecision } from "@/app/lib/security/middleware/decision-log";
@@ -140,6 +141,22 @@ export default clerkMiddleware(async (auth, req: Request) => {
   if (isPublicRoute(nextReq)) {
     logMiddlewareDecision(nextReq, "mw_allow_public");
     return applyDocumentCspHeaders(nextReq, nonce, cspValue);
+  }
+
+  // 1a. Blocked-user gate — fires before any role/onboarding checks.
+  //     Reads `status` from Clerk session claims (synced by admin suspend/unsuspend
+  //     actions). Prevents redirect loops by landing on the public
+  //     /unauthorized-sign-in page where Clerk signOut() is called.
+  {
+    const authObject = await auth();
+    const quickMeta = parseMiddlewareSessionMetadata(authObject.sessionClaims);
+    const blockedStatuses = ["SUSPENDED", "BANNED", "DEACTIVATED", "ARCHIVED"];
+    if (quickMeta?.status && blockedStatuses.includes(quickMeta.status)) {
+      logMiddlewareDecision(nextReq, "mw_redirect_unauthorized_sign_in", {
+        status: quickMeta.status,
+      });
+      return redirectToUnauthorizedSignIn(nextReq, quickMeta.status);
+    }
   }
 
   // 2. Onboarding routes - require auth but have special logic

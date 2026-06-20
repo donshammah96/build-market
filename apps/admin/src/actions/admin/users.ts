@@ -485,3 +485,204 @@ export async function assignUserRole(
     },
   );
 }
+
+// ---------------------------------------------------------------------------
+// Suspend / Unsuspend
+// ---------------------------------------------------------------------------
+
+const SuspendUserSchema = z
+  .object({
+    userId: NonEmptyStringSchema,
+    reason: z.string().trim().optional(),
+  })
+  .strict();
+
+const UnsuspendUserSchema = z
+  .object({
+    userId: NonEmptyStringSchema,
+  })
+  .strict();
+
+/**
+ * Suspends a user account.
+ *
+ * Effect: sets `status = SUSPENDED` in the database AND writes
+ * `publicMetadata.status = "SUSPENDED"` in Clerk so that middleware blocks
+ * the user on their next request without a DB round-trip.
+ *
+ * Session freshness note: this is a Tier 2 operation (account transition).
+ * The `safeAction` wrapper enforces `maxAgeSeconds: 300` via its internal
+ * `withAuth` call if the admin env is configured for session freshness checks.
+ */
+export async function suspendUser(
+  input: { userId: string; reason?: string },
+  idempotencyKey: string,
+) {
+  return safeAction(
+    "suspendUser",
+    async ({ actor, adminUserId }) => {
+      const parsedInput = parseActionInput(
+        SuspendUserSchema,
+        input,
+        "Valid suspension payload is required",
+      );
+      const parsedIdempotencyKey = parseActionInput(
+        IdempotencyKeySchema,
+        idempotencyKey,
+        "Idempotency-Key is required",
+      );
+
+      return runWithIdempotency({
+        adminUserId,
+        actionName: "suspendUser",
+        idempotencyKey: parsedIdempotencyKey,
+        resourceId: parsedInput.userId,
+        ttlHours: USER_IDEMPOTENCY_TTL_HOURS,
+        run: async () => {
+          const result = await usersService.prepareSuspendUser(actor, {
+            userId: parsedInput.userId,
+            ...(parsedInput.reason !== undefined
+              ? { reason: parsedInput.reason }
+              : {}),
+          });
+
+          if (!result.ok) {
+            throw new Error(result.message);
+          }
+
+          const user = result.data;
+
+          // 1. Update authoritative DB record first.
+          await usersRepository.updateUserStatus(user.id, "SUSPENDED");
+
+          // 2. Sync to Clerk publicMetadata so middleware can block
+          //    on the next token refresh without a DB call.
+          const client = await clerkClient();
+          await client.users.updateUserMetadata(user.clerkId, {
+            publicMetadata: {
+              status: "SUSPENDED",
+            },
+          });
+
+          revalidatePath("/users");
+          revalidatePath(`/users/${user.id}`);
+
+          return {
+            suspended: true,
+            userId: user.id,
+            email: user.email,
+            previousStatus: user.status,
+          };
+        },
+      });
+    },
+    {
+      auditLog: {
+        operation: "SUSPEND_USER",
+        resourceType: "user",
+        getTargetId: ({ data }) => {
+          const result = data as { userId: string };
+          return result.userId;
+        },
+        getDetails: ({ data }) => {
+          const result = data as {
+            previousStatus: string;
+            suspended: boolean;
+          };
+          return {
+            previousStatus: result.previousStatus,
+            suspended: result.suspended,
+          };
+        },
+      },
+    },
+  );
+}
+
+/**
+ * Restores a suspended user account to ACTIVE status.
+ *
+ * Effect: sets `status = ACTIVE` in the database AND clears
+ * `publicMetadata.status` in Clerk so that middleware stops blocking the user.
+ */
+export async function unsuspendUser(
+  input: { userId: string },
+  idempotencyKey: string,
+) {
+  return safeAction(
+    "unsuspendUser",
+    async ({ actor, adminUserId }) => {
+      const parsedInput = parseActionInput(
+        UnsuspendUserSchema,
+        input,
+        "Valid unsuspend payload is required",
+      );
+      const parsedIdempotencyKey = parseActionInput(
+        IdempotencyKeySchema,
+        idempotencyKey,
+        "Idempotency-Key is required",
+      );
+
+      return runWithIdempotency({
+        adminUserId,
+        actionName: "unsuspendUser",
+        idempotencyKey: parsedIdempotencyKey,
+        resourceId: parsedInput.userId,
+        ttlHours: USER_IDEMPOTENCY_TTL_HOURS,
+        run: async () => {
+          const result = await usersService.prepareUnsuspendUser(actor, {
+            userId: parsedInput.userId,
+          });
+
+          if (!result.ok) {
+            throw new Error(result.message);
+          }
+
+          const user = result.data;
+
+          // 1. Update authoritative DB record first.
+          await usersRepository.updateUserStatus(user.id, "ACTIVE");
+
+          // 2. Remove the blocked status from Clerk publicMetadata so
+          //    middleware stops blocking the user on token refresh.
+          const client = await clerkClient();
+          await client.users.updateUserMetadata(user.clerkId, {
+            publicMetadata: {
+              status: "ACTIVE",
+            },
+          });
+
+          revalidatePath("/users");
+          revalidatePath(`/users/${user.id}`);
+
+          return {
+            unsuspended: true,
+            userId: user.id,
+            email: user.email,
+            previousStatus: user.status,
+          };
+        },
+      });
+    },
+    {
+      auditLog: {
+        operation: "UNSUSPEND_USER",
+        resourceType: "user",
+        getTargetId: ({ data }) => {
+          const result = data as { userId: string };
+          return result.userId;
+        },
+        getDetails: ({ data }) => {
+          const result = data as {
+            previousStatus: string;
+            unsuspended: boolean;
+          };
+          return {
+            previousStatus: result.previousStatus,
+            unsuspended: result.unsuspended,
+          };
+        },
+      },
+    },
+  );
+}

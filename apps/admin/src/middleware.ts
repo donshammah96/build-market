@@ -9,7 +9,11 @@ import {
 } from "@/lib/security/claims";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 
-const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/unauthorized(.*)"]);
+const isPublicRoute = createRouteMatcher([
+  "/sign-in(.*)",
+  "/unauthorized(.*)",
+  "/unauthorized-sign-in(.*)",
+]);
 // Dashboard routes that require admin access
 const isDashboardRoute = createRouteMatcher([
   "/",
@@ -20,6 +24,9 @@ const isDashboardRoute = createRouteMatcher([
 ]);
 // Verification routes that require verification_admin or admin role
 const isVerificationRoute = createRouteMatcher(["/verifications(.*)"]);
+
+/** Statuses that must be blocked before role checks are applied. */
+const BLOCKED_STATUSES = ["SUSPENDED", "BANNED", "DEACTIVATED", "ARCHIVED"];
 
 type MiddlewareAuthObject = {
   userId: string | null;
@@ -61,6 +68,17 @@ export default clerkMiddleware(async (auth, req) => {
     return authObj.redirectToSignIn({ returnBackUrl: req.url });
   }
 
+  // Blocked-user gate — checked before role authorization so that suspended /
+  // banned admin accounts cannot access any admin route even if they still hold
+  // a valid admin role claim. Redirecting to /unauthorized-sign-in (public)
+  // instead of /unauthorized (protected) prevents a redirect loop.
+  const metadata = parseSessionMetadata(authObj.sessionClaims);
+  if (metadata?.status && BLOCKED_STATUSES.includes(metadata.status)) {
+    const url = new URL("/unauthorized-sign-in", req.url);
+    url.searchParams.set("reason", metadata.status);
+    return Response.redirect(url);
+  }
+
   // Check verification routes - requires admin or verification_admin
   if (isVerificationRoute(req)) {
     const isAuthorized = hasAllowedRole(
@@ -69,7 +87,9 @@ export default clerkMiddleware(async (auth, req) => {
     );
 
     if (!isAuthorized) {
-      return Response.redirect(new URL("/unauthorized", req.url));
+      return Response.redirect(
+        new URL("/unauthorized-sign-in?reason=not_admin", req.url),
+      );
     }
     return; // Allow access to verification routes
   }
@@ -82,7 +102,9 @@ export default clerkMiddleware(async (auth, req) => {
     );
 
     if (!isAuthorized) {
-      return Response.redirect(new URL("/unauthorized", req.url));
+      return Response.redirect(
+        new URL("/unauthorized-sign-in?reason=not_admin", req.url),
+      );
     }
     return; // Allow access to dashboard routes
   }
@@ -93,7 +115,9 @@ export default clerkMiddleware(async (auth, req) => {
     ADMIN_ROUTE_POLICY_MAP.defaultProtected,
   );
   if (!isAuthorized) {
-    return Response.redirect(new URL("/unauthorized", req.url));
+    return Response.redirect(
+      new URL("/unauthorized-sign-in?reason=not_admin", req.url),
+    );
   }
 });
 

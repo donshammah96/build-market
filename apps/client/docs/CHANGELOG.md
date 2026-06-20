@@ -28,6 +28,12 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Added
+
+- **Unauthorized Sign-In Page:** Added a public `/unauthorized-sign-in` page ([page.tsx](file:///c:/Users/User/build-market/apps/client/app/unauthorized-sign-in/page.tsx)) displaying account status-specific notices (Account Suspended, Banned, etc.) with a dark-theme glassmorphism card that invokes `signOut` on mount.
+- **Blocked-User Middleware Gate:** Integrated a middleware check in [middleware.ts](file:///c:/Users/User/build-market/apps/client/middleware.ts) that reads Clerk session claims and redirects users with blocked statuses (`SUSPENDED`, `BANNED`, `DEACTIVATED`, `ARCHIVED`) to `/unauthorized-sign-in` with the reason code.
+- **SSO Auth Callback Check:** Injected a fail-closed Clerk `publicMetadata` status validation check during [auth-callback/page.tsx](file:///c:/Users/User/build-market/apps/client/app/auth-callback/page.tsx) to prevent blocked SSO users from accessing the app before their session token propagates the status claim update.
+
 ### Changed (Testing)
 
 - **PropertyForm tests:** Replaced fragile full-tree HTML snapshots in `PropertyForm` component tests with robust semantic accessibility assertions.

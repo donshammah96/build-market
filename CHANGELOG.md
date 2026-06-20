@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Auth/Security**: Added a middleware-level blocked-user gate in both `apps/client` and `apps/admin` that redirects suspended, banned, deactivated, or archived users to a public `/unauthorized-sign-in` endpoint with the appropriate status reason.
+- **Client**: Added a public `/unauthorized-sign-in` page ([page.tsx](file:///c:/Users/User/build-market/apps/client/app/unauthorized-sign-in/page.tsx)) displaying account status-specific notices with a dark-theme glassmorphism card and auto-signout logic on mount.
+- **Admin**: Added a public `/unauthorized-sign-in` page ([page.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(auth)/unauthorized-sign-in/page.tsx>)) matching the admin dark theme that logs out the user and displays status-specific badges.
+- **Admin**: Implemented `suspendUser` and `unsuspendUser` server actions in [users.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/users.ts) to toggle database user status, sync to Clerk `publicMetadata`, enforce fresh authentication (`recentAuth`), and write audit logs.
+- **Admin**: Extended the user repository ([repository.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/users/repository.ts)) and service ([service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/users/service.ts)) to support fetching and updating status targets.
+- **Client**: Injected a fail-closed Clerk `publicMetadata` status validation check during [auth-callback/page.tsx](file:///c:/Users/User/build-market/apps/client/app/auth-callback/page.tsx) to prevent blocked SSO users from accessing the app before their session token propagates the status claim update.
 - **Admin**: Added v2-specific UI tests (happy path + one error state per route) for the four shadow routes (`users-v2`, `verifications-v2`, `analytics-v2`, `audit-v2`) to satisfy the Test Coverage gate in `RETIREMENT.md`.
 - **Admin**: Added unit tests for `NavigationSidebar` (`navigation-sidebar.test.tsx`), `AddUser` (`AddUser.test.tsx`), and `EditUser` (`EditUser.test.tsx`) components, verifying role-based navigation gating and form mutations.
 - **Admin**: Created `docs/RETIREMENT.md` with per-flag migration criteria, 4-criterion retirement gate, and per-flag status tables for all four `apps/admin` v2 shadow routes (I-13 / F-D3).

@@ -4,6 +4,10 @@
 
 ### Added
 
+- **Unauthorized Sign-In Flow:** Implemented a new `/unauthorized-sign-in` public route and page ([page.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(auth)/unauthorized-sign-in/page.tsx>)) that displays tailored restriction notices (Account Suspended, Account Banned, etc.) and auto-signs out blocked sessions on mount.
+- **Blocked-User Middleware Gate:** Added a middleware validation step in [middleware.ts](file:///c:/Users/User/build-market/apps/admin/src/middleware.ts) checking user status claims to redirect suspended, banned, deactivated, or archived users to the unauthorized sign-in page.
+- **User Suspension Server Actions:** Added `suspendUser` and `unsuspendUser` safe mutations in [users.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/users.ts) to toggle DB user status, synchronize state to Clerk `publicMetadata`, check action policies (requiring `recentAuth`), and write append-only audit log records.
+- **User Status Domain Logic:** Added status checking and update capabilities to the user repository ([repository.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/users/repository.ts)) and domain service ([service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/users/service.ts)).
 - **Clerk Satellite Configuration:** Added `NEXT_PUBLIC_CLERK_IS_SATELLITE`, `NEXT_PUBLIC_CLERK_DOMAIN`, and `NEXT_PUBLIC_CLERK_SIGN_IN_URL` environment variables in `apps/admin/.env.development` and `apps/admin/.env.test` for satellite domain authentication support.
 - **TSConfig References:** Added `@build/enums` reference path in `tsconfig.json`.
 
