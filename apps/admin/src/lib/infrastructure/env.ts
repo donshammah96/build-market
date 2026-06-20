@@ -50,6 +50,8 @@ const adminEnvSchema = z.object({
   S3_REGION: z.string().min(1).optional(),
   ODPC_EMAIL: z.string().email().optional(),
   DPO_EMAIL: z.string().email().optional(),
+  GDPR_ERASURE_CRON: z.string().min(1).optional(),
+  GDPR_ERASURE_BATCH_SIZE: z.coerce.number().int().positive().optional(),
   EXPORT_CLEANUP_CRON: z.string().min(1).optional(),
   EXPORT_CLEANUP_BATCH_SIZE: z.coerce.number().int().positive().optional(),
   EXPORT_CLEANUP_MAX_RETRIES: z.coerce.number().int().nonnegative().optional(),

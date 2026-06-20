@@ -12,6 +12,8 @@
 - **User Status Domain Logic:** Added status checking and update capabilities to the user repository ([repository.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/users/repository.ts)) and domain service ([service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/users/service.ts)).
 - **Clerk Satellite Configuration:** Added `NEXT_PUBLIC_CLERK_IS_SATELLITE`, `NEXT_PUBLIC_CLERK_DOMAIN`, and `NEXT_PUBLIC_CLERK_SIGN_IN_URL` environment variables in `apps/admin/.env.development` and `apps/admin/.env.test` for satellite domain authentication support.
 - **TSConfig References:** Added `@build/enums` reference path in `tsconfig.json`.
+- **GDPR Erasure Queue Integration**: Integrated the compliance erasure queue (`erasureQueue`), daily cron batch scheduler (`scheduleGdprErasure`), and queue processing worker (`createGdprErasureWorker`) into the central job orchestrator ([index.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/index.ts)) with support for manual trigger operations, worker health checks, and graceful shutdown handlers.
+- **Clerk Redirect Configuration**: Configured default `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL` and `NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL` redirect routes pointing to `/` in `.env.development` and `.env.example` to resolve redirection loop bugs on admin.buildmarket.app.
 
 ### Changed
 
