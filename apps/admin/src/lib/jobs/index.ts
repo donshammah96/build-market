@@ -40,7 +40,7 @@ import {
   createGdprErasureWorker,
   erasureQueue,
 } from "./gdpr-erasure";
-import { Worker } from "bullmq";
+import { Worker, Queue } from "bullmq";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 
 const logger = new StructuredLogger("job-orchestrator");
@@ -167,7 +167,7 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
 
   // Get job info from each queue
   const queues = [
-    { name: "Export Cleanup", queue: null as any }, // cleanupQueue is not exported
+    { name: "Export Cleanup", queue: null as Queue | null }, // cleanupQueue is not exported
     { name: "Data Retention", queue: retentionQueue },
     { name: "Anonymization Batch", queue: anonymizationQueue },
     { name: "Asset Cleanup", queue: assetCleanupQueue },

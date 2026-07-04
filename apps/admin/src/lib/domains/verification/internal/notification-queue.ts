@@ -96,7 +96,7 @@ interface NotificationJobData {
 
 // DB Backed Queue Strategy
 class DatabaseQueueStrategy implements NotificationQueueStrategy {
-  private prisma: any;
+  private prisma: PrismaClient;
 
   constructor() {
     this.prisma = getPrisma();
@@ -119,8 +119,8 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
         entityId: result.entityId,
         recipientUserId,
         newStatus: result.newStatus,
-        reason: result.reason,
-        notes: result.notes,
+        reason: result.reason ?? null,
+        notes: result.notes ?? null,
         lastError: error.message,
         nextRetryAt,
         status: "PENDING",
@@ -337,11 +337,13 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
           return property?.title || "Property";
         }
         case "certificate": {
-          const certificate = await this.prisma.certificate.findUnique({
-            where: { id: entityId },
-            select: { name: true },
-          });
-          return certificate?.name || "Certificate";
+          const certificate = await this.prisma.professionalDocument.findUnique(
+            {
+              where: { id: entityId },
+              select: { title: true },
+            },
+          );
+          return certificate?.title || "Certificate";
         }
         default:
           return "Your submission";
@@ -384,7 +386,7 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
           attemptCount: newCount,
           nextRetryAt: new Date(Date.now() + delay),
           lastAttemptAt: new Date(),
-          lastError: errorMessage,
+          lastError: errorMessage ?? "Unknown error",
         },
       });
 
@@ -420,7 +422,7 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
         status: "PENDING",
         attemptCount: 0,
         nextRetryAt: new Date(),
-        lastError: null,
+        lastError: "",
       },
     });
   }

@@ -1,4 +1,11 @@
-import { County, VerificationStatus } from "@build/db";
+import {
+  County,
+  VerificationStatus,
+  Portfolio,
+  Review,
+  Project,
+  User,
+} from "@build/db";
 import type { AdminActor } from "@/lib/security/admin-actor";
 
 export type ProfessionalsActor = AdminActor;
@@ -67,9 +74,9 @@ export interface ProfessionalDetails {
     issuer: string | null;
     expiryDate: Date | null;
   }>;
-  portfolios: any[];
-  reviews: any[];
-  projects: any[];
+  portfolios: Portfolio[];
+  reviews: Review[];
+  projects: Array<Project & { client: User }>;
 }
 
 export interface ProfessionalUpdateInput {
@@ -83,7 +90,7 @@ export interface ProfessionalUpdateInput {
 }
 
 export interface ProfessionalPageResult {
-  professionals: any[];
+  professionals: ProfessionalListItem[];
   meta: {
     total: number;
     page: number;

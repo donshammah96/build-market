@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Database/Schema**: Added `FailedNotification` model to `schema.prisma` and created migration `20260620074800_add_failed_notification` to support the database-backed verification notifications retry queue.
 - **Auth/Security**: Added a middleware-level blocked-user gate in both `apps/client` and `apps/admin` that redirects suspended, banned, deactivated, or archived users to a public `/unauthorized-sign-in` endpoint with the appropriate status reason.
 - **Client**: Added a public `/unauthorized-sign-in` page ([page.tsx](file:///c:/Users/User/build-market/apps/client/app/unauthorized-sign-in/page.tsx)) displaying account status-specific notices with a dark-theme glassmorphism card and auto-signout logic on mount.
 - **Admin**: Added a public `/unauthorized-sign-in` page ([page.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(auth)/unauthorized-sign-in/page.tsx>)) matching the admin dark theme that logs out the user and displays status-specific badges.
@@ -110,6 +111,9 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Admin**: Fixed TypeScript type warnings in compliance queue-status route, professionals contracts, and gdpr orchestrator by replacing explicit `any` with proper generic types.
+- **Admin**: Resolved compiler error and runtime bug in `DatabaseQueueStrategy.getEntityName` (within `notification-queue.ts`) where the query target was mapped to a non-existent `certificate` model instead of `professionalDocument`.
+- **Client**: Resolved markdown lint warning (MD024) in client `CHANGELOG.md` by renaming duplicate `## [Unreleased]` heading to `## [Unreleased - Historical]`.
 - **Client**: Resolved security check failure (`mapperNormalizationDrift`) in [service.ts](file:///c:/Users/User/build-market/apps/client/app/lib/domains/licenses/service.ts) by removing the redundant `timestamp` inline Date serialization from the `publishLicenseEvent` payload, letting the event publisher default it internally.
 - **Admin App**: Fixed database connection failure (`ECONNREFUSED` / `PrismaClientKnownRequestError`) in development mode by commenting out the default `DATABASE_URL` and `DIRECT_URL` placeholders in `apps/admin/.env.development` and commenting out the duplicate, non-functional `DATABASE_URL` / `POSTGRES_URL` entries pointing to `localhost:5434` at line 50 in the main `apps/admin/.env` file. This resolves the loading priority issues, allowing Next.js to cleanly fall back to the active Supabase connection string.
 - **Admin App**: Resolved React Server Component runtime boundary error (`getUserColumns is on the client. It's not possible to invoke a client function from the server`) on the users list page by introducing the Client Component wrapper [UsersTableClient](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/users/users-table-client.tsx>) that encapsulates the client-side column generation logic.
