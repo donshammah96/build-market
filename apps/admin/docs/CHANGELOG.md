@@ -1,5 +1,28 @@
 # apps/admin Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Banned, Deactivated, and Archived User Statuses**: Implemented validators and transitions in [service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/users/service.ts) and [users.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/users.ts) for `BANNED`, `DEACTIVATED`, and `ARCHIVED` statuses, preventing self-mutations and locking operations on deactivated accounts.
+- **GDPR Compliance Erasure Helper**: Created a dedicated anonymization helper in [gdpr-erasure.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/gdpr-erasure.ts) that hashes the user email (`deactivated-hash@deleted.local`), nullifies profile data, soft-deletes professional stores, schedules asset deletion, and deletes the Clerk profile.
+- **Unauthorized Sign-In Flow:** Implemented a new `/unauthorized-sign-in` public route and page ([page.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(auth)/unauthorized-sign-in/page.tsx>)) that displays tailored restriction notices (Account Suspended, Account Banned, etc.) and auto-signs out blocked sessions on mount.
+- **Blocked-User Middleware Gate:** Added a middleware validation step in [middleware.ts](file:///c:/Users/User/build-market/apps/admin/src/middleware.ts) checking user status claims to redirect suspended, banned, deactivated, or archived users to the unauthorized sign-in page.
+- **User Suspension Server Actions:** Added `suspendUser` and `unsuspendUser` safe mutations in [users.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/users.ts) to toggle DB user status, synchronize state to Clerk `publicMetadata`, check action policies (requiring `recentAuth`), and write append-only audit log records.
+- **User Status Domain Logic:** Added status checking and update capabilities to the user repository ([repository.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/users/repository.ts)) and domain service ([service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/users/service.ts)).
+- **Clerk Satellite Configuration:** Added `NEXT_PUBLIC_CLERK_IS_SATELLITE`, `NEXT_PUBLIC_CLERK_DOMAIN`, and `NEXT_PUBLIC_CLERK_SIGN_IN_URL` environment variables in `apps/admin/.env.development` and `apps/admin/.env.test` for satellite domain authentication support.
+- **TSConfig References:** Added `@build/enums` reference path in `tsconfig.json`.
+- **GDPR Erasure Queue Integration**: Integrated the compliance erasure queue (`erasureQueue`), daily cron batch scheduler (`scheduleGdprErasure`), and queue processing worker (`createGdprErasureWorker`) into the central job orchestrator ([index.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/index.ts)) with support for manual trigger operations, worker health checks, and graceful shutdown handlers.
+- **Clerk Redirect Configuration**: Configured default `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL` and `NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL` redirect routes pointing to `/` in `.env.development` and `.env.example` to resolve redirection loop bugs on admin.buildmarket.app.
+
+### Changed
+
+- **Vercel Build Command:** Modified `vercel.json` build command to compile referenced projects using `pnpm tsc --build tsconfig.json` before running next.js build to avoid build-time dependency resolution issues.
+- **Queue Provider Resolution:** Simplified `CURRENT_PROVIDER` logic in `notification-queue.ts` to map both `redis` and `bullmq` env values to `QueueProvider.REDIS`.
+- **Code Cleanup:** Removed unused imports (`adminEnvConfig`, `AdminLogEvent`, `NextResponse`, `AdminRole`, `superAdmin`) and unused destructuring assignments across several route handlers, contracts, and tests.
+
+---
+
 ## [2026-06-18] CI & Security Drift Fixes
 
 ### Fixed (CI & Security Drift Fixes)

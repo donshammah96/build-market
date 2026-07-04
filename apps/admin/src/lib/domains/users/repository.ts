@@ -1,10 +1,12 @@
 import { prisma } from "@build/db";
+import type { UserStatus } from "@build/db";
 import type {
   AdminUserDetails,
   ListUsersQuery,
   UserCredentialsTarget,
   UserIdentityTarget,
   UserRoleTarget,
+  UserStatusTarget,
 } from "./contracts";
 
 export async function listUsers(query: ListUsersQuery) {
@@ -108,5 +110,21 @@ export async function updateUserRole(
   return prisma.user.update({
     where: { id: userId },
     data: { role },
+  });
+}
+
+export async function findUserStatusTarget(
+  userId: string,
+): Promise<UserStatusTarget | null> {
+  return prisma.user.findFirst({
+    where: { id: userId, deletedAt: null },
+    select: { id: true, clerkId: true, email: true, status: true },
+  });
+}
+
+export async function updateUserStatus(userId: string, status: UserStatus) {
+  return prisma.user.update({
+    where: { id: userId },
+    data: { status },
   });
 }

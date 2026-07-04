@@ -3032,3 +3032,24 @@ model DataExport {
   userAgent   String
   metadata    Json?    @db.JsonB
 }
+
+model FailedNotification {
+  id              String   @id @default(uuid())
+  entityType      String   // "professional", "store", "property", "certificate", "license"
+  entityId        String
+  recipientUserId String
+  newStatus       String   // e.g., VerificationStatus string
+  reason          String?  @db.Text
+  notes           String?  @db.Text
+  attemptCount    Int      @default(0)
+  lastAttemptAt   DateTime?
+  nextRetryAt     DateTime
+  lastError       String   @db.Text
+  createdAt       DateTime @default(now())
+  status          String   @default("PENDING") // PENDING, COMPLETED, DEAD_LETTER
+
+  @@index([status])
+  @@index([nextRetryAt])
+  @@index([entityType, entityId])
+}
+

@@ -22,9 +22,11 @@ import {
   findUserDetailsById,
   findUserIdentityTarget,
   findUserRoleTarget,
+  findUserStatusTarget,
   listUsers,
   markPasswordResetRequired,
   updateUserRole,
+  updateUserStatus,
 } from "../repository";
 
 describe("users repository contract", () => {
@@ -112,6 +114,68 @@ describe("users repository contract", () => {
     expect(prismaMock.user.update).toHaveBeenNthCalledWith(2, {
       where: { id: "user_3" },
       data: { role: "ADMIN" },
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Suspend / Unsuspend repository primitives
+  // ---------------------------------------------------------------------------
+
+  it("findUserStatusTarget selects id, clerkId, email, and status with soft-delete guard", async () => {
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: "user_1",
+      clerkId: "clerk_1",
+      email: "user@example.com",
+      status: "ACTIVE",
+    });
+
+    const result = await findUserStatusTarget("user_1");
+
+    expect(prismaMock.user.findFirst).toHaveBeenCalledWith({
+      where: { id: "user_1", deletedAt: null },
+      select: { id: true, clerkId: true, email: true, status: true },
+    });
+    expect(result).toEqual({
+      id: "user_1",
+      clerkId: "clerk_1",
+      email: "user@example.com",
+      status: "ACTIVE",
+    });
+  });
+
+  it("findUserStatusTarget returns null for missing or soft-deleted users", async () => {
+    prismaMock.user.findFirst.mockResolvedValue(null);
+
+    const result = await findUserStatusTarget("user_404");
+
+    expect(result).toBeNull();
+  });
+
+  it("updateUserStatus issues a targeted Prisma update with SUSPENDED", async () => {
+    prismaMock.user.update.mockResolvedValue({
+      id: "user_1",
+      status: "SUSPENDED",
+    });
+
+    await updateUserStatus("user_1", "SUSPENDED");
+
+    expect(prismaMock.user.update).toHaveBeenCalledWith({
+      where: { id: "user_1" },
+      data: { status: "SUSPENDED" },
+    });
+  });
+
+  it("updateUserStatus correctly writes ACTIVE on unsuspend", async () => {
+    prismaMock.user.update.mockResolvedValue({
+      id: "user_1",
+      status: "ACTIVE",
+    });
+
+    await updateUserStatus("user_1", "ACTIVE");
+
+    expect(prismaMock.user.update).toHaveBeenCalledWith({
+      where: { id: "user_1" },
+      data: { status: "ACTIVE" },
     });
   });
 });

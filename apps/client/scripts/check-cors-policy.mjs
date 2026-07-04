@@ -7,7 +7,13 @@ import {
 } from "./security-check-utils.mjs";
 
 const SHARED_CORS_HELPER = "app/lib/api/cors.ts";
-const HEADER_SCAN_PATHS = ["app", "components", "hooks", "lib", "proxy.ts"];
+const HEADER_SCAN_PATHS = [
+  "app",
+  "components",
+  "hooks",
+  "lib",
+  "middleware.ts",
+];
 const OPTIONS_SCAN_PATHS = ["app/api"];
 const CORS_HEADER_PATTERN = /Access-Control-Allow-[A-Za-z-]+/g;
 const OPTIONS_EXPORT_PATTERN =

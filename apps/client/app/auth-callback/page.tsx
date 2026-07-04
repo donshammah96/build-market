@@ -36,6 +36,7 @@ import {
 interface UserMetadata {
   role?: unknown;
   isOnboarded?: boolean;
+  status?: unknown;
 }
 
 const MAX_RETRIES = 5;
@@ -98,6 +99,16 @@ export default function AuthCallbackPage() {
    */
   const checkAndRedirect = useCallback(async () => {
     if (!user) return;
+
+    // Block suspended/banned/deactivated/archived users before any routing.
+    // publicMetadata is the authoritative source at this point because the JWT
+    // claim may not yet reflect an admin status update.
+    const blockedStatuses = ["SUSPENDED", "BANNED", "DEACTIVATED", "ARCHIVED"];
+    const rawStatus = (user.publicMetadata as UserMetadata | undefined)?.status;
+    if (typeof rawStatus === "string" && blockedStatuses.includes(rawStatus)) {
+      router.replace(`/unauthorized-sign-in?reason=${rawStatus}`);
+      return;
+    }
 
     const refreshResult = await waitForClerkClaimRefresh({
       user,

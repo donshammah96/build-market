@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { z } from "zod";
 import { apiError, apiSuccess, HttpStatus } from "@/lib/api/api-response";
 import {
@@ -10,7 +10,6 @@ import { AdminRole } from "@build/db";
 import { resolveAdminRouteActor } from "@/lib/security/route-auth";
 import { auditService } from "@/lib/domains/audit/service";
 import { professionalsService } from "@/lib/domains/professionals/service";
-import type { AdminLogEvent } from "@/lib/infrastructure/logger";
 
 const logger = getClientLogger();
 

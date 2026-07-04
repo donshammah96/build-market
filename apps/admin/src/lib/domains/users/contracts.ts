@@ -11,7 +11,12 @@ export type UsersDomainErrorCode =
   | "USER_ALREADY_EXISTS"
   | "SELF_ROLE_CHANGE_DENIED"
   | "SELF_DELETE_DENIED"
+  | "SELF_SUSPEND_DENIED"
+  | "SELF_BAN_DENIED"
+  | "SELF_ARCHIVE_DENIED"
   | "USER_SELECTION_REQUIRED"
+  | "DEACTIVATED_USER_REVERT_DENIED"
+  | "SELF_DEACTIVATE_DENIED"
   | "BULK_LIMIT_EXCEEDED"
   | "REPOSITORY_ERROR";
 
@@ -111,4 +116,39 @@ export type DeleteUsersBulkInput = {
 export type UsersAuthorizationSnapshot = {
   actorRole: AdminRole;
   canManageUsers: boolean;
+};
+
+export type UserStatusTarget = UserIdentityTarget & {
+  status: string;
+};
+
+export type SuspendUserInput = {
+  userId: string;
+  reason?: string;
+};
+
+export type UnsuspendUserInput = {
+  userId: string;
+};
+
+export type BanUserInput = {
+  userId: string;
+  reason?: string;
+};
+
+export type UnbanUserInput = {
+  userId: string;
+};
+
+export type DeactivateUserInput = {
+  userId: string;
+};
+
+export type ArchiveUserInput = {
+  userId: string;
+  reason?: string;
+};
+
+export type UnarchiveUserInput = {
+  userId: string;
 };

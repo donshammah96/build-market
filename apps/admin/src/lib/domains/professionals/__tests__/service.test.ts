@@ -33,12 +33,6 @@ type MockedRepo = {
 };
 const mockRepo = repo.professionalsRepository as unknown as MockedRepo;
 
-// Actors
-const superAdmin = {
-  dbUserId: "sa1",
-  adminRole: "SUPER_ADMIN" as const,
-  clerkId: "mock-clerk-id",
-};
 const contentModerator = {
   dbUserId: "m1",
   adminRole: "CONTENT_MODERATOR" as const,

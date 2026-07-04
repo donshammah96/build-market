@@ -32,7 +32,7 @@ const config = [
       "components/**/*.{ts,tsx}",
       "hooks/**/*.{ts,tsx}",
       "lib/**/*.{ts,tsx}",
-      "proxy.ts",
+      "middleware.ts",
     ],
     ignores: [
       "app/lib/infrastructure/env.ts",

@@ -3,6 +3,12 @@ import { normalizeRole, type AppRole } from "./roles";
 export type MiddlewareSessionMetadata = {
   role?: AppRole;
   isOnboarded?: boolean;
+  /** Mirrors the `status` field written to Clerk `publicMetadata` by the admin app.
+   * Populated during session-claim sync so middleware can gate access without a
+   * database round-trip. Typed as `string` to avoid coupling this package to
+   * app-layer enums; callers should narrow using `isUserStatus` from `@build/enums`.
+   */
+  status?: string;
 };
 
 type ClaimsLike = {
@@ -25,6 +31,7 @@ export function parseMiddlewareSessionMetadata(
   const role = normalizeRole(record.role);
   const isOnboarded =
     typeof record.isOnboarded === "boolean" ? record.isOnboarded : undefined;
+  const status = typeof record.status === "string" ? record.status : undefined;
 
-  return { role, isOnboarded };
+  return { role, isOnboarded, status };
 }

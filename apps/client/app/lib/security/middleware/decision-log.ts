@@ -10,6 +10,7 @@ export type MiddlewareDecisionEvent =
   | "mw_redirect_maintenance"
   | "mw_redirect_registration_closed"
   | "mw_redirect_professional_signup_closed"
+  | "mw_redirect_unauthorized_sign_in"
   | "mw_allow_onboarding"
   | "mw_allow_protected"
   | "mw_redirect_professional_pending_verification"

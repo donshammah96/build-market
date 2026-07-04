@@ -6,14 +6,14 @@ import { adminEnvConfig } from "@/lib/infrastructure/env";
 export const metadata: Metadata = {
   title: "Build Market",
   description: "Find the best professionals for your building project",
-  metadataBase: new URL("https://build-market.vercel.app"),
+  metadataBase: new URL("https://buildmarket.app"),
   icons: {
     icon: "/favicon.ico",
   },
   openGraph: {
     title: "Build Market",
     description: "Find the best professionals for your building project",
-    url: "https://build-market.vercel.app",
+    url: "https://buildmarket.app",
     siteName: "Build Market",
     images: [
       {
@@ -50,8 +50,20 @@ export default async function RootLayout({
       </html>
     );
   }
+
+  const providerProps = {
+    publishableKey: clerkPublishableKey,
+    isSatellite: adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE,
+    ...(adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN
+      ? { domain: adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN }
+      : {}),
+    ...(adminEnvConfig.NEXT_PUBLIC_CLERK_SIGN_IN_URL
+      ? { signInUrl: adminEnvConfig.NEXT_PUBLIC_CLERK_SIGN_IN_URL }
+      : {}),
+  };
+
   return (
-    <ClerkProvider publishableKey={clerkPublishableKey}>
+    <ClerkProvider {...providerProps}>
       <html lang="en" suppressHydrationWarning>
         <body className="antialiased" suppressHydrationWarning>
           {children}

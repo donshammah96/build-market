@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAdminRouteActor } from "@/lib/security/route-auth";
 import type { AdminLogEvent } from "@/lib/infrastructure/logger";
-import { adminEnvConfig } from "@/lib/infrastructure/env";
 import { getAdminLogger } from "@/lib/infrastructure/logger";
 import { initializeAdminCorrelationId } from "@/lib/infrastructure/correlation";
+import type { Job } from "bullmq";
+import type { IncidentJobData } from "@/lib/queues/compliance.queue";
 import {
   incidentQueue,
   userNotificationQueue,
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
       return authResult.response;
     }
 
-    const { actor, adminRoleStr: adminRole } = authResult;
+    const { adminRoleStr: adminRole } = authResult;
 
     const [incidentStats, notificationStats, auditStats] = await Promise.all([
       incidentQueue.getJobCounts(
@@ -49,13 +50,15 @@ export async function GET(req: NextRequest) {
 
     // Get failed jobs for alerting
     const failedIncidents = await incidentQueue.getFailed();
-    const recentFailures = failedIncidents.slice(0, 5).map((job: any) => ({
-      id: job.id,
-      name: job.name,
-      failedAt: job.finishedOn,
-      reason: job.failedReason,
-      incidentId: job.data?.incidentId,
-    }));
+    const recentFailures = failedIncidents
+      .slice(0, 5)
+      .map((job: Job<IncidentJobData>) => ({
+        id: job.id,
+        name: job.name,
+        failedAt: job.finishedOn,
+        reason: job.failedReason,
+        incidentId: job.data?.incidentId,
+      }));
 
     logger.info({
       correlationId,

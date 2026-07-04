@@ -20,6 +20,7 @@ export const isPublicRoute = createRouteMatcher([
   "/verify(.*)",
   "/sso-callback(.*)",
   "/auth-callback",
+  "/unauthorized-sign-in(.*)",
   "/api(.*)",
   "/professionals(.*)",
   "/professional",
