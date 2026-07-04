@@ -4,6 +4,9 @@
 
 ### Added
 
+- **System Health Domain Slice**: Created a new domain slice at [`contracts.ts`](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/system-health/contracts.ts) and [`service.ts`](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/system-health/service.ts) running concurrent, error-isolated diagnostic probes (database `$queryRaw` ping, serverless-safe Upstash Redis ping, NATS JetStream configuration validation, and implicit Clerk status checking) with latency timing and degraded threshold flags.
+- **System Infrastructure Health Widget**: Added a dynamic presentational widget at [`SystemInfrastructureWidget.tsx`](file:///c:/Users/User/build-market/apps/admin/src/components/admin/dashboard/SystemInfrastructureWidget.tsx) displaying latency in milliseconds, detailed error logs for failed probes, a status strip, and a custom loading skeleton (`SystemInfrastructureSkeleton`).
+- **Resilient Layout and Error Screens**: Created root-level [`global-error.tsx`](file:///c:/Users/User/build-market/apps/admin/src/app/global-error.tsx), dashboard-level [`loading.tsx`](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/loading.tsx>), [`error.tsx`](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/error.tsx>) overlays, and a custom [`not-found.tsx`](file:///c:/Users/User/build-market/apps/admin/src/app/not-found.tsx) page to prevent runtime exceptions from breaking the dashboard.
 - **Banned, Deactivated, and Archived User Statuses**: Implemented validators and transitions in [service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/users/service.ts) and [users.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/users.ts) for `BANNED`, `DEACTIVATED`, and `ARCHIVED` statuses, preventing self-mutations and locking operations on deactivated accounts.
 - **GDPR Compliance Erasure Helper**: Created a dedicated anonymization helper in [gdpr-erasure.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/gdpr-erasure.ts) that hashes the user email (`deactivated-hash@deleted.local`), nullifies profile data, soft-deletes professional stores, schedules asset deletion, and deletes the Clerk profile.
 - **Unauthorized Sign-In Flow:** Implemented a new `/unauthorized-sign-in` public route and page ([page.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(auth)/unauthorized-sign-in/page.tsx>)) that displays tailored restriction notices (Account Suspended, Account Banned, etc.) and auto-signs out blocked sessions on mount.
@@ -18,6 +21,8 @@
 
 ### Changed
 
+- **Non-Blocking Dashboard Health Streaming**: Refactored the dashboard [`page.tsx`](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/page.tsx>) to render the System Infrastructure widget concurrently using `<Suspense>`, eliminating head-of-line blocking from slow database/cache checks.
+- **Structured Audit/Permissions Logging (ADR-ADMIN-003)**: Migrated permissions retrieval actions and layout-level connection validation logic from raw `console.error` logs to standard `StructuredLogger` events with trace correlation ID tracking.
 - **Vercel Build Command:** Modified `vercel.json` build command to compile referenced projects using `pnpm tsc --build tsconfig.json` before running next.js build to avoid build-time dependency resolution issues.
 - **Queue Provider Resolution:** Simplified `CURRENT_PROVIDER` logic in `notification-queue.ts` to map both `redis` and `bullmq` env values to `QueueProvider.REDIS`.
 - **Code Cleanup:** Removed unused imports (`adminEnvConfig`, `AdminLogEvent`, `NextResponse`, `AdminRole`, `superAdmin`) and unused destructuring assignments across several route handlers, contracts, and tests.

@@ -85,6 +85,8 @@ export const adminEnvSchema = z.object({
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().min(1).optional(),
   OTEL_SERVICE_NAME: z.string().min(1).optional(),
   OTEL_RESOURCE_ATTRIBUTES: z.string().min(1).optional(),
+  UPSTASH_REDIS_REST_URL: z.string().min(1).optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
 });
 
 export type AdminEnvConfig = z.infer<typeof adminEnvSchema>;
