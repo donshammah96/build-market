@@ -370,11 +370,7 @@ jobs:
       - name: Run Prisma migrations
         # Deploy any pending migrations to Supabase before building.
         # This catches schema drift before a Vercel deployment would.
-        # Uses DATABASE_URL (pooler) since DIRECT_URL (direct TCP) is blocked
-        # on the Supabase free tier without the IPv4 add-on.
-        # prisma.config.ts datasource.url resolves DATABASE_URL at runtime.
-        env:
-          DIRECT_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+        # Uses the job-level DIRECT_URL (direct TCP connection) to run migrations.
         run: pnpm -C packages/db exec prisma migrate deploy
 
       - name: Build workspace dependencies then client

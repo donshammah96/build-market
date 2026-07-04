@@ -51,6 +51,15 @@ export default async function RootLayout({
     );
   }
 
+  if (
+    adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE &&
+    !adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL
+  ) {
+    throw new Error(
+      "NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL is required when NEXT_PUBLIC_CLERK_IS_SATELLITE is true to prevent infinite redirect loops.",
+    );
+  }
+
   const providerProps = {
     publishableKey: clerkPublishableKey,
     isSatellite: adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE,

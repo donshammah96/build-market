@@ -172,6 +172,7 @@ const envGroups: EnvGroup[] = [
       { name: "NEXT_PUBLIC_APP_URL", required: true },
       { name: "NEXT_PUBLIC_API_URL", required: true },
       { name: "NEXT_PUBLIC_SEARCH_SERVICE_URL", required: false },
+      { name: "NEXT_PUBLIC_ADMIN_APP_URL", required: false },
     ],
   },
   {
@@ -891,6 +892,10 @@ function buildEnvConfig() {
     // URLs
     appUrl: getStringEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3500"),
     apiUrl: getStringEnv("NEXT_PUBLIC_API_URL", "http://localhost:3500/api"),
+    adminAppUrl: getStringEnv(
+      "NEXT_PUBLIC_ADMIN_APP_URL",
+      "http://localhost:3005",
+    ),
     appVersion: getStringEnv("npm_package_version", "0.1.0"),
 
     // Local-only auth bypass

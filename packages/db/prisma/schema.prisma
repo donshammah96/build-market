@@ -890,7 +890,7 @@ model User {
 
   // Status
   role              UserRole   @default(CLIENT)
-  status            UserStatus @default(ACTIVE)
+  status            UserStatus @default(ONBOARDING)
   isProfileComplete Boolean    @default(false)
   isEmailVerified   Boolean    @default(false)
   isPhoneVerified   Boolean    @default(false)

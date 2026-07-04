@@ -29,7 +29,7 @@ export default function SignInPage() {
             className="object-cover opacity-30 grayscale"
             priority
           />
-          <div className="absolute inset-0 bg-gradient-to-tr from-zinc-950 via-zinc-900/50 to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-tr from-zinc-950 via-zinc-900/50 to-transparent" />
         </div>
 
         <div className="relative z-10 text-center px-10">
@@ -43,7 +43,7 @@ export default function SignInPage() {
 
       {/* Right Panel (Form) */}
       <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 bg-zinc-50 lg:bg-white">
-        <div className="w-full max-w-[440px] space-y-8">
+        <div className="w-full max-w-110 space-y-8">
           <div className="lg:hidden text-center mb-8">
             <Link href="/" className="inline-flex items-center gap-2 mb-6">
               <span className="text-2xl font-bold text-zinc-900">
@@ -55,7 +55,7 @@ export default function SignInPage() {
           <div className="bg-white p-1 rounded-2xl shadow-xl shadow-zinc-200/50 border border-zinc-100">
             <SignIn
               routing="hash"
-              forceRedirectUrl={ROUTES.authCallback}
+              fallbackRedirectUrl={ROUTES.authCallback}
               signUpUrl={ROUTES.signUp}
               appearance={
                 {
