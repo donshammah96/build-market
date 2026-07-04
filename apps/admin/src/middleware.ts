@@ -8,6 +8,7 @@ import {
   parseSessionMetadata,
 } from "@/lib/security/claims";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { NextResponse } from "next/server";
 
 // ---------------------------------------------------------------------------
 // Route matchers
@@ -105,7 +106,7 @@ export default clerkMiddleware(async (auth, req) => {
   if (metadata?.status && BLOCKED_STATUSES.includes(metadata.status)) {
     const url = new URL("/unauthorized-sign-in", req.url);
     url.searchParams.set("reason", metadata.status);
-    return Response.redirect(url);
+    return NextResponse.redirect(url);
   }
 
   // 5. Verification routes — requires admin or verification_admin role
@@ -116,7 +117,7 @@ export default clerkMiddleware(async (auth, req) => {
     );
 
     if (!isAuthorized) {
-      return Response.redirect(
+      return NextResponse.redirect(
         new URL("/unauthorized-sign-in?reason=not_admin", req.url),
       );
     }
@@ -131,7 +132,7 @@ export default clerkMiddleware(async (auth, req) => {
     );
 
     if (!isAuthorized) {
-      return Response.redirect(
+      return NextResponse.redirect(
         new URL("/unauthorized-sign-in?reason=not_admin", req.url),
       );
     }
@@ -144,7 +145,7 @@ export default clerkMiddleware(async (auth, req) => {
     ADMIN_ROUTE_POLICY_MAP.defaultProtected,
   );
   if (!isAuthorized) {
-    return Response.redirect(
+    return NextResponse.redirect(
       new URL("/unauthorized-sign-in?reason=not_admin", req.url),
     );
   }
