@@ -19,6 +19,10 @@ const adminEnvSchema = z.object({
   NEXT_PUBLIC_CLERK_IS_SATELLITE: booleanString,
   NEXT_PUBLIC_CLERK_DOMAIN: z.string().min(1).optional(),
   NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().min(1).optional(),
+  /** Absolute sign-in URL on the primary Clerk domain. Required when
+   *  NEXT_PUBLIC_CLERK_IS_SATELLITE=true so that ClerkProvider routes
+   *  unauthenticated users to the primary app instead of the satellite. */
+  NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL: z.string().min(1).optional(),
   CLIENT_APP_URL: optionalUrl,
   NEXT_PUBLIC_APP_URL: optionalUrl,
   APP_URL: optionalUrl,
