@@ -28,6 +28,40 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Added (Centralized Admin App URL Configuration)
+
+- **Centralized Admin App URL Configuration**: Registered and exposed `NEXT_PUBLIC_ADMIN_APP_URL` within the client infrastructure environment layer to route administrative users to their canonical satellite domain dashboard.
+
+### Changed
+
+- **Clerk Redirect Loose Coupling**: Converted `<SignIn>` and `<SignUp>` component routing behaviors from `forceRedirectUrl` to `fallbackRedirectUrl` across standard authentication routes and professional sub-flows. This allows Clerk to respect and honor incoming `redirect_url` query parameters passed by satellite applications.
+
+### Fixed (Centralized Admin App URL Configuration)
+
+- **Admin Escape Hatch in Auth Callback**: Enhanced `/auth-callback` logic to intercept users with an authenticated `ADMIN` role and eject them to the designated `NEXT_PUBLIC_ADMIN_APP_URL`, bypassing standard client onboarding gates.
+- **Onboarding Gating Bypass Hardening**: Resolved a critical navigation race condition where un-onboarded accounts could access home dashboards via direct navigation or browser back-buttons. The system-wide default state for the `User` model in `schema.prisma` is hardened from `ACTIVE` to `ONBOARDING`, forcing middleware gates to evaluate incomplete user sessions as restricted by default until profile finalization occurs.
+- **Auth Callback Verification Coverage**: Introduced isolated unit tests covering role-based matrix routing to guarantee correct dashboard redirection variants for `CLIENT` vs `ADMIN` roles.
+
+**Files changed:**
+
+- `packages/db/prisma/schema.prisma`
+- `apps/client/app/lib/infrastructure/env.ts`
+- `apps/client/.env.development`
+- `apps/client/.env.test`
+- `apps/client/.env.example`
+- `apps/client/app/sign-in/[[...sign-in]]/page.tsx`
+- `apps/client/app/sign-up/[[...sign-up]]/page.tsx`
+- `apps/client/app/professional/sign-up/[[...sign-up]]/page.tsx`
+- `apps/client/app/auth-callback/page.tsx`
+- `apps/client/__tests__/app/auth-callback/page.test.tsx`
+
+**Verification:**
+
+- `pnpm run test` inside `apps/client` successfully executes the updated `AuthCallbackPage` assertions.
+- `pnpm run check-env-contract` verifies perfect synchronization of environment template contracts.
+- `pnpm run check-types` validates zero global TypeScript compilation diagnostics.
+- Local migration confirmation via `pnpm -C packages/db exec prisma migrate status`.
+
 ### Added
 
 - **Banned, Deactivated, and Archived Status Support**: Expanded `/unauthorized-sign-in` and middleware status checks to support block redirects for `BANNED`, `DEACTIVATED`, and `ARCHIVED` statuses.
@@ -480,7 +514,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [2026-04-30] Env Boundary Hardening — Supabase Group & `DIRECT_URL`
 
-### Changed
+### Changed (Env Boundary Hardening — Supabase Group)
 
 - **`apps/client/app/lib/infrastructure/env.ts` — four targeted improvements.**
   1. **`DIRECT_URL` added to the `database` envGroup.**
