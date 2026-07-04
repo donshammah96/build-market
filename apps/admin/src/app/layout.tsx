@@ -51,15 +51,32 @@ export default async function RootLayout({
     );
   }
 
+  if (
+    adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE &&
+    !adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL
+  ) {
+    throw new Error(
+      "NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL is required when NEXT_PUBLIC_CLERK_IS_SATELLITE is true to prevent infinite redirect loops.",
+    );
+  }
+
   const providerProps = {
     publishableKey: clerkPublishableKey,
     isSatellite: adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE,
     ...(adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN
       ? { domain: adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN }
       : {}),
-    ...(adminEnvConfig.NEXT_PUBLIC_CLERK_SIGN_IN_URL
-      ? { signInUrl: adminEnvConfig.NEXT_PUBLIC_CLERK_SIGN_IN_URL }
-      : {}),
+    // For satellite apps, signInUrl MUST be the primary domain's absolute URL
+    // (e.g. https://buildmarket.app/sign-in). A relative path causes Clerk to
+    // route auth to the satellite itself, producing an infinite redirect loop.
+    // NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL holds the absolute primary URL;
+    // NEXT_PUBLIC_CLERK_SIGN_IN_URL is the local satellite route (/sign-in)
+    // used only by the middleware and internal routing.
+    ...(adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL
+      ? { signInUrl: adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL }
+      : adminEnvConfig.NEXT_PUBLIC_CLERK_SIGN_IN_URL
+        ? { signInUrl: adminEnvConfig.NEXT_PUBLIC_CLERK_SIGN_IN_URL }
+        : {}),
   };
 
   return (

@@ -86,7 +86,7 @@ export default function ClientSignUpPage() {
           <div className="bg-white p-1 rounded-2xl shadow-xl shadow-zinc-200/50 border border-zinc-100">
             <SignUp
               routing="hash"
-              forceRedirectUrl={ROUTES.authCallback}
+              fallbackRedirectUrl={ROUTES.authCallback}
               appearance={
                 {
                   layout: {

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useUser, useClerk } from "@clerk/nextjs";
 import { ROUTES, dashboardForRole } from "@/lib/links";
+import { env } from "@/app/lib/infrastructure/env";
 import {
   CLERK_CLAIM_REFRESH_FAILURE_MESSAGE,
   hasExpectedOnboardingClaims,
@@ -72,6 +73,15 @@ export default function AuthCallbackPage() {
    */
   const getRedirectPath = useCallback(
     (metadata: UserMetadata | undefined): string => {
+      const normalizedRole =
+        typeof metadata?.role === "string"
+          ? metadata.role.trim().toUpperCase()
+          : undefined;
+
+      if (normalizedRole === "ADMIN") {
+        return env.adminAppUrl;
+      }
+
       if (metadata?.isOnboarded !== true) {
         return ROUTES.onboarding;
       }

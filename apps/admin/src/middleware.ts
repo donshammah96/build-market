@@ -9,21 +9,37 @@ import {
 } from "@/lib/security/claims";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 
+// ---------------------------------------------------------------------------
+// Route matchers
+// ---------------------------------------------------------------------------
+
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/unauthorized(.*)",
   "/unauthorized-sign-in(.*)",
 ]);
+
 // Dashboard routes that require admin access
 const isDashboardRoute = createRouteMatcher([
   "/",
+  "/analytics(.*)",
+  "/audit(.*)",
+  "/leads(.*)",
   "/professionals(.*)",
   "/projects(.*)",
-  "/users(.*)",
+  "/properties(.*)",
+  "/services(.*)",
   "/settings(.*)",
+  "/stores(.*)",
+  "/users(.*)",
 ]);
+
 // Verification routes that require verification_admin or admin role
 const isVerificationRoute = createRouteMatcher(["/verifications(.*)"]);
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 /** Statuses that must be blocked before role checks are applied. */
 const BLOCKED_STATUSES = ["SUSPENDED", "BANNED", "DEACTIVATED", "ARCHIVED"];
@@ -39,39 +55,52 @@ function hasAllowedRole(
   authObj: MiddlewareAuthObject,
   allowedRoles: readonly AdminAccessRole[],
 ): boolean {
+  // Primary check: Clerk's built-in `has` helper (reads org roles / permissions)
   for (const role of allowedRoles) {
     if (authObj.has({ role })) {
       return true;
     }
   }
 
+  // Fallback: read role from publicMetadata propagated into session claims
   const metadata = parseSessionMetadata(authObj.sessionClaims);
   const normalizedRole = normalizeAdminAccessRole(metadata?.role);
   return normalizedRole ? allowedRoles.includes(normalizedRole) : false;
 }
 
+// ---------------------------------------------------------------------------
+// Middleware
+// ---------------------------------------------------------------------------
+
 export default clerkMiddleware(async (auth, req) => {
+  // 1. Always allow public routes (sign-in, unauthorized pages) without any
+  //    auth check — this is the primary defence against redirect loops.
   if (isPublicRoute(req)) {
-    return; // Allow public routes
+    return;
   }
 
+  // 2. Dev bypass: short-circuit all auth/role checks in local development
+  //    when DEV_ADMIN_BYPASS=true. Never enable in production.
   const isDev = adminEnvConfig.NODE_ENV === "development";
   const devBypass = adminEnvConfig.DEV_ADMIN_BYPASS;
 
   if (isDev && devBypass) {
-    return; // Allow access to all pages under dev bypass
+    return;
   }
 
+  // 3. Require an authenticated Clerk session for all non-public routes.
+  //    `redirectToSignIn` will send the user to the primary domain sign-in
+  //    (resolved by ClerkProvider's `signInUrl`) and append `redirect_url`
+  //    so that after sign-in they return to the page they requested.
   const authObj = await auth();
 
   if (!authObj.userId) {
     return authObj.redirectToSignIn({ returnBackUrl: req.url });
   }
 
-  // Blocked-user gate — checked before role authorization so that suspended /
-  // banned admin accounts cannot access any admin route even if they still hold
-  // a valid admin role claim. Redirecting to /unauthorized-sign-in (public)
-  // instead of /unauthorized (protected) prevents a redirect loop.
+  // 4. Blocked-user gate — fires before role checks so that suspended/banned
+  //    accounts cannot access any admin route even with valid role claims.
+  //    Redirects to /unauthorized-sign-in (public) to avoid a protect-loop.
   const metadata = parseSessionMetadata(authObj.sessionClaims);
   if (metadata?.status && BLOCKED_STATUSES.includes(metadata.status)) {
     const url = new URL("/unauthorized-sign-in", req.url);
@@ -79,7 +108,7 @@ export default clerkMiddleware(async (auth, req) => {
     return Response.redirect(url);
   }
 
-  // Check verification routes - requires admin or verification_admin
+  // 5. Verification routes — requires admin or verification_admin role
   if (isVerificationRoute(req)) {
     const isAuthorized = hasAllowedRole(
       authObj as MiddlewareAuthObject,
@@ -91,10 +120,10 @@ export default clerkMiddleware(async (auth, req) => {
         new URL("/unauthorized-sign-in?reason=not_admin", req.url),
       );
     }
-    return; // Allow access to verification routes
+    return;
   }
 
-  // Check dashboard routes - requires admin role
+  // 6. Dashboard routes — requires admin role only
   if (isDashboardRoute(req)) {
     const isAuthorized = hasAllowedRole(
       authObj as MiddlewareAuthObject,
@@ -106,10 +135,10 @@ export default clerkMiddleware(async (auth, req) => {
         new URL("/unauthorized-sign-in?reason=not_admin", req.url),
       );
     }
-    return; // Allow access to dashboard routes
+    return;
   }
 
-  // For any other protected route, require at least admin role
+  // 7. Default: any other protected route requires at least a known admin role
   const isAuthorized = hasAllowedRole(
     authObj as MiddlewareAuthObject,
     ADMIN_ROUTE_POLICY_MAP.defaultProtected,

@@ -20,9 +20,9 @@ export default function ProfessionalSignUpPage() {
             className="object-cover opacity-30 grayscale"
             priority
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/80 to-zinc-900/40" />
+          <div className="absolute inset-0 bg-linear-to-t from-zinc-900 via-zinc-900/80 to-zinc-900/40" />
           {/* Grid Pattern for Technical Feel */}
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]" />
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-size-[24px_24px]" />
         </div>
 
         {/* Logo - positioned relative to full panel */}
@@ -79,7 +79,7 @@ export default function ProfessionalSignUpPage() {
 
       {/* --- Right Panel: Sign Up Form --- */}
       <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 bg-zinc-50 lg:bg-white">
-        <div className="w-full max-w-[440px] space-y-8">
+        <div className="w-full max-w-110 space-y-8">
           {/* Mobile Header */}
           <div className="lg:hidden text-center mb-8">
             <Link href="/" className="inline-flex items-center gap-2 mb-6">
@@ -96,7 +96,7 @@ export default function ProfessionalSignUpPage() {
           <div className="bg-white p-1 rounded-2xl shadow-xl shadow-zinc-200/50 border border-zinc-100">
             <SignUp
               routing="hash"
-              forceRedirectUrl={ROUTES.professionalOnboarding}
+              fallbackRedirectUrl={ROUTES.professionalOnboarding}
               appearance={
                 {
                   layout: {

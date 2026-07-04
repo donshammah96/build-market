@@ -42,7 +42,7 @@ export default function Page() {
         <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 p-1">
           <div className="bg-white/60 backdrop-blur-sm rounded-xl p-6 sm:p-8">
             <SignIn
-              forceRedirectUrl="/"
+              fallbackRedirectUrl="/"
               appearance={{
                 elements: {
                   rootBox: "w-full",
