@@ -894,7 +894,7 @@ function buildEnvConfig() {
     apiUrl: getStringEnv("NEXT_PUBLIC_API_URL", "http://localhost:3500/api"),
     adminAppUrl: getStringEnv(
       "NEXT_PUBLIC_ADMIN_APP_URL",
-      "http://localhost:3005",
+      isProd ? "https://admin.buildmarket.app" : "http://localhost:3005",
     ),
     appVersion: getStringEnv("npm_package_version", "0.1.0"),
 

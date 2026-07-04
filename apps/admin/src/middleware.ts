@@ -96,7 +96,10 @@ export default clerkMiddleware(async (auth, req) => {
   const authObj = await auth();
 
   if (!authObj.userId) {
-    return authObj.redirectToSignIn({ returnBackUrl: req.url });
+    const signInResponse = authObj.redirectToSignIn({
+      returnBackUrl: req.url,
+    }) as unknown as Response;
+    return new NextResponse(signInResponse.body, signInResponse);
   }
 
   // 4. Blocked-user gate — fires before role checks so that suspended/banned

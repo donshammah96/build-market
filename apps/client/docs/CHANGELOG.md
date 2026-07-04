@@ -38,9 +38,11 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Fixed (Centralized Admin App URL Configuration)
 
+- **Admin App URL Environment Fallback**: Configured the client environment variable resolver `NEXT_PUBLIC_ADMIN_APP_URL` to fallback to `https://admin.buildmarket.app` in production/Vercel environments when not explicitly configured, preventing administrators from being incorrectly routed to `http://localhost:3005` in production.
 - **Admin Escape Hatch in Auth Callback**: Enhanced `/auth-callback` logic to intercept users with an authenticated `ADMIN` role and eject them to the designated `NEXT_PUBLIC_ADMIN_APP_URL`, bypassing standard client onboarding gates.
 - **Onboarding Gating Bypass Hardening**: Resolved a critical navigation race condition where un-onboarded accounts could access home dashboards via direct navigation or browser back-buttons. The system-wide default state for the `User` model in `schema.prisma` is hardened from `ACTIVE` to `ONBOARDING`, forcing middleware gates to evaluate incomplete user sessions as restricted by default until profile finalization occurs.
 - **Auth Callback Verification Coverage**: Introduced isolated unit tests covering role-based matrix routing to guarantee correct dashboard redirection variants for `CLIENT` vs `ADMIN` roles.
+- **Auth Callback Hook Dependency**: Added missing `router` dependency to `checkAndRedirect` `useCallback` dependency array to resolve an ESLint warning.
 
 **Files changed:**
 
