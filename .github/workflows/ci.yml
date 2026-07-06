@@ -118,6 +118,9 @@ jobs:
       - name: Production dependency audit
         run: pnpm run deps:audit
 
+      - name: Build shared packages
+        run: pnpm run build --filter="@build/*"
+
       # Run static checks first for fast feedback — exit before running tests
       # if formatting, lint, or types fail.
       - name: Check formatting
