@@ -131,7 +131,7 @@ jobs:
         # set of required variables so the env contract passes without a real
         # database or Clerk account.
         env:
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
           CLERK_SECRET_KEY: sk_test_ci_placeholder
           CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
           DATABASE_URL: postgresql://ci:ci@localhost:5432/build_market_ci
@@ -170,7 +170,7 @@ jobs:
     # worst-case segments with a small buffer.
     timeout-minutes: 25
     env:
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
       CLERK_SECRET_KEY: sk_test_ci_placeholder
       CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
       DATABASE_URL: postgresql://ci:ci@localhost:5432/build_market_ci
