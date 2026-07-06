@@ -1,5 +1,5 @@
 import { Queue, type JobsOptions } from "bullmq";
-import { createRedisConnection } from "./redis-connection";
+import { createRedisConnection } from "@build/redis/tcp";
 
 export interface ExportJobData {
   exportId: string;

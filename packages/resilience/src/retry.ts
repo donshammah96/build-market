@@ -2,9 +2,9 @@
  * Intelligent retry logic with exponential backoff and jitter
  */
 
-import { RetryConfig } from "./types";
-import { Logger } from "./logger";
-import { getDefaultRetryConfig } from "./config";
+import { RetryConfig } from "./types.js";
+import { Logger } from "./logger.js";
+import { getDefaultRetryConfig } from "./config.js";
 
 export class RetryError extends Error {
   constructor(

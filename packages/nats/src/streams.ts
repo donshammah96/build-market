@@ -5,8 +5,8 @@ import {
   DiscardPolicy,
   StreamInfo,
 } from "nats";
-import { createNatsClient } from "./client";
-import type { NatsConfig, StreamOptions } from "./types";
+import { createNatsClient } from "./client.js";
+import type { NatsConfig, StreamOptions } from "./types.js";
 
 function isNotFoundError(error: unknown): boolean {
   if (!error || typeof error !== "object") {

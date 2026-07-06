@@ -161,6 +161,7 @@ export default function AuthCallbackPage() {
     getToken,
     isOnboardingTransition,
     performRedirect,
+    router,
     user,
   ]);
 

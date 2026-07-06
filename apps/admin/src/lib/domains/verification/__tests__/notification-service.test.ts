@@ -25,6 +25,9 @@ vi.mock("@/lib/domains/verification/internal/notification-queue", () => ({
 // Mock dependencies
 vi.mock("@build/db", () => ({
   prisma: {
+    user: {
+      findUnique: vi.fn(),
+    },
     professionalProfile: {
       findUnique: vi.fn(),
     },

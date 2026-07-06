@@ -7,21 +7,17 @@ import {
   ResilienceOptions,
   OperationResult,
   OperationCriticality,
-} from "./types";
-import {
-  withTimeout,
-  withCriticalityTimeout,
-  DEFAULT_TIMEOUTS,
-} from "./timeout";
-import { withRetry, DEFAULT_RETRY_CONFIG } from "./retry";
+} from "./types.js";
+import { withTimeout, DEFAULT_TIMEOUTS } from "./timeout.js";
+import { withRetry } from "./retry.js";
 import {
   CircuitBreakerRegistry,
   DEFAULT_CIRCUIT_BREAKER_CONFIG,
-} from "./circuit-breaker";
-import { CacheRegistry, DEFAULT_CACHE_CONFIG } from "./cache";
-import { withFallback } from "./fallback";
-import { MetricsCollector } from "./metrics";
-import { StructuredLogger } from "./logger";
+} from "./circuit-breaker.js";
+import { CacheRegistry, DEFAULT_CACHE_CONFIG } from "./cache.js";
+import { withFallback } from "./fallback.js";
+import { MetricsCollector } from "./metrics.js";
+import { StructuredLogger } from "./logger.js";
 
 /**
  * Resilient operation executor

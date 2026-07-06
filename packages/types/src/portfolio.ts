@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { CountyEnum } from "./auth";
-import { ProjectTypeEnum } from "./project";
+import { CountyEnum } from "./auth.js";
+import { ProjectTypeEnum } from "./project.js";
 
 // ========================================================
 // ENUMS

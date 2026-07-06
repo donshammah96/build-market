@@ -144,7 +144,7 @@ export function getBullMQConnectionSummary(): BullMQConnectionSummary {
 }
 
 /**
- * Build BullMQ connection options.r BullMQ.
+ * Build BullMQ connection options.
  *
  * Returning plain options (instead of a concrete ioredis instance) avoids
  * cross-package type incompatibilities when multiple ioredis versions are

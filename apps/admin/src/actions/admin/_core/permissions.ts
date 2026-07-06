@@ -9,6 +9,8 @@ import {
 } from "@/lib/security/claims";
 import type { AdminAccessRole } from "@/lib/security/authorization-policy";
 import { securityRepository } from "@/lib/security/repository";
+import { getAdminLogger } from "@/lib/infrastructure/logger";
+import { CorrelationIdManager } from "@build/resilience";
 
 const VERIFICATION_ALLOWED_ROLES = ["admin", "verification_admin"] as const;
 
@@ -34,6 +36,7 @@ function toAdminAccessRole(value: unknown): AdminAccessRole | undefined {
 }
 
 export async function getAdminPermissions(): Promise<AdminPermissions> {
+  const startTime = Date.now();
   const isDev = adminEnvConfig.NODE_ENV === "development";
   const devBypass = adminEnvConfig.DEV_ADMIN_BYPASS;
 
@@ -60,7 +63,27 @@ export async function getAdminPermissions(): Promise<AdminPermissions> {
     };
   }
 
-  const user = await securityRepository.findUserPermissions(clerkId);
+  let user = null;
+  try {
+    user = await securityRepository.findUserPermissions(clerkId);
+  } catch (error) {
+    const logger = getAdminLogger();
+    logger.error({
+      correlationId: CorrelationIdManager.get() || "unknown",
+      operationName: "get_admin_permissions",
+      adminRole: "unknown",
+      outcome: "internal_error",
+      durationMs: Date.now() - startTime,
+      errorMessage:
+        error instanceof Error ? error.message : "Prisma connection failed",
+    });
+    return {
+      role: undefined,
+      granularRole: null,
+      canAccess: false,
+      clerkId,
+    };
+  }
 
   if (!user) {
     return {

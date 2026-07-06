@@ -1,4 +1,4 @@
-import { normalizeRole, type AppRole } from "./roles";
+import { normalizeRole, type AppRole } from "./roles.js";
 
 export type MiddlewareSessionMetadata = {
   role?: AppRole;

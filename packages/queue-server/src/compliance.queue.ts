@@ -1,5 +1,5 @@
 import { Queue } from "bullmq";
-import { createRedisConnection } from "./redis-connection";
+import { createRedisConnection } from "@build/redis/tcp";
 import { AuditAction, IncidentSeverity } from "@build/db";
 
 export const ComplianceJobs = {

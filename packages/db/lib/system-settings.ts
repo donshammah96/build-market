@@ -6,7 +6,7 @@
  * Implements a Singleton pattern for efficient caching.
  */
 import { z } from "zod";
-import { prisma } from "./prisma";
+import { prisma } from "./prisma.js";
 import { Profession } from "@prisma/client";
 
 // =============================================================================

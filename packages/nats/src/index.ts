@@ -8,20 +8,24 @@ export {
   isNatsConnected,
   closeNatsConnection,
   createServiceClient,
-} from "./client";
+} from "./client.js";
 
 // Producer
-export { JetStreamProducer, createProducer, publishMessage } from "./producer";
+export {
+  JetStreamProducer,
+  createProducer,
+  publishMessage,
+} from "./producer.js";
 
 // Consumer
-export { JetStreamConsumer, createConsumer } from "./consumer";
+export { JetStreamConsumer, createConsumer } from "./consumer.js";
 
 // Streams
 export {
   StreamManager,
   createStreamManager,
   initializeStreams,
-} from "./streams";
+} from "./streams.js";
 
 // Types
 export type {
@@ -38,6 +42,6 @@ export type {
   OrderEvent,
   ProjectEvent,
   NotificationEvent,
-} from "./types";
+} from "./types.js";
 
-export { StreamPresets } from "./types";
+export { StreamPresets } from "./types.js";

@@ -15,9 +15,10 @@
     "check-types": "turbo run check-types",
     "sync:instructions-aligned-date": "node ./scripts/sync-instruction-alignment-date.mjs",
     "check:instructions": "pnpm run sync:instructions-aligned-date && node ./scripts/check-instructions-frontmatter.mjs",
+    "check:workspace-versions": "node ./scripts/check-package-manager-consistency.mjs",
     "test": "turbo run test",
-    "validate": "pnpm run format && pnpm run format:check && pnpm run lint && pnpm run check-types && pnpm run test",
-    "ci:local": "pnpm run deps:audit && pnpm run format:check && pnpm run lint && pnpm run client:check-env-contract && pnpm run client:check-security-drift && pnpm run client:report-security-drift:strict && pnpm run check-types && pnpm run test",
+    "validate": "pnpm run check:workspace-versions && pnpm run format && pnpm run format:check && pnpm run lint && pnpm run check-types && pnpm run test",
+    "ci:local": "pnpm run check:workspace-versions && pnpm run deps:audit && pnpm run format:check && pnpm run lint && pnpm run client:check-env-contract && pnpm run client:check-security-drift && pnpm run client:report-security-drift:strict && pnpm run check-types && pnpm run test",
     "ci:local:full": "pnpm install --frozen-lockfile && pnpm run ci:local",
     "clean": "turbo run clean && rimraf node_modules",
     "clean:cache": "turbo daemon clean && rimraf .turbo",
@@ -76,19 +77,19 @@
     "test:onboarding-ui-a11y:single-worker": "pnpm -C apps/client exec vitest run --pool=threads --maxWorkers=1 __tests__/app/onboarding/onboarding-route-ui.test.tsx __tests__/app/onboarding/onboarding-form-a11y.test.tsx"
   },
   "devDependencies": {
-    "next": "16.2.6",
+    "next": "catalog:",
     "ngrok": "5.0.0-beta.2",
-    "prettier": "^3.6.2",
+    "prettier": "catalog:",
     "rimraf": "^6.1.3",
-    "turbo": "^2.9.5",
-    "typescript": "^5.9.3"
+    "turbo": "catalog:",
+    "typescript": "catalog:"
   },
   "packageManager": "pnpm@11.1.2",
   "engines": {
     "node": "24.x",
-    "pnpm": ">=11"
+    "pnpm": ">=11.1.2 <12.0.0"
   },
   "dependencies": {
-    "js-cookie": "3.0.6"
+    "js-cookie": "catalog:"
   }
 }

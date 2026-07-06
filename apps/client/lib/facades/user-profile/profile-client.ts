@@ -44,17 +44,27 @@ export function normalizeCompleteProfileInput(
     documents: data.documents
       ?.filter(
         (
-          document,
-        ): document is typeof document & {
+          document: NonNullable<
+            ProfessionalOnboardingData["documents"]
+          >[number],
+        ): document is NonNullable<
+          ProfessionalOnboardingData["documents"]
+        >[number] & {
           uploadId: string;
         } => typeof document.uploadId === "string",
       )
-      .map((document) => ({
-        uploadId: document.uploadId,
-        previewUrl: document.previewUrl,
-        category: document.category,
-        title: document.title,
-      })),
+      .map(
+        (
+          document: NonNullable<
+            ProfessionalOnboardingData["documents"]
+          >[number] & { uploadId: string },
+        ) => ({
+          uploadId: document.uploadId,
+          previewUrl: document.previewUrl,
+          category: document.category,
+          title: document.title,
+        }),
+      ),
     ...(data.stores?.length ? { storeData: data.stores } : {}),
     ...(data.properties?.length ? { propertyData: data.properties } : {}),
     ...(data.boardRegistrationNumber

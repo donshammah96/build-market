@@ -1,7 +1,7 @@
 import { StringCodec, headers, PubAck } from "nats";
 import { propagation, context } from "@opentelemetry/api";
-import { getNatsClient, createNatsClient } from "./client";
-import type { NatsClient, NatsConfig, PublishOptions } from "./types";
+import { getNatsClient, createNatsClient } from "./client.js";
+import type { NatsClient, NatsConfig, PublishOptions } from "./types.js";
 
 const sc = StringCodec();
 
