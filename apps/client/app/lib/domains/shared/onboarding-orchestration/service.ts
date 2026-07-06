@@ -58,13 +58,15 @@ function toCreateStoreInput(store: StoreOnboardingData): CreateStoreInput {
     kraPin: store.kraPin,
     acceptsCard: store.acceptsCard,
     acceptsCash: store.acceptsCash,
-    images: (store.images ?? []).map((image: NonNullable<StoreOnboardingData["images"]>[number]) => ({
-      assetId: image.assetId,
-      category: image.category ?? "INTERIOR",
-      caption: image.caption,
-      isMain: image.isMain ?? false,
-      sortOrder: image.sortOrder,
-    })),
+    images: (store.images ?? []).map(
+      (image: NonNullable<StoreOnboardingData["images"]>[number]) => ({
+        assetId: image.assetId,
+        category: image.category ?? "INTERIOR",
+        caption: image.caption,
+        isMain: image.isMain ?? false,
+        sortOrder: image.sortOrder,
+      }),
+    ),
   };
 }
 
