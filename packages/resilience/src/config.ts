@@ -9,7 +9,7 @@ import {
   CacheConfig,
   TimeoutConfig,
   LogLevel,
-} from "./types";
+} from "./types.js";
 
 // ============================================
 // Environment Parsing Utilities

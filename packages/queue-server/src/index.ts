@@ -2,10 +2,10 @@ export {
   getBullMQConnectionOptions,
   getBullMQConnectionSummary,
   createRedisConnection,
-} from "./redis-connection.js";
+} from "@build/redis/tcp";
 export type {
   BullMQRedisConnectionOptions,
   BullMQConnectionSummary,
-} from "./redis-connection.js";
-export * from "./compliance.queue";
-export * from "./export.queue";
+} from "@build/redis/tcp";
+export * from "./compliance.queue.js";
+export * from "./export.queue.js";

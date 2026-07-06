@@ -14,13 +14,13 @@ import {
   SpanKind,
   SpanStatusCode,
 } from "@opentelemetry/api";
-import { createNatsClient } from "./client";
+import { createNatsClient } from "./client.js";
 import type {
   NatsClient,
   NatsConfig,
   TopicConfig,
   MessagePayload,
-} from "./types";
+} from "./types.js";
 
 const sc = StringCodec();
 

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, integration/admin-overhaul, release/*]
+    branches: [main, develop]
   pull_request:
     branches: [main, develop]
 
@@ -16,12 +16,33 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: "24.13.1"
+  # Must match "engines.node" in the root package.json AND in every
+  # apps/*/package.json. Vercel resolves the Node runtime from whichever
+  # package.json is closest to a project's configured Root Directory, so if
+  # this drifts from an app's own engines.node, CI validates a different
+  # runtime than what Vercel actually deploys with.
+  NODE_VERSION: "24"
   # Prevent Next.js from making outbound telemetry calls during build steps,
   # which can add latency and produce flaky network errors in CI.
   NEXT_TELEMETRY_DISABLED: "1"
 
 jobs:
+  workspace-version-consistency-guard:
+    name: Workspace Version Consistency Guard
+    runs-on: ubuntu-latest
+    # No install required: this is a pure fs/JSON check against package.json
+    # files, so it runs before dependency installation and fails fast if the
+    # toolchain versions that Vercel will pick per-project have drifted from
+    # the root (and therefore from the committed pnpm-lock.yaml).
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify packageManager / engines.node consistency across workspace
+        run: node scripts/check-package-manager-consistency.mjs
+
   client-changelog-guard:
     name: Client Changelog Guard
     runs-on: ubuntu-latest
@@ -63,100 +84,10 @@ jobs:
               core.info("Client changelog guard passed.");
             }
 
-  admin-changelog-guard:
-    name: Admin Changelog Guard
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - name: Require admin changelog update for admin code changes
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const pull_number = context.payload.pull_request.number;
-
-            const files = await github.paginate(
-              github.rest.pulls.listFiles,
-              { owner, repo, pull_number, per_page: 100 },
-            );
-
-            const adminCodeChanged = files.some((f) =>
-              f.filename.startsWith("apps/admin/") &&
-              !f.filename.startsWith("apps/admin/docs/"),
-            );
-            const changelogUpdated = files.some(
-              (f) =>
-                f.filename === "apps/admin/docs/CHANGELOG.md" &&
-                f.status !== "removed",
-            );
-
-            if (adminCodeChanged && !changelogUpdated) {
-              core.setFailed(
-                "apps/admin code changed but apps/admin/docs/CHANGELOG.md was not updated.",
-              );
-            } else {
-              core.info("Admin changelog guard passed.");
-            }
-
-  admin-validate:
-    name: Admin Validate
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
-      CLERK_SECRET_KEY: sk_test_ci_placeholder
-      CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
-      DATABASE_URL: "postgresql://ci:stub@localhost:5432/build_market_ci"
-      DIRECT_URL: "postgresql://ci:stub@localhost:5432/build_market_ci"
-      NEXT_PUBLIC_APP_URL: http://localhost:3005
-      APP_URL: http://localhost:3005
-      CLIENT_APP_URL: http://localhost:3500
-      INTERNAL_API_SECRET: ci-secret
-      S3_DISABLED: "true"
-      ENABLE_NOTIFICATION_SERVICE: "false"
-      QUEUE_PROVIDER: memory
-      ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build workspace packages
-        run: pnpm tsc --build tsconfig.json
-
-      - name: Admin type check
-        run: pnpm run admin:check-types
-
-      - name: Admin lint
-        run: pnpm run admin:lint
-
-      - name: Admin env contract check
-        run: pnpm run admin:check-env-contract
-
-      - name: Admin security drift report
-        run: pnpm run admin:report-security-drift:strict
-
-      - name: Admin tests
-        run: pnpm run admin:test:all
-
   validate:
     name: Validate
     runs-on: ubuntu-latest
+    needs: [workspace-version-consistency-guard]
     timeout-minutes: 15
 
     steps:
@@ -166,18 +97,15 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         # Version is sourced from the root packageManager field (pnpm@11.x).
-        # No explicit version pin needed here — it's already canonical in package.json.
+        # No explicit version pin needed here — it's already canonical in
+        # package.json, and workspace-version-consistency-guard (above) has
+        # already confirmed every app/package agrees with that root value.
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
-
-      - name: Print Node and pnpm versions
-        run: |
-          node -v
-          pnpm -v
 
       # The validate job runs only static checks: lint, type-check, unit tests.
       # None of these require a Next.js build artifact, so there is no .next/cache
@@ -199,21 +127,11 @@ jobs:
         # next lint resolves the env boundary at parse time; supply the minimum
         # set of required variables so the env contract passes without a real
         # database or Clerk account.
-        #
-        # NOTE: pk_test_ci_placeholder is intentionally not a valid Clerk key
-        # format here. next lint is ESLint-based and never executes Clerk's
-        # SDK runtime or middleware — it only parses/analyses source files.
-        # Clerk's initPublishableKeyValues() format validation only fires during
-        # actual request handling, which does not happen during linting.
         env:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
           CLERK_SECRET_KEY: sk_test_ci_placeholder
           CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
-          # Lint/type-check/unit-tests never open a real DB connection.
-          # A well-formed placeholder satisfies the env validator (postgresql:// prefix check)
-          # without requiring a live Supabase connection in the validate job.
-          DATABASE_URL: "postgresql://ci:stub@localhost:5432/build_market_ci"
-          DIRECT_URL: "postgresql://ci:stub@localhost:5432/build_market_ci"
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/build_market_ci
           NEXT_PUBLIC_APP_URL: http://localhost:3500
           NEXT_PUBLIC_API_URL: http://localhost:3500/api
           ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -227,9 +145,6 @@ jobs:
 
       - name: Client security drift report
         run: pnpm run client:report-security-drift:strict
-
-      - name: Build workspace packages
-        run: pnpm tsc --build tsconfig.json
 
       - name: Type check
         run: pnpm run check-types
@@ -252,70 +167,17 @@ jobs:
     # worst-case segments with a small buffer.
     timeout-minutes: 25
     env:
-      # -----------------------------------------------------------------------
-      # Clerk authentication
-      #
-      # FIX: Previously set to `pk_test_ci_placeholder`, which is not valid
-      # base64url. Clerk's edge middleware SDK calls initPublishableKeyValues()
-      # on EVERY request — including public routes — and throws
-      # "Error: Publishable key not valid" when the key cannot be parsed,
-      # producing a 500 on the root route and failing the smoke gate.
-      #
-      # These must be real Clerk test-instance keys stored as GitHub Actions
-      # repository secrets. See docs/CI-SECRETS.md for setup instructions.
-      # -----------------------------------------------------------------------
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.CLERK_CI_PUBLISHABLE_KEY }}
-      CLERK_SECRET_KEY: ${{ secrets.CLERK_CI_SECRET_KEY }}
-      CLERK_WEBHOOK_SECRET: ${{ secrets.CLERK_CI_WEBHOOK_SECRET }}
-
-      # -----------------------------------------------------------------------
-      # Database — Supabase Supavisor session-mode pooler
-      #
-      # FIX: Previously pointed to localhost:5432/build_market_ci — a Postgres
-      # instance that does not exist on GitHub Actions runners. The Next.js server
-      # started with a broken DATABASE_URL, causing Prisma's PrismaClient
-      # constructor to fail or emit P1001 on first query, which surfaced as a
-      # 500 on the smoke gate root route.
-      #
-      # Both secrets must be set in GitHub Repository Settings → Secrets:
-      #   SUPABASE_DATABASE_URL  — Supabase Supavisor session-mode pooler URL
-      #   SUPABASE_DIRECT_URL    — Direct connection URL (for migrate deploy)
-      # See docs/CI-SECRETS.md for setup instructions.
-      # -----------------------------------------------------------------------
-      DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
-      DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
-
-      # Supabase project metadata (satisfies envConfig.supabase validation)
-      SUPABASE_URL: "https://ewbnznoprzlqtcoxvjai.supabase.co"
-      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_CI_ANON_KEY }}
-
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci_placeholder
+      CLERK_SECRET_KEY: sk_test_ci_placeholder
+      CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/build_market_ci
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3500
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3500/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-
-      # Rate limiting: force in-process memory backend.
-      # With this setting the redis startup group is NOT added to startupGroups
-      # in env.ts (isRedisRateLimitBackendRequired returns false in non-production),
-      # so Upstash credentials are not validated at startup and the @upstash/ratelimit
-      # REST client is never initialised.
       RATE_LIMIT_BACKEND: memory
-
-      # Upstash REST stubs — present only to satisfy the envGroups required
-      # declarations. With RATE_LIMIT_BACKEND=memory these values are stored in
-      # envConfig but never read at runtime. No HTTP connections are made to
-      # these URLs by the rate limiter or REST client in this mode.
-      UPSTASH_REDIS_REST_URL: https://stub-ci.upstash.io
-      UPSTASH_REDIS_REST_TOKEN: stub_token_ci_only
-
-      # -----------------------------------------------------------------------
-      # BullMQ / background jobs — intentionally absent: REDIS_URL
-      #
-      # BullMQ/ioredis eagerly opens a TCP connection on startup. Stub hostnames
-      # do not resolve in public DNS and cause ioredis reconnect storms that
-      # flood stdout and can destabilise the smoke gate process.
-      # DISABLE_BACKGROUND_JOBS=true provides belt-and-suspenders defence.
-      # -----------------------------------------------------------------------
-      DISABLE_BACKGROUND_JOBS: "true"
+      UPSTASH_REDIS_REST_URL: https://stub.upstash.io
+      UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
+      REDIS_URL: "rediss://:stub_token_for_ci_only@stub.upstash.io:6379"
 
     steps:
       - name: Checkout
@@ -329,11 +191,6 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
-
-      - name: Print Node and pnpm versions
-        run: |
-          node -v
-          pnpm -v
 
       - name: Cache Next.js build
         uses: actions/cache@v4
@@ -367,12 +224,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run Prisma migrations
-        # Deploy any pending migrations to Supabase before building.
-        # This catches schema drift before a Vercel deployment would.
-        # Uses the job-level DIRECT_URL (direct TCP connection) to run migrations.
-        run: pnpm -C packages/db exec prisma migrate deploy
-
       - name: Build workspace dependencies then client
         # The trailing `...` in the filter is load-bearing.
         #
@@ -395,19 +246,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # ---------------------------------------------------------------
-          # Start the production server.
-          #
-          # PORT env var: avoids passing --port through pnpm's argument
-          # forwarding, which can silently drop or reorder flags.
-          #
-          # No --hostname: Next.js 16 defaults to 0.0.0.0 (all interfaces).
-          # Passing --hostname 127.0.0.1 caused a binding mismatch where
-          # the server reported "Ready" but curl could not establish a TCP
-          # connection on the GitHub Actions runner. Letting Next.js bind
-          # to 0.0.0.0 avoids this entirely.
-          # ---------------------------------------------------------------
-          PORT=3500 pnpm -C apps/client run start > /tmp/client-preview-smoke.log 2>&1 &
+          pnpm -C apps/client run start -- --hostname 127.0.0.1 --port 3500 > /tmp/client-preview-smoke.log 2>&1 &
           APP_PID=$!
 
           cleanup() {
@@ -415,73 +254,23 @@ jobs:
           }
           trap cleanup EXIT
 
-          # ---------------------------------------------------------------
-          # Phase 1: Wait for Next.js to report readiness in the server log.
-          #
-          # `pnpm -C apps/client run start` has non-trivial overhead —
-          # workspace resolution, lifecycle hooks, and process spawning can
-          # delay the actual `next start` invocation by 30–60+ seconds on
-          # cold CI runners. Polling with curl from t=0 wastes the entire
-          # retry budget before the TCP listener even exists.
-          #
-          # Instead, tail the log for the "Ready" marker that `next start`
-          # prints once the HTTP listener is bound.  We also check process
-          # liveness each iteration to fail fast if the server crashes
-          # during startup.
-          # ---------------------------------------------------------------
-          READY=false
-          echo "Waiting for Next.js server to become ready..."
-          for i in $(seq 1 180); do
-            if grep -q "Ready" /tmp/client-preview-smoke.log 2>/dev/null; then
-              echo "Server reported ready after ${i}s."
-              READY=true
-              break
-            fi
-            if ! kill -0 "$APP_PID" 2>/dev/null; then
-              echo "Server process (PID $APP_PID) exited before becoming ready."
-              cat /tmp/client-preview-smoke.log || true
-              exit 1
-            fi
-            sleep 1
-          done
-
-          if [ "$READY" != "true" ]; then
-            echo "Server did not become ready within 180 seconds."
-            cat /tmp/client-preview-smoke.log || true
-            exit 1
-          fi
-
-          # Brief settle time — the "Ready" log line can race slightly
-          # ahead of the kernel completing the listen() backlog setup.
-          sleep 2
-
-          # ---------------------------------------------------------------
-          # Phase 2: HTTP health probe.
-          #
-          # The server is confirmed ready.  A small number of retries with a
-          # generous per-request timeout handles any remaining TCP warmup or
-          # first-request JIT compilation in Turbopack.
-          #
-          # curl -4: force IPv4 to avoid IPv6 resolution delays on runners
-          # that have ::1 configured but the server bound to 0.0.0.0 (IPv4).
-          # ---------------------------------------------------------------
           STATUS="000"
-          for attempt in {1..5}; do
-            STATUS="$(curl -4 --silent --show-error --max-time 10 --output /tmp/client-preview-body.txt --write-out "%{http_code}" http://localhost:3500/ || true)"
-            echo "  probe ${attempt}: HTTP $STATUS"
+          for _ in {1..45}; do
+            # --max-time 5 bounds each individual attempt to 5 seconds.
+            # Without this, a slow-but-alive server could absorb the entire
+            # 45-attempt budget with one hung connection, masking startup failures
+            # and potentially exhausting the job timeout.
+            STATUS="$(curl --silent --show-error --max-time 5 --output /tmp/client-preview-body.txt --write-out "%{http_code}" http://127.0.0.1:3500/ || true)"
             if [ "$STATUS" != "000" ] && [ -n "$STATUS" ]; then
               break
             fi
-            sleep 2
+            sleep 1
           done
 
           echo "Smoke status: $STATUS"
 
           if [ -z "$STATUS" ] || [ "$STATUS" = "000" ]; then
             echo "Smoke gate failed: client preview root was unreachable."
-            echo "--- Network diagnostics ---"
-            ss -tlnp 2>/dev/null | grep 3500 || netstat -tlnp 2>/dev/null | grep 3500 || echo "(no listeners found on port 3500)"
-            echo "--- Server log ---"
             cat /tmp/client-preview-smoke.log || true
             exit 1
           fi

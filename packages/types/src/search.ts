@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CountyEnum, ProfessionEnum, StoreCategoryEnum } from "./auth";
+import { CountyEnum, ProfessionEnum, StoreCategoryEnum } from "./auth.js";
 
 // ========================================================
 // SEARCH SCHEMAS

@@ -9,7 +9,7 @@ import type {
   NatsClient,
   ConnectionMetrics,
   ConnectionStatus,
-} from "./types";
+} from "./types.js";
 
 /**
  * Singleton NATS client instance

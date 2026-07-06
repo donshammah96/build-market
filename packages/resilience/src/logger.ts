@@ -2,9 +2,9 @@
  * Structured logging with correlation IDs and contextual information
  */
 
-import { LogContext, LogLevel } from "./types";
-import type { Logger } from "./types";
-import { getConfig } from "./config";
+import { LogContext, LogLevel } from "./types.js";
+import type { Logger } from "./types.js";
+import { getConfig } from "./config.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 export interface LogEntry {
@@ -20,7 +20,7 @@ export interface LogEntry {
 }
 
 // Re-export Logger type for convenience
-export type { Logger } from "./types";
+export type { Logger } from "./types.js";
 
 /**
  * Structured logger implementation

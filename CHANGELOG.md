@@ -29,6 +29,12 @@ All notable changes to this project will be documented in this file.
 
 - **Developer Workflow**: Added a terminal hardening toolchain for deterministic command execution. Introduced the repo runbook in `docs/TERMINAL_RUNBOOK.md`, the clean PowerShell wrapper in `scripts/invoke-clean.ps1`, wrapper usage notes in `scripts/README.md`, stable root scripts in `package.json` (`redis:healthcheck`, `redis:audit`, `admin:check-types`, `queue-server:check-types`, `client:tsc-noemit`, `client:test:*`, `db:migrate:deploy`, `db:generate`, `db:seed`), and a reduced task surface in `.vscode/tasks.json` so recurring validation no longer depends on shared-shell cwd state, duplicate task variants, or inline shell logic.
 
+### Changed
+
+- **Workspace Build Pipeline**: Overhauled the compilation, packaging, and module resolution system across all workspace packages under `packages/` to target modern ESM outputs compiled to `dist/`. Added prepublish safeguards (`"prepack": "pnpm run build"`) and aligned package manifests to declare `"type": "module"` with NodeNext module resolution, and added explicit `.js` suffixes to relative imports inside package source code.
+- **Developer Workflow**: Hardened package clean scripts to remove `dist/` and `tsconfig.tsbuildinfo` concurrently to prevent stale compiler cache during TypeScript incremental builds.
+- **Redis Integration**: Decoupled the TCP worker connection driver setup (`ioredis`) from `@build/queue-server` into `@build/redis/tcp` (compiling to `dist/tcp.js`). This isolates worker-specific TCP drivers, permitting serverless edge functions and client applications to import standard `@build/redis` using HTTP connections without bundling unnecessary, heavy TCP drivers.
+
 ### Fixed (Admin App Fallback and Runtime Errors)
 
 - **Client**: Fixed `NEXT_PUBLIC_ADMIN_APP_URL` fallback defaulting to `http://localhost:3005` in production/Vercel environments. If the variable is not explicitly configured, it now dynamically falls back to `https://admin.buildmarket.app` in production, preventing incorrect redirects after admin authentication callbacks.

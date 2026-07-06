@@ -1,6 +1,6 @@
 import z from "zod";
-import { professionalLicenseSchema } from "./license";
-import { professionalDocumentSchema } from "./documents";
+import { professionalLicenseSchema } from "./license.js";
+import { professionalDocumentSchema } from "./documents.js";
 import {
   COUNTIES,
   PROFESSIONS,
