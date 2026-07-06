@@ -29,8 +29,10 @@
     "ioredis": "catalog:"
   },
   "devDependencies": {
+    "@build/eslint-config": "workspace:*",
     "@build/typescript-config": "workspace:*",
     "@types/node": "catalog:",
+    "eslint": "catalog:",
     "typescript": "catalog:"
   }
 }

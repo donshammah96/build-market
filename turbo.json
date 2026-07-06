@@ -1,6 +1,8 @@
 {
   "ui": "tui",
-  "globalDependencies": [".env*"],
+  "globalDependencies": [
+    ".env*"
+  ],
   "globalEnv": [
     "NODE_ENV",
     "NEXT_PUBLIC_APP_URL",
@@ -124,9 +126,19 @@
   "tasks": {
     "build": {
       "cache": true,
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**", "build/**"],
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "dist/**",
+        "build/**"
+      ],
       "env": [
         "NODE_ENV",
         "DATABASE_URL",
@@ -178,11 +190,14 @@
         "STORAGE_BUCKET",
         "STORAGE_REGION",
         "STORAGE_PROVIDER",
-        "CDN_URL"
+        "CDN_URL",
+        "NEXT_PHASE"
       ]
     },
     "lint": {
-      "dependsOn": ["^lint"],
+      "dependsOn": [
+        "^lint"
+      ],
       "cache": true,
       "env": [
         "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
@@ -199,20 +214,27 @@
         "NATS_TIMEOUT",
         "NATS_TOKEN",
         "NATS_USER",
-        "NATS_PASS"
+        "NATS_PASS",
+        "NEXT_PHASE"
       ]
     },
     "check-types": {
-      "dependsOn": ["^check-types"],
+      "dependsOn": [
+        "^check-types"
+      ],
       "cache": true
     },
     "dev": {
       "cache": false,
       "persistent": true,
-      "dependsOn": ["^build"]
+      "dependsOn": [
+        "^build"
+      ]
     },
     "test": {
-      "dependsOn": ["^build"],
+      "dependsOn": [
+        "^build"
+      ],
       "cache": true,
       "inputs": [
         "src/**/*.ts",
