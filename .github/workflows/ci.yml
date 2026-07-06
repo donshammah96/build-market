@@ -169,6 +169,11 @@ jobs:
     # ~4–6 min warm) + server startup + smoke loop. Keep above the sum of those
     # worst-case segments with a small buffer.
     timeout-minutes: 25
+    services:
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
     env:
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
       CLERK_SECRET_KEY: sk_test_ci_placeholder
@@ -180,7 +185,7 @@ jobs:
       RATE_LIMIT_BACKEND: memory
       UPSTASH_REDIS_REST_URL: https://stub.upstash.io
       UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
-      REDIS_URL: "rediss://:stub_token_for_ci_only@stub.upstash.io:6379"
+      REDIS_URL: redis://localhost:6379
 
     steps:
       - name: Checkout
