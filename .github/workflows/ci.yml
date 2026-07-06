@@ -174,6 +174,28 @@ jobs:
         image: redis:alpine
         ports:
           - 6379:6379
+      # Added: DATABASE_URL below points at 127.0.0.1:5432, but this job is the
+      # only one that runs a real `next start` (validate only lints/tests, it
+      # never boots the server). Without a real Postgres here, anything on the
+      # boot path that touches the DB (instrumentation, a warm Prisma connect,
+      # middleware) retries/backs off against a closed port for minutes before
+      # falling through — which is what was causing the smoke probe to time out
+      # for ~4-5 minutes before the process ever bound the port. GitHub Actions
+      # waits for the configured healthcheck to pass before starting job steps,
+      # so no extra wait step is required here.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: build_market_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ci -d build_market_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
     env:
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
       CLERK_SECRET_KEY: sk_test_ci_placeholder
@@ -232,6 +254,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Added: schema must exist before `next start` boots, or any DB read on
+      # the request/boot path fails (or, per the postgres-less setup this
+      # replaces, hangs) instead of the root route rendering cleanly.
+      - name: Apply database migrations
+        run: pnpm run db:migrate:deploy
+
       - name: Build workspace dependencies then client
         # The trailing `...` in the filter is load-bearing.
         #
@@ -252,7 +280,7 @@ jobs:
 
       - name: Smoke check root route (fail on 5xx)
         run: |
-          set -euo pipefail
+          set -uo pipefail
 
           pnpm -C apps/client run start --hostname 127.0.0.1 --port 3500 > /tmp/client-preview-smoke.log 2>&1 &
           APP_PID=$!
@@ -263,22 +291,41 @@ jobs:
           trap cleanup EXIT
 
           STATUS="000"
-          for _ in {1..45}; do
-            # --max-time 5 bounds each individual attempt to 5 seconds.
-            # Without this, a slow-but-alive server could absorb the entire
-            # 45-attempt budget with one hung connection, masking startup failures
-            # and potentially exhausting the job timeout.
-            STATUS="$(curl --silent --show-error --max-time 5 --output /tmp/client-preview-body.txt --write-out "%{http_code}" http://127.0.0.1:3500/ || true)"
+          # Budget: 60 attempts * (up to 3s curl timeout + 2s sleep) = up to 5
+          # minutes total. This matches the observed cold-boot time once a real
+          # Postgres backs the app (see the added `postgres` service above) and
+          # gives real headroom over a single fixed 45s window, which was too
+          # short for this app's actual boot path on a cold CI runner.
+          MAX_ATTEMPTS=60
+          for i in $(seq 1 "$MAX_ATTEMPTS"); do
+            # Fail fast if the server process already exited instead of waiting
+            # out the full probe budget — a crashed process will never start
+            # accepting connections, so there is nothing to gain by burning the
+            # remaining ~5 minutes before reporting that.
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "Smoke gate failed: client preview process exited before becoming ready."
+              cat /tmp/client-preview-smoke.log || true
+              exit 1
+            fi
+
+            STATUS="$(curl --silent --show-error --max-time 3 --output /tmp/client-preview-body.txt --write-out "%{http_code}" http://127.0.0.1:3500/ || true)"
             if [ "$STATUS" != "000" ] && [ -n "$STATUS" ]; then
               break
             fi
-            sleep 1
+
+            # Print progress every 10 attempts instead of one line per curl
+            # timeout — the prior output was 40+ near-identical "Operation
+            # timed out" lines with no diagnostic value.
+            if [ $(( i % 10 )) -eq 0 ]; then
+              echo "Still waiting for client preview to become reachable (attempt $i/$MAX_ATTEMPTS)..."
+            fi
+            sleep 2
           done
 
           echo "Smoke status: $STATUS"
 
           if [ -z "$STATUS" ] || [ "$STATUS" = "000" ]; then
-            echo "Smoke gate failed: client preview root was unreachable."
+            echo "Smoke gate failed: client preview root was unreachable after $MAX_ATTEMPTS attempts."
             cat /tmp/client-preview-smoke.log || true
             exit 1
           fi
