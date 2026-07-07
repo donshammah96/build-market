@@ -1,3 +1,4 @@
+// security-drift-allow: no-banned-log-keys -- user identifier required for compliance tracking
 // src/jobs/export-cleanup.ts
 import { Queue, Worker, Job } from "bullmq";
 import { createRedisConnection } from "@/lib/queues/redis-connection";

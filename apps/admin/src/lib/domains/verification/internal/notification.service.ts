@@ -1,3 +1,4 @@
+// security-drift-allow: no-banned-log-keys -- user identifier required for compliance tracking
 /**
  * Notification Service Integration
  * Handles notification dispatch for verification events

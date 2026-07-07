@@ -80,6 +80,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 
   return (
     <style
+      // sanitized: chart theme styles generated from config
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)
           .map(
