@@ -28,6 +28,25 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Changed (Environment Validation Schema)
+
+- **Environment Validation Schema**: Modified the client environment variable validation rules inside [apps/client/app/lib/infrastructure/env.ts](file:///c:/Users/User/build-market/apps/client/app/lib/infrastructure/env.ts) to accept local mock loopback protocols (`http://127.0.0.1` and `http://localhost`) for `UPSTASH_REDIS_REST_URL`. This allows the application to successfully boot in local offline or CI environments using stubs without throwing validation errors.
+
+### Fixed (CI Smoke Test Infrastructure)
+
+- **CI Workflow (Upstash REST Stub Connection)**: Replaced the loopback closed-port design for `UPSTASH_REDIS_REST_URL` in [.github/workflows/ci.yml](file:///c:/Users/User/build-market/.github/workflows/ci.yml) with a Python-based HTTP mock stub server on port `8079`. This resolves request timeouts and deadlocks caused by `@upstash/redis` SDK retry-and-backoff behaviors when connecting to a closed port or a raw Redis TCP socket (which deadlocks on TLS handshakes).
+- **CI Smoke Test Timeout**: Increased `curl` execution timeout inside client and admin smoke check loops from 3s to 15s to accommodate cold-start rendering latency on resource-constrained runners.
+
+**Files changed:**
+
+- `.github/workflows/ci.yml`
+- `apps/client/app/lib/infrastructure/env.ts`
+
+**Verification:**
+
+- `pnpm --filter="client" exec tsc --noEmit` verifies successful TypeScript typecheck.
+- Local validation of `ci.yml` format using `yaml.safe_load`.
+
 ### Added (Centralized Admin App URL Configuration)
 
 - **Centralized Admin App URL Configuration**: Registered and exposed `NEXT_PUBLIC_ADMIN_APP_URL` within the client infrastructure environment layer to route administrative users to their canonical satellite domain dashboard.
