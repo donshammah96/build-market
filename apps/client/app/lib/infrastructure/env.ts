@@ -200,9 +200,12 @@ const envGroups: EnvGroup[] = [
       {
         name: "UPSTASH_REDIS_REST_URL",
         required: true,
-        validate: (v) => v.startsWith("https://"),
+        validate: (v) =>
+          v.startsWith("https://") ||
+          v.startsWith("http://127.0.0.1") ||
+          v.startsWith("http://localhost"),
         errorMessage:
-          "Must be a valid HTTPS Upstash REST URL (e.g. https://<db>.upstash.io)",
+          "Must be a valid HTTPS Upstash REST URL (e.g. https://<db>.upstash.io) or local HTTP mock URL (e.g. http://127.0.0.1:8079)",
       },
       {
         name: "UPSTASH_REDIS_REST_TOKEN",
@@ -699,10 +702,14 @@ function validateRedisRateLimitReadiness(result: ValidationResult): void {
       "[redis] UPSTASH_REDIS_REST_URL is required for rate limiting in production. " +
         "Set it to your Upstash REST endpoint (https://<db>.upstash.io).",
     );
-  } else if (!upstashUrl.startsWith("https://")) {
+  } else if (
+    !upstashUrl.startsWith("https://") &&
+    !upstashUrl.startsWith("http://127.0.0.1") &&
+    !upstashUrl.startsWith("http://localhost")
+  ) {
     result.valid = false;
     result.errors.push(
-      "[redis] UPSTASH_REDIS_REST_URL must start with https://. " +
+      "[redis] UPSTASH_REDIS_REST_URL must start with https:// (or http://127.0.0.1 / http://localhost for local/CI mocks). " +
         `Received: ${upstashUrl.slice(0, 40)}`,
     );
   }
