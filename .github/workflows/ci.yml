@@ -425,7 +425,16 @@ jobs:
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3500/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
-      UPSTASH_REDIS_REST_URL: https://stub.upstash.io
+      # Was `https://stub.upstash.io`. RATE_LIMIT_BACKEND=memory is meant to
+      # keep the app off Upstash entirely, but if any request-time code path
+      # (middleware, instrumentation) calls this URL regardless of that flag,
+      # a real external hostname is the worst possible target for a stub:
+      # DNS resolution and any eventual response are both non-deterministic,
+      # and a request that never gets a response can hang far longer than
+      # this job's per-request probe timeout. 127.0.0.1 with nothing bound on
+      # that port fails at the kernel level — instant ECONNREFUSED, no DNS,
+      # no network round trip, no ambiguity.
+      UPSTASH_REDIS_REST_URL: http://localhost:6379
       UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
       REDIS_URL: redis://127.0.0.1:6379
 
@@ -510,20 +519,53 @@ jobs:
           }
           trap cleanup EXIT
 
-          STATUS="000"
-          # Budget: 60 attempts * (up to 3s curl timeout + 2s sleep) = up to 5
-          # minutes total. This matches the observed cold-boot time once a real
-          # Postgres backs the app (see the added `postgres` service above) and
-          # gives real headroom over a single fixed 45s window, which was too
-          # short for this app's actual boot path on a cold CI runner.
-          MAX_ATTEMPTS=60
-          for i in $(seq 1 "$MAX_ATTEMPTS"); do
-            # Fail fast if the server process already exited instead of waiting
-            # out the full probe budget — a crashed process will never start
-            # accepting connections, so there is nothing to gain by burning the
-            # remaining ~5 minutes before reporting that.
+          # --- Phase 1: wait for the port to open ---
+          # A raw TCP probe (bash's /dev/tcp) is cheaper than an HTTP request
+          # and, more importantly, tells us definitively when the process
+          # starts *accepting* connections — independent of whether it can
+          # ever finish handling one. Without this split, "still booting" and
+          # "bound the port but hangs on every request" look identical in the
+          # logs: both just print curl timeouts for 5 minutes straight.
+          PORT_OPEN=""
+          PORT_MAX_ATTEMPTS=60   # 60 * 2s = up to 2 minutes for the port to open
+          for i in $(seq 1 "$PORT_MAX_ATTEMPTS"); do
             if ! kill -0 "$APP_PID" 2>/dev/null; then
-              echo "Smoke gate failed: client preview process exited before becoming ready."
+              echo "Smoke gate failed: client preview process exited before opening a port."
+              cat /tmp/client-preview-smoke.log || true
+              exit 1
+            fi
+
+            if (exec 3<>/dev/tcp/127.0.0.1/3500) 2>/dev/null; then
+              exec 3>&- 3<&-
+              PORT_OPEN=1
+              echo "Port 3500 opened after ~$((i * 2))s."
+              break
+            fi
+
+            if [ $(( i % 10 )) -eq 0 ]; then
+              echo "Still waiting for port 3500 to open (attempt $i/$PORT_MAX_ATTEMPTS)..."
+            fi
+            sleep 2
+          done
+
+          if [ -z "$PORT_OPEN" ]; then
+            echo "Smoke gate failed: port 3500 never opened after $PORT_MAX_ATTEMPTS attempts (~2 minutes)."
+            cat /tmp/client-preview-smoke.log || true
+            exit 1
+          fi
+
+          # --- Phase 2: port is open — confirm a request actually completes ---
+          # Once the port is open, a request that keeps timing out is not "a
+          # slow boot" anymore — it's a hang, most likely a middleware or
+          # instrumentation call blocking on an external host that never
+          # responds. That's a different failure mode and deserves a fast,
+          # clearly-labeled failure instead of quietly consuming the rest of
+          # a 5-minute budget on a foregone conclusion.
+          STATUS="000"
+          HTTP_MAX_ATTEMPTS=10   # 10 * (3s curl timeout + 2s sleep) = ~50s
+          for i in $(seq 1 "$HTTP_MAX_ATTEMPTS"); do
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "Smoke gate failed: client preview process exited while waiting for a response."
               cat /tmp/client-preview-smoke.log || true
               exit 1
             fi
@@ -533,19 +575,18 @@ jobs:
               break
             fi
 
-            # Print progress every 10 attempts instead of one line per curl
-            # timeout — the prior output was 40+ near-identical "Operation
-            # timed out" lines with no diagnostic value.
-            if [ $(( i % 10 )) -eq 0 ]; then
-              echo "Still waiting for client preview to become reachable (attempt $i/$MAX_ATTEMPTS)..."
-            fi
+            echo "Port is open but no HTTP response yet (attempt $i/$HTTP_MAX_ATTEMPTS) — recent app output:"
+            tail -n 15 /tmp/client-preview-smoke.log || true
             sleep 2
           done
 
           echo "Smoke status: $STATUS"
 
           if [ -z "$STATUS" ] || [ "$STATUS" = "000" ]; then
-            echo "Smoke gate failed: client preview root was unreachable after $MAX_ATTEMPTS attempts."
+            echo "Smoke gate failed: port 3500 opened but never completed an HTTP response"
+            echo "after $HTTP_MAX_ATTEMPTS attempts (~50s). This is a hang, not a slow boot —"
+            echo "look for a request-time call to an external host that never responds"
+            echo "(e.g. a rate-limit or auth check that ignores RATE_LIMIT_BACKEND=memory)."
             cat /tmp/client-preview-smoke.log || true
             exit 1
           fi
@@ -612,6 +653,7 @@ jobs:
       CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3005
+      CLIENT_APP_URL: http://127.0.0.1:3500
       # ASSUMPTION: admin calls out to the client app's API rather than
       # exposing its own equivalent REST surface (see docs/CHANGELOG.md,
       # `callClientApi` in app/actions/admin/shared.ts). If admin's env
@@ -620,7 +662,7 @@ jobs:
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3005/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
-      UPSTASH_REDIS_REST_URL: https://stub.upstash.io
+      UPSTASH_REDIS_REST_URL: http://localhost:6379
       UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
       REDIS_URL: redis://127.0.0.1:6379
 
@@ -670,11 +712,41 @@ jobs:
           }
           trap cleanup EXIT
 
-          STATUS="000"
-          MAX_ATTEMPTS=60
-          for i in $(seq 1 "$MAX_ATTEMPTS"); do
+          # --- Phase 1: wait for the port to open ---
+          PORT_OPEN=""
+          PORT_MAX_ATTEMPTS=60   # 60 * 2s = up to 2 minutes for the port to open
+          for i in $(seq 1 "$PORT_MAX_ATTEMPTS"); do
             if ! kill -0 "$APP_PID" 2>/dev/null; then
-              echo "Smoke gate failed: admin preview process exited before becoming ready."
+              echo "Smoke gate failed: admin preview process exited before opening a port."
+              cat /tmp/admin-preview-smoke.log || true
+              exit 1
+            fi
+
+            if (exec 3<>/dev/tcp/127.0.0.1/3005) 2>/dev/null; then
+              exec 3>&- 3<&-
+              PORT_OPEN=1
+              echo "Port 3005 opened after ~$((i * 2))s."
+              break
+            fi
+
+            if [ $(( i % 10 )) -eq 0 ]; then
+              echo "Still waiting for port 3005 to open (attempt $i/$PORT_MAX_ATTEMPTS)..."
+            fi
+            sleep 2
+          done
+
+          if [ -z "$PORT_OPEN" ]; then
+            echo "Smoke gate failed: port 3005 never opened after $PORT_MAX_ATTEMPTS attempts (~2 minutes)."
+            cat /tmp/admin-preview-smoke.log || true
+            exit 1
+          fi
+
+          # --- Phase 2: port is open — confirm a request actually completes ---
+          STATUS="000"
+          HTTP_MAX_ATTEMPTS=10   # 10 * (3s curl timeout + 2s sleep) = ~50s
+          for i in $(seq 1 "$HTTP_MAX_ATTEMPTS"); do
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "Smoke gate failed: admin preview process exited while waiting for a response."
               cat /tmp/admin-preview-smoke.log || true
               exit 1
             fi
@@ -684,16 +756,18 @@ jobs:
               break
             fi
 
-            if [ $(( i % 10 )) -eq 0 ]; then
-              echo "Still waiting for admin preview to become reachable (attempt $i/$MAX_ATTEMPTS)..."
-            fi
+            echo "Port is open but no HTTP response yet (attempt $i/$HTTP_MAX_ATTEMPTS) — recent app output:"
+            tail -n 15 /tmp/admin-preview-smoke.log || true
             sleep 2
           done
 
           echo "Smoke status: $STATUS"
 
           if [ -z "$STATUS" ] || [ "$STATUS" = "000" ]; then
-            echo "Smoke gate failed: admin preview root was unreachable after $MAX_ATTEMPTS attempts."
+            echo "Smoke gate failed: port 3005 opened but never completed an HTTP response"
+            echo "after $HTTP_MAX_ATTEMPTS attempts (~50s). This is a hang, not a slow boot —"
+            echo "look for a request-time call to an external host that never responds"
+            echo "(e.g. a rate-limit or auth check that ignores RATE_LIMIT_BACKEND=memory)."
             cat /tmp/admin-preview-smoke.log || true
             exit 1
           fi
@@ -755,10 +829,11 @@ jobs:
       CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3005
+      CLIENT_APP_URL: http://127.0.0.1:3500
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3005/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
-      UPSTASH_REDIS_REST_URL: https://stub.upstash.io
+      UPSTASH_REDIS_REST_URL: http://localhost:6379
       UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
       REDIS_URL: redis://127.0.0.1:6379
 
