@@ -590,7 +590,15 @@ jobs:
         run: |
           set -uo pipefail
 
-          pnpm -C apps/client run start --hostname 127.0.0.1 --port 3500 > /tmp/client-preview-smoke.log 2>&1 &
+          # --report-on-signal: on SIGUSR2, Node dumps a full report (JS stack
+          # per context, native stack, active handles/requests, event loop
+          # state) without needing any app code changes or a debugger attached.
+          # This is what actually answers "what is the request handler stuck
+          # on" instead of the next person guessing again (Redis, then Clerk,
+          # then whatever comes after Clerk) every time this job hangs.
+          mkdir -p /tmp/node-reports
+          NODE_OPTIONS="--report-on-signal --report-signal=SIGUSR2 --report-directory=/tmp/node-reports" \
+            pnpm -C apps/client run start --hostname 127.0.0.1 --port 3500 > /tmp/client-preview-smoke.log 2>&1 &
           APP_PID=$!
 
           cleanup() {
@@ -642,7 +650,11 @@ jobs:
           # clearly-labeled failure instead of quietly consuming the rest of
           # a 5-minute budget on a foregone conclusion.
           STATUS="000"
-          HTTP_MAX_ATTEMPTS=10   # 10 * (15s curl timeout + 2s sleep) = ~170s
+          # Reduced from 10 attempts to 3: at --max-time 15 this is already
+          # 3x the timeout that failed to make any difference over the
+          # original 3s budget, so more retries only burn CI minutes without
+          # telling us anything new.
+          HTTP_MAX_ATTEMPTS=3   # 3 * (15s curl timeout + 2s sleep) = ~51s
           for i in $(seq 1 "$HTTP_MAX_ATTEMPTS"); do
             if ! kill -0 "$APP_PID" 2>/dev/null; then
               echo "Smoke gate failed: client preview process exited while waiting for a response."
@@ -664,9 +676,26 @@ jobs:
 
           if [ -z "$STATUS" ] || [ "$STATUS" = "000" ]; then
             echo "Smoke gate failed: port 3500 opened but never completed an HTTP response"
-            echo "after $HTTP_MAX_ATTEMPTS attempts (~50s). This is a hang, not a slow boot —"
-            echo "look for a request-time call to an external host that never responds"
-            echo "(e.g. a rate-limit or auth check that ignores RATE_LIMIT_BACKEND=memory)."
+            echo "after $HTTP_MAX_ATTEMPTS attempts. Capturing a Node diagnostic report before"
+            echo "giving up, so the actual stuck call site is visible instead of guessed at."
+
+            kill -USR2 "$APP_PID" 2>/dev/null || true
+            sleep 2
+
+            REPORT_FILE="$(ls -t /tmp/node-reports/report.*.json 2>/dev/null | head -n1)"
+            if [ -n "$REPORT_FILE" ]; then
+              echo "--- JS stack at the moment of the hang ($REPORT_FILE) ---"
+              jq -r '.javascriptStack.stack[]?' "$REPORT_FILE" 2>/dev/null || cat "$REPORT_FILE"
+              echo "--- Active libuv handles (what the event loop is still waiting on) ---"
+              jq -r '.libuv[]?.type' "$REPORT_FILE" 2>/dev/null | sort | uniq -c | sort -rn
+            else
+              echo "No report was generated — the process may be fully wedged (not even"
+              echo "servicing the signal) or exited between checks; see the app log below."
+            fi
+            echo "Redis/Upstash is ruled out for this route (confirmed: GET / has no"
+            echo "Redis-touching call path). Check the JS stack above for what it's"
+            echo "actually awaiting — Clerk session/JWKS verification and any DB query"
+            echo "on the render path are the next most likely candidates."
             cat /tmp/client-preview-smoke.log || true
             exit 1
           fi
