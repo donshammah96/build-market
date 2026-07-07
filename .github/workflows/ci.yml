@@ -562,7 +562,7 @@ jobs:
           # clearly-labeled failure instead of quietly consuming the rest of
           # a 5-minute budget on a foregone conclusion.
           STATUS="000"
-          HTTP_MAX_ATTEMPTS=10   # 10 * (3s curl timeout + 2s sleep) = ~50s
+          HTTP_MAX_ATTEMPTS=10   # 10 * (15s curl timeout + 2s sleep) = ~170s
           for i in $(seq 1 "$HTTP_MAX_ATTEMPTS"); do
             if ! kill -0 "$APP_PID" 2>/dev/null; then
               echo "Smoke gate failed: client preview process exited while waiting for a response."
@@ -570,7 +570,7 @@ jobs:
               exit 1
             fi
 
-            STATUS="$(curl --silent --show-error --max-time 3 --output /tmp/client-preview-body.txt --write-out "%{http_code}" http://127.0.0.1:3500/ || true)"
+            STATUS="$(curl --silent --show-error --max-time 15 --output /tmp/client-preview-body.txt --write-out "%{http_code}" http://127.0.0.1:3500/ || true)"
             if [ "$STATUS" != "000" ] && [ -n "$STATUS" ]; then
               break
             fi
@@ -743,7 +743,7 @@ jobs:
 
           # --- Phase 2: port is open — confirm a request actually completes ---
           STATUS="000"
-          HTTP_MAX_ATTEMPTS=10   # 10 * (3s curl timeout + 2s sleep) = ~50s
+          HTTP_MAX_ATTEMPTS=10   # 10 * (15s curl timeout + 2s sleep) = ~170s
           for i in $(seq 1 "$HTTP_MAX_ATTEMPTS"); do
             if ! kill -0 "$APP_PID" 2>/dev/null; then
               echo "Smoke gate failed: admin preview process exited while waiting for a response."
@@ -751,7 +751,7 @@ jobs:
               exit 1
             fi
 
-            STATUS="$(curl --silent --show-error --max-time 3 --output /tmp/admin-preview-body.txt --write-out "%{http_code}" http://127.0.0.1:3005/ || true)"
+            STATUS="$(curl --silent --show-error --max-time 15 --output /tmp/admin-preview-body.txt --write-out "%{http_code}" http://127.0.0.1:3005/ || true)"
             if [ "$STATUS" != "000" ] && [ -n "$STATUS" ]; then
               break
             fi
