@@ -709,6 +709,15 @@ jobs:
 
           echo "Smoke gate passed: root route returned non-5xx status $STATUS."
 
+      - name: Upload Node diagnostic report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: client-smoke-gate-node-report
+          path: /tmp/node-reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
   admin-preview-smoke-gate:
     name: Admin Preview Smoke Gate
     runs-on: ubuntu-latest
