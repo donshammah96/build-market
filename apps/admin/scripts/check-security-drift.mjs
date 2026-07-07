@@ -385,7 +385,7 @@ function checkBrowserStorage(file, source) {
 // --- Rule: no CORS headers or OPTION exports outside cors helper ---
 const CORS_HEADER_PATTERN = /Access-Control-Allow-[A-Za-z-]+/g;
 const OPTIONS_EXPORT_PATTERN =
-  /export\s+(?:const|async\s+function|function)\s+OPTIONS\b/g;
+  /export\s+(?:const|async\s+function|function)\s+OPTIONS\b/;
 
 function checkCorsPolicy(file, source) {
   const ruleId = "no-cors-drift";
@@ -458,7 +458,7 @@ function checkZodPassthrough(file, source) {
 
 // --- Rule: unsafe apiError pass-through ---
 const UNSAFE_CLIENT_MESSAGE_PATTERN =
-  /\bapiError\s*\(\s*(?:error|err)\.(message|stack)\b/i;
+  /\bapiError\s*\(\s*(?:error|err)\.(message|stack)\b/gi;
 
 function checkUnsafeClientErrors(file, source) {
   const ruleId = "unsafe-client-errors";
@@ -473,9 +473,7 @@ function checkUnsafeClientErrors(file, source) {
     rel.startsWith("src/lib/api/");
   if (!isRouteOrAction) return;
 
-  const matches = source.matchAll(
-    /\bapiError\s*\(\s*(?:error|err)\.(message|stack)\b/gi,
-  );
+  const matches = source.matchAll(UNSAFE_CLIENT_MESSAGE_PATTERN);
   for (const m of matches) {
     if (m.index === undefined) continue;
     const lineNum = source.slice(0, m.index).split(/\r?\n/).length;
