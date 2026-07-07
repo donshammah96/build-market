@@ -434,7 +434,7 @@ jobs:
       # this job's per-request probe timeout. 127.0.0.1 with nothing bound on
       # that port fails at the kernel level — instant ECONNREFUSED, no DNS,
       # no network round trip, no ambiguity.
-      UPSTASH_REDIS_REST_URL: https://127.0.0.1:6379
+      UPSTASH_REDIS_REST_URL: https://127.0.0.1:6378
       UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
       REDIS_URL: redis://127.0.0.1:6379
 
@@ -662,7 +662,7 @@ jobs:
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3005/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
-      UPSTASH_REDIS_REST_URL: https://127.0.0.1:6379
+      UPSTASH_REDIS_REST_URL: https://127.0.0.1:6378
       UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
       REDIS_URL: redis://127.0.0.1:6379
 
@@ -833,7 +833,7 @@ jobs:
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3005/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
-      UPSTASH_REDIS_REST_URL: https://127.0.0.1:6379
+      UPSTASH_REDIS_REST_URL: https://127.0.0.1:6378
       UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
       REDIS_URL: redis://127.0.0.1:6379
 
