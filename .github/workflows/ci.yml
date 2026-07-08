@@ -682,7 +682,17 @@ jobs:
             kill -USR2 "$APP_PID" 2>/dev/null || true
             sleep 2
 
-            REPORT_FILE="$(ls -t /tmp/node-reports/report.*.json 2>/dev/null | head -n1)"
+            # `|| true` is required here, not cosmetic: GitHub Actions runs
+            # `run:` steps as `bash -e {0}`, so `-e` is already active before
+            # our own `set -uo pipefail` line runs. When no report exists,
+            # `ls` exits 2; under `pipefail` that 2 propagates through the
+            # pipe even though `head` itself exits 0; under `-e` that non-zero
+            # in the assignment aborts the script right here — silently,
+            # before the `if [ -n "$REPORT_FILE" ]` fallback below ever runs,
+            # and before the final `cat`/`exit 1` that would surface the app
+            # log. That's the exact failure mode this guarded against: a
+            # missing report crashing the "handle a missing report" branch.
+            REPORT_FILE="$(ls -t /tmp/node-reports/report.*.json 2>/dev/null | head -n1 || true)"
             if [ -n "$REPORT_FILE" ]; then
               echo "--- JS stack at the moment of the hang ($REPORT_FILE) ---"
               jq -r '.javascriptStack.stack[]?' "$REPORT_FILE" 2>/dev/null || cat "$REPORT_FILE"
