@@ -679,7 +679,19 @@ jobs:
             echo "after $HTTP_MAX_ATTEMPTS attempts. Capturing a Node diagnostic report before"
             echo "giving up, so the actual stuck call site is visible instead of guessed at."
 
-            kill -USR2 "$APP_PID" 2>/dev/null || true
+            # `$APP_PID` is pnpm's own PID, not the Node/Next.js process it
+            # spawns to run the `start` script — pnpm runs the script as a
+            # child rather than exec'ing into it, and only relays a fixed
+            # set of signals (SIGINT/SIGTERM) for graceful shutdown, not
+            # arbitrary ones like SIGUSR2. Signaling $APP_PID here reliably
+            # hits pnpm, which drops it, so the report never gets generated
+            # regardless of what the actual server process is doing.
+            # Resolving the PID actually bound to the port sidesteps that
+            # assumption entirely, regardless of how pnpm/npm/yarn wraps the
+            # script underneath.
+            SERVER_PID="$(lsof -t -i :3500 -sTCP:LISTEN 2>/dev/null | head -n1 || true)"
+            SERVER_PID="${SERVER_PID:-$APP_PID}"
+            kill -USR2 "$SERVER_PID" 2>/dev/null || true
             sleep 2
 
             # `|| true` is required here, not cosmetic: GitHub Actions runs
