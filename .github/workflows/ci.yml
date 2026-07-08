@@ -2,9 +2,20 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    # integration/admin-overhaul is a long-lived integration branch for the
+    # admin-overhaul effort; it gets the same post-merge gates as main/develop
+    # (see client/admin-changelog-guard and client/admin-preview-smoke-gate
+    # below) so regressions are caught even if they land via a fast-forward
+    # merge or a merge commit that skipped an up-to-date PR check.
+    branches: [main, develop, integration/admin-overhaul]
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, integration/admin-overhaul]
+  schedule:
+    # Nightly run of the flake-focused admin:test:all suite (see
+    # admin-nightly-test-all below). 03:00 UTC is outside typical business
+    # hours for this team; adjust if that assumption is wrong.
+    - cron: "0 3 * * *"
+  workflow_dispatch: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -25,6 +36,24 @@ env:
   # Prevent Next.js from making outbound telemetry calls during build steps,
   # which can add latency and produce flaky network errors in CI.
   NEXT_TELEMETRY_DISABLED: "1"
+  # Turborepo remote caching. Every `turbo run ...` invocation in this
+  # workflow (directly via `pnpm exec turbo`, or indirectly via the
+  # `build` / `check-types` / `test` root scripts) picks these up
+  # automatically — no per-job wiring needed.
+  #
+  # ASSUMPTION: remote cache backend is Vercel Remote Cache (the turbo
+  # default), so TURBO_TOKEN/TURBO_TEAM are enough. Set both as repository
+  # (or org) secrets: TURBO_TOKEN from `npx turbo login` (or a Vercel access
+  # token scoped to the team), TURBO_TEAM from the Vercel team slug. If this
+  # repo instead points at a self-hosted remote cache, add TURBO_API here
+  # too and adjust the token accordingly.
+  #
+  # Safe by default: these secrets are unset for PRs from forks, and turbo
+  # silently falls back to local-only caching (cache misses, not failures)
+  # when they're absent — so this never breaks a build, it just stops
+  # sharing cache hits across runs until the secrets are configured.
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
 jobs:
   workspace-version-consistency-guard:
@@ -36,41 +65,106 @@ jobs:
     # the root (and therefore from the committed pnpm-lock.yaml).
     permissions:
       contents: read
+    # A pure fs/JSON check should finish in seconds; this bounds the blast
+    # radius of a hung runner instead of falling back to the 360-minute
+    # platform default.
+    timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Verify packageManager / engines.node consistency across workspace
         run: node scripts/check-package-manager-consistency.mjs
 
+  pinned-actions-guard:
+    name: Pinned Actions Guard
+    runs-on: ubuntu-latest
+    # Pure static check against workflow/composite-action YAML — no
+    # dependency install required, so this runs standalone before validate
+    # and fails fast if any `uses:` ref isn't pinned to a full commit SHA.
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      # skip_push: "true" alone gives validate-only behavior — pinact-action
+      # checks all `uses:` refs and fails the job if any aren't pinned to a
+      # full commit SHA, without attempting to write a fix or push a commit.
+      # verify: "true" additionally confirms each existing SHA pin's
+      # "# vX.Y.Z" comment matches what that SHA actually resolves to,
+      # catching a spoofed version comment on a legitimate-looking SHA.
+      - name: Check all GitHub Actions are pinned to a commit SHA
+        uses: suzuki-shunsuke/pinact-action@28aeb220eb3252ad0d4422dd5d9368e925acbd8d # v1.3.0
+        with:
+          skip_push: "true"
+          verify: "true"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
   client-changelog-guard:
     name: Client Changelog Guard
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    # Runs on PRs (pre-merge) AND on push to main/develop/integration/admin-overhaul
+    # (post-merge) — see the `on.push.branches` list above for which branches
+    # that covers. A merge commit or fast-forward push that slipped past PR
+    # review still gets checked here.
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     # This job only reads PR metadata — no checkout required, no write permissions.
     permissions:
       contents: read
       pull-requests: read
+    # github-script hitting the PR-files API is seconds of work; this bounds
+    # the blast radius of a hung runner instead of the 360-minute default.
+    timeout-minutes: 5
     steps:
       - name: Require client changelog update for client code changes
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const pull_number = context.payload.pull_request.number;
 
-            const files = await github.paginate(
-              github.rest.pulls.listFiles,
-              { owner, repo, pull_number, per_page: 100 },
-            );
+            // On a pull_request event we ask the PR-files API. On a push
+            // event (post-merge run) there is no open PR to query, so we
+            // read the changed-file lists straight off the push payload's
+            // commits instead — each commit already carries its own
+            // added/modified/removed arrays, so no extra API call is needed.
+            let changedFiles = [];
+
+            if (context.eventName === "pull_request") {
+              const pull_number = context.payload.pull_request.number;
+              const files = await github.paginate(
+                github.rest.pulls.listFiles,
+                { owner, repo, pull_number, per_page: 100 },
+              );
+              changedFiles = files.map((f) => ({ filename: f.filename, status: f.status }));
+            } else {
+              const commits = context.payload.commits || [];
+              const byFilename = new Map();
+              for (const commit of commits) {
+                for (const filename of commit.added || []) byFilename.set(filename, "added");
+                for (const filename of commit.modified || []) byFilename.set(filename, "modified");
+                for (const filename of commit.removed || []) byFilename.set(filename, "removed");
+              }
+              changedFiles = Array.from(byFilename, ([filename, status]) => ({ filename, status }));
+
+              if (changedFiles.length === 0) {
+                // e.g. the first push of a brand-new branch, or a push whose
+                // commits payload GitHub truncated. Nothing to validate.
+                core.info(
+                  "Client changelog guard: push event carried no file changes to check; skipping.",
+                );
+                return;
+              }
+            }
 
             const isClientCodeFile = (filename) =>
               filename.startsWith("apps/client/") &&
               !filename.startsWith("apps/client/docs/");
 
-            const clientCodeChanged = files.some((f) => isClientCodeFile(f.filename));
-            const changelogUpdated = files.some(
+            const clientCodeChanged = changedFiles.some((f) => isClientCodeFile(f.filename));
+            const changelogUpdated = changedFiles.some(
               (f) =>
                 f.filename === "apps/client/docs/CHANGELOG.md" &&
                 f.status !== "removed",
@@ -84,25 +178,100 @@ jobs:
               core.info("Client changelog guard passed.");
             }
 
+  admin-changelog-guard:
+    name: Admin Changelog Guard
+    runs-on: ubuntu-latest
+    # Runs on PRs (pre-merge) AND on push to main/develop/integration/admin-overhaul
+    # (post-merge) — mirrors client-changelog-guard.
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    # Mirrors client-changelog-guard exactly. Before this job existed, admin
+    # was the one app in the workspace with *no* changelog enforcement at
+    # all — this was the actual CI-parity gap, not a missing test suite.
+    #
+    # ASSUMPTION: admin follows the same apps/admin/docs/CHANGELOG.md
+    # convention as apps/client/docs/CHANGELOG.md. If admin's changelog lives
+    # somewhere else (or doesn't exist yet), update the path below — or
+    # create apps/admin/docs/CHANGELOG.md — before enabling this as a
+    # required check.
+    permissions:
+      contents: read
+      pull-requests: read
+    timeout-minutes: 5
+    steps:
+      - name: Require admin changelog update for admin code changes
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // See client-changelog-guard for why push events are handled
+            // via the push payload's commits instead of the PR-files API.
+            let changedFiles = [];
+
+            if (context.eventName === "pull_request") {
+              const pull_number = context.payload.pull_request.number;
+              const files = await github.paginate(
+                github.rest.pulls.listFiles,
+                { owner, repo, pull_number, per_page: 100 },
+              );
+              changedFiles = files.map((f) => ({ filename: f.filename, status: f.status }));
+            } else {
+              const commits = context.payload.commits || [];
+              const byFilename = new Map();
+              for (const commit of commits) {
+                for (const filename of commit.added || []) byFilename.set(filename, "added");
+                for (const filename of commit.modified || []) byFilename.set(filename, "modified");
+                for (const filename of commit.removed || []) byFilename.set(filename, "removed");
+              }
+              changedFiles = Array.from(byFilename, ([filename, status]) => ({ filename, status }));
+
+              if (changedFiles.length === 0) {
+                core.info(
+                  "Admin changelog guard: push event carried no file changes to check; skipping.",
+                );
+                return;
+              }
+            }
+
+            const isAdminCodeFile = (filename) =>
+              filename.startsWith("apps/admin/") &&
+              !filename.startsWith("apps/admin/docs/");
+
+            const adminCodeChanged = changedFiles.some((f) => isAdminCodeFile(f.filename));
+            const changelogUpdated = changedFiles.some(
+              (f) =>
+                f.filename === "apps/admin/docs/CHANGELOG.md" &&
+                f.status !== "removed",
+            );
+
+            if (adminCodeChanged && !changelogUpdated) {
+              core.setFailed(
+                "apps/admin code changed but apps/admin/docs/CHANGELOG.md was not updated.",
+              );
+            } else {
+              core.info("Admin changelog guard passed.");
+            }
+
   validate:
     name: Validate
     runs-on: ubuntu-latest
-    needs: [workspace-version-consistency-guard]
+    needs: [workspace-version-consistency-guard, pinned-actions-guard]
     timeout-minutes: 15
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
         # Version is sourced from the root packageManager field (pnpm@11.x).
         # No explicit version pin needed here — it's already canonical in
         # package.json, and workspace-version-consistency-guard (above) has
         # already confirmed every app/package agrees with that root value.
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
@@ -126,7 +295,14 @@ jobs:
       - name: Check formatting
         run: pnpm run format:check
 
-      - name: Lint
+      # Lint is split per-app rather than run once via the workspace-wide
+      # `pnpm run lint` alias. Both apps' next.config.ts read the *same*
+      # env var names (NEXT_PUBLIC_APP_URL, NEXT_PUBLIC_API_URL) but expect
+      # different values (client: port 3500, admin: port 3005). A single
+      # shared step env block cannot hold both values at once, so a merged
+      # "Lint" step silently lints admin under client's URLs. Splitting is
+      # the correctness fix, not just tidiness.
+      - name: Lint (client)
         # next lint resolves the env boundary at parse time; supply the minimum
         # set of required variables so the env contract passes without a real
         # database or Clerk account.
@@ -138,10 +314,27 @@ jobs:
           NEXT_PUBLIC_APP_URL: http://localhost:3500
           NEXT_PUBLIC_API_URL: http://localhost:3500/api
           ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-        run: pnpm run lint
+        run: pnpm exec turbo run lint --filter=client
 
-      - name: Env contract check
+      - name: Lint (admin)
+        # Scoped to admin's own origin/port. Secrets (Clerk, DB, encryption key)
+        # are shared across both apps in this monorepo. Since admin calls the
+        # client app's API via callClientApi, it validates CLIENT_APP_URL.
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNzb3VudHMuZGV2JA==
+          CLERK_SECRET_KEY: sk_test_ci_placeholder
+          CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
+          NEXT_PUBLIC_APP_URL: http://localhost:3005
+          CLIENT_APP_URL: http://localhost:3500
+          ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef789abcdef0123456789abcdef"
+        run: pnpm exec turbo run lint --filter=admin
+
+      - name: Env contract check (client)
         run: pnpm run client:check-env-contract
+
+      - name: Env contract check (admin)
+        run: pnpm run admin:check-env-contract
 
       - name: Client security drift checks
         run: pnpm run client:check-security-drift
@@ -149,6 +342,22 @@ jobs:
       - name: Client security drift report
         run: pnpm run client:report-security-drift:strict
 
+      # Admin now has both halves of the check, matching client:
+      # check-security-drift (fails the build on hard rule violations) runs
+      # first, then report-security-drift:strict for the informational/
+      # strict-mode summary. See apps/admin/scripts/check-security-drift.mjs
+      # for the current rule set and its stated assumptions.
+      - name: Admin security drift checks
+        run: pnpm run admin:check-security-drift
+
+      - name: Admin security drift report
+        run: pnpm run admin:report-security-drift:strict
+
+      # Type check and test are intentionally NOT duplicated per-app here:
+      # `turbo run check-types` / `turbo run test` already fan out to every
+      # workspace package that defines those scripts, which includes
+      # apps/admin. Adding admin-scoped copies would just re-run the same
+      # work twice for no additional coverage.
       - name: Type check
         run: pnpm run check-types
 
@@ -164,16 +373,27 @@ jobs:
     # minutes. On a passing PR the net wall-clock cost is ~5 extra minutes;
     # on a failing PR we save the full build cost every time.
     needs: [validate]
-    if: github.event_name == 'pull_request'
+    # Runs on PRs (pre-merge) AND on push to main/develop/integration/admin-overhaul
+    # (post-merge). Checkout below already resolves to the right commit for
+    # either event type without any extra `ref:` handling.
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     # 25 minutes covers: install (~2 min) + build:client (~10–15 min on cold cache,
     # ~4–6 min warm) + server startup + smoke loop. Keep above the sum of those
     # worst-case segments with a small buffer.
     timeout-minutes: 25
     services:
       redis:
-        image: redis:alpine
+        # Pinned to a specific version (matching the postgres service below)
+        # rather than the floating `alpine` tag, so a Redis point release
+        # can't silently change behavior under CI without a deliberate bump.
+        image: redis:7-alpine
         ports:
           - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
       # Added: DATABASE_URL below points at 127.0.0.1:5432, but this job is the
       # only one that runs a real `next start` (validate only lints/tests, it
       # never boots the server). Without a real Postgres here, anything on the
@@ -205,25 +425,114 @@ jobs:
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3500/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
-      UPSTASH_REDIS_REST_URL: https://stub.upstash.io
+      BYPASS_AUTH: "true"
+      # Was `https://stub.upstash.io`, then `https://127.0.0.1:6378` (an
+      # unbound local port, on the theory that a closed port fails at the
+      # kernel level — instant ECONNREFUSED, no DNS, no ambiguity). That
+      # theory is correct for a *single* Redis call, but it does not hold
+      # once retries enter the picture: `@upstash/redis` retries failed
+      # requests with backoff by design, and every request-time code path
+      # that touches Redis for something other than rate limiting (feature
+      # flags, maintenance-mode checks, cache reads — RATE_LIMIT_BACKEND only
+      # gates the rate-limit backend selection, nothing else) independently
+      # re-triggers that retry loop on ECONNREFUSED. If more than one such
+      # call happens while rendering a single page, the retries stack, and
+      # the cumulative delay comfortably exceeds this job's per-request probe
+      # timeout — which is exactly the "port opens, but no request ever
+      # completes" hang this job kept hitting even after the URL pointed at a
+      # closed port. See the "Start Upstash REST stub" step below: instead of
+      # making the failure faster, it removes the failure by answering every
+      # request with a fast, valid-shaped 200 so nothing ever has a reason to
+      # retry.
+      UPSTASH_REDIS_REST_URL: http://127.0.0.1:8079
       UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
       REDIS_URL: redis://127.0.0.1:6379
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
 
+      # Must be up before `next start` in the smoke-check step below —
+      # anything on the request path that reads Redis needs a live, fast
+      # endpoint from the moment the very first request lands. Stdlib-only
+      # (no image pull, no third-party env-var contract to track down); it
+      # exists purely to keep request handling unblocked during boot, not to
+      # validate cache correctness.
+      - name: Start Upstash REST stub (always-200, no retries triggered)
+        run: |
+          nohup python3 -c '
+          import http.server
+          import json
+
+          class UpstashStubHandler(http.server.BaseHTTPRequestHandler):
+              def _respond(self):
+                  length = int(self.headers.get("Content-Length", 0) or 0)
+                  raw = self.rfile.read(length) if length else b""
+
+                  # Discriminator is the PATH only. The Upstash single-command
+                  # format ("/") is *also* submitted as a flat JSON array
+                  # (e.g. `["GET", "key"]`), so sniffing "is the body a JSON
+                  # array?" misclassifies an ordinary single command as a
+                  # pipeline call and hands the SDK the wrong response shape
+                  # back — which the SDK would treat as a parse failure and
+                  # retry, defeating the entire point of this stub.
+                  is_pipeline_path = "pipeline" in self.path or "multi-exec" in self.path
+
+                  if is_pipeline_path:
+                      count = 1
+                      try:
+                          parsed = json.loads(raw) if raw else None
+                          if isinstance(parsed, list):
+                              count = max(len(parsed), 1)
+                      except (json.JSONDecodeError, ValueError):
+                          pass
+                      body = json.dumps([{"result": None} for _ in range(count)]).encode()
+                  else:
+                      body = json.dumps({"result": None}).encode()
+
+                  self.send_response(200)
+                  self.send_header("Content-Type", "application/json")
+                  self.send_header("Content-Length", str(len(body)))
+                  self.end_headers()
+                  self.wfile.write(body)
+
+              def do_GET(self):
+                  self._respond()
+
+              def do_POST(self):
+                  self._respond()
+
+              def log_message(self, fmt, *args):
+                  pass
+
+          http.server.ThreadingHTTPServer(("127.0.0.1", 8079), UpstashStubHandler).serve_forever()
+          ' > /tmp/upstash-rest-stub.log 2>&1 &
+          echo $! > /tmp/upstash-rest-stub.pid
+
+          for i in $(seq 1 15); do
+            if curl --silent --max-time 1 --output /dev/null http://127.0.0.1:8079/; then
+              echo "Upstash REST stub is accepting requests."
+              break
+            fi
+            if [ "$i" -eq 15 ]; then
+              echo "Upstash REST stub failed to start within 15s."
+              cat /tmp/upstash-rest-stub.log || true
+              exit 1
+            fi
+            sleep 1
+          done
+
       - name: Cache Next.js build
-        uses: actions/cache@v4
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
         with:
           path: |
             ${{ github.workspace }}/apps/client/.next/cache
@@ -282,50 +591,134 @@ jobs:
         run: |
           set -uo pipefail
 
-          pnpm -C apps/client run start --hostname 127.0.0.1 --port 3500 > /tmp/client-preview-smoke.log 2>&1 &
+          # --report-on-signal: on SIGUSR2, Node dumps a full report (JS stack
+          # per context, native stack, active handles/requests, event loop
+          # state) without needing any app code changes or a debugger attached.
+          # This is what actually answers "what is the request handler stuck
+          # on" instead of the next person guessing again (Redis, then Clerk,
+          # then whatever comes after Clerk) every time this job hangs.
+          mkdir -p /tmp/node-reports
+          NODE_OPTIONS="--report-on-signal --report-signal=SIGUSR2 --report-directory=/tmp/node-reports" \
+            pnpm -C apps/client run start --hostname 127.0.0.1 --port 3500 > /tmp/client-preview-smoke.log 2>&1 &
           APP_PID=$!
 
           cleanup() {
             kill "$APP_PID" >/dev/null 2>&1 || true
+            [ -f /tmp/upstash-rest-stub.pid ] && kill "$(cat /tmp/upstash-rest-stub.pid)" >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
 
-          STATUS="000"
-          # Budget: 60 attempts * (up to 3s curl timeout + 2s sleep) = up to 5
-          # minutes total. This matches the observed cold-boot time once a real
-          # Postgres backs the app (see the added `postgres` service above) and
-          # gives real headroom over a single fixed 45s window, which was too
-          # short for this app's actual boot path on a cold CI runner.
-          MAX_ATTEMPTS=60
-          for i in $(seq 1 "$MAX_ATTEMPTS"); do
-            # Fail fast if the server process already exited instead of waiting
-            # out the full probe budget — a crashed process will never start
-            # accepting connections, so there is nothing to gain by burning the
-            # remaining ~5 minutes before reporting that.
+          # --- Phase 1: wait for the port to open ---
+          # A raw TCP probe (bash's /dev/tcp) is cheaper than an HTTP request
+          # and, more importantly, tells us definitively when the process
+          # starts *accepting* connections — independent of whether it can
+          # ever finish handling one. Without this split, "still booting" and
+          # "bound the port but hangs on every request" look identical in the
+          # logs: both just print curl timeouts for 5 minutes straight.
+          PORT_OPEN=""
+          PORT_MAX_ATTEMPTS=60   # 60 * 2s = up to 2 minutes for the port to open
+          for i in $(seq 1 "$PORT_MAX_ATTEMPTS"); do
             if ! kill -0 "$APP_PID" 2>/dev/null; then
-              echo "Smoke gate failed: client preview process exited before becoming ready."
+              echo "Smoke gate failed: client preview process exited before opening a port."
               cat /tmp/client-preview-smoke.log || true
               exit 1
             fi
 
-            STATUS="$(curl --silent --show-error --max-time 3 --output /tmp/client-preview-body.txt --write-out "%{http_code}" http://127.0.0.1:3500/ || true)"
+            if (exec 3<>/dev/tcp/127.0.0.1/3500) 2>/dev/null; then
+              exec 3>&- 3<&-
+              PORT_OPEN=1
+              echo "Port 3500 opened after ~$((i * 2))s."
+              break
+            fi
+
+            if [ $(( i % 10 )) -eq 0 ]; then
+              echo "Still waiting for port 3500 to open (attempt $i/$PORT_MAX_ATTEMPTS)..."
+            fi
+            sleep 2
+          done
+
+          if [ -z "$PORT_OPEN" ]; then
+            echo "Smoke gate failed: port 3500 never opened after $PORT_MAX_ATTEMPTS attempts (~2 minutes)."
+            cat /tmp/client-preview-smoke.log || true
+            exit 1
+          fi
+
+          # --- Phase 2: port is open — confirm a request actually completes ---
+          # Once the port is open, a request that keeps timing out is not "a
+          # slow boot" anymore — it's a hang, most likely a middleware or
+          # instrumentation call blocking on an external host that never
+          # responds. That's a different failure mode and deserves a fast,
+          # clearly-labeled failure instead of quietly consuming the rest of
+          # a 5-minute budget on a foregone conclusion.
+          STATUS="000"
+          # Reduced from 10 attempts to 3: at --max-time 15 this is already
+          # 3x the timeout that failed to make any difference over the
+          # original 3s budget, so more retries only burn CI minutes without
+          # telling us anything new.
+          HTTP_MAX_ATTEMPTS=3   # 3 * (15s curl timeout + 2s sleep) = ~51s
+          for i in $(seq 1 "$HTTP_MAX_ATTEMPTS"); do
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "Smoke gate failed: client preview process exited while waiting for a response."
+              cat /tmp/client-preview-smoke.log || true
+              exit 1
+            fi
+
+            STATUS="$(curl --silent --show-error --max-time 15 --output /tmp/client-preview-body.txt --write-out "%{http_code}" http://127.0.0.1:3500/ || true)"
             if [ "$STATUS" != "000" ] && [ -n "$STATUS" ]; then
               break
             fi
 
-            # Print progress every 10 attempts instead of one line per curl
-            # timeout — the prior output was 40+ near-identical "Operation
-            # timed out" lines with no diagnostic value.
-            if [ $(( i % 10 )) -eq 0 ]; then
-              echo "Still waiting for client preview to become reachable (attempt $i/$MAX_ATTEMPTS)..."
-            fi
+            echo "Port is open but no HTTP response yet (attempt $i/$HTTP_MAX_ATTEMPTS) — recent app output:"
+            tail -n 15 /tmp/client-preview-smoke.log || true
             sleep 2
           done
 
           echo "Smoke status: $STATUS"
 
           if [ -z "$STATUS" ] || [ "$STATUS" = "000" ]; then
-            echo "Smoke gate failed: client preview root was unreachable after $MAX_ATTEMPTS attempts."
+            echo "Smoke gate failed: port 3500 opened but never completed an HTTP response"
+            echo "after $HTTP_MAX_ATTEMPTS attempts. Capturing a Node diagnostic report before"
+            echo "giving up, so the actual stuck call site is visible instead of guessed at."
+
+            # `$APP_PID` is pnpm's own PID, not the Node/Next.js process it
+            # spawns to run the `start` script — pnpm runs the script as a
+            # child rather than exec'ing into it, and only relays a fixed
+            # set of signals (SIGINT/SIGTERM) for graceful shutdown, not
+            # arbitrary ones like SIGUSR2. Signaling $APP_PID here reliably
+            # hits pnpm, which drops it, so the report never gets generated
+            # regardless of what the actual server process is doing.
+            # Resolving the PID actually bound to the port sidesteps that
+            # assumption entirely, regardless of how pnpm/npm/yarn wraps the
+            # script underneath.
+            SERVER_PID="$(lsof -t -i :3500 -sTCP:LISTEN 2>/dev/null | head -n1 || true)"
+            SERVER_PID="${SERVER_PID:-$APP_PID}"
+            kill -USR2 "$SERVER_PID" 2>/dev/null || true
+            sleep 2
+
+            # `|| true` is required here, not cosmetic: GitHub Actions runs
+            # `run:` steps as `bash -e {0}`, so `-e` is already active before
+            # our own `set -uo pipefail` line runs. When no report exists,
+            # `ls` exits 2; under `pipefail` that 2 propagates through the
+            # pipe even though `head` itself exits 0; under `-e` that non-zero
+            # in the assignment aborts the script right here — silently,
+            # before the `if [ -n "$REPORT_FILE" ]` fallback below ever runs,
+            # and before the final `cat`/`exit 1` that would surface the app
+            # log. That's the exact failure mode this guarded against: a
+            # missing report crashing the "handle a missing report" branch.
+            REPORT_FILE="$(ls -t /tmp/node-reports/report.*.json 2>/dev/null | head -n1 || true)"
+            if [ -n "$REPORT_FILE" ]; then
+              echo "--- JS stack at the moment of the hang ($REPORT_FILE) ---"
+              jq -r '.javascriptStack.stack[]?' "$REPORT_FILE" 2>/dev/null || cat "$REPORT_FILE"
+              echo "--- Active libuv handles (what the event loop is still waiting on) ---"
+              jq -r '.libuv[]?.type' "$REPORT_FILE" 2>/dev/null | sort | uniq -c | sort -rn
+            else
+              echo "No report was generated — the process may be fully wedged (not even"
+              echo "servicing the signal) or exited between checks; see the app log below."
+            fi
+            echo "Redis/Upstash is ruled out for this route (confirmed: GET / has no"
+            echo "Redis-touching call path). Check the JS stack above for what it's"
+            echo "actually awaiting — Clerk session/JWKS verification and any DB query"
+            echo "on the render path are the next most likely candidates."
             cat /tmp/client-preview-smoke.log || true
             exit 1
           fi
@@ -338,3 +731,396 @@ jobs:
           fi
 
           echo "Smoke gate passed: root route returned non-5xx status $STATUS."
+
+      - name: Upload Node diagnostic report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: client-smoke-gate-node-report
+          path: /tmp/node-reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  admin-preview-smoke-gate:
+    name: Admin Preview Smoke Gate
+    runs-on: ubuntu-latest
+    # Mirrors client-preview-smoke-gate. Runs in parallel with it (both only
+    # `need: [validate]`, not each other) so this doesn't add serialized
+    # wall-clock time on a passing PR.
+    #
+    # Why this job exists: before this change, apps/admin had zero coverage
+    # for the exact regression class client-preview-smoke-gate was built to
+    # catch — a broken middleware import, a missing route handler, or (per
+    # the client incident this workflow already hardened against) an eager
+    # DB/Redis dependency at boot that hangs `next start` for minutes before
+    # it ever binds the port. `validate` type-checks and unit-tests admin via
+    # turbo, but never actually boots the server, so none of that is exposed
+    # without a real smoke test.
+    needs: [validate]
+    # Runs on PRs (pre-merge) AND on push to main/develop/integration/admin-overhaul
+    # (post-merge) — mirrors client-preview-smoke-gate.
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    timeout-minutes: 25
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+      # admin depends on @build/redis and @build/db (see apps/admin/package.json),
+      # so it is exposed to the same class of boot-time DB/Redis hang that
+      # client-preview-smoke-gate was hardened against. Providing both here
+      # up front avoids rediscovering that failure mode the hard way.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: build_market_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ci -d build_market_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
+      CLERK_SECRET_KEY: sk_test_ci_placeholder
+      CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3005
+      CLIENT_APP_URL: http://127.0.0.1:3500
+      # ASSUMPTION: admin calls out to the client app's API rather than
+      # exposing its own equivalent REST surface (see docs/CHANGELOG.md,
+      # `callClientApi` in app/actions/admin/shared.ts). If admin's env
+      # boundary expects a distinct variable name for that cross-app base
+      # URL, add it here rather than relying on this one.
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:3005/api
+      ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      RATE_LIMIT_BACKEND: memory
+      # See the matching env-var comment in client-preview-smoke-gate above:
+      # a closed port fails fast for one Redis call, but `@upstash/redis`
+      # retries with backoff, so any request path with more than one
+      # Redis-touching call still stacks retries into a hang. The "Start
+      # Upstash REST stub" step below removes the failure entirely instead
+      # of just making it faster. admin currently redirects unauthenticated
+      # requests to `/` before any Redis-touching code runs (see the
+      # detailed analysis in this incident), so this job doesn't hit the
+      # hang today — but that's an artifact of the current middleware, not a
+      # guarantee, and the stub costs nothing to keep in place here too.
+      UPSTASH_REDIS_REST_URL: http://127.0.0.1:8079
+      UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
+      REDIS_URL: redis://127.0.0.1:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Start Upstash REST stub (always-200, no retries triggered)
+        run: |
+          nohup python3 -c '
+          import http.server
+          import json
+
+          class UpstashStubHandler(http.server.BaseHTTPRequestHandler):
+              def _respond(self):
+                  length = int(self.headers.get("Content-Length", 0) or 0)
+                  raw = self.rfile.read(length) if length else b""
+
+                  # Discriminator is the PATH only. The Upstash single-command
+                  # format ("/") is *also* submitted as a flat JSON array
+                  # (e.g. `["GET", "key"]`), so sniffing "is the body a JSON
+                  # array?" misclassifies an ordinary single command as a
+                  # pipeline call and hands the SDK the wrong response shape
+                  # back — which the SDK would treat as a parse failure and
+                  # retry, defeating the entire point of this stub.
+                  is_pipeline_path = "pipeline" in self.path or "multi-exec" in self.path
+
+                  if is_pipeline_path:
+                      count = 1
+                      try:
+                          parsed = json.loads(raw) if raw else None
+                          if isinstance(parsed, list):
+                              count = max(len(parsed), 1)
+                      except (json.JSONDecodeError, ValueError):
+                          pass
+                      body = json.dumps([{"result": None} for _ in range(count)]).encode()
+                  else:
+                      body = json.dumps({"result": None}).encode()
+
+                  self.send_response(200)
+                  self.send_header("Content-Type", "application/json")
+                  self.send_header("Content-Length", str(len(body)))
+                  self.end_headers()
+                  self.wfile.write(body)
+
+              def do_GET(self):
+                  self._respond()
+
+              def do_POST(self):
+                  self._respond()
+
+              def log_message(self, fmt, *args):
+                  pass
+
+          http.server.ThreadingHTTPServer(("127.0.0.1", 8079), UpstashStubHandler).serve_forever()
+          ' > /tmp/upstash-rest-stub.log 2>&1 &
+          echo $! > /tmp/upstash-rest-stub.pid
+
+          for i in $(seq 1 15); do
+            if curl --silent --max-time 1 --output /dev/null http://127.0.0.1:8079/; then
+              echo "Upstash REST stub is accepting requests."
+              break
+            fi
+            if [ "$i" -eq 15 ]; then
+              echo "Upstash REST stub failed to start within 15s."
+              cat /tmp/upstash-rest-stub.log || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Cache Next.js build
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: |
+            ${{ github.workspace }}/apps/admin/.next/cache
+          # Scoped to apps/admin source only, same rationale as the client
+          # job's cache key: hashing the whole monorepo would invalidate this
+          # cache on unrelated packages/* or apps/client/* changes.
+          key: ${{ runner.os }}-nextjs-admin-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ hashFiles('apps/admin/**/*.{js,jsx,ts,tsx,css}') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-admin-${{ hashFiles('**/pnpm-lock.yaml') }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply database migrations
+        run: pnpm run db:migrate:deploy
+
+      - name: Build workspace dependencies then admin
+        run: pnpm --filter="admin..." run build
+
+      - name: Smoke check root route (fail on 5xx)
+        run: |
+          set -uo pipefail
+
+          pnpm -C apps/admin run start --hostname 127.0.0.1 --port 3005 > /tmp/admin-preview-smoke.log 2>&1 &
+          APP_PID=$!
+
+          cleanup() {
+            kill "$APP_PID" >/dev/null 2>&1 || true
+            [ -f /tmp/upstash-rest-stub.pid ] && kill "$(cat /tmp/upstash-rest-stub.pid)" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          # --- Phase 1: wait for the port to open ---
+          PORT_OPEN=""
+          PORT_MAX_ATTEMPTS=60   # 60 * 2s = up to 2 minutes for the port to open
+          for i in $(seq 1 "$PORT_MAX_ATTEMPTS"); do
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "Smoke gate failed: admin preview process exited before opening a port."
+              cat /tmp/admin-preview-smoke.log || true
+              exit 1
+            fi
+
+            if (exec 3<>/dev/tcp/127.0.0.1/3005) 2>/dev/null; then
+              exec 3>&- 3<&-
+              PORT_OPEN=1
+              echo "Port 3005 opened after ~$((i * 2))s."
+              break
+            fi
+
+            if [ $(( i % 10 )) -eq 0 ]; then
+              echo "Still waiting for port 3005 to open (attempt $i/$PORT_MAX_ATTEMPTS)..."
+            fi
+            sleep 2
+          done
+
+          if [ -z "$PORT_OPEN" ]; then
+            echo "Smoke gate failed: port 3005 never opened after $PORT_MAX_ATTEMPTS attempts (~2 minutes)."
+            cat /tmp/admin-preview-smoke.log || true
+            exit 1
+          fi
+
+          # --- Phase 2: port is open — confirm a request actually completes ---
+          STATUS="000"
+          HTTP_MAX_ATTEMPTS=10   # 10 * (15s curl timeout + 2s sleep) = ~170s
+          for i in $(seq 1 "$HTTP_MAX_ATTEMPTS"); do
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "Smoke gate failed: admin preview process exited while waiting for a response."
+              cat /tmp/admin-preview-smoke.log || true
+              exit 1
+            fi
+
+            STATUS="$(curl --silent --show-error --max-time 15 --output /tmp/admin-preview-body.txt --write-out "%{http_code}" http://127.0.0.1:3005/ || true)"
+            if [ "$STATUS" != "000" ] && [ -n "$STATUS" ]; then
+              break
+            fi
+
+            echo "Port is open but no HTTP response yet (attempt $i/$HTTP_MAX_ATTEMPTS) — recent app output:"
+            tail -n 15 /tmp/admin-preview-smoke.log || true
+            sleep 2
+          done
+
+          echo "Smoke status: $STATUS"
+
+          if [ -z "$STATUS" ] || [ "$STATUS" = "000" ]; then
+            echo "Smoke gate failed: port 3005 opened but never completed an HTTP response"
+            echo "after $HTTP_MAX_ATTEMPTS attempts (~50s). This is a hang, not a slow boot —"
+            echo "look for a request-time call to an external host that never responds"
+            echo "(e.g. a rate-limit or auth check that ignores RATE_LIMIT_BACKEND=memory)."
+            cat /tmp/admin-preview-smoke.log || true
+            exit 1
+          fi
+
+          if [ "${STATUS:0:1}" = "5" ]; then
+            echo "Smoke gate failed: root route returned 5xx."
+            cat /tmp/admin-preview-smoke.log || true
+            cat /tmp/admin-preview-body.txt || true
+            exit 1
+          fi
+
+          echo "Smoke gate passed: root route returned non-5xx status $STATUS."
+
+  admin-nightly-test-all:
+    name: Admin Nightly Test Suite (flake-focused)
+    runs-on: ubuntu-latest
+    # Nightly/flake-focused suite: `admin:test:all` is the broader,
+    # slower admin test run (includes specs that are known-flaky or too
+    # slow for the required PR path — see apps/admin/package.json for the
+    # script's own scope). It runs on the nightly schedule above, plus
+    # on-demand via workflow_dispatch for manual debugging, but never on
+    # every push/PR — that keeps it off the required PR critical path
+    # while still giving it a daily run and a paper trail when it fails.
+    #
+    # ASSUMPTION: `admin:test:all` is a Jest/Vitest-style run (like the
+    # root `pnpm run test` in the validate job) that exercises the app
+    # against a live DB/Redis rather than a built, running Next.js server.
+    # If it actually needs a running app (e.g. Playwright against
+    # `next start`), add the build + start steps from
+    # admin-preview-smoke-gate above before the test step.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 45
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: build_market_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ci -d build_market_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
+      CLERK_SECRET_KEY: sk_test_ci_placeholder
+      CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3005
+      CLIENT_APP_URL: http://127.0.0.1:3500
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:3005/api
+      ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      RATE_LIMIT_BACKEND: memory
+      UPSTASH_REDIS_REST_URL: https://127.0.0.1:6378
+      UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
+      REDIS_URL: redis://127.0.0.1:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply database migrations
+        run: pnpm run db:migrate:deploy
+
+      - name: Run admin nightly/flake-focused test suite
+        run: pnpm run admin:test:all
+
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    # `always()` so this job still runs (and can report failure) even when an
+    # upstream job in `needs` failed outright — the default implicit
+    # condition would skip ci-success entirely in that case, which defeats
+    # the point of having one required status check.
+    if: always()
+    needs:
+      - workspace-version-consistency-guard
+      - pinned-actions-guard
+      - client-changelog-guard
+      - admin-changelog-guard
+      - validate
+      - client-preview-smoke-gate
+      - admin-preview-smoke-gate
+      - admin-nightly-test-all
+    timeout-minutes: 5
+    steps:
+      - name: Check status of all required jobs
+        run: |
+          # `needs.*.result` is one of: success, failure, cancelled, skipped.
+          # The changelog guards and both smoke gates now run on pull_request
+          # AND on push to main/develop/integration/admin-overhaul (see their
+          # `if:` conditions above); admin-nightly-test-all only runs on
+          # `schedule` / `workflow_dispatch`. Every one of those jobs reports
+          # "skipped" rather than "success" on event types it doesn't run
+          # for — that's an expected, non-failing outcome here, not a real gap.
+          results='${{ toJSON(needs) }}'
+          echo "$results" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+
+          failed=$(echo "$results" | jq -r '
+            to_entries
+            | map(select(.value.result != "success" and .value.result != "skipped"))
+            | length
+          ')
+
+          if [ "$failed" -gt 0 ]; then
+            echo "One or more required jobs did not succeed."
+            exit 1
+          fi
+
+          echo "All required jobs passed (or were intentionally skipped)."
+
+    # Point branch protection's required status check at "CI Success" rather
+    # than at individual job names. This is the one check name that needs to
+    # stay stable as jobs above are renamed, split, or added — every other
+    # job name here can change freely without a branch-protection-settings
+    # update in lockstep.

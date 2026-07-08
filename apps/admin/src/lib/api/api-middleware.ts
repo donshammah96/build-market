@@ -102,7 +102,6 @@ export function withAuth<T = unknown>(handler: AuthenticatedHandler<T>) {
 
       if (!user) {
         logger.warn("User not found in database", {
-          clerkId,
           correlationId,
         });
         return apiError("User account not found", HttpStatus.NOT_FOUND);
@@ -113,7 +112,6 @@ export function withAuth<T = unknown>(handler: AuthenticatedHandler<T>) {
       if (userStatus && userStatus !== "ACTIVE") {
         const statusError = BLOCKED_STATUSES[userStatus];
         logger.warn("Non-active user attempted access", {
-          userId: user.id,
           status: userStatus,
           correlationId,
         });
@@ -133,7 +131,6 @@ export function withAuth<T = unknown>(handler: AuthenticatedHandler<T>) {
 
         if (adminProfile && !adminProfile.isActive) {
           logger.warn("Inactive admin attempted access", {
-            userId: user.id,
             correlationId,
           });
           return apiError(
@@ -154,7 +151,6 @@ export function withAuth<T = unknown>(handler: AuthenticatedHandler<T>) {
       };
 
       logger.debug("Request authenticated", {
-        userId: user.id,
         role: user.role,
         ...(adminRole && { adminRole }),
         correlationId,
@@ -194,7 +190,6 @@ export function withRole(allowedRoles: UserRole[]) {
 
       if (!allowedRoles.includes(context.userRole)) {
         logger.warn("Access denied - insufficient permissions", {
-          userId: context.dbUserId,
           userRole: context.userRole,
           requiredRoles: allowedRoles,
           ...omitUndefined({ correlationId }),
@@ -206,7 +201,6 @@ export function withRole(allowedRoles: UserRole[]) {
       }
 
       logger.debug("Role check passed", {
-        userId: context.dbUserId,
         userRole: context.userRole,
         ...omitUndefined({ correlationId }),
       });
@@ -237,7 +231,6 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
       // Must be an ADMIN user
       if (context.userRole !== UserRole.ADMIN) {
         logger.warn("Non-admin attempted admin-role-gated action", {
-          userId: context.dbUserId,
           userRole: context.userRole,
           requiredAdminRoles: allowedAdminRoles,
           ...omitUndefined({ correlationId }),
@@ -251,7 +244,6 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
       // Must have an AdminProfile with a role
       if (!context.adminRole) {
         logger.warn("Admin user missing AdminProfile", {
-          userId: context.dbUserId,
           ...omitUndefined({ correlationId }),
         });
         return apiError(
@@ -267,7 +259,6 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
 
       if (!hasAccess) {
         logger.warn("Admin role insufficient", {
-          userId: context.dbUserId,
           adminRole: context.adminRole,
           requiredAdminRoles: allowedAdminRoles,
           ...omitUndefined({ correlationId }),
@@ -279,7 +270,6 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
       }
 
       logger.debug("Admin role check passed", {
-        userId: context.dbUserId,
         adminRole: context.adminRole,
         ...omitUndefined({ correlationId }),
       });

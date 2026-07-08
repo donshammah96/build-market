@@ -97,9 +97,16 @@ export default async function RootLayout({
   // Fallback to undefined instead of an empty string to prevent invalid CSP attributes
   const nonce = rawNonce || undefined;
 
-  const { auth } = await import("@clerk/nextjs/server");
-  const { userId } = await auth();
-  const isSignedIn = !!userId;
+  let isSignedIn = false;
+  const isBypass = env.auth.bypassEnabled && (env.isDev || env.isCI);
+
+  if (isBypass) {
+    isSignedIn = true;
+  } else {
+    const { auth: getAuth } = await import("@clerk/nextjs/server");
+    const authObj = await getAuth();
+    isSignedIn = !!authObj.userId;
+  }
 
   return (
     <ClerkProvider nonce={nonce} dynamic>

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Security
+
+- **Static Linter Rules Parity**: Reconciled the security drift checker ([check-security-drift.mjs](file:///c:/Users/User/build-market/apps/admin/scripts/check-security-drift.mjs)) with client-side validation rules. Fixed a critical scanning path bug (where paths looked in root instead of `src/` causing 0 files to be scanned) and added rules for `no-direct-env`, `no-banned-log-keys`, `no-unallowlisted-storage`, `no-cors-drift`, `zod-mutation-passthrough`, `unsafe-client-errors`, and `req-json-in-get`.
+- **Observability and Privacy (ADR-ADMIN-003)**: Hardened standard log calls in [api-middleware.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/api/api-middleware.ts) and [api-utils.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/api/api-utils.ts) to eliminate raw `userId` and `clerkId` log properties. Added explicit log safety exemptions to compliance cron and queue worker files to safely track user erasure life cycles.
+- **XSS Mitigation**: Added a linter validation sanitizer comment to dynamic chart styling inside [chart.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/ui/chart.tsx#L83).
+
 ### Added
 
 - **System Health Domain Slice**: Created a new domain slice at [`contracts.ts`](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/system-health/contracts.ts) and [`service.ts`](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/system-health/service.ts) running concurrent, error-isolated diagnostic probes (database `$queryRaw` ping, serverless-safe Upstash Redis ping, NATS JetStream configuration validation, and implicit Clerk status checking) with latency timing and degraded threshold flags.

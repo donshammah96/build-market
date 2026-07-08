@@ -1,0 +1,27 @@
+version: 2
+updates:
+  # Keeps the SHA-pinned actions in ci.yml (checkout, setup-node,
+  # pnpm/action-setup, cache, github-script) current. Dependabot resolves
+  # the SHA back to its tag/version, checks for newer releases, and opens a
+  # PR that bumps the SHA while updating the trailing "# vX.Y.Z" comment —
+  # so the pins stay both immutable AND current, instead of silently
+  # drifting.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # Bundle all action bumps into a single PR per run instead of one PR per
+    # action. With five pinned actions in this workflow, ungrouped updates
+    # would mean up to five separate PRs (and five separate required-check
+    # runs) for routine version bumps.
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
