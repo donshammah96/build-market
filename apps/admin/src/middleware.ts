@@ -96,6 +96,17 @@ export default clerkMiddleware(async (auth, req) => {
   const authObj = await auth();
 
   if (!authObj.userId) {
+    if (
+      adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE &&
+      adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL
+    ) {
+      const primarySignIn =
+        adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL;
+      const redirectUrl = new URL(primarySignIn);
+      redirectUrl.searchParams.set("redirect_url", req.url);
+      return NextResponse.redirect(redirectUrl);
+    }
+
     const signInResponse = authObj.redirectToSignIn({
       returnBackUrl: req.url,
     }) as unknown as Response;

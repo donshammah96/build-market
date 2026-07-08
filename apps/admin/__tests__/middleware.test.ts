@@ -34,6 +34,16 @@ vi.mock("@/lib/auth-sync", () => ({
   syncUserRole: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/infrastructure/env", () => ({
+  adminEnvConfig: {
+    NODE_ENV: "test",
+    DEV_ADMIN_BYPASS: false,
+    NEXT_PUBLIC_CLERK_IS_SATELLITE: false,
+    NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL: "",
+  },
+}));
+
+import { adminEnvConfig } from "@/lib/infrastructure/env";
 import middleware from "../src/middleware";
 
 describe("Admin Middleware - Authentication Redirect", () => {
@@ -96,5 +106,38 @@ describe("Admin Middleware - Authentication Redirect", () => {
     expect(response.headers.get("Location")).toBe(
       "https://buildmarket.app/sign-in",
     );
+  });
+
+  it("should redirect directly to the primary sign-in URL in satellite mode", async () => {
+    adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE = true;
+    adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL =
+      "https://buildmarket.app/sign-in";
+
+    try {
+      mockAuth.mockResolvedValue({
+        userId: null,
+      });
+
+      const request = new NextRequest(
+        "https://admin.buildmarket.app/dashboard",
+        {
+          headers: {
+            host: "admin.buildmarket.app",
+          },
+        },
+      );
+
+      const response = await middleware(request, {} as any);
+
+      expect(response).toBeTruthy();
+      expect(response).toBeInstanceOf(NextResponse);
+      expect(response?.headers.get("Location")).toBe(
+        "https://buildmarket.app/sign-in?redirect_url=https%3A%2F%2Fadmin.buildmarket.app%2Fdashboard",
+      );
+      expect(response?.status).toBe(307);
+    } finally {
+      adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE = false;
+      adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL = "";
+    }
   });
 });
