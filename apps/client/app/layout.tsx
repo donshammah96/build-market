@@ -98,17 +98,14 @@ export default async function RootLayout({
   const nonce = rawNonce || undefined;
 
   let isSignedIn = false;
-  let userId: string | null = null;
   const isBypass = env.auth.bypassEnabled && (env.isDev || env.isCI);
 
   if (isBypass) {
-    userId = env.auth.devActor.clerkId;
     isSignedIn = true;
   } else {
     const { auth: getAuth } = await import("@clerk/nextjs/server");
     const authObj = await getAuth();
-    userId = authObj.userId ?? null;
-    isSignedIn = !!userId;
+    isSignedIn = !!authObj.userId;
   }
 
   return (

@@ -139,7 +139,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- **CI / Smoke Test**: Fixed the client preview smoke gate timeout/hang by allowing Clerk's server-side authentication checks to be bypassed in the CI environment. Added `BYPASS_AUTH: "true"` environment flag to the `client-preview-smoke-gate` job in `.github/workflows/ci.yml`, and updated `apps/client/middleware.ts` and `apps/client/app/layout.tsx` to conditionally bypass Clerk `auth()` when `BYPASS_AUTH` is enabled in CI or development.
+- **CI / Smoke Test**: Fixed the client preview smoke gate timeout/hang by allowing Clerk's server-side authentication checks and request wrapping to be bypassed in the CI environment. Added `BYPASS_AUTH: "true"` environment flag to the `client-preview-smoke-gate` job in `.github/workflows/ci.yml`, and updated `apps/client/middleware.ts` and `apps/client/app/layout.tsx` to conditionally bypass Clerk `auth()` and the `clerkMiddleware` request-interceptor wrapper when `BYPASS_AUTH` is enabled in CI or development, while resolving an unused `userId` variable warning.
 - **Admin**: Fixed TypeScript type warnings in compliance queue-status route, professionals contracts, and gdpr orchestrator by replacing explicit `any` with proper generic types.
 - **Admin**: Resolved compiler error and runtime bug in `DatabaseQueueStrategy.getEntityName` (within `notification-queue.ts`) where the query target was mapped to a non-existent `certificate` model instead of `professionalDocument`.
 - **Client**: Resolved markdown lint warning (MD024) in client `CHANGELOG.md` by renaming duplicate `## [Unreleased]` heading to `## [Unreleased - Historical]`.
