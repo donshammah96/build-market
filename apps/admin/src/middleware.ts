@@ -69,6 +69,36 @@ function hasAllowedRole(
   return normalizedRole ? allowedRoles.includes(normalizedRole) : false;
 }
 
+/**
+ * Best-effort fallback for the primary domain's sign-in URL when
+ * `NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL` is unset for the environment
+ * serving this request (e.g. a Preview/branch deploy where only
+ * Production has the var configured).
+ *
+ * Heuristic: strip the leftmost subdomain label from the current host
+ * (`admin.buildmarket.app` -> `buildmarket.app`) and assume `/sign-in`
+ * lives at the apex. This only fires as a safety net — it should never
+ * be relied on in place of setting the env var, since it assumes a
+ * specific domain-naming convention (satellite = one subdomain deep
+ * under the primary's apex). Returns null if the host doesn't look like
+ * a subdomain (nothing sensible to strip), so callers can fall back
+ * further.
+ */
+function deriveFallbackPrimarySignInUrl(req: {
+  nextUrl: { protocol: string; host: string };
+}): string | null {
+  const { protocol, host } = req.nextUrl;
+  const labels = host.split(".");
+
+  // Need at least "sub.domain.tld" to safely strip one subdomain label.
+  if (labels.length <= 2) {
+    return null;
+  }
+
+  const apexHost = labels.slice(1).join(".");
+  return `${protocol}//${apexHost}/sign-in`;
+}
+
 // ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
@@ -97,15 +127,42 @@ export default clerkMiddleware(
     const authObj = await auth();
 
     if (!authObj.userId) {
-      if (
-        adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE &&
-        adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL
-      ) {
+      if (adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE) {
+        // Prefer the explicit env var. If it's unset for this environment,
+        // derive a fallback from the request host rather than silently
+        // dropping straight to `redirectToSignIn()` — that path resolves
+        // via `NEXT_PUBLIC_CLERK_SIGN_IN_URL` (typically a *relative*
+        // path like "/sign-in"), which on a satellite domain is exactly
+        // the redirect-loop bug this middleware exists to prevent.
         const primarySignIn =
-          adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL;
-        const redirectUrl = new URL(primarySignIn);
-        redirectUrl.searchParams.set("redirect_url", req.url);
-        return NextResponse.redirect(redirectUrl);
+          adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL ||
+          deriveFallbackPrimarySignInUrl(req);
+
+        if (primarySignIn) {
+          if (!adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL) {
+            console.warn(
+              "[middleware] NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL is not set " +
+                `for this environment; falling back to derived sign-in URL "${primarySignIn}". ` +
+                "Set the env var explicitly for this Vercel environment to avoid relying on this heuristic.",
+            );
+          }
+
+          const redirectUrl = new URL(primarySignIn);
+          redirectUrl.searchParams.set("redirect_url", req.url);
+          return NextResponse.redirect(redirectUrl);
+        }
+
+        // Both the env var and the host-derivation heuristic failed
+        // (e.g. running on a bare `vercel.app` preview host with no
+        // subdomain structure to strip). Log loudly so this is
+        // discoverable in Vercel's function logs instead of silently
+        // manifesting as a redirect loop for users.
+        console.error(
+          "[middleware] NEXT_PUBLIC_CLERK_IS_SATELLITE is true but no primary " +
+            `sign-in URL could be resolved for host "${req.nextUrl.host}" ` +
+            "(env var unset and host has no apex domain to derive). Falling back " +
+            "to local redirectToSignIn(), which may cause a redirect loop on satellite domains.",
+        );
       }
 
       const signInResponse = authObj.redirectToSignIn({
@@ -165,12 +222,29 @@ export default clerkMiddleware(
       );
     }
   },
-  {
+  // ---------------------------------------------------------------------
+  // Dynamic Clerk options resolver.
+  //
+  // Why a function instead of a static object: `domain` is REQUIRED
+  // whenever `isSatellite` is true, or Clerk throws
+  // "Missing domain and proxyUrl" at request time. A static object built
+  // from `NEXT_PUBLIC_CLERK_DOMAIN` is only as reliable as that env var's
+  // propagation to *every* Vercel environment (Production, Preview,
+  // per-branch deploys). If it's ever unset for the environment that
+  // served a given request, `isSatellite: true` reaches Clerk with no
+  // domain and the whole app 500s.
+  //
+  // Resolving `domain` from the incoming request's host removes that
+  // failure mode entirely — it is always defined, and it is always the
+  // domain that is actually serving the request (which is also what
+  // Clerk needs to validate the satellite handshake against). The env
+  // var is kept as an explicit override for cases where you deliberately
+  // want to pin the domain rather than infer it.
+  // ---------------------------------------------------------------------
+  (req) => ({
     isSatellite: adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE,
-    ...(adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN
-      ? { domain: adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN }
-      : {}),
-  },
+    domain: adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN || req.nextUrl.host,
+  }),
 );
 
 export const config = {
