@@ -1,8 +1,16 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
-import { FileText, Award, ShieldCheck } from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+  FileText,
+  Award,
+  ShieldCheck,
+  Terminal,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
@@ -36,7 +44,7 @@ const DocumentFormDialog = dynamic(
     import("./document-form-dialog").then((m) => ({
       default: m.DocumentFormDialog,
     })),
-  { ssr: false, loading: () => <div className="min-h-[200px]" /> },
+  { ssr: false, loading: () => <div className="min-h-50" /> },
 );
 
 const CertificateFormDialog = dynamic(
@@ -44,7 +52,7 @@ const CertificateFormDialog = dynamic(
     import("./certificate-form-dialog").then((m) => ({
       default: m.CertificateFormDialog,
     })),
-  { ssr: false, loading: () => <div className="min-h-[200px]" /> },
+  { ssr: false, loading: () => <div className="min-h-50" /> },
 );
 
 const LicenseFormDialog = dynamic(
@@ -52,13 +60,48 @@ const LicenseFormDialog = dynamic(
     import("./license-form-dialog").then((m) => ({
       default: m.LicenseFormDialog,
     })),
-  { ssr: false, loading: () => <div className="min-h-[200px]" /> },
+  { ssr: false, loading: () => <div className="min-h-50" /> },
 );
 
 export default function CredentialsSettingsPageClient() {
   const [activeTab, setActiveTab] = useState<
     "documents" | "certificates" | "licenses"
   >("documents");
+
+  const [logs, setLogs] = useState<any[]>([]);
+  const [isPolling, setIsPolling] = useState(true);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+
+  // Poll for telemetry logs (runs every 1.5s during active demo)
+  useEffect(() => {
+    if (!isPolling) return;
+    const fetchLogs = async () => {
+      try {
+        const res = await fetch("/api/demo/logs");
+        if (res.ok) {
+          const data = await res.json();
+          setLogs(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch telemetry logs", err);
+      }
+    };
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 1500);
+    return () => clearInterval(interval);
+  }, [isPolling]);
+
+  const clearTelemetryLogs = async () => {
+    try {
+      const res = await fetch("/api/demo/logs", { method: "DELETE" });
+      if (res.ok) {
+        setLogs([]);
+        toast.success("Telemetry logs cleared");
+      }
+    } catch {
+      toast.error("Failed to clear telemetry logs");
+    }
+  };
 
   const [docCreateOpen, setDocCreateOpen] = useState(false);
   const [docEditOpen, setDocEditOpen] = useState(false);
@@ -412,6 +455,153 @@ export default function CredentialsSettingsPageClient() {
         }
         isPending={deleteLicMutation.isPending}
       />
+
+      {/* UNDER THE HOOD: SYSTEM TELEMETRY PANEL */}
+      <div className="mt-12 rounded-xl border border-zinc-800 bg-zinc-950/75 p-6 backdrop-blur-md shadow-2xl text-zinc-300">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-850 pb-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="relative flex h-3 w-3">
+              <span
+                className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isPolling ? "bg-emerald-400" : "bg-zinc-650"}`}
+              ></span>
+              <span
+                className={`relative inline-flex rounded-full h-3 w-3 ${isPolling ? "bg-emerald-500" : "bg-zinc-550"}`}
+              ></span>
+            </div>
+            <div>
+              <h2 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                <Terminal className="h-5 w-5 text-emerald-400" />
+                Under the Hood: System Telemetry
+              </h2>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Redaction-filtered live stream of event logs and API transitions
+                (ADR-005 compliant)
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsPolling(!isPolling)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                isPolling
+                  ? "bg-zinc-900 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                  : "bg-emerald-950/40 border-emerald-800 text-emerald-400 hover:bg-emerald-950/60"
+              }`}
+            >
+              {isPolling ? "Pause Feed" : "Resume Feed"}
+            </button>
+            <button
+              onClick={clearTelemetryLogs}
+              disabled={logs.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-950/30 border border-red-900/50 text-red-400 transition-all hover:bg-red-950/60 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Clear Logs
+            </button>
+          </div>
+        </div>
+
+        {logs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center rounded-lg border border-dashed border-zinc-850 bg-zinc-900/10">
+            <Terminal className="h-8 w-8 text-zinc-700 mb-2 animate-pulse" />
+            <p className="text-sm font-medium text-zinc-500">
+              No events logged yet
+            </p>
+            <p className="text-xs text-zinc-650 mt-1">
+              Submit documents or wait for admin verifications to generate
+              telemetry
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3 max-h-100 overflow-y-auto pr-2 custom-scrollbar">
+            {logs.map((log, index) => {
+              const logId = `${log.correlationId}-${index}`;
+              const isExpanded = expandedLogId === logId;
+              const isSuccess = log.outcome === "success";
+              const isWarning =
+                log.outcome === "validation_error" ||
+                log.outcome === "rate_limited" ||
+                log.outcome === "domain_error";
+
+              let outcomeBadgeColor =
+                "bg-red-500/10 text-red-400 border-red-500/20";
+              if (isSuccess)
+                outcomeBadgeColor =
+                  "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+              else if (isWarning)
+                outcomeBadgeColor =
+                  "bg-amber-500/10 text-amber-400 border-amber-500/20";
+
+              return (
+                <div
+                  key={logId}
+                  className="rounded-lg border border-zinc-850 bg-zinc-900/20 hover:bg-zinc-900/40 transition-all overflow-hidden"
+                >
+                  <div
+                    onClick={() => setExpandedLogId(isExpanded ? null : logId)}
+                    className="flex flex-wrap items-center justify-between gap-3 p-3.5 cursor-pointer select-none"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-zinc-600 text-xs">
+                        {new Date(log.timestamp).toLocaleTimeString()}
+                      </span>
+                      <span className="font-mono font-semibold text-sm text-zinc-200">
+                        {log.operationName}
+                      </span>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full border ${outcomeBadgeColor}`}
+                      >
+                        {log.outcome}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-4 text-xs font-mono text-zinc-400">
+                      <span>
+                        Status:{" "}
+                        <strong
+                          className={
+                            log.httpStatus >= 400
+                              ? "text-red-400"
+                              : "text-emerald-400"
+                          }
+                        >
+                          {log.httpStatus}
+                        </strong>
+                      </span>
+                      <span>
+                        Duration: <strong>{log.durationMs}ms</strong>
+                      </span>
+                      <span className="capitalize">
+                        Actor:{" "}
+                        <strong className="text-zinc-300">
+                          {log.actorRole}
+                        </strong>
+                      </span>
+                      {isExpanded ? (
+                        <ChevronUp className="h-4 w-4 text-zinc-500" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-zinc-500" />
+                      )}
+                    </div>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="border-t border-zinc-850 bg-black/60 p-4 font-mono text-xs overflow-x-auto">
+                      <div className="flex justify-between items-center text-zinc-500 mb-2 border-b border-zinc-850 pb-1.5">
+                        <span>Redacted Trace Payload</span>
+                        <span>Correlation ID: {log.correlationId}</span>
+                      </div>
+                      <pre className="text-emerald-400 custom-scrollbar">
+                        {JSON.stringify(log, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

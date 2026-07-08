@@ -21,8 +21,7 @@ import { withAuth } from "@/app/lib/api/api-middleware";
 import { licensesService } from "@/app/lib/domains/licenses";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-// ADR-006 classification: Class B - professional license identifiers and authority data cross this boundary.
-// Reviewed: 2026-04-09 by @copilot
+import { pushDemoLog } from "@/app/lib/api/demo-logs";
 
 const ROUTE_PATTERN = "/api/professional-portal/licenses";
 
@@ -54,6 +53,7 @@ function createLicensesOutcomeLogger(
     httpStatus: number,
     details: LicensesOutcomeLogFields = {},
   ) => {
+    const durationMs = Date.now() - requestStartedAt;
     getClientLogger().info("Professional licenses adapter outcome", {
       correlationId,
       operationName,
@@ -62,11 +62,44 @@ function createLicensesOutcomeLogger(
       actorRole,
       outcome,
       httpStatus,
-      durationMs: Date.now() - requestStartedAt,
+      durationMs,
       ...(details.licenseId ? { licenseId: details.licenseId } : {}),
       ...(details.idempotency ? { idempotency: details.idempotency } : {}),
       ...(details.domainError ? { domainError: details.domainError } : {}),
     });
+
+    // Map license outcomes to ProfessionalPortalRouteOutcome
+    let normalizedOutcome:
+      | "success"
+      | "domain_error"
+      | "validation_error"
+      | "rate_limited"
+      | "internal_error" = "success";
+    if (outcome === "rate_limited") {
+      normalizedOutcome = "rate_limited";
+    } else if (outcome === "bad_request") {
+      normalizedOutcome = "validation_error";
+    } else if (outcome === "failed") {
+      normalizedOutcome = "internal_error";
+    } else if (
+      outcome === "forbidden" ||
+      outcome === "conflict" ||
+      outcome === "not_found"
+    ) {
+      normalizedOutcome = "domain_error";
+    }
+
+    pushDemoLog({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: normalizedOutcome,
+      httpStatus,
+      durationMs,
+      ...(details.domainError ? { domainError: details.domainError } : {}),
+      resourceType: "license",
+      ...(details.licenseId ? { resourceId: details.licenseId } : {}),
+    }).catch(() => undefined);
   };
 }
 

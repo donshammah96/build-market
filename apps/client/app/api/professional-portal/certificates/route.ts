@@ -24,9 +24,7 @@ import { AuditAction } from "@prisma/client";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { certificatesService } from "@/app/lib/domains/certificates";
 import { normalizeRole } from "@/app/lib/security/roles";
-
-// ADR-006 classification: Class B - certificate verification metadata and identifiers cross this boundary.
-// Reviewed: 2026-04-09 by @copilot
+import { pushDemoLog } from "@/app/lib/api/demo-logs";
 
 const ROUTE_PATTERN = "/api/professional-portal/certificates";
 
@@ -58,6 +56,7 @@ function createCertificatesOutcomeLogger(
     httpStatus: number,
     details: CertificatesOutcomeLogFields = {},
   ) => {
+    const durationMs = Date.now() - requestStartedAt;
     getClientLogger().info("Professional certificates adapter outcome", {
       correlationId,
       operationName,
@@ -66,13 +65,46 @@ function createCertificatesOutcomeLogger(
       actorRole,
       outcome,
       httpStatus,
-      durationMs: Date.now() - requestStartedAt,
+      durationMs,
       ...(details.certificateId
         ? { certificateId: details.certificateId }
         : {}),
       ...(details.idempotency ? { idempotency: details.idempotency } : {}),
       ...(details.domainError ? { domainError: details.domainError } : {}),
     });
+
+    // Map certificate outcomes to ProfessionalPortalRouteOutcome
+    let normalizedOutcome:
+      | "success"
+      | "domain_error"
+      | "validation_error"
+      | "rate_limited"
+      | "internal_error" = "success";
+    if (outcome === "rate_limited") {
+      normalizedOutcome = "rate_limited";
+    } else if (outcome === "bad_request") {
+      normalizedOutcome = "validation_error";
+    } else if (outcome === "failed") {
+      normalizedOutcome = "internal_error";
+    } else if (
+      outcome === "forbidden" ||
+      outcome === "conflict" ||
+      outcome === "not_found"
+    ) {
+      normalizedOutcome = "domain_error";
+    }
+
+    pushDemoLog({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: normalizedOutcome,
+      httpStatus,
+      durationMs,
+      ...(details.domainError ? { domainError: details.domainError } : {}),
+      resourceType: "certificate",
+      ...(details.certificateId ? { resourceId: details.certificateId } : {}),
+    }).catch(() => undefined);
   };
 }
 

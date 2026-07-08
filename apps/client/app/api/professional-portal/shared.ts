@@ -5,6 +5,8 @@ import { normalizeRole } from "@/app/lib/security/roles";
 // ADR-006 classification: Class C - shared adapter helpers expose route metadata only.
 // Reviewed: 2026-05-07 by @copilot
 
+import { pushDemoLog } from "@/app/lib/api/demo-logs";
+
 export type ProfessionalPortalRouteOutcome =
   | "success"
   | "domain_error"
@@ -92,6 +94,9 @@ export function logProfessionalPortalRouteOutcome(input: RouteLogInput): void {
   } else {
     logger.warn("Professional portal route outcome", payload);
   }
+
+  // Push to telemetry log panel (runs async)
+  pushDemoLog(payload).catch(() => undefined);
 }
 
 export function conflictResponse() {

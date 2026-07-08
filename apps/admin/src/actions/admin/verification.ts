@@ -5,6 +5,9 @@ import { revalidatePath } from "next/cache";
 import { runWithIdempotency } from "./idempotency";
 import { safeAction } from "@/_core/safe-action";
 import { parseActionInput } from "@/_core/validation";
+import { clerkClient } from "@clerk/nextjs/server";
+import { prisma } from "@build/db";
+import { pushDemoLog } from "@/lib/infrastructure/demo-logs";
 import {
   verificationService,
   type VerificationQueueItem as DomainVerificationQueueItem,
@@ -202,7 +205,7 @@ export async function verifyEntity(
 ): Promise<ActionResponse<{ newStatus: VerificationStatus; message: string }>> {
   return safeAction(
     "verifyEntity",
-    async ({ actor, adminUserId }) => {
+    async ({ actor, adminUserId, correlationId, requestStartedAt }) => {
       const validated = parseVerifyEntity(input);
       const parsedIdempotencyKey = parseActionInput(
         IdempotencyKeySchema,
@@ -226,10 +229,59 @@ export async function verifyEntity(
             throw new Error(result.message);
           }
 
+          // On approval: professional status transitions PENDING_VERIFICATION -> ACTIVE;
+          // Clerk publicMetadata sync is confirmed before the success response is finalized.
+          if (
+            validated.entityType === "professional" &&
+            validated.action === "VERIFY"
+          ) {
+            const user = await prisma.user.findUnique({
+              where: { id: validated.entityId },
+              select: { clerkId: true },
+            });
+            if (user?.clerkId) {
+              try {
+                const client = await clerkClient();
+                await client.users.updateUserMetadata(user.clerkId, {
+                  publicMetadata: {
+                    status: "ACTIVE",
+                  },
+                });
+              } catch (clerkErr) {
+                console.error(
+                  "Failed to update Clerk metadata during verification:",
+                  clerkErr,
+                );
+                // Fail closed: throw error to fail the transaction/action so it can be retried
+                throw new Error(
+                  "Clerk metadata synchronization failed. Please retry.",
+                );
+              }
+
+              // Update user status in database to ACTIVE
+              await prisma.user.update({
+                where: { id: validated.entityId },
+                data: { status: "ACTIVE" },
+              });
+            }
+          }
+
           revalidateVerificationEntity(
             validated.entityType,
             validated.entityId,
           );
+
+          // Push demo telemetry log
+          pushDemoLog({
+            correlationId,
+            operationName: "verify_entity",
+            actorRole: "ADMIN",
+            outcome: "success",
+            httpStatus: 200,
+            durationMs: Date.now() - requestStartedAt,
+            resourceType: validated.entityType,
+            resourceId: validated.entityId,
+          }).catch(() => undefined);
 
           return {
             newStatus: result.data.newStatus as VerificationStatus,
@@ -264,7 +316,7 @@ export async function verifyDocument(
 ): Promise<ActionResponse<{ message: string }>> {
   return safeAction(
     "verifyDocument",
-    async ({ actor, adminUserId }) => {
+    async ({ actor, adminUserId, correlationId, requestStartedAt }) => {
       const validated = parseVerifyDocument(input);
       const parsedIdempotencyKey = parseActionInput(
         IdempotencyKeySchema,
@@ -295,6 +347,18 @@ export async function verifyDocument(
           if (result.data.targetEntityType === "property") {
             revalidatePath(`/properties/${result.data.targetEntityId}`);
           }
+
+          // Push demo telemetry log
+          pushDemoLog({
+            correlationId,
+            operationName: "verify_document",
+            actorRole: "ADMIN",
+            outcome: "success",
+            httpStatus: 200,
+            durationMs: Date.now() - requestStartedAt,
+            resourceType: validated.documentType,
+            resourceId: validated.documentId,
+          }).catch(() => undefined);
 
           return {
             message: result.data.message,

@@ -25,8 +25,7 @@ import { withAuth } from "@/app/lib/api/api-middleware";
 import { documentsService } from "@/app/lib/domains/documents";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-// ADR-006 classification: Class B - verification document categories and metadata cross this adapter boundary.
-// Reviewed: 2026-04-09 by @copilot
+import { pushDemoLog } from "@/app/lib/api/demo-logs";
 
 const ROUTE_PATTERN = "/api/professional-portal/documents";
 
@@ -65,6 +64,7 @@ function createDocumentsOutcomeLogger(
     httpStatus: number,
     details: DocumentsOutcomeLogFields = {},
   ) => {
+    const durationMs = Date.now() - requestStartedAt;
     getClientLogger().info("Professional documents adapter outcome", {
       correlationId,
       operationName,
@@ -73,11 +73,44 @@ function createDocumentsOutcomeLogger(
       actorRole,
       outcome,
       httpStatus,
-      durationMs: Date.now() - requestStartedAt,
+      durationMs,
       ...(details.documentId ? { documentId: details.documentId } : {}),
       ...(details.idempotency ? { idempotency: details.idempotency } : {}),
       ...(details.domainError ? { domainError: details.domainError } : {}),
     });
+
+    // Map document outcomes to ProfessionalPortalRouteOutcome
+    let normalizedOutcome:
+      | "success"
+      | "domain_error"
+      | "validation_error"
+      | "rate_limited"
+      | "internal_error" = "success";
+    if (outcome === "rate_limited") {
+      normalizedOutcome = "rate_limited";
+    } else if (outcome === "bad_request") {
+      normalizedOutcome = "validation_error";
+    } else if (outcome === "failed") {
+      normalizedOutcome = "internal_error";
+    } else if (
+      outcome === "forbidden" ||
+      outcome === "conflict" ||
+      outcome === "not_found"
+    ) {
+      normalizedOutcome = "domain_error";
+    }
+
+    pushDemoLog({
+      correlationId,
+      operationName,
+      actorRole,
+      outcome: normalizedOutcome,
+      httpStatus,
+      durationMs,
+      ...(details.domainError ? { domainError: details.domainError } : {}),
+      resourceType: "document",
+      ...(details.documentId ? { resourceId: details.documentId } : {}),
+    }).catch(() => undefined);
   };
 }
 
