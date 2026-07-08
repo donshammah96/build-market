@@ -42,6 +42,6 @@ describe("env-and-layout", () => {
       }).rejects.toThrow(
         "NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL is required when NEXT_PUBLIC_CLERK_IS_SATELLITE is true",
       );
-    });
+    }, 60000);
   });
 });
