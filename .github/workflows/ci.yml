@@ -425,6 +425,7 @@ jobs:
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3500/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
+      BYPASS_AUTH: "true"
       # Was `https://stub.upstash.io`, then `https://127.0.0.1:6378` (an
       # unbound local port, on the theory that a closed port fails at the
       # kernel level — instant ECONNREFUSED, no DNS, no ambiguity). That

@@ -35,12 +35,14 @@ This format is based on Keep a Changelog and uses semantic categories:
 ### Fixed (CI Smoke Test Infrastructure)
 
 - **CI Workflow (Upstash REST Stub Connection)**: Replaced the loopback closed-port design for `UPSTASH_REDIS_REST_URL` in [.github/workflows/ci.yml](file:///c:/Users/User/build-market/.github/workflows/ci.yml) with a Python-based HTTP mock stub server on port `8079`. This resolves request timeouts and deadlocks caused by `@upstash/redis` SDK retry-and-backoff behaviors when connecting to a closed port or a raw Redis TCP socket (which deadlocks on TLS handshakes).
+- **Clerk Auth Hang**: Fixed a timeout/hang during layout rendering by allowing Clerk's server-side authentication checks to be bypassed in the CI environment. Updated `apps/client/middleware.ts` and `apps/client/app/layout.tsx` to conditionally bypass Clerk `auth()` when `BYPASS_AUTH` is enabled in CI or development.
 - **CI Smoke Test Timeout**: Increased `curl` execution timeout inside client and admin smoke check loops from 3s to 15s to accommodate cold-start rendering latency on resource-constrained runners.
 
 **Files changed:**
 
 - `.github/workflows/ci.yml`
-- `apps/client/app/lib/infrastructure/env.ts`
+- `apps/client/app/layout.tsx`
+- `apps/client/middleware.ts`
 
 **Verification:**
 

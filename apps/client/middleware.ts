@@ -80,8 +80,8 @@ export default clerkMiddleware(async (auth, req: Request) => {
   });
 
   // --- DEV AUTH BYPASS ---
-  // Allow all routes during local offline development without triggering Clerk checks
-  if (env.auth.bypassEnabled && env.isDev) {
+  // Allow all routes during local offline development or CI without triggering Clerk checks
+  if (env.auth.bypassEnabled && (env.isDev || env.isCI)) {
     logMiddlewareDecision(nextReq, "mw_dev_bypass");
     return applyDocumentCspHeaders(nextReq, nonce, cspValue);
   }
