@@ -28,12 +28,11 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
-### Added
+### Added (Live Demo Telemetry)
 
 - **Live Demo Telemetry**: Introduced a real-time, polling "Under the Hood" system telemetry log panel at the bottom of the client credentials page ([credentials-settings-page-client.tsx](file:///c:/Users/User/build-market/apps/client/app/professional-portal/settings/credentials/_components/credentials-settings-page-client.tsx)) displaying filtered, PII-redacted event log streams (ADR-005 and ADR-006 compliant).
 - **Live Telemetry API**: Created a logs endpoint `/api/demo/logs` ([route.ts](file:///c:/Users/User/build-market/apps/client/app/api/demo/logs/route.ts)) and client log helper `pushDemoLog` ([demo-logs.ts](file:///c:/Users/User/build-market/apps/client/app/lib/api/demo-logs.ts)) supporting Redis and in-memory fallback queues.
 - **Verification Adapter Telemetry**: Connected certificates, documents, and licenses adapter outcome loggers to dynamically dispatch trace payloads to the telemetry log stream.
-
 
 ### Changed (Environment Validation Schema)
 
