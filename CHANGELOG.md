@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Live Demo**: Implemented a comprehensive, idempotent Live Demo framework for the EBK/NCA credentials verification journey, including a dynamic database/Redis seed script ([seed-demo.ts](file:///c:/Users/User/build-market/scripts/seed-demo.ts)) to reset demo contractor and admin review states.
+- **Telemetry**: Introduced a real-time, polling "Under the Hood" system telemetry log panel component ([credentials-settings-page-client.tsx](file:///c:/Users/User/build-market/apps/client/app/professional-portal/settings/credentials/_components/credentials-settings-page-client.tsx)) displaying filtered, PII-redacted event log streams (ADR-005 and ADR-006 compliant).
+- **Admin Clerk Sync**: Hardened the admin `verifyEntity` and `verifyDocument` server actions ([verification.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/verification.ts)) to perform a fail-closed Clerk `publicMetadata` status sync and User status transition to `ACTIVE` on professional verification.
 - **Database/Schema**: Added `FailedNotification` model to `schema.prisma` and created migration `20260620074800_add_failed_notification` to support the database-backed verification notifications retry queue.
 - **Auth/Security**: Added a middleware-level blocked-user gate in both `apps/client` and `apps/admin` that redirects suspended, banned, deactivated, or archived users to a public `/unauthorized-sign-in` endpoint with the appropriate status reason.
 - **Client**: Added a public `/unauthorized-sign-in` page ([page.tsx](file:///c:/Users/User/build-market/apps/client/app/unauthorized-sign-in/page.tsx)) displaying account status-specific notices with a dark-theme glassmorphism card and auto-signout logic on mount.
