@@ -55,6 +55,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ### Changed
 
+- **TypeScript 7 Upgrade**: Upgraded the compiler across the workspace to `7.0.2` and verified compatibility with Next.js client application builds and the Vitest test suites.
 - **Clerk Redirect Loose Coupling**: Converted `<SignIn>` and `<SignUp>` component routing behaviors from `forceRedirectUrl` to `fallbackRedirectUrl` across standard authentication routes and professional sub-flows. This allows Clerk to respect and honor incoming `redirect_url` query parameters passed by satellite applications.
 
 ### Fixed (Centralized Admin App URL Configuration)

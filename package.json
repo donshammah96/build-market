@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
+    "postinstall": "node scripts/patch-typescript.mjs",
     "build:client": "turbo run build --filter=client",
     "build:admin": "turbo run build --filter=admin",
     "dev": "turbo run dev",
@@ -78,6 +79,7 @@
     "test:onboarding-ui-a11y:single-worker": "pnpm -C apps/client exec vitest run --pool=threads --maxWorkers=1 __tests__/app/onboarding/onboarding-route-ui.test.tsx __tests__/app/onboarding/onboarding-form-a11y.test.tsx"
   },
   "devDependencies": {
+    "@typescript/typescript6": "catalog:",
     "next": "catalog:",
     "ngrok": "5.0.0-beta.2",
     "prettier": "catalog:",
