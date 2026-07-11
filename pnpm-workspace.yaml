@@ -49,6 +49,7 @@ catalog:
   prettier: ^3.6.2
   turbo: ^2.9.5
   vitest: ^4.1.6
+  tsx: ^4.20.6
   "@types/node": ^24.8.1
 
   # --- Next.js / React (client + admin) ---

@@ -170,6 +170,7 @@
     "start-server-and-test": "^2.0.10",
     "tailwindcss": "catalog:",
     "turbo": "catalog:",
+    "tsx": "catalog:",
     "tw-animate-css": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
