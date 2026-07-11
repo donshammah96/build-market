@@ -197,6 +197,4 @@ packageExtensions:
       js-cookie: 3.0.6
 
 patchedDependencies:
-  '@typescript-eslint/typescript-estree@8.61.1': patches/@typescript-eslint__typescript-estree@8.61.1.patch
-  typescript@7.0.2: patches/typescript@7.0.2.patch
   uri-js: patches/uri-js.patch
