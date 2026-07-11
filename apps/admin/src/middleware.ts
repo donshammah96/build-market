@@ -70,6 +70,51 @@ function hasAllowedRole(
 }
 
 /**
+ * Coerce a value that is *supposed* to be a boolean env flag into an actual
+ * boolean, defensively. Some env-loading layers pass raw strings through
+ * (e.g. "false") which are truthy in JS and silently flip logic like
+ * `isSatellite` on when it should be off. Never trust `Boolean(x)` for a
+ * flag that might be the literal string "false".
+ */
+function toBool(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") return value.trim().toLowerCase() === "true";
+  return Boolean(value);
+}
+
+/** Returns true only if `value` parses as a well-formed absolute http(s) URL. */
+function isAbsoluteHttpUrl(value: string | null | undefined): value is string {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Normalize a Clerk `domain` option to a bare host. Clerk expects just the
+ * host (e.g. "buildmarket.app"), not a full URL. If someone accidentally
+ * configures NEXT_PUBLIC_CLERK_DOMAIN with a scheme (e.g.
+ * "https://buildmarket.app"), strip it down instead of passing a malformed
+ * value through.
+ */
+function normalizeClerkDomain(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
+    try {
+      return new URL(trimmed).host || null;
+    } catch {
+      return null;
+    }
+  }
+  return trimmed;
+}
+
+/**
  * Best-effort fallback for the primary domain's sign-in URL when
  * `NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL` is unset for the environment
  * serving this request (e.g. a Preview/branch deploy where only
@@ -95,8 +140,47 @@ function deriveFallbackPrimarySignInUrl(req: {
     return null;
   }
 
+  // Guard against stripping a label off a *.vercel.app (or similar shared
+  // hosting) preview host — that would derive a nonsense apex like
+  // "vercel.app" that is syntactically valid but not actually ours.
+  const KNOWN_SHARED_HOSTING_SUFFIXES = ["vercel.app", "vercel.sh"];
+  const apexCandidate = labels.slice(-2).join(".");
+  if (KNOWN_SHARED_HOSTING_SUFFIXES.includes(apexCandidate)) {
+    return null;
+  }
+
   const apexHost = labels.slice(1).join(".");
   return `${protocol}//${apexHost}/sign-in`;
+}
+
+/**
+ * Resolve the absolute primary sign-in URL to use for a satellite request,
+ * validating the env-provided value rather than trusting it blindly. A
+ * relative or malformed `NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL` (e.g. copied
+ * from the non-satellite `NEXT_PUBLIC_CLERK_SIGN_IN_URL`, which is meant to
+ * be relative) must NOT be handed to Clerk — that is exactly what throws
+ * "The signInUrl needs to have a absolute url format" and, because this is
+ * evaluated for every request (including public ones), takes the whole site
+ * down rather than just failing one redirect.
+ */
+function resolvePrimarySignInUrl(req: {
+  nextUrl: { protocol: string; host: string };
+}): string | null {
+  const configured = adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL;
+
+  if (configured) {
+    if (isAbsoluteHttpUrl(configured)) {
+      return configured;
+    }
+    console.error(
+      "[middleware] NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL=" +
+        `"${configured}" is not an absolute http(s) URL (did you mean to set ` +
+        "NEXT_PUBLIC_CLERK_SIGN_IN_URL instead, which IS relative?). Ignoring " +
+        "it and falling back to host-derivation instead of crashing.",
+    );
+  }
+
+  return deriveFallbackPrimarySignInUrl(req);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +198,7 @@ export default clerkMiddleware(
     // 2. Dev bypass: short-circuit all auth/role checks in local development
     //    when DEV_ADMIN_BYPASS=true. Never enable in production.
     const isDev = adminEnvConfig.NODE_ENV === "development";
-    const devBypass = adminEnvConfig.DEV_ADMIN_BYPASS;
+    const devBypass = toBool(adminEnvConfig.DEV_ADMIN_BYPASS);
 
     if (isDev && devBypass) {
       return;
@@ -127,26 +211,17 @@ export default clerkMiddleware(
     const authObj = await auth();
 
     if (!authObj.userId) {
-      if (adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE) {
-        // Prefer the explicit env var. If it's unset for this environment,
-        // derive a fallback from the request host rather than silently
-        // dropping straight to `redirectToSignIn()` — that path resolves
-        // via `NEXT_PUBLIC_CLERK_SIGN_IN_URL` (typically a *relative*
-        // path like "/sign-in"), which on a satellite domain is exactly
-        // the redirect-loop bug this middleware exists to prevent.
-        const primarySignIn =
-          adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL ||
-          deriveFallbackPrimarySignInUrl(req);
+      if (toBool(adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE)) {
+        // Prefer the explicit env var (validated). If it's unset or
+        // malformed for this environment, derive a fallback from the
+        // request host rather than silently dropping straight to
+        // `redirectToSignIn()` — that path resolves via
+        // `NEXT_PUBLIC_CLERK_SIGN_IN_URL` (typically a *relative* path like
+        // "/sign-in"), which on a satellite domain is exactly the
+        // redirect-loop bug this middleware exists to prevent.
+        const primarySignIn = resolvePrimarySignInUrl(req);
 
         if (primarySignIn) {
-          if (!adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL) {
-            console.warn(
-              "[middleware] NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL is not set " +
-                `for this environment; falling back to derived sign-in URL "${primarySignIn}". ` +
-                "Set the env var explicitly for this Vercel environment to avoid relying on this heuristic.",
-            );
-          }
-
           const redirectUrl = new URL(primarySignIn);
           redirectUrl.searchParams.set("redirect_url", req.url);
           return NextResponse.redirect(redirectUrl);
@@ -160,8 +235,9 @@ export default clerkMiddleware(
         console.error(
           "[middleware] NEXT_PUBLIC_CLERK_IS_SATELLITE is true but no primary " +
             `sign-in URL could be resolved for host "${req.nextUrl.host}" ` +
-            "(env var unset and host has no apex domain to derive). Falling back " +
-            "to local redirectToSignIn(), which may cause a redirect loop on satellite domains.",
+            "(env var unset/invalid and host has no apex domain to derive). " +
+            "Falling back to local redirectToSignIn(), which may cause a " +
+            "redirect loop on satellite domains.",
         );
       }
 
@@ -225,26 +301,61 @@ export default clerkMiddleware(
   // ---------------------------------------------------------------------
   // Dynamic Clerk options resolver.
   //
-  // Why a function instead of a static object: `domain` is REQUIRED
-  // whenever `isSatellite` is true, or Clerk throws
-  // "Missing domain and proxyUrl" at request time. A static object built
-  // from `NEXT_PUBLIC_CLERK_DOMAIN` is only as reliable as that env var's
-  // propagation to *every* Vercel environment (Production, Preview,
-  // per-branch deploys). If it's ever unset for the environment that
-  // served a given request, `isSatellite: true` reaches Clerk with no
-  // domain and the whole app 500s.
+  // Why a function instead of a static object: both `domain` and
+  // `signInUrl` are REQUIRED (and must be well-formed) whenever
+  // `isSatellite` is true, or Clerk throws at request time — for EVERY
+  // request, including public ones, since Clerk resolves these options
+  // internally before our handler body runs.
   //
-  // Resolving `domain` from the incoming request's host removes that
-  // failure mode entirely — it is always defined, and it is always the
-  // domain that is actually serving the request (which is also what
-  // Clerk needs to validate the satellite handshake against). The env
-  // var is kept as an explicit override for cases where you deliberately
-  // want to pin the domain rather than infer it.
+  // IMPORTANT: this resolver must NEVER hand Clerk an unvalidated env
+  // value. A relative/malformed `signInUrl`, or a truthy-but-wrong
+  // `isSatellite` flag (e.g. from a raw "false" string), throws here and
+  // takes down every route on the site, not just one redirect. Everything
+  // below is validated before being returned.
   // ---------------------------------------------------------------------
-  (req) => ({
-    isSatellite: adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE,
-    domain: adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN || req.nextUrl.host,
-  }),
+  (req) => {
+    const isSatellite = toBool(adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE);
+
+    if (!isSatellite) {
+      return {
+        isSatellite: false,
+        domain:
+          normalizeClerkDomain(adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN) ||
+          req.nextUrl.host,
+      };
+    }
+
+    const signInUrl = resolvePrimarySignInUrl(req) || undefined;
+
+    if (!signInUrl) {
+      // Neither the env var nor host-derivation produced an absolute
+      // URL — Clerk would throw on every request with isSatellite: true
+      // and no signInUrl. Fail OPEN (disable satellite mode for this
+      // request) rather than crashing the whole site; loudly log so this
+      // config gap gets fixed instead of silently degrading auth.
+      console.error(
+        "[middleware] NEXT_PUBLIC_CLERK_IS_SATELLITE is true but no absolute " +
+          `signInUrl could be resolved for host "${req.nextUrl.host}". ` +
+          "Disabling satellite mode for this request instead of crashing — " +
+          "set NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL (absolute URL) and " +
+          "NEXT_PUBLIC_CLERK_DOMAIN for this Vercel environment to fix properly.",
+      );
+      return {
+        isSatellite: false,
+        domain:
+          normalizeClerkDomain(adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN) ||
+          req.nextUrl.host,
+      };
+    }
+
+    return {
+      isSatellite: true,
+      domain:
+        normalizeClerkDomain(adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN) ||
+        req.nextUrl.host,
+      signInUrl,
+    };
+  },
 );
 
 export const config = {
