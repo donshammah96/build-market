@@ -3,6 +3,25 @@ import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 
+/**
+ * Strip any scheme prefix from a Clerk domain so it is always a bare
+ * host. Mirrors the same helper in middleware.ts — both must be kept
+ * in sync. Example: "https://admin.buildmarket.app" → "admin.buildmarket.app".
+ */
+function normalizeClerkDomain(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
+    try {
+      return new URL(trimmed).host || null;
+    } catch {
+      return null;
+    }
+  }
+  return trimmed;
+}
+
 export const metadata: Metadata = {
   title: "Build Market",
   description: "Find the best professionals for your building project",
@@ -63,8 +82,12 @@ export default async function RootLayout({
   const providerProps = {
     publishableKey: clerkPublishableKey,
     isSatellite: adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE,
-    ...(adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN
-      ? { domain: adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN }
+    ...(normalizeClerkDomain(adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN)
+      ? {
+          domain: normalizeClerkDomain(
+            adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN,
+          )!,
+        }
       : {}),
     // For satellite apps, signInUrl MUST be the primary domain's absolute URL
     // (e.g. https://buildmarket.app/sign-in). A relative path causes Clerk to
