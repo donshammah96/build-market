@@ -54,7 +54,8 @@ export default function SignInPage() {
 
           <div className="bg-white p-1 rounded-2xl shadow-xl shadow-zinc-200/50 border border-zinc-100">
             <SignIn
-              routing="hash"
+              routing="path"
+              path="/sign-in"
               fallbackRedirectUrl={ROUTES.authCallback}
               signUpUrl={ROUTES.signUp}
               appearance={

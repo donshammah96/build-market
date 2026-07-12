@@ -28,7 +28,22 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
-### Changed (Environment Validation Schema)
+### Fixed (Clerk Sign-In / Sign-Up "Continue" Button)
+
+- **Auth UI (Clerk Routing)**: Fixed a critical regression where clicking **Continue** on the `<SignIn>` and `<SignUp>` Clerk components did nothing — the multi-step auth flow stalled after email entry. Root cause: all four Clerk component usages were configured with `routing="hash"`, which is designed for single-page apps. With Next.js App Router catch-all routes (`[[...sign-in]]` / `[[...sign-up]]`), Clerk's hash-fragment navigation (`#/sign-in/factor-one`) does not trigger a re-render of the catch-all segment, leaving the component frozen on the email-entry step. Fixed by switching all components to `routing="path"` with the matching `path` prop, which delegates navigation to the Next.js router — correctly picked up by the catch-all and causing the component to advance to the next step.
+- This also restores **admin sign-in** via `admin.buildmarket.app`, which redirects unauthenticated users to the primary domain sign-in page that was broken.
+
+**Files changed:**
+
+- `apps/client/app/sign-in/[[...sign-in]]/page.tsx` — `routing="hash"` → `routing="path" path="/sign-in"`
+- `apps/client/app/sign-up/[[...sign-up]]/page.tsx` — `routing="hash"` → `routing="path" path="/sign-up"`
+- `apps/client/app/professional/sign-up/[[...sign-up]]/page.tsx` — `routing="hash"` → `routing="path" path="/professional/sign-up"`
+- `apps/client/components/forms/RegisterForm.tsx` — `routing="hash"` → `routing="path" path="/sign-up"`
+
+**Verification:**
+
+- `pnpm -C apps/client exec tsc --noEmit` → 0 errors.
+- Manual: navigate to `/sign-in`, enter email, click Continue — component advances to password/OTP step.
 
 - **Environment Validation Schema**: Modified the client environment variable validation rules inside [apps/client/app/lib/infrastructure/env.ts](file:///c:/Users/User/build-market/apps/client/app/lib/infrastructure/env.ts) to accept local mock loopback protocols (`http://127.0.0.1` and `http://localhost`) for `UPSTASH_REDIS_REST_URL`. This allows the application to successfully boot in local offline or CI environments using stubs without throwing validation errors.
 

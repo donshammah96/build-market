@@ -85,7 +85,8 @@ export default function ClientSignUpPage() {
           {/* Clerk Component Wrapper */}
           <div className="bg-white p-1 rounded-2xl shadow-xl shadow-zinc-200/50 border border-zinc-100">
             <SignUp
-              routing="hash"
+              routing="path"
+              path="/sign-up"
               fallbackRedirectUrl={ROUTES.authCallback}
               appearance={
                 {

@@ -7,7 +7,8 @@ const RegisterForm: React.FC = () => {
   return (
     <div className="w-full max-w-md">
       <SignUp
-        routing="hash"
+        routing="path"
+        path="/sign-up"
         appearance={{
           elements: {
             rootBox: "w-full",

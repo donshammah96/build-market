@@ -36,6 +36,17 @@ All notable changes to this project will be documented in this file.
 - **Admin/Security**: Hardened standard logs in [api-middleware.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/api/api-middleware.ts) and [api-utils.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/api/api-utils.ts) to remove direct `userId` and `clerkId` log properties, ensuring full compliance with ADR-ADMIN-003. Added linter exemption comments to GDPR and compliance cron/batch workers to safely allow tracking user deletion lifecycle.
 - **Admin/Security**: Added sanitizer validation comments to dynamic theme styling in [chart.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/ui/chart.tsx#L83).
 
+### Fixed (Clerk Sign-In / Sign-Up "Continue" Button)
+
+- **Client/Auth UI**: Fixed a critical regression blocking all user authentication. The `<SignIn>` and `<SignUp>` Clerk components were using `routing="hash"` (SPA mode), which silently breaks the multi-step flow in Next.js App Router: Clerk's hash-fragment navigation does not trigger a re-render of `[[...sign-in]]` / `[[...sign-up]]` catch-all segments, leaving the component frozen after email entry. Switched all four component usages to `routing="path"` with matching `path` props. Also restores admin sign-in — `admin.buildmarket.app` is a Clerk satellite that redirects unauthenticated users to the same primary-domain sign-in page.
+
+**Files changed:**
+
+- `apps/client/app/sign-in/[[...sign-in]]/page.tsx`
+- `apps/client/app/sign-up/[[...sign-up]]/page.tsx`
+- `apps/client/app/professional/sign-up/[[...sign-up]]/page.tsx`
+- `apps/client/components/forms/RegisterForm.tsx`
+
 ### Fixed (TypeScript/Build Pipeline)
 
 - **TypeScript/Build Pipeline**: Resolved CI and Vercel build failures caused by the native compiler upgrade to TypeScript `7.0.2`. Next.js 16.2.6 expects a programmatic `typescript/lib/typescript.js` file, which is missing from TS7's native binary bundle. Added a workspace `postinstall` script ([patch-typescript.mjs](file:///c:/Users/User/build-market/scripts/patch-typescript.mjs)) that patches the `typescript` package in `node_modules` by bridging it to standard `@typescript/typescript6` compiler APIs. This resolves programmatic compilation checks by Next.js and `tsx` in CI while retaining the fast native `tsc` binary for CLI compilation.
