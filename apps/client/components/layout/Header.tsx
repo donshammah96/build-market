@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ROUTES } from "@/lib/links";
 import { MobileNav } from "./MobileNav";
 import Image from "next/image";
-import { SignInButton, useUser } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";
 import ProfileButton from "../shared/ProfileButton";
 export const Header = () => {
   const { isSignedIn } = useUser();
@@ -44,7 +44,9 @@ export const Header = () => {
               </Link>
               <div className="flex items-center gap-6">
                 {!isSignedIn ? (
-                  <SignInButton forceRedirectUrl={ROUTES.authCallback} />
+                  <Link href={ROUTES.signIn} className={navLinkClass}>
+                    Sign In
+                  </Link>
                 ) : (
                   <ProfileButton />
                 )}

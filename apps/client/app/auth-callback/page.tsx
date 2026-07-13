@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useUser, useClerk } from "@clerk/nextjs";
 import { ROUTES, dashboardForRole } from "@/lib/links";
@@ -51,7 +51,7 @@ function parseExpectedRole(value: string | null): ClaimRefreshRole | undefined {
   return undefined;
 }
 
-export default function AuthCallbackPage() {
+export function AuthCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isLoaded, isSignedIn, user } = useUser();
@@ -264,5 +264,29 @@ export default function AuthCallbackPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function AuthCallback() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-linear-to-br from-zinc-50 to-zinc-100">
+          <div className="text-center max-w-md mx-auto px-4">
+            <div className="relative mb-6">
+              <div className="w-16 h-16 mx-auto border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+            <h2 className="text-xl font-semibold text-zinc-800 mb-2">
+              Loading your session...
+            </h2>
+            <p className="text-zinc-500 text-sm mb-6">
+              Verifying your session...
+            </p>
+          </div>
+        </div>
+      }
+    >
+      <AuthCallbackPage />
+    </Suspense>
   );
 }

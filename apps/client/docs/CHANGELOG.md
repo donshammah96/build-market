@@ -36,8 +36,12 @@ This format is based on Keep a Changelog and uses semantic categories:
 - **Image Optimization**: Optimized LCP background graphics (`hero-signin.jpg`, `hero-homeowner.jpg`) with WebP format targets, custom sizing limits (`sizes="50vw"`), and adjusted compression quality (`quality={60}`).
 - **Security / CSP Hardening**: Updated Content Security Policy (CSP) allowlist and nonce-based builders in `next-config-csp.ts` and `csp-nonce.ts` to grant connect-src/script-src wildcards (`*.buildmarket.app`), `'unsafe-eval'` for Clerk bundle code execution, and `'self'` in `script-src-elem` for Cloudflare edge scripts.
 
+- **Auth UI (Navigation Header)**: Fixed the Header Sign-In link. Replaced Clerk's default unstyled and non-semantic `<SignInButton>` element (which lacked a standard HTML `href` attribute and caused navigation issues) with a standard Next.js `<Link>` pointing to `ROUTES.signIn` using matching CSS navigation classes.
+- **Client/Auth Callback**: Wrapped the client-side `/auth-callback` routing logic inside a `<Suspense>` boundary to prevent dynamic `useSearchParams` compilation warning/error during static production builds.
+
 **Files changed:**
 
+- `apps/client/app/auth-callback/page.tsx`
 - `apps/client/app/layout.tsx`
 - `apps/client/app/sign-in/[[...sign-in]]/page.tsx`
 - `apps/client/app/sign-in/loading.tsx`
@@ -46,6 +50,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 - `apps/client/components/auth/AuthPageSkeleton.tsx`
 - `apps/client/components/auth/ClerkSignInWidget.tsx`
 - `apps/client/components/auth/ClerkSignUpWidget.tsx`
+- `apps/client/components/layout/Header.tsx`
 - `apps/client/next-config-csp.ts`
 - `apps/client/app/lib/security/middleware/csp-nonce.ts`
 - `apps/client/.env`
