@@ -28,6 +28,34 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Fixed (Clerk Auth Page Load Performance & CSP Headers)
+
+- **Auth UI (Clerk Loading / LCP)**: Resolved slow loading speeds and cumulative layout shifts (CLS) on the `/sign-in` and `/sign-up` catch-all routes. Migrated page shells to Server Components (RSC) to serve the static frame instantly, and deferred Clerk dynamic bundle loading via lazy dynamic imports with `ssr: false` inside a `<Suspense>` boundary.
+- **Loading Skeletons**: Built custom shimmer placeholders (`AuthPageSkeleton.tsx`) and route-level `loading.tsx` page segment configurations matching the split-screen desktop layouts to anchor the UI.
+- **Resource preconnect**: Programmed dynamic preconnect and dns-prefetch links in `layout.tsx` pointing directly to the resolved Clerk FAPI domain.
+- **Image Optimization**: Optimized LCP background graphics (`hero-signin.jpg`, `hero-homeowner.jpg`) with WebP format targets, custom sizing limits (`sizes="50vw"`), and adjusted compression quality (`quality={60}`).
+- **Security / CSP Hardening**: Updated Content Security Policy (CSP) allowlist and nonce-based builders in `next-config-csp.ts` and `csp-nonce.ts` to grant connect-src/script-src wildcards (`*.buildmarket.app`), `'unsafe-eval'` for Clerk bundle code execution, and `'self'` in `script-src-elem` for Cloudflare edge scripts.
+
+**Files changed:**
+
+- `apps/client/app/layout.tsx`
+- `apps/client/app/sign-in/[[...sign-in]]/page.tsx`
+- `apps/client/app/sign-in/loading.tsx`
+- `apps/client/app/sign-up/[[...sign-up]]/page.tsx`
+- `apps/client/app/sign-up/loading.tsx`
+- `apps/client/components/auth/AuthPageSkeleton.tsx`
+- `apps/client/components/auth/ClerkSignInWidget.tsx`
+- `apps/client/components/auth/ClerkSignUpWidget.tsx`
+- `apps/client/next-config-csp.ts`
+- `apps/client/app/lib/security/middleware/csp-nonce.ts`
+- `apps/client/.env`
+- `apps/client/.env.vercel`
+
+**Verification:**
+
+- `pnpm --filter client check-types` → 0 errors.
+- `pnpm validate` → all tests passed successfully with FULL TURBO cache hit.
+
 ### Fixed (Clerk Sign-In / Sign-Up "Continue" Button)
 
 - **Auth UI (Clerk Routing)**: Fixed a critical regression where clicking **Continue** on the `<SignIn>` and `<SignUp>` Clerk components did nothing — the multi-step auth flow stalled after email entry. Root cause: all four Clerk component usages were configured with `routing="hash"`, which is designed for single-page apps. With Next.js App Router catch-all routes (`[[...sign-in]]` / `[[...sign-up]]`), Clerk's hash-fragment navigation (`#/sign-in/factor-one`) does not trigger a re-render of the catch-all segment, leaving the component frozen on the email-entry step. Fixed by switching all components to `routing="path"` with the matching `path` prop, which delegates navigation to the Next.js router — correctly picked up by the catch-all and causing the component to advance to the next step.

@@ -1,22 +1,29 @@
-"use client";
-
-import { SignUp } from "@clerk/nextjs";
+import dynamicImport from "next/dynamic";
 import Link from "next/link";
 import Image from "next/image";
 import { ROUTES } from "@/lib/links";
 import { ArrowLeft, Search, BookOpen, ShieldCheck } from "lucide-react";
+import { Suspense } from "react";
+import { AuthPageSkeleton } from "@/components/auth/AuthPageSkeleton";
+import type { Metadata } from "next";
 
-/**
- * Sign-Up Page (Client/Homeowner)
- *
- * Uses Clerk's SignUp component for authentication.
- * After successful sign-up, redirects to /auth-callback which:
- * - Checks if onboarding is complete
- * - Routes new users to /onboarding
- * - Routes existing users to their appropriate dashboard
- *
- * This ensures a consistent flow for all users.
- */
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Create an Account",
+  description:
+    "Join Build Market to find verified professionals, save design ideas, and manage construction projects in Kenya.",
+};
+
+// Defer Clerk hydration to improve initial page load and LCP
+const ClerkSignUpWidget = dynamicImport(
+  () => import("@/components/auth/ClerkSignUpWidget"),
+  {
+    ssr: false,
+    loading: () => <AuthPageSkeleton variant="sign-up" />,
+  },
+);
+
 export default function ClientSignUpPage() {
   return (
     <div className="flex min-h-screen w-full bg-white">
@@ -30,6 +37,8 @@ export default function ClientSignUpPage() {
             fill
             className="object-cover opacity-40"
             priority
+            sizes="50vw"
+            quality={60}
           />
           <div className="absolute inset-0 bg-linear-to-t from-zinc-900 via-zinc-900/60 to-transparent" />
         </div>
@@ -83,41 +92,10 @@ export default function ClientSignUpPage() {
           </div>
 
           {/* Clerk Component Wrapper */}
-          <div className="bg-white p-1 rounded-2xl shadow-xl shadow-zinc-200/50 border border-zinc-100">
-            <SignUp
-              routing="path"
-              path="/sign-up"
-              fallbackRedirectUrl={ROUTES.authCallback}
-              appearance={
-                {
-                  layout: {
-                    socialButtonsPlacement: "bottom",
-                    showOptionalFields: false,
-                  },
-                  elements: {
-                    rootBox: "w-full",
-                    card: "shadow-none p-6 sm:p-8 w-full border-0",
-                    headerTitle:
-                      "text-2xl font-bold text-zinc-900 tracking-tight",
-                    headerSubtitle: "text-zinc-500 font-normal",
-                    socialButtonsBlockButton:
-                      "bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-600 font-medium rounded-lg h-11 transition-colors",
-                    socialButtonsBlockButtonText: "font-medium",
-                    dividerLine: "bg-zinc-100",
-                    dividerText:
-                      "text-zinc-400 bg-white px-3 text-xs uppercase tracking-widest font-medium",
-                    formButtonPrimary:
-                      "bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-900/10 rounded-lg h-11 font-semibold transition-all hover:shadow-emerald-900/20",
-                    formFieldLabel: "text-zinc-700 font-medium text-sm mb-1.5",
-                    formFieldInput:
-                      "h-11 border-zinc-200 focus:border-emerald-500 focus:ring-emerald-500/20 rounded-lg bg-zinc-50/50 transition-all",
-                    footerActionLink:
-                      "text-emerald-600 hover:text-emerald-700 font-medium hover:underline decoration-2 underline-offset-4",
-                    identityPreviewText: "text-zinc-600 font-medium",
-                  },
-                } as any
-              }
-            />
+          <div className="bg-white p-1 rounded-2xl shadow-xl shadow-zinc-200/50 border border-zinc-100 min-h-[500px] flex items-center justify-center">
+            <Suspense fallback={<AuthPageSkeleton variant="sign-up" />}>
+              <ClerkSignUpWidget />
+            </Suspense>
           </div>
 
           {/* Layer 1: Clickwrap Agreement */}

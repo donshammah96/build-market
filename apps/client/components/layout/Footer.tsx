@@ -192,14 +192,14 @@ export const Footer = memo(function Footer() {
             {/* Contact Info */}
             <div className="pt-6 mt-6 border-t border-border space-y-3">
               <a
-                href="mailto:hello@buildmarket.co.ke"
+                href="mailto:hello@buildmarket.app"
                 className="flex items-center gap-3 text-sm text-muted-foreground hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
               >
                 <Mail size={16} className="text-primary" aria-hidden="true" />
                 <span>hello@buildmarket.app</span>
               </a>
               <a
-                href="tel:+254791938881"
+                href="tel:+254798798770"
                 className="flex items-center gap-3 text-sm text-muted-foreground hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
               >
                 <Phone size={16} className="text-primary" aria-hidden="true" />

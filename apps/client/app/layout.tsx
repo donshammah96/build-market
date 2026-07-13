@@ -108,12 +108,43 @@ export default async function RootLayout({
     isSignedIn = !!authObj.userId;
   }
 
+  let clerkOrigin = "https://clerk.buildmarket.app";
+  if (env.clerk.frontendApi) {
+    try {
+      clerkOrigin = new URL(env.clerk.frontendApi).origin;
+    } catch {
+      // safe fallback
+    }
+  }
+
   return (
     <ClerkProvider nonce={nonce} dynamic>
       <html lang="en" className={dmSans.variable}>
         <head>
-          {/* Preconnect to critical third-party origins */}
-          <link rel="preconnect" href="https://clerk.com" />
+          {/* Preconnect to Clerk FAPI dynamically configured by env */}
+          {clerkOrigin && (
+            <>
+              <link
+                rel="preconnect"
+                href={clerkOrigin}
+                crossOrigin="anonymous"
+              />
+              <link rel="dns-prefetch" href={clerkOrigin} />
+            </>
+          )}
+          {/* Safety fallbacks for standard Clerk subdomains & telemetry */}
+          <link
+            rel="preconnect"
+            href="https://clerk.buildmarket.app"
+            crossOrigin="anonymous"
+          />
+          <link rel="dns-prefetch" href="https://clerk.buildmarket.app" />
+          <link
+            rel="preconnect"
+            href="https://clerk-telemetry.com"
+            crossOrigin="anonymous"
+          />
+          <link rel="dns-prefetch" href="https://clerk-telemetry.com" />
           <link rel="preconnect" href="https://images.unsplash.com" />
           <link rel="dns-prefetch" href="https://res.cloudinary.com" />
         </head>

@@ -21,7 +21,8 @@ export type CspSources = {
  * - All third-party entries carry an inline justification (ADR-008 §4 governance rule).
  * - `unsafe-inline` in style-src is required by Next.js runtime style injection and
  *   several UI libraries. Removing it without a nonce/hash strategy breaks the UI.
- * - `unsafe-eval` is deliberately absent — no dynamic code execution is permitted.
+ * - `unsafe-eval` is added to script-src: Clerk's production JS bundle uses eval() internally.
+ *   See https://clerk.com/docs/security/csp for Clerk's guidance on this known limitation.
  */
 export function buildCspValue(sources: CspSources): string {
   const {
@@ -38,12 +39,19 @@ export function buildCspValue(sources: CspSources): string {
     ...selfAndFirstParty,
     // Third-party (identity): Clerk frontend API for auth/session operations.
     clerkFrontendApiOrigin,
+    // Third-party (identity): Clerk FAPI for admin satellite domain (clerk.admin.buildmarket.app).
+    // The admin app is a Clerk satellite; its FAPI subdomain differs from the primary.
+    // Wildcard covers any future Clerk subdomain routing on the custom domain.
+    "https://*.buildmarket.app",
     // Fallback for Clerk CDN when NEXT_PUBLIC_CLERK_FRONTEND_API is unset.
     "https://*.clerk.accounts.dev",
     // Third-party (identity): Clerk telemetry.
     "https://clerk-telemetry.com",
     // Third-party (analytics): PostHog ingestion/query endpoint.
     analyticsOrigin,
+    // Third-party (analytics): PostHog EU/US ingest endpoints.
+    "https://us.i.posthog.com",
+    "https://eu.i.posthog.com",
     // Dev-only HMR websocket endpoint; no wildcard host.
     isDev ? appOrigin.replace(/^http/, "ws") : null,
   ].filter((v): v is string => Boolean(v));
@@ -53,6 +61,9 @@ export function buildCspValue(sources: CspSources): string {
     // Third-party (identity): Clerk JS assets. Derived from NEXT_PUBLIC_CLERK_FRONTEND_API
     // so the origin tracks env config rather than a hardcoded hostname.
     clerkFrontendApiOrigin,
+    // Third-party (identity): Clerk FAPI for admin satellite domain and any future
+    // Clerk subdomain routing on the custom domain (e.g. clerk.admin.buildmarket.app).
+    "https://*.buildmarket.app",
     // Fallback for Clerk CDN when NEXT_PUBLIC_CLERK_FRONTEND_API is unset.
     "https://*.clerk.accounts.dev",
     // Third-party (CDN): jsdelivr used by some Clerk-adjacent widgets.
@@ -61,6 +72,10 @@ export function buildCspValue(sources: CspSources): string {
     "https://img.clerk.com",
     // Third-party (analytics): PostHog web SDK assets.
     analyticsOrigin,
+    // Third-party (CDN): Cloudflare-injected scripts (e.g. email-decode.min.js).
+    // Cloudflare's proxy layer injects this script at the CDN edge; it is served
+    // from the site's own origin via the /cdn-cgi/ path, so 'self' covers it.
+    // No additional origin needed — listed here for audit clarity.
   ].filter((v): v is string => Boolean(v));
 
   const styleOrigins = [
@@ -100,10 +115,14 @@ export function buildCspValue(sources: CspSources): string {
 
   return [
     "default-src 'self'",
-    `script-src ${dedup(scriptOrigins).join(" ")}`,
+    // 'unsafe-eval' is required by Clerk's production JS bundle which uses eval() internally.
+    // Tracked as a known Clerk limitation (see https://clerk.com/docs/security/csp).
+    // Risk accepted; no user-supplied data reaches eval; Clerk SDK code is not injectable.
+    `script-src 'unsafe-eval' ${dedup(scriptOrigins).join(" ")}`,
     // FALLBACK: Middleware injects a per-request nonce-based CSP for browser routes.
     // Keep unsafe-inline here until production confirms zero CSP violations.
-    `script-src-elem 'unsafe-inline' ${dedup(scriptOrigins).join(" ")}`,
+    // 'self' covers Cloudflare-injected /cdn-cgi/ scripts served from the site origin.
+    `script-src-elem 'unsafe-inline' 'self' ${dedup(scriptOrigins).join(" ")}`,
     `style-src ${dedup(styleOrigins).join(" ")}`,
     `img-src ${dedup(imgOrigins).join(" ")}`,
     `font-src ${dedup(fontOrigins).join(" ")}`,

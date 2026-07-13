@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed (Clerk Auth Page Load Performance & CSP Headers)
+
+- **Client/Auth UI**: Fixed slow loading times, LCP blockages, and cumulative layout shifts (CLS) on sign-in and sign-up pages. Converted catching-all page wrappers to Server Components (RSC) to render immediate page frames, deferred Clerk component initialization via dynamic lazy imports with `ssr: false` under a `<Suspense>` boundary, and set up pixel-perfect shimmer loaders (`AuthPageSkeleton.tsx`) as fallback states.
+- **Client/Auth UI**: Optimized background LCP images (`hero-signin.jpg` and `hero-homeowner.jpg`) using Next.js image constraints, dynamic sizes (`50vw`), and lower compression (`quality={60}`).
+- **Client/Security**: Resolved CSP connect-src and script-src blockages for production auth by adding a wildcard (`https://*.buildmarket.app`) covering primary and satellite Clerk endpoints. Enabled `'unsafe-eval'` to satisfy Clerk's compilation loop requirements, and allowlisted `'self'` inside `script-src-elem` to unblock Cloudflare edge proxies (`/cdn-cgi/`).
+- **Client/Performance**: Injected dynamic preconnect `<link>` elements pointing to the active Clerk frontend API domain resolved from configuration parameters.
+
+**Files changed:**
+
+- `apps/client/app/layout.tsx`
+- `apps/client/app/sign-in/[[...sign-in]]/page.tsx`
+- `apps/client/app/sign-in/loading.tsx`
+- `apps/client/app/sign-up/[[...sign-up]]/page.tsx`
+- `apps/client/app/sign-up/loading.tsx`
+- `apps/client/components/auth/AuthPageSkeleton.tsx`
+- `apps/client/components/auth/ClerkSignInWidget.tsx`
+- `apps/client/components/auth/ClerkSignUpWidget.tsx`
+- `apps/client/next-config-csp.ts`
+- `apps/client/app/lib/security/middleware/csp-nonce.ts`
+- `apps/client/.env`
+- `apps/client/.env.vercel`
+
 ### Added
 
 - **Database/Schema**: Added `FailedNotification` model to `schema.prisma` and created migration `20260620074800_add_failed_notification` to support the database-backed verification notifications retry queue.
