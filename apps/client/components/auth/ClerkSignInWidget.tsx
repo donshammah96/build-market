@@ -2,8 +2,20 @@
 
 import { SignIn } from "@clerk/nextjs";
 import { ROUTES } from "@/lib/links";
+import { useEffect, useState } from "react";
+import { AuthPageSkeleton } from "./AuthPageSkeleton";
 
 export default function ClerkSignInWidget() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return <AuthPageSkeleton variant="sign-in" />;
+  }
+
   return (
     <SignIn
       routing="path"

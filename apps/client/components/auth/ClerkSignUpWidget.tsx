@@ -2,8 +2,20 @@
 
 import { SignUp } from "@clerk/nextjs";
 import { ROUTES } from "@/lib/links";
+import { useEffect, useState } from "react";
+import { AuthPageSkeleton } from "./AuthPageSkeleton";
 
 export default function ClerkSignUpWidget() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return <AuthPageSkeleton variant="sign-up" />;
+  }
+
   return (
     <SignUp
       routing="path"

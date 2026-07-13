@@ -1,11 +1,10 @@
-import dynamicImport from "next/dynamic";
 import Link from "next/link";
 import Image from "next/image";
-import { ROUTES } from "@/lib/links";
 import { ArrowLeft } from "lucide-react";
 import { Suspense } from "react";
 import { AuthPageSkeleton } from "@/components/auth/AuthPageSkeleton";
 import type { Metadata } from "next";
+import ClerkSignInWidget from "@/components/auth/ClerkSignInWidget";
 
 export const dynamic = "force-dynamic";
 
@@ -14,15 +13,6 @@ export const metadata: Metadata = {
   description:
     "Sign in to your Build Market account to manage your projects, find pros, and browse construction designs in Kenya.",
 };
-
-// Defer Clerk hydration to improve initial page load and LCP
-const ClerkSignInWidget = dynamicImport(
-  () => import("@/components/auth/ClerkSignInWidget"),
-  {
-    ssr: false,
-    loading: () => <AuthPageSkeleton variant="sign-in" />,
-  },
-);
 
 export default function SignInPage() {
   return (
@@ -62,7 +52,7 @@ export default function SignInPage() {
             </Link>
           </div>
 
-          <div className="bg-white p-1 rounded-2xl shadow-xl shadow-zinc-200/50 border border-zinc-100 min-h-[400px] flex items-center justify-center">
+          <div className="bg-white p-1 rounded-2xl shadow-xl shadow-zinc-200/50 border border-zinc-100 min-h-100 flex items-center justify-center">
             <Suspense fallback={<AuthPageSkeleton variant="sign-in" />}>
               <ClerkSignInWidget />
             </Suspense>

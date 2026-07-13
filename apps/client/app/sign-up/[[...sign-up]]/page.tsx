@@ -1,4 +1,3 @@
-import dynamicImport from "next/dynamic";
 import Link from "next/link";
 import Image from "next/image";
 import { ROUTES } from "@/lib/links";
@@ -6,6 +5,7 @@ import { ArrowLeft, Search, BookOpen, ShieldCheck } from "lucide-react";
 import { Suspense } from "react";
 import { AuthPageSkeleton } from "@/components/auth/AuthPageSkeleton";
 import type { Metadata } from "next";
+import ClerkSignUpWidget from "@/components/auth/ClerkSignUpWidget";
 
 export const dynamic = "force-dynamic";
 
@@ -14,15 +14,6 @@ export const metadata: Metadata = {
   description:
     "Join Build Market to find verified professionals, save design ideas, and manage construction projects in Kenya.",
 };
-
-// Defer Clerk hydration to improve initial page load and LCP
-const ClerkSignUpWidget = dynamicImport(
-  () => import("@/components/auth/ClerkSignUpWidget"),
-  {
-    ssr: false,
-    loading: () => <AuthPageSkeleton variant="sign-up" />,
-  },
-);
 
 export default function ClientSignUpPage() {
   return (
@@ -92,7 +83,7 @@ export default function ClientSignUpPage() {
           </div>
 
           {/* Clerk Component Wrapper */}
-          <div className="bg-white p-1 rounded-2xl shadow-xl shadow-zinc-200/50 border border-zinc-100 min-h-[500px] flex items-center justify-center">
+          <div className="bg-white p-1 rounded-2xl shadow-xl shadow-zinc-200/50 border border-zinc-100 min-h-125 flex items-center justify-center">
             <Suspense fallback={<AuthPageSkeleton variant="sign-up" />}>
               <ClerkSignUpWidget />
             </Suspense>
