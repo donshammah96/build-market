@@ -1,6 +1,21 @@
 import { beforeEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Job } from "bullmq";
 
+// Mock bullmq to prevent Worker/Queue instantiation from connecting to Redis
+vi.mock("bullmq", () => {
+  return {
+    Queue: class MockQueue {
+      add = vi.fn().mockResolvedValue({ id: "mock-job-id" });
+      on = vi.fn();
+      close = vi.fn().mockResolvedValue(undefined);
+    },
+    Worker: class MockWorker {
+      on = vi.fn();
+      close = vi.fn().mockResolvedValue(undefined);
+    },
+  };
+});
+
 // Set environment variable immediately
 process.env.REDIS_URL = "redis://localhost:6379";
 

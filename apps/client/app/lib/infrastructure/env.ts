@@ -332,6 +332,11 @@ const envGroups: EnvGroup[] = [
         name: "RESEND_WEBHOOK_SECRET",
         required: false,
       },
+      {
+        name: "WORKER_HEALTH_PORT",
+        required: false,
+        default: "8080",
+      },
     ],
   },
   {
@@ -1124,6 +1129,7 @@ function buildEnvConfig() {
       resendApiKey: getOptionalStringEnv("RESEND_API_KEY"),
       resendSegmentId: getOptionalStringEnv("RESEND_SEGMENT_ID"),
       resendWebhookSecret: getOptionalStringEnv("RESEND_WEBHOOK_SECRET"),
+      workerHealthPort: getNumberEnv("WORKER_HEALTH_PORT", 8080),
     },
 
     // GDPR

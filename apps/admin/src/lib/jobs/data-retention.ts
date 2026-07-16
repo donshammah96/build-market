@@ -174,7 +174,6 @@ export function createDataRetentionWorker() {
             if (holds.length > 0) {
               logger.info("User has legal hold, skipping", {
                 correlationId,
-                userId: user.id,
                 holdReasons: holds,
               });
               metrics.blockedByLegalHold++;
@@ -201,13 +200,12 @@ export function createDataRetentionWorker() {
 
             logger.info("Scheduled anonymization for user", {
               correlationId,
-              userId: user.id,
             });
           } catch (error) {
             logger.error(
               "Error processing user for retention",
               error instanceof Error ? error : new Error(String(error)),
-              { correlationId, userId: user.id },
+              { correlationId },
             );
             metrics.errors++;
           }

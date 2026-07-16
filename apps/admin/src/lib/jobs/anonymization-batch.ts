@@ -154,7 +154,6 @@ export function createAnonymizationBatchWorker() {
             if (holds.length > 0) {
               logger.info("User has legal hold, skipping anonymization", {
                 correlationId,
-                userId: user.id,
                 holdReasons: holds,
               });
               metrics.skippedLegalHold++;
@@ -170,7 +169,6 @@ export function createAnonymizationBatchWorker() {
             if (currentStatus?.status === "ACTIVE") {
               logger.info("User reactivated, skipping", {
                 correlationId,
-                userId: user.id,
               });
               metrics.skippedActive++;
               continue;
@@ -179,7 +177,6 @@ export function createAnonymizationBatchWorker() {
             if (currentStatus?.anonymizedAt) {
               logger.info("User already anonymized, skipping", {
                 correlationId,
-                userId: user.id,
               });
               metrics.skippedActive++;
               continue;
@@ -191,13 +188,12 @@ export function createAnonymizationBatchWorker() {
 
             logger.info("User anonymized successfully", {
               correlationId,
-              userId: user.id,
             });
           } catch (error) {
             logger.error(
               "Error anonymizing user",
               error instanceof Error ? error : new Error(String(error)),
-              { correlationId, userId: user.id },
+              { correlationId },
             );
             metrics.errors++;
           }

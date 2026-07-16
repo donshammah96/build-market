@@ -137,7 +137,8 @@
     "ESP_API_KEY",
     "ESP_KEY_ID",
     "RESEND_SEGMENT_ID",
-    "RESEND_WEBHOOK_SECRET"
+    "RESEND_WEBHOOK_SECRET",
+    "WORKER_HEALTH_PORT"
   ],
   "tasks": {
     "build": {

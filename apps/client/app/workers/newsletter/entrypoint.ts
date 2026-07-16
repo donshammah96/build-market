@@ -15,6 +15,7 @@ import { newsletterConfirmationEmailWorker } from "./confirmation-email.worker";
 import { getBullMQConnectionSummary } from "@build/queue-server";
 import { StructuredLogger } from "@build/resilience";
 import http from "node:http";
+import { envConfig } from "@/app/lib/infrastructure/env";
 
 const logger = new StructuredLogger("newsletter-worker-process");
 const workers = [newsletterEspSyncWorker, newsletterConfirmationEmailWorker];
@@ -48,8 +49,7 @@ const server = http.createServer((req, res) => {
   res.end(JSON.stringify({ ok: allReady }));
 });
 
-// eslint-disable-next-line no-restricted-syntax
-const healthPort = process.env.WORKER_HEALTH_PORT ?? 8080;
+const healthPort = envConfig.newsletter.workerHealthPort ?? 8080;
 server.listen(healthPort, () => {
   logger.info(`Health check endpoint listening on port ${healthPort}`, {});
 });

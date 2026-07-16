@@ -139,7 +139,6 @@ export function createCleanupWorker() {
             logger.debug("Cleaning up export", {
               correlationId,
               exportId: exportRecord.id,
-              userId: exportRecord.userId,
               s3Key: exportRecord.s3Key,
             });
 
@@ -187,7 +186,6 @@ export function createCleanupWorker() {
             logger.info("Export cleaned up successfully", {
               correlationId,
               exportId: exportRecord.id,
-              userId: exportRecord.userId,
             });
           } catch (error) {
             metrics.failureCount++;
@@ -198,7 +196,6 @@ export function createCleanupWorker() {
               {
                 correlationId,
                 exportId: exportRecord.id,
-                userId: exportRecord.userId,
                 s3Key: exportRecord.s3Key,
               },
             );

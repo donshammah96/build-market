@@ -50,8 +50,18 @@ export interface LogContext {
   // Log actorRole (an enum with no identity) instead. Any call site that was
   // passing userId will now produce a compile error, making violations visible
   // at build time rather than leaking silently at runtime.
+  userId?: never;
+  clerkId?: never;
+  userEmail?: never;
+  email?: never;
+  phone?: never;
+  nationalId?: never;
   operationName?: string;
   serviceName?: string;
+  // traceId / spanId are injected automatically by the logger's OTel mixin
+  // when an active span exists — do not set these manually from call sites.
+  traceId?: string;
+  spanId?: string;
   [key: string]: unknown;
 }
 

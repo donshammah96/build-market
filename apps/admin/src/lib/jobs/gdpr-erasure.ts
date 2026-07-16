@@ -45,7 +45,6 @@ export async function triggerImmediateGdprErasure(userId: string) {
     );
     logger.info("Queued immediate GDPR erasure job", {
       correlationId,
-      userId,
       jobId: job.id,
     });
     return job.id;
@@ -53,7 +52,7 @@ export async function triggerImmediateGdprErasure(userId: string) {
     logger.error(
       "Failed to queue immediate GDPR erasure job",
       error instanceof Error ? error : new Error(String(error)),
-      { correlationId, userId },
+      { correlationId },
     );
     throw error;
   }
@@ -119,7 +118,6 @@ export function createGdprErasureWorker() {
         const { userId } = job.data as { userId: string };
         logger.info("Processing immediate GDPR erasure for user", {
           correlationId,
-          userId,
           jobId: job.id,
         });
 
@@ -127,13 +125,12 @@ export function createGdprErasureWorker() {
           await erasureService.performGdprErasure(userId);
           logger.info("Immediate GDPR erasure completed successfully", {
             correlationId,
-            userId,
           });
         } catch (error) {
           logger.error(
             "Failed to execute immediate GDPR erasure",
             error instanceof Error ? error : new Error(String(error)),
-            { correlationId, userId },
+            { correlationId },
           );
           throw error;
         }
@@ -176,7 +173,7 @@ export function createGdprErasureWorker() {
               logger.error(
                 "Error during batch GDPR erasure for user",
                 error instanceof Error ? error : new Error(String(error)),
-                { correlationId, userId: user.id },
+                { correlationId },
               );
               metrics.errors++;
             }

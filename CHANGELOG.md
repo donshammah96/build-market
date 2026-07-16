@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed (Logging & Observability Audits)
+
+- **Observability (Pino Structured Logging Upgrade)**: Replaced hand-rolled console-based logging in `@build/resilience` package with standard Pino logging. Built a custom version-tracked caching mechanism in `StructuredLogger` to dynamically invalidate and rebuild child log instances when runtime configurations are hot-reloaded (e.g. in tests/dev servers), bypassing continuous allocations.
+- **Security (Redaction & PII Compile Guards)**: Aligned `REDACT_PATHS` with context spreading structure using flat root and wildcard nested keys to prevent secret leaks to stdout. Modified `LogContext` typescript definition to explicitly type forbidden PII fields (`userId`, `clerkId`, `userEmail`, `email`, `phone`, `nationalId`) as `never`, raising compile-time blocks against security-drift.
+- **Observability (PII Removal Audit)**: Cleaned up 19 compile-time type-safety violations across 6 `apps/admin` files (`notification.service.ts`, `anonymization-batch.ts`, `data-retention.ts`, `export-cleanup.ts`, `gdpr-erasure.ts`, and `notification.worker.ts`) by removing raw PII identifiers (`userId`, `userEmail`) from logging contexts.
+- **Observability (Resilient Transport Fallback)**: Wrapped `pino-pretty` initialization in a try-catch block to gracefully fallback to standard JSON logging if pretty printing dependencies are pruned (e.g. in thin production environments), preventing boot failures.
+- **Configuration (Safe Env Config Alignment)**: Aligned `apps/client/app/workers/newsletter/entrypoint.ts` with ADR-004 by registering `WORKER_HEALTH_PORT` under type-safe `envConfig.newsletter.workerHealthPort` instead of reading `process.env` directly. Added `WORKER_HEALTH_PORT=8080` to all client `.env` files and templates (`.env.development`, `.env.test`, `.env.vercel.example`, `.env.local.example`, `.env.local`).
+
+**Files changed:**
+
+- `packages/resilience/package.json`
+- `packages/resilience/src/logger.ts`
+- `packages/resilience/src/types.ts`
+- `packages/resilience/src/__tests__/logger.test.ts`
+- `apps/admin/src/lib/domains/verification/internal/notification.service.ts`
+- `apps/admin/src/lib/jobs/anonymization-batch.ts`
+- `apps/admin/src/lib/jobs/data-retention.ts`
+- `apps/admin/src/lib/jobs/export-cleanup.ts`
+- `apps/admin/src/lib/jobs/gdpr-erasure.ts`
+- `apps/admin/src/lib/workers/compliance/notification.worker.ts`
+- `apps/client/app/lib/infrastructure/env.ts`
+- `apps/client/app/workers/newsletter/entrypoint.ts`
+- `apps/client/.env.development`
+- `apps/client/.env.test`
+- `apps/client/.env.vercel.example`
+- `apps/client/.env.local.example`
+- `apps/client/.env.local`
+
 ### Changed (Newsletter)
 
 - **Newsletter (Decoupled DB-Backed Opt-In)**: Added the `NewsletterSubscriber` model and enums (`NewsletterSubscriberStatus`, `NewsletterEspSyncStatus`) to the Prisma schema, and created the back-relation on `User`. The local database is now the source of truth for GDPR/POPIA consent logs, while outbound sync to Resend/Mailchimp is handled asynchronously.
@@ -16,6 +44,7 @@ All notable changes to this project will be documented in this file.
 - **Newsletter (GDPR Soft-delete)**: Refactored `eraseSubscriberByEmail` in repository to securely anonymize PII and replace unique email indexes, allowing users to re-register while keeping an audit trace.
 - **Newsletter (Rate Limiting & Security)**: Added secondary email-hash SHA-256 rate limiting on `/subscribe` to block multi-IP spamming, and configured ESLint restricted-import rules to protect the Redis connection boundaries.
 - **Newsletter (Scheduled Reconciliation)**: Added a 15-minute sweep job (`newsletter-sweep.ts`) to reconcile stuck syncs and emit alerts on `DEAD_LETTER` subscriber statuses, registering it in the main job orchestrator.
+- **Newsletter (Unit Test Mocking)**: Mocked `bullmq`'s `Queue` and `Worker` classes in `newsletter-workers.test.ts` to prevent module evaluation side-effects from spawning stray Redis connection attempts, resolving local/CI Vitest worker hook timeouts.
 
 **Files changed:**
 
@@ -40,6 +69,7 @@ All notable changes to this project will be documented in this file.
 - `apps/client/__tests__/api/newsletter/subscribe.route.test.ts`
 - `apps/client/__tests__/api/newsletter/confirm.route.test.ts`
 - `apps/client/__tests__/api/newsletter/unsubscribe.route.test.ts`
+- `apps/client/__tests__/workers/newsletter-workers.test.ts`
 - `apps/client/__tests__/workers/newsletter-workers.test.ts`
 - `apps/client/scripts/security-lint-checks.mjs`
 - `apps/client/scripts/check-security-lint.mjs`

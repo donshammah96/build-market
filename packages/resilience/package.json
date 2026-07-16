@@ -20,15 +20,28 @@
     "check-types": "tsc --noEmit",
     "build": "tsc",
     "prepack": "pnpm run build",
-    "test": "echo \"No tests configured\" && exit 0"
+    "test": "vitest run"
   },
   "dependencies": {
     "@build/redis": "workspace:*",
-    "lru-cache": "^11.2.2"
+    "lru-cache": "^11.2.2",
+    "pino": "^9.2.0",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.9.1"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/api": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@build/typescript-config": "workspace:*",
+    "@opentelemetry/api": "^1.9.1",
     "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "pino-pretty": "^13.0.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

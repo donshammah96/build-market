@@ -288,7 +288,6 @@ export async function publishVerificationEvent(
       subject,
       entityId: result.entityId,
       status: result.newStatus,
-      userEmail,
     });
   } catch (error) {
     logger.error(
