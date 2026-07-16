@@ -140,4 +140,57 @@ describe("Admin Middleware - Authentication Redirect", () => {
       adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL = "";
     }
   });
+
+  it("should return a 401 JSON response for unauthenticated requests to API routes", async () => {
+    mockAuth.mockResolvedValue({
+      userId: null,
+    });
+
+    const request = new NextRequest(
+      "https://admin.buildmarket.app/api/some-route",
+      {
+        headers: {
+          host: "admin.buildmarket.app",
+        },
+      },
+    );
+
+    const response = await middleware(request, {} as any);
+
+    expect(response).toBeTruthy();
+    expect(response).toBeInstanceOf(NextResponse);
+    expect(response?.status).toBe(401);
+
+    const body = await response!.json();
+    expect(body).toEqual({ error: "Unauthorized" });
+  });
+
+  it("should return a 403 JSON response for blocked users requesting API routes", async () => {
+    mockAuth.mockResolvedValue({
+      userId: "user_123",
+      sessionClaims: {
+        metadata: {
+          status: "SUSPENDED",
+        },
+      },
+    });
+
+    const request = new NextRequest(
+      "https://admin.buildmarket.app/api/some-route",
+      {
+        headers: {
+          host: "admin.buildmarket.app",
+        },
+      },
+    );
+
+    const response = await middleware(request, {} as any);
+
+    expect(response).toBeTruthy();
+    expect(response).toBeInstanceOf(NextResponse);
+    expect(response?.status).toBe(403);
+
+    const body = await response!.json();
+    expect(body).toEqual({ error: "Forbidden", reason: "SUSPENDED" });
+  });
 });

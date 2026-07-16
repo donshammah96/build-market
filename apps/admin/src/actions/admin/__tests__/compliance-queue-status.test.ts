@@ -43,6 +43,15 @@ vi.mock("@build/db", () => ({
       findUnique: vi.fn(),
     },
   },
+  UserRole: {
+    ADMIN: "ADMIN",
+    CLIENT: "CLIENT",
+    PROFESSIONAL: "PROFESSIONAL",
+  },
+  AdminRole: {
+    SUPER_ADMIN: "SUPER_ADMIN",
+    SUPPORT_AGENT: "SUPPORT_AGENT",
+  },
 }));
 
 vi.mock("@/lib/infrastructure/env", () => ({

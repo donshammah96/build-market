@@ -192,6 +192,8 @@ export async function POST(req: NextRequest) {
         },
       );
 
+      // In production, enforce strict replay protection; fail the request if the store is down.
+      // In development/test environments, allow the webhook to execute undeduplicated for developer convenience.
       if (env.isProd) {
         return finalizeResponse(
           apiError(

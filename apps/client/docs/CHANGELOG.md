@@ -28,6 +28,14 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Docs (Webhook)
+
+- **Webhook Error Policy**: Added inline documentation to the production-only replay protection guard within the Clerk webhook route handler (`route.ts`) to clarify the asymmetric handling logic between production and development/test environments.
+
+**Files changed:**
+
+- `apps/client/app/api/clerk-webhook/route.ts`
+
 ### Security (Boundary Decoupling)
 
 - **Domain Security (Boundary Decoupling)**: Resolved two `mapperInfraImport` findings by removing the dependency of domain mappers on the presentation/api adapter layer (`@/app/lib/api/dto-serialization`). Localized the date-and-decimal `serializeDto` helper inside `messaging/mappers.ts` and `newsletter/mappers.ts` to keep the domain services' DTO mappings pure, satisfying the import direction rules enforced by static drift reports.

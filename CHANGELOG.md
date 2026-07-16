@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Security (Admin Authentication Hardening)
+
+- **Middleware (API Route Handlers)**: Updated `middleware.ts` to return `401 Unauthorized` or `403 Forbidden` JSON responses instead of redirects when hitting expired or invalid sessions on API/tRPC routes.
+- **Security (Consolidated Environment Coercion)**: Created a centralized environment utility `toBool` and used it across `middleware.ts`, `route-auth.ts`, and `actor-resolver.ts` to prevent raw string boolean coercion issues.
+- **Security (Route Authentication Gates)**: Refactored `route-auth.ts` to leverage `@build/db`'s `UserRole` and `AdminRole` enums instead of raw string literal comparisons, and introduced fallback actor roles to safely prevent route crashes.
+- **Client Auth (Query Parameter Passing)**: Updated the satellite sign-in page component to accept, parse, and forward query parameters during domain redirection.
+- **CLI Utilities (Admin Promotion Security)**: Redesigned the `promote-admin.ts` script to consume cli-arguments, display active database target warnings, prompt for confirmation, and write a structured `AdminAuditLog` record inside the Prisma write transaction.
+
+**Files changed:**
+
+- `apps/admin/src/lib/infrastructure/env-utils.ts`
+- `apps/admin/src/middleware.ts`
+- `apps/admin/src/lib/security/route-auth.ts`
+- `apps/admin/src/actions/admin/_core/actor-resolver.ts`
+- `apps/admin/src/app/(auth)/sign-in/[[...sign-in]]/page.tsx`
+- `apps/admin/scripts/promote-admin.ts`
+- `apps/admin/src/actions/admin/__tests__/compliance-queue-status.test.ts`
+- `apps/admin/__tests__/middleware.test.ts`
+- `apps/client/app/api/clerk-webhook/route.ts`
+
 ### Security (Boundary Decoupling)
 
 - **Domain Security (Boundary Decoupling)**: Resolved two `mapperInfraImport` findings by removing the dependency of domain mappers on the presentation/api adapter layer (`@/app/lib/api/dto-serialization`). Localized the date-and-decimal `serializeDto` helper inside `messaging/mappers.ts` and `newsletter/mappers.ts` to keep the domain services' DTO mappings pure, satisfying the import direction rules enforced by static drift reports.

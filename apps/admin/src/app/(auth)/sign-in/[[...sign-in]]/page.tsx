@@ -17,11 +17,41 @@ import { redirect } from "next/navigation";
  * return them to, and the primary app handles post-sign-in routing via
  * Clerk's own `afterSignInUrl` / `fallbackRedirectUrl` configuration.
  */
-export default function SignInPage() {
-  const destination =
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams:
+    | Promise<Record<string, string | string[] | undefined>>
+    | Record<string, string | string[] | undefined>;
+}) {
+  const params = await searchParams;
+  const target =
     adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL ||
     adminEnvConfig.NEXT_PUBLIC_CLERK_SIGN_IN_URL ||
     "/";
 
-  redirect(destination);
+  const isAbsolute =
+    target.startsWith("http://") || target.startsWith("https://");
+  const destination = isAbsolute
+    ? new URL(target)
+    : new URL(target, "http://n");
+
+  if (params) {
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined) {
+        if (Array.isArray(v)) {
+          destination.searchParams.delete(k);
+          v.forEach((val) => destination.searchParams.append(k, val));
+        } else {
+          destination.searchParams.set(k, v);
+        }
+      }
+    });
+  }
+
+  const redirectUrl = isAbsolute
+    ? destination.toString()
+    : `${destination.pathname}${destination.search}`;
+
+  redirect(redirectUrl);
 }

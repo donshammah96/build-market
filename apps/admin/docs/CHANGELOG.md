@@ -4,6 +4,9 @@
 
 ### Security
 
+- **Consolidated Environment Flag Parsing**: Centralized environment variable boolean flag parsing into `env-utils.ts` and migrated calls to prevent raw string parsing inconsistencies.
+- **Route & Action Authorization Hardening (ADR-ADMIN-001)**: Integrated database `UserRole` and `AdminRole` enums instead of raw string comparison in `route-auth.ts`, and enforced safe role fallback values to prevent route crashes.
+- **CLI Tools Security**: Added CLI arguments, interactive safety prompts, target database host warnings, and structured Prisma `AdminAuditLog` record generation to the `promote-admin.ts` utility.
 - **Static Linter Rules Parity**: Reconciled the security drift checker ([check-security-drift.mjs](file:///c:/Users/User/build-market/apps/admin/scripts/check-security-drift.mjs)) with client-side validation rules. Fixed a critical scanning path bug (where paths looked in root instead of `src/` causing 0 files to be scanned) and added rules for `no-direct-env`, `no-banned-log-keys`, `no-unallowlisted-storage`, `no-cors-drift`, `zod-mutation-passthrough`, `unsafe-client-errors`, and `req-json-in-get`.
 - **Observability and Privacy (ADR-ADMIN-003)**: Hardened standard log calls in [api-middleware.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/api/api-middleware.ts) and [api-utils.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/api/api-utils.ts) to eliminate raw `userId` and `clerkId` log properties. Added explicit log safety exemptions to compliance cron and queue worker files to safely track user erasure life cycles.
 - **XSS Mitigation**: Added a linter validation sanitizer comment to dynamic chart styling inside [chart.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/ui/chart.tsx#L83).
@@ -39,6 +42,10 @@
 
 ### Fixed
 
+- **Middleware API Redirect Bypass**: Updated `middleware.ts` to return `401 Unauthorized` and `403 Forbidden` JSON responses on API/tRPC routes when user session is unauthenticated or blocked, instead of redirecting the requests to HTML login pages.
+- **Deep-link Query Params Forwarding**: Refactored the satellite sign-in catch-all route page component to accept and propagate query parameters during primary domain sign-in forwarding.
+- **Middleware Test Suite**: Updated `middleware.test.ts` to verify 401/403 JSON responses on API routes.
+- **Compliance Queue Status Mock**: Added mocked `UserRole` and `AdminRole` enums to `compliance-queue-status.test.ts` to prevent runtime crashes during route-auth checks.
 - **Admin Middleware Clerk Hardening**: Hardened the `clerkMiddleware()` options resolver and routing guards in [middleware.ts](file:///c:/Users/User/build-market/apps/admin/src/middleware.ts) to prevent request-time crashes (500 errors) when environment variables are missing or malformed.
   - Added strict absolute URL validation via `isAbsoluteHttpUrl` to check `NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL` before using it, falling back to host-derivation and logging errors instead of crashing.
   - Hardened host-derivation in `deriveFallbackPrimarySignInUrl` to bail out on known shared hosting suffixes (like `vercel.app` and `vercel.sh`).
