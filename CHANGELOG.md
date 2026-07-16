@@ -4,6 +4,80 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed (Newsletter)
+
+- **Newsletter (Decoupled DB-Backed Opt-In)**: Added the `NewsletterSubscriber` model and enums (`NewsletterSubscriberStatus`, `NewsletterEspSyncStatus`) to the Prisma schema, and created the back-relation on `User`. The local database is now the source of truth for GDPR/POPIA consent logs, while outbound sync to Resend/Mailchimp is handled asynchronously.
+- **Newsletter (Background Jobs & Queues)**: Configured BullMQ background queues (`newsletter-esp-sync` and `newsletter-confirmation-email`) to decouple third-party ESP calls from the request path, implementing retry policies, next-retry tracking, and dead-letter handling.
+- **Newsletter (Resend Segments Model)**: Upgraded the Resend integration to use the modern Resend Segments model (global contact creation + segment association fallback) instead of the deprecated legacy audiences endpoint.
+- **Newsletter (Confirmation Route)**: Updated the route and service handlers to enforce strict double opt-in validation, secure token hashing (SHA-256), and resubscription cooldown limits.
+- **Newsletter (Honeypot Enforcement)**: Fixed the client-side form submission check. If the hidden `company` input is filled, the code immediately mocks a success state without invoking the API, preventing bot spams efficiently.
+- **Newsletter (Double Opt-In Worker Wiring)**: Wired BullMQ background workers to a dedicated persistent node process entrypoint (`entrypoint.ts`) with healthchecks (`/healthz` on port 8080) and graceful SIGTERM/SIGINT drainage handlers.
+- **Newsletter (Email Outcome Visibility)**: Added `confirmationEmailStatus` and `confirmationEmailLastError` fields to `NewsletterSubscriber` database model and select projections, updating repository and workers to record transactional outcomes database-side.
+- **Newsletter (GDPR Soft-delete)**: Refactored `eraseSubscriberByEmail` in repository to securely anonymize PII and replace unique email indexes, allowing users to re-register while keeping an audit trace.
+- **Newsletter (Rate Limiting & Security)**: Added secondary email-hash SHA-256 rate limiting on `/subscribe` to block multi-IP spamming, and configured ESLint restricted-import rules to protect the Redis connection boundaries.
+- **Newsletter (Scheduled Reconciliation)**: Added a 15-minute sweep job (`newsletter-sweep.ts`) to reconcile stuck syncs and emit alerts on `DEAD_LETTER` subscriber statuses, registering it in the main job orchestrator.
+
+**Files changed:**
+
+- `packages/db/prisma/schema.prisma`
+- `packages/db/prisma/migrations/20260716062000_add_newsletter_confirmation_email_status/migration.sql`
+- `apps/client/eslint.config.js`
+- `apps/client/app/lib/api/dto-serialization.ts`
+- `apps/client/app/lib/validation/newsletter-validation.ts`
+- `apps/client/app/lib/domains/newsletter/service.ts`
+- `apps/client/app/lib/domains/newsletter/repository.ts`
+- `apps/client/app/lib/domains/newsletter/mappers.ts`
+- `apps/client/app/lib/domains/newsletter/esp-sync.ts`
+- `apps/client/app/lib/domains/messaging/mappers.ts`
+- `apps/client/app/lib/queues/newsletter.queue.ts`
+- `apps/client/app/workers/newsletter/entrypoint.ts`
+- `apps/client/app/workers/newsletter/confirmation-email.worker.ts`
+- `apps/client/app/workers/newsletter/esp-sync.worker.ts`
+- `apps/client/app/jobs/newsletter-sweep.ts`
+- `apps/client/app/jobs/index.ts`
+- `apps/client/app/api/newsletter/subscribe/route.ts`
+- `apps/client/__tests__/lib/domains/newsletter.service.test.ts`
+- `apps/client/__tests__/api/newsletter/subscribe.route.test.ts`
+- `apps/client/__tests__/api/newsletter/confirm.route.test.ts`
+- `apps/client/__tests__/api/newsletter/unsubscribe.route.test.ts`
+- `apps/client/__tests__/workers/newsletter-workers.test.ts`
+- `apps/client/scripts/security-lint-checks.mjs`
+- `apps/client/scripts/check-security-lint.mjs`
+- `apps/client/scripts/report-security-drift.mjs`
+
+### Changed (Client UI & Navigation Refactoring)
+
+- **Client UI (Navigation & Layouts)**: Refactored and simplified link and routing configurations monorepo-wide, migrating layout elements (ClientNavbar, Footer, Header, MobileNav, NavBar, ProfessionalNavbar, ProfessionalSidebar, RouteFocusManager) to a central typed configuration in [nav-config.ts](file:///c:/Users/User/build-market/apps/client/app/lib/config/nav-config.ts) and clean routes mapping.
+- **Client UI (Newsletter pages)**: Added frontend confirmation and unsubscribe pages in [confirm/page.tsx](file:///c:/Users/User/build-market/apps/client/app/newsletter/confirm/page.tsx) and [unsubscribe/page.tsx](file:///c:/Users/User/build-market/apps/client/app/newsletter/unsubscribe/page.tsx) to complete the double opt-in loop.
+- **Client UI (Legal & Onboarding)**: Refactored legal layouts, updated styling classes to align with modern themes (Tailwind-compatible properties), and added error/loading skeleton boundaries in onboarding steps.
+
+**Files changed:**
+
+- `apps/client/lib/links.ts`
+- `apps/client/lib/routes/index.ts`
+- `apps/client/lib/routes/marketplace.routes.ts`
+- `apps/client/lib/routes/professional.routes.ts`
+- `apps/client/app/lib/config/nav-config.ts`
+- `apps/client/components/layout/ClientNavbar.tsx`
+- `apps/client/components/layout/Footer.tsx`
+- `apps/client/components/layout/Header.tsx`
+- `apps/client/components/layout/MobileNav.tsx`
+- `apps/client/components/layout/NavBar.tsx`
+- `apps/client/components/layout/ProfessionalNavbar.tsx`
+- `apps/client/components/layout/ProfessionalSidebar.tsx`
+- `apps/client/components/layout/RouteFocusManager.tsx`
+- `apps/client/app/newsletter/confirm/page.tsx`
+- `apps/client/app/newsletter/unsubscribe/page.tsx`
+- `apps/client/app/legal/cookie-settings/_components/CookieCategoryCard.tsx`
+- `apps/client/app/legal/cookie-settings/page.tsx`
+- `apps/client/app/legal/layout.tsx`
+- `apps/client/app/legal/privacy/page.tsx`
+- `apps/client/app/legal/professional-terms/page.tsx`
+- `apps/client/app/onboarding/error.tsx`
+- `apps/client/app/onboarding/loading.tsx`
+- `apps/client/tsconfig.json`
+- `turbo.json`
+
 ### Fixed (Clerk Auth Page Load Performance & CSP Headers)
 
 - **Client/Auth UI**: Fixed slow loading times, LCP blockages, and cumulative layout shifts (CLS) on sign-in and sign-up pages. Converted catching-all page wrappers to Server Components (RSC) to render immediate page frames, deferred Clerk component initialization via dynamic lazy imports with `ssr: false` under a `<Suspense>` boundary, and set up pixel-perfect shimmer loaders (`AuthPageSkeleton.tsx`) as fallback states.
@@ -57,6 +131,7 @@ All notable changes to this project will be documented in this file.
 
 ### Security
 
+- **Client/Security**: Added a custom static code analyzer check (`workerImport` check: SEC-LINT-008) in [security-lint-checks.mjs](file:///c:/Users/User/build-market/apps/client/scripts/security-lint-checks.mjs), [check-security-lint.mjs](file:///c:/Users/User/build-market/apps/client/scripts/check-security-lint.mjs), and [report-security-drift.mjs](file:///c:/Users/User/build-market/apps/client/scripts/report-security-drift.mjs) that scans client presentation, components, routes, and services for prohibited direct background worker imports to protect the Redis connection boundaries.
 - **Admin/Security**: Reconciled the security drift static rule checker ([check-security-drift.mjs](file:///c:/Users/User/build-market/apps/admin/scripts/check-security-drift.mjs)) with the client-side validation rules. Fixed a critical directory path bug that was preventing any files from being scanned. Integrated rules for environment boundaries (`no-direct-env`), log safety (`no-banned-log-keys`), browser persistence (`no-unallowlisted-storage`), CORS policies (`no-cors-drift`), zod schema passthroughs (`zod-mutation-passthrough`), unsafe API errors (`unsafe-client-errors`), and body requests in GET routes (`req-json-in-get`).
 - **Admin/Security**: Hardened standard logs in [api-middleware.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/api/api-middleware.ts) and [api-utils.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/api/api-utils.ts) to remove direct `userId` and `clerkId` log properties, ensuring full compliance with ADR-ADMIN-003. Added linter exemption comments to GDPR and compliance cron/batch workers to safely allow tracking user deletion lifecycle.
 - **Admin/Security**: Added sanitizer validation comments to dynamic theme styling in [chart.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/ui/chart.tsx#L83).

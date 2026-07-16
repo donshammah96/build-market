@@ -131,6 +131,35 @@ const config = [
     },
   },
   {
+    files: [
+      "app/**/*.{ts,tsx}",
+      "components/**/*.{ts,tsx}",
+      "hooks/**/*.{ts,tsx}",
+      "lib/**/*.{ts,tsx}",
+    ],
+    ignores: [
+      "app/workers/**",
+      "app/jobs/**",
+      "**/__tests__/**",
+      "**/*.test.{ts,tsx}",
+      "**/*.spec.{ts,tsx}",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/*.worker", "**/esp-sync"],
+              message:
+                "Worker modules and esp-sync.ts open a Redis connection/polling loop on import. They must only be imported by the dedicated worker entrypoint under app/workers — see NEWSLETTER_WORKER_WIRING.md.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["app/lib/domains/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [

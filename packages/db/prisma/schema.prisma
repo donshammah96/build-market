@@ -5,7 +5,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  extensions = [citext]
+  extensions = [citext, pg_stat_statements(schema: "extensions"), pgcrypto(schema: "extensions"), pgroonga(schema: "pgroonga"), sslinfo(schema: "extensions"), supabase_vault(schema: "vault"), uuidOssp(map: "uuid-ossp", schema: "extensions")]
 }
 
 // ========================================================
@@ -983,6 +983,7 @@ model User {
   uploadedIdeaBookAttachments IdeaBookAttachment[]
   uploadedPropertyAttachments PropertyAttachment[]
   leads                       Lead[]
+  newsletterSubscribers       NewsletterSubscriber[]
 
   @@index([clerkId])
   @@index([email])
@@ -1674,7 +1675,7 @@ model Asset {
   quoteAttachments    QuoteAttachment[]    @relation("QuoteAttachmentAssets")
   reviewImages        ReviewImage[]        @relation("ReviewImageAssets")
   ideaBookAttachments IdeaBookAttachment[] @relation("IdeaBookAttachmentAssets")
-  directUploads        DirectUpload[]
+  directUploads       DirectUpload[]
 
   // Usage tracking
   downloadCount Int       @default(0)
@@ -1686,10 +1687,10 @@ model Asset {
   deletedAt   DateTime?
   deleteAfter DateTime? // For temp uploads
 
+  @@unique([uploaderId, checksum, visibility])
   @@index([uploaderId])
   @@index([checksum]) // Deduplication lookup
   @@index([createdAt])
-  @@unique([uploaderId, checksum, visibility])
 }
 
 enum DirectUploadStatus {
@@ -1723,7 +1724,7 @@ model DirectUpload {
   failedAt      DateTime?
   failureReason String?
 
-  temporary   Boolean @default(false)
+  temporary   Boolean   @default(false)
   deleteAfter DateTime?
 
   createdAt DateTime @default(now())
@@ -3034,22 +3035,87 @@ model DataExport {
 }
 
 model FailedNotification {
-  id              String   @id @default(uuid())
-  entityType      String   // "professional", "store", "property", "certificate", "license"
+  id              String    @id @default(uuid())
+  entityType      String // "professional", "store", "property", "certificate", "license"
   entityId        String
   recipientUserId String
-  newStatus       String   // e.g., VerificationStatus string
-  reason          String?  @db.Text
-  notes           String?  @db.Text
-  attemptCount    Int      @default(0)
+  newStatus       String // e.g., VerificationStatus string
+  reason          String?   @db.Text
+  notes           String?   @db.Text
+  attemptCount    Int       @default(0)
   lastAttemptAt   DateTime?
   nextRetryAt     DateTime
-  lastError       String   @db.Text
-  createdAt       DateTime @default(now())
-  status          String   @default("PENDING") // PENDING, COMPLETED, DEAD_LETTER
+  lastError       String    @db.Text
+  createdAt       DateTime  @default(now())
+  status          String    @default("PENDING") // PENDING, COMPLETED, DEAD_LETTER
 
   @@index([status])
   @@index([nextRetryAt])
   @@index([entityType, entityId])
+  @@map("failed_notifications")
 }
 
+enum NewsletterSubscriberStatus {
+  PENDING_CONFIRMATION // signed up, confirmation email sent, not yet clicked
+  SUBSCRIBED // confirmed, active
+  UNSUBSCRIBED // user-initiated unsubscribe
+  BOUNCED // ESP reported a hard bounce — never re-add without re-confirmation
+  COMPLAINED // ESP reported a spam complaint — permanently suppressed
+}
+
+enum NewsletterEspSyncStatus {
+  PENDING // not yet synced to the ESP
+  SYNCED // successfully synced
+  FAILED // sync attempt failed, will retry (see espNextRetryAt)
+  DEAD_LETTER // exhausted retries — needs manual/ops follow-up
+}
+
+model NewsletterSubscriber {
+  id    String @id @default(uuid())
+  email String @unique @db.Citext
+
+  // Best-effort link only — subscribing does not require an account and
+  // must keep working if this is null.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  status NewsletterSubscriberStatus @default(PENDING_CONFIRMATION)
+  source String                     @default("footer") // "footer", "checkout", "professional_onboarding", ...
+
+  // Consent audit trail (GDPR / Kenya DPA / CAN-SPAM)
+  consentIpAddress String?
+  consentUserAgent String? @db.Text
+
+  // Double opt-in confirmation. Store a hash, never the raw token — same
+  // reasoning as password reset tokens.
+  confirmationTokenHash      String?   @unique
+  confirmationTokenExpiresAt DateTime?
+  confirmedAt                DateTime?
+  lastConfirmationSentAt     DateTime?
+  confirmationEmailStatus    String?   @default("PENDING") // "PENDING" | "SENT" | "FAILED"
+  confirmationEmailLastError String?   @db.Text
+
+  // Unsubscribe
+  unsubscribeTokenHash String?   @unique
+  unsubscribedAt       DateTime?
+  unsubscribeReason    String?
+
+  // ESP sync state — mirrors FailedNotification's retry-tracking pattern.
+  espProvider      String? // "resend" | "mailchimp" | "stub"
+  espContactId     String? // provider's contact ID once synced
+  espSyncStatus    NewsletterEspSyncStatus @default(PENDING)
+  espSyncAttempts  Int                     @default(0)
+  espLastSyncError String?                 @db.Text
+  espLastSyncAt    DateTime?
+  espNextRetryAt   DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([status])
+  @@index([espSyncStatus, espNextRetryAt])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("newsletter_subscribers")
+}

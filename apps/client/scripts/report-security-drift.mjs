@@ -14,6 +14,7 @@ import {
   collectMutationPassthroughDrift,
   collectOpaqueLogContextDrift,
   collectUnsafeApiErrorDrift,
+  collectWorkerImportDrift,
 } from "./security-lint-checks.mjs";
 import {
   CRITICAL_TRANSITION_STEP_SEQUENCE_RULES,
@@ -1566,6 +1567,7 @@ const report = {
     mapperNormalizationDrift: 0,
     operationsBuilderDrift: 0,
     indexExportDrift: 0,
+    workerImport: 0,
   },
   findings: {
     envBoundary: collectEnvDrift(),
@@ -1598,6 +1600,7 @@ const report = {
     mapperNormalizationDrift: phase0.mapperNormalizationDrift,
     operationsBuilderDrift: phase0.operationsBuilderDrift,
     indexExportDrift: phase0.indexExportDrift,
+    workerImport: collectWorkerImportDrift(),
   },
 };
 
@@ -1648,6 +1651,7 @@ report.summary.mapperNormalizationDrift =
 report.summary.operationsBuilderDrift =
   report.findings.operationsBuilderDrift.length;
 report.summary.indexExportDrift = report.findings.indexExportDrift.length;
+report.summary.workerImport = report.findings.workerImport.length;
 
 fs.writeFileSync(REPORT_OUTPUT, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 
@@ -1737,6 +1741,9 @@ console.log(
 console.log(
   `[security/drift-report] indexExportDrift: ${report.summary.indexExportDrift}`,
 );
+console.log(
+  `[security/drift-report] workerImport: ${report.summary.workerImport}`,
+);
 console.log(`[security/drift-report] output: ${relativeToApp(REPORT_OUTPUT)}`);
 
 const hasFindings =
@@ -1768,7 +1775,8 @@ const hasFindings =
   report.summary.safeIdempotencyCompleteDrift > 0 ||
   report.summary.mapperNormalizationDrift > 0 ||
   report.summary.operationsBuilderDrift > 0 ||
-  report.summary.indexExportDrift > 0;
+  report.summary.indexExportDrift > 0 ||
+  report.summary.workerImport > 0;
 
 if (FAIL_ON_ANY && hasFindings) {
   process.exit(1);

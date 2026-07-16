@@ -46,6 +46,11 @@ import {
   createOnboardingUploadCleanupWorker,
   getOnboardingUploadCleanupQueue,
 } from "./onboarding-upload-cleanup";
+import {
+  scheduleNewsletterSweep,
+  createNewsletterSweepWorker,
+  getNewsletterSweepQueue,
+} from "./newsletter-sweep";
 import { Worker } from "bullmq";
 
 // Track all workers for graceful shutdown
@@ -104,6 +109,7 @@ export async function initializeAllSchedulers(): Promise<void> {
       scheduleAnonymizationBatch(),
       scheduleAssetCleanup(),
       scheduleOnboardingUploadCleanup(),
+      scheduleNewsletterSweep(),
     ]);
 
     console.log("[JobOrchestrator] All jobs scheduled");
@@ -117,6 +123,7 @@ export async function initializeAllSchedulers(): Promise<void> {
       createAnonymizationBatchWorker(),
       createAssetCleanupWorker(),
       createOnboardingUploadCleanupWorker(),
+      createNewsletterSweepWorker(),
     ];
 
     console.log("[JobOrchestrator] All workers created");
@@ -164,6 +171,7 @@ export async function shutdownAllSchedulers(): Promise<void> {
       getAssetCleanupQueue().close(),
       getOnboardingUploadCleanupQueue().close(),
       getExportQueue().close(),
+      getNewsletterSweepQueue().close(),
     ]);
 
     workers = [];
@@ -192,6 +200,10 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
     {
       name: "Onboarding Upload Cleanup",
       queue: getOnboardingUploadCleanupQueue(),
+    },
+    {
+      name: "Newsletter Sweep",
+      queue: getNewsletterSweepQueue(),
     },
   ];
 
@@ -230,7 +242,8 @@ export async function triggerJob(
     | "data-retention"
     | "anonymization-batch"
     | "asset-cleanup"
-    | "onboarding-upload-cleanup",
+    | "onboarding-upload-cleanup"
+    | "newsletter-sweep",
 ): Promise<{ success: boolean; jobId?: string; error?: string }> {
   try {
     let queue;
@@ -256,6 +269,10 @@ export async function triggerJob(
       case "onboarding-upload-cleanup":
         queue = getOnboardingUploadCleanupQueue();
         jobName = "cleanup-expired-staged-uploads";
+        break;
+      case "newsletter-sweep":
+        queue = getNewsletterSweepQueue();
+        jobName = "reconcile-stuck-newsletter-syncs";
         break;
       default:
         return { success: false, error: `Unknown job type: ${jobType}` };
@@ -314,6 +331,7 @@ export async function healthCheck(): Promise<{
     "anonymization",
     "asset-cleanup",
     "onboarding-upload-cleanup",
+    "newsletter-sweep",
   ] as const;
 
   for (let i = 0; i < workerNames.length; i++) {

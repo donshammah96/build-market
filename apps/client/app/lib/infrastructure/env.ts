@@ -308,6 +308,33 @@ const envGroups: EnvGroup[] = [
     ],
   },
   {
+    name: "newsletter",
+    description: "Newsletter / Email Service Provider (ESP) for footer signup",
+    variables: [
+      {
+        name: "ESP_PROVIDER",
+        required: false,
+        default: "stub",
+      },
+      {
+        name: "ESP_API_KEY",
+        required: false,
+      },
+      {
+        name: "ESP_LIST_ID",
+        required: false,
+      },
+      {
+        name: "RESEND_SEGMENT_ID",
+        required: false,
+      },
+      {
+        name: "RESEND_WEBHOOK_SECRET",
+        required: false,
+      },
+    ],
+  },
+  {
     name: "webhooks",
     description: "Webhook replay and freshness controls",
     variables: [
@@ -1081,6 +1108,22 @@ function buildEnvConfig() {
     // getOptionalStringEnv so absence returns undefined rather than empty string.
     ai: {
       geminiApiKey: getOptionalStringEnv("NEXT_PUBLIC_GEMINI_API_KEY"),
+    },
+
+    newsletter: {
+      provider: getStringEnv("ESP_PROVIDER", "stub") as
+        | "resend"
+        | "mailchimp"
+        | "stub",
+      apiKey:
+        getOptionalStringEnv("ESP_API_KEY") ||
+        getOptionalStringEnv("RESEND_API_KEY"),
+      listId:
+        getOptionalStringEnv("ESP_LIST_ID") ||
+        getOptionalStringEnv("RESEND_SEGMENT_ID"),
+      resendApiKey: getOptionalStringEnv("RESEND_API_KEY"),
+      resendSegmentId: getOptionalStringEnv("RESEND_SEGMENT_ID"),
+      resendWebhookSecret: getOptionalStringEnv("RESEND_WEBHOOK_SECRET"),
     },
 
     // GDPR

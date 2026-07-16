@@ -21,7 +21,7 @@ export default function PrivacyPolicyPage() {
       <h1 className="text-4xl md:text-5xl font-bold text-center leading-tight mb-6">
         Your Data Is Safe.
         <br />
-        <span className="bg-gradient-to-r from-emerald-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent">
+        <span className="bg-linear-to-r from-emerald-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent">
           Pinky Promise.
         </span>
       </h1>
@@ -36,9 +36,9 @@ export default function PrivacyPolicyPage() {
       {/* Placeholder card */}
       <div className="relative group">
         {/* Glow effect */}
-        <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-cyan-500/20 rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+        <div className="absolute -inset-1 bg-linear-to-r from-emerald-500/20 via-teal-500/20 to-cyan-500/20 rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
 
-        <div className="relative bg-white/[0.03] backdrop-blur-sm border border-white/10 rounded-2xl p-8 md:p-12 space-y-8">
+        <div className="relative bg-white/3 backdrop-blur-sm border border-white/10 rounded-2xl p-8 md:p-12 space-y-8">
           {/* Construction emoji header */}
           <div className="text-center space-y-4">
             <div className="text-6xl">🏗️</div>
@@ -78,7 +78,7 @@ export default function PrivacyPolicyPage() {
             ].map((item) => (
               <div
                 key={item.title}
-                className="bg-white/[0.03] border border-white/5 rounded-xl p-5 hover:border-emerald-500/20 transition-colors"
+                className="bg-white/3 border border-white/5 rounded-xl p-5 hover:border-emerald-500/20 transition-colors"
               >
                 <div className="text-2xl mb-2">{item.emoji}</div>
                 <h3 className="font-semibold text-white text-sm mb-1">
@@ -115,7 +115,7 @@ export default function PrivacyPolicyPage() {
         <p className="text-sm text-zinc-500">Have questions about your data?</p>
         <div className="flex items-center justify-center gap-4">
           <a
-            href="mailto:privacy@buildmarket.co.ke"
+            href="mailto:privacy@buildmarket.app"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-sm font-medium hover:bg-emerald-500/20 transition-colors border border-emerald-500/20"
           >
             ✉️ Contact Privacy Team
