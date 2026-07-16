@@ -28,6 +28,15 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Security (Boundary Decoupling)
+
+- **Domain Security (Boundary Decoupling)**: Resolved two `mapperInfraImport` findings by removing the dependency of domain mappers on the presentation/api adapter layer (`@/app/lib/api/dto-serialization`). Localized the date-and-decimal `serializeDto` helper inside `messaging/mappers.ts` and `newsletter/mappers.ts` to keep the domain services' DTO mappings pure, satisfying the import direction rules enforced by static drift reports.
+
+**Files changed:**
+
+- `apps/client/app/lib/domains/messaging/mappers.ts`
+- `apps/client/app/lib/domains/newsletter/mappers.ts`
+
 ### Changed (Newsletter)
 
 - **Newsletter (Decoupled DB-Backed Opt-In)**: Added the `NewsletterSubscriber` model and enums (`NewsletterSubscriberStatus`, `NewsletterEspSyncStatus`) to the Prisma schema, and created the back-relation on `User`. The local database is now the source of truth for GDPR/POPIA consent logs, while outbound sync to Resend/Mailchimp is handled asynchronously.

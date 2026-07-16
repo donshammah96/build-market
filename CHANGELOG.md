@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Security (Boundary Decoupling)
+
+- **Domain Security (Boundary Decoupling)**: Resolved two `mapperInfraImport` findings by removing the dependency of domain mappers on the presentation/api adapter layer (`@/app/lib/api/dto-serialization`). Localized the date-and-decimal `serializeDto` helper inside `messaging/mappers.ts` and `newsletter/mappers.ts` to keep the domain services' DTO mappings pure, satisfying the import direction rules enforced by static drift reports.
+
+**Files changed:**
+
+- `apps/client/app/lib/domains/messaging/mappers.ts`
+- `apps/client/app/lib/domains/newsletter/mappers.ts`
+
 ### Changed (Logging & Observability Audits)
 
 - **Observability (Pino Structured Logging Upgrade)**: Replaced hand-rolled console-based logging in `@build/resilience` package with standard Pino logging. Built a custom version-tracked caching mechanism in `StructuredLogger` to dynamically invalidate and rebuild child log instances when runtime configurations are hot-reloaded (e.g. in tests/dev servers), bypassing continuous allocations.
