@@ -35,6 +35,7 @@
 - **Code Cleanup:** Removed unused imports (`adminEnvConfig`, `AdminLogEvent`, `NextResponse`, `AdminRole`, `superAdmin`) and unused destructuring assignments across several route handlers, contracts, and tests.
 - **ClerkProvider `signInUrl` (satellite mode):** [layout.tsx](file:///c:/Users/User/build-market/apps/admin/src/app/layout.tsx) now resolves `signInUrl` from `NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL` (absolute) before falling back to `NEXT_PUBLIC_CLERK_SIGN_IN_URL`. Ensures `ClerkProvider` always points unauthenticated users to the primary-domain OAuth endpoint, not the satellite's own relative path.
 - **`<SignIn>` redirect prop:** [sign-in/page.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(auth)/sign-in/[[...sign-in]]/page.tsx>) changed from `forceRedirectUrl="/"` to `fallbackRedirectUrl="/"`. `forceRedirectUrl` unconditionally overrides any `redirect_url` param, breaking deep-link return navigation. `fallbackRedirectUrl` respects a present `redirect_url` and only falls back to `/` when none exists.
+- **Observability (PII Removal Audit)**: Cleaned up 19 compile-time type-safety violations across 6 `apps/admin` files ([notification.service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/verification/internal/notification.service.ts), [anonymization-batch.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/anonymization-batch.ts), [data-retention.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/data-retention.ts), [export-cleanup.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/export-cleanup.ts), [gdpr-erasure.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/gdpr-erasure.ts), and [notification.worker.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/workers/compliance/notification.worker.ts)) by removing raw PII identifiers (`userId`, `userEmail`) from logging contexts.
 
 ### Fixed
 
@@ -137,7 +138,7 @@
 - **`src/actions/admin/README.md`**: Created action layer structure guide documenting the flat-file rule, the Next.js route-handler architectural constraint that exempts `route.ts` directories from the collapse policy, and a table of all exempt API route handlers. Implements I-14 / F-S2.
 - **`src/lib/validation/README.md`**: Created deprecation notice for `lib/validation/` confirming all 18 schemas are orphaned (zero active imports), with a per-file audit table and deletion runbook. Implements I-23 / F-S5.
 
-### Removed
+### Removed (orphaned `lib/validation/` schemas)
 
 - Deleted orphaned `lib/validation/` schemas.
 
