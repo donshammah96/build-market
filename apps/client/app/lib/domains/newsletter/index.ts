@@ -6,4 +6,7 @@ export {
   unsubscribe,
   getConfiguredEspProvider,
 } from "@/app/lib/domains/newsletter/service";
-export { toNewsletterDto } from "@/app/lib/domains/newsletter/mappers";
+export {
+  toNewsletterDto,
+  toPublicSubscribeResult,
+} from "@/app/lib/domains/newsletter/mappers";

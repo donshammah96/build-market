@@ -58,6 +58,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 - **Newsletter (Rate Limiting & Security)**: Added secondary email-hash SHA-256 rate limiting on `/subscribe` to block multi-IP spamming, and configured ESLint restricted-import rules to protect the Redis connection boundaries.
 - **Newsletter (Scheduled Reconciliation)**: Added a 15-minute sweep job (`newsletter-sweep.ts`) to reconcile stuck syncs and emit alerts on `DEAD_LETTER` subscriber statuses, registering it in the main job orchestrator.
 - **Newsletter (Static Security Scan)**: Added a custom static code analyzer check (`workerImport` check: SEC-LINT-008) in `security-lint-checks.mjs`, `check-security-lint.mjs`, and `report-security-drift.mjs` that scans client presentation, components, routes, and services for prohibited direct background worker imports to protect the Redis connection boundaries.
+- **Newsletter (API Route DTO Mapping)**: Refactored the newsletter API routes (subscribe, confirm, unsubscribe) to route success response payloads through the domain-level `toPublicSubscribeResult` mapper, enforcing a strict public allow-list security boundary at the API contract layer.
 
 **Files changed:**
 
@@ -69,6 +70,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 - `apps/client/app/lib/domains/newsletter/service.ts`
 - `apps/client/app/lib/domains/newsletter/repository.ts`
 - `apps/client/app/lib/domains/newsletter/mappers.ts`
+- `apps/client/app/lib/domains/newsletter/index.ts`
 - `apps/client/app/lib/domains/newsletter/esp-sync.ts`
 - `apps/client/app/lib/domains/messaging/mappers.ts`
 - `apps/client/app/lib/queues/newsletter.queue.ts`
@@ -78,6 +80,8 @@ This format is based on Keep a Changelog and uses semantic categories:
 - `apps/client/app/jobs/newsletter-sweep.ts`
 - `apps/client/app/jobs/index.ts`
 - `apps/client/app/api/newsletter/subscribe/route.ts`
+- `apps/client/app/api/newsletter/confirm/route.ts`
+- `apps/client/app/api/newsletter/unsubscribe/route.ts`
 - `apps/client/__tests__/lib/domains/newsletter.service.test.ts`
 - `apps/client/__tests__/api/newsletter/subscribe.route.test.ts`
 - `apps/client/__tests__/api/newsletter/confirm.route.test.ts`

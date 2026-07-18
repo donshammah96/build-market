@@ -8,7 +8,10 @@ import {
   getClientLogger,
 } from "@/app/lib/api/resilient-api";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
-import { confirmSubscription } from "@/app/lib/domains/newsletter/service";
+import {
+  confirmSubscription,
+  toPublicSubscribeResult,
+} from "@/app/lib/domains/newsletter";
 import { NewsletterConfirmSchema } from "@/app/lib/validation/newsletter-validation";
 import {
   now,
@@ -126,5 +129,8 @@ export async function POST(req: NextRequest) {
     durationMs: now() - startMs,
   });
 
-  return apiSuccess({ ok: true, status: result.data.status });
+  return apiSuccess({
+    ok: true,
+    ...toPublicSubscribeResult(result.data.status),
+  });
 }
