@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 - **Security (Route Authentication Gates)**: Refactored `route-auth.ts` to leverage `@build/db`'s `UserRole` and `AdminRole` enums instead of raw string literal comparisons, and introduced fallback actor roles to safely prevent route crashes.
 - **Client Auth (Query Parameter Passing)**: Updated the satellite sign-in page component to accept, parse, and forward query parameters during domain redirection.
 - **CLI Utilities (Admin Promotion Security)**: Redesigned the `promote-admin.ts` script to consume cli-arguments, display active database target warnings, prompt for confirmation, and write a structured `AdminAuditLog` record inside the Prisma write transaction.
+- **CLI Utilities (Admin Environment Access)**: Fixed a boundary drift violation in `promote-admin.ts` by replacing direct `process.env.DATABASE_URL` read with canonical `adminEnvConfig` loaded dynamically after `dotenv` bootstrap, satisfying ADR-ADMIN-006 environment access boundary validation rules.
 
 **Files changed:**
 

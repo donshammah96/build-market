@@ -29,10 +29,11 @@ async function main() {
     process.exit(1);
   }
 
+  const { adminEnvConfig } = await import("../src/lib/infrastructure/env");
   const { prisma, UserRole, AdminRole } = await import("@build/db");
 
   // Resolve and log the database host
-  const dbUrl = process.env.DATABASE_URL;
+  const dbUrl = adminEnvConfig.DATABASE_URL;
   let host = "Unknown Host";
   if (dbUrl) {
     try {
