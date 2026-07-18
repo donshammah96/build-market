@@ -23,7 +23,7 @@ export async function sendEmail({
   attachments,
 }: SendEmailOptions) {
   await resend.emails.send({
-    from: "no-reply/buildmarket.com",
+    from: "no-reply@buildmarket.app",
     to,
     subject,
     html,

@@ -34,6 +34,31 @@ All notable changes to this project will be documented in this file.
 - `apps/client/app/lib/domains/messaging/mappers.ts`
 - `apps/client/app/lib/domains/newsletter/mappers.ts`
 
+### Changed (Admin Codebase Reorganization & Documentation)
+
+- **Code Reorganization & Test Relocation**: Moved 13 action boundary tests from `src/actions/admin/__tests__/` to `__tests__/actions/` at the application root, aligning the codebase with established guidelines. Replaced all relative mock paths and imports with type-safe path aliases (`@/actions/admin/...` and `@/_core/...`).
+- **CLI Scripts Consolidation**: Consolidated the CLI scripts directory by moving the Clerk administrative role setup script `src/scripts/set-admin.ts` to `scripts/set-admin.ts`, updating its relative paths for dotenv configuration and dynamic infrastructure env imports, and removing the now-empty `src/scripts/` directory.
+- **Admin Documentation & README**: Generated a comprehensive, staff-level root `README.md` for the admin application detailing layer boundaries, directory structures, environment variables, security controls (freshness gating and audit logs), and development/testing instructions. Also updated the test structure mapping in `docs/CONTRIBUTING.md`.
+
+**Files changed:**
+
+- `apps/admin/__tests__/actions/analytics-actions.test.ts`
+- `apps/admin/__tests__/actions/audit-actions.test.ts`
+- `apps/admin/__tests__/actions/compliance-queue-status.test.ts`
+- `apps/admin/__tests__/actions/dashboard-actions.test.ts`
+- `apps/admin/__tests__/actions/onboarding-remediation.test.ts`
+- `apps/admin/__tests__/actions/projects-actions.test.ts`
+- `apps/admin/__tests__/actions/properties-actions.test.ts`
+- `apps/admin/__tests__/actions/settings-actions.test.ts`
+- `apps/admin/__tests__/actions/stores-actions.test.ts`
+- `apps/admin/__tests__/actions/users-actions.test.ts`
+- `apps/admin/__tests__/actions/verification-actions.test.ts`
+- `apps/admin/__tests__/actions/verify-api.test.ts`
+- `apps/admin/__tests__/actions/verify-document-api.test.ts`
+- `apps/admin/scripts/set-admin.ts`
+- `apps/admin/README.md`
+- `apps/admin/docs/CONTRIBUTING.md`
+
 ### Changed (Logging & Observability Audits)
 
 - **Observability (Pino Structured Logging Upgrade)**: Replaced hand-rolled console-based logging in `@build/resilience` package with standard Pino logging. Built a custom version-tracked caching mechanism in `StructuredLogger` to dynamically invalidate and rebuild child log instances when runtime configurations are hot-reloaded (e.g. in tests/dev servers), bypassing continuous allocations.
@@ -75,6 +100,7 @@ All notable changes to this project will be documented in this file.
 - **Newsletter (Rate Limiting & Security)**: Added secondary email-hash SHA-256 rate limiting on `/subscribe` to block multi-IP spamming, and configured ESLint restricted-import rules to protect the Redis connection boundaries.
 - **Newsletter (Scheduled Reconciliation)**: Added a 15-minute sweep job (`newsletter-sweep.ts`) to reconcile stuck syncs and emit alerts on `DEAD_LETTER` subscriber statuses, registering it in the main job orchestrator.
 - **Newsletter (Unit Test Mocking)**: Mocked `bullmq`'s `Queue` and `Worker` classes in `newsletter-workers.test.ts` to prevent module evaluation side-effects from spawning stray Redis connection attempts, resolving local/CI Vitest worker hook timeouts.
+- **Newsletter (API Route DTO Mapping)**: Refactored the newsletter API routes (subscribe, confirm, unsubscribe) to route success response payloads through the domain-level `toPublicSubscribeResult` mapper, enforcing a strict public allow-list security boundary at the API contract layer.
 
 **Files changed:**
 
@@ -86,6 +112,7 @@ All notable changes to this project will be documented in this file.
 - `apps/client/app/lib/domains/newsletter/service.ts`
 - `apps/client/app/lib/domains/newsletter/repository.ts`
 - `apps/client/app/lib/domains/newsletter/mappers.ts`
+- `apps/client/app/lib/domains/newsletter/index.ts`
 - `apps/client/app/lib/domains/newsletter/esp-sync.ts`
 - `apps/client/app/lib/domains/messaging/mappers.ts`
 - `apps/client/app/lib/queues/newsletter.queue.ts`
@@ -95,6 +122,8 @@ All notable changes to this project will be documented in this file.
 - `apps/client/app/jobs/newsletter-sweep.ts`
 - `apps/client/app/jobs/index.ts`
 - `apps/client/app/api/newsletter/subscribe/route.ts`
+- `apps/client/app/api/newsletter/confirm/route.ts`
+- `apps/client/app/api/newsletter/unsubscribe/route.ts`
 - `apps/client/__tests__/lib/domains/newsletter.service.test.ts`
 - `apps/client/__tests__/api/newsletter/subscribe.route.test.ts`
 - `apps/client/__tests__/api/newsletter/confirm.route.test.ts`

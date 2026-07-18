@@ -115,16 +115,16 @@ vi.mock("@/lib/domains/stores/store.config", () => ({
   },
 }));
 
-vi.mock("../idempotency", () => ({
+vi.mock("@/actions/admin/idempotency", () => ({
   runWithIdempotency: vi.fn(async <T>(params: { run: () => Promise<T> }) =>
     params.run(),
   ),
 }));
 
-vi.mock("../_core/safe-action", () => ({
+vi.mock("@/_core/safe-action", () => ({
   safeAction: sharedMock.safeAction,
 }));
-vi.mock("../_core/validation", () => ({
+vi.mock("@/_core/validation", () => ({
   parseActionInput: sharedMock.parseActionInput,
 }));
 vi.mock("@/_core/safe-action", () => ({
@@ -154,8 +154,8 @@ import {
   deactivateUser,
   archiveUser,
   unarchiveUser,
-} from "../users";
-import { safeAction } from "../shared";
+} from "@/actions/admin/users";
+import { safeAction } from "@/actions/admin/shared";
 
 const IDEMPOTENCY_KEY = "idem-key-1";
 

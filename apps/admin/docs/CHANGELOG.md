@@ -30,6 +30,9 @@
 
 ### Changed
 
+- **Code Reorganization & Test Relocation**: Moved 13 action boundary tests from `src/actions/admin/__tests__/` to `__tests__/actions/` at the application root, aligning the codebase with established guidelines. Replaced all relative mock paths and imports with type-safe path aliases (`@/actions/admin/...` and `@/_core/...`).
+- **CLI Scripts Consolidation**: Consolidated the CLI scripts directory by moving the Clerk administrative role setup script `src/scripts/set-admin.ts` to `scripts/set-admin.ts`, updating its relative paths for dotenv configuration and dynamic infrastructure env imports, and removing the now-empty `src/scripts/` directory.
+- **Admin Documentation & README**: Generated a comprehensive, staff-level root `README.md` for the admin application detailing layer boundaries, directory structures, environment variables, security controls (freshness gating and audit logs), and development/testing instructions. Also updated the test structure mapping in `docs/CONTRIBUTING.md`.
 - **TypeScript Catalog**: Upgraded the monorepo-wide TypeScript version to `7.0.2` and migrated the local `typescript` dependency to the workspace `catalog:` schema to ensure workspace-wide version consistency.
 - **Non-Blocking Dashboard Health Streaming**: Refactored the dashboard [`page.tsx`](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/page.tsx>) to render the System Infrastructure widget concurrently using `<Suspense>`, eliminating head-of-line blocking from slow database/cache checks.
 - **Structured Audit/Permissions Logging (ADR-ADMIN-003)**: Migrated permissions retrieval actions and layout-level connection validation logic from raw `console.error` logs to standard `StructuredLogger` events with trace correlation ID tracking.

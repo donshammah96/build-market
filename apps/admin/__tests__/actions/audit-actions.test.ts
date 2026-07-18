@@ -53,7 +53,7 @@ vi.mock("@clerk/nextjs/server", () => ({
   auth: clerkMock.auth,
 }));
 
-vi.mock("../../lib/auth-sync", () => syncMock);
+vi.mock("@/lib/auth-sync", () => syncMock);
 vi.mock("@/lib/api/rate-limit", () => rateLimitMock);
 vi.mock("@/lib/domains/audit/service", () => auditServiceMock);
 
@@ -69,7 +69,7 @@ import {
   getAuditLogStats,
   getAuditLogActions,
   exportAuditLogs,
-} from "../audit";
+} from "@/actions/admin/audit";
 
 // ---------------------------------------------------------------------------
 // Helpers

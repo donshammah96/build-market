@@ -47,7 +47,7 @@ vi.mock("@/lib/config/feature-flags", () => ({
   },
   isAdminFeatureEnabled: vi.fn().mockReturnValue(false),
 }));
-vi.mock("../idempotency", () => ({
+vi.mock("@/actions/admin/idempotency", () => ({
   runWithIdempotency: vi.fn(async <T>(params: { run: () => Promise<T> }) =>
     params.run(),
   ),
@@ -57,7 +57,7 @@ vi.mock("../idempotency", () => ({
 // Imports (after mocks)
 // ============================================================================
 
-import { getProjects, getProjectDetails } from "../projects";
+import { getProjects, getProjectDetails } from "@/actions/admin/projects";
 
 const mockService = projectsServiceMock.projectsService;
 

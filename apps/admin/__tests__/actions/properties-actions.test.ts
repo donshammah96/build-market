@@ -76,7 +76,7 @@ import {
   rejectProperty,
   changePropertyStatus,
   deleteProperty,
-} from "../properties";
+} from "@/actions/admin/properties";
 
 const mockService = propertiesServiceMock.propertiesService;
 

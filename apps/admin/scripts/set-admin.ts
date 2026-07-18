@@ -4,10 +4,10 @@ import { fileURLToPath } from "url";
 import { createClerkClient } from "@clerk/backend";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 async function setAdminRole(userId: string) {
-  const { adminEnvConfig } = await import("../lib/infrastructure/env");
+  const { adminEnvConfig } = await import("../src/lib/infrastructure/env");
 
   const clerkClient = createClerkClient({
     ...(adminEnvConfig.CLERK_SECRET_KEY

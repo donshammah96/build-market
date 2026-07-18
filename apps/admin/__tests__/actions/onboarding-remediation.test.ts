@@ -20,19 +20,12 @@ vi.mock("@build/db", () => ({
   prisma: {},
 }));
 
-vi.mock("../_core/safe-action", () => ({
-  safeAction: mocks.safeAction,
-}));
-vi.mock("../_core/client-api", () => ({
-  callClientApi: mocks.callClientApi,
-}));
 vi.mock("@/_core/safe-action", () => ({
   safeAction: mocks.safeAction,
 }));
 vi.mock("@/_core/client-api", () => ({
   callClientApi: mocks.callClientApi,
 }));
-
 const mockEnv = vi.hoisted(() => ({
   INTERNAL_API_SECRET: "test-secret" as string | undefined,
 }));
@@ -47,7 +40,7 @@ import {
   onboardingClerkSync,
   onboardingIdempotencyReconcile,
   onboardingReconcile,
-} from "../onboarding-remediation";
+} from "@/actions/admin/onboarding-remediation";
 
 describe("admin onboarding remediation actions", () => {
   beforeEach(() => {

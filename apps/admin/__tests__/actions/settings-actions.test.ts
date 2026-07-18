@@ -48,7 +48,7 @@ vi.mock("@/lib/config/feature-flags", () => ({
   },
   isAdminFeatureEnabled: vi.fn().mockReturnValue(false),
 }));
-vi.mock("../idempotency", () => ({
+vi.mock("@/actions/admin/idempotency", () => ({
   runWithIdempotency: vi.fn(async <T>(params: { run: () => Promise<T> }) =>
     params.run(),
   ),
@@ -62,7 +62,7 @@ import {
   getSystemSettings,
   updateSystemSettings,
   clearSystemCache,
-} from "../settings";
+} from "@/actions/admin/settings";
 
 const mockService = settingsServiceMock.settingsService;
 

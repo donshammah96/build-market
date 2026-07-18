@@ -62,7 +62,7 @@ vi.mock("@/lib/config/feature-flags", () => ({
   },
   isAdminFeatureEnabled: vi.fn().mockReturnValue(false),
 }));
-vi.mock("../idempotency", () => ({
+vi.mock("@/actions/admin/idempotency", () => ({
   runWithIdempotency: vi.fn(async <T>(params: { run: () => Promise<T> }) =>
     params.run(),
   ),
@@ -79,7 +79,7 @@ import {
   verifyStore,
   rejectStore,
   deleteStore,
-} from "../stores";
+} from "@/actions/admin/stores";
 
 const mockService = storesServiceMock.storesService;
 

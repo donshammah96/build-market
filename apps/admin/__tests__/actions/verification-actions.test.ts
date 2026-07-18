@@ -89,16 +89,16 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
-vi.mock("../idempotency", () => ({
+vi.mock("@/actions/admin/idempotency", () => ({
   runWithIdempotency: vi.fn(async <T>(params: { run: () => Promise<T> }) =>
     params.run(),
   ),
 }));
 
-vi.mock("../_core/safe-action", () => ({
+vi.mock("@/_core/safe-action", () => ({
   safeAction: sharedMock.safeAction,
 }));
-vi.mock("../_core/validation", () => ({
+vi.mock("@/_core/validation", () => ({
   parseActionInput: sharedMock.parseActionInput,
 }));
 vi.mock("@/_core/safe-action", () => ({
@@ -117,7 +117,7 @@ import {
   batchVerifyEntities,
   verifyDocument,
   verifyEntity,
-} from "../verification";
+} from "@/actions/admin/verification";
 import { safeAction } from "@/_core/safe-action";
 
 const IDEMPOTENCY_KEY = "idem-key-1";

@@ -60,7 +60,7 @@ import {
   getMetricTimeSeries,
   getGeographicDistribution,
   getTopProfessionals,
-} from "../analytics";
+} from "@/actions/admin/analytics";
 
 const mockService = financeServiceMock.financeService;
 
