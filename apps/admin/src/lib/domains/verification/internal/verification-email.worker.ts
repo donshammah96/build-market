@@ -141,7 +141,7 @@ export async function startVerificationEmailConsumer(): Promise<void> {
             const recipient = await resolveRecipientEmail(event);
             if (!recipient) {
               logger.info(
-                "Skipped sending email: recipient email could not be resolved",
+                "Skipped sending email - recipient email address unresolved",
                 {
                   entityType,
                   entityId,
@@ -183,7 +183,7 @@ export async function startVerificationEmailConsumer(): Promise<void> {
 
             if (!template.emailSubject || !template.emailBody) {
               logger.info(
-                "Skipped sending email: template subject or body is missing",
+                "Skipped sending email - template subject or body missing",
                 {
                   entityType,
                   entityId,
@@ -196,7 +196,7 @@ export async function startVerificationEmailConsumer(): Promise<void> {
             // 5. Send email via Resend
             if (!adminEnvConfig.RESEND_API_KEY) {
               logger.warn(
-                "Skipped sending email: RESEND_API_KEY is not configured",
+                "Skipped sending email - RESEND_API_KEY is not configured",
                 {
                   entityType,
                   entityId,
@@ -262,7 +262,7 @@ export async function startVerificationEmailConsumer(): Promise<void> {
 
             if (!user?.email) {
               logger.info(
-                "Skipped sending license email: user email could not be resolved",
+                "Skipped sending license email - user email address unresolved",
                 {
                   licenseId,
                   professionalId,
@@ -312,7 +312,7 @@ export async function startVerificationEmailConsumer(): Promise<void> {
 
             if (!template.emailSubject || !template.emailBody) {
               logger.info(
-                "Skipped sending license email: template subject or body is missing",
+                "Skipped sending license email - template subject or body missing",
                 {
                   licenseId,
                   outcome: "email_skipped",
@@ -323,7 +323,7 @@ export async function startVerificationEmailConsumer(): Promise<void> {
 
             if (!adminEnvConfig.RESEND_API_KEY) {
               logger.warn(
-                "Skipped sending license email: RESEND_API_KEY is not configured",
+                "Skipped sending license email - RESEND_API_KEY is not configured",
                 {
                   licenseId,
                   outcome: "email_skipped",

@@ -55,6 +55,7 @@
 
 ### Fixed
 
+- **Security Drift Log Safety (`verification-email.worker.ts`)**: Reworded log message strings in [verification-email.worker.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/verification/internal/verification-email.worker.ts) to replace `email:` colons with hyphens, resolving false-positive `no-banned-log-keys` security drift linter violations (ADR-ADMIN-003).
 - **Unused Import Removal (`notification-queue.ts`)**: Removed unused `Job` import binding from `bullmq` in [notification-queue.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/verification/internal/notification-queue.ts).
 - **Middleware API Redirect Bypass**: Updated `middleware.ts` to return `401 Unauthorized` and `403 Forbidden` JSON responses on API/tRPC routes when user session is unauthenticated or blocked, instead of redirecting the requests to HTML login pages.
 - **Deep-link Query Params Forwarding**: Refactored the satellite sign-in catch-all route page component to accept and propagate query parameters during primary domain sign-in forwarding.

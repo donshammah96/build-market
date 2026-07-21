@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed (Code Cleanup & Linter Hygiene)
 
+- **Admin Security Drift Check (`verification-email.worker.ts`)**: Reworded log message titles in `verification-email.worker.ts` to use hyphens instead of colons following the word `email` (`"Skipped sending email - ..."`), eliminating 6 false-positive `no-banned-log-keys` linter violations (ADR-ADMIN-003).
 - **Admin Verification (`notification-queue.ts`)**: Removed unused import binding `Job` from `bullmq` in `apps/admin/src/lib/domains/verification/internal/notification-queue.ts`.
 
 **Files changed:**
@@ -19,6 +20,7 @@ All notable changes to this project will be documented in this file.
 - `pnpm-workspace.yaml`
 - `pnpm-lock.yaml`
 - `apps/admin/src/lib/domains/verification/internal/notification-queue.ts`
+- `apps/admin/src/lib/domains/verification/internal/verification-email.worker.ts`
 - `CHANGELOG.md`
 - `apps/admin/docs/CHANGELOG.md`
 
