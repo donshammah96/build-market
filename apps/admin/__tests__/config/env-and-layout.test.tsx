@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 import React from "react";
-import { adminEnvSchema } from "@/lib/infrastructure/env";
+import { adminEnvSchema, validateAdminEnv } from "@/lib/infrastructure/env";
 
 vi.mock("@clerk/nextjs", () => ({
   ClerkProvider: ({ children }: any) => <>{children}</>,
@@ -22,6 +22,18 @@ describe("env-and-layout", () => {
           "https://buildmarket.app/sign-in",
       });
       expect(result.success).toBe(true);
+    });
+
+    it("should handle static build phase fallback without throwing Zod refinement error when schema parsing fails in production", () => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("NEXT_PHASE", "phase-production-build");
+      vi.stubEnv("QUEUE_PROVIDER", "");
+
+      try {
+        expect(() => validateAdminEnv()).not.toThrow();
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
   });
 

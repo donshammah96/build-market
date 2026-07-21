@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed (Code Cleanup & Linter Hygiene)
 
+- **Admin CI Preview Smoke Gate & Env Validation (`apps/admin`, `.github`)**: Fixed CI build failure on `admin-preview-smoke-gate` (`Error: Failed to collect page data for /_not-found`). Refactored `adminEnvSchema` in `apps/admin/src/lib/infrastructure/env.ts` to split the base `ZodObject` from the refined schema so static build phase fallback calls `adminBaseEnvSchema.partial()`, preventing Zod refinement `.partial()` runtime errors. Configured `QUEUE_PROVIDER: memory` in `.github/workflows/ci.yml` for the `admin-preview-smoke-gate` job environment.
 - **Admin Security Drift Check (`verification-email.worker.ts`)**: Reworded log message titles in `verification-email.worker.ts` to use hyphens instead of colons following the word `email` (`"Skipped sending email - ..."`), eliminating 6 false-positive `no-banned-log-keys` linter violations (ADR-ADMIN-003).
 - **Admin Verification (`notification-queue.ts`)**: Removed unused import binding `Job` from `bullmq` in `apps/admin/src/lib/domains/verification/internal/notification-queue.ts`.
 
