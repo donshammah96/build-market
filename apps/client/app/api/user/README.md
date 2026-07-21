@@ -282,9 +282,7 @@ curl https://buildmarket.com/api/user/profile \
       "role": "CLIENT",
       "isProfileComplete": true
     },
-    "profile": {
-      /* Client/Professional profile */
-    },
+    "profile": {/* Client/Professional profile */},
     "completion": {
       "percentage": 85,
       "missingRequired": [],
@@ -424,9 +422,7 @@ export const ratelimit = new Ratelimit({
   "success": false,
   "error": "Error message",
   "code": "ERROR_CODE",
-  "details": {
-    /* Optional additional info */
-  }
+  "details": {/* Optional additional info */}
 }
 ```
 
