@@ -52,10 +52,7 @@ export type IdempotencyCheckResult<T = unknown> = {
 };
 
 export type IdempotencyReplayDataClass =
-  | "Class A"
-  | "Class B"
-  | "Class C"
-  | "Class D";
+  "Class A" | "Class B" | "Class C" | "Class D";
 
 export type IdempotencyReplayScope =
   | "calendar_event"

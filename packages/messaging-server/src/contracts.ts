@@ -35,11 +35,7 @@ export type MessagingActor = {
 // ---------------------------------------------------------------------------
 
 export type MessagingDomainErrorCode =
-  | "forbidden"
-  | "not_found"
-  | "invalid_input"
-  | "conflict"
-  | "internal";
+  "forbidden" | "not_found" | "invalid_input" | "conflict" | "internal";
 
 // ---------------------------------------------------------------------------
 // Result wrapper

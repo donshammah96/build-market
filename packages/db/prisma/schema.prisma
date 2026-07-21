@@ -966,6 +966,8 @@ model User {
   analytics            UserAnalytics[]
   verifiedCertificates ProfessionalDocument[] @relation("DocumentVerifier")
   verifiedLicenses     ProfessionalLicense[]  @relation("LicenseVerifier")
+  verifiedStores       Store[]                @relation("StoreVerifier")
+  verifiedProperties   Property[]             @relation("PropertyVerifier")
   calendarEvents       CalendarEvent[]        @relation("ClientCalendarEvents")
   notifications        Notification[]
   adminAuditLogs       AdminAuditLog[]        @relation("AdminActions") // Relation to logs created by this admin
@@ -1891,6 +1893,8 @@ model Store {
   verificationStatus VerificationStatus @default(PENDING)
   verificationNotes  String?
   verifiedAt         DateTime?
+  verifiedById       String?
+  verifiedBy         User?              @relation("StoreVerifier", fields: [verifiedById], references: [id])
   rejectionReason    String?
 
   featured    Boolean @default(false)
@@ -2169,6 +2173,8 @@ model Property {
 
   verified           Boolean            @default(false)
   verifiedAt         DateTime?
+  verifiedById       String?
+  verifiedBy         User?              @relation("PropertyVerifier", fields: [verifiedById], references: [id])
   submittedAt        DateTime?
   rejectionReason    String?
   verificationStatus VerificationStatus @default(PENDING)
@@ -3035,24 +3041,29 @@ model DataExport {
 }
 
 model FailedNotification {
-  id              String    @id @default(uuid())
+  id              String                   @id @default(uuid())
   entityType      String // "professional", "store", "property", "certificate", "license"
   entityId        String
   recipientUserId String
   newStatus       String // e.g., VerificationStatus string
-  reason          String?   @db.Text
-  notes           String?   @db.Text
-  attemptCount    Int       @default(0)
+  reason          String?                  @db.Text
+  notes           String?                  @db.Text
+  attemptCount    Int                      @default(0)
   lastAttemptAt   DateTime?
   nextRetryAt     DateTime
-  lastError       String    @db.Text
-  createdAt       DateTime  @default(now())
-  status          String    @default("PENDING") // PENDING, COMPLETED, DEAD_LETTER
+  lastError       String                   @db.Text
+  createdAt       DateTime                 @default(now())
+  status          FailedNotificationStatus @default(PENDING)
 
-  @@index([status])
-  @@index([nextRetryAt])
+  @@index([status, nextRetryAt])
   @@index([entityType, entityId])
   @@map("failed_notifications")
+}
+
+enum FailedNotificationStatus {
+  PENDING
+  COMPLETED
+  DEAD_LETTER
 }
 
 enum NewsletterSubscriberStatus {

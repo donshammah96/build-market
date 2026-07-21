@@ -6,9 +6,9 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 type WithoutUndefinedValues<T extends Record<string, unknown>> = {
-  [K in keyof T as Exclude<T[K], undefined> extends never
-    ? never
-    : K]?: Exclude<T[K], undefined>;
+  [
+    K in keyof T as Exclude<T[K], undefined> extends never ? never : K
+  ]?: Exclude<T[K], undefined>;
 };
 
 export function omitUndefined<T extends Record<string, unknown>>(

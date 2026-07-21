@@ -137,10 +137,7 @@ export const documentsRepository = {
     | { data: DocumentUpdateResult }
     | {
         error:
-          | "not_found"
-          | "forbidden"
-          | "asset_not_found"
-          | "asset_forbidden";
+          "not_found" | "forbidden" | "asset_not_found" | "asset_forbidden";
       }
   > {
     const existing = await prisma.professionalDocument.findUnique({

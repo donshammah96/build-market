@@ -4,8 +4,14 @@ import {
   JetStreamClient,
   JetStreamManager,
 } from "nats";
+import {
+  setConnectionStatus,
+  recordReconnect,
+  recordDisconnect,
+} from "./metrics.js";
 import type {
   NatsConfig,
+  ResolvedNatsConfig,
   NatsClient,
   ConnectionMetrics,
   ConnectionStatus,
@@ -33,11 +39,11 @@ let verboseLogging = false;
 /**
  * Get environment-aware default configuration
  */
-function getDefaultConfig(): NatsConfig {
+function getDefaultConfig(): ResolvedNatsConfig {
   const env = process.env.NODE_ENV || "development";
   const isProd = env === "production";
 
-  const config: NatsConfig = {
+  const config: ResolvedNatsConfig = {
     servers: process.env.NATS_URL || "nats://localhost:4222",
     name: process.env.NATS_CLIENT_NAME || `build-market-${env}`,
     reconnect: true,
@@ -71,7 +77,7 @@ function getDefaultConfig(): NatsConfig {
 /**
  * Merge user config with environment-aware defaults
  */
-function mergeConfig(config?: Partial<NatsConfig>): NatsConfig {
+function mergeConfig(config?: Partial<NatsConfig>): ResolvedNatsConfig {
   const defaultConfig = getDefaultConfig();
   return {
     ...defaultConfig,
@@ -190,6 +196,7 @@ export async function createNatsClient(
     const nc: NatsConnection = await connect(connectionOptions);
 
     connectionMetrics.connectedAt = new Date();
+    setConnectionStatus(true);
     log("info", `Connected to ${nc.getServer()}`);
 
     // Get JetStream client and manager
@@ -206,6 +213,7 @@ export async function createNatsClient(
         try {
           await nc.drain();
           natsClient = null;
+          setConnectionStatus(false);
           log("info", "Connection closed gracefully");
         } catch (error) {
           log("error", "Error during connection close", error);
@@ -224,12 +232,16 @@ export async function createNatsClient(
           case "disconnect":
             connectionMetrics.lastDisconnectAt = new Date();
             connectionMetrics.totalDisconnects++;
+            setConnectionStatus(false);
+            recordDisconnect();
             log("warn", `Disconnected from ${status.data}`);
             break;
 
           case "reconnect":
             connectionMetrics.reconnectAttempts++;
             connectionMetrics.lastReconnectAt = new Date();
+            setConnectionStatus(true);
+            recordReconnect();
             log("info", `Reconnected to ${status.data}`, {
               attempts: connectionMetrics.reconnectAttempts,
             });
@@ -329,7 +341,7 @@ export async function closeNatsConnection(): Promise<void> {
 }
 
 /**
- * Create a scoped NATS client for a specific service
+ * Register a scoped NATS client for a specific service
  * Useful for identifying which service is publishing/consuming
  */
 export async function createServiceClient(
@@ -344,6 +356,21 @@ export async function createServiceClient(
     },
     options,
   );
+}
+
+/**
+ * Test-only escape hatch: clears the module-level singleton and metrics
+ * counters so integration tests can connect fresh against an ephemeral
+ * test server without state leaking between test files. Deliberately not
+ * exported from index.ts.
+ */
+export function _resetNatsClientForTests(): void {
+  natsClient = null;
+  connectionMetrics = {
+    reconnectAttempts: 0,
+    totalDisconnects: 0,
+    errors: [],
+  };
 }
 
 /**

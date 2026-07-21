@@ -1,21 +1,25 @@
-/**
- * Notification Service Test Suite
- * Tests for verification notification dispatch
- */
-
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   notifyVerificationResult,
   publishVerificationEvent,
+  publishLicenseVerificationEvent,
 } from "../internal/notification.service";
 import type { VerificationResult } from "../internal/types";
+import type { LicenseVerificationResult } from "../internal/license-verification.service";
+
+const producerMock = vi.hoisted(() => ({
+  connect: vi.fn(),
+  disconnect: vi.fn(),
+  publishWithRetry: vi.fn(),
+}));
+
+vi.mock("@/lib/infrastructure/nats-client", () => ({
+  getAdminNatsProducer: vi.fn(() => Promise.resolve(producerMock)),
+  shutdownAdminNatsProducer: vi.fn(() => Promise.resolve()),
+}));
 
 vi.mock("@build/nats", () => ({
-  createProducer: vi.fn(() => ({
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-    publishWithRetry: vi.fn(),
-  })),
+  createProducer: vi.fn(() => producerMock),
 }));
 
 vi.mock("@/lib/domains/verification/internal/notification-queue", () => ({
@@ -211,7 +215,7 @@ describe("Notification Service", () => {
   });
 
   describe("publishVerificationEvent", () => {
-    it("should log Kafka event intent", async () => {
+    it("should publish NATS event for non-license entities", async () => {
       const result: VerificationResult = {
         success: true,
         entityType: "professional",
@@ -222,10 +226,68 @@ describe("Notification Service", () => {
         message: "Professional verified",
       };
 
-      // Should not throw - just logs for now
-      await expect(
-        publishVerificationEvent(result, "user@example.com", "John Doe"),
-      ).resolves.not.toThrow();
+      await publishVerificationEvent(result, "user@example.com", "John Doe");
+
+      expect(producerMock.publishWithRetry).toHaveBeenCalledWith(
+        "verification.professional.verified",
+        expect.objectContaining({
+          entityType: "professional",
+          entityId: "prof_123",
+          newStatus: "VERIFIED",
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it("should early return for license entityType in publishVerificationEvent", async () => {
+      const result: VerificationResult = {
+        success: true,
+        entityType: "license",
+        entityId: "lic_123",
+        previousStatus: "PENDING",
+        newStatus: "VERIFIED",
+        message: "License verified",
+      };
+
+      await publishVerificationEvent(result, "user@example.com", "John Doe");
+
+      expect(producerMock.publishWithRetry).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("publishLicenseVerificationEvent", () => {
+    it("should publish license verification event to NATS", async () => {
+      const result: LicenseVerificationResult = {
+        success: true,
+        entityType: "license",
+        entityId: "lic_123",
+        licenseId: "lic_123",
+        authority: "NCA",
+        licenseNumber: "NCA-001",
+        professionalId: "prof_456",
+        verificationMethod: "MANUAL",
+        previousStatus: "PENDING",
+        newStatus: "VERIFIED",
+        message: "License verified",
+      };
+
+      await publishLicenseVerificationEvent(result, "admin_1", "corr_123");
+
+      expect(producerMock.publishWithRetry).toHaveBeenCalledWith(
+        "license.verified",
+        expect.objectContaining({
+          licenseId: "lic_123",
+          professionalId: "prof_456",
+          authority: "NCA",
+          licenseNumber: "NCA-001",
+          action: "verified",
+          adminId: "admin_1",
+          correlationId: "corr_123",
+        }),
+        expect.objectContaining({
+          maxRetries: 3,
+        }),
+      );
     });
   });
 });

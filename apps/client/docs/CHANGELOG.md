@@ -28,7 +28,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
-### Docs (Webhook)
+### Docs (Webhook Error Policy)
 
 - **Webhook Error Policy**: Added inline documentation to the production-only replay protection guard within the Clerk webhook route handler (`route.ts`) to clarify the asymmetric handling logic between production and development/test environments.
 

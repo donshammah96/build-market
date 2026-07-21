@@ -76,6 +76,9 @@ vi.mock("@/lib/api/resilient-api", async () => {
         { status },
       );
     }),
+    apiSuccess: vi.fn().mockImplementation((data) => {
+      return NextResponse.json(data, { status: 200 });
+    }),
   };
 });
 
@@ -214,7 +217,7 @@ describe("POST /api/admin/verify", () => {
     const response = await POST(request, { dbUserId: TEST_UUIDS.ADMIN_DB });
     const data = await response.json();
 
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(400);
     expect(data.success).toBe(false);
     expect(data.error).toBe("Admin capability denied");
   });

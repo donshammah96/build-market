@@ -12,11 +12,7 @@ export const dynamic = "force-dynamic";
 // ---------------------------------------------------------------------------
 
 type BlockReason =
-  | "SUSPENDED"
-  | "BANNED"
-  | "DEACTIVATED"
-  | "ARCHIVED"
-  | "default";
+  "SUSPENDED" | "BANNED" | "DEACTIVATED" | "ARCHIVED" | "default";
 
 interface ReasonConfig {
   title: string;

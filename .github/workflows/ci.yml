@@ -1072,6 +1072,9 @@ jobs:
       - name: Apply database migrations
         run: pnpm run db:migrate:deploy
 
+      - name: Build workspace dependencies then admin
+        run: pnpm --filter="admin..." run build
+
       - name: Run admin nightly/flake-focused test suite
         run: pnpm run admin:test:all
 

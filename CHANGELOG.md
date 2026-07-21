@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added (Admin Verification NATS Event Wiring)
+
+- **Admin Verification NATS Event Wiring & Producer Consolidation**: Implemented `publishLicenseVerificationEvent()` in `notification.service.ts` to publish typed `LicenseVerificationEvent` payloads on `license.<action>`, closing the license event gap. Consolidated NATS producers into `getAdminNatsProducer()` singleton in `nats-client.ts`. Wired `publishLicenseVerificationEvent` into `service.ts` `verifyLicense()` non-blocking, typed `tx?: Prisma.TransactionClient` in `audit-service.ts`, and extended `verification-email.worker.ts` with a `license.>` subject consumer handler.
+
+**Files changed:**
+
+- `apps/admin/src/lib/infrastructure/nats-client.ts`
+- `apps/admin/src/lib/domains/verification/internal/notification.service.ts`
+- `apps/admin/src/lib/domains/verification/internal/license-external-verification.service.ts`
+- `apps/admin/src/lib/domains/verification/internal/audit-service.ts`
+- `apps/admin/src/lib/domains/verification/internal/notification-helpers.ts`
+- `apps/admin/src/lib/domains/verification/internal/verification-email.worker.ts`
+- `apps/admin/src/lib/domains/verification/service.ts`
+- `apps/admin/src/lib/domains/verification/__tests__/notification-service.test.ts`
+- `apps/admin/src/lib/domains/verification/__tests__/service.test.ts`
+- `apps/admin/src/lib/domains/verification/__tests__/verification-email-worker.test.ts`
+- `apps/admin/docs/progress/VERIFICATION-NATS-WIRING-REVIEW.md`
+- `apps/admin/docs/CHANGELOG.md`
+
+### Added (NATS Infrastructure Observability)
+
+- **NATS Observability & Stream Manager Hardening**: Updated [`NATS_MONITORING_SETUP.MD`](file:///c:/Users/User/build-market/packages/nats/docs/NATS_MONITORING_SETUP.MD) and [`deploy-monitoring-runbook.md`](file:///c:/Users/User/build-market/packages/nats/docs/deploy-monitoring-runbook.md) with a fully deployed, production-verified setup on AKS Automatic mode. Fixed JetStream `duplicateWindow` validation in [`streams.ts`](file:///c:/Users/User/build-market/packages/nats/src/streams.ts) by auto-capping default duplicate windows to `maxAge` whenever `maxAge` is less than 2 minutes. Wired all `getDefaultConfig()` environment variables (`NATS_URL`, `NATS_CLIENT_NAME`, `NATS_MAX_RECONNECT_ATTEMPTS`, `NATS_RECONNECT_TIME_WAIT`, `NATS_TIMEOUT`, `NATS_TOKEN`, `NATS_USER`, `NATS_PASS`, `NATS_TEST_URL`, `NATS_TEST_SERVER`, `NATS_TEST_VERBOSE`) in [`.env`](file:///c:/Users/User/build-market/packages/nats/.env), [`.env.example`](file:///c:/Users/User/build-market/packages/nats/.env.example), and [`turbo.json`](file:///c:/Users/User/build-market/turbo.json). Verified 10/10 passing integration tests across `@build/nats`.
+
+**Files changed:**
+
+- `packages/nats/docs/NATS_MONITORING_SETUP.MD`
+- `packages/nats/docs/deploy-monitoring-runbook.md`
+- `packages/nats/src/streams.ts`
+- `packages/nats/src/test/integration/metrics.test.ts`
+- `packages/nats/src/test/integration/streams.test.ts`
+- `packages/nats/src/test/integration/producer-consumer.test.ts`
+- `packages/nats/src/test/integration/dead-letter.test.ts`
+- `turbo.json`
+
 ### Security (Admin Authentication Hardening)
 
 - **Middleware (API Route Handlers)**: Updated `middleware.ts` to return `401 Unauthorized` or `403 Forbidden` JSON responses instead of redirects when hitting expired or invalid sessions on API/tRPC routes.
@@ -33,6 +67,21 @@ All notable changes to this project will be documented in this file.
 
 - `apps/client/app/lib/domains/messaging/mappers.ts`
 - `apps/client/app/lib/domains/newsletter/mappers.ts`
+
+### Changed (Admin Verification Domain Refactoring)
+
+- **Admin Verification Strategy Pattern Refactor**: Refactored `verifyProfessional()`, `verifyStore()`, and `verifyProperty()` in `apps/admin/src/lib/domains/verification/internal/` to use a single, generic `verifyEntityCore()` strategy adapter ([verify-entity-core.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/verification/internal/verify-entity-core.ts)). Consolidated entity fetch, state transition validation, `$transaction` atomicity loop (update + audit log), structured logging, and result shaping into a private adapter pipeline while strictly maintaining `exactOptionalPropertyTypes: true` compliance.
+
+**Files changed:**
+
+- `apps/admin/src/lib/domains/verification/internal/verify-entity-core.ts`
+- `apps/admin/src/lib/domains/verification/internal/professional-verification.service.ts`
+- `apps/admin/src/lib/domains/verification/internal/store-verification.service.ts`
+- `apps/admin/src/lib/domains/verification/internal/property-verification.service.ts`
+- `apps/admin/src/lib/domains/verification/__tests__/verify-entity-core.test.ts`
+- `apps/admin/docs/progress/verification-nats-wiring-review.md`
+- `apps/admin/docs/CHANGELOG.md`
+- `CHANGELOG.md`
 
 ### Changed (Admin Codebase Reorganization & Documentation)
 

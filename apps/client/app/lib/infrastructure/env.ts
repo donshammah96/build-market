@@ -1057,9 +1057,7 @@ function buildEnvConfig() {
     // with getOptionalStringEnv to stay within the ADR-004 boundary.
     storage: {
       provider: getStringEnv("STORAGE_PROVIDER", "local") as
-        | "local"
-        | "s3"
-        | "gcs",
+        "local" | "s3" | "gcs",
       localPath: getStringEnv("UPLOAD_DIR", "./public/uploads"),
       bucket: resolvedStorageAssetBucket,
       privateBucket: resolvedStoragePrivateBucket,
@@ -1117,9 +1115,7 @@ function buildEnvConfig() {
 
     newsletter: {
       provider: getStringEnv("ESP_PROVIDER", "stub") as
-        | "resend"
-        | "mailchimp"
-        | "stub",
+        "resend" | "mailchimp" | "stub",
       apiKey:
         getOptionalStringEnv("ESP_API_KEY") ||
         getOptionalStringEnv("RESEND_API_KEY"),

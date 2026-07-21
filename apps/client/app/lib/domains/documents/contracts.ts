@@ -84,5 +84,4 @@ export type DocumentDeleteResult = {
 
 /** Internal repository return type for getDocumentById */
 export type GetDocumentResult =
-  | { data: DocumentDetail }
-  | { error: "not_found" | "forbidden" };
+  { data: DocumentDetail } | { error: "not_found" | "forbidden" };

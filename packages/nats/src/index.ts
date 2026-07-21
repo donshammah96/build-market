@@ -27,6 +27,13 @@ export {
   initializeStreams,
 } from "./streams.js";
 
+// Metrics
+// Producer/consumer/connection metrics are recorded automatically.
+// Stream size/message-count gauges are opt-in — prefer
+// initializeStreams(config, { withMetrics: true }) in one designated
+// service; this direct export remains for manual/advanced wiring.
+export { registerStreamMetrics } from "./metrics.js";
+
 // Types
 export type {
   NatsConfig,

@@ -39,6 +39,15 @@
     "NATS_CLUSTER_ID",
     "NATS_CLIENT_ID",
     "NATS_CLIENT_NAME",
+    "NATS_MAX_RECONNECT_ATTEMPTS",
+    "NATS_RECONNECT_TIME_WAIT",
+    "NATS_TIMEOUT",
+    "NATS_TOKEN",
+    "NATS_USER",
+    "NATS_PASS",
+    "NATS_TEST_URL",
+    "NATS_TEST_SERVER",
+    "NATS_TEST_VERBOSE",
     "S3_DISABLED",
     "R2_ENDPOINT",
     "R2_REGION",
@@ -266,7 +275,22 @@
         "CLERK_SECRET_KEY",
         "CLERK_WEBHOOK_SECRET",
         "UPSTASH_REDIS_REST_URL",
-        "UPSTASH_REDIS_REST_TOKEN"
+        "UPSTASH_REDIS_REST_TOKEN",
+        "NATS_TEST_URL",
+        "NATS_TEST_SERVER",
+        "NATS_TEST_VERBOSE"
+      ]
+    },
+    "test:integration": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "env": [
+        "NATS_TEST_URL",
+        "NATS_TEST_SERVER",
+        "NATS_TEST_VERBOSE",
+        "NATS_URL"
       ]
     }
   },

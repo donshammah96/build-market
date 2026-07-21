@@ -97,8 +97,6 @@ export type ProjectPageResult = {
 
 export type ProjectsDomainError = {
   code:
-    | "PROJECTS_POLICY_DENIED"
-    | "PROJECT_NOT_FOUND"
-    | "PROJECTS_FETCH_FAILED";
+    "PROJECTS_POLICY_DENIED" | "PROJECT_NOT_FOUND" | "PROJECTS_FETCH_FAILED";
   message: string;
 };

@@ -180,10 +180,7 @@ export type PropertyUpdateInput = Partial<{
 }>;
 
 export type PropertyStatusValue =
-  | "AVAILABLE"
-  | "SOLD"
-  | "RENTED"
-  | "UNDER_OFFER";
+  "AVAILABLE" | "SOLD" | "RENTED" | "UNDER_OFFER";
 
 export type PropertyStatsResult = {
   total: number;

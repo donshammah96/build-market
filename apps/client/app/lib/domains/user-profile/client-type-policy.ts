@@ -7,8 +7,7 @@ import {
 } from "./client-type-compliance";
 
 export type ClientMutationPolicy =
-  | "projectCreationPolicy"
-  | "paymentInitiationPolicy";
+  "projectCreationPolicy" | "paymentInitiationPolicy";
 
 export type ClientMutationPolicyResult =
   | {

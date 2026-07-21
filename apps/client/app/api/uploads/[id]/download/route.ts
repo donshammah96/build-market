@@ -38,11 +38,7 @@ export const GET = withAuth<{ id: string }>(
 
     const logOutcome = (
       outcome:
-        | "started"
-        | "succeeded"
-        | "failed"
-        | "rate_limited"
-        | "not_found",
+        "started" | "succeeded" | "failed" | "rate_limited" | "not_found",
       httpStatus: number,
       additional: Record<string, unknown> = {},
     ) => {

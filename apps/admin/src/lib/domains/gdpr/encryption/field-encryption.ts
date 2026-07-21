@@ -58,8 +58,7 @@ export function loadEncryptionKeys(forceReload = false): void {
   for (const version of keyVersions) {
     const envVar = `ENCRYPTION_KEY_${version.toUpperCase()}`;
     const keyHex = adminEnvConfig[envVar as keyof typeof adminEnvConfig] as
-      | string
-      | undefined;
+      string | undefined;
 
     if (keyHex) {
       if (keyHex.length !== 64) {

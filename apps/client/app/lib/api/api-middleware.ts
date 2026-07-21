@@ -50,8 +50,7 @@ const BLOCKED_STATUSES: Record<string, { message: string; status: number }> = {
 const DEFAULT_RECENT_AUTH_MAX_AGE_SECONDS = 300;
 
 type RecentAuthValidationResult =
-  | { ok: true }
-  | { ok: false; reason: "missing_claim" | "stale_claim" };
+  { ok: true } | { ok: false; reason: "missing_claim" | "stale_claim" };
 
 function parseNumericClaim(claim: unknown): number | null {
   if (typeof claim === "number" && Number.isFinite(claim)) {

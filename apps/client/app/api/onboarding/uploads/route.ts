@@ -98,11 +98,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const logOutcome = (
     outcome:
-      | "succeeded"
-      | "failed"
-      | "rate_limited"
-      | "unauthorized"
-      | "bad_request",
+      "succeeded" | "failed" | "rate_limited" | "unauthorized" | "bad_request",
     httpStatus: number,
     // Additional fields are explicit named keys, never a spread bag.
     // ADR-005: log events must carry the minimum stable field set.

@@ -40,8 +40,7 @@ export type OnboardingStatus = {
 export async function resolveOnboardingStatus(
   clerkId: string,
   metadata:
-    | { isOnboarded?: boolean; role?: string; status?: string }
-    | undefined,
+    { isOnboarded?: boolean; role?: string; status?: string } | undefined,
   baseUrl: string,
   mode: OnboardingResolutionMode = "strict",
 ): Promise<OnboardingStatus> {

@@ -17,11 +17,7 @@ import { normalizeRole } from "@/app/lib/security/roles";
 const ROUTE_PATTERN = "/api/professional-portal/inventory/alerts";
 
 type SellerInsightsAdapterOutcome =
-  | "started"
-  | "succeeded"
-  | "failed"
-  | "rate_limited"
-  | "domain_error";
+  "started" | "succeeded" | "failed" | "rate_limited" | "domain_error";
 
 function createSellerInsightsOutcomeLogger(
   req: NextRequest,

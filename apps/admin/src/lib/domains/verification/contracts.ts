@@ -7,10 +7,7 @@ export type VerificationActor = {
 };
 
 export type VerificationEntityType =
-  | "professional"
-  | "store"
-  | "property"
-  | "license";
+  "professional" | "store" | "property" | "license";
 export type VerificationQueueEntityType = VerificationEntityType | "all";
 export type VerificationQueueStatus =
   | "UNVERIFIED"
@@ -112,19 +109,15 @@ export type VerificationStats = {
 };
 
 export type VerificationEntityAction =
-  | "VERIFY"
-  | "REJECT"
-  | "REQUEST_CORRECTION";
+  "VERIFY" | "REJECT" | "REQUEST_CORRECTION";
 
 export type VerificationDocumentType =
-  | "professional_document"
-  | "property_document"
-  | "certificate";
+  "professional_document" | "property_document" | "certificate";
 
 export type VerificationDocumentAction = "APPROVE" | "REJECT";
 
 export type VerifyEntityInput = {
-  entityType: VerificationEntityType;
+  entityType: Exclude<VerificationEntityType, "license">;
   entityId: string;
   action: VerificationEntityAction;
   notes?: string | undefined;
@@ -285,6 +278,22 @@ type VerificationDetailsBase = {
   auditHistory?: VerificationAuditHistoryEntry[];
 };
 
+export type LicenseEntityDetail = {
+  id: string;
+  authority: string;
+  licenseNumber: string;
+  status: string;
+  createdAt: Date;
+  validFrom?: Date | null;
+  validUntil?: Date | null;
+  professional?: {
+    userId: string;
+    companyName: string | null;
+    user?: VerificationPersonSummary;
+  };
+  [key: string]: unknown;
+};
+
 export type VerificationDetails =
   | (VerificationDetailsBase & {
       entityType: "professional";
@@ -297,6 +306,10 @@ export type VerificationDetails =
   | (VerificationDetailsBase & {
       entityType: "property";
       entity: PropertyEntityDetail;
+    })
+  | (VerificationDetailsBase & {
+      entityType: "license";
+      entity: LicenseEntityDetail;
     });
 
 export type VerificationDomainErrorCode =

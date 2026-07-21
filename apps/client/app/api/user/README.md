@@ -31,7 +31,7 @@ These routes implement the core GDPR user rights:
 
 All routes follow these architectural patterns:
 
-```
+```text
 ┌─────────────────┐
 │  withAuth()     │  ← Authentication middleware
 └────────┬────────┘
@@ -365,7 +365,7 @@ All endpoints require authentication via the `withAuth()` middleware.
 
 ### Required Headers
 
-```
+```text
 Authorization: Bearer <clerk_jwt_token>
 Content-Type: application/json
 ```

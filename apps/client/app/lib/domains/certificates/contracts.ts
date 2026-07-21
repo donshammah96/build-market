@@ -101,5 +101,4 @@ export type UpdateCertificateResult =
     };
 
 export type DeleteCertificateResult =
-  | { data: CertificateDeleteResult }
-  | { error: "not_found" | "forbidden" };
+  { data: CertificateDeleteResult } | { error: "not_found" | "forbidden" };

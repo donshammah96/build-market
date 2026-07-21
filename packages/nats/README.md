@@ -1,19 +1,48 @@
 # @build/nats
 
-A NATS JetStream messaging package for Build Market's event-driven architecture. Provides reliable, scalable message streaming between microservices.
+NATS JetStream messaging package for Build Market. Provides typed
+publish/consume primitives, durable stream management, distributed
+tracing, and application-level metrics for event-driven communication
+between services (orders, users, projects, notifications, license
+verification, and more).
 
-## Features
+## Contents
 
-- **JetStream Support** - Durable message persistence with at-least-once delivery
-- **Singleton Client** - Shared connection across your service
-- **Producer with Retry** - Automatic retry on publish failures
-- **Durable Consumers** - Resume from last acknowledged message after restart
-- **Stream Management** - Create and configure streams programmatically
-- **Type-Safe Events** - Pre-defined event types for verification, orders, projects, etc.
+- [Why JetStream](#why-jetstream)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Configuration](#configuration)
+- [Streams](#streams)
+- [Producing messages](#producing-messages)
+- [Consuming messages](#consuming-messages)
+- [Tracing](#tracing)
+- [Metrics](#metrics)
+- [Testing](#testing)
+- [Monitoring & deployment](#monitoring--deployment)
+- [API reference](#api-reference)
+
+## Why JetStream
+
+Build Market is a set of independent services (order management, user
+accounts, licensing/verification, notifications, project workflows) that
+need to communicate without direct service-to-service coupling. JetStream
+gives us:
+
+- **Durable storage** — a published event is stored on disk (or memory,
+  for ephemeral streams) until every interested consumer has processed it.
+- **At-least-once delivery** — a consumer that crashes mid-processing
+  gets the message redelivered, instead of silently losing it.
+- **Explicit acknowledgment** — consumers control exactly when a message
+  is considered "done," with configurable retry/backoff and dead-lettering
+  after a max delivery count.
+- **Message deduplication** — publishing with the same `msgId` within a
+  stream's duplicate window is a no-op on the second call, giving natural
+  idempotency for at-least-once producers.
 
 ## Installation
 
-The package is included in the monorepo. Add it to your service's `package.json`:
+This package is part of the Build Market monorepo and is consumed via the
+workspace protocol:
 
 ```json
 {
@@ -23,569 +52,279 @@ The package is included in the monorepo. Add it to your service's `package.json`
 }
 ```
 
-Then run:
+## Quick start
 
-```bash
-pnpm install
-```
+```ts
+import { createProducer, createConsumer, initializeStreams } from "@build/nats";
 
-## Prerequisites
+// Once, at startup for whichever service owns stream provisioning:
+await initializeStreams({ servers: process.env.NATS_URL });
 
-### Local Development
-
-Install and start NATS server with JetStream enabled:
-
-```powershell
-# Windows (winget)
-winget install NATS.Server
-
-# Start with JetStream
-nats-server -js
-```
-
-Or download from [nats.io/download](https://nats.io/download/).
-
-### Production
-
-Use a managed NATS service or deploy NATS cluster. Set environment variables:
-
-```env
-NATS_URL=nats://your-server:4222
-NATS_CLIENT_NAME=your-service-name
-NATS_TOKEN=your-auth-token        # Optional
-NATS_USER=your-username           # Optional
-NATS_PASS=your-password           # Optional
-```
-
-## Quick Start
-
-### 1. Initialize Streams (First Run)
-
-Before publishing/consuming, ensure streams exist:
-
-```typescript
-import { createNatsClient, initializeStreams } from "@build/nats";
-
-// Connect to NATS
-await createNatsClient();
-
-// Create all predefined streams (VERIFICATION, USERS, ORDERS, PROJECTS, NOTIFICATIONS)
-await initializeStreams();
-```
-
-### 2. Publish Events
-
-```typescript
-import { createProducer, type VerificationEvent } from "@build/nats";
-
-// Create producer for your service
-const producer = createProducer("my-service");
+// Producer
+const producer = createProducer("order-service");
 await producer.connect();
+await producer.publish("order.created", { orderId: "abc123", amount: 4200 });
 
-// Publish with JetStream acknowledgment
-const event: VerificationEvent = {
-  entityType: "professional",
-  entityId: "user-123",
-  previousStatus: "PENDING",
-  newStatus: "VERIFIED",
-  success: true,
-  message: "Professional verification approved",
-  verifiedAt: new Date().toISOString(),
-  metadata: {
-    email: "user@example.com",
-    userName: "John Doe",
-  },
-};
-
-await producer.publish("verification.professional.verified", event);
-
-// Or with retry on failure
-await producer.publishWithRetry("verification.professional.verified", event, {
-  maxRetries: 3,
-  retryDelay: 1000,
-});
-
-// Cleanup on shutdown
-await producer.disconnect();
-```
-
-### 3. Consume Events
-
-```typescript
-import {
-  createConsumer,
-  initializeStreams,
-  type TopicConfig,
-  type MessagePayload,
-  type VerificationEvent,
-} from "@build/nats";
-
-// Ensure streams exist
-await initializeStreams();
-
-// Create consumer with consumer group name
+// Consumer
 const consumer = createConsumer("notification-service", "notification-group");
 await consumer.connect();
-
-// Define topic handlers
-const topics: TopicConfig[] = [
+await consumer.subscribe([
   {
-    subject: "verification.>", // Wildcard: matches verification.professional.*, verification.store.*, etc.
-    handler: async (message: MessagePayload<VerificationEvent>) => {
-      console.log("Received verification event:", message.data);
-      console.log("Subject:", message.subject);
-      console.log("Sequence:", message.seq);
-
-      // Process the event...
-
-      // Message is auto-acked on success
-      // To manually control: message.ack(), message.nak(), message.term()
-    },
-    consumerOptions: {
-      durableName: "my-verification-consumer",
-      deliverPolicy: "new", // Only new messages
-      maxDeliver: 5, // Max retry attempts
-    },
-  },
-  {
-    subject: "user.created",
+    subject: "order.created",
     handler: async (message) => {
-      const { userId, email } = message.data as {
-        userId: string;
-        email: string;
-      };
-      // Send welcome email...
+      console.log("Received order:", message.data);
+      // No need to call message.ack() yourself — the consumer auto-acks
+      // on successful handler completion, and auto-naks/terminates on
+      // failure per your maxDeliver setting.
     },
   },
-];
-
-await consumer.subscribe(topics);
-
-// Graceful shutdown
-process.on("SIGTERM", async () => {
-  await consumer.disconnect();
-});
+]);
 ```
 
-## API Reference
+## Configuration
 
-### Client
+`NatsConfig` fields are read from environment variables by default
+(`getDefaultConfig()` in `client.ts`), and can be overridden per call:
 
-```typescript
-import {
-  createNatsClient,
-  getNatsClient,
-  isNatsConnected,
-  closeNatsConnection,
-  createServiceClient,
-} from "@build/nats";
+| Env var                       | Default                    | Purpose                      |
+| ----------------------------- | -------------------------- | ---------------------------- |
+| `NATS_URL`                    | `nats://localhost:4222`    | Server(s) to connect to      |
+| `NATS_CLIENT_NAME`            | `build-market-${NODE_ENV}` | Client identification        |
+| `NATS_TOKEN`                  | —                          | Token auth                   |
+| `NATS_USER` / `NATS_PASS`     | —                          | User/password auth           |
+| `NATS_TIMEOUT`                | 5000 (10000 in prod)       | Connection timeout (ms)      |
+| `NATS_MAX_RECONNECT_ATTEMPTS` | -1 (infinite)              | Reconnect attempts           |
+| `NATS_RECONNECT_TIME_WAIT`    | 1000 (2000 in prod)        | Wait between reconnects (ms) |
 
-// Create/get singleton client
-const client = await createNatsClient({
-  servers: "localhost:4222",
+Any of these can be overridden per-call:
+
+```ts
+await createNatsClient({
+  servers: "nats://staging-nats:4222",
   name: "my-service",
-  reconnect: true,
-  maxReconnectAttempts: -1, // Infinite
-  timeout: 10000,
 });
-
-// Get existing client (throws if not connected)
-const existingClient = getNatsClient();
-
-// Check connection status
-if (isNatsConnected()) {
-  // ...
-}
-
-// Close connection
-await closeNatsConnection();
 ```
 
-### Producer
+The underlying connection is a **singleton** — the first call to
+`createNatsClient()` (directly, or via `createProducer`/`createConsumer`)
+establishes it, and subsequent calls reuse the existing connection unless
+it's been closed.
 
-```typescript
-import { createProducer, publishMessage, JetStreamProducer } from "@build/nats";
+## Streams
 
-const producer = createProducer("service-name");
+Predefined streams (`StreamPresets` in `types.ts`, provisioned by
+`initializeStreams()`):
+
+| Stream          | Subjects         | Retention | Max age                     |
+| --------------- | ---------------- | --------- | --------------------------- |
+| `VERIFICATION`  | `verification.>` | limits    | 7 days                      |
+| `USERS`         | `user.>`         | limits    | 30 days                     |
+| `ORDERS`        | `order.>`        | limits    | 90 days                     |
+| `PROJECTS`      | `project.>`      | limits    | 90 days                     |
+| `NOTIFICATIONS` | `notification.>` | workqueue | 24 hours                    |
+| `LICENSES`      | `license.>`      | limits    | 30 days, 2-min dedup window |
+
+`StreamManager.ensureStream()` is **idempotent** — call it repeatedly
+with the same name and it creates on first call, updates on subsequent
+calls, never duplicates. It auto-caps `duplicateWindow` to `maxAge`
+whenever `maxAge` is set below the default 2-minute window, since
+JetStream rejects a duplicate window longer than a stream's max message
+age.
+
+```ts
+import { createStreamManager } from "@build/nats";
+
+const manager = createStreamManager();
+await manager.ensureStream({
+  name: "CUSTOM_STREAM",
+  subjects: ["custom.>"],
+  storage: "file",
+  maxAge: 60 * 60 * 1_000_000_000, // 1 hour, in nanoseconds
+});
+
+const stats = await manager.getStreamStats("CUSTOM_STREAM");
+// { messages, bytes, firstSeq, lastSeq, consumerCount }
+```
+
+**Note on units:** JetStream's own config fields (`maxAge`, `ackWait`,
+`duplicateWindow`) are all **nanoseconds**, not milliseconds. This has
+bitten us once already (see `CHANGELOG.md`) — when in doubt, multiply
+explicitly: `5 * 1000 * 1_000_000` for "5 seconds."
+
+## Producing messages
+
+```ts
+import { createProducer } from "@build/nats";
+
+const producer = createProducer("order-service");
 await producer.connect();
 
-// Standard publish with ack
-const ack = await producer.publish("subject.name", { data: "value" });
-console.log(`Published to stream ${ack.stream}, seq: ${ack.seq}`);
+// Standard publish, waits for JetStream ack
+const ack = await producer.publish("order.created", { orderId: "abc123" });
 
-// Publish with retry
-await producer.publishWithRetry(
-  "subject.name",
-  { data: "value" },
-  {
-    maxRetries: 3,
-    retryDelay: 1000,
-    msgId: "unique-id-for-dedup",
-  },
+// Idempotent publish — same msgId within the duplicate window is deduped
+await producer.publish(
+  "order.created",
+  { orderId: "abc123" },
+  { msgId: "order-abc123-created" },
 );
 
-// Fire-and-forget (no JetStream ack)
-await producer.publishFast("subject.name", { data: "value" });
+// Fire-and-forget (core NATS, no JetStream ack, no durability guarantee)
+await producer.publishFast("metrics.heartbeat", { ts: Date.now() });
 
-// One-off publish using existing connection
-await publishMessage("subject.name", { data: "value" });
+// Automatic retry with exponential backoff + jitter
+await producer.publishWithRetry(
+  "order.created",
+  { orderId: "abc123" },
+  { maxRetries: 3, retryDelayMs: 1000 },
+);
 ```
 
-### Consumer
+## Consuming messages
 
-```typescript
-import {
-  createConsumer,
-  JetStreamConsumer,
-  type TopicConfig,
-} from "@build/nats";
+```ts
+import { createConsumer } from "@build/nats";
 
-const consumer = createConsumer(
-  "service-name", // Service identifier
-  "consumer-group", // Consumer group for load balancing
-);
-
+const consumer = createConsumer("notification-service", "notification-group");
 await consumer.connect();
-
-const topics: TopicConfig[] = [
+await consumer.subscribe([
   {
-    subject: "orders.>", // Subject pattern (supports *, >)
-    handler: async (msg) => {}, // Message handler
+    subject: "order.created",
     consumerOptions: {
-      durableName: "order-processor",
-      deliverPolicy: "all", // "all" | "last" | "new"
-      ackPolicy: "explicit", // "explicit" | "none" | "all"
-      maxDeliver: 5, // Max redelivery attempts
-      ackWait: 30000000000, // 30s in nanoseconds
-      maxAckPending: 1000,
+      maxDeliver: 5, // give up after 5 delivery attempts
+      ackWait: 30_000_000_000, // 30s, in nanoseconds
+    },
+    handler: async (message) => {
+      // Throwing here triggers an automatic NAK with exponential backoff.
+      // Once deliveryCount reaches maxDeliver, the message is terminated
+      // (removed from the pending queue) instead of redelivered forever.
+      await processOrder(message.data);
     },
   },
-];
+]);
 
-await consumer.subscribe(topics);
-
-// Check status
-consumer.isRunning(); // true/false
-
-// Shutdown
+// Graceful shutdown — stops the pull loop and awaits in-flight processing
 await consumer.disconnect();
 ```
 
-### Stream Management
+Each subscribed subject gets its own durable consumer
+(`${groupName}-${sanitizedSubject}`), so multiple services can each run
+their own `groupName` against the same subject and each get their own
+independent delivery cursor.
 
-```typescript
-import {
-  createStreamManager,
-  initializeStreams,
-  type StreamOptions,
-} from "@build/nats";
+## Tracing
 
-const manager = createStreamManager();
+Every publish injects the active OpenTelemetry context into message
+headers; every consume extracts it and starts a child span
+(`nats.consume <subject>`), so a trace started in an HTTP handler that
+publishes an event continues seamlessly into whichever service consumes
+it — no manual correlation-ID plumbing required. This uses
+`@opentelemetry/api` only; wire up an actual tracer/exporter in your
+service's OTel bootstrap the same way you would for HTTP tracing.
 
-// Create/update a stream
-await manager.ensureStream({
-  name: "MY_STREAM",
-  subjects: ["myservice.>"],
-  retention: "limits", // "limits" | "interest" | "workqueue"
-  storage: "file", // "file" | "memory"
-  maxAge: 7 * 24 * 60 * 60 * 1000000000, // 7 days in nanoseconds
-  maxMsgs: 1000000,
-  replicas: 1,
-});
+## Metrics
 
-// Get stream info
-const info = await manager.getStream("MY_STREAM");
+The package also emits OTel **metrics**, namespaced `nats_client_*`
+specifically so they don't collide with an infra-level NATS server
+exporter (`nats_varz_*`) if you run one alongside:
 
-// Get statistics
-const stats = await manager.getStreamStats("MY_STREAM");
-// { messages, bytes, firstSeq, lastSeq, consumerCount }
+| Metric                                                               | What it tells you                                         |
+| -------------------------------------------------------------------- | --------------------------------------------------------- |
+| `nats_client_messages_published_total`                               | Publish volume & success/error rate, by subject           |
+| `nats_client_publish_duration_ms`                                    | JetStream ack round-trip latency                          |
+| `nats_client_messages_consumed_total`                                | Handler outcome (success/error), by subject               |
+| `nats_client_consume_duration_ms`                                    | Handler execution time                                    |
+| `nats_client_messages_redelivered_total`                             | Redelivery rate — rising fast usually means a handler bug |
+| `nats_client_messages_terminated_total`                              | Effective dead-letter rate                                |
+| `nats_client_consumer_nak_total`                                     | Explicit NAKs issued                                      |
+| `nats_client_connection_status`                                      | 1 if connected, 0 if not                                  |
+| `nats_client_reconnect_total` / `nats_client_disconnect_total`       | Connection stability                                      |
+| `nats_client_consumer_pending_messages` / `..._ack_pending_messages` | Per-consumer lag — the best "is a consumer stuck" signal  |
+| `nats_client_stream_messages` / `nats_client_stream_bytes`           | Per-stream size (opt-in)                                  |
 
-// List all streams
-const streams = await manager.listStreams();
+Like tracing, this only uses `@opentelemetry/api` — every instrument is
+a documented no-op until your service registers a real `MeterProvider`.
+See **`docs/MONITORING.md`** for the bootstrap snippet and suggested
+PromQL/alerts. Stream-size gauges are opt-in via:
 
-// Purge messages
-await manager.purgeStream("MY_STREAM");
-
-// Delete stream
-await manager.deleteStream("MY_STREAM");
-
-// Initialize all predefined Build Market streams
-await initializeStreams();
+```ts
+await initializeStreams(config, { withMetrics: true }); // enable from ONE designated service
 ```
 
-## Predefined Streams
+## Testing
 
-The package includes predefined stream configurations in `StreamPresets`:
-
-| Stream          | Subjects         | Retention | Max Age  |
-| --------------- | ---------------- | --------- | -------- |
-| `VERIFICATION`  | `verification.>` | limits    | 7 days   |
-| `USERS`         | `user.>`         | limits    | 30 days  |
-| `ORDERS`        | `order.>`        | limits    | 90 days  |
-| `PROJECTS`      | `project.>`      | limits    | 90 days  |
-| `NOTIFICATIONS` | `notification.>` | workqueue | 24 hours |
-
-Use `initializeStreams()` to create all of them.
-
-## Event Types
-
-Pre-defined TypeScript interfaces for type-safe messaging:
-
-```typescript
-import type {
-  VerificationEvent,
-  UserEvent,
-  OrderEvent,
-  ProjectEvent,
-  NotificationEvent,
-} from "@build/nats";
-
-// VerificationEvent
-const event: VerificationEvent = {
-  entityType: "professional", // | "store" | "property" | "certificate"
-  entityId: "user-123",
-  previousStatus: "PENDING",
-  newStatus: "VERIFIED",
-  success: true,
-  message: "Approved",
-  verifiedAt: "2026-01-15T10:00:00Z",
-  reason: "Optional rejection reason",
-  notes: "Admin notes",
-  metadata: { email: "user@example.com" },
-};
-
-// UserEvent
-const userEvent: UserEvent = {
-  userId: "user-123",
-  action: "created", // | "updated" | "deleted" | "verified" | "suspended"
-  email: "user@example.com",
-  metadata: {},
-};
-
-// OrderEvent
-const orderEvent: OrderEvent = {
-  orderId: "order-123",
-  action: "created", // | "updated" | "paid" | "shipped" | "delivered" | "cancelled"
-  userId: "user-123",
-  amount: 99.99,
-  metadata: {},
-};
-
-// ProjectEvent
-const projectEvent: ProjectEvent = {
-  projectId: "proj-123",
-  action: "created", // | "updated" | "completed" | "cancelled"
-  userId: "user-123",
-  professionalId: "pro-456",
-  metadata: {},
-};
-
-// NotificationEvent
-const notifEvent: NotificationEvent = {
-  userId: "user-123",
-  type: "email", // | "push" | "in_app"
-  category: "verification", // | "order" | "message" | "project" | "review" | "system"
-  title: "Notification Title",
-  content: "Notification body",
-  data: {},
-  priority: "normal", // | "low" | "high" | "urgent"
-};
-```
-
-## Subject Naming Convention
-
-Follow this pattern for subjects:
-
-```
-<domain>.<entity>.<action>
-```
-
-Examples:
-
-- `verification.professional.verified`
-- `verification.store.rejected`
-- `user.created`
-- `user.updated`
-- `order.created`
-- `order.paid`
-- `project.completed`
-- `notification.email.send`
-
-Wildcards:
-
-- `*` - Matches single token: `verification.*.verified` matches `verification.professional.verified`
-- `>` - Matches multiple tokens: `verification.>` matches all verification events
-
-## Error Handling
-
-### Producer Errors
-
-```typescript
-try {
-  await producer.publish("subject", data);
-} catch (error) {
-  // Handle publish failure (network, stream not found, etc.)
-  console.error("Publish failed:", error);
-}
-
-// Or use built-in retry
-await producer.publishWithRetry("subject", data, {
-  maxRetries: 3,
-  retryDelay: 1000,
-});
-```
-
-### Consumer Errors
-
-Messages are automatically retried on handler errors (up to `maxDeliver` times):
-
-```typescript
-handler: async (msg) => {
-  try {
-    await processMessage(msg.data);
-    // Auto-acked on success
-  } catch (error) {
-    // Auto-NAK'd, will be redelivered
-    throw error;
-  }
-};
-```
-
-For manual control:
-
-```typescript
-handler: async (msg) => {
-  try {
-    await processMessage(msg.data);
-    msg.ack(); // Explicit ack
-  } catch (error) {
-    if (isPermanentFailure(error)) {
-      msg.term(); // Don't retry
-    } else {
-      msg.nak(5000); // Retry after 5 seconds
-    }
-  }
-};
-```
-
-## Integration Example
-
-### Notification Service
-
-```typescript
-// apps/notification-service/src/services/natsConsumer.ts
-import {
-  createConsumer,
-  createNatsClient,
-  initializeStreams,
-  type MessagePayload,
-  type VerificationEvent,
-} from "@build/nats";
-import { sendEmail } from "./emailService";
-
-export async function initializeNatsConsumer() {
-  await createNatsClient();
-  await initializeStreams();
-
-  const consumer = createConsumer("notification-service", "notification-group");
-  await consumer.connect();
-
-  await consumer.subscribe([
-    {
-      subject: "verification.>",
-      handler: async (msg: MessagePayload<VerificationEvent>) => {
-        const event = msg.data;
-
-        if (event.metadata?.email) {
-          await sendEmail(
-            event.metadata.email as string,
-            `${event.entityType} Verification Update`,
-            `Status: ${event.newStatus}. ${event.message}`,
-          );
-        }
-      },
-    },
-  ]);
-}
-```
-
-### Verification Service Publisher
-
-```typescript
-// apps/client/lib/services/verification/notification.service.ts
-import { createProducer, type VerificationEvent } from "@build/nats";
-
-let producer: ReturnType<typeof createProducer> | null = null;
-
-async function getProducer() {
-  if (!producer) {
-    producer = createProducer("verification-service");
-    await producer.connect();
-  }
-  return producer;
-}
-
-export async function publishVerificationEvent(
-  result: VerificationResult,
-  userEmail: string,
-) {
-  const p = await getProducer();
-
-  const event: VerificationEvent = {
-    entityType: result.entityType,
-    entityId: result.entityId,
-    previousStatus: result.previousStatus,
-    newStatus: result.newStatus,
-    success: result.success,
-    message: result.message,
-    metadata: { email: userEmail },
-  };
-
-  await p.publishWithRetry(
-    `verification.${result.entityType}.${result.newStatus.toLowerCase()}`,
-    event,
-  );
-}
-```
-
-## Troubleshooting
-
-### Connection Issues
-
-```
-[NATS] Connection failed: Error: connect ECONNREFUSED 127.0.0.1:4222
-```
-
-**Solution:** Ensure NATS server is running with JetStream enabled:
+Integration tests run against a real spawned `nats-server -js` process,
+not a mocked client — redelivery timing, `maxDeliver` termination, and
+`msgId` dedup are server behavior, and mocking the client wouldn't
+exercise any of it.
 
 ```bash
-nats-server -js
+pnpm test:integration
 ```
 
-### Stream Not Found
+Requires the `nats-server` binary on `PATH` (`brew install nats-server`,
+or download from the [NATS releases page](https://github.com/nats-io/nats-server/releases)).
+Full details, prerequisites, and coverage breakdown: **`docs/TESTING.md`**.
 
-```
-[NATS Consumer] No stream found for subject: verification.>
-```
+## Monitoring & deployment
 
-**Solution:** Initialize streams before subscribing:
+Infra-level NATS server health (cluster quorum, disk, connections) is
+covered separately from this package's application metrics — see
+**`docs/NATS_MONITORING_SETUP.MD`** for the exporter/Prometheus/Grafana
+setup currently deployed on AKS, and **`docs/deploy-monitoring-runbook.md`**
+for the exact deployment steps.
 
-```typescript
-await initializeStreams();
-```
+## API reference
 
-### Message Not Delivered
+### `client.ts`
 
-Check if:
+| Export                                                | Purpose                                          |
+| ----------------------------------------------------- | ------------------------------------------------ |
+| `createNatsClient(config?, options?)`                 | Get or create the singleton connection           |
+| `createServiceClient(serviceName, config?, options?)` | Same, with a service-scoped client name          |
+| `getNatsClient()`                                     | Get the existing client, throws if not connected |
+| `isNatsConnected()`                                   | Boolean connection check                         |
+| `getConnectionStatus()`                               | Full status + health metrics snapshot            |
+| `closeNatsConnection()`                               | Graceful drain + close                           |
 
-1. Stream exists and covers the subject
-2. Consumer is subscribed to the correct subject pattern
-3. Producer is publishing to a subject that matches a stream
+### `producer.ts`
 
-### Debug Logging
+| Export                                                           | Purpose                                              |
+| ---------------------------------------------------------------- | ---------------------------------------------------- |
+| `createProducer(serviceName, config?)`                           | Create a `JetStreamProducer`                         |
+| `JetStreamProducer.publish(subject, message, options?)`          | Publish with JetStream ack                           |
+| `JetStreamProducer.publishFast(subject, message)`                | Fire-and-forget, no durability                       |
+| `JetStreamProducer.publishWithRetry(subject, message, options?)` | Auto-retry with backoff                              |
+| `publishMessage(subject, message, options?)`                     | One-off publish using the existing shared connection |
 
-The package logs to console. Look for `[NATS]`, `[NATS Producer]`, `[NATS Consumer]`, `[NATS Streams]` prefixes.
+### `consumer.ts`
 
-## License
+| Export                                            | Purpose                                         |
+| ------------------------------------------------- | ----------------------------------------------- |
+| `createConsumer(serviceName, groupName, config?)` | Create a `JetStreamConsumer`                    |
+| `JetStreamConsumer.subscribe(topics)`             | Subscribe to one or more subjects with handlers |
+| `JetStreamConsumer.disconnect()`                  | Stop pulling, await in-flight processing, close |
+| `JetStreamConsumer.isRunning()`                   | Health check                                    |
 
-MIT
+### `streams.ts`
+
+| Export                                                                                        | Purpose                                                                |
+| --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `createStreamManager(config?)`                                                                | Create a `StreamManager`                                               |
+| `StreamManager.ensureStream(options)`                                                         | Idempotent create-or-update                                            |
+| `StreamManager.deleteStream` / `purgeStream` / `getStream` / `listStreams` / `getStreamStats` | Admin operations                                                       |
+| `initializeStreams(config?, { withMetrics? })`                                                | Provision all `StreamPresets`, optionally enabling stream-size metrics |
+
+### `metrics.ts`
+
+| Export                           | Purpose                                                                                  |
+| -------------------------------- | ---------------------------------------------------------------------------------------- |
+| `registerStreamMetrics(config?)` | Manual/advanced entry point for stream-size gauges (prefer the `initializeStreams` flag) |
+
+### `types.ts`
+
+`NatsConfig`, `StreamOptions`, `ConsumerOptions`, `TopicConfig`,
+`MessagePayload`, `PublishOptions`, `ConnectionMetrics`, `ConnectionStatus`,
+`NatsClient`, `StreamPresets`, and typed event shapes
+(`VerificationEvent`, `LicenseVerificationEvent`, `UserEvent`,
+`OrderEvent`, `ProjectEvent`, `NotificationEvent`).

@@ -3,111 +3,78 @@
  * Handles verification logic for stores
  */
 
-import { prisma } from "@build/db";
+import { prisma, type Prisma } from "@build/db";
+import { VerificationRequest, VerificationResult } from "./types";
 import {
-  VerificationRequest,
-  VerificationResult,
-  mapActionToStatus,
-  validateTransition,
-} from "./types";
-import { createAuditLog } from "./audit-service";
-import { StructuredLogger } from "@build/resilience";
+  verifyEntityCore,
+  type VerifyEntityAdapter,
+} from "./verify-entity-core";
+
 import { omitUndefined } from "@/lib/utils";
 
-const logger = new StructuredLogger("store-verification-service");
-
-export async function verifyStore(
-  request: VerificationRequest,
-): Promise<VerificationResult> {
-  const { entityId, action, notes, reason, adminId, ipAddress, userAgent } =
-    request;
-
-  // Fetch current store
-  const store = await prisma.store.findUnique({
-    where: { id: entityId },
-    select: {
-      id: true,
-      name: true,
-      verificationStatus: true,
-      verified: true,
-      professional: {
-        select: {
-          user: {
-            select: {
-              email: true,
-              firstName: true,
-              lastName: true,
+const storeAdapter: VerifyEntityAdapter = {
+  entityType: "store",
+  entityTypeLabel: "Store",
+  notFoundMessage: "Store not found",
+  auditActionSuffix: "STORE",
+  auditPrismaEntityType: "Store",
+  loggerName: "store-verification-service",
+  async fetchEntity(entityId: string) {
+    const store = await prisma.store.findUnique({
+      where: { id: entityId },
+      select: {
+        id: true,
+        name: true,
+        verificationStatus: true,
+        verified: true,
+        professionalId: true,
+        professional: {
+          select: {
+            user: {
+              select: {
+                email: true,
+                firstName: true,
+                lastName: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    });
 
-  if (!store) {
-    throw new Error("Store not found");
-  }
+    if (!store) return null;
 
-  const currentStatus = store.verificationStatus;
-  const newStatus = mapActionToStatus(action);
+    return {
+      currentStatus: store.verificationStatus,
+      displayName: store.name,
+      metadata: {
+        storeName: store.name,
+        ownerId: store.professionalId,
+      },
+    };
+  },
 
-  // Validate state transition
-  const validation = validateTransition(currentStatus, action, reason);
-  if (!validation.isValid) {
-    throw new Error(validation.errors.join(", "));
-  }
+  async updateEntity(tx: Prisma.TransactionClient, entityId: string, data) {
+    return tx.store.update({
+      where: { id: entityId },
+      data: {
+        verificationStatus: data.verificationStatus,
+        verified: data.verified,
+        verifiedAt: data.verifiedAt,
+        verifiedById: data.verifiedById,
+        ...(data.notes !== undefined ? { verificationNotes: data.notes } : {}),
+        ...omitUndefined({
+          rejectionReason: data.rejectionReason,
+        }),
+      },
+    });
+  },
+};
 
-  // Update store
-  const updated = await prisma.store.update({
-    where: { id: entityId },
-    data: {
-      verificationStatus: newStatus,
-      verified: newStatus === "VERIFIED",
-      verifiedAt: newStatus === "VERIFIED" ? new Date() : null,
-      ...(action === "REJECT"
-        ? { rejectionReason: reason ?? null }
-        : { rejectionReason: null }),
-    },
-  });
-
-  // Create audit log
-  await createAuditLog({
-    adminId,
-    action: `${action}_STORE`,
-    entityType: "Store",
-    entityId,
-    oldStatus: currentStatus,
-    newStatus,
-    reason: notes || reason,
-    metadata: {
-      storeName: store.name,
-      ownerEmail: store.professional.user.email,
-    },
-    ipAddress,
-    userAgent,
-  });
-
-  logger.info("Store verification completed", {
-    storeId: entityId,
-    action,
-    previousStatus: currentStatus,
-    newStatus,
-    adminId,
-  });
-
-  return {
-    success: true,
-    entityType: "store",
-    entityId,
-    previousStatus: currentStatus,
-    newStatus,
-    message: `Store "${store.name}" has been ${action.toLowerCase()}ed`,
-    ...omitUndefined({
-      verifiedAt: updated.verifiedAt ?? undefined,
-      reason: action === "REJECT" ? reason : undefined,
-      notes,
-    }),
-  };
+export async function verifyStore(
+  request: VerificationRequest,
+): Promise<VerificationResult> {
+  return verifyEntityCore(request, storeAdapter);
 }
 
 export async function getStoreVerificationDetails(storeId: string) {
