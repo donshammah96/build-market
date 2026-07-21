@@ -12,7 +12,7 @@
 import { StructuredLogger } from "@build/resilience";
 import { VerificationResult, type EntityType } from "./types";
 import { getEntityName } from "./notification-helpers";
-import { Queue, Job } from "bullmq";
+import { Queue } from "bullmq";
 import type { VerificationStatus } from "@build/db";
 import { FailedNotificationStatus } from "@build/db";
 import { getBullMQConnectionOptions } from "@build/queue-server";

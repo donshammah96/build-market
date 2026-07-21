@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Security (Dependency Vulnerability Patches)
+
+- **Security (CVE & Audit Fixes)**: Updated package overrides in `pnpm-workspace.yaml` to resolve `pnpm run deps:audit` vulnerabilities:
+  - `brace-expansion`: Upgraded `brace-expansion@^2.0.0` override from `2.0.3` to `2.1.2` (mitigating high severity DoS via exponential-time expansion, GHSA-3jxr-9vmj-r5cp).
+  - `protobufjs`: Upgraded `protobufjs` override from `>=8.0.2` to `>=8.6.6` (mitigating moderate severity prototype pollution GHSA-jfj6-75fj-8934 and DoS infinite loop GHSA-j3f2-48v5-ccww).
+
+### Fixed (Code Cleanup & Linter Hygiene)
+
+- **Admin Verification (`notification-queue.ts`)**: Removed unused import binding `Job` from `bullmq` in `apps/admin/src/lib/domains/verification/internal/notification-queue.ts`.
+
+**Files changed:**
+
+- `pnpm-workspace.yaml`
+- `pnpm-lock.yaml`
+- `apps/admin/src/lib/domains/verification/internal/notification-queue.ts`
+- `CHANGELOG.md`
+- `apps/admin/docs/CHANGELOG.md`
+
 ### Added (Admin Verification NATS Event Wiring)
 
 - **Admin Verification NATS Event Wiring & Producer Consolidation**: Implemented `publishLicenseVerificationEvent()` in `notification.service.ts` to publish typed `LicenseVerificationEvent` payloads on `license.<action>`, closing the license event gap. Consolidated NATS producers into `getAdminNatsProducer()` singleton in `nats-client.ts`. Wired `publishLicenseVerificationEvent` into `service.ts` `verifyLicense()` non-blocking, typed `tx?: Prisma.TransactionClient` in `audit-service.ts`, and extended `verification-email.worker.ts` with a `license.>` subject consumer handler.

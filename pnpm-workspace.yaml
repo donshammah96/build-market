@@ -158,7 +158,7 @@ overrides:
   "socket.io-client>ws": ">=8.20.1"
   "@hono/node-server": ">=2.0.2"
   "ajv@^6.12.0": "6.14.0"
-  "brace-expansion@^2.0.0": "2.0.3"
+  "brace-expansion@^2.0.0": "2.1.2"
   defu: ">=6.1.5"
   effect: ">=3.20.0"
   fast-uri: ">=3.1.2"
@@ -182,7 +182,7 @@ overrides:
   next: "catalog:"
   dompurify: ">=3.4.11"
   axios: ">=1.15.0"
-  protobufjs: ">=8.0.2"
+  protobufjs: ">=8.6.6"
   postcss: "catalog:"
   "next>postcss": "catalog:"
   # NOTE: the previous "admin>next": "16.2.6" entry has been removed. pnpm's

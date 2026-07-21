@@ -4,6 +4,9 @@
 
 ### Security
 
+- **Dependency Vulnerability Patches**: Updated root `pnpm-workspace.yaml` overrides to patch security vulnerabilities flagged by `pnpm run deps:audit` impacting `apps/admin`:
+  - `brace-expansion`: Upgraded override from `2.0.3` to `2.1.2` (remediating DoS via exponential-time expansion, GHSA-3jxr-9vmj-r5cp).
+  - `protobufjs`: Upgraded override from `>=8.0.2` to `>=8.6.6` (remediating prototype pollution GHSA-jfj6-75fj-8934 and DoS infinite loop GHSA-j3f2-48v5-ccww in `@opentelemetry/exporter-trace-otlp-grpc` -> `@grpc/grpc-js` chain).
 - **Consolidated Environment Flag Parsing**: Centralized environment variable boolean flag parsing into `env-utils.ts` and migrated calls to prevent raw string parsing inconsistencies.
 - **Route & Action Authorization Hardening (ADR-ADMIN-001)**: Integrated database `UserRole` and `AdminRole` enums instead of raw string comparison in `route-auth.ts`, and enforced safe role fallback values to prevent route crashes.
 - **CLI Tools Security**: Added CLI arguments, interactive safety prompts, target database host warnings, and structured Prisma `AdminAuditLog` record generation to the `promote-admin.ts` utility.
@@ -52,6 +55,7 @@
 
 ### Fixed
 
+- **Unused Import Removal (`notification-queue.ts`)**: Removed unused `Job` import binding from `bullmq` in [notification-queue.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/verification/internal/notification-queue.ts).
 - **Middleware API Redirect Bypass**: Updated `middleware.ts` to return `401 Unauthorized` and `403 Forbidden` JSON responses on API/tRPC routes when user session is unauthenticated or blocked, instead of redirecting the requests to HTML login pages.
 - **Deep-link Query Params Forwarding**: Refactored the satellite sign-in catch-all route page component to accept and propagate query parameters during primary domain sign-in forwarding.
 - **Middleware Test Suite**: Updated `middleware.test.ts` to verify 401/403 JSON responses on API routes.
