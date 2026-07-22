@@ -28,6 +28,15 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Fixed (Image Processing Typecheck)
+
+- **Image Processing Typecheck**: Fixed type check error in `image-processing.ts` (`TS2678: Type '"jpg"' is not comparable to type 'keyof FormatEnum'`). Removed redundant invalid `case "jpg"` from image compression format switch since Sharp normalizes JPEG files to `"jpeg"` in `FormatEnum`.
+
+**Files changed:**
+
+- `apps/client/app/lib/media/image-processing.ts`
+- `apps/client/docs/CHANGELOG.md`
+
 ### Docs (Webhook Error Policy)
 
 - **Webhook Error Policy**: Added inline documentation to the production-only replay protection guard within the Clerk webhook route handler (`route.ts`) to clarify the asymmetric handling logic between production and development/test environments.

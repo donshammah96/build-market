@@ -20,6 +20,7 @@ All notable changes to this project will be documented in this file.
 - **Admin CI Preview Smoke Gate & Env Validation (`apps/admin`, `.github`)**: Fixed CI build failure on `admin-preview-smoke-gate` (`Error: Failed to collect page data for /_not-found`). Refactored `adminEnvSchema` in `apps/admin/src/lib/infrastructure/env.ts` to split the base `ZodObject` from the refined schema so static build phase fallback calls `adminBaseEnvSchema.partial()`, preventing Zod refinement `.partial()` runtime errors. Configured `QUEUE_PROVIDER: memory` in `.github/workflows/ci.yml` for the `admin-preview-smoke-gate` job environment.
 - **Admin Security Drift Check (`verification-email.worker.ts`)**: Reworded log message titles in `verification-email.worker.ts` to use hyphens instead of colons following the word `email` (`"Skipped sending email - ..."`), eliminating 6 false-positive `no-banned-log-keys` linter violations (ADR-ADMIN-003).
 - **Admin Verification (`notification-queue.ts`)**: Removed unused import binding `Job` from `bullmq` in `apps/admin/src/lib/domains/verification/internal/notification-queue.ts`.
+- **Image Processing Typecheck (`apps/client`)**: Fixed type check error in `image-processing.ts` (`TS2678: Type '"jpg"' is not comparable to type 'keyof FormatEnum'`). Removed redundant invalid `case "jpg"` from image compression format switch since Sharp normalizes JPEG files to `"jpeg"` in `FormatEnum`.
 
 **Files changed:**
 
@@ -27,8 +28,10 @@ All notable changes to this project will be documented in this file.
 - `pnpm-lock.yaml`
 - `apps/admin/src/lib/domains/verification/internal/notification-queue.ts`
 - `apps/admin/src/lib/domains/verification/internal/verification-email.worker.ts`
+- `apps/client/app/lib/media/image-processing.ts`
 - `CHANGELOG.md`
 - `apps/admin/docs/CHANGELOG.md`
+- `apps/client/docs/CHANGELOG.md`
 
 ### Added (Admin Verification NATS Event Wiring)
 
