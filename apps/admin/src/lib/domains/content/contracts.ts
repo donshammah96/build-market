@@ -64,8 +64,7 @@ export type ContentModerationPage = {
 };
 
 export type ContentDomainErrorCode =
-  | "CONTENT_INVALID_FILTER"
-  | "CONTENT_POLICY_DENIED";
+  "CONTENT_INVALID_FILTER" | "CONTENT_POLICY_DENIED";
 
 export type ContentDomainError = {
   code: ContentDomainErrorCode;

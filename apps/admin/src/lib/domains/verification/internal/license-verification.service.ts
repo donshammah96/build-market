@@ -102,7 +102,7 @@ export async function verifyLicense(
         metadata: {
           authority: license.authority,
           licenseNumber: license.licenseNumber,
-          userEmail: license.professional.user.email,
+          professionalId: license.professionalId,
         },
         ipAddress,
         userAgent,

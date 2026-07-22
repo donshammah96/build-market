@@ -7,7 +7,7 @@ const booleanString = z
 
 const optionalUrl = z.string().url().optional();
 
-export const adminEnvSchema = z.object({
+export const adminBaseEnvSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
@@ -31,7 +31,7 @@ export const adminEnvSchema = z.object({
   NEXT_PUBLIC_ORDER_SERVICE_URL: optionalUrl,
   NOTIFICATION_SERVICE_URL: optionalUrl,
   ENABLE_NOTIFICATION_SERVICE: booleanString,
-  QUEUE_PROVIDER: z.enum(["memory", "redis", "bullmq"]).optional(),
+  QUEUE_PROVIDER: z.enum(["memory", "redis", "bullmq", "db"]).optional(),
   INTERNAL_API_SECRET: z.string().min(1).optional(),
   DEV_ADMIN_BYPASS: booleanString,
   S3_DISABLED: booleanString,
@@ -89,6 +89,20 @@ export const adminEnvSchema = z.object({
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
 });
 
+export const adminEnvSchema = adminBaseEnvSchema.refine(
+  (data) => {
+    // Require QUEUE_PROVIDER in production environment (F10)
+    if (data.NODE_ENV === "production" && !data.QUEUE_PROVIDER) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "QUEUE_PROVIDER is required when NODE_ENV is production",
+    path: ["QUEUE_PROVIDER"],
+  },
+);
+
 export type AdminEnvConfig = z.infer<typeof adminEnvSchema>;
 
 function isStaticBuildPhase(): boolean {
@@ -129,7 +143,7 @@ function cleanEnv(
   return env;
 }
 
-function validateAdminEnv(): AdminEnvConfig {
+export function validateAdminEnv(): AdminEnvConfig {
   const cleanedEnv = cleanEnv(process.env);
   const parsed = adminEnvSchema.safeParse(cleanedEnv);
 
@@ -138,7 +152,7 @@ function validateAdminEnv(): AdminEnvConfig {
   }
 
   if (isStaticBuildPhase()) {
-    return adminEnvSchema.partial().parse(cleanedEnv) as AdminEnvConfig;
+    return adminBaseEnvSchema.partial().parse(cleanedEnv) as AdminEnvConfig;
   }
 
   const details = parsed.error.issues

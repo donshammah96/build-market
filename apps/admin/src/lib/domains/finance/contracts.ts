@@ -101,11 +101,7 @@ export type PlatformAnalyticsResult = {
 };
 
 export type TimeSeriesMetric =
-  | "users"
-  | "professionals"
-  | "leads"
-  | "orders"
-  | "revenue";
+  "users" | "professionals" | "leads" | "orders" | "revenue";
 
 export type TimeSeriesEntry = {
   date: string;
@@ -121,10 +117,7 @@ export type GeoDistributionEntry = {
 };
 
 export type TopProfessionalMetric =
-  | "leads"
-  | "reviews"
-  | "revenue"
-  | "projects";
+  "leads" | "reviews" | "revenue" | "projects";
 
 export type TopProfessionalEntry = {
   userId: string;

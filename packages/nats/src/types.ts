@@ -5,25 +5,32 @@ import type { NatsConnection, JetStreamClient, JetStreamManager } from "nats";
  */
 export interface NatsConfig {
   /** NATS server URLs (e.g., ["localhost:4222"]) */
-  servers: string | string[];
+  servers?: string | string[] | undefined;
   /** Client name for identification */
-  name?: string;
+  name?: string | undefined;
   /** Authentication token */
-  token?: string;
+  token?: string | undefined;
   /** Username for authentication */
-  user?: string;
+  user?: string | undefined;
   /** Password for authentication */
-  pass?: string;
+  pass?: string | undefined;
   /** Connection timeout in milliseconds */
-  timeout?: number;
+  timeout?: number | undefined;
   /** Reconnect automatically on disconnect */
-  reconnect?: boolean;
+  reconnect?: boolean | undefined;
   /** Maximum reconnection attempts */
-  maxReconnectAttempts?: number;
+  maxReconnectAttempts?: number | undefined;
   /** Wait time between reconnection attempts (ms) */
-  reconnectTimeWait?: number;
+  reconnectTimeWait?: number | undefined;
   /** Enable TLS */
-  tls?: boolean;
+  tls?: boolean | undefined;
+}
+
+/**
+ * Resolved NATS connection configuration with defaults applied
+ */
+export interface ResolvedNatsConfig extends NatsConfig {
+  servers: string | string[];
 }
 
 /**
@@ -62,11 +69,7 @@ export interface ConsumerOptions {
   filterSubject?: string;
   /** Delivery policy for new consumers */
   deliverPolicy?:
-    | "all"
-    | "last"
-    | "new"
-    | "by_start_sequence"
-    | "by_start_time";
+    "all" | "last" | "new" | "by_start_sequence" | "by_start_time";
   /** Acknowledgment policy */
   ackPolicy?: "explicit" | "none" | "all";
   /** Max number of delivery attempts */
@@ -297,12 +300,7 @@ export interface UserEvent {
 export interface OrderEvent {
   orderId: string;
   action:
-    | "created"
-    | "updated"
-    | "paid"
-    | "shipped"
-    | "delivered"
-    | "cancelled";
+    "created" | "updated" | "paid" | "shipped" | "delivered" | "cancelled";
   userId: string;
   amount?: number;
   metadata?: Record<string, unknown>;
@@ -320,12 +318,7 @@ export interface NotificationEvent {
   userId: string;
   type: "email" | "push" | "in_app";
   category:
-    | "order"
-    | "message"
-    | "project"
-    | "review"
-    | "system"
-    | "verification";
+    "order" | "message" | "project" | "review" | "system" | "verification";
   title: string;
   content: string;
   data?: Record<string, unknown>;

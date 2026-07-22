@@ -27,10 +27,7 @@ type RepositoryResult<T> =
   | {
       success: false;
       error:
-        | "not_found"
-        | "forbidden"
-        | "invalid_transition"
-        | "limit_exceeded";
+        "not_found" | "forbidden" | "invalid_transition" | "limit_exceeded";
       message?: string;
     };
 

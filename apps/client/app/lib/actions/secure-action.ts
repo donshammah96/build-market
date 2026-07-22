@@ -33,8 +33,7 @@ export type ActionFailure = {
 };
 
 export type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: ActionFailure };
+  { success: true; data: T } | { success: false; error: ActionFailure };
 
 export type ActionActor = {
   clerkId: string;
@@ -49,8 +48,7 @@ export type ActionActor = {
 type PolicyResult = void | boolean | ActionFailure;
 
 type RecentAuthValidationResult =
-  | { ok: true }
-  | { ok: false; reason: "missing_claim" | "stale_claim" };
+  { ok: true } | { ok: false; reason: "missing_claim" | "stale_claim" };
 
 type ActionRateLimitConfig<TParsed> = {
   key:

@@ -803,6 +803,7 @@ jobs:
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3005/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
+      QUEUE_PROVIDER: memory
       # See the matching env-var comment in client-preview-smoke-gate above:
       # a closed port fails fast for one Redis call, but `@upstash/redis`
       # retries with backoff, so any request path with more than one
@@ -1071,6 +1072,9 @@ jobs:
 
       - name: Apply database migrations
         run: pnpm run db:migrate:deploy
+
+      - name: Build workspace dependencies then admin
+        run: pnpm --filter="admin..." run build
 
       - name: Run admin nightly/flake-focused test suite
         run: pnpm run admin:test:all

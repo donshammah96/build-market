@@ -6,6 +6,7 @@ import {
   StreamInfo,
 } from "nats";
 import { createNatsClient } from "./client.js";
+import { registerStreamMetrics } from "./metrics.js";
 import type { NatsConfig, StreamOptions } from "./types.js";
 
 function isNotFoundError(error: unknown): boolean {
@@ -44,6 +45,14 @@ export class StreamManager {
   async ensureStream(options: StreamOptions): Promise<StreamInfo> {
     const jsm = await this.getJsm();
 
+    const maxAge = options.maxAge ?? 0;
+    const defaultDuplicateWindow = 120_000_000_000; // 2 minutes in ns
+    const duplicateWindow =
+      options.duplicateWindow ??
+      (maxAge > 0 && maxAge < defaultDuplicateWindow
+        ? maxAge
+        : defaultDuplicateWindow);
+
     const streamConfig: Partial<StreamConfig> = {
       name: options.name,
       subjects: options.subjects,
@@ -51,10 +60,10 @@ export class StreamManager {
       storage: this.mapStorage(options.storage || "file"),
       max_msgs: options.maxMsgs ?? -1,
       max_bytes: options.maxBytes ?? -1,
-      max_age: options.maxAge ?? 0,
+      max_age: maxAge,
       num_replicas: options.replicas ?? 1,
       discard: this.mapDiscard(options.discard || "old"),
-      duplicate_window: options.duplicateWindow ?? 120000000000, // 2 minutes
+      duplicate_window: duplicateWindow,
     };
 
     try {
@@ -206,9 +215,17 @@ export function createStreamManager(
 
 /**
  * Initialize all predefined streams for Build Market
+ *
+ * @param config - Optional NATS connection overrides
+ * @param options.withMetrics - If true, also registers the per-stream
+ *   message-count/byte-size gauges from ./metrics.ts. Off by default:
+ *   this polls jsm.streams.list() on every metrics scrape, so opt in from
+ *   one designated process (e.g. an ops/health service) rather than every
+ *   replica that happens to call initializeStreams() on boot.
  */
 export async function initializeStreams(
   config?: Partial<NatsConfig>,
+  options?: { withMetrics?: boolean },
 ): Promise<void> {
   const manager = createStreamManager(config);
 
@@ -273,4 +290,9 @@ export async function initializeStreams(
   }
 
   console.log("[NATS Streams] All streams initialized");
+
+  if (options?.withMetrics) {
+    registerStreamMetrics(config);
+    console.log("[NATS Streams] Stream size/message-count metrics registered");
+  }
 }

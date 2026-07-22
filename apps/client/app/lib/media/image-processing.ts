@@ -107,7 +107,6 @@ export async function processImage(
   const format = metadata.format || "jpeg";
   switch (format) {
     case "jpeg":
-    case "jpg":
       optimizedImage = optimizedImage.jpeg({
         quality: opts.quality,
         mozjpeg: true,

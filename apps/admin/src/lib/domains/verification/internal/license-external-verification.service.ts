@@ -3,19 +3,11 @@
  * Handles requesting automatic verification from external APIs (NCA/EBK)
  */
 
-import { createProducer } from "@build/nats";
+import type { LicenseVerificationEvent } from "@build/nats";
+import { getAdminNatsProducer } from "@/lib/infrastructure/nats-client";
 import { StructuredLogger } from "@build/resilience";
 
 const logger = new StructuredLogger("license-external-verification-service");
-let natsProducer: any = null;
-
-async function getNatsProducer() {
-  if (!natsProducer) {
-    natsProducer = createProducer("license-external-verification-service");
-    await natsProducer.connect();
-  }
-  return natsProducer;
-}
 
 export async function requestAutoVerification(
   licenseId: string,
@@ -25,8 +17,8 @@ export async function requestAutoVerification(
   correlationId: string,
 ): Promise<void> {
   try {
-    const producer = await getNatsProducer();
-    const event = {
+    const producer = await getAdminNatsProducer();
+    const event: LicenseVerificationEvent = {
       licenseId,
       professionalId,
       authority,
@@ -39,7 +31,7 @@ export async function requestAutoVerification(
     };
 
     const subject = "license.auto_verify_requested";
-    await producer.publishWithRetry(subject, event, {
+    await producer.publishWithRetry<LicenseVerificationEvent>(subject, event, {
       msgId: `auto-verify-req-${licenseId}-${Date.now()}`,
       maxRetries: 3,
     });

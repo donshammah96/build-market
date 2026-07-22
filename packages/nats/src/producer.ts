@@ -1,6 +1,7 @@
 import { StringCodec, headers, PubAck } from "nats";
 import { propagation, context } from "@opentelemetry/api";
 import { getNatsClient, createNatsClient } from "./client.js";
+import { recordPublish, recordPublishRetry } from "./metrics.js";
 import type { NatsClient, NatsConfig, PublishOptions } from "./types.js";
 
 const sc = StringCodec();
@@ -89,13 +90,16 @@ export class JetStreamProducer {
 
     pubOpts.headers = buildHeaders(options?.headers);
 
+    const startTime = performance.now();
     try {
       const ack = await js.publish(subject, payload, pubOpts);
+      recordPublish(subject, "success", performance.now() - startTime);
       console.log(
         `[NATS Producer] Published to ${subject}, seq: ${ack.seq}, stream: ${ack.stream}`,
       );
       return ack;
     } catch (error) {
+      recordPublish(subject, "error", performance.now() - startTime);
       console.error(`[NATS Producer] Failed to publish to ${subject}:`, error);
       throw error;
     }
@@ -115,6 +119,7 @@ export class JetStreamProducer {
 
     const payload = sc.encode(JSON.stringify(message));
     this.client.connection.publish(subject, payload);
+    recordPublish(subject, "success", 0, "fast");
     console.log(`[NATS Producer] Published (fast) to ${subject}`);
   }
 
@@ -140,6 +145,7 @@ export class JetStreamProducer {
           error,
         );
         if (attempt < maxRetries - 1) {
+          recordPublishRetry(subject);
           // Exponential back-off with randomized jitter
           const delay =
             retryDelayMs * Math.pow(2, attempt) + Math.random() * 500;
@@ -196,5 +202,13 @@ export async function publishMessage<T extends object>(
   if (options?.timeout) pubOpts.timeout = options.timeout;
   pubOpts.headers = buildHeaders(options?.headers);
 
-  return client.jetstream.publish(subject, payload, pubOpts);
+  const startTime = performance.now();
+  try {
+    const ack = await client.jetstream.publish(subject, payload, pubOpts);
+    recordPublish(subject, "success", performance.now() - startTime);
+    return ack;
+  } catch (error) {
+    recordPublish(subject, "error", performance.now() - startTime);
+    throw error;
+  }
 }

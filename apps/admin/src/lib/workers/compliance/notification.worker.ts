@@ -101,7 +101,7 @@ export const notificationWorker = new Worker<UserNotificationJobData>(
             logger.error(
               "Failed to notify user",
               error instanceof Error ? error : new Error(String(error)),
-              { correlationId, userId: user.id, channel },
+              { correlationId, channel },
             );
             results.failed++;
 

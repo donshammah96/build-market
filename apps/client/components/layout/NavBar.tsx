@@ -1,6 +1,13 @@
 "use client";
 
-import React, { useState, useCallback, memo, useMemo } from "react";
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  memo,
+  useMemo,
+} from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "../ui/button";
@@ -22,7 +29,7 @@ const MobileAccessibilityTrigger = React.memo(
 );
 import { SignInButton, SignUpButton, UserButton, useUser } from "@clerk/nextjs";
 import { normalizeRole } from "@/app/lib/security/roles";
-import { ROUTES, dashboardForRole } from "@/lib/links";
+import { ROUTES, dashboardForRole } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import {
   useThrottledScroll,
@@ -88,6 +95,7 @@ const MobileNavItem = memo(function MobileNavItem({
   index,
   shouldAnimate,
   isActive,
+  tabIndex,
 }: {
   href: string;
   label: string;
@@ -95,6 +103,7 @@ const MobileNavItem = memo(function MobileNavItem({
   index: number;
   shouldAnimate: boolean;
   isActive: boolean;
+  tabIndex: number;
 }) {
   return (
     <div
@@ -108,6 +117,7 @@ const MobileNavItem = memo(function MobileNavItem({
         href={href}
         onClick={onClick}
         aria-current={isActive ? "page" : undefined}
+        tabIndex={tabIndex}
         className={cn(
           "block min-h-11 py-2 border-b border-border transition-colors text-2xl font-semibold",
           "text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-sm",
@@ -127,10 +137,13 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
   // Use throttled scroll for better performance
   const isScrolled = useThrottledScroll(20);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { user } = useUser();
+  const { user, isLoaded } = useUser();
   const pathname = usePathname();
   const isSignedIn = Boolean(user);
   const shouldAnimate = useShouldAnimate();
+
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileToggleRef = useRef<HTMLButtonElement>(null);
 
   const userRole = user?.publicMetadata?.role as string | undefined;
   const normalizedUserRole = normalizeRole(userRole);
@@ -157,6 +170,55 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
   const closeMobileMenu = useCallback(() => {
     setIsMobileMenuOpen(false);
   }, []);
+
+  // Focus trap + Escape-to-close + focus restoration for the mobile
+  // overlay, matching the pattern already proven in MobileNav.tsx instead
+  // of leaving the drawer with no keyboard handling at all.
+  useEffect(() => {
+    if (isMobileMenuOpen && mobileMenuRef.current) {
+      const focusableElements = mobileMenuRef.current.querySelectorAll(
+        'a[href], button, input, textarea, select, details, [tabindex]:not([tabindex="-1"])',
+      ) as NodeListOf<HTMLElement>;
+      const firstElement = focusableElements.item(0);
+      const lastElement = focusableElements.item(focusableElements.length - 1);
+
+      // Lock body scroll while the overlay is open.
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+          closeMobileMenu();
+          return;
+        }
+        if (e.key === "Tab" && firstElement && lastElement) {
+          if (e.shiftKey) {
+            if (document.activeElement === firstElement) {
+              e.preventDefault();
+              lastElement.focus();
+            }
+          } else {
+            if (document.activeElement === lastElement) {
+              e.preventDefault();
+              firstElement.focus();
+            }
+          }
+        }
+      };
+
+      document.addEventListener("keydown", handleKeyDown);
+      firstElement?.focus();
+
+      return () => {
+        document.removeEventListener("keydown", handleKeyDown);
+        document.body.style.overflow = previousOverflow;
+      };
+    }
+
+    if (!isMobileMenuOpen) {
+      mobileToggleRef.current?.focus();
+    }
+  }, [isMobileMenuOpen, closeMobileMenu]);
 
   const desktopAccessibilityTrigger = useMemo(
     () => (
@@ -240,23 +302,43 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
             <AccessibilitySettingsPanel trigger={desktopAccessibilityTrigger} />
 
             {/* Auth Buttons */}
-            {!isSignedIn ? (
+            {!isLoaded ? (
+              <div
+                className="h-9 w-40 rounded-full bg-current/10 animate-pulse"
+                aria-hidden="true"
+              />
+            ) : !isSignedIn ? (
               <>
+                {/*
+                  SignInButton/SignUpButton clone their child and attach a
+                  click handler that opens the Clerk modal. Previously this
+                  child was a Button wrapping a next/link <Link>, which
+                  meant two competing handlers (navigate vs. open-modal) sat
+                  on the same element. The child is now a plain button with
+                  no href/navigation — Clerk owns the click entirely.
+                */}
                 <SignInButton
                   mode="modal"
                   forceRedirectUrl={ROUTES.authCallback}
                 >
-                  <Button
-                    variant="ghost"
-                    className={cn("font-medium", textColorClass, hoverClass)}
+                  <button
+                    type="button"
+                    className={cn(
+                      "inline-flex items-center justify-center rounded-md px-4 h-9 text-sm font-medium transition-colors",
+                      textColorClass,
+                      hoverClass,
+                    )}
                   >
                     Sign In
-                  </Button>
+                  </button>
                 </SignInButton>
                 <SignUpButton mode="modal" forceRedirectUrl={ROUTES.onboarding}>
-                  <Button className="rounded-full px-6 shadow-md bg-primary text-primary-foreground hover:bg-primary/90">
-                    <Link href={ROUTES.professional}>Join as a Pro</Link>
-                  </Button>
+                  <button
+                    type="button"
+                    className="rounded-full px-6 h-9 shadow-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium transition-colors"
+                  >
+                    Join as a Pro
+                  </button>
                 </SignUpButton>
               </>
             ) : (
@@ -288,6 +370,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
             />
 
             <Button
+              ref={mobileToggleRef}
               variant="ghost"
               size="icon"
               className={cn(textColorClass, hoverClass)}
@@ -303,6 +386,7 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
 
       {/* Mobile Menu Overlay - CSS-based animation instead of framer-motion */}
       <div
+        ref={mobileMenuRef}
         className={cn(
           "fixed inset-0 bg-background z-40 md:hidden pt-24 px-6 flex flex-col gap-6",
           "transition-all duration-300 ease-out",
@@ -311,6 +395,8 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
             : "opacity-0 translate-x-full pointer-events-none",
         )}
         aria-hidden={!isMobileMenuOpen}
+        // Prevent keyboard focus from landing on offscreen links while closed.
+        inert={!isMobileMenuOpen}
       >
         {visibleNavItems.map((item, index) => (
           <MobileNavItem
@@ -321,34 +407,34 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
             index={index}
             shouldAnimate={shouldAnimate && isMobileMenuOpen}
             isActive={pathname === item.href}
+            tabIndex={isMobileMenuOpen ? 0 : -1}
           />
         ))}
 
         <div className="mt-4 flex flex-col gap-3">
-          {!isSignedIn ? (
+          {!isLoaded ? null : !isSignedIn ? (
             <>
               <SignInButton mode="modal" forceRedirectUrl={ROUTES.authCallback}>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="w-full justify-center"
+                <button
+                  type="button"
+                  className="w-full justify-center inline-flex items-center rounded-md border border-input h-11 text-base font-medium"
                 >
                   Sign In
-                </Button>
+                </button>
               </SignInButton>
               <SignUpButton mode="modal" forceRedirectUrl={ROUTES.onboarding}>
-                <Button
-                  size="lg"
-                  className="w-full justify-center bg-primary text-primary-foreground hover:bg-primary/90"
+                <button
+                  type="button"
+                  className="w-full justify-center inline-flex items-center rounded-md h-11 text-base font-medium bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   Join as a Pro
-                </Button>
+                </button>
               </SignUpButton>
             </>
           ) : (
             <>
               {dashboardHref && (
-                <Link href={dashboardHref}>
+                <Link href={dashboardHref} tabIndex={isMobileMenuOpen ? 0 : -1}>
                   <Button
                     variant="secondary"
                     size="lg"

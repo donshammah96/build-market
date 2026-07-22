@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { prisma } from "@build/db";
+import { prisma, UserRole, AdminRole } from "@build/db";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
-import type { AdminRole } from "@build/db";
+import { toBool } from "@/lib/infrastructure/env-utils";
 
 /**
  * Resolved admin identity for API route handlers.
@@ -32,11 +32,11 @@ export async function resolveAdminRouteActor(
   requestStartedAt: number,
 ): Promise<AuthRouteResult> {
   const isDev = adminEnvConfig.NODE_ENV === "development";
-  const devBypass = adminEnvConfig.DEV_ADMIN_BYPASS;
+  const devBypass = toBool(adminEnvConfig.DEV_ADMIN_BYPASS);
 
   if (isDev && devBypass) {
     const dbAdmin = await prisma.user.findFirst({
-      where: { role: "ADMIN" },
+      where: { role: UserRole.ADMIN },
       select: {
         id: true,
         clerkId: true,
@@ -49,7 +49,7 @@ export async function resolveAdminRouteActor(
       actor: {
         dbUserId: dbAdmin?.id || "11111111-1111-1111-1111-111111111111",
         clerkId: dbAdmin?.clerkId || "admin_buildmarket_001",
-        adminRole: (dbAdmin?.adminProfile?.role as any) || "SUPER_ADMIN",
+        adminRole: dbAdmin?.adminProfile?.role ?? AdminRole.SUPER_ADMIN,
       },
       adminRoleStr: dbAdmin?.adminProfile?.role
         ? String(dbAdmin.adminProfile.role)
@@ -96,12 +96,12 @@ export async function resolveAdminRouteActor(
     };
   }
 
-  const isAdmin = user.role === "ADMIN";
+  const isAdmin = user.role === UserRole.ADMIN;
   const hasActiveProfile = user.adminProfile?.isActive === true;
 
   if (!isAdmin || !hasActiveProfile) {
     const isDev = adminEnvConfig.NODE_ENV === "development";
-    const devBypass = adminEnvConfig.DEV_ADMIN_BYPASS;
+    const devBypass = toBool(adminEnvConfig.DEV_ADMIN_BYPASS);
 
     if (!isDev || !devBypass) {
       logWarn({
@@ -130,7 +130,7 @@ export async function resolveAdminRouteActor(
     actor: {
       dbUserId: user.id,
       clerkId,
-      adminRole: user.adminProfile!.role!,
+      adminRole: user.adminProfile?.role ?? AdminRole.SUPER_ADMIN,
     },
     adminRoleStr,
   };

@@ -2572,8 +2572,7 @@ export default function PropertyForm({
                     errors.features?.message ||
                       (
                         errors.features as
-                          | { root?: { message?: string } }
-                          | undefined
+                          { root?: { message?: string } } | undefined
                       )?.root?.message,
                   ) !== undefined
                 }
@@ -2610,13 +2609,11 @@ export default function PropertyForm({
           error={
             (
               errors.images as
-                | { message?: string; root?: { message?: string } }
-                | undefined
+                { message?: string; root?: { message?: string } } | undefined
             )?.message ||
             (
               errors.images as
-                | { message?: string; root?: { message?: string } }
-                | undefined
+                { message?: string; root?: { message?: string } } | undefined
             )?.root?.message
           }
         />

@@ -4,7 +4,11 @@ import {
 } from "@/lib/security/authorization-policy";
 import { err, ok, type Result } from "@/lib/result";
 import { getAuditHistory } from "./internal/audit-service";
-import { notifyVerificationResult } from "./internal/notification.service";
+import {
+  notifyVerificationResult,
+  publishLicenseVerificationEvent,
+} from "./internal/notification.service";
+import { getAdminCorrelationId } from "@/lib/infrastructure/correlation";
 import {
   getProfessionalVerificationDetails,
   verifyProfessional,
@@ -17,7 +21,10 @@ import {
   getStoreVerificationDetails,
   verifyStore,
 } from "./internal/store-verification.service";
-import { verifyLicense as verifyLicenseInternal } from "./internal/license-verification.service";
+import {
+  verifyLicense as verifyLicenseInternal,
+  type LicenseVerificationRequest,
+} from "./internal/license-verification.service";
 import type { VerificationRequest } from "./internal/types";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 import type {
@@ -243,19 +250,38 @@ export async function listVerificationQueue(
 
   const showLicenseQueue =
     adminEnvConfig.NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE;
+
+  // Bound the query size to prevent database overload (F7)
+  const limitAll = Math.min(500, query.skip + query.limit);
+
   const [professionals, stores, properties, licenses] = await Promise.all([
     verificationRepository.listProfessionalQueue({
       ...query,
+      entityType: "professional",
+      skip: 0,
+      limit: limitAll,
       status: query.status,
     }),
-    verificationRepository.listStoreQueue({ ...query, status: query.status }),
+    verificationRepository.listStoreQueue({
+      ...query,
+      entityType: "store",
+      skip: 0,
+      limit: limitAll,
+      status: query.status,
+    }),
     verificationRepository.listPropertyQueue({
       ...query,
+      entityType: "property",
+      skip: 0,
+      limit: limitAll,
       status: query.status,
     }),
     showLicenseQueue
       ? verificationRepository.listLicenseQueue({
           ...query,
+          entityType: "license",
+          skip: 0,
+          limit: limitAll,
           status: query.status,
         })
       : Promise.resolve([]),
@@ -378,13 +404,11 @@ function mapAuditEntry(entry: {
 
 function mapProfessionalDetails(
   entityId: string,
-  details: Awaited<ReturnType<typeof getProfessionalVerificationDetails>>,
+  details: NonNullable<
+    Awaited<ReturnType<typeof getProfessionalVerificationDetails>>
+  >,
   auditHistory: Awaited<ReturnType<typeof getAuditHistory>>,
 ): VerificationDetails {
-  if (!details) {
-    throw new Error("Professional profile not found");
-  }
-
   return {
     entityType: "professional",
     entityId,
@@ -411,13 +435,9 @@ function mapProfessionalDetails(
 
 function mapStoreDetails(
   entityId: string,
-  details: Awaited<ReturnType<typeof getStoreVerificationDetails>>,
+  details: NonNullable<Awaited<ReturnType<typeof getStoreVerificationDetails>>>,
   auditHistory: Awaited<ReturnType<typeof getAuditHistory>>,
 ): VerificationDetails {
-  if (!details) {
-    throw new Error("Store not found");
-  }
-
   return {
     entityType: "store",
     entityId,
@@ -439,13 +459,11 @@ function mapStoreDetails(
 
 function mapPropertyDetails(
   entityId: string,
-  details: Awaited<ReturnType<typeof getPropertyVerificationDetails>>,
+  details: NonNullable<
+    Awaited<ReturnType<typeof getPropertyVerificationDetails>>
+  >,
   auditHistory: Awaited<ReturnType<typeof getAuditHistory>>,
 ): VerificationDetails {
-  if (!details) {
-    throw new Error("Property not found");
-  }
-
   return {
     entityType: "property",
     entityId,
@@ -497,7 +515,17 @@ export async function getVerificationDetails(
       return err(notFound("Professional profile not found"));
     }
 
-    return ok(mapProfessionalDetails(input.entityId, details, auditHistory));
+    try {
+      return ok(mapProfessionalDetails(input.entityId, details, auditHistory));
+    } catch (error) {
+      return err({
+        code: "VERIFICATION_REPOSITORY_ERROR",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Professional mapping failed",
+      });
+    }
   }
 
   if (input.entityType === "store") {
@@ -510,19 +538,41 @@ export async function getVerificationDetails(
       return err(notFound("Store not found"));
     }
 
-    return ok(mapStoreDetails(input.entityId, details, auditHistory));
+    try {
+      return ok(mapStoreDetails(input.entityId, details, auditHistory));
+    } catch (error) {
+      return err({
+        code: "VERIFICATION_REPOSITORY_ERROR",
+        message:
+          error instanceof Error ? error.message : "Store mapping failed",
+      });
+    }
   }
 
-  const [details, auditHistory] = await Promise.all([
-    getPropertyVerificationDetails(input.entityId),
-    getAuditHistory("Property", input.entityId),
-  ]);
+  if (input.entityType === "property") {
+    const [details, auditHistory] = await Promise.all([
+      getPropertyVerificationDetails(input.entityId),
+      getAuditHistory("Property", input.entityId),
+    ]);
 
-  if (!details) {
-    return err(notFound("Property not found"));
+    if (!details) {
+      return err(notFound("Property not found"));
+    }
+
+    try {
+      return ok(mapPropertyDetails(input.entityId, details, auditHistory));
+    } catch (error) {
+      return err({
+        code: "VERIFICATION_REPOSITORY_ERROR",
+        message:
+          error instanceof Error ? error.message : "Property mapping failed",
+      });
+    }
   }
 
-  return ok(mapPropertyDetails(input.entityId, details, auditHistory));
+  return err(
+    notFound("License details lookup not supported via this endpoint"),
+  );
 }
 
 export async function verifyEntity(
@@ -535,6 +585,14 @@ export async function verifyEntity(
 ): Promise<Result<VerificationEntitySummary, VerificationDomainError>> {
   const capability = requireVerificationCapability(actor);
   if (!capability.ok) return capability;
+
+  // Guard against license type falling through to verifyProperty (F5)
+  if (input.entityType === ("license" as any)) {
+    return err({
+      code: "VERIFICATION_INVALID_FILTER",
+      message: "License verification must use verifyLicense directly",
+    });
+  }
 
   try {
     const request = toVerificationRequest(actor, input, metadata);
@@ -685,8 +743,34 @@ export async function batchVerifyEntities(
   );
 
   for (const entity of sortedEntities) {
+    if (entity.entityType === "license") {
+      const result = await verifyLicense(actor, {
+        licenseId: entity.entityId,
+        action: input.action,
+        reason: input.reason,
+      });
+
+      if (result.ok) {
+        results.push({
+          entityType: entity.entityType,
+          entityId: entity.entityId,
+          success: true,
+        });
+        continue;
+      }
+
+      results.push({
+        entityType: entity.entityType,
+        entityId: entity.entityId,
+        success: false,
+        error: result.message,
+      });
+      continue;
+    }
+
     const result = await verifyEntity(actor, {
-      ...entity,
+      entityType: entity.entityType,
+      entityId: entity.entityId,
       action: input.action,
       ...(input.reason ? { reason: input.reason } : {}),
     });
@@ -765,7 +849,7 @@ export async function verifyLicense(
   }
 
   try {
-    const requestData: any = {
+    const requestData: LicenseVerificationRequest = {
       licenseId: input.licenseId,
       action: input.action,
       adminId: actor.dbUserId,
@@ -779,7 +863,17 @@ export async function verifyLicense(
 
     const result = await verifyLicenseInternal(requestData);
 
+    const correlationId = getAdminCorrelationId() ?? crypto.randomUUID();
+    publishLicenseVerificationEvent(
+      result,
+      actor.dbUserId,
+      correlationId,
+    ).catch(() => {
+      // Non-blocking fire-and-forget; error logging happens inside publishLicenseVerificationEvent
+    });
+
     const recipientUserId = result.professionalId;
+
     await notifyVerificationResult(
       {
         success: true,

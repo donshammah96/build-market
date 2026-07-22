@@ -1,7 +1,5 @@
 type DashboardProfession =
-  | "GENERAL_CONTRACTOR"
-  | "HARDWARE"
-  | "REAL_ESTATE_AGENT";
+  "GENERAL_CONTRACTOR" | "HARDWARE" | "REAL_ESTATE_AGENT";
 
 function mockDashboardApis(profession: DashboardProfession) {
   cy.intercept("GET", "**/api/user/profile", {

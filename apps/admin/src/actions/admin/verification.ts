@@ -217,10 +217,36 @@ export async function verifyEntity(
         resourceId: `${validated.entityType}:${validated.entityId}:${validated.action}`,
         ttlHours: VERIFICATION_IDEMPOTENCY_TTL_HOURS,
         run: async () => {
-          const result = await verificationService.verifyEntity(
-            actor,
-            validated,
-          );
+          if (validated.entityType === "license") {
+            const result = await verificationService.verifyLicense(actor, {
+              licenseId: validated.entityId,
+              action: validated.action,
+              notes: validated.notes,
+              reason: validated.reason,
+            });
+
+            if (!result.ok) {
+              throw new Error(result.message);
+            }
+
+            revalidateVerificationEntity(
+              validated.entityType,
+              validated.entityId,
+            );
+
+            return {
+              newStatus: result.data.newStatus as VerificationStatus,
+              message: result.data.message,
+            };
+          }
+
+          const result = await verificationService.verifyEntity(actor, {
+            entityType: validated.entityType,
+            entityId: validated.entityId,
+            action: validated.action,
+            notes: validated.notes,
+            reason: validated.reason,
+          });
 
           if (!result.ok) {
             throw new Error(result.message);

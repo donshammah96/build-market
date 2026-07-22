@@ -1,44 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useUser } from "@clerk/nextjs";
+import { useUser, useClerk } from "@clerk/nextjs";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import {
-  LayoutDashboard,
-  Users,
-  Briefcase,
-  MessageSquare,
-  Image as ImageIcon,
-  DollarSign,
-  Settings,
-  LogOut,
-  BadgeCheck,
-  Store,
-  UserCircle,
-} from "lucide-react";
+import { BadgeCheck, Store, UserCircle, Settings, LogOut } from "lucide-react";
 import { useProfileCompletion } from "@/hooks/useProfileStatus";
-
-const navItems = [
-  {
-    label: "Overview",
-    href: "/professional-portal/dashboard",
-    icon: LayoutDashboard,
-  },
-  { label: "Leads", href: "/professional-portal/leads", icon: Users, badge: 3 },
-  { label: "Projects", href: "/professional-portal/projects", icon: Briefcase },
-  {
-    label: "Messages",
-    href: "/professional-portal/messages",
-    icon: MessageSquare,
-  },
-  {
-    label: "Portfolio",
-    href: "/professional-portal/portfolio",
-    icon: ImageIcon,
-  },
-  { label: "Finance", href: "/professional-portal/finance", icon: DollarSign },
-];
+import { professionalNavItems } from "@/app/lib/config/nav-config";
 
 interface ProfessionalSidebarProps {
   verified?: boolean;
@@ -49,6 +17,7 @@ export function ProfessionalSidebar({
 }: ProfessionalSidebarProps) {
   const pathname = usePathname();
   const { user } = useUser();
+  const { signOut } = useClerk();
   const { percentage, isComplete, isLoading } = useProfileCompletion();
 
   // Show completion prompt in sidebar
@@ -96,12 +65,12 @@ export function ProfessionalSidebar({
         <p className="px-2 text-xs font-semibold text-white/60 uppercase tracking-wider mb-2">
           Management
         </p>
-        {navItems.map((item) => {
+        {professionalNavItems.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
 
           return (
-            <Link key={item.href} href={item.href}>
+            <Link key={item.key} href={item.href}>
               <div
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative",
@@ -109,17 +78,26 @@ export function ProfessionalSidebar({
                     ? "bg-primary text-primary-foreground shadow-lg"
                     : "text-white/70 hover:bg-white/10 hover:text-white",
                 )}
+                aria-current={isActive ? "page" : undefined}
               >
-                <Icon
-                  className={cn(
-                    "h-4 w-4",
-                    isActive
-                      ? "text-white"
-                      : "text-white/60 group-hover:text-white",
-                  )}
-                />
+                {Icon && (
+                  <Icon
+                    className={cn(
+                      "h-4 w-4",
+                      isActive
+                        ? "text-white"
+                        : "text-white/60 group-hover:text-white",
+                    )}
+                  />
+                )}
                 <span>{item.label}</span>
-                {item.badge && (
+                {/*
+                  Was `{item.badge && (...)}` — if badge is ever 0, React
+                  renders the literal text "0" into the sidebar because 0
+                  is falsy-but-renderable. Explicit numeric + >0 check
+                  avoids that class of bug for any future zero-count badge.
+                */}
+                {typeof item.badge === "number" && item.badge > 0 && (
                   <span className="absolute right-2 bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-md">
                     {item.badge}
                   </span>
@@ -182,7 +160,11 @@ export function ProfessionalSidebar({
 
       {/* Footer Actions */}
       <div className="p-4 border-t border-white/10">
-        <button className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-white/70 hover:text-destructive transition-colors">
+        <button
+          type="button"
+          onClick={() => signOut()}
+          className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-white/70 hover:text-destructive transition-colors"
+        >
           <LogOut className="h-4 w-4" />
           <span>Sign Out</span>
         </button>

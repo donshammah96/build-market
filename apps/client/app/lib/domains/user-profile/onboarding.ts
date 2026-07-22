@@ -1142,8 +1142,7 @@ export const userProfileOnboardingService = {
           phone: transactionResult.user.phone,
           avatar: transactionResult.user.avatar,
           role: transactionResult.user.role.toLowerCase() as
-            | "client"
-            | "professional",
+            "client" | "professional",
         },
         transactionResult.profile,
       );

@@ -4,6 +4,7 @@ import { AdminRole, UserRole } from "@build/db";
 import { auth } from "@clerk/nextjs/server";
 import { syncUserRole } from "@/lib/auth-sync";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { toBool } from "@/lib/infrastructure/env-utils";
 import { securityRepository } from "@/lib/security/repository";
 import type { AdminActor } from "@/lib/security/admin-actor";
 import type { AdminActionError } from "../types";
@@ -27,7 +28,7 @@ export async function resolveAdminActor(): Promise<
   | { ok: false; error: AdminActionError }
 > {
   const isDev = adminEnvConfig.NODE_ENV === "development";
-  const devBypass = adminEnvConfig.DEV_ADMIN_BYPASS;
+  const devBypass = toBool(adminEnvConfig.DEV_ADMIN_BYPASS);
 
   if (isDev && devBypass) {
     const dbAdmin = await securityRepository.findUserPermissions(

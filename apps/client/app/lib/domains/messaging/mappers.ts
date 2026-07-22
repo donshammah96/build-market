@@ -1,9 +1,5 @@
 type DecimalLike = { toNumber?: () => number; toString?: () => string };
 
-export function toMessagingDto<T>(value: T): T {
-  return serializeDto(value) as T;
-}
-
 function serializeDto(value: unknown): unknown {
   if (value instanceof Date) return value.toISOString();
   if (Array.isArray(value)) return value.map(serializeDto);
@@ -21,4 +17,8 @@ function serializeDto(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value).map(([key, nested]) => [key, serializeDto(nested)]),
   );
+}
+
+export function toMessagingDto<T>(value: T): T {
+  return serializeDto(value) as T;
 }

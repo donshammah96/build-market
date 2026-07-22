@@ -3,7 +3,7 @@
  * Centralized audit logging for admin verification actions
  */
 
-import { prisma } from "@build/db";
+import { prisma, type Prisma } from "@build/db";
 import { StructuredLogger } from "@build/resilience";
 import { omitUndefined } from "@/lib/utils";
 
@@ -24,9 +24,9 @@ export interface AuditLogData {
 
 export async function createAuditLog(
   data: AuditLogData,
-  tx?: any,
+  tx?: Prisma.TransactionClient,
 ): Promise<void> {
-  const db = tx || prisma;
+  const db = tx ?? prisma;
   try {
     const admin =
       data.adminId === "SYSTEM"

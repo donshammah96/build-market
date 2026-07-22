@@ -273,7 +273,7 @@ const adminEnvSchema = z.object({
 
 | Type                      | Location                             | Naming                       |
 | ------------------------- | ------------------------------------ | ---------------------------- |
-| Action boundary tests     | `src/actions/admin/__tests__/`       | `<slice>.actions.test.ts`    |
+| Action boundary tests     | `__tests__/actions/`                 | `<slice>-actions.test.ts`    |
 | Domain service tests      | `src/lib/domains/<slice>/__tests__/` | `<slice>.service.test.ts`    |
 | Repository contract tests | `src/lib/domains/<slice>/__tests__/` | `<slice>.repository.test.ts` |
 | Security/policy tests     | `__tests__/security/`                | `<topic>.test.ts`            |
@@ -303,7 +303,7 @@ const adminEnvSchema = z.object({
 pnpm run admin:test:all
 
 # Run a specific test file
-pnpm -C apps/admin exec vitest run src/actions/admin/__tests__/users.actions.test.ts
+pnpm -C apps/admin exec vitest run __tests__/actions/users-actions.test.ts
 
 # Watch mode during development
 pnpm -C apps/admin exec vitest --pool=threads --maxWorkers=1

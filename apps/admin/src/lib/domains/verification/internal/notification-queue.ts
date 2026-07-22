@@ -11,23 +11,111 @@
 
 import { StructuredLogger } from "@build/resilience";
 import { VerificationResult, type EntityType } from "./types";
-import { PrismaClient } from "@prisma/client";
-import { Queue, Worker, Job } from "bullmq";
+import { getEntityName } from "./notification-helpers";
+import { Queue } from "bullmq";
 import type { VerificationStatus } from "@build/db";
+import { FailedNotificationStatus } from "@build/db";
 import { getBullMQConnectionOptions } from "@build/queue-server";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 import { omitUndefined } from "@/lib/utils";
+import { prisma } from "@build/db";
 
 // Config and Types
 const logger = new StructuredLogger("notification-queue-service");
 
-// Lazy-loaded Prisma client (singleton pattern)
-let prismaInstance: PrismaClient | null = null;
-function getPrisma(): PrismaClient {
-  if (!prismaInstance) {
-    prismaInstance = new PrismaClient();
+/**
+ * Attempt to resend a notification
+ * Returns true on success, false on failure
+ */
+export async function resendNotification(
+  result: VerificationResult,
+  recipientUserId: string,
+): Promise<boolean> {
+  try {
+    // Import notification templates and create notification
+    const { getVerificationTemplate } =
+      await import("./notification-templates");
+
+    // Get entity name for better notification context
+    const entityName = await getEntityName(result.entityType, result.entityId);
+
+    // Map verification status to notification type
+    const notificationType =
+      result.newStatus === "VERIFIED"
+        ? "VERIFIED"
+        : result.newStatus === "REJECTED"
+          ? "REJECTED"
+          : result.newStatus === "NEEDS_CORRECTION"
+            ? "NEEDS_CORRECTION"
+            : "VERIFIED";
+
+    const template = getVerificationTemplate(
+      notificationType,
+      result.entityType,
+      {
+        entityName,
+        entityId: result.entityId,
+        rejectionReason: result.reason,
+        correctionNotes:
+          result.newStatus === "NEEDS_CORRECTION" ? result.reason : undefined,
+        adminNotes: result.notes,
+      },
+    );
+
+    // Create database notification
+    await prisma.notification.create({
+      data: {
+        userId: recipientUserId,
+        title: template.title,
+        message: template.message,
+        type: template.type,
+        link: template.link,
+      },
+    });
+
+    // Optionally send to external notification service
+    if (adminEnvConfig.ENABLE_NOTIFICATION_SERVICE) {
+      const notificationServiceUrl =
+        adminEnvConfig.NOTIFICATION_SERVICE_URL ?? "http://localhost:3011";
+
+      const response = await fetch(
+        `${notificationServiceUrl}/api/notifications`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: recipientUserId,
+            type: "in_app",
+            category: "verification",
+            title: template.title,
+            content: template.message,
+            emailSubject: template.emailSubject,
+            emailBody: template.emailBody,
+            data: {
+              entityType: result.entityType,
+              entityId: result.entityId,
+              verificationStatus: result.newStatus,
+              link: template.link,
+            },
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Notification service responded with ${response.status}`,
+        );
+      }
+    }
+
+    return true;
+  } catch (error) {
+    logger.error("Failed to resend notification", error as Error, {
+      entityId: result.entityId,
+      recipientUserId,
+    });
+    return false;
   }
-  return prismaInstance;
 }
 
 // Config enums
@@ -42,7 +130,9 @@ const CURRENT_PROVIDER: QueueProvider =
   adminEnvConfig.QUEUE_PROVIDER === "redis" ||
   adminEnvConfig.QUEUE_PROVIDER === "bullmq"
     ? QueueProvider.REDIS
-    : QueueProvider.MEMORY;
+    : adminEnvConfig.QUEUE_PROVIDER === "db"
+      ? QueueProvider.DB
+      : QueueProvider.MEMORY;
 
 // Maximum retry attempts before moving to dead letter
 const MAX_RETRY_ATTEMPTS = 3;
@@ -66,7 +156,7 @@ export interface FailedNotificationEntry {
   nextRetryAt: Date;
   lastError: string;
   createdAt: Date;
-  status: "PENDING" | "COMPLETED" | "DEAD_LETTER";
+  status: FailedNotificationStatus;
 }
 
 // Interface Definition
@@ -96,12 +186,6 @@ interface NotificationJobData {
 
 // DB Backed Queue Strategy
 class DatabaseQueueStrategy implements NotificationQueueStrategy {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = getPrisma();
-  }
-
   // 1. Queue a failed notification
   async queueNotification(
     result: VerificationResult,
@@ -113,7 +197,7 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
       Date.now() + (RETRY_DELAYS[0] ?? DEFAULT_RETRY_DELAY),
     );
 
-    await this.prisma.failedNotification.create({
+    await prisma.failedNotification.create({
       data: {
         entityType: result.entityType,
         entityId: result.entityId,
@@ -138,7 +222,7 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
     const now = new Date();
 
     // Fetch pending notifications due for retry
-    const pending = await this.prisma.failedNotification.findMany({
+    const pending = await prisma.failedNotification.findMany({
       where: {
         status: "PENDING",
         nextRetryAt: { lte: now },
@@ -171,13 +255,13 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
         };
 
         // Attempt to resend the notification
-        const success = await this.resendNotification(
+        const success = await resendNotification(
           verificationResult,
           item.recipientUserId,
         );
 
         if (success) {
-          await this.prisma.failedNotification.update({
+          await prisma.failedNotification.update({
             where: { id: item.id },
             data: {
               status: "COMPLETED",
@@ -206,153 +290,6 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
     }
   }
 
-  /**
-   * Attempt to resend a notification
-   * Returns true on success, false on failure
-   */
-  private async resendNotification(
-    result: VerificationResult,
-    recipientUserId: string,
-  ): Promise<boolean> {
-    try {
-      // Import notification templates and create notification
-      const { getVerificationTemplate } =
-        await import("./notification-templates");
-
-      // Get entity name for better notification context
-      const entityName = await this.getEntityName(
-        result.entityType,
-        result.entityId,
-      );
-
-      // Map verification status to notification type
-      const notificationType =
-        result.newStatus === "VERIFIED"
-          ? "VERIFIED"
-          : result.newStatus === "REJECTED"
-            ? "REJECTED"
-            : result.newStatus === "NEEDS_CORRECTION"
-              ? "NEEDS_CORRECTION"
-              : "VERIFIED";
-
-      const template = getVerificationTemplate(
-        notificationType,
-        result.entityType,
-        {
-          entityName,
-          entityId: result.entityId,
-          rejectionReason: result.reason,
-          correctionNotes:
-            result.newStatus === "NEEDS_CORRECTION" ? result.reason : undefined,
-          adminNotes: result.notes,
-        },
-      );
-
-      // Create database notification
-      await this.prisma.notification.create({
-        data: {
-          userId: recipientUserId,
-          title: template.title,
-          message: template.message,
-          type: template.type,
-          link: template.link,
-        },
-      });
-
-      // Optionally send to external notification service
-      if (adminEnvConfig.ENABLE_NOTIFICATION_SERVICE) {
-        const notificationServiceUrl =
-          adminEnvConfig.NOTIFICATION_SERVICE_URL ?? "http://localhost:3011";
-
-        const response = await fetch(
-          `${notificationServiceUrl}/api/notifications`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              userId: recipientUserId,
-              type: "in_app",
-              category: "verification",
-              title: template.title,
-              content: template.message,
-              emailSubject: template.emailSubject,
-              emailBody: template.emailBody,
-              data: {
-                entityType: result.entityType,
-                entityId: result.entityId,
-                verificationStatus: result.newStatus,
-                link: template.link,
-              },
-            }),
-          },
-        );
-
-        if (!response.ok) {
-          throw new Error(
-            `Notification service responded with ${response.status}`,
-          );
-        }
-      }
-
-      return true;
-    } catch (error) {
-      logger.error("Failed to resend notification", error as Error, {
-        entityId: result.entityId,
-        recipientUserId,
-      });
-      return false;
-    }
-  }
-
-  /**
-   * Get entity name for notification context
-   */
-  private async getEntityName(
-    entityType: EntityType,
-    entityId: string,
-  ): Promise<string> {
-    try {
-      switch (entityType) {
-        case "professional": {
-          const professional = await this.prisma.professionalProfile.findUnique(
-            {
-              where: { userId: entityId },
-              select: { companyName: true },
-            },
-          );
-          return professional?.companyName || "Professional Profile";
-        }
-        case "store": {
-          const store = await this.prisma.store.findUnique({
-            where: { id: entityId },
-            select: { name: true },
-          });
-          return store?.name || "Store";
-        }
-        case "property": {
-          const property = await this.prisma.property.findUnique({
-            where: { id: entityId },
-            select: { title: true },
-          });
-          return property?.title || "Property";
-        }
-        case "certificate": {
-          const certificate = await this.prisma.professionalDocument.findUnique(
-            {
-              where: { id: entityId },
-              select: { title: true },
-            },
-          );
-          return certificate?.title || "Certificate";
-        }
-        default:
-          return "Your submission";
-      }
-    } catch {
-      return "Your submission";
-    }
-  }
-
   private async handleFailure(
     item: FailedNotificationEntry,
     errorMessage?: string,
@@ -361,7 +298,7 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
 
     // Check if we have exceeded max retries
     if (newCount >= MAX_RETRY_ATTEMPTS) {
-      await this.prisma.failedNotification.update({
+      await prisma.failedNotification.update({
         where: { id: item.id },
         data: {
           status: "DEAD_LETTER",
@@ -380,7 +317,7 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
       const delayIndex = Math.min(newCount - 1, RETRY_DELAYS.length - 1);
       const delay = RETRY_DELAYS[delayIndex] ?? DEFAULT_RETRY_DELAY;
 
-      await this.prisma.failedNotification.update({
+      await prisma.failedNotification.update({
         where: { id: item.id },
         data: {
           attemptCount: newCount,
@@ -405,18 +342,18 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
     completed: number;
   }> {
     const [pending, deadLetter, completed] = await Promise.all([
-      this.prisma.failedNotification.count({ where: { status: "PENDING" } }),
-      this.prisma.failedNotification.count({
+      prisma.failedNotification.count({ where: { status: "PENDING" } }),
+      prisma.failedNotification.count({
         where: { status: "DEAD_LETTER" },
       }),
-      this.prisma.failedNotification.count({ where: { status: "COMPLETED" } }),
+      prisma.failedNotification.count({ where: { status: "COMPLETED" } }),
     ]);
     return { pending, deadLetter, completed };
   }
 
   // 4. Requeue a dead letter notification
   async requeueDeadLetter(id: string): Promise<void> {
-    await this.prisma.failedNotification.update({
+    await prisma.failedNotification.update({
       where: { id },
       data: {
         status: "PENDING",
@@ -429,7 +366,7 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
 
   // 5. Clear completed notifications
   async clearCompletedNotifications(): Promise<number> {
-    const cleared = await this.prisma.failedNotification.deleteMany({
+    const cleared = await prisma.failedNotification.deleteMany({
       where: { status: "COMPLETED" },
     });
     return cleared.count;
@@ -439,206 +376,14 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
 // Redis Backed Queue Strategy
 class RedisQueueStrategy implements NotificationQueueStrategy {
   private queue: Queue<NotificationJobData>;
-  private worker: Worker<NotificationJobData>;
-  private prisma: PrismaClient;
   private readonly queueName = "notification-retries";
 
   constructor() {
     const redisConfig = getBullMQConnectionOptions();
 
-    this.prisma = getPrisma();
     this.queue = new Queue<NotificationJobData>(this.queueName, {
       connection: redisConfig,
     });
-
-    // Initialize Worker with notification resend logic
-    this.worker = new Worker<NotificationJobData>(
-      this.queueName,
-      async (job: Job<NotificationJobData>) => {
-        const { result, recipientUserId } = job.data;
-
-        logger.info(`Processing Redis Job ${job.id}`, {
-          entityId: result.entityId,
-          attemptNumber: job.attemptsMade + 1,
-        });
-
-        // Attempt to resend the notification
-        const success = await this.resendNotification(result, recipientUserId);
-
-        if (!success) {
-          // Throw error to trigger BullMQ retry mechanism
-          throw new Error("Failed to send notification");
-        }
-
-        return { sent: true, entityId: result.entityId };
-      },
-      {
-        connection: redisConfig,
-      },
-    );
-
-    // Handle worker events
-    this.worker.on("failed", (job: Job | undefined, err: Error) => {
-      logger.error("Redis job failed", err, {
-        jobId: job?.id,
-        entityId: job?.data?.result?.entityId,
-        attemptsMade: job?.attemptsMade,
-      });
-    });
-
-    this.worker.on("completed", (job: Job) => {
-      logger.info("Redis job completed", {
-        jobId: job.id,
-        entityId: job.data.result.entityId,
-      });
-    });
-  }
-
-  /**
-   * Attempt to resend a notification
-   * Returns true on success, false on failure
-   */
-  private async resendNotification(
-    result: VerificationResult,
-    recipientUserId: string,
-  ): Promise<boolean> {
-    try {
-      // Import notification templates
-      const { getVerificationTemplate } =
-        await import("./notification-templates");
-
-      // Get entity name for better notification context
-      const entityName = await this.getEntityName(
-        result.entityType,
-        result.entityId,
-      );
-
-      // Map verification status to notification type
-      const notificationType =
-        result.newStatus === "VERIFIED"
-          ? "VERIFIED"
-          : result.newStatus === "REJECTED"
-            ? "REJECTED"
-            : result.newStatus === "NEEDS_CORRECTION"
-              ? "NEEDS_CORRECTION"
-              : "VERIFIED";
-
-      const template = getVerificationTemplate(
-        notificationType,
-        result.entityType,
-        {
-          entityName,
-          entityId: result.entityId,
-          rejectionReason: result.reason,
-          correctionNotes:
-            result.newStatus === "NEEDS_CORRECTION" ? result.reason : undefined,
-          adminNotes: result.notes,
-        },
-      );
-
-      // Create database notification
-      await this.prisma.notification.create({
-        data: {
-          userId: recipientUserId,
-          title: template.title,
-          message: template.message,
-          type: template.type,
-          link: template.link,
-        },
-      });
-
-      // Optionally send to external notification service
-      if (adminEnvConfig.ENABLE_NOTIFICATION_SERVICE) {
-        const notificationServiceUrl =
-          adminEnvConfig.NOTIFICATION_SERVICE_URL ?? "http://localhost:3011";
-
-        const response = await fetch(
-          `${notificationServiceUrl}/api/notifications`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              userId: recipientUserId,
-              type: "in_app",
-              category: "verification",
-              title: template.title,
-              content: template.message,
-              emailSubject: template.emailSubject,
-              emailBody: template.emailBody,
-              data: {
-                entityType: result.entityType,
-                entityId: result.entityId,
-                verificationStatus: result.newStatus,
-                link: template.link,
-              },
-            }),
-          },
-        );
-
-        if (!response.ok) {
-          throw new Error(
-            `Notification service responded with ${response.status}`,
-          );
-        }
-      }
-
-      return true;
-    } catch (error) {
-      logger.error("Failed to resend notification via Redis", error as Error, {
-        entityId: result.entityId,
-        recipientUserId,
-      });
-      return false;
-    }
-  }
-
-  /**
-   * Get entity name for notification context
-   */
-  private async getEntityName(
-    entityType: EntityType,
-    entityId: string,
-  ): Promise<string> {
-    try {
-      switch (entityType) {
-        case "professional": {
-          const professional = await this.prisma.professionalProfile.findUnique(
-            {
-              where: { userId: entityId },
-              select: { companyName: true },
-            },
-          );
-          return professional?.companyName || "Professional Profile";
-        }
-        case "store": {
-          const store = await this.prisma.store.findUnique({
-            where: { id: entityId },
-            select: { name: true },
-          });
-          return store?.name || "Store";
-        }
-        case "property": {
-          const property = await this.prisma.property.findUnique({
-            where: { id: entityId },
-            select: { title: true },
-          });
-          return property?.title || "Property";
-        }
-        case "certificate": {
-          const certificate = await this.prisma.professionalDocument.findUnique(
-            {
-              where: { id: entityId },
-              select: { title: true },
-            },
-          );
-          return certificate?.title || "Certificate";
-        }
-        default:
-          return "Your submission";
-      }
-    } catch {
-      return "Your submission";
-    }
   }
 
   async queueNotification(
@@ -711,7 +456,6 @@ class RedisQueueStrategy implements NotificationQueueStrategy {
   }
 
   async shutdown(): Promise<void> {
-    await this.worker.close();
     await this.queue.close();
     logger.info("Redis queue strategy shutdown complete");
   }
@@ -729,12 +473,6 @@ function generateId(): string {
 
 // In-Memory Queue Strategy (for development/testing)
 class MemoryQueueStrategy implements NotificationQueueStrategy {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = getPrisma();
-  }
-
   async queueNotification(
     result: VerificationResult,
     recipientUserId: string,
@@ -794,7 +532,7 @@ class MemoryQueueStrategy implements NotificationQueueStrategy {
           };
 
           // Attempt to resend the notification
-          const success = await this.resendNotification(
+          const success = await resendNotification(
             verificationResult,
             entry.recipientUserId,
           );
@@ -821,157 +559,6 @@ class MemoryQueueStrategy implements NotificationQueueStrategy {
           );
         }
       }
-    }
-  }
-
-  /**
-   * Attempt to resend a notification
-   * Returns true on success, false on failure
-   */
-  private async resendNotification(
-    result: VerificationResult,
-    recipientUserId: string,
-  ): Promise<boolean> {
-    try {
-      // Import notification templates
-      const { getVerificationTemplate } =
-        await import("./notification-templates");
-
-      // Get entity name for better notification context
-      const entityName = await this.getEntityName(
-        result.entityType,
-        result.entityId,
-      );
-
-      // Map verification status to notification type
-      const notificationType =
-        result.newStatus === "VERIFIED"
-          ? "VERIFIED"
-          : result.newStatus === "REJECTED"
-            ? "REJECTED"
-            : result.newStatus === "NEEDS_CORRECTION"
-              ? "NEEDS_CORRECTION"
-              : "VERIFIED";
-
-      const template = getVerificationTemplate(
-        notificationType,
-        result.entityType,
-        {
-          entityName,
-          entityId: result.entityId,
-          rejectionReason: result.reason,
-          correctionNotes:
-            result.newStatus === "NEEDS_CORRECTION" ? result.reason : undefined,
-          adminNotes: result.notes,
-        },
-      );
-
-      // Create database notification
-      await this.prisma.notification.create({
-        data: {
-          userId: recipientUserId,
-          title: template.title,
-          message: template.message,
-          type: template.type,
-          link: template.link,
-        },
-      });
-
-      // Optionally send to external notification service
-      if (adminEnvConfig.ENABLE_NOTIFICATION_SERVICE) {
-        const notificationServiceUrl =
-          adminEnvConfig.NOTIFICATION_SERVICE_URL ?? "http://localhost:3011";
-
-        const response = await fetch(
-          `${notificationServiceUrl}/api/notifications`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              userId: recipientUserId,
-              type: "in_app",
-              category: "verification",
-              title: template.title,
-              content: template.message,
-              emailSubject: template.emailSubject,
-              emailBody: template.emailBody,
-              data: {
-                entityType: result.entityType,
-                entityId: result.entityId,
-                verificationStatus: result.newStatus,
-                link: template.link,
-              },
-            }),
-          },
-        );
-
-        if (!response.ok) {
-          throw new Error(
-            `Notification service responded with ${response.status}`,
-          );
-        }
-      }
-
-      return true;
-    } catch (error) {
-      logger.error(
-        "Failed to resend notification via Memory queue",
-        error as Error,
-        {
-          entityId: result.entityId,
-          recipientUserId,
-        },
-      );
-      return false;
-    }
-  }
-
-  /**
-   * Get entity name for notification context
-   */
-  private async getEntityName(
-    entityType: EntityType,
-    entityId: string,
-  ): Promise<string> {
-    try {
-      switch (entityType) {
-        case "professional": {
-          const professional = await this.prisma.professionalProfile.findUnique(
-            {
-              where: { userId: entityId },
-              select: { companyName: true },
-            },
-          );
-          return professional?.companyName || "Professional Profile";
-        }
-        case "store": {
-          const store = await this.prisma.store.findUnique({
-            where: { id: entityId },
-            select: { name: true },
-          });
-          return store?.name || "Store";
-        }
-        case "property": {
-          const property = await this.prisma.property.findUnique({
-            where: { id: entityId },
-            select: { title: true },
-          });
-          return property?.title || "Property";
-        }
-        case "certificate": {
-          const certificate = await this.prisma.professionalDocument.findUnique(
-            {
-              where: { id: entityId },
-              select: { title: true },
-            },
-          );
-          return certificate?.title || "Certificate";
-        }
-        default:
-          return "Your submission";
-      }
-    } catch {
-      return "Your submission";
     }
   }
 

@@ -28,6 +28,144 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Fixed (Image Processing Typecheck)
+
+- **Image Processing Typecheck**: Fixed type check error in `image-processing.ts` (`TS2678: Type '"jpg"' is not comparable to type 'keyof FormatEnum'`). Removed redundant invalid `case "jpg"` from image compression format switch since Sharp normalizes JPEG files to `"jpeg"` in `FormatEnum`.
+
+**Files changed:**
+
+- `apps/client/app/lib/media/image-processing.ts`
+- `apps/client/docs/CHANGELOG.md`
+
+### Docs (Webhook Error Policy)
+
+- **Webhook Error Policy**: Added inline documentation to the production-only replay protection guard within the Clerk webhook route handler (`route.ts`) to clarify the asymmetric handling logic between production and development/test environments.
+
+**Files changed:**
+
+- `apps/client/app/api/clerk-webhook/route.ts`
+
+### Security (Boundary Decoupling)
+
+- **Domain Security (Boundary Decoupling)**: Resolved two `mapperInfraImport` findings by removing the dependency of domain mappers on the presentation/api adapter layer (`@/app/lib/api/dto-serialization`). Localized the date-and-decimal `serializeDto` helper inside `messaging/mappers.ts` and `newsletter/mappers.ts` to keep the domain services' DTO mappings pure, satisfying the import direction rules enforced by static drift reports.
+
+**Files changed:**
+
+- `apps/client/app/lib/domains/messaging/mappers.ts`
+- `apps/client/app/lib/domains/newsletter/mappers.ts`
+
+### Changed (Newsletter)
+
+- **Newsletter (Decoupled DB-Backed Opt-In)**: Added the `NewsletterSubscriber` model and enums (`NewsletterSubscriberStatus`, `NewsletterEspSyncStatus`) to the Prisma schema, and created the back-relation on `User`. The local database is now the source of truth for GDPR/POPIA consent logs, while outbound sync to Resend/Mailchimp is handled asynchronously.
+- **Newsletter (Background Jobs & Queues)**: Configured BullMQ background queues (`newsletter-esp-sync` and `newsletter-confirmation-email`) to decouple third-party ESP calls from the request path, implementing retry policies, next-retry tracking, and dead-letter handling.
+- **Newsletter (Resend Segments Model)**: Upgraded the Resend integration to use the modern Resend Segments model (global contact creation + segment association fallback) instead of the deprecated legacy audiences endpoint.
+- **Newsletter (Confirmation Route)**: Updated the route and service handlers to enforce strict double opt-in validation, secure token hashing (SHA-256), and resubscription cooldown limits.
+- **Newsletter (Honeypot Enforcement)**: Fixed the client-side form submission check. If the hidden `company` input is filled, the code immediately mocks a success state without invoking the API, preventing bot spams efficiently.
+- **Newsletter (Double Opt-In Worker Wiring)**: Wired BullMQ background workers to a dedicated persistent node process entrypoint (`entrypoint.ts`) with healthchecks (`/healthz` on port 8080) and graceful SIGTERM/SIGINT drainage handlers.
+- **Newsletter (Email Outcome Visibility)**: Added `confirmationEmailStatus` and `confirmationEmailLastError` fields to `NewsletterSubscriber` database model and select projections, updating repository and workers to record transactional outcomes database-side.
+- **Newsletter (GDPR Soft-delete)**: Refactored `eraseSubscriberByEmail` in repository to securely anonymize PII and replace unique email indexes, allowing users to re-register while keeping an audit trace.
+- **Newsletter (Rate Limiting & Security)**: Added secondary email-hash SHA-256 rate limiting on `/subscribe` to block multi-IP spamming, and configured ESLint restricted-import rules to protect the Redis connection boundaries.
+- **Newsletter (Scheduled Reconciliation)**: Added a 15-minute sweep job (`newsletter-sweep.ts`) to reconcile stuck syncs and emit alerts on `DEAD_LETTER` subscriber statuses, registering it in the main job orchestrator.
+- **Newsletter (Static Security Scan)**: Added a custom static code analyzer check (`workerImport` check: SEC-LINT-008) in `security-lint-checks.mjs`, `check-security-lint.mjs`, and `report-security-drift.mjs` that scans client presentation, components, routes, and services for prohibited direct background worker imports to protect the Redis connection boundaries.
+- **Newsletter (API Route DTO Mapping)**: Refactored the newsletter API routes (subscribe, confirm, unsubscribe) to route success response payloads through the domain-level `toPublicSubscribeResult` mapper, enforcing a strict public allow-list security boundary at the API contract layer.
+
+**Files changed:**
+
+- `packages/db/prisma/schema.prisma`
+- `packages/db/prisma/migrations/20260716062000_add_newsletter_confirmation_email_status/migration.sql`
+- `apps/client/eslint.config.js`
+- `apps/client/app/lib/api/dto-serialization.ts`
+- `apps/client/app/lib/validation/newsletter-validation.ts`
+- `apps/client/app/lib/domains/newsletter/service.ts`
+- `apps/client/app/lib/domains/newsletter/repository.ts`
+- `apps/client/app/lib/domains/newsletter/mappers.ts`
+- `apps/client/app/lib/domains/newsletter/index.ts`
+- `apps/client/app/lib/domains/newsletter/esp-sync.ts`
+- `apps/client/app/lib/domains/messaging/mappers.ts`
+- `apps/client/app/lib/queues/newsletter.queue.ts`
+- `apps/client/app/workers/newsletter/entrypoint.ts`
+- `apps/client/app/workers/newsletter/confirmation-email.worker.ts`
+- `apps/client/app/workers/newsletter/esp-sync.worker.ts`
+- `apps/client/app/jobs/newsletter-sweep.ts`
+- `apps/client/app/jobs/index.ts`
+- `apps/client/app/api/newsletter/subscribe/route.ts`
+- `apps/client/app/api/newsletter/confirm/route.ts`
+- `apps/client/app/api/newsletter/unsubscribe/route.ts`
+- `apps/client/__tests__/lib/domains/newsletter.service.test.ts`
+- `apps/client/__tests__/api/newsletter/subscribe.route.test.ts`
+- `apps/client/__tests__/api/newsletter/confirm.route.test.ts`
+- `apps/client/__tests__/api/newsletter/unsubscribe.route.test.ts`
+- `apps/client/__tests__/workers/newsletter-workers.test.ts`
+- `apps/client/scripts/security-lint-checks.mjs`
+- `apps/client/scripts/check-security-lint.mjs`
+- `apps/client/scripts/report-security-drift.mjs`
+
+### Changed (Client UI & Navigation Refactoring)
+
+- **Client UI (Navigation & Layouts)**: Refactored and simplified link and routing configurations monorepo-wide, migrating layout elements (ClientNavbar, Footer, Header, MobileNav, NavBar, ProfessionalNavbar, ProfessionalSidebar, RouteFocusManager) to a central typed configuration in [nav-config.ts](file:///c:/Users/User/build-market/apps/client/app/lib/config/nav-config.ts) and clean routes mapping.
+- **Client UI (Newsletter pages)**: Added frontend confirmation and unsubscribe pages in [confirm/page.tsx](file:///c:/Users/User/build-market/apps/client/app/newsletter/confirm/page.tsx) and [unsubscribe/page.tsx](file:///c:/Users/User/build-market/apps/client/app/newsletter/unsubscribe/page.tsx) to complete the double opt-in loop.
+- **Client UI (Legal & Onboarding)**: Refactored legal layouts, updated styling classes to align with modern themes (Tailwind-compatible properties), and added error/loading skeleton boundaries in onboarding steps.
+
+**Files changed:**
+
+- `apps/client/lib/links.ts`
+- `apps/client/lib/routes/index.ts`
+- `apps/client/lib/routes/marketplace.routes.ts`
+- `apps/client/lib/routes/professional.routes.ts`
+- `apps/client/app/lib/config/nav-config.ts`
+- `apps/client/components/layout/ClientNavbar.tsx`
+- `apps/client/components/layout/Footer.tsx`
+- `apps/client/components/layout/Header.tsx`
+- `apps/client/components/layout/MobileNav.tsx`
+- `apps/client/components/layout/NavBar.tsx`
+- `apps/client/components/layout/ProfessionalNavbar.tsx`
+- `apps/client/components/layout/ProfessionalSidebar.tsx`
+- `apps/client/components/layout/RouteFocusManager.tsx`
+- `apps/client/app/newsletter/confirm/page.tsx`
+- `apps/client/app/newsletter/unsubscribe/page.tsx`
+- `apps/client/app/legal/cookie-settings/_components/CookieCategoryCard.tsx`
+- `apps/client/app/legal/cookie-settings/page.tsx`
+- `apps/client/app/legal/layout.tsx`
+- `apps/client/app/legal/privacy/page.tsx`
+- `apps/client/app/legal/professional-terms/page.tsx`
+- `apps/client/app/onboarding/error.tsx`
+- `apps/client/app/onboarding/loading.tsx`
+- `apps/client/tsconfig.json`
+- `turbo.json`
+
+### Fixed (Clerk Auth Page Load Performance & CSP Headers)
+
+- **Auth UI (Clerk Loading / LCP)**: Resolved slow loading speeds and cumulative layout shifts (CLS) on the `/sign-in` and `/sign-up` catch-all routes. Migrated page shells to Server Components (RSC) to serve the static frame instantly, and deferred Clerk dynamic bundle loading via lazy dynamic imports with `ssr: false` inside a `<Suspense>` boundary.
+- **Loading Skeletons**: Built custom shimmer placeholders (`AuthPageSkeleton.tsx`) and route-level `loading.tsx` page segment configurations matching the split-screen desktop layouts to anchor the UI.
+- **Resource preconnect**: Programmed dynamic preconnect and dns-prefetch links in `layout.tsx` pointing directly to the resolved Clerk FAPI domain.
+- **Image Optimization**: Optimized LCP background graphics (`hero-signin.jpg`, `hero-homeowner.jpg`) with WebP format targets, custom sizing limits (`sizes="50vw"`), and adjusted compression quality (`quality={60}`).
+- **Security / CSP Hardening**: Updated Content Security Policy (CSP) allowlist and nonce-based builders in `next-config-csp.ts` and `csp-nonce.ts` to grant connect-src/script-src wildcards (`*.buildmarket.app`), `'unsafe-eval'` for Clerk bundle code execution, and `'self'` in `script-src-elem` for Cloudflare edge scripts.
+
+- **Auth UI (Navigation Header)**: Fixed the Header Sign-In link. Replaced Clerk's default unstyled and non-semantic `<SignInButton>` element (which lacked a standard HTML `href` attribute and caused navigation issues) with a standard Next.js `<Link>` pointing to `ROUTES.signIn` using matching CSS navigation classes.
+- **Client/Auth Callback**: Wrapped the client-side `/auth-callback` routing logic inside a `<Suspense>` boundary to prevent dynamic `useSearchParams` compilation warning/error during static production builds.
+
+**Files changed:**
+
+- `apps/client/app/auth-callback/page.tsx`
+- `apps/client/app/layout.tsx`
+- `apps/client/app/sign-in/[[...sign-in]]/page.tsx`
+- `apps/client/app/sign-in/loading.tsx`
+- `apps/client/app/sign-up/[[...sign-up]]/page.tsx`
+- `apps/client/app/sign-up/loading.tsx`
+- `apps/client/components/auth/AuthPageSkeleton.tsx`
+- `apps/client/components/auth/ClerkSignInWidget.tsx`
+- `apps/client/components/auth/ClerkSignUpWidget.tsx`
+- `apps/client/components/layout/Header.tsx`
+- `apps/client/next-config-csp.ts`
+- `apps/client/app/lib/security/middleware/csp-nonce.ts`
+- `apps/client/.env`
+- `apps/client/.env.vercel`
+
+**Verification:**
+
+- `pnpm --filter client check-types` → 0 errors.
+- `pnpm validate` → all tests passed successfully with FULL TURBO cache hit.
+
 ### Fixed (Clerk Sign-In / Sign-Up "Continue" Button)
 
 - **Auth UI (Clerk Routing)**: Fixed a critical regression where clicking **Continue** on the `<SignIn>` and `<SignUp>` Clerk components did nothing — the multi-step auth flow stalled after email entry. Root cause: all four Clerk component usages were configured with `routing="hash"`, which is designed for single-page apps. With Next.js App Router catch-all routes (`[[...sign-in]]` / `[[...sign-up]]`), Clerk's hash-fragment navigation (`#/sign-in/factor-one`) does not trigger a re-render of the catch-all segment, leaving the component frozen on the email-entry step. Fixed by switching all components to `routing="path"` with the matching `path` prop, which delegates navigation to the Next.js router — correctly picked up by the catch-all and causing the component to advance to the next step.

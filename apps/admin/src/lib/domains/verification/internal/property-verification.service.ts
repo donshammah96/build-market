@@ -3,110 +3,77 @@
  * Handles verification logic for property listings
  */
 
-import { prisma } from "@build/db";
+import { prisma, type Prisma } from "@build/db";
+import { VerificationRequest, VerificationResult } from "./types";
 import {
-  VerificationRequest,
-  VerificationResult,
-  mapActionToStatus,
-  validateTransition,
-} from "./types";
-import { createAuditLog } from "./audit-service";
-import { StructuredLogger } from "@build/resilience";
+  verifyEntityCore,
+  type VerifyEntityAdapter,
+} from "./verify-entity-core";
+
 import { omitUndefined } from "@/lib/utils";
 
-const logger = new StructuredLogger("property-verification-service");
-
-export async function verifyProperty(
-  request: VerificationRequest,
-): Promise<VerificationResult> {
-  const { entityId, action, notes, reason, adminId, ipAddress, userAgent } =
-    request;
-
-  // Fetch current property
-  const property = await prisma.property.findUnique({
-    where: { id: entityId },
-    select: {
-      id: true,
-      title: true,
-      verificationStatus: true,
-      agent: {
-        select: {
-          user: {
-            select: {
-              email: true,
-              firstName: true,
-              lastName: true,
+const propertyAdapter: VerifyEntityAdapter = {
+  entityType: "property",
+  entityTypeLabel: "Property",
+  notFoundMessage: "Property not found",
+  auditActionSuffix: "PROPERTY",
+  auditPrismaEntityType: "Property",
+  loggerName: "property-verification-service",
+  async fetchEntity(entityId: string) {
+    const property = await prisma.property.findUnique({
+      where: { id: entityId },
+      select: {
+        id: true,
+        title: true,
+        verificationStatus: true,
+        agentId: true,
+        agent: {
+          select: {
+            user: {
+              select: {
+                email: true,
+                firstName: true,
+                lastName: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    });
 
-  if (!property) {
-    throw new Error("Property not found");
-  }
+    if (!property) return null;
 
-  const currentStatus = property.verificationStatus;
-  const newStatus = mapActionToStatus(action);
+    return {
+      currentStatus: property.verificationStatus,
+      displayName: property.title,
+      metadata: {
+        propertyTitle: property.title,
+        agentId: property.agentId,
+      },
+    };
+  },
 
-  // Validate state transition
-  const validation = validateTransition(currentStatus, action, reason);
-  if (!validation.isValid) {
-    throw new Error(validation.errors.join(", "));
-  }
+  async updateEntity(tx: Prisma.TransactionClient, entityId: string, data) {
+    return tx.property.update({
+      where: { id: entityId },
+      data: {
+        verified: data.verified,
+        verificationStatus: data.verificationStatus,
+        verifiedAt: data.verifiedAt,
+        verifiedById: data.verifiedById,
+        ...(data.notes !== undefined ? { verificationNotes: data.notes } : {}),
+        ...omitUndefined({
+          rejectionReason: data.rejectionReason,
+        }),
+      },
+    });
+  },
+};
 
-  // Update property
-  const updated = await prisma.property.update({
-    where: { id: entityId },
-    data: {
-      verified: newStatus === "VERIFIED",
-      verificationStatus: newStatus,
-      verifiedAt: newStatus === "VERIFIED" ? new Date() : null,
-      ...(action === "REJECT"
-        ? { rejectionReason: reason ?? null }
-        : { rejectionReason: null }),
-    },
-  });
-
-  // Create audit log
-  await createAuditLog({
-    adminId,
-    action: `${action}_PROPERTY`,
-    entityType: "Property",
-    entityId,
-    oldStatus: currentStatus,
-    newStatus,
-    reason: notes || reason,
-    metadata: {
-      propertyTitle: property.title,
-      agentEmail: property.agent.user.email,
-    },
-    ipAddress,
-    userAgent,
-  });
-
-  logger.info("Property verification completed", {
-    propertyId: entityId,
-    action,
-    previousStatus: currentStatus,
-    newStatus,
-    adminId,
-  });
-
-  return {
-    success: true,
-    entityType: "property",
-    entityId,
-    previousStatus: currentStatus,
-    newStatus,
-    message: `Property "${property.title}" has been ${action.toLowerCase()}ed`,
-    ...omitUndefined({
-      verifiedAt: updated.verifiedAt ?? undefined,
-      reason: action === "REJECT" ? reason : undefined,
-      notes,
-    }),
-  };
+export async function verifyProperty(
+  request: VerificationRequest,
+): Promise<VerificationResult> {
+  return verifyEntityCore(request, propertyAdapter);
 }
 
 export async function getPropertyVerificationDetails(propertyId: string) {

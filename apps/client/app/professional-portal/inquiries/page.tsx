@@ -83,11 +83,7 @@ export default function InquiriesPage() {
     statusFilter !== "all"
       ? {
           status: statusFilter.toUpperCase() as
-            | "NEW"
-            | "CONTACTED"
-            | "VIEWING_SCHEDULED"
-            | "OFFER_MADE"
-            | "CLOSED",
+            "NEW" | "CONTACTED" | "VIEWING_SCHEDULED" | "OFFER_MADE" | "CLOSED",
         }
       : {},
   );

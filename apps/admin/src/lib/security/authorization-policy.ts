@@ -5,9 +5,7 @@ import { err, ok, type Result } from "@/lib/result";
 export type AdminAccessRole = "admin" | "verification_admin";
 
 export type AdminRoutePolicyKey =
-  | "dashboard"
-  | "verification"
-  | "defaultProtected";
+  "dashboard" | "verification" | "defaultProtected";
 
 export type AdminActionRisk = "low" | "high";
 
@@ -23,8 +21,7 @@ export enum AdminCapability {
 }
 
 export type AdminPolicyErrorCode =
-  | "ADMIN_POLICY_DENIED"
-  | "ADMIN_POLICY_UNKNOWN_CAPABILITY";
+  "ADMIN_POLICY_DENIED" | "ADMIN_POLICY_UNKNOWN_CAPABILITY";
 
 export type AdminPolicyError = {
   error: AdminPolicyErrorCode;

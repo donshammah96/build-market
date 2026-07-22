@@ -6,18 +6,10 @@
 import { VerificationStatus } from "@build/db";
 
 export type EntityType =
-  | "professional"
-  | "store"
-  | "property"
-  | "certificate"
-  | "license";
+  "professional" | "store" | "property" | "certificate" | "license";
 
 export type VerificationAction =
-  | "VERIFY"
-  | "REJECT"
-  | "REQUEST_CORRECTION"
-  | "SUBMIT"
-  | "RESUBMIT";
+  "VERIFY" | "REJECT" | "REQUEST_CORRECTION" | "SUBMIT" | "RESUBMIT";
 
 export interface VerificationRequest {
   entityType: EntityType;

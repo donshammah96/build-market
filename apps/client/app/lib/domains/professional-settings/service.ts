@@ -42,10 +42,7 @@ export type ServiceGroup = {
 };
 
 export type ServiceCategorySortField =
-  | "createdAt"
-  | "name"
-  | "sortOrder"
-  | "updatedAt";
+  "createdAt" | "name" | "sortOrder" | "updatedAt";
 
 export type ServiceCategorySortDirection = "asc" | "desc";
 
@@ -139,10 +136,7 @@ type SettingsProfileRecord = Omit<
 type CompleteProfessionalProfileInput = z.infer<typeof completeProfileSchema>;
 
 export type ProfessionalSettingsErrorCode =
-  | "not_found"
-  | "invalid_input"
-  | "conflict"
-  | "internal";
+  "not_found" | "invalid_input" | "conflict" | "internal";
 
 type ProfessionalSettingsResult<T> = Result<
   T,

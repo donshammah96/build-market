@@ -46,6 +46,7 @@ const propertyServiceMock = vi.hoisted(() => ({
 
 const notificationServiceMock = vi.hoisted(() => ({
   notifyVerificationResult: vi.fn(),
+  publishLicenseVerificationEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 const auditServiceMock = vi.hoisted(() => ({
@@ -551,6 +552,13 @@ describe("verification domain service", () => {
       expect(
         notificationServiceMock.notifyVerificationResult,
       ).toHaveBeenCalled();
+      expect(
+        notificationServiceMock.publishLicenseVerificationEvent,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({ licenseId: "lic_1" }),
+        "admin_1",
+        expect.any(String),
+      );
 
       // @ts-ignore
       adminEnvConfig.NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE =

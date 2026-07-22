@@ -3,9 +3,7 @@ import { apiFetch } from "@/lib/api-client-utils";
 import { API_ROUTES } from "@/lib/links";
 
 export type ConsentTypeValue =
-  | "ANALYTICS_COOKIES"
-  | "MARKETING_EMAIL"
-  | "MARKETING_SMS";
+  "ANALYTICS_COOKIES" | "MARKETING_EMAIL" | "MARKETING_SMS";
 
 export type ConsentUpdate = {
   type: ConsentTypeValue;

@@ -5,6 +5,7 @@ import {
   collectMutationPassthroughDrift,
   collectSensitiveStorageWriteDrift,
   collectUnsafeApiErrorDrift,
+  collectWorkerImportDrift,
 } from "./security-lint-checks.mjs";
 
 const mutationPassthrough = collectMutationPassthroughDrift();
@@ -12,13 +13,15 @@ const dangerousHtml = collectDangerousHtmlDrift();
 const unsafeApiError = collectUnsafeApiErrorDrift();
 const getJsonInGetHandler = collectGetJsonInGetHandlerDrift();
 const sensitiveStorageWrite = collectSensitiveStorageWriteDrift();
+const workerImport = collectWorkerImportDrift();
 
 if (
   mutationPassthrough.length > 0 ||
   dangerousHtml.length > 0 ||
   unsafeApiError.length > 0 ||
   getJsonInGetHandler.length > 0 ||
-  sensitiveStorageWrite.length > 0
+  sensitiveStorageWrite.length > 0 ||
+  workerImport.length > 0
 ) {
   console.error("[security/lint] Security lint violations detected.");
 
@@ -77,9 +80,20 @@ if (
     }
   }
 
+  if (workerImport.length > 0) {
+    console.error(
+      "[security/lint][SEC-LINT-008] Direct import of worker modules is prohibited in presentation, hook, component, and service files:",
+    );
+    for (const offender of workerImport) {
+      console.error(
+        `  - ${offender.file}:${offender.line} -> ${offender.sample}`,
+      );
+    }
+  }
+
   process.exit(1);
 }
 
 console.log(
-  "[security/lint] OK: SEC-LINT-002, SEC-LINT-003, SEC-LINT-004, SEC-LINT-006, and SEC-LINT-007 checks passed.",
+  "[security/lint] OK: SEC-LINT-002, SEC-LINT-003, SEC-LINT-004, SEC-LINT-006, SEC-LINT-007, and SEC-LINT-008 checks passed.",
 );

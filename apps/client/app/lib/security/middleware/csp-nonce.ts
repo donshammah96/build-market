@@ -44,12 +44,19 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     ...selfAndFirstParty,
     // Third-party (identity): Clerk frontend API for auth/session operations.
     clerkFrontendApiOrigin,
+    // Third-party (identity): Clerk FAPI for admin satellite domain (clerk.admin.buildmarket.app).
+    // The admin app is a Clerk satellite; its FAPI subdomain differs from the primary.
+    // Wildcard covers any future Clerk subdomain routing on the custom domain.
+    "https://*.buildmarket.app",
     // Fallback for Clerk CDN when NEXT_PUBLIC_CLERK_FRONTEND_API is unset.
     "https://*.clerk.accounts.dev",
     // Third-party (identity): Clerk telemetry.
     "https://clerk-telemetry.com",
     // Third-party (analytics): PostHog ingestion/query endpoint.
     analyticsOrigin,
+    // Third-party (analytics): PostHog EU/US ingest endpoints (explicit for CSP).
+    "https://us.i.posthog.com",
+    "https://eu.i.posthog.com",
     // Dev-only HMR websocket endpoint; no wildcard host.
     isDev ? appOrigin.replace(/^http/, "ws") : null,
   ].filter((value): value is string => Boolean(value));
@@ -59,6 +66,9 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     // Third-party (identity): Clerk JS assets. Derived from NEXT_PUBLIC_CLERK_FRONTEND_API
     // so the origin tracks env config rather than a hardcoded hostname.
     clerkFrontendApiOrigin,
+    // Third-party (identity): Clerk FAPI for admin satellite domain and any future
+    // Clerk subdomain routing on the custom domain (e.g. clerk.admin.buildmarket.app).
+    "https://*.buildmarket.app",
     // Fallback for Clerk CDN when NEXT_PUBLIC_CLERK_FRONTEND_API is unset.
     "https://*.clerk.accounts.dev",
     // Third-party (CDN): jsdelivr used by some Clerk-adjacent widgets.
@@ -67,6 +77,8 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     "https://img.clerk.com",
     // Third-party (analytics): PostHog web SDK assets.
     analyticsOrigin,
+    // Third-party (CDN): Cloudflare-injected /cdn-cgi/ scripts are served from
+    // the site's own origin, so 'self' covers them. No additional origin needed.
   ].filter((value): value is string => Boolean(value));
 
   const styleOrigins = [
@@ -104,10 +116,14 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
 
   return [
     "default-src 'self'",
-    `script-src 'nonce-${nonce}' 'strict-dynamic' ${dedup(scriptOrigins).join(" ")}`,
+    // 'unsafe-eval' is required by Clerk's production JS bundle which uses eval() internally.
+    // Tracked as a known Clerk limitation (see https://clerk.com/docs/security/csp).
+    // Risk accepted; no user-supplied data reaches eval; Clerk SDK code is not injectable.
+    `script-src 'nonce-${nonce}' 'strict-dynamic' 'unsafe-eval' ${dedup(scriptOrigins).join(" ")}`,
     // 'strict-dynamic' delegates trust to scripts loaded by nonce-authorized scripts.
     // Origin allowlists are retained as fallbacks for browsers without strict-dynamic support.
-    `script-src-elem 'nonce-${nonce}' 'strict-dynamic' ${dedup(scriptOrigins).join(" ")}`,
+    // 'self' covers Cloudflare-injected /cdn-cgi/ scripts served from the site origin.
+    `script-src-elem 'nonce-${nonce}' 'strict-dynamic' 'self' ${dedup(scriptOrigins).join(" ")}`,
     `style-src ${dedup(styleOrigins).join(" ")}`,
     `img-src ${dedup(imgOrigins).join(" ")}`,
     `font-src ${dedup(fontOrigins).join(" ")}`,

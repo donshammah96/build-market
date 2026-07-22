@@ -485,11 +485,7 @@ export default function LeadsPage() {
                     leadId: selectedLead.id,
                     data: {
                       status: selectedLead.status as
-                        | "NEW"
-                        | "CONTACTED"
-                        | "PROPOSAL"
-                        | "WON"
-                        | "LOST",
+                        "NEW" | "CONTACTED" | "PROPOSAL" | "WON" | "LOST",
                     },
                   });
                   setIsUpdateStatusOpen(false);

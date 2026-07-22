@@ -171,8 +171,7 @@ export async function togglePropertyFeatured(propertyId: string) {
         getTargetId: () => propertyId,
         getDetails: ({ data }) => {
           const result = data as
-            | { property?: { featured?: boolean } }
-            | undefined;
+            { property?: { featured?: boolean } } | undefined;
           return { propertyId, featured: result?.property?.featured };
         },
       },

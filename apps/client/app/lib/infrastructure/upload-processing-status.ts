@@ -2,10 +2,7 @@ import { redisCache } from "@build/redis";
 import { env } from "@/app/lib/infrastructure/env";
 
 export type UploadProcessingState =
-  | "pending"
-  | "processing"
-  | "ready"
-  | "failed";
+  "pending" | "processing" | "ready" | "failed";
 
 export type ReadyUploadAssetSnapshot = {
   assetId: string;

@@ -93,10 +93,7 @@ export interface AuditJobData {
   ipAddress?: string;
   userAgent?: string;
   legalBasis?:
-    | "CONSENT"
-    | "CONTRACT"
-    | "LEGAL_OBLIGATION"
-    | "LEGITIMATE_INTEREST";
+    "CONSENT" | "CONTRACT" | "LEGAL_OBLIGATION" | "LEGITIMATE_INTEREST";
   timestamp: string;
 }
 

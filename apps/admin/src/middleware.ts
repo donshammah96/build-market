@@ -9,6 +9,7 @@ import {
 } from "@/lib/security/claims";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 import { NextResponse } from "next/server";
+import { toBool } from "@/lib/infrastructure/env-utils";
 
 // ---------------------------------------------------------------------------
 // Route matchers
@@ -67,19 +68,6 @@ function hasAllowedRole(
   const metadata = parseSessionMetadata(authObj.sessionClaims);
   const normalizedRole = normalizeAdminAccessRole(metadata?.role);
   return normalizedRole ? allowedRoles.includes(normalizedRole) : false;
-}
-
-/**
- * Coerce a value that is *supposed* to be a boolean env flag into an actual
- * boolean, defensively. Some env-loading layers pass raw strings through
- * (e.g. "false") which are truthy in JS and silently flip logic like
- * `isSatellite` on when it should be off. Never trust `Boolean(x)` for a
- * flag that might be the literal string "false".
- */
-function toBool(value: unknown): boolean {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") return value.trim().toLowerCase() === "true";
-  return Boolean(value);
 }
 
 /** Returns true only if `value` parses as a well-formed absolute http(s) URL. */
@@ -209,8 +197,15 @@ export default clerkMiddleware(
     //    (resolved by ClerkProvider's `signInUrl`) and append `redirect_url`
     //    so that after sign-in they return to the page they requested.
     const authObj = await auth();
+    const isApiRoute =
+      req.nextUrl.pathname.startsWith("/api") ||
+      req.nextUrl.pathname.startsWith("/trpc");
 
     if (!authObj.userId) {
+      if (isApiRoute) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
       if (toBool(adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE)) {
         // Prefer the explicit env var (validated). If it's unset or
         // malformed for this environment, derive a fallback from the
@@ -252,6 +247,12 @@ export default clerkMiddleware(
     //    Redirects to /unauthorized-sign-in (public) to avoid a protect-loop.
     const metadata = parseSessionMetadata(authObj.sessionClaims);
     if (metadata?.status && BLOCKED_STATUSES.includes(metadata.status)) {
+      if (isApiRoute) {
+        return NextResponse.json(
+          { error: "Forbidden", reason: metadata.status },
+          { status: 403 },
+        );
+      }
       const url = new URL("/unauthorized-sign-in", req.url);
       url.searchParams.set("reason", metadata.status);
       return NextResponse.redirect(url);
@@ -265,6 +266,12 @@ export default clerkMiddleware(
       );
 
       if (!isAuthorized) {
+        if (isApiRoute) {
+          return NextResponse.json(
+            { error: "Forbidden", reason: "not_admin" },
+            { status: 403 },
+          );
+        }
         return NextResponse.redirect(
           new URL("/unauthorized-sign-in?reason=not_admin", req.url),
         );
@@ -280,6 +287,12 @@ export default clerkMiddleware(
       );
 
       if (!isAuthorized) {
+        if (isApiRoute) {
+          return NextResponse.json(
+            { error: "Forbidden", reason: "not_admin" },
+            { status: 403 },
+          );
+        }
         return NextResponse.redirect(
           new URL("/unauthorized-sign-in?reason=not_admin", req.url),
         );
@@ -293,6 +306,12 @@ export default clerkMiddleware(
       ADMIN_ROUTE_POLICY_MAP.defaultProtected,
     );
     if (!isAuthorized) {
+      if (isApiRoute) {
+        return NextResponse.json(
+          { error: "Forbidden", reason: "not_admin" },
+          { status: 403 },
+        );
+      }
       return NextResponse.redirect(
         new URL("/unauthorized-sign-in?reason=not_admin", req.url),
       );

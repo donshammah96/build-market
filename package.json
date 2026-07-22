@@ -80,7 +80,7 @@
   },
   "devDependencies": {
     "@typescript/typescript6": "catalog:",
-    "next": "catalog:",
+    "next": "16.2.6",
     "ngrok": "5.0.0-beta.2",
     "prettier": "catalog:",
     "rimraf": "^6.1.3",
@@ -93,6 +93,6 @@
     "pnpm": ">=11.1.2 <12.0.0"
   },
   "dependencies": {
-    "js-cookie": "catalog:"
+    "js-cookie": "3.0.6"
   }
 }

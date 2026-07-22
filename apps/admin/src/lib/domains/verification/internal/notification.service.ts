@@ -5,39 +5,32 @@
  */
 
 import { prisma } from "@build/db";
-import { VerificationResult, type EntityType } from "./types";
+import { VerificationResult } from "./types";
 import { StructuredLogger } from "@build/resilience";
 import {
   getVerificationTemplate,
   type NotificationType,
 } from "./notification-templates";
+import { getEntityName } from "./notification-helpers";
 import { queueFailedNotification } from "./notification-queue";
 import {
-  createProducer,
-  type JetStreamProducer,
   type VerificationEvent,
+  type LicenseVerificationEvent,
 } from "@build/nats";
+import {
+  getAdminNatsProducer,
+  shutdownAdminNatsProducer,
+} from "@/lib/infrastructure/nats-client";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 import { omitUndefined } from "@/lib/utils";
+import type { LicenseVerificationResult } from "./license-verification.service";
 
 const logger = new StructuredLogger("verification-notification-service");
 
 const NOTIFICATION_SERVICE_URL =
   adminEnvConfig.NOTIFICATION_SERVICE_URL ?? "http://localhost:3011";
 
-// NATS producer instance (lazy initialized)
-let natsProducer: JetStreamProducer | null = null;
-
-/**
- * Get or create NATS producer
- */
-async function getNatsProducer(): Promise<JetStreamProducer> {
-  if (!natsProducer) {
-    natsProducer = createProducer("verification-service");
-    await natsProducer.connect();
-  }
-  return natsProducer;
-}
+export { shutdownAdminNatsProducer as shutdownNatsProducer };
 
 export async function notifyVerificationResult(
   result: VerificationResult,
@@ -191,57 +184,6 @@ export async function sendToNotificationService(
   }
 }
 
-/**
- * Get entity name for notification context
- */
-async function getEntityName(
-  entityType: EntityType,
-  entityId: string,
-): Promise<string> {
-  try {
-    switch (entityType) {
-      case "professional": {
-        const professional = await prisma.professionalProfile.findUnique({
-          where: { userId: entityId },
-          select: { companyName: true },
-        });
-        return professional?.companyName || "Professional Profile";
-      }
-      case "store": {
-        const store = await prisma.store.findUnique({
-          where: { id: entityId },
-          select: { name: true },
-        });
-        return store?.name || "Store";
-      }
-      case "property": {
-        const property = await prisma.property.findUnique({
-          where: { id: entityId },
-          select: { title: true },
-        });
-        return property?.title || "Property";
-      }
-      case "certificate": {
-        // Certificates are documents, fetch certificate name
-        const certificate = await prisma.professionalDocument.findUnique({
-          where: { id: entityId },
-          select: { title: true },
-        });
-        return certificate?.title || "Certificate";
-      }
-      default:
-        return "Your submission";
-    }
-  } catch (error) {
-    logger.warn("Failed to fetch entity name for notification", {
-      error: error instanceof Error ? error.message : String(error),
-      entityType,
-      entityId,
-    });
-    return "Your submission";
-  }
-}
-
 // Email notification via NATS JetStream
 export async function publishVerificationEvent(
   result: VerificationResult,
@@ -249,7 +191,7 @@ export async function publishVerificationEvent(
   userName: string,
 ): Promise<void> {
   try {
-    const producer = await getNatsProducer();
+    const producer = await getAdminNatsProducer();
 
     if (result.entityType === "license") {
       return;
@@ -288,7 +230,6 @@ export async function publishVerificationEvent(
       subject,
       entityId: result.entityId,
       status: result.newStatus,
-      userEmail,
     });
   } catch (error) {
     logger.error(
@@ -302,13 +243,65 @@ export async function publishVerificationEvent(
   }
 }
 
-/**
- * Shutdown NATS producer gracefully (call on app shutdown)
- */
-export async function shutdownNatsProducer(): Promise<void> {
-  if (natsProducer) {
-    await natsProducer.disconnect();
-    natsProducer = null;
-    logger.info("NATS producer shutdown complete");
+function mapLicenseResultToEvent(
+  result: LicenseVerificationResult,
+  adminId: string,
+  correlationId: string,
+): LicenseVerificationEvent {
+  const action: LicenseVerificationEvent["action"] =
+    result.newStatus === "VERIFIED"
+      ? "verified"
+      : result.newStatus === "REJECTED"
+        ? "rejected"
+        : result.newStatus === "NEEDS_CORRECTION"
+          ? "needs_correction"
+          : "resubmitted";
+
+  return {
+    licenseId: result.licenseId,
+    professionalId: result.professionalId,
+    authority: result.authority,
+    licenseNumber: result.licenseNumber,
+    previousStatus: result.previousStatus,
+    newStatus: result.newStatus,
+    action,
+    adminId,
+    verificationMethod:
+      result.verificationMethod === "MANUAL" ? "MANUAL" : "SYSTEM",
+    correlationId,
+    timestamp: new Date().toISOString(),
+    ...(result.reason || result.notes
+      ? { metadata: { reason: result.reason, notes: result.notes } }
+      : {}),
+  };
+}
+
+export async function publishLicenseVerificationEvent(
+  result: LicenseVerificationResult,
+  adminId: string,
+  correlationId: string,
+): Promise<void> {
+  try {
+    const producer = await getAdminNatsProducer();
+    const event = mapLicenseResultToEvent(result, adminId, correlationId);
+    const subject = `license.${event.action}`;
+
+    await producer.publishWithRetry<LicenseVerificationEvent>(subject, event, {
+      msgId: `license-${result.licenseId}-${event.action}-${Date.now()}`,
+      maxRetries: 3,
+      retryDelayMs: 1000,
+    });
+
+    logger.info("License verification event published to NATS", {
+      subject,
+      licenseId: result.licenseId,
+      status: result.newStatus,
+    });
+  } catch (error) {
+    logger.error(
+      "Failed to publish license verification event to NATS",
+      error as Error,
+      { licenseId: result.licenseId },
+    );
   }
 }

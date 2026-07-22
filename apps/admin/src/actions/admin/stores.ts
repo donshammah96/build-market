@@ -188,8 +188,7 @@ export async function verifyStore(
         getTargetId: () => storeId,
         getDetails: ({ data }) => {
           const result = data as
-            | { oldStatus?: string | null; notes?: string | null }
-            | undefined;
+            { oldStatus?: string | null; notes?: string | null } | undefined;
           return {
             storeId,
             oldStatus: result?.oldStatus,

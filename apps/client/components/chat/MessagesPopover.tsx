@@ -35,8 +35,7 @@ export function MessagesPopover() {
       if (result.success && result.data) {
         // API returns { threads, pagination } — normalize to array
         const data = result.data as
-          | Conversation[]
-          | { threads?: Conversation[]; pagination?: unknown };
+          Conversation[] | { threads?: Conversation[]; pagination?: unknown };
         return Array.isArray(data) ? data : (data?.threads ?? []);
       }
       throw new Error("Failed to fetch conversations");

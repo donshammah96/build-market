@@ -57,6 +57,7 @@ export const getStoreProductUrl = (storeId: string, productId: string) =>
 
 // Property URL helpers
 export const getPropertyUrl = (id: string) => `/properties/${id}`;
+export const getVendorUrl = (id: string) => `/vendors/${id}`;
 
 // ============================================================================
 // MARKETPLACE API ROUTES
@@ -152,6 +153,9 @@ export const getPropertySearchUrl = (
   },
 ): string =>
   getSearchUrl(MARKETPLACE_ROUTES.properties, filters as QueryParams);
+
+export const getProfessionalSearchUrl = (filters: SearchFilters): string =>
+  getSearchUrl("/professionals", filters);
 
 // ============================================================================
 // EXTERNAL LINKS

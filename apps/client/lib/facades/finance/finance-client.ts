@@ -25,10 +25,7 @@ export type RequestWithdrawalClientInput = WithdrawInput & {
 export type { FinanceStats };
 
 export type FinanceTransactionStatus =
-  | "PENDING"
-  | "COMPLETED"
-  | "FAILED"
-  | "CANCELLED";
+  "PENDING" | "COMPLETED" | "FAILED" | "CANCELLED";
 
 export type FinanceTransactionType = "INCOME" | "WITHDRAWAL" | "EXPENSE";
 

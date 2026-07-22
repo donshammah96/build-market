@@ -11,7 +11,7 @@ import { HttpStatus } from "@/lib/api/api-response";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/api/rate-limit";
 import {
   apiError,
-  executeResilient,
+  apiSuccess,
   getClientLogger,
   initializeCorrelationId,
 } from "@/lib/api/resilient-api";
@@ -62,65 +62,71 @@ export const POST = withAdminRole([
     action: parsed.data.action,
   });
 
-  return executeResilient(
-    async () => {
-      if (!context.adminRole) {
-        throw new Error("Unauthorized: Admin role missing");
-      }
-
-      // Audit log is created downstream in verificationService.verifyEntity.
-      const result = await verificationService.verifyEntity(
-        {
-          clerkId: context.clerkId,
-          dbUserId: context.dbUserId,
-          adminRole: context.adminRole,
-        },
-        parsed.data,
-        {
-          ...(req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip")
-            ? {
-                ipAddress:
-                  req.headers.get("x-forwarded-for") ??
-                  req.headers.get("x-real-ip") ??
-                  undefined,
-              }
-            : {}),
-          ...(req.headers.get("user-agent")
-            ? { userAgent: req.headers.get("user-agent") ?? undefined }
-            : {}),
-        },
+  try {
+    if (!context.adminRole) {
+      return apiError(
+        "Unauthorized: Admin role missing",
+        HttpStatus.UNAUTHORIZED,
       );
+    }
 
-      if (!result.ok) {
-        throw new Error(result.message);
-      }
+    // Audit log is created downstream in verificationService.verifyEntity.
+    const result = await verificationService.verifyEntity(
+      {
+        clerkId: context.clerkId,
+        dbUserId: context.dbUserId,
+        adminRole: context.adminRole,
+      },
+      parsed.data,
+      {
+        ...(req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip")
+          ? {
+              ipAddress:
+                req.headers.get("x-forwarded-for") ??
+                req.headers.get("x-real-ip") ??
+                undefined,
+            }
+          : {}),
+        ...(req.headers.get("user-agent")
+          ? { userAgent: req.headers.get("user-agent") ?? undefined }
+          : {}),
+      },
+    );
 
-      logger.info("Verification completed successfully", {
+    if (!result.ok) {
+      return apiError(result.message, HttpStatus.BAD_REQUEST);
+    }
+
+    logger.info("Verification completed successfully", {
+      correlationId,
+      adminId: context.dbUserId,
+      entityType: parsed.data.entityType,
+      entityId: parsed.data.entityId,
+      action: parsed.data.action,
+      newStatus: result.data.newStatus,
+    });
+
+    return apiSuccess({
+      success: true,
+      data: result.data,
+      message: result.data.message,
+    });
+  } catch (error) {
+    logger.error(
+      "Verification failed",
+      error instanceof Error ? error : new Error(String(error)),
+      {
         correlationId,
         adminId: context.dbUserId,
         entityType: parsed.data.entityType,
         entityId: parsed.data.entityId,
         action: parsed.data.action,
-        newStatus: result.data.newStatus,
-      });
-
-      return {
-        success: true,
-        data: result.data,
-        message: result.data.message,
-      };
-    },
-    {
-      operationName: "admin_verify_entity",
-      criticality: "critical",
-      timeout: 15_000,
-      retry: {
-        maxAttempts: 2,
-        initialDelayMs: 1_000,
-        maxDelayMs: 5_000,
-        backoffMultiplier: 2,
-        jitterFactor: 0.1,
       },
-    },
-  );
+    );
+
+    return apiError(
+      error instanceof Error ? error.message : "Verification failed",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
 });

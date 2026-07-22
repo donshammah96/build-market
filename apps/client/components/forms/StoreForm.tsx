@@ -1168,13 +1168,11 @@ export default function StoreForm({
           error={
             (
               errors.images as
-                | { message?: string; root?: { message?: string } }
-                | undefined
+                { message?: string; root?: { message?: string } } | undefined
             )?.message ||
             (
               errors.images as
-                | { message?: string; root?: { message?: string } }
-                | undefined
+                { message?: string; root?: { message?: string } } | undefined
             )?.root?.message
           }
           theme={theme}

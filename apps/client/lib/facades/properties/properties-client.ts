@@ -83,8 +83,7 @@ export type SimilarPropertiesPayload = { properties: PropertyListItem[] };
 
 /** Create returns PropertyCreateResultDto; update/delete return PropertyMutationResultDto. */
 export type PropertyMutationPayload =
-  | PropertyCreateResultDto
-  | PropertyMutationResultDto;
+  PropertyCreateResultDto | PropertyMutationResultDto;
 
 export type CreatePropertiesBatchPayload = {
   properties: PropertyCreateResultDto[];

@@ -51,8 +51,7 @@ export const GET = withAuth<PortfolioParams>(
     const { searchParams } = new URL(req.url);
     const categoryValue = searchParams.get("category") || undefined;
     let categoryFilter:
-      | ReturnType<typeof PortfolioImageCategorySchema.parse>
-      | undefined;
+      ReturnType<typeof PortfolioImageCategorySchema.parse> | undefined;
 
     if (categoryValue) {
       const parsedCategory =

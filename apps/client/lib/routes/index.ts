@@ -21,8 +21,10 @@ export {
   getStoreByTypeUrl,
   getStoreProductUrl,
   getPropertyUrl,
+  getVendorUrl,
   getStoreSearchUrl,
   getPropertySearchUrl,
+  getProfessionalSearchUrl,
   getSearchUrl,
   withQueryParams,
   withPagination,
@@ -64,6 +66,7 @@ export {
   getProfessionalTransactionUrl,
   getProfessionalClientUrl,
   getProfessionalCalendarUrl,
+  getApiProfessionalDetailUrl,
   type ProfessionalRouteKey,
 } from "./professional.routes";
 
@@ -87,9 +90,34 @@ export {
   type AdminRouteKey,
 } from "./admin.routes";
 
+import { CLIENT_ROUTES, CLIENT_API_ROUTES } from "./client.routes";
+import {
+  MARKETPLACE_ROUTES,
+  MARKETPLACE_API_ROUTES,
+} from "./marketplace.routes";
+import {
+  PROFESSIONAL_ROUTES,
+  PROFESSIONAL_API_ROUTES,
+} from "./professional.routes";
+import { ADMIN_ROUTES, ADMIN_API_ROUTES } from "./admin.routes";
+
 // ============================================================================
-// BACKWARD-COMPAT: ROUTES and API_ROUTES unified objects
-// All existing `@/lib/links` callsites use these — kept for smooth migration.
-// New code should import from the domain-specific route files above.
+// ROUTES and API_ROUTES unified objects
+// All existing callsites use these — kept for smooth migration.
 // ============================================================================
-export { ROUTES, API_ROUTES } from "@/lib/links";
+export const ROUTES = {
+  ...CLIENT_ROUTES,
+  ...MARKETPLACE_ROUTES,
+  ...PROFESSIONAL_ROUTES,
+  ...ADMIN_ROUTES,
+} as const;
+
+export const API_ROUTES = {
+  ...CLIENT_API_ROUTES,
+  ...MARKETPLACE_API_ROUTES,
+  ...PROFESSIONAL_API_ROUTES,
+  ...ADMIN_API_ROUTES,
+} as const;
+
+export type RouteKey = keyof typeof ROUTES;
+export type ApiRouteKey = keyof typeof API_ROUTES;

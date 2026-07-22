@@ -66,7 +66,7 @@ export default function ProfessionalTermsPage() {
       <h1 className="text-4xl md:text-5xl font-bold text-center leading-tight mb-6">
         The Rules of
         <br />
-        <span className="bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 bg-clip-text text-transparent">
+        <span className="bg-linear-to-r from-amber-400 via-yellow-300 to-amber-500 bg-clip-text text-transparent">
           Engagement.
         </span>
       </h1>
@@ -90,7 +90,7 @@ export default function ProfessionalTermsPage() {
           {plainEnglishTerms.map((term, i) => (
             <div
               key={i}
-              className={`bg-white/[0.03] border border-white/10 rounded-2xl p-6 hover:bg-white/[0.05] transition-colors ${
+              className={`bg-white/3 border border-white/10 rounded-2xl p-6 hover:bg-white/5 transition-colors ${
                 i === plainEnglishTerms.length - 1
                   ? "md:col-span-2 md:w-1/2 md:mx-auto"
                   : ""
@@ -111,9 +111,9 @@ export default function ProfessionalTermsPage() {
       {/* Placeholder card */}
       <div className="relative group">
         {/* Glow effect */}
-        <div className="absolute -inset-1 bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-orange-500/20 rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+        <div className="absolute -inset-1 bg-linear-to-r from-amber-500/20 via-yellow-500/20 to-orange-500/20 rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
 
-        <div className="relative bg-white/[0.03] backdrop-blur-sm border border-white/10 rounded-2xl p-8 md:p-12 space-y-8">
+        <div className="relative bg-white/3 backdrop-blur-sm border border-white/10 rounded-2xl p-8 md:p-12 space-y-8">
           {/* Construction emoji header */}
           <div className="text-center space-y-4">
             <div className="text-6xl">⚖️</div>
@@ -164,11 +164,9 @@ export default function ProfessionalTermsPage() {
             ].map((item) => (
               <div
                 key={item.title}
-                className="flex items-start gap-4 bg-white/[0.02] border border-white/5 rounded-xl p-4 hover:border-amber-500/20 transition-colors"
+                className="flex items-start gap-4 bg-white/3 border border-white/5 rounded-xl p-4 hover:border-amber-500/20 transition-colors"
               >
-                <span className="text-2xl flex-shrink-0 mt-0.5">
-                  {item.emoji}
-                </span>
+                <span className="text-2xl shrink-0 mt-0.5">{item.emoji}</span>
                 <div>
                   <h4 className="font-semibold text-white text-sm">
                     {item.title}
@@ -216,7 +214,7 @@ export default function ProfessionalTermsPage() {
         </p>
         <div className="flex items-center justify-center gap-4">
           <a
-            href="mailto:legal@buildmarket.co.ke"
+            href="mailto:legal@buildmarket.app"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-amber-500/10 text-amber-400 text-sm font-medium hover:bg-amber-500/20 transition-colors border border-amber-500/20"
           >
             ✉️ Contact Legal Team

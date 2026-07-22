@@ -5,9 +5,7 @@ import { env } from "@/app/lib/infrastructure/env";
 const UNSAFE_MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export type MutationOriginFailureReason =
-  | "missing_origin"
-  | "invalid_origin"
-  | "untrusted_origin";
+  "missing_origin" | "invalid_origin" | "untrusted_origin";
 
 export type MutationOriginCheckResult =
   | { ok: true; trustedOrigin?: string }

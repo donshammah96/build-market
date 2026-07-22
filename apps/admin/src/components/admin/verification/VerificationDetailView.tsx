@@ -161,9 +161,8 @@ export function VerificationDetailView({
     startTransition(async () => {
       // Determine document type based on entity type
       let documentType:
-        | "professional_document"
-        | "property_document"
-        | "certificate" = "professional_document";
+        "professional_document" | "property_document" | "certificate" =
+        "professional_document";
       if (entityType === "property") {
         documentType = "property_document";
       }

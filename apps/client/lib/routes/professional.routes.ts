@@ -217,3 +217,6 @@ export const PROFESSIONAL_API_ROUTES = {
   professionalProfile: "/api/professional-portal/profile",
   professionalProfileComplete: "/api/professional-portal/profile/complete",
 } as const;
+
+export const getApiProfessionalDetailUrl = (id: string) =>
+  PROFESSIONAL_API_ROUTES.professionalDetail(id);

@@ -15,6 +15,14 @@ import {
   SpanStatusCode,
 } from "@opentelemetry/api";
 import { createNatsClient } from "./client.js";
+import {
+  recordConsume,
+  recordRedelivery,
+  recordTermination,
+  recordNak,
+  registerConsumerForLag,
+  unregisterConsumerForLag,
+} from "./metrics.js";
 import type {
   NatsClient,
   NatsConfig,
@@ -42,6 +50,11 @@ export class JetStreamConsumer {
   private groupName: string;
   private config?: Partial<NatsConfig> | undefined;
   private consumers: Consumer[] = [];
+  private consumerRefs: Array<{
+    consumer: Consumer;
+    subject: string;
+    durableName: string;
+  }> = [];
   private running: boolean = false;
   private loopHandles: Promise<void>[] = [];
 
@@ -63,7 +76,20 @@ export class JetStreamConsumer {
       ...this.config,
       name: `${this.serviceName}-consumer`,
     });
+    registerConsumerForLag(this);
     console.log(`[NATS Consumer] ${this.serviceName} connected`);
+  }
+
+  /**
+   * Read-only snapshot of active consumers for lag metrics collection.
+   * Not part of the public subscribe/handler API — consumed by ./metrics.ts.
+   */
+  getConsumerRefs(): ReadonlyArray<{
+    consumer: Consumer;
+    subject: string;
+    durableName: string;
+  }> {
+    return this.consumerRefs;
   }
 
   /**
@@ -101,6 +127,11 @@ export class JetStreamConsumer {
           consumerConfig.durable_name!,
         );
         this.consumers.push(consumer);
+        this.consumerRefs.push({
+          consumer,
+          subject: topic.subject,
+          durableName: consumerConfig.durable_name!,
+        });
 
         // Start consuming messages
         const maxDeliver = consumerConfig.max_deliver ?? 5;
@@ -261,6 +292,8 @@ export class JetStreamConsumer {
     maxDeliver: number,
   ): Promise<void> {
     const batchSize = 10;
+    const maxBackoffMs = 10_000;
+    let consecutiveErrors = 0;
 
     while (this.running) {
       try {
@@ -276,12 +309,51 @@ export class JetStreamConsumer {
           }
           await this.processMessage(msg, handler, subject, maxDeliver);
         }
+
+        // A clean fetch cycle (even one that only timed out waiting for
+        // messages) means the consumer/stream is reachable again.
+        consecutiveErrors = 0;
       } catch (error) {
-        // Ignore timeout errors (normal when no messages)
-        if (!isTimeoutError(error)) {
-          console.error(`[NATS Consumer] Error consuming ${subject}:`, error);
+        // Ignore timeout errors (normal when no messages) — no backoff needed.
+        if (isTimeoutError(error)) {
+          continue;
         }
+
+        consecutiveErrors += 1;
+        console.error(
+          `[NATS Consumer] Error consuming ${subject} (consecutive failures: ${consecutiveErrors}):`,
+          error,
+        );
+
+        // A non-timeout error here usually means the durable consumer or
+        // its stream no longer exists (e.g. deleted out from under a still-
+        // running loop), or the server is temporarily unreachable. Without
+        // backoff this becomes a tight loop that re-fails in a
+        // sub-millisecond cycle, burning CPU and flooding logs with the
+        // same error hundreds of times a second. Back off exponentially,
+        // capped, and give up the loop's running flag one last check so
+        // shutdown (disconnect()) still takes effect promptly.
+        const delay = Math.min(
+          1000 * Math.pow(2, consecutiveErrors - 1),
+          maxBackoffMs,
+        );
+        await this.sleepUnlessStopped(delay);
       }
+    }
+  }
+
+  /**
+   * Sleeps up to `ms`, but returns early the moment `disconnect()` flips
+   * `running` to false — so an in-progress error backoff never adds delay
+   * to shutdown.
+   */
+  private async sleepUnlessStopped(ms: number): Promise<void> {
+    const checkIntervalMs = 100;
+    const deadline = Date.now() + ms;
+    while (this.running && Date.now() < deadline) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(checkIntervalMs, deadline - Date.now())),
+      );
     }
   }
 
@@ -295,10 +367,15 @@ export class JetStreamConsumer {
     maxDeliver: number,
   ): Promise<void> {
     const deliveryCount = msg.info.deliveryCount;
+    if (deliveryCount > 1) {
+      recordRedelivery(subject);
+    }
+
     if (deliveryCount > maxDeliver) {
       console.warn(
         `[NATS Consumer] Message seq ${msg.seq} delivery count (${deliveryCount}) exceeds maxDeliver (${maxDeliver}). Terminating message.`,
       );
+      recordTermination(subject);
       msg.term();
       return;
     }
@@ -329,6 +406,8 @@ export class JetStreamConsumer {
       const parentContext = propagation.extract(context.active(), carrier);
       const tracer = trace.getTracer("nats-consumer");
 
+      const startTime = performance.now();
+
       await context.with(parentContext, async () => {
         await tracer.startActiveSpan(
           `nats.consume ${subject}`,
@@ -348,6 +427,7 @@ export class JetStreamConsumer {
               // Auto-ack on success
               msg.ack();
               span.setStatus({ code: SpanStatusCode.OK });
+              recordConsume(subject, "success", performance.now() - startTime);
               console.log(
                 `[NATS Consumer] Processed message from ${subject}, seq: ${msg.seq}`,
               );
@@ -357,6 +437,7 @@ export class JetStreamConsumer {
                 code: SpanStatusCode.ERROR,
                 message: (error as Error).message,
               });
+              recordConsume(subject, "error", performance.now() - startTime);
               console.error(
                 `[NATS Consumer] Error processing message from ${subject}:`,
                 error,
@@ -366,12 +447,14 @@ export class JetStreamConsumer {
                 console.warn(
                   `[NATS Consumer] Message seq ${msg.seq} failed and reached maxDeliver (${maxDeliver}). Terminating message.`,
                 );
+                recordTermination(subject);
                 msg.term();
               } else {
                 // Exponential NAK back-off using message redelivery metadata
                 const redeliveryCount = deliveryCount - 1;
                 const baseDelayMs = 1000;
                 const delay = baseDelayMs * Math.pow(2, redeliveryCount);
+                recordNak(subject);
                 msg.nak(delay);
               }
 
@@ -412,6 +495,7 @@ export class JetStreamConsumer {
   async disconnect(): Promise<void> {
     console.log(`[NATS Consumer] ${this.serviceName} stopping...`);
     this.running = false;
+    unregisterConsumerForLag(this);
 
     // Await active pull loops for a clean shutdown
     if (this.loopHandles.length > 0) {
@@ -420,6 +504,7 @@ export class JetStreamConsumer {
     }
 
     this.consumers = [];
+    this.consumerRefs = [];
     this.client = null;
     console.log(`[NATS Consumer] ${this.serviceName} disconnected`);
   }

@@ -8,8 +8,7 @@ const mockCleanupExpiredStagedUploads = vi.hoisted(() => vi.fn());
 const mockCleanupExpiredDirectUploads = vi.hoisted(() => vi.fn());
 
 let capturedProcessor:
-  | ((job: { name: string; id: string }) => Promise<unknown>)
-  | null = null;
+  ((job: { name: string; id: string }) => Promise<unknown>) | null = null;
 
 vi.mock("@build/queue-server", () => ({
   createRedisConnection: () => ({ host: "localhost", port: 6379 }),
