@@ -24,25 +24,36 @@ export default async function DashboardLayout({
     granularRole: null,
     canAccess: false,
   };
-  let errorMsg = "";
+  let hasLoadError = false;
+  let correlationId: string | null = null;
 
   try {
     const [u, p] = await Promise.all([currentUser(), getAdminPermissions()]);
     user = u;
     permissions = p;
   } catch (err) {
+    if (
+      err &&
+      typeof err === "object" &&
+      "digest" in err &&
+      (err as { digest?: string }).digest === "DYNAMIC_SERVER_USAGE"
+    ) {
+      throw err;
+    }
+    hasLoadError = true;
+    correlationId = `adm_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
     console.error(
-      "[DashboardLayout] Critical auth or permissions load failure:",
+      `[DashboardLayout] Critical auth or permissions load failure (correlationId=${correlationId}):`,
       err,
     );
-    errorMsg =
-      err instanceof Error ? err.message : "Prisma database connection timeout";
   }
 
   // If there was a database/network error or access is denied
-  if (errorMsg || !permissions.canAccess) {
-    const title = errorMsg ? "Database Connection Failure" : "Access Denied";
-    const description = errorMsg
+  if (hasLoadError || !permissions.canAccess) {
+    const title = hasLoadError
+      ? "Database Connection Failure"
+      : "Access Denied";
+    const description = hasLoadError
       ? "The admin system failed to establish a secure connection to the database. This may be due to network timeout or incorrect configuration."
       : "You do not have the required administrative role to access the dashboard. If you believe this is an error, contact your administrator.";
 
@@ -69,13 +80,13 @@ export default async function DashboardLayout({
             {description}
           </p>
 
-          {errorMsg && (
+          {correlationId && (
             <div className="w-full bg-zinc-100 rounded-lg p-3 text-left mb-6 border border-zinc-200">
               <span className="text-[10px] font-bold text-zinc-500 uppercase block tracking-wider mb-1">
-                System Diagnostics
+                System Incident Reference
               </span>
               <p className="text-xs font-mono text-zinc-700 break-all">
-                {errorMsg}
+                Correlation ID: {correlationId}
               </p>
             </div>
           )}

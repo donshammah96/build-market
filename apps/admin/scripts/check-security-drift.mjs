@@ -534,8 +534,23 @@ function checkReqJsonInGet(file, source) {
   }
 }
 
+function checkIgnoreBuildErrors() {
+  const ruleId = "no-ignore-build-errors";
+  const configPath = path.join(ROOT, "next.config.ts");
+  if (!existsSync(configPath)) return;
+  const source = readFileSync(configPath, "utf8");
+  if (isAllowed(source, ruleId)) return;
+  if (/ignoreBuildErrors\s*:\s*true/.test(source)) {
+    violations.push({
+      id: ruleId,
+      message: `apps/admin/next.config.ts has typescript.ignoreBuildErrors set to true. Build errors must not be ignored in production builds (P0-1).`,
+    });
+  }
+}
+
 async function main() {
   checkMiddlewarePresence();
+  checkIgnoreBuildErrors();
 
   const files = (
     await Promise.all(

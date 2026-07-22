@@ -12,9 +12,9 @@
 
 ## Active Phase
 
-**Phase:** Final Autopsy Completion Pass — I-13, I-14, I-23 (complete)
+**Phase:** Production Readiness Audit & Governance Framework (ADR-ADMIN-010 through ADR-ADMIN-015)
 
-**Status:** All architecture autopsy items (I-1 through I-23 and F-O3) are now resolved. The final pass (2026-06-07) completed the housekeeping deletion of `lib/validation/` and implemented independent v2 page files for all four shadow routes (`users-v2`, `verifications-v2`, `analytics-v2`, `audit-v2`), satisfying the Feature Parity Confirmed criterion in `RETIREMENT.md`.
+**Status:** Completed the staff-level production-readiness audit ([ADMIN-PRODUCTION-READINESS-AUDIT.md](ADMIN-PRODUCTION-READINESS-AUDIT.md)) and authored Tier 0 governance ADRs (ADR-ADMIN-010 through ADR-ADMIN-015) covering browser security headers/CSP, observability SLOs, background job/queue semantics, environment governance, incident response break-glass controls, and tamper-evident audit/retention custody.
 
 ---
 
@@ -58,21 +58,25 @@ Status codes: `compliant` | `known defect` | `unaudited/in progress` | `N/A`
 | -                 | Documentation Hardening (F-Doc1, F-Doc2, F-Doc3)     | 2026-06-05 | -                                  |
 | -                 | Architecture Autopsy Implementation Pass             | 2026-06-05 | -                                  |
 | -                 | Final Autopsy Completion Pass (I-13, I-14, I-23)     | 2026-06-07 | -                                  |
+| Production Phase  | Production Readiness Audit & ADR-010..015 Framework  | 2026-07-22 | -                                  |
+| Roadmap Phase 0   | Production Gate Stabilization (P0-1 through P0-5)    | 2026-07-22 | -                                  |
 
 ---
 
 ## Latest Verification
 
-| Check                                | Result | Notes                                    |
-| ------------------------------------ | ------ | ---------------------------------------- |
-| `admin:check-types`                  | Pass   | Exit 0. All files compiled cleanly.      |
-| `admin:test:all`                     | Pass   | 49 files; 378 of 378 tests passed.       |
-| `admin:report-security-drift:strict` | Pass   | Exit 0. Zero findings in all categories. |
-| `admin:lint`                         | Pass   | 79 known warnings; 0 errors.             |
+| Check                                | Result | Notes                                     |
+| ------------------------------------ | ------ | ----------------------------------------- |
+| `admin:check-types`                  | Pass   | Exit 0. TypeScript build errors enforced. |
+| `admin:test:all`                     | Pass   | All test suites passing cleanly.          |
+| `admin:report-security-drift:strict` | Pass   | Exit 0. Zero findings in all categories.  |
+| `admin:lint`                         | Pass   | 79 known warnings; 0 errors.              |
 
 ---
 
 ## Next Priority
 
-1. **Deployment:** Validate all phases in staging and production environments.
-2. **Enable v2 Flags:** Enable each `NEXT_PUBLIC_ADMIN_FF_V2_*` flag in production to begin the 30-day stability window per `docs/RETIREMENT.md`. All four v2 pages have independent implementations, full feature parity, and completed v2-specific UI tests (happy path + error state).
+1. **Phase 1 (Security & Environment Hardening):** Enforce `ADMIN_DEPLOYMENT_PROFILE` env validation, route authorization registry, audit coverage checks, and SSRF outbound HTTP guards.
+2. **Phase 2 (Operability & Compliance):** Wire OpenTelemetry metric/SLO contracts, register background queue/job contracts, and formalize tamper-evident audit logging.
+3. **Phase 3 (Structural Cleanup):** Extract dashboard shell/access/error components and enforce import boundaries with ESLint.
+4. **Enable v2 Flags & Retirement:** Execute feature flag retirement schedule per [`RETIREMENT.md`](RETIREMENT.md) once production stability windows clear.
