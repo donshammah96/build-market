@@ -60,6 +60,7 @@ Status codes: `compliant` | `known defect` | `unaudited/in progress` | `N/A`
 | -                 | Final Autopsy Completion Pass (I-13, I-14, I-23)     | 2026-06-07 | -                                  |
 | Production Phase  | Production Readiness Audit & ADR-010..015 Framework  | 2026-07-22 | -                                  |
 | Roadmap Phase 0   | Production Gate Stabilization (P0-1 through P0-5)    | 2026-07-22 | -                                  |
+| Roadmap Phase 1   | Security & Configuration Hardening (P0/P1)           | 2026-07-22 | -                                  |
 
 ---
 
@@ -68,15 +69,15 @@ Status codes: `compliant` | `known defect` | `unaudited/in progress` | `N/A`
 | Check                                | Result | Notes                                     |
 | ------------------------------------ | ------ | ----------------------------------------- |
 | `admin:check-types`                  | Pass   | Exit 0. TypeScript build errors enforced. |
-| `admin:test:all`                     | Pass   | All test suites passing cleanly.          |
-| `admin:report-security-drift:strict` | Pass   | Exit 0. Zero findings in all categories.  |
+| `admin:check-env-contract`           | Pass   | Exit 0. All env keys match templates.     |
+| `admin:test:all`                     | Pass   | 63 test files passing cleanly.            |
+| `admin:report-security-drift:strict` | Pass   | Exit 0. Zero findings across 302 files.   |
 | `admin:lint`                         | Pass   | 79 known warnings; 0 errors.              |
 
 ---
 
 ## Next Priority
 
-1. **Phase 1 (Security & Environment Hardening):** Enforce `ADMIN_DEPLOYMENT_PROFILE` env validation, route authorization registry, audit coverage checks, and SSRF outbound HTTP guards.
-2. **Phase 2 (Operability & Compliance):** Wire OpenTelemetry metric/SLO contracts, register background queue/job contracts, and formalize tamper-evident audit logging.
-3. **Phase 3 (Structural Cleanup):** Extract dashboard shell/access/error components and enforce import boundaries with ESLint.
-4. **Enable v2 Flags & Retirement:** Execute feature flag retirement schedule per [`RETIREMENT.md`](RETIREMENT.md) once production stability windows clear.
+1. **Phase 2 (Operability & Compliance):** Wire OpenTelemetry metric/SLO contracts, register background queue/job contracts, and formalize tamper-evident audit logging.
+2. **Phase 3 (Structural Cleanup):** Extract dashboard shell/access/error components and enforce import boundaries with ESLint.
+3. **Enable v2 Flags & Retirement:** Execute feature flag retirement schedule per [`RETIREMENT.md`](RETIREMENT.md) once production stability windows clear.

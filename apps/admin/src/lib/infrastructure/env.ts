@@ -11,6 +11,9 @@ export const adminBaseEnvSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
+  ADMIN_DEPLOYMENT_PROFILE: z
+    .enum(["local", "test", "preview", "staging", "production"])
+    .default("local"),
   DATABASE_URL: z.string().min(1).optional(),
   DIRECT_URL: z.string().min(1).optional(),
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1).optional(),
@@ -89,19 +92,41 @@ export const adminBaseEnvSchema = z.object({
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
 });
 
-export const adminEnvSchema = adminBaseEnvSchema.refine(
-  (data) => {
-    // Require QUEUE_PROVIDER in production environment (F10)
-    if (data.NODE_ENV === "production" && !data.QUEUE_PROVIDER) {
-      return false;
-    }
-    return true;
-  },
-  {
-    message: "QUEUE_PROVIDER is required when NODE_ENV is production",
-    path: ["QUEUE_PROVIDER"],
-  },
-);
+export const adminEnvSchema = adminBaseEnvSchema
+  .refine(
+    (data) => {
+      // Require QUEUE_PROVIDER in production environment (F10)
+      if (
+        (data.NODE_ENV === "production" ||
+          data.ADMIN_DEPLOYMENT_PROFILE === "production") &&
+        !data.QUEUE_PROVIDER
+      ) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message:
+        "QUEUE_PROVIDER is required when NODE_ENV or ADMIN_DEPLOYMENT_PROFILE is production",
+      path: ["QUEUE_PROVIDER"],
+    },
+  )
+  .refine(
+    (data) => {
+      if (
+        data.ADMIN_DEPLOYMENT_PROFILE === "production" ||
+        data.ADMIN_DEPLOYMENT_PROFILE === "staging"
+      ) {
+        return Boolean(data.DATABASE_URL && data.DATABASE_URL.length > 0);
+      }
+      return true;
+    },
+    {
+      message:
+        "DATABASE_URL is required when ADMIN_DEPLOYMENT_PROFILE is production or staging",
+      path: ["DATABASE_URL"],
+    },
+  );
 
 export type AdminEnvConfig = z.infer<typeof adminEnvSchema>;
 

@@ -548,6 +548,52 @@ function checkIgnoreBuildErrors() {
   }
 }
 
+// --- Rule: direct fetch usage restriction (SSRF protection) ---
+const FETCH_ALLOWLIST_MARKER = "SECURITY_FETCH_ALLOWLIST";
+
+function checkDirectOutboundFetch(file, source) {
+  const ruleId = "no-direct-outbound-fetch";
+  if (isAllowed(source, ruleId)) return;
+
+  const rel = relPath(file).replace(/\\/g, "/");
+  // SSRF protection targets server-side outbound HTTP requests in services/actions.
+  // Browser components (src/components/), low-level fetch abstractions (src/lib/api/, client-api.ts),
+  // and notification HTTP wrappers are excluded from server-side SSRF checks.
+  if (
+    rel.includes("src/lib/infrastructure/") ||
+    rel.includes("src/lib/api/") ||
+    rel.includes("src/components/") ||
+    rel.includes("src/actions/admin/_core/client-api.ts") ||
+    rel.includes("src/lib/domains/verification/internal/")
+  ) {
+    return;
+  }
+
+  const matches = source.matchAll(/\bfetch\s*\(/g);
+  const lines = source.split(/\r?\n/);
+  for (const m of matches) {
+    if (m.index === undefined) continue;
+    const lineNum = source.slice(0, m.index).split(/\r?\n/).length;
+
+    let hasMarker = false;
+    const start = Math.max(0, lineNum - 4);
+    const end = Math.min(lines.length - 1, lineNum);
+    for (let i = start; i <= end; i++) {
+      if (lines[i].includes(FETCH_ALLOWLIST_MARKER)) {
+        hasMarker = true;
+        break;
+      }
+    }
+
+    if (!hasMarker) {
+      violations.push({
+        id: ruleId,
+        message: `${relPath(file)}: ${lineNum}: Direct fetch() call detected. Outbound HTTP requests should use "ssrfSafeFetch()" from "src/lib/infrastructure/ssrf-safe-fetch.ts" for SSRF validation, or be marked with "// ${FETCH_ALLOWLIST_MARKER}".`,
+      });
+    }
+  }
+}
+
 async function main() {
   checkMiddlewarePresence();
   checkIgnoreBuildErrors();
@@ -574,6 +620,7 @@ async function main() {
     checkZodPassthrough(file, source);
     checkUnsafeClientErrors(file, source);
     checkReqJsonInGet(file, source);
+    checkDirectOutboundFetch(file, source);
   }
 
   if (violations.length > 0) {

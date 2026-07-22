@@ -357,13 +357,13 @@ The audit uses the following external baseline:
 - [x] Add security-header ADR and implementation spike ([ADR-ADMIN-010](adr/ADR-ADMIN-010-admin-browser-security-headers-and-csp.md), [security-headers.ts](../src/lib/security/security-headers.ts), `headers()` in `next.config.ts`).
 - [x] Create route/action policy drift tests ([route-and-action-policy-drift.test.ts](../__tests__/security/route-and-action-policy-drift.test.ts) & [security-headers.test.ts](../__tests__/config/security-headers.test.ts)).
 
-### Phase 1: Security and Configuration Hardening (P0/P1)
+### Phase 1: Security and Configuration Hardening (P0/P1) — Complete (2026-07-22)
 
-- Implement deployment-profile env validation.
-- Add CSP/security headers in report-only mode.
-- Build route registry and generate middleware/navigation inputs.
-- Add high-risk operation registry and audit coverage test.
-- Add SSRF-safe outbound client and direct-fetch lint restrictions.
+- [x] Implement deployment-profile env validation (`ADMIN_DEPLOYMENT_PROFILE` in [env.ts](../src/lib/infrastructure/env.ts)).
+- [x] Add CSP/security headers in report-only mode ([ADR-ADMIN-010](adr/ADR-ADMIN-010-admin-browser-security-headers-and-csp.md), [security-headers.ts](../src/lib/security/security-headers.ts)).
+- [x] Build route registry and generate middleware/navigation inputs ([route-registry.ts](../src/lib/security/route-registry.ts), [middleware.ts](../src/middleware.ts)).
+- [x] Add high-risk operation registry and audit coverage test ([high-risk-admin-registry.ts](../src/lib/security/high-risk-admin-registry.ts), [audit-coverage.test.ts](../__tests__/security/audit-coverage.test.ts)).
+- [x] Add SSRF-safe outbound client and direct-fetch lint restrictions ([ssrf-safe-fetch.ts](../src/lib/infrastructure/ssrf-safe-fetch.ts), [ssrf-safe-fetch.test.ts](../__tests__/infrastructure/ssrf-safe-fetch.test.ts), `checkDirectOutboundFetch` in `check-security-drift.mjs`).
 
 ### Phase 2: Operability and Compliance (P1)
 
@@ -395,10 +395,10 @@ The audit uses the following external baseline:
 Before treating `apps/admin` as production-ready, require:
 
 - [x] `ignoreBuildErrors` removed and build fails on type errors.
-- [ ] Production env profile validates auth, DB, queue, storage, encryption, observability, and privacy settings.
+- [x] Production env profile validates auth, DB, queue, storage, encryption, observability, and privacy settings.
 - [x] CSP and security headers shipped and tested.
-- [ ] Route registry prevents unregistered dashboard/admin routes.
-- [ ] Every high-risk action has capability policy, recent-auth, rate limit, idempotency where applicable, and audit coverage.
+- [x] Route registry prevents unregistered dashboard/admin routes.
+- [x] Every high-risk action has capability policy, recent-auth, rate limit, idempotency where applicable, and audit coverage.
 - [x] User-facing errors are redacted and include correlation IDs.
 - [ ] Logs, metrics, traces, dashboards, alerts, and runbooks exist for P0/P1 workflows.
 - [ ] Queue/job retry, dead-letter, idempotency, and replay behavior documented and tested.

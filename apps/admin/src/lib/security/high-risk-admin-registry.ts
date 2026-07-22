@@ -84,6 +84,24 @@ export const HIGH_RISK_ADMIN_ACTIONS = [
     maxAgeSeconds: 180,
     rateLimitNamespace: "content",
   },
+  {
+    actionName: "suspendUser",
+    category: "role-mutation",
+    maxAgeSeconds: 180,
+    rateLimitNamespace: "users",
+  },
+  {
+    actionName: "unsuspendUser",
+    category: "role-mutation",
+    maxAgeSeconds: 180,
+    rateLimitNamespace: "users",
+  },
+  {
+    actionName: "anonymizeUser",
+    category: "user-deletion",
+    maxAgeSeconds: 180,
+    rateLimitNamespace: "users",
+  },
 ] as const satisfies readonly HighRiskAdminAction[];
 
 export type HighRiskAdminActionName =
