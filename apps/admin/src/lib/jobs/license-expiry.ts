@@ -6,6 +6,11 @@ import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 import { createAuditLog } from "@/lib/domains/verification/internal/audit-service";
 import { createProducer } from "@build/nats";
+import { validateJobPayload } from "@/lib/queues/queue-registry";
+import {
+  jobAttemptCounter,
+  jobDurationHistogram,
+} from "@/lib/infrastructure/metrics";
 
 const logger = new StructuredLogger("license-expiry-job");
 
@@ -100,6 +105,7 @@ export function createLicenseExpiryWorker() {
   const worker = new Worker(
     "maintenance-jobs",
     async (job: Job) => {
+      validateJobPayload("maintenance-jobs", job.name, job.data);
       if (job.name !== "expire-pending-licenses") {
         logger.warn("Received unexpected job type", {
           jobName: job.name,
@@ -355,6 +361,15 @@ export function createLicenseExpiryWorker() {
       jobId: job.id,
       result,
     });
+    try {
+      jobAttemptCounter.add(1, { jobName: job.name, status: "completed" });
+      if (job.finishedOn && job.processedOn) {
+        jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+          jobName: job.name,
+          status: "completed",
+        });
+      }
+    } catch {}
   });
 
   worker.on("failed", (job: Job | undefined, error: Error) => {
@@ -362,6 +377,18 @@ export function createLicenseExpiryWorker() {
       jobId: job?.id,
       attemptsMade: job?.attemptsMade,
     });
+    try {
+      jobAttemptCounter.add(1, {
+        jobName: job?.name ?? "unknown",
+        status: "failed",
+      });
+      if (job && job.finishedOn && job.processedOn) {
+        jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+          jobName: job.name,
+          status: "failed",
+        });
+      }
+    } catch {}
   });
 
   worker.on("error", (error: Error) => {

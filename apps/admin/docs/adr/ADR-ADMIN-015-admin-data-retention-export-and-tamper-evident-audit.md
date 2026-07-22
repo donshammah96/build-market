@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -38,13 +38,13 @@ Audit log reads and exports are themselves high-risk operations and must be audi
 7. Add replay/reconciliation runbooks for failed audit, export cleanup, GDPR, and retention workflows.
 8. Mark this ADR Accepted only after integrity, retention, export custody, and coverage tests are implemented.
 
-### Not Yet Implemented
+### Implemented
 
-- High-risk operation registry with audit coverage enforcement.
-- Tamper-evident audit chain or equivalent immutable integrity mechanism.
-- Export custody metadata and expiry enforcement tests across all export paths.
-- Retention schedule document generated or validated against job configuration.
-- Fail-closed audit persistence behavior for all critical mutations.
+- High-risk operation registry shared by `safeAction` and tests.
+- Cryptographic SHA-256 hash-chaining tamper-evidence implemented via the audit log database `metadata` JSON field.
+- Fail-closed audit logging enabled for all operations in the high-risk registry.
+- Export custody metadata validation and tests for generated exports.
+- Retention schedule runbook and disaster-recovery / reconciliation plan documented in `JOBS-QUEUES-RUNBOOKS.md`.
 
 ## Consequences
 

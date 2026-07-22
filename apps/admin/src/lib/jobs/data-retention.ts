@@ -16,6 +16,11 @@ import { prisma } from "@build/db";
 import { AnonymizationService } from "@/lib/domains/gdpr/anonymization/service";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { validateJobPayload } from "@/lib/queues/queue-registry";
+import {
+  jobAttemptCounter,
+  jobDurationHistogram,
+} from "@/lib/infrastructure/metrics";
 
 const logger = new StructuredLogger("data-retention-job");
 
@@ -85,6 +90,7 @@ export function createDataRetentionWorker() {
   const worker = new Worker(
     "gdpr-data-retention",
     async (job: Job) => {
+      validateJobPayload("gdpr-data-retention", job.name, job.data);
       if (job.name !== "enforce-data-retention") {
         logger.warn("Received unexpected job type", {
           jobName: job.name,
@@ -272,6 +278,15 @@ export function createDataRetentionWorker() {
 
   worker.on("completed", (job: Job) => {
     logger.info("Job completed", { jobId: job.id });
+    try {
+      jobAttemptCounter.add(1, { jobName: job.name, status: "completed" });
+      if (job.finishedOn && job.processedOn) {
+        jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+          jobName: job.name,
+          status: "completed",
+        });
+      }
+    } catch {}
   });
 
   worker.on("failed", (job: Job | undefined, error: Error) => {
@@ -280,6 +295,18 @@ export function createDataRetentionWorker() {
       error instanceof Error ? error : new Error(String(error)),
       { jobId: job?.id },
     );
+    try {
+      jobAttemptCounter.add(1, {
+        jobName: job?.name ?? "unknown",
+        status: "failed",
+      });
+      if (job && job.finishedOn && job.processedOn) {
+        jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+          jobName: job.name,
+          status: "failed",
+        });
+      }
+    } catch {}
   });
 
   worker.on("error", (error: Error) => {

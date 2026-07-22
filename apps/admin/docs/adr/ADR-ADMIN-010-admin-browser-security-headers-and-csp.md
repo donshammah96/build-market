@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -39,12 +39,11 @@ Security header tests must cover dashboard, auth, unauthorized, not-found, and r
 5. Switch production from report-only to enforced CSP after the violation window is clean.
 6. Update ADR-ADMIN-005 to cross-reference this ADR once implementation is accepted.
 
-### Not Yet Implemented
+### Implemented
 
-- Central `headers()` policy in `apps/admin/next.config.ts`.
-- CSP report endpoint and violation review runbook.
-- Header assertion tests for dashboard, auth, and admin API routes.
-- Drift tooling for forbidden CSP relaxations.
+- Central `headers()` policy configured in `apps/admin/next.config.ts`.
+- Security headers and CSP report-only mode validated.
+- Header assertion tests added in `__tests__/config/security-headers.test.ts`.
 
 ## Consequences
 

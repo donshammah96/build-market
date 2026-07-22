@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma, UserRole, AdminRole } from "@build/db";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 import { toBool } from "@/lib/infrastructure/env-utils";
+import { routeOutcomeCounter } from "@/lib/infrastructure/metrics";
 
 /**
  * Resolved admin identity for API route handlers.
@@ -44,6 +45,18 @@ export async function resolveAdminRouteActor(
       },
     });
 
+    const adminRoleStr = dbAdmin?.adminProfile?.role
+      ? String(dbAdmin.adminProfile.role)
+      : "SUPER_ADMIN";
+
+    try {
+      routeOutcomeCounter.add(1, {
+        operationName,
+        adminRole: adminRoleStr,
+        outcome: "success",
+      });
+    } catch {}
+
     return {
       authorized: true,
       actor: {
@@ -51,9 +64,7 @@ export async function resolveAdminRouteActor(
         clerkId: dbAdmin?.clerkId || "admin_buildmarket_001",
         adminRole: dbAdmin?.adminProfile?.role ?? AdminRole.SUPER_ADMIN,
       },
-      adminRoleStr: dbAdmin?.adminProfile?.role
-        ? String(dbAdmin.adminProfile.role)
-        : "SUPER_ADMIN",
+      adminRoleStr,
     };
   }
 
@@ -67,6 +78,13 @@ export async function resolveAdminRouteActor(
       outcome: "unauthorized",
       durationMs: Date.now() - requestStartedAt,
     });
+    try {
+      routeOutcomeCounter.add(1, {
+        operationName,
+        adminRole: "unknown",
+        outcome: "unauthorized",
+      });
+    } catch {}
     return {
       authorized: false,
       response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
@@ -90,6 +108,13 @@ export async function resolveAdminRouteActor(
       outcome: "unauthorized",
       durationMs: Date.now() - requestStartedAt,
     });
+    try {
+      routeOutcomeCounter.add(1, {
+        operationName,
+        adminRole: "unknown",
+        outcome: "unauthorized",
+      });
+    } catch {}
     return {
       authorized: false,
       response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
@@ -98,6 +123,9 @@ export async function resolveAdminRouteActor(
 
   const isAdmin = user.role === UserRole.ADMIN;
   const hasActiveProfile = user.adminProfile?.isActive === true;
+  const adminRoleStr = user.adminProfile?.role
+    ? String(user.adminProfile.role)
+    : "unknown";
 
   if (!isAdmin || !hasActiveProfile) {
     const isDev = adminEnvConfig.NODE_ENV === "development";
@@ -107,13 +135,18 @@ export async function resolveAdminRouteActor(
       logWarn({
         correlationId,
         operationName,
-        adminRole: user.adminProfile?.role
-          ? String(user.adminProfile.role)
-          : "unknown",
+        adminRole: adminRoleStr,
         outcome: "forbidden",
         durationMs: Date.now() - requestStartedAt,
         errorCode: "FORBIDDEN",
       });
+      try {
+        routeOutcomeCounter.add(1, {
+          operationName,
+          adminRole: adminRoleStr,
+          outcome: "forbidden",
+        });
+      } catch {}
       return {
         authorized: false,
         response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
@@ -121,9 +154,13 @@ export async function resolveAdminRouteActor(
     }
   }
 
-  const adminRoleStr = user.adminProfile?.role
-    ? String(user.adminProfile.role)
-    : "unknown";
+  try {
+    routeOutcomeCounter.add(1, {
+      operationName,
+      adminRole: adminRoleStr,
+      outcome: "success",
+    });
+  } catch {}
 
   return {
     authorized: true,

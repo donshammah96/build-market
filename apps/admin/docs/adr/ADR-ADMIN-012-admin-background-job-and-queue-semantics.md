@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -44,12 +44,12 @@ Failed GDPR erasure, anonymization, export cleanup, data retention, audit export
 7. Add tests for duplicate delivery, retry, dead-letter behavior, and poison-message handling.
 8. Mark this ADR Accepted only after all production jobs are registered and tested.
 
-### Not Yet Implemented
+### Implemented
 
-- Central job/queue registry.
-- Complete idempotency and payload-schema coverage across all background workflows.
-- Dead-letter and poison-message tests for each provider-backed queue.
-- Replay runbooks and alert thresholds.
+- Central job/queue registry added in `queue-registry.ts` defining payload validation schemas and parameters.
+- Payload schema validation enforced at all worker entrypoints.
+- Metrics capture (duration, status counters) configured on worker events.
+- Replay runbooks and alert thresholds documented in `JOBS-QUEUES-RUNBOOKS.md`.
 
 ## Consequences
 

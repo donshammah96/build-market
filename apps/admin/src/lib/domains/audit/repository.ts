@@ -183,6 +183,14 @@ export async function createAuditLog(
   return mapAuditLog(row);
 }
 
+export async function findLastAuditLog(): Promise<AuditLogEntry | null> {
+  const row = await prisma.adminAuditLog.findFirst({
+    orderBy: { createdAt: "desc" },
+    select: AUDIT_LOG_SELECT,
+  });
+  return row ? mapAuditLog(row) : null;
+}
+
 export const auditRepository = {
   listAuditLogs,
   countAuditLogs,
@@ -194,4 +202,5 @@ export const auditRepository = {
   findDistinctActions,
   findForExport,
   createAuditLog,
+  findLastAuditLog,
 };

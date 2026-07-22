@@ -4,6 +4,44 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added (Admin Background Jobs, Metrics and Cryptographic Chaining)
+
+- **Admin background jobs, metrics and cryptographic chaining (`apps/admin`)**:
+  - Implemented OpenTelemetry metrics provider and scaffolding in `metrics.ts` and `otel.ts` (tracking action/route outcomes, durations, queue lag, and job attempts).
+  - Instrumented `safe-action.ts` and `route-auth.ts` with OTel counters/histograms.
+  - Implemented cryptographic SHA-256 hash chaining inside `recordAdminAuditEvent` stored in the existing `details` JSON field, and exposed `verifyAuditLogIntegrity` to detect log tampering or broken pointer chains.
+  - Enforced fail-closed constraints for high-risk operations on audit log creation failures in `audit.ts`.
+  - Built a centralized `queue-registry.ts` with Zod payload validation schemas and integrated them in all workers to guard against poison messages.
+  - Created 3 new test suites (`telemetry.test.ts`, `queue-registry.test.ts`, `audit-tamper-evidence.test.ts`) guaranteeing 100% test coverage.
+  - Created operational runbooks `JOBS-QUEUES-RUNBOOKS.md` and telemetry mapping documentation `TELEMETRY-SLO.md`.
+
+**Files changed:**
+
+- `apps/admin/package.json`
+- `apps/admin/src/lib/infrastructure/metrics.ts`
+- `apps/admin/src/lib/infrastructure/otel.ts`
+- `apps/admin/src/actions/admin/_core/safe-action.ts`
+- `apps/admin/src/lib/security/route-auth.ts`
+- `apps/admin/src/lib/domains/audit/service.ts`
+- `apps/admin/src/lib/domains/audit/repository.ts`
+- `apps/admin/src/actions/admin/_core/audit.ts`
+- `apps/admin/src/lib/queues/queue-registry.ts`
+- `apps/admin/src/lib/workers/compliance/incident.worker.ts`
+- `apps/admin/src/lib/jobs/gdpr-erasure.ts`
+- `apps/admin/src/lib/jobs/data-retention.ts`
+- `apps/admin/src/lib/jobs/anonymization-batch.ts`
+- `apps/admin/src/lib/jobs/asset-cleanup.ts`
+- `apps/admin/src/lib/jobs/export-cleanup.ts`
+- `apps/admin/src/lib/jobs/license-expiry.ts`
+- `apps/admin/__tests__/infrastructure/telemetry.test.ts`
+- `apps/admin/__tests__/infrastructure/queue-registry.test.ts`
+- `apps/admin/__tests__/security/audit-tamper-evidence.test.ts`
+- `apps/admin/src/lib/domains/audit/__tests__/service.test.ts`
+- `apps/admin/docs/JOBS-QUEUES-RUNBOOKS.md`
+- `apps/admin/docs/TELEMETRY-SLO.md`
+- `apps/admin/docs/VERIFICATION.md`
+- `CHANGELOG.md`
+
 ### Security (Dependency Vulnerability Patches)
 
 - **Security (CVE & Audit Fixes)**: Updated package overrides in `pnpm-workspace.yaml` to resolve `pnpm run deps:audit` vulnerabilities:

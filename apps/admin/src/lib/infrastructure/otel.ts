@@ -1,5 +1,7 @@
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-grpc";
+import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-grpc";
+import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import { HttpInstrumentation } from "@opentelemetry/instrumentation-http";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { PrismaInstrumentation } from "@prisma/instrumentation";
@@ -28,13 +30,23 @@ export function initOtel(env: AdminEnvConfig) {
     }
   }
 
-  const exporter = new OTLPTraceExporter({
+  const traceExporter = new OTLPTraceExporter({
     url: endpoint,
+  });
+
+  const metricExporter = new OTLPMetricExporter({
+    url: endpoint,
+  });
+
+  const metricReader = new PeriodicExportingMetricReader({
+    exporter: metricExporter as any,
+    exportIntervalMillis: 60000,
   });
 
   sdk = new NodeSDK({
     resource: resourceFromAttributes(resourceAttributes),
-    traceExporter: exporter,
+    traceExporter,
+    metricReader: metricReader as any,
     instrumentations: [new PrismaInstrumentation(), new HttpInstrumentation()],
   });
 

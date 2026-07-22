@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -46,12 +46,12 @@ Adapter layers may emit routine operation telemetry. Services and repositories m
 6. Add dashboard and alert links to `apps/admin/docs/VERIFICATION.md` and relevant runbooks.
 7. Mark this ADR Accepted only after telemetry is emitted, dashboards exist, and alert/runbook ownership is documented.
 
-### Not Yet Implemented
+### Implemented
 
-- SLO registry for admin operations.
-- Metrics helpers and queue/job health metrics across all P0/P1 workflows.
-- Dashboard and alert definitions.
-- Staging telemetry smoke tests.
+- SLO registry for admin operations documented in `TELEMETRY-SLO.md`.
+- Metrics API initialized and counters/histograms wired to route resolution, safeAction, audit writes, and workers.
+- Dashboard panel mapping and alert configurations defined.
+- Staging and unit telemetry validation test coverage added in `__tests__/observability/telemetry.test.ts`.
 
 ## Consequences
 
