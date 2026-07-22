@@ -58,11 +58,7 @@ export const adminBaseEnvSchema = z.object({
   GDPR_ERASURE_BATCH_SIZE: z.coerce.number().int().positive().optional(),
   EXPORT_CLEANUP_CRON: z.string().min(1).optional(),
   EXPORT_CLEANUP_BATCH_SIZE: z.coerce.number().int().positive().optional(),
-  EXPORT_CLEANUP_MAX_RETRIES: z.coerce
-    .number()
-    .int()
-    .nonnegative()
-    .optional(),
+  EXPORT_CLEANUP_MAX_RETRIES: z.coerce.number().int().nonnegative().optional(),
   DATA_RETENTION_CRON: z.string().min(1).optional(),
   RETENTION_BATCH_SIZE: z.coerce.number().int().positive().optional(),
   ASSET_CLEANUP_CRON: z.string().min(1).optional(),
