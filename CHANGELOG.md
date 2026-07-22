@@ -7,6 +7,11 @@ All notable changes to this project will be documented in this file.
 ### Security (Dependency Vulnerability Patches)
 
 - **Security (CVE & Audit Fixes)**: Updated package overrides in `pnpm-workspace.yaml` to resolve `pnpm run deps:audit` vulnerabilities:
+  - `hono` & `@hono/node-server`: Upgraded `hono` override from `>=4.12.18` to `>=4.12.27` and `@hono/node-server` from `>=2.0.2` to `>=2.0.10` (mitigating moderate XSS via JSX escaping bypass GHSA-w62v-xxxg-mg59, cross-request JSX context disclosure GHSA-hvrm-45r6-mjfj, header deduplication drop GHSA-xgm2-5f3f-mvvc, and unauthenticated WebSocket memory leak GHSA-9mqv-5hh9-4cgg).
+  - `fast-uri`: Upgraded `fast-uri` override from `>=3.1.2` to `>=4.1.1` (mitigating high severity host confusion via IDN canonicalization GHSA-4c8g-83qw-93j6 and backslash authority delimiter GHSA-v2hh-gcrm-f6hx).
+  - `dompurify`: Upgraded `dompurify` override from `>=3.4.11` to `>=3.4.12` (mitigating low severity custom element sanitizer bypass GHSA-c2j3-45gr-mqc4).
+  - `sharp`: Enforced `sharp` override `>=0.35.0` (mitigating high severity libvips vulnerabilities GHSA-f88m-g3jw-g9cj).
+  - `@opentelemetry/propagator-jaeger`: Enforced `@opentelemetry/propagator-jaeger` override `>=2.9.0` (mitigating high severity DoS via malformed header GHSA-45rx-2jwx-cxfr).
   - `brace-expansion`: Upgraded `brace-expansion@^2.0.0` override from `2.0.3` to `2.1.2` (mitigating high severity DoS via exponential-time expansion, GHSA-3jxr-9vmj-r5cp).
   - `protobufjs`: Upgraded `protobufjs` override from `>=8.0.2` to `>=8.6.6` (mitigating moderate severity prototype pollution GHSA-jfj6-75fj-8934 and DoS infinite loop GHSA-j3f2-48v5-ccww).
 
