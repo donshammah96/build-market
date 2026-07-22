@@ -46,7 +46,22 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 
 ## Latest Verification Results
 
-> **Phase 2 Operability and Compliance (P1) Pass (2026-07-22)**
+> **Phase 3 Structural Cleanup and Retirement (P2) Pass (2026-07-22)**
+
+| Check                                | Result | Notes                                                            |
+| ------------------------------------ | ------ | ---------------------------------------------------------------- |
+| `admin:check-types`                  | Pass   | Exit 0. Zero TypeScript errors across workspace.                 |
+| `admin:build`                        | Pass   | Exit 0. Full Next.js production build cleanly compiled.          |
+| `admin:lint`                         | Pass   | Exit 0. 79 known warnings remain, 0 errors.                      |
+| `admin:check-env-contract`           | Pass   | Exit 0. All 75 environment boundary keys match across templates. |
+| `admin:report-security-drift:strict` | Pass   | Exit 0. Zero findings across 307 files.                          |
+| `admin:test:all`                     | Pass   | 67 test files. 501 of 501 tests passed.                          |
+
+---
+
+## Previous Verification Snapshots
+
+### Phase 2 Operability and Compliance (P1) Pass (2026-07-22)
 
 | Check                                | Result | Notes                                                            |
 | ------------------------------------ | ------ | ---------------------------------------------------------------- |
@@ -59,9 +74,7 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 
 ---
 
-## Previous Verification Snapshots
-
-> **Phase 1 Security & Configuration Hardening Pass (2026-07-22)**
+### Phase 1 Security & Configuration Hardening Pass (2026-07-22)
 
 | Check                                | Result | Notes                                                                        |
 | ------------------------------------ | ------ | ---------------------------------------------------------------------------- |
@@ -74,7 +87,7 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 
 ---
 
-> **Phase 0 Production Gate Hardening Pass (2026-07-22)**
+### Phase 0 Production Gate Hardening Pass (2026-07-22)
 
 | Check                                | Result | Notes                                                                        |
 | ------------------------------------ | ------ | ---------------------------------------------------------------------------- |
@@ -87,9 +100,7 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 
 ---
 
-## Previous Verification Snapshots
-
-> **P2 & P3 Autopsy Refactoring Pass (2026-06-07)**
+### P2 & P3 Autopsy Refactoring Pass (2026-06-07)
 
 | Check                                | Result | Notes                                        |
 | ------------------------------------ | ------ | -------------------------------------------- |
@@ -101,9 +112,7 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 
 ---
 
-## Previous Verification Snapshot
-
-> **Architecture Autopsy Implementation Pass (2026-06-05)**
+### Architecture Autopsy Implementation Pass (2026-06-05)
 
 | Check                                | Result | Notes                                        |
 | ------------------------------------ | ------ | -------------------------------------------- |

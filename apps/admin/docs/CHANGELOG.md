@@ -2,7 +2,17 @@
 
 ## [Unreleased]
 
-### Added (Background Jobs, Metrics Scaffolding & Tamper-Evident Audit )
+### Added (Structural Cleanup, Shell Component Extraction & Feature Flag Lifecycle)
+
+- **Dashboard Shell & Access Boundary Component Extraction (P2-1 / Phase 3)**:
+  - Extracted modular layout presentation components under `src/components/admin/shell/`: [AdminShell.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/admin/shell/AdminShell.tsx), [AdminAccessBoundary.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/admin/shell/AdminAccessBoundary.tsx), [AdminUserMenu.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/admin/shell/AdminUserMenu.tsx), and [AdminSystemErrorCard.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/admin/shell/AdminSystemErrorCard.tsx).
+  - Refactored [layout.tsx](file:///c:/Users/User/build-market/apps/admin/src/app/%28dashboard%29/layout.tsx) into a thin async layout composing `AdminAccessBoundary` with server-side auth/permission resolution.
+  - Added unit test suite [shell.test.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/admin/shell/__tests__/shell.test.tsx) verifying access denial, database error displays with correlation IDs, and successful rendering.
+- **Architectural Boundary Lint Enforcement (P2-2 / Phase 3)**:
+  - Extended [check-security-drift.mjs](file:///c:/Users/User/build-market/apps/admin/scripts/check-security-drift.mjs) with strict static architectural checks: `no-direct-orm-access` (forbidding runtime Prisma/DB query instances in presentation and server action layers), `no-raw-clerk-server` (forbidding raw Clerk server imports outside auth adapters and shell), and `checkFeatureFlagLifecycle`.
+- **Feature Flag Lifecycle Governance (P1-3 / Phase 3)**:
+  - Extended [feature-flags.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/config/feature-flags.ts) with `FEATURE_FLAG_LIFECYCLE_METADATA` specifying `owner`, `createdAt`, `targetRetirementDate`, `maxLifetimeDays`, and description for every `AdminFeatureFlag`.
+  - Added static linter assertion in `check-security-drift.mjs` verifying that every active feature flag has complete lifecycle metadata and complies with retirement schedules.
 
 - **Background Jobs, Metrics Scaffolding & Tamper-Evident Audit (ADR-ADMIN-011 / ADR-ADMIN-012 / ADR-ADMIN-015 / Phase 2)**:
   - **OpenTelemetry Metrics Scaffolding**: Added `@opentelemetry/exporter-metrics-otlp-grpc` and `@opentelemetry/sdk-metrics` dependencies to `package.json`, configured the standard OTLP metric exporter and `PeriodicExportingMetricReader` in [otel.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/infrastructure/otel.ts), and created [metrics.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/infrastructure/metrics.ts) defining standard counters (`admin.action.outcome`, `admin.route.outcome`, `admin.audit.write`, `admin.job.attempt`, `admin.queue.lag`) and latency histograms.

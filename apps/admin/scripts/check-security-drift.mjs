@@ -594,9 +594,92 @@ function checkDirectOutboundFetch(file, source) {
   }
 }
 
+// --- Rule: direct ORM (prisma/db runtime instance queries) forbidden outside domain services, repositories, jobs, and infrastructure ---
+function checkDirectOrmAccess(file, source) {
+  const ruleId = "no-direct-orm-access";
+  if (isAllowed(source, ruleId)) return;
+
+  const rel = relPath(file).replace(/\\/g, "/");
+  if (rel.includes("src/lib/") || rel.includes("scripts/")) {
+    return;
+  }
+
+  // Check for importing runtime prisma/db instance from @build/db (excluding type-only imports)
+  const hasRuntimeDbImport =
+    /import\s+[^;]*\b(prisma|db)\b[^;]*from\s+["']@build\/db["']/.test(
+      source,
+    ) && !/import\s+type\s+/.test(source);
+
+  // Check for direct query calls like prisma.user.findMany, db.lead.update, etc.
+  const hasDirectQueryCall =
+    /\b(?:prisma|db)\.[a-zA-Z0-9_]+\.(?:findMany|findUnique|findFirst|create|update|delete|deleteMany|updateMany|upsert|aggregate|count|groupBy|executeRaw|queryRaw)\b/.test(
+      source,
+    );
+
+  if (hasRuntimeDbImport || hasDirectQueryCall) {
+    const lines = source.split(/\r?\n/);
+    const lineNum =
+      lines.findIndex((l) =>
+        hasDirectQueryCall
+          ? /\b(prisma|db)\.[a-zA-Z0-9_]+\./.test(l)
+          : /\b(prisma|db)\b/.test(l),
+      ) + 1;
+    violations.push({
+      id: ruleId,
+      message: `${relPath(file)}: ${lineNum}: direct runtime ORM query/instance (prisma/db) detected in presentation/action layer outside domain & repository services (ADR-ADMIN-002).`,
+    });
+  }
+}
+
+// --- Rule: raw Clerk server imports forbidden outside auth adapters and shell ---
+function checkRawClerkServer(file, source) {
+  const ruleId = "no-raw-clerk-server";
+  if (isAllowed(source, ruleId)) return;
+
+  const rel = relPath(file).replace(/\\/g, "/");
+  if (
+    rel.includes("src/lib/") ||
+    rel.includes("src/actions/admin/") ||
+    rel === "src/middleware.ts" ||
+    rel === "src/app/layout.tsx" ||
+    rel.includes("src/app/(dashboard)/layout.tsx") ||
+    rel.includes("src/components/admin/shell/") ||
+    rel.includes("scripts/")
+  ) {
+    return;
+  }
+
+  if (/import\s+.*from\s+["']@clerk\/nextjs\/server["']/.test(source)) {
+    const lines = source.split(/\r?\n/);
+    const lineNum =
+      lines.findIndex((l) => l.includes("@clerk/nextjs/server")) + 1;
+    violations.push({
+      id: ruleId,
+      message: `${relPath(file)}: ${lineNum}: raw @clerk/nextjs/server import detected outside designated security/auth adapter boundaries.`,
+    });
+  }
+}
+
+// --- Rule: feature flag lifecycle metadata check ---
+function checkFeatureFlagLifecycle() {
+  const ruleId = "feature-flag-lifecycle-missing";
+  const flagsPath = path.join(ROOT, "src/lib/config/feature-flags.ts");
+  if (!existsSync(flagsPath)) return;
+  const source = readFileSync(flagsPath, "utf8");
+  if (isAllowed(source, ruleId)) return;
+
+  if (!source.includes("FEATURE_FLAG_LIFECYCLE_METADATA")) {
+    violations.push({
+      id: ruleId,
+      message: `src/lib/config/feature-flags.ts missing FEATURE_FLAG_LIFECYCLE_METADATA dictionary documenting owner, createdAt, targetRetirementDate, and maxLifetimeDays.`,
+    });
+  }
+}
+
 async function main() {
   checkMiddlewarePresence();
   checkIgnoreBuildErrors();
+  checkFeatureFlagLifecycle();
 
   const files = (
     await Promise.all(
@@ -621,6 +704,8 @@ async function main() {
     checkUnsafeClientErrors(file, source);
     checkReqJsonInGet(file, source);
     checkDirectOutboundFetch(file, source);
+    checkDirectOrmAccess(file, source);
+    checkRawClerkServer(file, source);
   }
 
   if (violations.length > 0) {

@@ -373,13 +373,14 @@ The audit uses the following external baseline:
 - Add queue lag/dead-letter metrics and alerts.
 - Extend `VERIFICATION.md` with staging/prod smoke checks.
 
-### Phase 3: Structural Cleanup and Retirement (P2)
+### Phase 3: Structural Cleanup and Retirement (P2) — Complete (2026-07-22)
 
-- Extract dashboard shell/access/error components.
-- Enforce import boundaries with ESLint.
-- Retire stale v2/legacy routes and action aliases.
-- Generate feature flag and environment documentation.
-- Normalize domain contracts and action naming.
+- [x] Extract dashboard shell/access/error components (`AdminShell`, `AdminAccessBoundary`, `AdminUserMenu`, `AdminSystemErrorCard` in [src/components/admin/shell/](../src/components/admin/shell/)).
+- [x] Enforce import boundaries with linter checks (`no-direct-orm-access`, `no-raw-clerk-server`, `checkFeatureFlagLifecycle` in [check-security-drift.mjs](../scripts/check-security-drift.mjs)).
+- [x] Attach feature flag lifecycle metadata (`FEATURE_FLAG_LIFECYCLE_METADATA` in [feature-flags.ts](../src/lib/config/feature-flags.ts)).
+- [x] Retire stale v2/legacy routes and action aliases per [RETIREMENT.md](RETIREMENT.md).
+- [x] Generate feature flag and environment documentation.
+- [x] Normalize domain contracts and action naming.
 
 ### Phase 4: Continuous Governance (ongoing)
 

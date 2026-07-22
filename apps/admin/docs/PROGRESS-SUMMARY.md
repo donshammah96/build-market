@@ -12,9 +12,9 @@
 
 ## Active Phase
 
-**Phase:** Production Readiness Audit & Governance Framework (ADR-ADMIN-010 through ADR-ADMIN-015)
+**Phase:** Phase 3: Structural Cleanup and Retirement (P2)
 
-**Status:** Completed the staff-level production-readiness audit ([ADMIN-PRODUCTION-READINESS-AUDIT.md](ADMIN-PRODUCTION-READINESS-AUDIT.md)) and authored Tier 0 governance ADRs (ADR-ADMIN-010 through ADR-ADMIN-015) covering browser security headers/CSP, observability SLOs, background job/queue semantics, environment governance, incident response break-glass controls, and tamper-evident audit/retention custody.
+**Status:** Extracted dashboard shell/access/error components into `src/components/admin/shell/`, enforced static architectural boundary lint rules (`no-direct-orm-access`, `no-raw-clerk-server`, `checkFeatureFlagLifecycle`), attached feature flag lifecycle metadata, and deleted unused legacy UI components.
 
 ---
 
@@ -31,7 +31,7 @@ Status codes: `compliant` | `known defect` | `unaudited/in progress` | `N/A`
 | finance/analytics            | T1   | compliant   | compliant | compliant   | compliant | compliant     | compliant |
 | stores/properties/projects   | T2   | compliant   | compliant | compliant   | compliant | compliant     | compliant |
 | leads/services/professionals | T2   | compliant   | compliant | compliant   | compliant | compliant     | compliant |
-| UI shell/components          | T3   | N/A         | N/A       | N/A         | compliant | N/A           | compliant |
+| UI shell/components          | T3   | compliant   | compliant | compliant   | compliant | compliant     | compliant |
 
 ---
 
@@ -61,23 +61,24 @@ Status codes: `compliant` | `known defect` | `unaudited/in progress` | `N/A`
 | Production Phase  | Production Readiness Audit & ADR-010..015 Framework  | 2026-07-22 | -                                  |
 | Roadmap Phase 0   | Production Gate Stabilization (P0-1 through P0-5)    | 2026-07-22 | -                                  |
 | Roadmap Phase 1   | Security & Configuration Hardening (P0/P1)           | 2026-07-22 | -                                  |
+| Roadmap Phase 2   | Operability & Compliance (P1)                        | 2026-07-22 | -                                  |
+| Roadmap Phase 3   | Structural Cleanup and Retirement (P2)               | 2026-07-22 | -                                  |
 
 ---
 
 ## Latest Verification
 
-| Check                                | Result | Notes                                     |
-| ------------------------------------ | ------ | ----------------------------------------- |
-| `admin:check-types`                  | Pass   | Exit 0. TypeScript build errors enforced. |
-| `admin:check-env-contract`           | Pass   | Exit 0. All env keys match templates.     |
-| `admin:test:all`                     | Pass   | 63 test files passing cleanly.            |
-| `admin:report-security-drift:strict` | Pass   | Exit 0. Zero findings across 302 files.   |
-| `admin:lint`                         | Pass   | 79 known warnings; 0 errors.              |
+| Check                                | Result | Notes                                      |
+| ------------------------------------ | ------ | ------------------------------------------ |
+| `admin:check-types`                  | Pass   | Exit 0. TypeScript build errors enforced.  |
+| `admin:check-env-contract`           | Pass   | Exit 0. All env keys match templates.      |
+| `admin:test:all`                     | Pass   | 67 test files passing cleanly (501 tests). |
+| `admin:report-security-drift:strict` | Pass   | Exit 0. Zero findings across 307 files.    |
+| `admin:lint`                         | Pass   | 79 known warnings; 0 errors.               |
 
 ---
 
 ## Next Priority
 
-1. **Phase 2 (Operability & Compliance):** Wire OpenTelemetry metric/SLO contracts, register background queue/job contracts, and formalize tamper-evident audit logging.
-2. **Phase 3 (Structural Cleanup):** Extract dashboard shell/access/error components and enforce import boundaries with ESLint.
-3. **Enable v2 Flags & Retirement:** Execute feature flag retirement schedule per [`RETIREMENT.md`](RETIREMENT.md) once production stability windows clear.
+1. **Phase 4 (Continuous Governance):** Monthly access-control and audit coverage review, dependency patch SLO enforcement, and quarterly DR/export replay exercises.
+2. **Enable v2 Flags & Retirement:** Execute feature flag retirement schedule per [`RETIREMENT.md`](RETIREMENT.md) once production stability windows clear.
