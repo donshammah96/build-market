@@ -82,7 +82,7 @@
   },
   "devDependencies": {
     "@typescript/typescript6": "catalog:",
-    "next": "16.2.6",
+    "next": "catalog:",
     "ngrok": "5.0.0-beta.2",
     "prettier": "catalog:",
     "rimraf": "^6.1.3",

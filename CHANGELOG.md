@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed (Prisma Migration History Recovery & Newsletter/Verification Schema Sync)
+
+- **Migrations**: Fixed a duplicate index creation bug in `20260715045843_add_newsletter_last_confirmation_sent_at` where the manually-added `FailedNotification` → `failed_notifications` rename step (preserving existing retry data instead of drop/recreate) left behind Prisma's separately auto-generated `CreateIndex` statements for the same three indexes (`failed_notifications_status_idx`, `failed_notifications_nextRetryAt_idx`, `failed_notifications_entityType_entityId_idx`), causing `42P07 relation already exists` on any full migration replay (shadow database, CI, fresh clones).
+- **Migrations**: Resolved migration history drift caused by Supabase's automatically-installed `supabase_vault` extension (in the `vault` schema), which is provisioned outside Prisma's migration history on every Supabase project and was surfacing as a spurious `prisma migrate reset` prompt. Added `supabase_vault(schema: "vault")` to the `schema.prisma` datasource `extensions` list and introduced migration `20260723120000_add_supabase_vault_extension`, guarded with `CREATE SCHEMA IF NOT EXISTS "vault"` so the migration is a no-op against the real database (extension pre-exists) while still replaying cleanly against Prisma's ephemeral shadow database (extension and schema absent by default).
+- **Migrations**: Repaired two migration checksum mismatches (`20260715045843_add_newsletter_last_confirmation_sent_at`, `20260723120000_add_supabase_vault_extension`) in `_prisma_migrations` that arose from editing migration SQL files after they had already been applied and marked as such; recomputed and updated the stored checksums directly rather than replaying or resetting the database, preserving existing `failed_notifications` and `newsletter_subscribers` data.
+- **Prisma Schema**: Applied migration `20260723050000_add_verified_by_to_store_and_property`, adding a `verifiedBy` relation/column to the `Store` and `Property` models.
+- **Prisma Schema**: Applied migration `20260723034803_add_newsletter_table`, finalizing the `newsletter_subscribers` table (double opt-in fields, ESP sync status/retry tracking, consent metadata) and restoring `_prisma_migrations`/database parity after the above recovery steps.
+
+**Files changed:**
+
+- `packages/db/prisma/schema.prisma`
+- `packages/db/prisma/migrations/20260715045843_add_newsletter_last_confirmation_sent_at/migration.sql`
+- `packages/db/prisma/migrations/20260723120000_add_supabase_vault_extension/migration.sql`
+- `packages/db/prisma/migrations/20260723050000_add_verified_by_to_store_and_property/migration.sql`
+- `packages/db/prisma/migrations/20260723034803_add_newsletter_table/migration.sql`
+- `CHANGELOG.md`
+
 ### Added (Admin Background Jobs, Metrics and Cryptographic Chaining)
 
 - **Admin background jobs, metrics and cryptographic chaining (`apps/admin`)**:

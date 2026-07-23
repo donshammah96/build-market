@@ -192,6 +192,7 @@ export const newsletterRepository = {
     return prisma.newsletterSubscriber.findMany({
       where: {
         deletedAt: null,
+        status: { in: ["SUBSCRIBED", "UNSUBSCRIBED"] },
         espSyncStatus: { in: ["PENDING", "FAILED"] },
         OR: [{ espNextRetryAt: null }, { espNextRetryAt: { lte: new Date() } }],
       },

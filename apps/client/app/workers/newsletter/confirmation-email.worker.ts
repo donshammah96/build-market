@@ -51,11 +51,14 @@ export async function processConfirmationEmailJob(
     throw err;
   }
 
-  const confirmUrl = new URL("/api/newsletter/confirm", baseUrl);
-  confirmUrl.searchParams.set("token", confirmationToken);
+  const pageConfirmUrl = new URL("/newsletter/confirm", baseUrl);
+  pageConfirmUrl.searchParams.set("token", confirmationToken);
 
-  const unsubscribeUrl = new URL("/api/newsletter/unsubscribe", baseUrl);
-  unsubscribeUrl.searchParams.set("token", unsubscribeToken);
+  const pageUnsubscribeUrl = new URL("/newsletter/unsubscribe", baseUrl);
+  pageUnsubscribeUrl.searchParams.set("token", unsubscribeToken);
+
+  const apiUnsubscribeUrl = new URL("/api/newsletter/unsubscribe", baseUrl);
+  apiUnsubscribeUrl.searchParams.set("token", unsubscribeToken);
 
   try {
     const res = await fetch("https://api.resend.com/emails", {
@@ -69,13 +72,13 @@ export async function processConfirmationEmailJob(
         to: email,
         subject: "Confirm your Build Market newsletter subscription",
         html: renderConfirmationEmail(
-          confirmUrl.toString(),
-          unsubscribeUrl.toString(),
+          pageConfirmUrl.toString(),
+          pageUnsubscribeUrl.toString(),
         ),
         // RFC 8058 one-click unsubscribe header — most mail clients surface
         // this as a native "Unsubscribe" button next to the sender.
         headers: {
-          "List-Unsubscribe": `<${unsubscribeUrl.toString()}>`,
+          "List-Unsubscribe": `<${apiUnsubscribeUrl.toString()}>`,
           "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         },
       }),

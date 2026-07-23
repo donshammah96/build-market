@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+### Fixed (CI Lint Errors)
+
+- **NULL_POINTER** (`audit-tamper-evidence.test.ts`): Resolved two static analysis `NULL_POINTER` findings on lines 111 and 169 where `(createdCall?.details as any)._audit.loggedAt` accessed a property through optional chaining but then dereferenced it unconditionally. Extracted `const details = createdCall!.details as any` after the existing `expect(createdCall).toBeDefined()` guard to satisfy the null-safety contract.
+- **UNUSED_IMPORT** (`telemetry.test.ts`): Removed stale `vi` import from `vitest` — the test file only uses `describe`, `it`, and `expect`.
+- **UNUSED_IMPORT** (`resilient-api.ts`): Removed unused `import { omitUndefined } from "@/lib/utils"` — the helper was never called in the file after a prior refactor.
+
+### Security (Next.js Vulnerability Patch)
+
+- **Next.js 16.2.11 Security Upgrade**: Bumped all workspace catalog Next.js pins (`next`, `eslint-config-next`, `@next/bundle-analyzer`, `@next/eslint-plugin-next`) from `16.2.6` to `16.2.11` to remediate 7 security advisories:
+  - `GHSA-6gpp-xcg3-4w24` (high) — Middleware / Proxy bypass in App Router with Turbopack + single locale
+  - `GHSA-m99w-x7hq-7vfj` (high) — Denial of Service in App Router via Server Actions
+  - `GHSA-89xv-2m56-2m9x` (high) — SSRF in Server Actions on custom servers
+  - `GHSA-p9j2-gv94-2wf4` (high) — SSRF via attacker-controlled destination hostname in rewrites
+  - `GHSA-4c39-4ccg-62r3` (moderate) — Cache confusion of response bodies for requests with bodies
+  - `GHSA-q8wf-6r8g-63ch` (moderate) — DoS in Image Optimization API via SVGs
+  - `GHSA-955p-x3mx-jcvp` (moderate) — Unauthenticated disclosure of internal Server Function endpoints
+
+**Files changed:**
+
+- `apps/admin/__tests__/security/audit-tamper-evidence.test.ts`
+- `apps/admin/__tests__/infrastructure/telemetry.test.ts`
+- `apps/admin/src/lib/api/resilient-api.ts`
+- `pnpm-workspace.yaml`
+
 ### Added (Phase 4 Continuous Governance & Flag Retirement)
 
 - **CI Governance Pipeline Integration & Feature Flag Expiration Enforcement (P1-3 / Phase 4)**:

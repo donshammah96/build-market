@@ -28,6 +28,33 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Security (Next.js Vulnerability Patch)
+
+- **Next.js 16.2.11 Security Upgrade**: Bumped all workspace catalog Next.js pins (`next`, `eslint-config-next`, `@next/bundle-analyzer`, `@next/eslint-plugin-next`) from `16.2.6` to `16.2.11` to remediate 7 security advisories across both `apps/client` and `apps/admin`:
+  - `GHSA-6gpp-xcg3-4w24` (high) — Middleware / Proxy bypass in App Router with Turbopack + single locale
+  - `GHSA-m99w-x7hq-7vfj` (high) — Denial of Service in App Router via Server Actions
+  - `GHSA-89xv-2m56-2m9x` (high) — Server-Side Request Forgery in Server Actions on custom servers
+  - `GHSA-p9j2-gv94-2wf4` (high) — Server-Side Request Forgery via attacker-controlled destination hostname in rewrites
+  - `GHSA-4c39-4ccg-62r3` (moderate) — Cache confusion of response bodies for requests with bodies
+  - `GHSA-q8wf-6r8g-63ch` (moderate) — Denial of Service in Image Optimization API via SVGs
+  - `GHSA-955p-x3mx-jcvp` (moderate) — Unauthenticated disclosure of internal Server Function endpoints
+
+**Files changed:**
+
+- `pnpm-workspace.yaml`
+
+### Fixed (Codex Review — integration/admin-overhaul)
+
+- **P1 — Email body links now target browser pages** (`confirmation-email.worker.ts`): The confirmation email was linking its CTA button and footer unsubscribe link directly to `/api/newsletter/confirm` and `/api/newsletter/unsubscribe`, both of which only export `POST`. A user click issues a `GET`, resulting in a 405. Fixed by routing email body links to the browser pages (`/newsletter/confirm`, `/newsletter/unsubscribe`) that read the token from the query string and POST to the API via client-side JS. The RFC 8058 `List-Unsubscribe` header retains the API URL (`/api/newsletter/unsubscribe`) because mail-provider one-click unsubscribe correctly issues a `POST`.
+
+- **P1 — ESP sync excludes unconfirmed subscribers** (`repository.ts`): `findDueForEspSync` previously returned any row with `espSyncStatus: PENDING | FAILED` regardless of subscription status. Since new subscribers are created as `PENDING_CONFIRMATION` with `espSyncStatus: PENDING`, the sweep enqueued subscribe actions for addresses that had not confirmed double opt-in — a GDPR consent violation. Added `status: { in: ["SUBSCRIBED", "UNSUBSCRIBED"] }` to the query's `where` clause.
+
+- **P2 — ESP sync action derived from current DB status** (`esp-sync.worker.ts`): The worker trusted the `action` field from the queued job payload even after re-reading the current subscriber from the DB. A delayed or retried `subscribe` job could run after the subscriber had already unsubscribed, effectively re-subscribing them out of order. Fixed by deriving `effectiveAction` from `subscriber.status` at execution time (`SUBSCRIBED` → `"subscribe"`, `UNSUBSCRIBED` → `"unsubscribe"`, any other status → no-op log + early return). The queued `action` is retained in log fields as `queuedAction` for observability.
+
+- **P1 — Missing `verifiedById` migration for Store and Property** (`packages/db/prisma/migrations/20260723050000_add_verified_by_to_store_and_property/migration.sql`): `schema.prisma` declared `verifiedById String?` and `@relation("StoreVerifier" / "PropertyVerifier")` on `Store` (line 1896) and `Property` (line 2176), but no migration existed to add the column and FK to the live tables. Added a new migration that issues `ALTER TABLE "Store" ADD COLUMN "verifiedById" TEXT` / `ALTER TABLE "Property" ADD COLUMN "verifiedById" TEXT` plus the corresponding FK constraints referencing `"users"("id") ON DELETE SET NULL`.
+
+- **P1 — FailedNotification rename preserves rows** (`packages/db/prisma/migrations/20260715045843_.../migration.sql`): The original migration dropped `"FailedNotification"` and recreated it as `"failed_notifications"`, destroying all pending/failed retry records on deploy. Replaced the `DROP TABLE` + `CREATE TABLE` block with `ALTER TABLE "FailedNotification" RENAME TO "failed_notifications"` plus in-place index renames — the schemas are identical so no column changes are needed.
+
 ### Fixed (Image Processing Typecheck)
 
 - **Image Processing Typecheck**: Fixed type check error in `image-processing.ts` (`TS2678: Type '"jpg"' is not comparable to type 'keyof FormatEnum'`). Removed redundant invalid `case "jpg"` from image compression format switch since Sharp normalizes JPEG files to `"jpeg"` in `FormatEnum`.

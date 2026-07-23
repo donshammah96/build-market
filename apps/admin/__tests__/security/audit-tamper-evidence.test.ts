@@ -98,6 +98,7 @@ describe("Audit Log Cryptographic Tamper Evidence & Hashing Chain", () => {
     expect(integrity.prevHash).toBe("genesis");
 
     // Verify hash matches signature inputs
+    const details = createdCall!.details as any;
     const expectedPayload = JSON.stringify({
       prevHash: "genesis",
       sequence: 1,
@@ -108,7 +109,7 @@ describe("Audit Log Cryptographic Tamper Evidence & Hashing Chain", () => {
       targetId: event.targetResourceId,
       targetType: event.targetResourceType,
       reason: event.reason,
-      createdAt: (createdCall?.details as any)._audit.loggedAt,
+      createdAt: details._audit.loggedAt,
     });
     const expectedHash = createHash("sha256")
       .update(expectedPayload)
@@ -156,6 +157,7 @@ describe("Audit Log Cryptographic Tamper Evidence & Hashing Chain", () => {
     expect(integrity.sequence).toBe(2);
     expect(integrity.prevHash).toBe(priorHash);
 
+    const details = createdCall!.details as any;
     const expectedPayload = JSON.stringify({
       prevHash: priorHash,
       sequence: 2,
@@ -166,7 +168,7 @@ describe("Audit Log Cryptographic Tamper Evidence & Hashing Chain", () => {
       targetId: event.targetResourceId,
       targetType: event.targetResourceType,
       reason: event.reason,
-      createdAt: (createdCall?.details as any)._audit.loggedAt,
+      createdAt: details._audit.loggedAt,
     });
     const expectedHash = createHash("sha256")
       .update(expectedPayload)

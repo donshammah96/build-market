@@ -26,26 +26,19 @@ CREATE TYPE "NewsletterSubscriberStatus" AS ENUM ('PENDING_CONFIRMATION', 'SUBSC
 CREATE TYPE "NewsletterEspSyncStatus" AS ENUM ('PENDING', 'SYNCED', 'FAILED', 'DEAD_LETTER');
 
 -- DropTable
-DROP TABLE "FailedNotification";
+-- RenameTable: preserve existing retry records
+ALTER TABLE "FailedNotification" RENAME TO "failed_notifications";
+ALTER TABLE "failed_notifications" RENAME CONSTRAINT "FailedNotification_pkey" TO "failed_notifications_pkey";
 
--- CreateTable
-CREATE TABLE "failed_notifications" (
-    "id" TEXT NOT NULL,
-    "entityType" TEXT NOT NULL,
-    "entityId" TEXT NOT NULL,
-    "recipientUserId" TEXT NOT NULL,
-    "newStatus" TEXT NOT NULL,
-    "reason" TEXT,
-    "notes" TEXT,
-    "attemptCount" INTEGER NOT NULL DEFAULT 0,
-    "lastAttemptAt" TIMESTAMP(3),
-    "nextRetryAt" TIMESTAMP(3) NOT NULL,
-    "lastError" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "status" TEXT NOT NULL DEFAULT 'PENDING',
+-- Rename indexes to match new snake_case table name
+DROP INDEX "FailedNotification_status_idx";
+CREATE INDEX "failed_notifications_status_idx" ON "failed_notifications"("status");
 
-    CONSTRAINT "failed_notifications_pkey" PRIMARY KEY ("id")
-);
+DROP INDEX "FailedNotification_nextRetryAt_idx";
+CREATE INDEX "failed_notifications_nextRetryAt_idx" ON "failed_notifications"("nextRetryAt");
+
+DROP INDEX "FailedNotification_entityType_entityId_idx";
+CREATE INDEX "failed_notifications_entityType_entityId_idx" ON "failed_notifications"("entityType", "entityId");
 
 -- CreateTable
 CREATE TABLE "newsletter_subscribers" (
@@ -76,15 +69,6 @@ CREATE TABLE "newsletter_subscribers" (
 
     CONSTRAINT "newsletter_subscribers_pkey" PRIMARY KEY ("id")
 );
-
--- CreateIndex
-CREATE INDEX "failed_notifications_status_idx" ON "failed_notifications"("status");
-
--- CreateIndex
-CREATE INDEX "failed_notifications_nextRetryAt_idx" ON "failed_notifications"("nextRetryAt");
-
--- CreateIndex
-CREATE INDEX "failed_notifications_entityType_entityId_idx" ON "failed_notifications"("entityType", "entityId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "newsletter_subscribers_email_key" ON "newsletter_subscribers"("email");

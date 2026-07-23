@@ -11,7 +11,6 @@ import {
   type OperationCriticality,
   type ResilienceOptions,
 } from "@build/resilience";
-import { omitUndefined } from "@/lib/utils";
 
 // Initialize global executor for the client app
 const executor = new ResilientExecutor("build-market-admin");
