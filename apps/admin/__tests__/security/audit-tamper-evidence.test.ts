@@ -91,14 +91,18 @@ describe("Audit Log Cryptographic Tamper Evidence & Hashing Chain", () => {
     const createdCall = vi.mocked(auditRepository.createAuditLog).mock
       .calls[0]?.[0];
     expect(createdCall).toBeDefined();
+    if (!createdCall) throw new Error("Expected createAuditLog call");
 
-    const integrity = (createdCall?.details as any)?._audit?.integrity;
-    expect(integrity).toBeDefined();
+    const details = createdCall.details as any;
+    expect(details?._audit?.integrity).toBeDefined();
+    if (!details?._audit?.integrity)
+      throw new Error("Expected audit integrity");
+
+    const integrity = details._audit.integrity;
     expect(integrity.sequence).toBe(1);
     expect(integrity.prevHash).toBe("genesis");
 
     // Verify hash matches signature inputs
-    const details = createdCall!.details as any;
     const expectedPayload = JSON.stringify({
       prevHash: "genesis",
       sequence: 1,
@@ -151,13 +155,17 @@ describe("Audit Log Cryptographic Tamper Evidence & Hashing Chain", () => {
     const createdCall = vi.mocked(auditRepository.createAuditLog).mock
       .calls[0]?.[0];
     expect(createdCall).toBeDefined();
+    if (!createdCall) throw new Error("Expected createAuditLog call");
 
-    const integrity = (createdCall?.details as any)?._audit?.integrity;
-    expect(integrity).toBeDefined();
+    const details = createdCall.details as any;
+    expect(details?._audit?.integrity).toBeDefined();
+    if (!details?._audit?.integrity)
+      throw new Error("Expected audit integrity");
+
+    const integrity = details._audit.integrity;
     expect(integrity.sequence).toBe(2);
     expect(integrity.prevHash).toBe(priorHash);
 
-    const details = createdCall!.details as any;
     const expectedPayload = JSON.stringify({
       prevHash: priorHash,
       sequence: 2,
@@ -345,6 +353,10 @@ describe("Audit Log Cryptographic Tamper Evidence & Hashing Chain", () => {
       },
     ];
 
+    const firstLog = mockLogs[0];
+    const secondLog = mockLogs[1];
+    if (!firstLog || !secondLog) throw new Error("Expected mock logs");
+
     // Force first item check to pass by mocking calculatedHash check or let it fail at item 2
     // To make sure it fails on second item chain check:
     const calculatedHash1 = createHash("sha256")
@@ -359,12 +371,12 @@ describe("Audit Log Cryptographic Tamper Evidence & Hashing Chain", () => {
           targetId: "target1",
           targetType: "type1",
           reason: "reason1",
-          createdAt: mockLogs[0]?.details._audit.loggedAt,
+          createdAt: firstLog.details._audit.loggedAt,
         }),
       )
       .digest("hex");
 
-    mockLogs[0]!.details._audit.integrity.hash = calculatedHash1;
+    firstLog.details._audit.integrity.hash = calculatedHash1;
 
     const calculatedHash2 = createHash("sha256")
       .update(
@@ -378,12 +390,12 @@ describe("Audit Log Cryptographic Tamper Evidence & Hashing Chain", () => {
           targetId: "target2",
           targetType: "type2",
           reason: "reason2",
-          createdAt: mockLogs[1]?.details._audit.loggedAt,
+          createdAt: secondLog.details._audit.loggedAt,
         }),
       )
       .digest("hex");
 
-    mockLogs[1]!.details._audit.integrity.hash = calculatedHash2;
+    secondLog.details._audit.integrity.hash = calculatedHash2;
 
     vi.mocked(prisma.adminAuditLog.findMany).mockResolvedValue(mockLogs as any);
 
