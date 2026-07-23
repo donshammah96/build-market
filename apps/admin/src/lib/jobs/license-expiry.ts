@@ -306,7 +306,12 @@ export function createLicenseExpiryWorker() {
           correlationId,
           jobId: job.id,
           metrics: {
-            ...metrics,
+            expiredFound: metrics.expiredFound,
+            expiredSuccess: metrics.expiredSuccess,
+            expiredFailure: metrics.expiredFailure,
+            warningsSent: metrics.warningsSent,
+            startTime: metrics.startTime,
+            endTime: metrics.endTime,
             durationMs,
             durationSeconds: Math.round(durationMs / 1000),
           },

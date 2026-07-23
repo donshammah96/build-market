@@ -660,9 +660,9 @@ function checkRawClerkServer(file, source) {
   }
 }
 
-// --- Rule: feature flag lifecycle metadata check ---
+// --- Rule: feature flag lifecycle metadata & lifetime expiration check ---
 function checkFeatureFlagLifecycle() {
-  const ruleId = "feature-flag-lifecycle-missing";
+  const ruleId = "feature-flag-lifecycle";
   const flagsPath = path.join(ROOT, "src/lib/config/feature-flags.ts");
   if (!existsSync(flagsPath)) return;
   const source = readFileSync(flagsPath, "utf8");
@@ -673,6 +673,36 @@ function checkFeatureFlagLifecycle() {
       id: ruleId,
       message: `src/lib/config/feature-flags.ts missing FEATURE_FLAG_LIFECYCLE_METADATA dictionary documenting owner, createdAt, targetRetirementDate, and maxLifetimeDays.`,
     });
+    return;
+  }
+
+  const flagRegex =
+    /\[AdminFeatureFlag\.([A-Z0-9_]+)\]:\s*\{[\s\S]*?createdAt:\s*"([^"]+)"[\s\S]*?targetRetirementDate:\s*"([^"]+)"[\s\S]*?maxLifetimeDays:\s*(\d+)/g;
+  let match;
+  const now = new Date();
+
+  while ((match = flagRegex.exec(source)) !== null) {
+    const [, key, createdAtStr, targetRetirementStr, maxLifetimeStr] = match;
+    const createdAt = new Date(createdAtStr);
+    const targetRetirement = new Date(targetRetirementStr);
+    const maxLifetimeDays = parseInt(maxLifetimeStr, 10);
+
+    const daysActive = Math.floor(
+      (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24),
+    );
+    if (daysActive > maxLifetimeDays) {
+      violations.push({
+        id: "feature-flag-expired",
+        message: `Feature flag AdminFeatureFlag.${key} active for ${daysActive} days, exceeding approved maxLifetimeDays of ${maxLifetimeDays} days. Retire flag per RETIREMENT.md.`,
+      });
+    }
+
+    if (now.getTime() > targetRetirement.getTime() + 86400000) {
+      violations.push({
+        id: "feature-flag-overdue",
+        message: `Feature flag AdminFeatureFlag.${key} passed targetRetirementDate (${targetRetirementStr}). Execute flag retirement per RETIREMENT.md.`,
+      });
+    }
   }
 }
 

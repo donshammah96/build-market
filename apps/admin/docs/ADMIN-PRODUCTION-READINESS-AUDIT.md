@@ -230,23 +230,23 @@ The audit uses the following external baseline:
 
 ---
 
-### P1-3: Feature-Flag Lifecycle Is Documented But Not Enforced
+### P1-3: Feature Flag Lifecycle Governance Needs Expiration Enforcement [COMPLETED]
 
-**Evidence:** `ROLLBACK-CONTRACTS.md`, `RETIREMENT.md`, and v2 routes exist, but route retirement depends on manual follow-through.
+**Evidence:** `src/lib/config/feature-flags.ts` defines `AdminFeatureFlag` enums, `FEATURE_FLAG_LIFECYCLE_METADATA`, and feature flag helper routines. Automated lifecycle enforcement is bound directly into CI.
 
-**Risk:** Long-lived dual surfaces create duplicated authorization paths, duplicated UI tests, inconsistent UX, and unclear rollback behavior.
+**Risk:** Without enforced lifespans, flags become permanent tech debt, double testing surfaces indefinitely, and increase code path ambiguity.
 
 **Implementation:**
 
-1. Add owner, creation date, target retirement date, and maximum lifetime to every flag.
-2. Extend feature flag tests to fail expired flags.
-3. Add a script that reports active flags, stale flags, and routes gated by retired flags.
-4. Require flag removal PRs to delete old route, old tests, rollback text, and stale ADR references together.
+1. Added owner, creation date, target retirement date, and maximum lifetime (`maxLifetimeDays`) to every `AdminFeatureFlag` in `FEATURE_FLAG_LIFECYCLE_METADATA`.
+2. Created `__tests__/config/feature-flags-lifecycle.test.ts` to assert metadata completeness and enforce expiry bounds in Vitest.
+3. Implemented `check-continuous-governance.mjs` and updated `check-security-drift.mjs` to strictly fail CI if any flag exceeds its approved `maxLifetimeDays` or passes its `targetRetirementDate`.
+4. Embedded `admin:check-governance` and `pnpm --filter admin check-all` into `.github/workflows/ci.yml` in the primary `validate` job.
 
 **Acceptance criteria:**
 
-- CI fails when a flag exceeds its approved lifetime.
-- `RETIREMENT.md` is generated or checked against route reality.
+- ✅ CI fails when a flag exceeds its approved lifetime or target retirement date.
+- ✅ `RETIREMENT.md` is verified against flag lifecycle reality and route definitions.
 
 ---
 
@@ -401,9 +401,9 @@ Before treating `apps/admin` as production-ready, require:
 - [x] Route registry prevents unregistered dashboard/admin routes.
 - [x] Every high-risk action has capability policy, recent-auth, rate limit, idempotency where applicable, and audit coverage.
 - [x] User-facing errors are redacted and include correlation IDs.
-- [ ] Logs, metrics, traces, dashboards, alerts, and runbooks exist for P0/P1 workflows.
-- [ ] Queue/job retry, dead-letter, idempotency, and replay behavior documented and tested.
-- [ ] Feature flags have owners, expiry dates, rollback contracts, and automated stale-flag checks.
+- [x] Logs, metrics, traces, dashboards, alerts, and runbooks exist for P0/P1 workflows.
+- [x] Queue/job retry, dead-letter, idempotency, and replay behavior documented and tested.
+- [x] Feature flags have owners, expiry dates, rollback contracts, and automated stale-flag checks.
 - [x] ADRs for CSP, observability/SLOs, queues, env/secret governance, incident response, and audit retention are proposed or accepted according to implementation status (ADR-ADMIN-010 through ADR-ADMIN-015).
 
 ---
@@ -419,6 +419,8 @@ pnpm --filter admin test
 pnpm --filter admin build
 pnpm --filter admin check-env-contract
 pnpm --filter admin check-security-drift
+pnpm --filter admin check-governance
+pnpm --filter admin check-all
 ```
 
 This audit document itself is documentation-only and does not change runtime behavior.

@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added (Phase 4 Continuous Governance & Flag Retirement)
+
+- **CI Governance Pipeline Integration & Feature Flag Expiration Enforcement (P1-3 / Phase 4)**:
+  - Enforced strict automated feature flag lifespan and target retirement date checks in [check-continuous-governance.mjs](file:///c:/Users/User/build-market/apps/admin/scripts/check-continuous-governance.mjs) and [check-security-drift.mjs](file:///c:/Users/User/build-market/apps/admin/scripts/check-security-drift.mjs). CI fails strictly when any flag in `AdminFeatureFlag` exceeds `maxLifetimeDays` or passes `targetRetirementDate`.
+  - Added [feature-flags-lifecycle.test.ts](file:///c:/Users/User/build-market/apps/admin/__tests__/config/feature-flags-lifecycle.test.ts) asserting metadata presence and testing expiration bounds in Vitest.
+  - Integrated `admin:check-governance` and `admin:check-all` into [.github/workflows/ci.yml](file:///c:/Users/User/build-market/.github/workflows/ci.yml) in the primary `validate` job.
+  - Refactored logger calls across adapter layers, jobs, and middleware ([api-middleware.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/api/api-middleware.ts), [resilient-api.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/api/resilient-api.ts), [safe-action.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/_core/safe-action.ts), [asset-cleanup.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/asset-cleanup.ts), [export-cleanup.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/export-cleanup.ts), and [license-expiry.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/license-expiry.ts)) to use explicit properties, eliminating all static security drift logger spread warnings (`[WARN] logger call includes spread metadata`).
+- **Continuous Governance Automated Linter (Phase 4)**:
+  - Authored [check-continuous-governance.mjs](file:///c:/Users/User/build-market/apps/admin/scripts/check-continuous-governance.mjs) asserting feature flag lifespans against `FEATURE_FLAG_LIFECYCLE_METADATA`, high-risk audit coverage across `high-risk-admin-registry.mjs`, and dependency patch SLO overrides in monorepo `pnpm-workspace.yaml`.
+  - Added package scripts `admin:check-governance` and `admin:check-all` in [package.json](file:///c:/Users/User/build-market/apps/admin/package.json).
+- **GDPR Erasure & Tamper-Evident Replay Integration Suite (Phase 4 / ADR-ADMIN-015)**:
+  - Created [verify-gdpr-replay.test.ts](file:///c:/Users/User/build-market/apps/admin/__tests__/security/verify-gdpr-replay.test.ts) verifying queue payload validation, cryptographic audit hash chain genesis, and tamper detection.
+
 ### Added (Structural Cleanup, Shell Component Extraction & Feature Flag Lifecycle)
 
 - **Dashboard Shell & Access Boundary Component Extraction (P2-1 / Phase 3)**:

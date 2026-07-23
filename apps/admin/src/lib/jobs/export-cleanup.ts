@@ -250,7 +250,12 @@ export function createCleanupWorker() {
           correlationId,
           jobId: job.id,
           metrics: {
-            ...metrics,
+            totalFound: metrics.totalFound,
+            successCount: metrics.successCount,
+            failureCount: metrics.failureCount,
+            bytesFreed: metrics.bytesFreed,
+            startTime: metrics.startTime,
+            endTime: metrics.endTime,
             durationMs,
             durationSeconds: Math.round(durationMs / 1000),
             bytesFreedMB: Math.round(metrics.bytesFreed / 1024 / 1024),

@@ -189,21 +189,25 @@ export function withRole(allowedRoles: UserRole[]) {
       const logger = getClientLogger();
 
       if (!allowedRoles.includes(context.userRole)) {
-        logger.warn("Access denied - insufficient permissions", {
+        const logContext: Record<string, unknown> = {
           userRole: context.userRole,
           requiredRoles: allowedRoles,
-          ...omitUndefined({ correlationId }),
-        });
+        };
+        if (correlationId) logContext.correlationId = correlationId;
+
+        logger.warn("Access denied - insufficient permissions", logContext);
         return apiError(
           "Forbidden. Insufficient permissions.",
           HttpStatus.FORBIDDEN,
         );
       }
 
-      logger.debug("Role check passed", {
+      const passContext: Record<string, unknown> = {
         userRole: context.userRole,
-        ...omitUndefined({ correlationId }),
-      });
+      };
+      if (correlationId) passContext.correlationId = correlationId;
+
+      logger.debug("Role check passed", passContext);
 
       return handler(req, context, params);
     });
@@ -230,11 +234,13 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
 
       // Must be an ADMIN user
       if (context.userRole !== UserRole.ADMIN) {
-        logger.warn("Non-admin attempted admin-role-gated action", {
+        const logContext: Record<string, unknown> = {
           userRole: context.userRole,
           requiredAdminRoles: allowedAdminRoles,
-          ...omitUndefined({ correlationId }),
-        });
+        };
+        if (correlationId) logContext.correlationId = correlationId;
+
+        logger.warn("Non-admin attempted admin-role-gated action", logContext);
         return apiError(
           "Forbidden. Admin access required.",
           HttpStatus.FORBIDDEN,
@@ -243,9 +249,10 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
 
       // Must have an AdminProfile with a role
       if (!context.adminRole) {
-        logger.warn("Admin user missing AdminProfile", {
-          ...omitUndefined({ correlationId }),
-        });
+        const logContext: Record<string, unknown> = {};
+        if (correlationId) logContext.correlationId = correlationId;
+
+        logger.warn("Admin user missing AdminProfile", logContext);
         return apiError(
           "Admin profile not configured. Contact a system administrator.",
           HttpStatus.FORBIDDEN,
@@ -258,21 +265,25 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
         allowedAdminRoles.includes(context.adminRole);
 
       if (!hasAccess) {
-        logger.warn("Admin role insufficient", {
+        const logContext: Record<string, unknown> = {
           adminRole: context.adminRole,
           requiredAdminRoles: allowedAdminRoles,
-          ...omitUndefined({ correlationId }),
-        });
+        };
+        if (correlationId) logContext.correlationId = correlationId;
+
+        logger.warn("Admin role insufficient", logContext);
         return apiError(
           "Forbidden. You do not have the required admin permissions.",
           HttpStatus.FORBIDDEN,
         );
       }
 
-      logger.debug("Admin role check passed", {
+      const logContext: Record<string, unknown> = {
         adminRole: context.adminRole,
-        ...omitUndefined({ correlationId }),
-      });
+      };
+      if (correlationId) logContext.correlationId = correlationId;
+
+      logger.debug("Admin role check passed", logContext);
 
       return handler(req, context, params);
     });

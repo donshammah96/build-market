@@ -15,6 +15,7 @@ import { omitUndefined } from "@/lib/utils";
 import {
   getAdminLogger,
   type AdminLogOutcome,
+  type AdminLogEvent,
 } from "@/lib/infrastructure/logger";
 import {
   actionOutcomeCounter,
@@ -177,14 +178,21 @@ export async function safeAction<T>(
     extra?: { errorCode?: string; errorMessage?: string },
   ): void {
     const durationMs = Date.now() - requestStartedAt;
-    logger.info({
+    const logEvent: AdminLogEvent & { errorMessage?: string } = {
       correlationId,
       operationName: actionName,
       adminRole,
       outcome,
       durationMs,
-      ...omitUndefined(extra ?? {}),
-    });
+    };
+    if (extra?.errorCode) {
+      logEvent.errorCode = extra.errorCode;
+    }
+    if (extra?.errorMessage) {
+      logEvent.errorMessage = extra.errorMessage;
+    }
+
+    logger.info(logEvent);
 
     try {
       actionOutcomeCounter.add(1, {

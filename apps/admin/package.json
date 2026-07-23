@@ -17,8 +17,10 @@
     "test:all": "vitest run --pool=forks --maxWorkers=1",
     "check-env-contract": "node scripts/check-env-contract.mjs",
     "check-security-drift": "node scripts/check-security-drift.mjs",
+    "check-governance": "node scripts/check-continuous-governance.mjs",
     "report-security-drift": "node scripts/report-security-drift.mjs",
-    "report-security-drift:strict": "node scripts/report-security-drift.mjs --strict"
+    "report-security-drift:strict": "node scripts/report-security-drift.mjs --strict",
+    "check-all": "pnpm check-types && pnpm check-env-contract && pnpm check-security-drift && pnpm check-governance && pnpm report-security-drift:strict"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",

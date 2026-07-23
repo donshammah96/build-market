@@ -353,6 +353,12 @@ jobs:
       - name: Admin security drift report
         run: pnpm run admin:report-security-drift:strict
 
+      - name: Admin continuous governance checks
+        run: pnpm run admin:check-governance
+
+      - name: Admin full workspace gate
+        run: pnpm run admin:check-all
+
       # Type check and test are intentionally NOT duplicated per-app here:
       # `turbo run check-types` / `turbo run test` already fan out to every
       # workspace package that defines those scripts, which includes
