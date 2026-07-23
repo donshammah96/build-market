@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Changed (Monorepo Catalog Governance & CI Guard)
+
+- **Strict Catalog Governance**: Updated `apps/admin/package.json` dependencies (`@opentelemetry/sdk-metrics`, `@clerk/nextjs`, `next`, `next-themes`, etc.) to `"catalog:"`. Integrated pre-install catalog consistency linter into CI workflow (`.github/workflows/ci.yml`).
+
+**Files changed:**
+
+- `apps/admin/package.json`
+- `pnpm-workspace.yaml`
+- `scripts/check-catalog-consistency.mjs`
+- `.github/workflows/ci.yml`
+
 ### Fixed (CI Lint Errors)
 
 - **NULL_POINTER** (`audit-tamper-evidence.test.ts`): Resolved two static analysis `NULL_POINTER` findings on lines 111 and 169 where `(createdCall?.details as any)._audit.loggedAt` accessed a property through optional chaining but then dereferenced it unconditionally. Extracted `const details = createdCall!.details as any` after the existing `expect(createdCall).toBeDefined()` guard to satisfy the null-safety contract.

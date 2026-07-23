@@ -6,7 +6,7 @@ packages:
 # but still allows adding a dependency outside the catalog (e.g. a package
 # used by only one workspace project). Flip to `strict` once every shared
 # dependency has been migrated, to make catalog usage mandatory.
-catalogMode: prefer
+catalogMode: strict
 
 allowBuilds:
   "@clerk/shared": true
@@ -147,8 +147,6 @@ overrides:
   "eslint-config-next>typescript": "npm:@typescript/typescript6@^6.0.2"
   "@opentelemetry/core": "2.8.0"
   # DRY'd against the catalog above so a bump only ever happens in one place.
-  ioredis: "catalog:"
-  js-cookie: "catalog:"
   "@clerk/shared>js-cookie": "catalog:"
   "@clerk/backend>js-cookie": "catalog:"
   "@clerk/nextjs>js-cookie": "catalog:"
@@ -164,7 +162,6 @@ overrides:
   fast-uri: ">=4.1.1"
   fast-xml-builder: ">=1.1.7"
   fast-xml-parser: ">=5.7.0"
-  uuid: "catalog:"
   "bullmq>uuid": "catalog:"
   hono: ">=4.12.27"
   lodash: ">=4.18.0"
@@ -179,11 +176,9 @@ overrides:
   "rollup@^4.0.0": "4.60.1"
   "@clerk/express": ">=2.1.6"
   yaml: ">=2.8.3"
-  next: "catalog:"
   dompurify: ">=3.4.12"
   axios: ">=1.15.0"
   protobufjs: ">=8.6.6"
-  postcss: "catalog:"
   "next>postcss": "catalog:"
   sharp: ">=0.35.0"
   "@opentelemetry/propagator-jaeger": ">=2.9.0"

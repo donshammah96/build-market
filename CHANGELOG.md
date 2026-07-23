@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed (Monorepo Catalog Governance & CI Static Guard)
+
+- **pnpm Catalog Governance**: Switched `catalogMode` from `prefer` to `strict` in `pnpm-workspace.yaml`. Purged top-level un-scoped overrides (`js-cookie`, `ioredis`, `uuid`, `postcss`, `next`) from `pnpm-workspace.yaml#overrides` to prevent pnpm's override engine from mutating manifest dependency specifiers during resolution.
+- **CI Static Linter**: Introduced `scripts/check-catalog-consistency.mjs`, a zero-dependency pre-install linter that validates all 16 workspace `package.json` manifests against defined `pnpm-workspace.yaml#catalog` dependencies in `<100ms`. Integrated into `.github/workflows/ci.yml` under `workspace-version-consistency-guard` and `pnpm run check:workspace-versions`.
+- **Manifest Parity**: Aligned catalog protocol specifiers across root `package.json`, `apps/admin/package.json`, `packages/auth-server/package.json`, and `packages/ui/package.json` to `"catalog:"`.
+
+**Files changed:**
+
+- `pnpm-workspace.yaml`
+- `scripts/check-catalog-consistency.mjs`
+- `.github/workflows/ci.yml`
+- `package.json`
+- `apps/admin/package.json`
+- `packages/auth-server/package.json`
+- `packages/ui/package.json`
+- `pnpm-lock.yaml`
+
 ### Fixed (Prisma Migration History Recovery & Newsletter/Verification Schema Sync)
 
 - **Migrations**: Fixed a duplicate index creation bug in `20260715045843_add_newsletter_last_confirmation_sent_at` where the manually-added `FailedNotification` → `failed_notifications` rename step (preserving existing retry data instead of drop/recreate) left behind Prisma's separately auto-generated `CreateIndex` statements for the same three indexes (`failed_notifications_status_idx`, `failed_notifications_nextRetryAt_idx`, `failed_notifications_entityType_entityId_idx`), causing `42P07 relation already exists` on any full migration replay (shadow database, CI, fresh clones).

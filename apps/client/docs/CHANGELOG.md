@@ -28,6 +28,17 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Changed (Monorepo Catalog Governance & CI Guard)
+
+- **Strict Catalog Governance**: Enforced `catalogMode: strict` in `pnpm-workspace.yaml` and verified all `apps/client/package.json` catalog dependencies (`next`, `react`, `react-dom`, `@clerk/nextjs`, etc.) strictly match `"catalog:"`. Integrated zero-install `check-catalog-consistency.mjs` static linter into CI workflow.
+
+**Files changed:**
+
+- `apps/client/package.json`
+- `pnpm-workspace.yaml`
+- `scripts/check-catalog-consistency.mjs`
+- `.github/workflows/ci.yml`
+
 ### Security (Next.js Vulnerability Patch)
 
 - **Next.js 16.2.11 Security Upgrade**: Bumped all workspace catalog Next.js pins (`next`, `eslint-config-next`, `@next/bundle-analyzer`, `@next/eslint-plugin-next`) from `16.2.6` to `16.2.11` to remediate 7 security advisories across both `apps/client` and `apps/admin`:

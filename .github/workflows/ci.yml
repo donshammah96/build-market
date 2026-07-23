@@ -76,6 +76,9 @@ jobs:
       - name: Verify packageManager / engines.node consistency across workspace
         run: node scripts/check-package-manager-consistency.mjs
 
+      - name: Verify pnpm catalog specifier consistency across workspace
+        run: node scripts/check-catalog-consistency.mjs
+
   pinned-actions-guard:
     name: Pinned Actions Guard
     runs-on: ubuntu-latest
