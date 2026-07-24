@@ -28,6 +28,21 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Fixed (Newsletter Worker Email Links, ESP Opt-In Filter & Stale Job Resilience)
+
+- **Email Confirmation & Unsubscribe Link Targets (`confirmation-email.worker.ts`)**: Formatted CTA and footer links in transactional confirmation email HTML templates to point to user-facing page routes (`/newsletter/confirm` and `/newsletter/unsubscribe`) instead of POST-only API endpoints. Retained `/api/newsletter/unsubscribe` exclusively for the RFC 8058 `List-Unsubscribe` email header.
+- **ESP Sync Double Opt-In Filter (`repository.ts`, `newsletter-sweep.ts`)**: Restricted `findDueForEspSync()` query to `SUBSCRIBED` and `UNSUBSCRIBED` statuses, preventing unconfirmed `PENDING_CONFIRMATION` subscribers from being enqueued for external ESP sync during reconciliation sweeps.
+- **ESP Sync Stale Job Action Resolution (`esp-sync.worker.ts`)**: Derived `effectiveAction` directly from current subscriber status at worker processing time (`SUBSCRIBED` → `"subscribe"`, `UNSUBSCRIBED` → `"unsubscribe"`), ignoring stale job payload actions after status changes.
+- **Worker Unit Test Isolation (`newsletter-workers.test.ts`)**: Mocked `@build/queue-server` in worker unit tests to prevent cold Redis TCP connection timeouts on test execution.
+
+**Files changed:**
+
+- `apps/client/app/workers/newsletter/confirmation-email.worker.ts`
+- `apps/client/app/workers/newsletter/esp-sync.worker.ts`
+- `apps/client/app/lib/domains/newsletter/repository.ts`
+- `apps/client/app/jobs/newsletter-sweep.ts`
+- `apps/client/__tests__/workers/newsletter-workers.test.ts`
+
 ### Changed (Monorepo Catalog Governance & CI Guard)
 
 - **Strict Catalog Governance**: Enforced `catalogMode: strict` in `pnpm-workspace.yaml` and verified all `apps/client/package.json` catalog dependencies (`next`, `react`, `react-dom`, `@clerk/nextjs`, etc.) strictly match `"catalog:"`. Integrated zero-install `check-catalog-consistency.mjs` static linter into CI workflow.

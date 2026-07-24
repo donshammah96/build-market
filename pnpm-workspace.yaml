@@ -64,6 +64,7 @@ catalog:
   "@types/react": 19.1.0
   "@types/react-dom": 19.1.1
   next-themes: ^0.4.6
+  "@swc/helpers": ^0.5.15
 
   # --- Styling (client + admin) ---
   tailwindcss: ^4
@@ -146,7 +147,7 @@ overrides:
   "@build/eslint-config>typescript": "npm:@typescript/typescript6@^6.0.2"
   "eslint-config-next>typescript": "npm:@typescript/typescript6@^6.0.2"
   "@opentelemetry/core": "2.8.0"
-  # DRY'd against the catalog above so a bump only ever happens in one place.
+  "bullmq>ioredis": "catalog:"
   "@clerk/shared>js-cookie": "catalog:"
   "@clerk/backend>js-cookie": "catalog:"
   "@clerk/nextjs>js-cookie": "catalog:"
@@ -194,6 +195,9 @@ packageExtensions:
   "@clerk/shared@*":
     dependencies:
       js-cookie: 3.0.6
+  "next@*":
+    dependencies:
+      "@swc/helpers": "^0.5.15"
 
 patchedDependencies:
   uri-js: patches/uri-js.patch

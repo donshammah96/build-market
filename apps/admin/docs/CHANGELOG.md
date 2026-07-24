@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Fixed (Monorepo ioredis Lockfile Harmonization & Queue Generic Type Compatibility)
+
+- **Monorepo ioredis Resolution (`pnpm-workspace.yaml`, `pnpm-lock.yaml`)**: Forced `bullmq>ioredis` to catalog version `5.11.1` in `pnpm-workspace.yaml#overrides` and updated `pnpm-lock.yaml`, resolving a version mismatch where `bullmq` pulled `ioredis@5.10.1` while `@build/redis` and `apps/admin` imported `ioredis@5.11.1`.
+- **Queue Generic Parameter Specification (`notification-queue.ts`)**: Specified explicit generic parameter types (`Queue<NotificationJobData, any, string>`) and constructor assertion on BullMQ `Queue` instances in `notification-queue.ts` to resolve `TS2375` type errors under TypeScript `exactOptionalPropertyTypes` mode.
+
+**Files changed:**
+
+- `pnpm-workspace.yaml`
+- `pnpm-lock.yaml`
+- `apps/admin/src/lib/domains/verification/internal/notification-queue.ts`
+
 ### Changed (Monorepo Catalog Governance & CI Guard)
 
 - **Strict Catalog Governance**: Updated `apps/admin/package.json` dependencies (`@opentelemetry/sdk-metrics`, `@clerk/nextjs`, `next`, `next-themes`, etc.) to `"catalog:"`. Integrated pre-install catalog consistency linter into CI workflow (`.github/workflows/ci.yml`).

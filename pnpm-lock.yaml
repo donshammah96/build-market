@@ -81,6 +81,9 @@ catalogs:
     '@radix-ui/react-tooltip':
       specifier: ^1.2.6
       version: 1.2.10
+    '@swc/helpers':
+      specifier: ^0.5.15
+      version: 0.5.15
     '@tailwindcss/postcss':
       specifier: ^4
       version: 4.3.1
@@ -204,6 +207,7 @@ overrides:
   '@build/eslint-config>typescript': npm:@typescript/typescript6@^6.0.2
   eslint-config-next>typescript: npm:@typescript/typescript6@^6.0.2
   '@opentelemetry/core': 2.8.0
+  bullmq>ioredis: 5.11.1
   '@clerk/shared>js-cookie': 3.0.6
   '@clerk/backend>js-cookie': 3.0.6
   '@clerk/nextjs>js-cookie': 3.0.6
@@ -240,7 +244,7 @@ overrides:
   sharp: '>=0.35.0'
   '@opentelemetry/propagator-jaeger': '>=2.9.0'
 
-packageExtensionsChecksum: sha256-yb3Aq5Ac4N//3UT68/FcxYF9B8mv5aXOx/NCswPSUrM=
+packageExtensionsChecksum: sha256-Tf8/ENYrocEYcyci4FMrU+Gnx/wF0Vfq6maOjSb9VkU=
 
 patchedDependencies:
   uri-js: e0d51b698f4a62b29c699b76f2a103f0a146849ea2477d0fba7ed1c65e671869
@@ -430,6 +434,9 @@ importers:
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
+      ioredis:
+        specifier: 'catalog:'
+        version: 5.11.1
       lucide-react:
         specifier: 'catalog:'
         version: 0.488.0(react@19.2.7)
@@ -473,6 +480,9 @@ importers:
       '@build/typescript-config':
         specifier: workspace:*
         version: link:../../packages/typescript-config
+      '@swc/helpers':
+        specifier: 'catalog:'
+        version: 0.5.15
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.3.1
@@ -2535,9 +2545,6 @@ packages:
 
   '@ioredis/commands@1.10.0':
     resolution: {integrity: sha512-UmeW7z4LfctwoQ5wkhVzgq8tXkreED2xZGpX+Bg+zA+WJFZCT6c062AfCK/Dfk81xZnnwdhJCUMkitihRaoC2Q==}
-
-  '@ioredis/commands@1.5.1':
-    resolution: {integrity: sha512-JH8ZL/ywcJyR9MmJ5BNqZllXNZQqQbnVZOqpPQqE1vHiFgAw4NHbvE0FOduNU8IX9babitBT46571OnPTT0Zcw==}
 
   '@isaacs/cliui@8.0.2':
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
@@ -6394,10 +6401,6 @@ packages:
     resolution: {integrity: sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg==}
     engines: {node: '>=12'}
 
-  ioredis@5.10.1:
-    resolution: {integrity: sha512-HuEDBTI70aYdx1v6U97SbNx9F1+svQKBDo30o0b9fw055LMepzpOOd0Ccg9Q6tbqmBSJaMuY0fB7yw9/vjBYCA==}
-    engines: {node: '>=12.22.0'}
-
   ioredis@5.11.1:
     resolution: {integrity: sha512-ehuGcf94bQXhfagULNXrJdfnWO38v070jxSx/qE87Kjzmu2fU7ro5EFAb+OPituLqgfyuQaym5DlrNydW2sJ9A==}
     engines: {node: '>=12.22.0'}
@@ -6865,12 +6868,6 @@ packages:
 
   lodash.clonedeep@4.5.0:
     resolution: {integrity: sha512-H5ZhCF25riFd9uB5UCkVKo61m3S/xZk1x4wA6yp/L3RFP6Z/eHH1ymQcGLo7J3GMPfm0V/7m1tryHuGVxpqEBQ==}
-
-  lodash.defaults@4.2.0:
-    resolution: {integrity: sha512-qjxPLHd3r5DnsdGacqOMU6pb/avJzdh9tFX2ymgoZE27BmjXrNy/y4LoaiTeAb+O3gL8AfpJGtqfX/ae2leYYQ==}
-
-  lodash.isarguments@3.1.0:
-    resolution: {integrity: sha512-chi4NHZlZqZD18a0imDHnZPrDeBbTtVN7GXMwuGdRH9qotxAjYs3aVLKc7zNOG9eddR5Ksd8rvFEBc9SsggPpg==}
 
   lodash.merge@4.6.2:
     resolution: {integrity: sha512-0KpjqXRVvrYyCsX1swR/XTK0va6VQkQM6MNo7PqW77ByjAhoARA8EfrP1N4+KlKj8YS0ZUCtRT/YUuhyYDujIQ==}
@@ -10240,8 +10237,6 @@ snapshots:
 
   '@ioredis/commands@1.10.0': {}
 
-  '@ioredis/commands@1.5.1': {}
-
   '@isaacs/cliui@8.0.2':
     dependencies:
       string-width: 5.1.2
@@ -12935,7 +12930,7 @@ snapshots:
   bullmq@5.78.1:
     dependencies:
       cron-parser: 4.9.0
-      ioredis: 5.10.1
+      ioredis: 5.11.1
       msgpackr: 2.0.2
       node-abort-controller: 3.1.1
       semver: 7.8.1
@@ -14489,20 +14484,6 @@ snapshots:
 
   internmap@2.0.3: {}
 
-  ioredis@5.10.1:
-    dependencies:
-      '@ioredis/commands': 1.5.1
-      cluster-key-slot: 1.1.1
-      debug: 4.4.3(supports-color@8.1.1)
-      denque: 2.1.0
-      lodash.defaults: 4.2.0
-      lodash.isarguments: 3.1.0
-      redis-errors: 1.2.0
-      redis-parser: 3.0.0
-      standard-as-callback: 2.1.0
-    transitivePeerDependencies:
-      - supports-color
-
   ioredis@5.11.1:
     dependencies:
       '@ioredis/commands': 1.10.0
@@ -14935,10 +14916,6 @@ snapshots:
   lodash.camelcase@4.3.0: {}
 
   lodash.clonedeep@4.5.0: {}
-
-  lodash.defaults@4.2.0: {}
-
-  lodash.isarguments@3.1.0: {}
 
   lodash.merge@4.6.2: {}
 

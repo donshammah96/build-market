@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed (Monorepo ioredis Lockfile Harmonization & BullMQ Queue Type Alignment)
+
+- **Monorepo ioredis & BullMQ Resolution (`pnpm-workspace.yaml`, `pnpm-lock.yaml`)**: Forced `bullmq>ioredis` to catalog version `5.11.1` in `pnpm-workspace.yaml#overrides` and updated `pnpm-lock.yaml`, resolving a lockfile version skew where `bullmq@5.78.1` pulled `ioredis@5.10.1` while `@build/redis` and `apps/admin` imported `ioredis@5.11.1`. Unified all workspace Redis type definitions and eliminated duplicate `.pnpm` module trees that caused `ERR_PNPM_EPERM` file rename failures on Windows.
+- **Queue Generic Parameter Specification (`apps/admin`)**: Specified explicit generic parameter types (`Queue<NotificationJobData, any, string>`) and constructor assertion on BullMQ `Queue` instances in `notification-queue.ts` to resolve `TS2375` type errors under TypeScript `exactOptionalPropertyTypes` mode.
+
+**Files changed:**
+
+- `pnpm-workspace.yaml`
+- `pnpm-lock.yaml`
+- `apps/admin/src/lib/domains/verification/internal/notification-queue.ts`
+
 ### Changed (Monorepo Catalog Governance & CI Static Guard)
 
 - **pnpm Catalog Governance**: Switched `catalogMode` from `prefer` to `strict` in `pnpm-workspace.yaml`. Purged top-level un-scoped overrides (`js-cookie`, `ioredis`, `uuid`, `postcss`, `next`) from `pnpm-workspace.yaml#overrides` to prevent pnpm's override engine from mutating manifest dependency specifiers during resolution.
