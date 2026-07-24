@@ -16,18 +16,18 @@ async function setAdminRole(userId: string) {
   });
 
   try {
-    await clerkClient.users.updateUser(userId, {
+    await clerkClient.users.updateUserMetadata(userId, {
       publicMetadata: {
-        role: "admin",
+        role: "super_admin",
       },
     });
-    console.log(`User ${userId} promoted to Admin.`);
+    console.log(`User ${userId} promoted to Super Admin.`);
   } catch (error) {
     console.error("Failed to update user:", error);
   }
 }
 
 // Replace with the actual User ID from Clerk Dashboard
-const TARGET_USER_ID = "user_123.....";
+const TARGET_USER_ID = "user_123.........";
 
 void setAdminRole(TARGET_USER_ID);

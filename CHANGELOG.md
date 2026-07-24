@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed (Admin Scripting & Clerk User Sync)
+
+- **Admin Promotion Script & Clerk Sync (`apps/admin/scripts/`)**: Refactored `set-admin.ts` to set Clerk `publicMetadata.role` to `"super_admin"` using the non-deprecated `clerkClient.users.updateUserMetadata` API. Executed promotion for target user `user_3FKfonUuBhDFq41AfYXQ0yPHPdw` and synchronized Clerk users to database `users` and `AdminProfile` tables via `sync-clerk-users.ts`.
+
+**Files changed:**
+
+- `apps/admin/scripts/set-admin.ts`
+- `apps/admin/scripts/sync-clerk-users.ts`
+
+### Fixed (Prisma Migration & Extension Portability Fix)
+
+- **Database Extension & Migration Portability (`packages/db`)**: Removed vendor-locked `supabase_vault(schema: "vault")` extension from `packages/db/prisma/schema.prisma` and deleted unapplied migration `20260723120000_add_supabase_vault_extension`. Resolved Prisma error `P3018` (`ERROR: extension "supabase_vault" is not available`, SQL State `0A000`), restoring database schema and migration portability across standard PostgreSQL environments (CI, local Docker, AWS RDS, GCP Cloud SQL).
+
+**Files changed:**
+
+- `packages/db/prisma/schema.prisma`
+- `packages/db/prisma/migrations/20260723120000_add_supabase_vault_extension/migration.sql` (deleted)
+
 ### Fixed (Monorepo ioredis Lockfile Harmonization & BullMQ Queue Type Alignment)
 
 - **Monorepo ioredis & BullMQ Resolution (`pnpm-workspace.yaml`, `pnpm-lock.yaml`)**: Forced `bullmq>ioredis` to catalog version `5.11.1` in `pnpm-workspace.yaml#overrides` and updated `pnpm-lock.yaml`, resolving a lockfile version skew where `bullmq@5.78.1` pulled `ioredis@5.10.1` while `@build/redis` and `apps/admin` imported `ioredis@5.11.1`. Unified all workspace Redis type definitions and eliminated duplicate `.pnpm` module trees that caused `ERR_PNPM_EPERM` file rename failures on Windows.

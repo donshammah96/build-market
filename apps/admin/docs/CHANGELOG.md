@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed (Admin Super Admin Promotion Script & Clerk User Sync)
+
+- **Admin Promotion CLI Script (`scripts/set-admin.ts`)**: Updated script to promote target users to `super_admin` in Clerk `publicMetadata` (`role: "super_admin"`). Upgraded Clerk API call to non-deprecated `clerkClient.users.updateUserMetadata` for safe partial metadata mutation. Executed promotion for user.
+- **Clerk Users Database Sync (`scripts/sync-clerk-users.ts`)**: Executed synchronization script fetching Clerk users and upserting user identity records into database `users` and `AdminProfile` tables with `UserRole.ADMIN` and `AdminRole.SUPER_ADMIN`.
+
+**Files changed:**
+
+- `apps/admin/scripts/set-admin.ts`
+- `apps/admin/scripts/sync-clerk-users.ts`
+
 ### Fixed (Monorepo ioredis Lockfile Harmonization & Queue Generic Type Compatibility)
 
 - **Monorepo ioredis Resolution (`pnpm-workspace.yaml`, `pnpm-lock.yaml`)**: Forced `bullmq>ioredis` to catalog version `5.11.1` in `pnpm-workspace.yaml#overrides` and updated `pnpm-lock.yaml`, resolving a version mismatch where `bullmq` pulled `ioredis@5.10.1` while `@build/redis` and `apps/admin` imported `ioredis@5.11.1`.
