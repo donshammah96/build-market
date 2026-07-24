@@ -31,6 +31,7 @@ const repositoryMock = vi.hoisted(() => ({
   findDistinctActions: vi.fn(),
   findForExport: vi.fn(),
   createAuditLog: vi.fn(),
+  findLastAuditLog: vi.fn(),
 }));
 
 const securityRepositoryMock = vi.hoisted(() => ({

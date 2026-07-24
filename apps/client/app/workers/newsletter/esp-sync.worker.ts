@@ -55,7 +55,36 @@ export async function processEspSyncJob(job: Job<NewsletterEspSyncJobData>) {
     return;
   }
 
-  const result = await syncSubscriberToEsp(subscriber.email, action);
+  let effectiveAction: "subscribe" | "unsubscribe";
+  if (subscriber.status === "SUBSCRIBED") {
+    effectiveAction = "subscribe";
+  } else if (subscriber.status === "UNSUBSCRIBED") {
+    effectiveAction = "unsubscribe";
+  } else {
+    logger.info("Sync aborted: subscriber status does not permit ESP sync", {
+      operationName: "esp_sync",
+      outcome: "aborted",
+      subscriberId,
+      status: subscriber.status,
+      queuedAction: action,
+      jobId: job.id,
+    });
+    return;
+  }
+
+  if (effectiveAction !== action) {
+    logger.info("Sync action updated to match current DB subscriber status", {
+      operationName: "esp_sync",
+      outcome: "action_adjusted",
+      subscriberId,
+      status: subscriber.status,
+      queuedAction: action,
+      effectiveAction,
+      jobId: job.id,
+    });
+  }
+
+  const result = await syncSubscriberToEsp(subscriber.email, effectiveAction);
   const provider = getConfiguredEspProvider();
 
   if (result.ok) {
@@ -63,7 +92,7 @@ export async function processEspSyncJob(job: Job<NewsletterEspSyncJobData>) {
       operationName: "esp_sync",
       outcome: "success",
       subscriberId,
-      action,
+      action: effectiveAction,
       provider,
       espContactId: result.data.espContactId,
       jobId: job.id,
@@ -84,7 +113,7 @@ export async function processEspSyncJob(job: Job<NewsletterEspSyncJobData>) {
     operationName: "esp_sync",
     outcome: exhausted ? "dead_letter" : "failure",
     subscriberId,
-    action,
+    action: effectiveAction,
     provider,
     attempt: attemptsSoFar,
     exhausted,

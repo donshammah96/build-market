@@ -1,4 +1,5 @@
 {
+  "//": "Force TypeScript cache reload after adding queue-registry.ts",
   "extends": "@build/typescript-config/nextjs.json",
   "compilerOptions": {
     "target": "ES2017",

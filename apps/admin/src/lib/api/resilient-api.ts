@@ -11,7 +11,6 @@ import {
   type OperationCriticality,
   type ResilienceOptions,
 } from "@build/resilience";
-import { omitUndefined } from "@/lib/utils";
 
 // Initialize global executor for the client app
 const executor = new ResilientExecutor("build-market-admin");
@@ -51,10 +50,13 @@ export function apiError(
 ): NextResponse {
   const correlationId = CorrelationIdManager.get();
 
-  logger.error(message, undefined, {
+  const logContext: Record<string, unknown> = {
     statusCode: status,
-    ...omitUndefined({ correlationId, details }),
-  });
+  };
+  if (correlationId) logContext.correlationId = correlationId;
+  if (details !== undefined) logContext.details = details;
+
+  logger.error(message, undefined, logContext);
 
   return NextResponse.json(
     {

@@ -1,4 +1,3 @@
-// security-drift-allow: no-banned-log-keys -- user identifier required for compliance tracking
 // src/jobs/export-cleanup.ts
 import { Queue, Worker, Job } from "bullmq";
 import { createRedisConnection } from "@/lib/queues/redis-connection";
@@ -6,6 +5,11 @@ import { prisma } from "@build/db";
 import { ExportProcessor } from "@/lib/workers/export/processor";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { validateJobPayload } from "@/lib/queues/queue-registry";
+import {
+  jobAttemptCounter,
+  jobDurationHistogram,
+} from "@/lib/infrastructure/metrics";
 
 const logger = new StructuredLogger("export-cleanup-job");
 
@@ -69,6 +73,7 @@ export function createCleanupWorker() {
   const worker = new Worker(
     "maintenance-jobs",
     async (job: Job) => {
+      validateJobPayload("maintenance-jobs", job.name, job.data);
       // Job validation
       if (job.name !== "cleanup-expired-exports") {
         logger.warn("Received unexpected job type", {
@@ -245,7 +250,12 @@ export function createCleanupWorker() {
           correlationId,
           jobId: job.id,
           metrics: {
-            ...metrics,
+            totalFound: metrics.totalFound,
+            successCount: metrics.successCount,
+            failureCount: metrics.failureCount,
+            bytesFreed: metrics.bytesFreed,
+            startTime: metrics.startTime,
+            endTime: metrics.endTime,
             durationMs,
             durationSeconds: Math.round(durationMs / 1000),
             bytesFreedMB: Math.round(metrics.bytesFreed / 1024 / 1024),
@@ -305,6 +315,15 @@ export function createCleanupWorker() {
       jobId: job.id,
       result,
     });
+    try {
+      jobAttemptCounter.add(1, { jobName: job.name, status: "completed" });
+      if (job.finishedOn && job.processedOn) {
+        jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+          jobName: job.name,
+          status: "completed",
+        });
+      }
+    } catch {}
   });
 
   worker.on("failed", (job: Job | undefined, error: Error) => {
@@ -319,6 +338,18 @@ export function createCleanupWorker() {
           : 0,
       },
     );
+    try {
+      jobAttemptCounter.add(1, {
+        jobName: job?.name ?? "unknown",
+        status: "failed",
+      });
+      if (job && job.finishedOn && job.processedOn) {
+        jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+          jobName: job.name,
+          status: "failed",
+        });
+      }
+    } catch {}
   });
 
   worker.on("error", (error: Error) => {

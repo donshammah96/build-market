@@ -46,7 +46,79 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 
 ## Latest Verification Results
 
-> **P2 & P3 Autopsy Refactoring Pass (2026-06-07)**
+> **Phase 4 Continuous Governance Pass (2026-07-23)**
+
+| Check                                | Result | Notes                                                            |
+| ------------------------------------ | ------ | ---------------------------------------------------------------- |
+| `admin:check-types`                  | Pass   | Exit 0. Zero TypeScript errors across workspace.                 |
+| `admin:build`                        | Pass   | Exit 0. Full Next.js production build cleanly compiled.          |
+| `admin:lint`                         | Pass   | Exit 0. 79 known warnings remain, 0 errors.                      |
+| `admin:check-env-contract`           | Pass   | Exit 0. All 75 environment boundary keys match across templates. |
+| `admin:check-governance`             | Pass   | Exit 0. Zero flag expiry / patch SLO violations.                 |
+| `admin:check-security-drift`         | Pass   | Exit 0. Zero violations across 309 files, zero warnings.         |
+| `admin:report-security-drift:strict` | Pass   | Exit 0. Zero findings across 309 files.                          |
+| `admin:check-all`                    | Pass   | Exit 0. All 5 static security and governance gates exit cleanly. |
+| `admin:test:all`                     | Pass   | 69 test files. 508 of 508 tests passed.                          |
+
+---
+
+## Previous Verification Snapshots
+
+### Phase 3 Structural Cleanup and Retirement (P2) Pass (2026-07-22)
+
+| Check                                | Result | Notes                                                            |
+| ------------------------------------ | ------ | ---------------------------------------------------------------- |
+| `admin:check-types`                  | Pass   | Exit 0. Zero TypeScript errors across workspace.                 |
+| `admin:build`                        | Pass   | Exit 0. Full Next.js production build cleanly compiled.          |
+| `admin:lint`                         | Pass   | Exit 0. 79 known warnings remain, 0 errors.                      |
+| `admin:check-env-contract`           | Pass   | Exit 0. All 75 environment boundary keys match across templates. |
+| `admin:report-security-drift:strict` | Pass   | Exit 0. Zero findings across 307 files.                          |
+| `admin:test:all`                     | Pass   | 67 test files. 501 of 501 tests passed.                          |
+
+---
+
+## Previous Verification Snapshots - Phase 1 & 2
+
+### Phase 2 Operability and Compliance (P1) Pass (2026-07-22)
+
+| Check                                | Result | Notes                                                            |
+| ------------------------------------ | ------ | ---------------------------------------------------------------- |
+| `admin:check-types`                  | Pass   | Exit 0. Zero TypeScript errors across workspace.                 |
+| `admin:build`                        | Pass   | Exit 0. Full Next.js production build cleanly compiled.          |
+| `admin:lint`                         | Pass   | Exit 0. 79 known warnings remain, 0 errors.                      |
+| `admin:check-env-contract`           | Pass   | Exit 0. All 75 environment boundary keys match across templates. |
+| `admin:report-security-drift:strict` | Pass   | Exit 0. Zero findings across 309 files.                          |
+| `admin:test:all`                     | Pass   | 66 test files. 497 of 497 tests passed.                          |
+
+---
+
+### Phase 1 Security & Configuration Hardening Pass (2026-07-22)
+
+| Check                                | Result | Notes                                                                        |
+| ------------------------------------ | ------ | ---------------------------------------------------------------------------- |
+| `admin:check-types`                  | Pass   | Exit 0. Zero TypeScript errors across workspace.                             |
+| `admin:build`                        | Pass   | Exit 0. Full Next.js production build cleanly compiled with TS typechecking. |
+| `admin:lint`                         | Pass   | Exit 0. 79 known warnings remain, 0 errors.                                  |
+| `admin:check-env-contract`           | Pass   | Exit 0. All 75 environment boundary keys match across templates.             |
+| `admin:report-security-drift:strict` | Pass   | Exit 0. Zero findings across 302 files.                                      |
+| `admin:test:all`                     | Pass   | 63 test files. 484 of 484 tests passed.                                      |
+
+---
+
+### Phase 0 Production Gate Hardening Pass (2026-07-22)
+
+| Check                                | Result | Notes                                                                        |
+| ------------------------------------ | ------ | ---------------------------------------------------------------------------- |
+| `admin:check-types`                  | Pass   | Exit 0. TypeScript build errors enforced.                                    |
+| `admin:build`                        | Pass   | Exit 0. Full Next.js production build cleanly compiled with TS typechecking. |
+| `admin:lint`                         | Pass   | Exit 0. 79 known warnings remain, 0 errors.                                  |
+| `admin:check-env-contract`           | Pass   | Exit 0. All env keys match templates.                                        |
+| `admin:report-security-drift:strict` | Pass   | Exit 0. Zero findings across 300 files.                                      |
+| `admin:test:all`                     | Pass   | 60 test files. 473 of 473 tests passed.                                      |
+
+---
+
+### P2 & P3 Autopsy Refactoring Pass (2026-06-07)
 
 | Check                                | Result | Notes                                        |
 | ------------------------------------ | ------ | -------------------------------------------- |
@@ -58,9 +130,7 @@ pnpm -C apps/admin exec vitest run --pool=threads --maxWorkers=1
 
 ---
 
-## Previous Verification Snapshot
-
-> **Architecture Autopsy Implementation Pass (2026-06-05)**
+### Architecture Autopsy Implementation Pass (2026-06-05)
 
 | Check                                | Result | Notes                                        |
 | ------------------------------------ | ------ | -------------------------------------------- |

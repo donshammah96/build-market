@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { auditService } from "@/lib/domains/audit/service";
 import type { AdminActor } from "@/lib/security/admin-actor";
 import type { SafeActionOptions } from "./safe-action";
+import { getHighRiskAdminAction } from "@/lib/security/high-risk-admin-registry";
 
 export async function recordDeclarativeAudit(
   actor: AdminActor,
@@ -46,8 +47,10 @@ export async function recordDeclarativeAudit(
     ...(errorMessage ? { errorMessage } : {}),
   };
 
-  await auditService
-    .recordAdminAuditEvent({
+  const isHighRisk = getHighRiskAdminAction(auditLog.operation) !== undefined;
+
+  try {
+    await auditService.recordAdminAuditEvent({
       actor,
       operationName: auditLog.operation,
       correlationId,
@@ -59,6 +62,14 @@ export async function recordDeclarativeAudit(
       reason,
       ipAddress,
       userAgent,
-    })
-    .catch(() => undefined);
+    });
+  } catch (error) {
+    if (isHighRisk) {
+      throw new Error(
+        `Audit logging failed for high-risk operation: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
 }

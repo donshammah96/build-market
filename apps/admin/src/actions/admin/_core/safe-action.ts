@@ -15,7 +15,12 @@ import { omitUndefined } from "@/lib/utils";
 import {
   getAdminLogger,
   type AdminLogOutcome,
+  type AdminLogEvent,
 } from "@/lib/infrastructure/logger";
+import {
+  actionOutcomeCounter,
+  actionDurationHistogram,
+} from "@/lib/infrastructure/metrics";
 import { withAdminCorrelation } from "@/lib/infrastructure/correlation";
 import { resolveAdminActor } from "./actor-resolver";
 import { recordDeclarativeAudit } from "./audit";
@@ -172,14 +177,38 @@ export async function safeAction<T>(
     adminRole: string,
     extra?: { errorCode?: string; errorMessage?: string },
   ): void {
-    logger.info({
+    const durationMs = Date.now() - requestStartedAt;
+    const logEvent: AdminLogEvent & { errorMessage?: string } = {
       correlationId,
       operationName: actionName,
       adminRole,
       outcome,
-      durationMs: Date.now() - requestStartedAt,
-      ...omitUndefined(extra ?? {}),
-    });
+      durationMs,
+    };
+    if (extra?.errorCode) {
+      logEvent.errorCode = extra.errorCode;
+    }
+    if (extra?.errorMessage) {
+      logEvent.errorMessage = extra.errorMessage;
+    }
+
+    logger.info(logEvent);
+
+    try {
+      actionOutcomeCounter.add(1, {
+        operationName: actionName,
+        adminRole,
+        outcome,
+        ...(extra?.errorCode ? { errorCode: extra.errorCode } : {}),
+      });
+
+      actionDurationHistogram.record(durationMs, {
+        operationName: actionName,
+        outcome,
+      });
+    } catch {
+      // Prevent telemetry failure from affecting action lifecycle
+    }
   }
 
   try {

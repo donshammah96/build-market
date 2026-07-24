@@ -15,6 +15,24 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    testTimeout: 10000, // 10 seconds for tests with eventual consistency scenarios
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html"],
+      exclude: [
+        "node_modules/",
+        "__tests__/",
+        "**/*.config.{js,ts}",
+        "**/types/",
+        "**/*.d.ts",
+      ],
+      thresholds: {
+        lines: 80,
+        functions: 80,
+        branches: 80,
+        statements: 80,
+      },
+    },
     include: [
       "__tests__/**/*.test.{ts,tsx}",
       "src/**/*.test.{ts,tsx}",

@@ -2,7 +2,95 @@
 
 ## [Unreleased]
 
-### Security
+### Changed (Admin Super Admin Promotion Script & Clerk User Sync)
+
+- **Admin Promotion CLI Script (`scripts/set-admin.ts`)**: Updated script to promote target users to `super_admin` in Clerk `publicMetadata` (`role: "super_admin"`). Upgraded Clerk API call to non-deprecated `clerkClient.users.updateUserMetadata` for safe partial metadata mutation. Executed promotion for user.
+- **Clerk Users Database Sync (`scripts/sync-clerk-users.ts`)**: Executed synchronization script fetching Clerk users and upserting user identity records into database `users` and `AdminProfile` tables with `UserRole.ADMIN` and `AdminRole.SUPER_ADMIN`.
+
+**Files changed:**
+
+- `apps/admin/scripts/set-admin.ts`
+- `apps/admin/scripts/sync-clerk-users.ts`
+
+### Fixed (Monorepo ioredis Lockfile Harmonization & Queue Generic Type Compatibility)
+
+- **Monorepo ioredis Resolution (`pnpm-workspace.yaml`, `pnpm-lock.yaml`)**: Forced `bullmq>ioredis` to catalog version `5.11.1` in `pnpm-workspace.yaml#overrides` and updated `pnpm-lock.yaml`, resolving a version mismatch where `bullmq` pulled `ioredis@5.10.1` while `@build/redis` and `apps/admin` imported `ioredis@5.11.1`.
+- **Queue Generic Parameter Specification (`notification-queue.ts`)**: Specified explicit generic parameter types (`Queue<NotificationJobData, any, string>`) and constructor assertion on BullMQ `Queue` instances in `notification-queue.ts` to resolve `TS2375` type errors under TypeScript `exactOptionalPropertyTypes` mode.
+
+**Files changed:**
+
+- `pnpm-workspace.yaml`
+- `pnpm-lock.yaml`
+- `apps/admin/src/lib/domains/verification/internal/notification-queue.ts`
+
+### Changed (Monorepo Catalog Governance & CI Guard)
+
+- **Strict Catalog Governance**: Updated `apps/admin/package.json` dependencies (`@opentelemetry/sdk-metrics`, `@clerk/nextjs`, `next`, `next-themes`, etc.) to `"catalog:"`. Integrated pre-install catalog consistency linter into CI workflow (`.github/workflows/ci.yml`).
+
+**Files changed:**
+
+- `apps/admin/package.json`
+- `pnpm-workspace.yaml`
+- `scripts/check-catalog-consistency.mjs`
+- `.github/workflows/ci.yml`
+
+### Fixed (CI Lint Errors)
+
+- **NULL_POINTER** (`audit-tamper-evidence.test.ts`): Resolved two static analysis `NULL_POINTER` findings on lines 111 and 169 where `(createdCall?.details as any)._audit.loggedAt` accessed a property through optional chaining but then dereferenced it unconditionally. Extracted `const details = createdCall!.details as any` after the existing `expect(createdCall).toBeDefined()` guard to satisfy the null-safety contract.
+- **UNUSED_IMPORT** (`telemetry.test.ts`): Removed stale `vi` import from `vitest` — the test file only uses `describe`, `it`, and `expect`.
+- **UNUSED_IMPORT** (`resilient-api.ts`): Removed unused `import { omitUndefined } from "@/lib/utils"` — the helper was never called in the file after a prior refactor.
+
+### Security (Next.js Vulnerability Patch)
+
+- **Next.js 16.2.11 Security Upgrade**: Bumped all workspace catalog Next.js pins (`next`, `eslint-config-next`, `@next/bundle-analyzer`, `@next/eslint-plugin-next`) from `16.2.6` to `16.2.11` to remediate 7 security advisories:
+  - `GHSA-6gpp-xcg3-4w24` (high) — Middleware / Proxy bypass in App Router with Turbopack + single locale
+  - `GHSA-m99w-x7hq-7vfj` (high) — Denial of Service in App Router via Server Actions
+  - `GHSA-89xv-2m56-2m9x` (high) — SSRF in Server Actions on custom servers
+  - `GHSA-p9j2-gv94-2wf4` (high) — SSRF via attacker-controlled destination hostname in rewrites
+  - `GHSA-4c39-4ccg-62r3` (moderate) — Cache confusion of response bodies for requests with bodies
+  - `GHSA-q8wf-6r8g-63ch` (moderate) — DoS in Image Optimization API via SVGs
+  - `GHSA-955p-x3mx-jcvp` (moderate) — Unauthenticated disclosure of internal Server Function endpoints
+
+**Files changed:**
+
+- `apps/admin/__tests__/security/audit-tamper-evidence.test.ts`
+- `apps/admin/__tests__/infrastructure/telemetry.test.ts`
+- `apps/admin/src/lib/api/resilient-api.ts`
+- `pnpm-workspace.yaml`
+
+### Added (Phase 4 Continuous Governance & Flag Retirement)
+
+- **CI Governance Pipeline Integration & Feature Flag Expiration Enforcement (P1-3 / Phase 4)**:
+  - Enforced strict automated feature flag lifespan and target retirement date checks in [check-continuous-governance.mjs](file:///c:/Users/User/build-market/apps/admin/scripts/check-continuous-governance.mjs) and [check-security-drift.mjs](file:///c:/Users/User/build-market/apps/admin/scripts/check-security-drift.mjs). CI fails strictly when any flag in `AdminFeatureFlag` exceeds `maxLifetimeDays` or passes `targetRetirementDate`.
+  - Added [feature-flags-lifecycle.test.ts](file:///c:/Users/User/build-market/apps/admin/__tests__/config/feature-flags-lifecycle.test.ts) asserting metadata presence and testing expiration bounds in Vitest.
+  - Integrated `admin:check-governance` and `admin:check-all` into [.github/workflows/ci.yml](file:///c:/Users/User/build-market/.github/workflows/ci.yml) in the primary `validate` job.
+  - Refactored logger calls across adapter layers, jobs, and middleware ([api-middleware.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/api/api-middleware.ts), [resilient-api.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/api/resilient-api.ts), [safe-action.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/_core/safe-action.ts), [asset-cleanup.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/asset-cleanup.ts), [export-cleanup.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/export-cleanup.ts), and [license-expiry.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/license-expiry.ts)) to use explicit properties, eliminating all static security drift logger spread warnings (`[WARN] logger call includes spread metadata`).
+- **Continuous Governance Automated Linter (Phase 4)**:
+  - Authored [check-continuous-governance.mjs](file:///c:/Users/User/build-market/apps/admin/scripts/check-continuous-governance.mjs) asserting feature flag lifespans against `FEATURE_FLAG_LIFECYCLE_METADATA`, high-risk audit coverage across `high-risk-admin-registry.mjs`, and dependency patch SLO overrides in monorepo `pnpm-workspace.yaml`.
+  - Added package scripts `admin:check-governance` and `admin:check-all` in [package.json](file:///c:/Users/User/build-market/apps/admin/package.json).
+- **GDPR Erasure & Tamper-Evident Replay Integration Suite (Phase 4 / ADR-ADMIN-015)**:
+  - Created [verify-gdpr-replay.test.ts](file:///c:/Users/User/build-market/apps/admin/__tests__/security/verify-gdpr-replay.test.ts) verifying queue payload validation, cryptographic audit hash chain genesis, and tamper detection.
+
+### Added (Structural Cleanup, Shell Component Extraction & Feature Flag Lifecycle)
+
+- **Dashboard Shell & Access Boundary Component Extraction (P2-1 / Phase 3)**:
+  - Extracted modular layout presentation components under `src/components/admin/shell/`: [AdminShell.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/admin/shell/AdminShell.tsx), [AdminAccessBoundary.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/admin/shell/AdminAccessBoundary.tsx), [AdminUserMenu.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/admin/shell/AdminUserMenu.tsx), and [AdminSystemErrorCard.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/admin/shell/AdminSystemErrorCard.tsx).
+  - Refactored [layout.tsx](file:///c:/Users/User/build-market/apps/admin/src/app/%28dashboard%29/layout.tsx) into a thin async layout composing `AdminAccessBoundary` with server-side auth/permission resolution.
+  - Added unit test suite [shell.test.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/admin/shell/__tests__/shell.test.tsx) verifying access denial, database error displays with correlation IDs, and successful rendering.
+- **Architectural Boundary Lint Enforcement (P2-2 / Phase 3)**:
+  - Extended [check-security-drift.mjs](file:///c:/Users/User/build-market/apps/admin/scripts/check-security-drift.mjs) with strict static architectural checks: `no-direct-orm-access` (forbidding runtime Prisma/DB query instances in presentation and server action layers), `no-raw-clerk-server` (forbidding raw Clerk server imports outside auth adapters and shell), and `checkFeatureFlagLifecycle`.
+- **Feature Flag Lifecycle Governance (P1-3 / Phase 3)**:
+  - Extended [feature-flags.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/config/feature-flags.ts) with `FEATURE_FLAG_LIFECYCLE_METADATA` specifying `owner`, `createdAt`, `targetRetirementDate`, `maxLifetimeDays`, and description for every `AdminFeatureFlag`.
+  - Added static linter assertion in `check-security-drift.mjs` verifying that every active feature flag has complete lifecycle metadata and complies with retirement schedules.
+
+- **Background Jobs, Metrics Scaffolding & Tamper-Evident Audit (ADR-ADMIN-011 / ADR-ADMIN-012 / ADR-ADMIN-015 / Phase 2)**:
+  - **OpenTelemetry Metrics Scaffolding**: Added `@opentelemetry/exporter-metrics-otlp-grpc` and `@opentelemetry/sdk-metrics` dependencies to `package.json`, configured the standard OTLP metric exporter and `PeriodicExportingMetricReader` in [otel.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/infrastructure/otel.ts), and created [metrics.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/infrastructure/metrics.ts) defining standard counters (`admin.action.outcome`, `admin.route.outcome`, `admin.audit.write`, `admin.job.attempt`, `admin.queue.lag`) and latency histograms.
+  - **Boundary Instrumentation**: Instrumented server action boundary [safe-action.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/_core/safe-action.ts), API route handler authentication [route-auth.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/security/route-auth.ts), and background BullMQ workers with outcome counters and latency histograms.
+  - **Queue Payload Registry & Poison Message Guards**: Created [queue-registry.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/queues/queue-registry.ts) registering payload Zod validation schemas across all background queues and enforced fail-closed payload checks in workers ([incident.worker.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/workers/compliance/incident.worker.ts), [gdpr-erasure.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/gdpr-erasure.ts), [data-retention.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/data-retention.ts), [anonymization-batch.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/anonymization-batch.ts), [asset-cleanup.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/asset-cleanup.ts), [export-cleanup.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/export-cleanup.ts), and [license-expiry.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/license-expiry.ts)).
+  - **Cryptographic Audit Hashing Chain**: Added `findLastAuditLog` in [repository.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/audit/repository.ts), implemented SHA-256 hash chaining in [service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/audit/service.ts) stored on the existing JSON `details` field, exposed `verifyAuditLogIntegrity(actor)` to detect log tampering or broken pointer segments, and enforced fail-closed behavior for high-risk operations in [audit.ts](file:///c:/Users/User/build-market/apps/admin/src/actions/admin/_core/audit.ts).
+  - **Operational Runbooks & Test Verification**: Authored [JOBS-QUEUES-RUNBOOKS.md](file:///c:/Users/User/build-market/apps/admin/docs/JOBS-QUEUES-RUNBOOKS.md) and [TELEMETRY-SLO.md](file:///c:/Users/User/build-market/apps/admin/docs/TELEMETRY-SLO.md), created test suites [telemetry.test.ts](file:///c:/Users/User/build-market/apps/admin/__tests__/infrastructure/telemetry.test.ts), [queue-registry.test.ts](file:///c:/Users/User/build-market/apps/admin/__tests__/infrastructure/queue-registry.test.ts), and [audit-tamper-evidence.test.ts](file:///c:/Users/User/build-market/apps/admin/__tests__/security/audit-tamper-evidence.test.ts), and updated snapshot results in [VERIFICATION.md](file:///c:/Users/User/build-market/apps/admin/docs/VERIFICATION.md).
+
+### Security (Dependency Vulnerability Patches)
 
 - **Dependency Vulnerability Patches**: Updated root `pnpm-workspace.yaml` overrides to patch security vulnerabilities flagged by `pnpm run deps:audit` impacting `apps/admin`:
   - `brace-expansion`: Upgraded override from `2.0.3` to `2.1.2` (remediating DoS via exponential-time expansion, GHSA-3jxr-9vmj-r5cp).
@@ -12,9 +100,22 @@
 - **CLI Tools Security**: Added CLI arguments, interactive safety prompts, target database host warnings, and structured Prisma `AdminAuditLog` record generation to the `promote-admin.ts` utility.
 - **Static Linter Rules Parity**: Reconciled the security drift checker ([check-security-drift.mjs](file:///c:/Users/User/build-market/apps/admin/scripts/check-security-drift.mjs)) with client-side validation rules. Fixed a critical scanning path bug (where paths looked in root instead of `src/` causing 0 files to be scanned) and added rules for `no-direct-env`, `no-banned-log-keys`, `no-unallowlisted-storage`, `no-cors-drift`, `zod-mutation-passthrough`, `unsafe-client-errors`, and `req-json-in-get`.
 - **Observability and Privacy (ADR-ADMIN-003)**: Hardened standard log calls in [api-middleware.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/api/api-middleware.ts) and [api-utils.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/api/api-utils.ts) to eliminate raw `userId` and `clerkId` log properties. Added explicit log safety exemptions to compliance cron and queue worker files to safely track user erasure life cycles.
-- **XSS Mitigation**: Added a linter validation sanitizer comment to dynamic chart styling inside [chart.tsx](file:///c:/Users/User/build-market/apps/admin/src/components/ui/chart.tsx#L83).
+- **Production Gate Hardening (P0-1 & P0-5)**: Disabled TypeScript build suppression (`ignoreBuildErrors: false`) in [next.config.ts](file:///c:/Users/User/build-market/apps/admin/next.config.ts) and redacted raw exception output/database connection errors in [layout.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/layout.tsx>), replacing them with correlation IDs. Added static check `checkIgnoreBuildErrors()` to [check-security-drift.mjs](file:///c:/Users/User/build-market/apps/admin/scripts/check-security-drift.mjs) to prevent reintroduction of build error bypasses.
+- **Central Browser Security Headers (ADR-ADMIN-010)**: Configured central security headers policy (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `Strict-Transport-Security`, `Content-Security-Policy-Report-Only`) in [next.config.ts](file:///c:/Users/User/build-market/apps/admin/next.config.ts) and created module [security-headers.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/security/security-headers.ts).
+- **Deployment Profile Environment Governance (ADR-ADMIN-013 / Phase 1)**: Added `ADMIN_DEPLOYMENT_PROFILE` (`local`, `test`, `preview`, `staging`, `production`) to [env.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/infrastructure/env.ts). Configured schema refinements enforcing required presence of database URLs and queue providers when deploying under `production` or `staging` profiles.
+- **Typed Route Registry & Single Source of Truth (Phase 1)**: Centralized App Router dashboard route matchers, titles, sections, and role policies in [route-registry.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/security/route-registry.ts) and refactored [middleware.ts](file:///c:/Users/User/build-market/apps/admin/src/middleware.ts) to consume matchers directly. Added automated test [route-registry.test.ts](file:///c:/Users/User/build-market/apps/admin/__tests__/security/route-registry.test.ts) enforcing that every filesystem page under `src/app/(dashboard)` is registered.
+- **SSRF-Safe Outbound Client & Static Egress Linter Rule (Phase 1)**: Created [ssrf-safe-fetch.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/infrastructure/ssrf-safe-fetch.ts) validating outbound target URLs against private IPv4 blocks (RFC 1918), link-local cloud metadata (`169.254.169.254`), and loopbacks (`127.0.0.1`, `::1`, `localhost`). Created test suite [ssrf-safe-fetch.test.ts](file:///c:/Users/User/build-market/apps/admin/__tests__/infrastructure/ssrf-safe-fetch.test.ts) and added static linter rule `checkDirectOutboundFetch` to [check-security-drift.mjs](file:///c:/Users/User/build-market/apps/admin/scripts/check-security-drift.mjs).
+- **High-Risk Operation Registry & Audit Coverage Assertions (ADR-ADMIN-015 / Phase 1)**: Extended [high-risk-admin-registry.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/security/high-risk-admin-registry.ts) with `suspendUser`, `unsuspendUser`, and `anonymizeUser` entries and created [audit-coverage.test.ts](file:///c:/Users/User/build-market/apps/admin/__tests__/security/audit-coverage.test.ts) asserting `maxAgeSeconds` freshness thresholds and rate limit namespaces across tier-1 mutations.
+
+### Fixed
+
+- **TypeScript 7 Native Bridge Compatibility & Build Typechecking (`patch-typescript.mjs`)**: Fixed a Next.js production build failure (`.module is not defined in ES module scope` & `Cannot read properties of undefined (reading 'ESNext')`) caused by `"type": "module"` in `node_modules/typescript/package.json` and incomplete TypeScript compiler exports. Updated [patch-typescript.mjs](file:///c:/Users/User/build-market/scripts/patch-typescript.mjs) to set `node_modules/typescript/package.json` as CommonJS, use resolved target paths, and re-export the full TypeScript compiler CJS bundle (`module.exports = require("${ts6Path}")`).
+- **Next.js Dynamic Server Usage Signal Rethrow in Layout (`layout.tsx`)**: Fixed false-positive database failure log output during `next build` static page collection by rethrowing `err.digest === "DYNAMIC_SERVER_USAGE"` inside [layout.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/layout.tsx>).
 
 ### Added
+
+- **Production Readiness Audit Docs & Governance ADRs**: Added proposed production readiness audit and ADRs for admin browser security headers/CSP, observability SLOs and telemetry, background job and queue semantics, environment and secret governance, incident response and break-glass access, and data retention/export/tamper-evident audit controls.
+- **Security Headers & Policy Assertion Test Suites**: Created test suites [security-headers.test.ts](file:///c:/Users/User/build-market/apps/admin/__tests__/config/security-headers.test.ts), [route-and-action-policy-drift.test.ts](file:///c:/Users/User/build-market/apps/admin/__tests__/security/route-and-action-policy-drift.test.ts), [route-registry.test.ts](file:///c:/Users/User/build-market/apps/admin/__tests__/security/route-registry.test.ts), [audit-coverage.test.ts](file:///c:/Users/User/build-market/apps/admin/__tests__/security/audit-coverage.test.ts), and [ssrf-safe-fetch.test.ts](file:///c:/Users/User/build-market/apps/admin/__tests__/infrastructure/ssrf-safe-fetch.test.ts).
 
 - **Admin Shared NATS Producer Singleton**: Created centralized infrastructure-level NATS producer lazy-singleton in [nats-client.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/infrastructure/nats-client.ts) with `getAdminNatsProducer()` and `shutdownAdminNatsProducer()`, respecting `adminEnvConfig.NATS_URL`.
 - **License NATS Verification Events**: Implemented `publishLicenseVerificationEvent()` in [notification.service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/verification/internal/notification.service.ts) to publish typed `LicenseVerificationEvent` payloads on `license.<action>` (`verified`, `rejected`, `needs_correction`).
@@ -53,7 +154,7 @@
 - **`<SignIn>` redirect prop:** [sign-in/page.tsx](<file:///c:/Users/User/build-market/apps/admin/src/app/(auth)/sign-in/[[...sign-in]]/page.tsx>) changed from `forceRedirectUrl="/"` to `fallbackRedirectUrl="/"`. `forceRedirectUrl` unconditionally overrides any `redirect_url` param, breaking deep-link return navigation. `fallbackRedirectUrl` respects a present `redirect_url` and only falls back to `/` when none exists.
 - **Observability (PII Removal Audit)**: Cleaned up 19 compile-time type-safety violations across 6 `apps/admin` files ([notification.service.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/domains/verification/internal/notification.service.ts), [anonymization-batch.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/anonymization-batch.ts), [data-retention.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/data-retention.ts), [export-cleanup.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/export-cleanup.ts), [gdpr-erasure.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/gdpr-erasure.ts), and [notification.worker.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/workers/compliance/notification.worker.ts)) by removing raw PII identifiers (`userId`, `userEmail`) from logging contexts.
 
-### Fixed
+### Fixed (Static Build Environment Validation)
 
 - **Static Build Environment Validation (`env.ts`)**: Extracted `adminBaseEnvSchema` as a pure `ZodObject` before refinement, allowing `isStaticBuildPhase()` to execute `adminBaseEnvSchema.partial()` when environment validation fails during production `next build`. This prevents Zod runtime exceptions (`Error: .partial() cannot be used on object schemas containing refinements`) during static page data collection for `/_not-found` and server components. Added unit test reproduction using `vi.stubEnv` in [env-and-layout.test.tsx](file:///c:/Users/User/build-market/apps/admin/__tests__/config/env-and-layout.test.tsx).
 - **CI Admin Preview Smoke Gate (`ci.yml`)**: Added `QUEUE_PROVIDER: memory` to the `admin-preview-smoke-gate` job environment block in [.github/workflows/ci.yml](file:///c:/Users/User/build-market/.github/workflows/ci.yml) to satisfy production environment schema requirements during CI preview builds.

@@ -16,6 +16,13 @@ vi.mock("bullmq", () => {
   };
 });
 
+vi.mock("@build/queue-server", () => ({
+  createRedisConnection: vi.fn().mockReturnValue({
+    on: vi.fn(),
+    quit: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
+
 // Set environment variable immediately
 process.env.REDIS_URL = "redis://localhost:6379";
 
@@ -94,7 +101,7 @@ beforeAll(async () => {
   const espWorkerMod = await import("@/app/workers/newsletter/esp-sync.worker");
   processConfirmationEmailJob = emailWorkerMod.processConfirmationEmailJob;
   processEspSyncJob = espWorkerMod.processEspSyncJob;
-});
+}, 30000);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -149,11 +156,77 @@ describe("Newsletter Confirmation Email Worker", () => {
       expect.stringContaining("Resend email send failed"),
     );
   });
+
+  it("formats confirmation and unsubscribe email links to page routes, keeping API route for RFC 8058 header", async () => {
+    const job = {
+      id: "job-1",
+      data: {
+        subscriberId: "sub-123",
+        email: "user@example.com",
+        confirmationToken: "conf-token-123",
+        unsubscribeToken: "unsub-token-456",
+      },
+    } as unknown as Job;
+
+    await processConfirmationEmailJob(job);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://api.resend.com/emails",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+
+    const callArgs = (global.fetch as any).mock.calls[0][1];
+    const parsedBody = JSON.parse(callArgs.body);
+    expect(parsedBody.html).toContain(
+      "/newsletter/confirm?token=conf-token-123",
+    );
+    expect(parsedBody.html).toContain(
+      "/newsletter/unsubscribe?token=unsub-token-456",
+    );
+    expect(parsedBody.html).not.toContain("/api/newsletter/confirm");
+    expect(parsedBody.headers["List-Unsubscribe"]).toContain(
+      "/api/newsletter/unsubscribe?token=unsub-token-456",
+    );
+  });
 });
 
 describe("Newsletter ESP Sync Worker", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("adjusts action to unsubscribe when subscriber status is UNSUBSCRIBED even if job payload was subscribe", async () => {
+    mockFindById.mockResolvedValue({
+      id: "sub-123",
+      email: "user@example.com",
+      status: "UNSUBSCRIBED",
+      espSyncAttempts: 0,
+    });
+    mockSyncSubscriberToEsp.mockResolvedValue({
+      ok: true,
+      data: { espContactId: "contact-123" },
+    });
+
+    const job = {
+      id: "job-stale",
+      data: {
+        subscriberId: "sub-123",
+        action: "subscribe",
+      },
+    } as unknown as Job;
+
+    await processEspSyncJob(job);
+
+    expect(mockSyncSubscriberToEsp).toHaveBeenCalledWith(
+      "user@example.com",
+      "unsubscribe",
+    );
+    expect(mockSyncSubscriberToEsp).not.toHaveBeenCalledWith(
+      "user@example.com",
+      "subscribe",
+    );
   });
 
   it("updates ESP sync status to SYNCED in the database on successful sync", async () => {

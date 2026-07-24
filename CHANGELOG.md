@@ -4,6 +4,107 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed (Admin Scripting & Clerk User Sync)
+
+- **Admin Promotion Script & Clerk Sync (`apps/admin/scripts/`)**: Refactored `set-admin.ts` to set Clerk `publicMetadata.role` to `"super_admin"` using the non-deprecated `clerkClient.users.updateUserMetadata` API. Executed promotion for target user `user_3FKfonUuBhDFq41AfYXQ0yPHPdw` and synchronized Clerk users to database `users` and `AdminProfile` tables via `sync-clerk-users.ts`.
+
+**Files changed:**
+
+- `apps/admin/scripts/set-admin.ts`
+- `apps/admin/scripts/sync-clerk-users.ts`
+
+### Fixed (Prisma Migration & Extension Portability Fix)
+
+- **Database Extension & Migration Portability (`packages/db`)**: Removed vendor-locked `supabase_vault(schema: "vault")` extension from `packages/db/prisma/schema.prisma` and deleted unapplied migration `20260723120000_add_supabase_vault_extension`. Resolved Prisma error `P3018` (`ERROR: extension "supabase_vault" is not available`, SQL State `0A000`), restoring database schema and migration portability across standard PostgreSQL environments (CI, local Docker, AWS RDS, GCP Cloud SQL).
+
+**Files changed:**
+
+- `packages/db/prisma/schema.prisma`
+- `packages/db/prisma/migrations/20260723120000_add_supabase_vault_extension/migration.sql` (deleted)
+
+### Fixed (Monorepo ioredis Lockfile Harmonization & BullMQ Queue Type Alignment)
+
+- **Monorepo ioredis & BullMQ Resolution (`pnpm-workspace.yaml`, `pnpm-lock.yaml`)**: Forced `bullmq>ioredis` to catalog version `5.11.1` in `pnpm-workspace.yaml#overrides` and updated `pnpm-lock.yaml`, resolving a lockfile version skew where `bullmq@5.78.1` pulled `ioredis@5.10.1` while `@build/redis` and `apps/admin` imported `ioredis@5.11.1`. Unified all workspace Redis type definitions and eliminated duplicate `.pnpm` module trees that caused `ERR_PNPM_EPERM` file rename failures on Windows.
+- **Queue Generic Parameter Specification (`apps/admin`)**: Specified explicit generic parameter types (`Queue<NotificationJobData, any, string>`) and constructor assertion on BullMQ `Queue` instances in `notification-queue.ts` to resolve `TS2375` type errors under TypeScript `exactOptionalPropertyTypes` mode.
+
+**Files changed:**
+
+- `pnpm-workspace.yaml`
+- `pnpm-lock.yaml`
+- `apps/admin/src/lib/domains/verification/internal/notification-queue.ts`
+
+### Changed (Monorepo Catalog Governance & CI Static Guard)
+
+- **pnpm Catalog Governance**: Switched `catalogMode` from `prefer` to `strict` in `pnpm-workspace.yaml`. Purged top-level un-scoped overrides (`js-cookie`, `ioredis`, `uuid`, `postcss`, `next`) from `pnpm-workspace.yaml#overrides` to prevent pnpm's override engine from mutating manifest dependency specifiers during resolution.
+- **CI Static Linter**: Introduced `scripts/check-catalog-consistency.mjs`, a zero-dependency pre-install linter that validates all 16 workspace `package.json` manifests against defined `pnpm-workspace.yaml#catalog` dependencies in `<100ms`. Integrated into `.github/workflows/ci.yml` under `workspace-version-consistency-guard` and `pnpm run check:workspace-versions`.
+- **Manifest Parity**: Aligned catalog protocol specifiers across root `package.json`, `apps/admin/package.json`, `packages/auth-server/package.json`, and `packages/ui/package.json` to `"catalog:"`.
+
+**Files changed:**
+
+- `pnpm-workspace.yaml`
+- `scripts/check-catalog-consistency.mjs`
+- `.github/workflows/ci.yml`
+- `package.json`
+- `apps/admin/package.json`
+- `packages/auth-server/package.json`
+- `packages/ui/package.json`
+- `pnpm-lock.yaml`
+
+### Fixed (Prisma Migration History Recovery & Newsletter/Verification Schema Sync)
+
+- **Migrations**: Fixed a duplicate index creation bug in `20260715045843_add_newsletter_last_confirmation_sent_at` where the manually-added `FailedNotification` → `failed_notifications` rename step (preserving existing retry data instead of drop/recreate) left behind Prisma's separately auto-generated `CreateIndex` statements for the same three indexes (`failed_notifications_status_idx`, `failed_notifications_nextRetryAt_idx`, `failed_notifications_entityType_entityId_idx`), causing `42P07 relation already exists` on any full migration replay (shadow database, CI, fresh clones).
+- **Migrations**: Resolved migration history drift caused by Supabase's automatically-installed `supabase_vault` extension (in the `vault` schema), which is provisioned outside Prisma's migration history on every Supabase project and was surfacing as a spurious `prisma migrate reset` prompt. Added `supabase_vault(schema: "vault")` to the `schema.prisma` datasource `extensions` list and introduced migration `20260723120000_add_supabase_vault_extension`, guarded with `CREATE SCHEMA IF NOT EXISTS "vault"` so the migration is a no-op against the real database (extension pre-exists) while still replaying cleanly against Prisma's ephemeral shadow database (extension and schema absent by default).
+- **Migrations**: Repaired two migration checksum mismatches (`20260715045843_add_newsletter_last_confirmation_sent_at`, `20260723120000_add_supabase_vault_extension`) in `_prisma_migrations` that arose from editing migration SQL files after they had already been applied and marked as such; recomputed and updated the stored checksums directly rather than replaying or resetting the database, preserving existing `failed_notifications` and `newsletter_subscribers` data.
+- **Prisma Schema**: Applied migration `20260723050000_add_verified_by_to_store_and_property`, adding a `verifiedBy` relation/column to the `Store` and `Property` models.
+- **Prisma Schema**: Applied migration `20260723034803_add_newsletter_table`, finalizing the `newsletter_subscribers` table (double opt-in fields, ESP sync status/retry tracking, consent metadata) and restoring `_prisma_migrations`/database parity after the above recovery steps.
+
+**Files changed:**
+
+- `packages/db/prisma/schema.prisma`
+- `packages/db/prisma/migrations/20260715045843_add_newsletter_last_confirmation_sent_at/migration.sql`
+- `packages/db/prisma/migrations/20260723120000_add_supabase_vault_extension/migration.sql`
+- `packages/db/prisma/migrations/20260723050000_add_verified_by_to_store_and_property/migration.sql`
+- `packages/db/prisma/migrations/20260723034803_add_newsletter_table/migration.sql`
+- `CHANGELOG.md`
+
+### Added (Admin Background Jobs, Metrics and Cryptographic Chaining)
+
+- **Admin background jobs, metrics and cryptographic chaining (`apps/admin`)**:
+  - Implemented OpenTelemetry metrics provider and scaffolding in `metrics.ts` and `otel.ts` (tracking action/route outcomes, durations, queue lag, and job attempts).
+  - Instrumented `safe-action.ts` and `route-auth.ts` with OTel counters/histograms.
+  - Implemented cryptographic SHA-256 hash chaining inside `recordAdminAuditEvent` stored in the existing `details` JSON field, and exposed `verifyAuditLogIntegrity` to detect log tampering or broken pointer chains.
+  - Enforced fail-closed constraints for high-risk operations on audit log creation failures in `audit.ts`.
+  - Built a centralized `queue-registry.ts` with Zod payload validation schemas and integrated them in all workers to guard against poison messages.
+  - Created 3 new test suites (`telemetry.test.ts`, `queue-registry.test.ts`, `audit-tamper-evidence.test.ts`) guaranteeing 100% test coverage.
+  - Created operational runbooks `JOBS-QUEUES-RUNBOOKS.md` and telemetry mapping documentation `TELEMETRY-SLO.md`.
+
+**Files changed:**
+
+- `apps/admin/package.json`
+- `apps/admin/src/lib/infrastructure/metrics.ts`
+- `apps/admin/src/lib/infrastructure/otel.ts`
+- `apps/admin/src/actions/admin/_core/safe-action.ts`
+- `apps/admin/src/lib/security/route-auth.ts`
+- `apps/admin/src/lib/domains/audit/service.ts`
+- `apps/admin/src/lib/domains/audit/repository.ts`
+- `apps/admin/src/actions/admin/_core/audit.ts`
+- `apps/admin/src/lib/queues/queue-registry.ts`
+- `apps/admin/src/lib/workers/compliance/incident.worker.ts`
+- `apps/admin/src/lib/jobs/gdpr-erasure.ts`
+- `apps/admin/src/lib/jobs/data-retention.ts`
+- `apps/admin/src/lib/jobs/anonymization-batch.ts`
+- `apps/admin/src/lib/jobs/asset-cleanup.ts`
+- `apps/admin/src/lib/jobs/export-cleanup.ts`
+- `apps/admin/src/lib/jobs/license-expiry.ts`
+- `apps/admin/__tests__/infrastructure/telemetry.test.ts`
+- `apps/admin/__tests__/infrastructure/queue-registry.test.ts`
+- `apps/admin/__tests__/security/audit-tamper-evidence.test.ts`
+- `apps/admin/src/lib/domains/audit/__tests__/service.test.ts`
+- `apps/admin/docs/JOBS-QUEUES-RUNBOOKS.md`
+- `apps/admin/docs/TELEMETRY-SLO.md`
+- `apps/admin/docs/VERIFICATION.md`
+- `CHANGELOG.md`
+
 ### Security (Dependency Vulnerability Patches)
 
 - **Security (CVE & Audit Fixes)**: Updated package overrides in `pnpm-workspace.yaml` to resolve `pnpm run deps:audit` vulnerabilities:

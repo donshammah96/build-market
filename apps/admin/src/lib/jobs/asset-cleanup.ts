@@ -14,6 +14,11 @@ import { AssetCleanupService } from "@/lib/domains/gdpr/asset-cleanup/service";
 import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { validateJobPayload } from "@/lib/queues/queue-registry";
+import {
+  jobAttemptCounter,
+  jobDurationHistogram,
+} from "@/lib/infrastructure/metrics";
 
 const logger = new StructuredLogger("asset-cleanup-job");
 
@@ -148,6 +153,7 @@ export function createAssetCleanupWorker() {
   const worker = new Worker(
     "gdpr-asset-cleanup",
     async (job: Job) => {
+      validateJobPayload("gdpr-asset-cleanup", job.name, job.data);
       if (job.name !== "cleanup-expired-assets") {
         logger.warn("Received unexpected job type", {
           jobName: job.name,
@@ -284,7 +290,14 @@ export function createAssetCleanupWorker() {
           correlationId,
           jobId: job.id,
           metrics: {
-            ...metrics,
+            totalExpired: metrics.totalExpired,
+            deletedFromS3: metrics.deletedFromS3,
+            deletedFromDB: metrics.deletedFromDB,
+            transferredToSystem: metrics.transferredToSystem,
+            errors: metrics.errors,
+            bytesFreed: metrics.bytesFreed,
+            startTime: metrics.startTime,
+            endTime: metrics.endTime,
             durationMs,
             bytesFreedMB: (metrics.bytesFreed / 1024 / 1024).toFixed(2),
           },
@@ -343,6 +356,15 @@ export function createAssetCleanupWorker() {
 
   worker.on("completed", (job: Job) => {
     logger.info("Job completed", { jobId: job.id });
+    try {
+      jobAttemptCounter.add(1, { jobName: job.name, status: "completed" });
+      if (job.finishedOn && job.processedOn) {
+        jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+          jobName: job.name,
+          status: "completed",
+        });
+      }
+    } catch {}
   });
 
   worker.on("failed", (job: Job | undefined, error: Error) => {
@@ -351,6 +373,18 @@ export function createAssetCleanupWorker() {
       error instanceof Error ? error : new Error(String(error)),
       { jobId: job?.id },
     );
+    try {
+      jobAttemptCounter.add(1, {
+        jobName: job?.name ?? "unknown",
+        status: "failed",
+      });
+      if (job && job.finishedOn && job.processedOn) {
+        jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+          jobName: job.name,
+          status: "failed",
+        });
+      }
+    } catch {}
   });
 
   worker.on("error", (error: Error) => {

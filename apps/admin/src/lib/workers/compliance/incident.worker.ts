@@ -10,12 +10,18 @@ import { sendEmail } from "@/lib/infrastructure/mailer";
 import { IncidentSeverity } from "@prisma/client";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { validateJobPayload } from "@/lib/queues/queue-registry";
+import {
+  jobAttemptCounter,
+  jobDurationHistogram,
+} from "@/lib/infrastructure/metrics";
 
 const logger = new StructuredLogger("incident-worker");
 
 export const incidentWorker = new Worker<IncidentJobData>(
   "security-incidents",
   async (job: Job<IncidentJobData>) => {
+    validateJobPayload("security-incidents", job.name, job.data);
     const { incidentId, type, severity, metadata } = job.data;
     const correlationId = CorrelationIdManager.generate();
     CorrelationIdManager.set(correlationId);
@@ -392,17 +398,39 @@ Reference: ${incident.id}
 // Event handlers
 incidentWorker.on("completed", (job: Job) => {
   logger.info("Job completed", { jobId: job.id });
+  try {
+    jobAttemptCounter.add(1, { jobName: job.name, status: "completed" });
+    if (job.finishedOn && job.processedOn) {
+      jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+        jobName: job.name,
+        status: "completed",
+      });
+    }
+  } catch {}
 });
 
 incidentWorker.on("failed", (job: Job | undefined, err: Error) => {
   logger.error(
     "Job failed",
     err instanceof Error ? err : new Error(String(err)),
-    { jobId: job?.id, severity: job?.data.severity },
+    { jobId: job?.id, severity: job?.data?.severity },
   );
 
+  try {
+    jobAttemptCounter.add(1, {
+      jobName: job?.name ?? "unknown",
+      status: "failed",
+    });
+    if (job && job.finishedOn && job.processedOn) {
+      jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+        jobName: job.name,
+        status: "failed",
+      });
+    }
+  } catch {}
+
   // Alert on-call engineer if critical
-  if (job?.data.severity === "CRITICAL") {
+  if (job?.data?.severity === "CRITICAL") {
     // await alertOnCallEngineer(err);
   }
 });

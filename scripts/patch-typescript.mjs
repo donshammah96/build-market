@@ -36,24 +36,34 @@ try {
     process.exit(0);
   }
 
+  // Update typescript's package.json to be CommonJS for standard compiler require compatibility
+  const pkgJsonPath = path.join(tsDir, "package.json");
+  if (fs.existsSync(pkgJsonPath)) {
+    const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, "utf8"));
+    delete pkg.type;
+    pkg.main = "./lib/typescript.js";
+    pkg.exports = {
+      ".": "./lib/typescript.js",
+      "./package.json": "./package.json",
+    };
+    fs.writeFileSync(pkgJsonPath, JSON.stringify(pkg, null, 2));
+  }
+
   const libDir = path.join(tsDir, "lib");
   fs.mkdirSync(libDir, { recursive: true });
 
   const dummyFile = path.join(libDir, "typescript.js");
   const versionFile = path.join(libDir, "version.cjs");
 
-  // Compute portable relative path from typescript/lib to @typescript/typescript6/lib/typescript.js
-  const ts6RelativePath = path
-    .relative(libDir, path.join(ts6Dir, "lib", "typescript.js"))
-    .replace(/\\/g, "/");
+  const ts6Path = path.join(ts6Dir, "lib", "typescript.js").replace(/\\/g, "/");
 
   fs.writeFileSync(
     dummyFile,
-    `module.exports = require("${ts6RelativePath}");\n`,
+    `module.exports = require("${ts6Path}");\n`,
   );
   fs.writeFileSync(
     versionFile,
-    `const ts6 = require("${ts6RelativePath}");\nmodule.exports = ts6;\n`,
+    `module.exports = require("${ts6Path}");\n`,
   );
 
   console.log("Successfully patched typescript (v7.0.2) with TS6 bridge.");

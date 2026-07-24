@@ -14,14 +14,14 @@
   "devDependencies": {
     "@build/eslint-config": "workspace:*",
     "@build/typescript-config": "workspace:*",
-    "@types/node": "^24.8.1",
-    "@types/react": "19.1.0",
-    "@types/react-dom": "19.1.1",
-    "eslint": "^9.35.0",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "eslint": "catalog:",
     "typescript": "catalog:"
   },
   "dependencies": {
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react": "catalog:",
+    "react-dom": "catalog:"
   }
 }

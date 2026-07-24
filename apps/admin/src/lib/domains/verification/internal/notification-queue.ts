@@ -375,15 +375,15 @@ class DatabaseQueueStrategy implements NotificationQueueStrategy {
 
 // Redis Backed Queue Strategy
 class RedisQueueStrategy implements NotificationQueueStrategy {
-  private queue: Queue<NotificationJobData>;
+  private queue: Queue<NotificationJobData, any, string>;
   private readonly queueName = "notification-retries";
 
   constructor() {
     const redisConfig = getBullMQConnectionOptions();
 
-    this.queue = new Queue<NotificationJobData>(this.queueName, {
+    this.queue = new Queue(this.queueName, {
       connection: redisConfig,
-    });
+    }) as unknown as Queue<NotificationJobData, any, string>;
   }
 
   async queueNotification(

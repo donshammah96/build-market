@@ -400,8 +400,8 @@ export function collectWorkerImportDrift() {
 
     const lines = content.split(/\r?\n/);
     const workerImportPatterns = [
-      /import\s+(?:.*\s+from\s+)?['\"].*?\.worker(?:\.ts)?['\"]/i,
-      /import\s*\(\s*['\"].*?\.worker(?:\.ts)?['\"]\s*\)/i,
+      /import\s+(?:.*\s+from\s+)?['"].*?\.worker(?:\.ts)?['"]/i,
+      /import\s*\(\s*['"].*?\.worker(?:\.ts)?['"]\s*\)/i,
     ];
 
     for (const pattern of workerImportPatterns) {

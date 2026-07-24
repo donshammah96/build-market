@@ -13,6 +13,62 @@ export const AdminFeatureFlag = {
 export type AdminFeatureFlag =
   (typeof AdminFeatureFlag)[keyof typeof AdminFeatureFlag];
 
+export interface FeatureFlagMetadata {
+  owner: string;
+  createdAt: string; // ISO date string (YYYY-MM-DD)
+  targetRetirementDate: string; // ISO date string (YYYY-MM-DD)
+  maxLifetimeDays: number;
+  description: string;
+}
+
+export const FEATURE_FLAG_LIFECYCLE_METADATA: Record<
+  AdminFeatureFlag,
+  FeatureFlagMetadata
+> = {
+  [AdminFeatureFlag.ADMIN_V2_USER_MANAGEMENT]: {
+    owner: "admin-platform-team",
+    createdAt: "2026-05-18",
+    targetRetirementDate: "2026-09-01",
+    maxLifetimeDays: 120,
+    description: "v2 user management shadow route",
+  },
+  [AdminFeatureFlag.ADMIN_V2_VERIFICATION_QUEUE]: {
+    owner: "admin-platform-team",
+    createdAt: "2026-05-18",
+    targetRetirementDate: "2026-09-01",
+    maxLifetimeDays: 120,
+    description: "v2 verification queue shadow route",
+  },
+  [AdminFeatureFlag.ADMIN_V2_FINANCE_DASHBOARD]: {
+    owner: "admin-platform-team",
+    createdAt: "2026-05-18",
+    targetRetirementDate: "2026-09-01",
+    maxLifetimeDays: 120,
+    description: "v2 finance dashboard shadow route",
+  },
+  [AdminFeatureFlag.ADMIN_V2_AUDIT_LOG_UI]: {
+    owner: "admin-platform-team",
+    createdAt: "2026-05-18",
+    targetRetirementDate: "2026-09-01",
+    maxLifetimeDays: 120,
+    description: "v2 audit log UI shadow route",
+  },
+  [AdminFeatureFlag.ADMIN_V2_STRUCTURED_LOGGING]: {
+    owner: "admin-platform-team",
+    createdAt: "2026-05-18",
+    targetRetirementDate: "2026-10-01",
+    maxLifetimeDays: 150,
+    description: "Structured telemetry and log formatting v2",
+  },
+  [AdminFeatureFlag.ADMIN_FF_LICENSE_VERIFICATION_QUEUE]: {
+    owner: "admin-compliance-team",
+    createdAt: "2026-07-21",
+    targetRetirementDate: "2026-11-01",
+    maxLifetimeDays: 120,
+    description: "License verification workflow integration",
+  },
+};
+
 const FLAG_ENV_KEYS = {
   [AdminFeatureFlag.ADMIN_V2_USER_MANAGEMENT]:
     "NEXT_PUBLIC_ADMIN_FF_V2_USER_MANAGEMENT",

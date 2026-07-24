@@ -1,4 +1,4 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 import {
   ADMIN_ROUTE_POLICY_MAP,
   type AdminAccessRole,
@@ -10,34 +10,11 @@ import {
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 import { NextResponse } from "next/server";
 import { toBool } from "@/lib/infrastructure/env-utils";
-
-// ---------------------------------------------------------------------------
-// Route matchers
-// ---------------------------------------------------------------------------
-
-const isPublicRoute = createRouteMatcher([
-  "/sign-in(.*)",
-  "/unauthorized(.*)",
-  "/unauthorized-sign-in(.*)",
-]);
-
-// Dashboard routes that require admin access
-const isDashboardRoute = createRouteMatcher([
-  "/",
-  "/analytics(.*)",
-  "/audit(.*)",
-  "/leads(.*)",
-  "/professionals(.*)",
-  "/projects(.*)",
-  "/properties(.*)",
-  "/services(.*)",
-  "/settings(.*)",
-  "/stores(.*)",
-  "/users(.*)",
-]);
-
-// Verification routes that require verification_admin or admin role
-const isVerificationRoute = createRouteMatcher(["/verifications(.*)"]);
+import {
+  isPublicRoute,
+  isDashboardRoute,
+  isVerificationRoute,
+} from "@/lib/security/route-registry";
 
 // ---------------------------------------------------------------------------
 // Helpers

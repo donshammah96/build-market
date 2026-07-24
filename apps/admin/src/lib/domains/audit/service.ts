@@ -17,8 +17,10 @@ import type {
 import { AUDIT_EXPORT_MAX_ROWS } from "./contracts";
 import { auditRepository } from "./repository";
 import { securityRepository } from "@/lib/security/repository";
-import { AuditStatus, AuditSeverity } from "@build/db";
+import { AuditStatus, AuditSeverity, prisma } from "@build/db";
 import { getAdminLogger } from "@/lib/infrastructure/logger";
+import { createHash } from "crypto";
+import { auditWriteCounter } from "@/lib/infrastructure/metrics";
 
 const SORT_ORDER = ["asc", "desc"] as const;
 
@@ -227,6 +229,26 @@ export async function recordAdminAuditEvent(
 ): Promise<void> {
   const logger = getAdminLogger();
 
+  let status: AuditStatus = AuditStatus.SUCCESS;
+  if (event.outcome === "unauthorized" || event.outcome === "forbidden") {
+    status = AuditStatus.DENIED;
+  } else if (event.outcome !== "success") {
+    status = AuditStatus.FAILURE;
+  }
+
+  // Map severity based on outcome or action details
+  let severity: AuditSeverity = AuditSeverity.INFO;
+  if (event.outcome === "internal_error") {
+    severity = AuditSeverity.CRITICAL;
+  } else if (
+    event.outcome === "forbidden" ||
+    event.outcome === "session_stale" ||
+    event.outcome === "rate_limited" ||
+    /delete|remove|suspend|reject/i.test(event.operationName)
+  ) {
+    severity = AuditSeverity.WARNING;
+  }
+
   try {
     const user = await securityRepository.findUserForAudit(
       event.actor.dbUserId,
@@ -243,35 +265,45 @@ export async function recordAdminAuditEvent(
       return;
     }
 
-    // Map outcome to AuditStatus
-    let status: AuditStatus = AuditStatus.SUCCESS;
-    if (event.outcome === "unauthorized" || event.outcome === "forbidden") {
-      status = AuditStatus.DENIED;
-    } else if (event.outcome !== "success") {
-      status = AuditStatus.FAILURE;
-    }
+    // Hash Chaining implementation
+    const lastLog = await auditRepository.findLastAuditLog();
+    const prevHash = lastLog
+      ? (lastLog.details as any)?._audit?.integrity?.hash || "genesis"
+      : "genesis";
+    const sequence = lastLog
+      ? ((lastLog.details as any)?._audit?.integrity?.sequence || 0) + 1
+      : 1;
 
-    // Map severity based on outcome or action details
-    let severity: AuditSeverity = AuditSeverity.INFO;
-    if (event.outcome === "internal_error") {
-      severity = AuditSeverity.CRITICAL;
-    } else if (
-      event.outcome === "forbidden" ||
-      event.outcome === "session_stale" ||
-      event.outcome === "rate_limited" ||
-      /delete|remove|suspend|reject/i.test(event.operationName)
-    ) {
-      severity = AuditSeverity.WARNING;
-    }
+    const loggedAt = new Date().toISOString();
+
+    const hashPayload = JSON.stringify({
+      prevHash,
+      sequence,
+      adminId: user.id,
+      action: event.operationName,
+      severity,
+      status,
+      targetId: event.targetResourceId ?? "global",
+      targetType: event.targetResourceType ?? "admin_action",
+      reason: event.reason ?? null,
+      createdAt: loggedAt,
+    });
+
+    const hash = createHash("sha256").update(hashPayload).digest("hex");
 
     const immutableDetails = {
       ...(event.details ?? {}),
       _audit: {
         immutable: true,
         schemaVersion: 1,
-        loggedAt: new Date().toISOString(),
+        loggedAt,
         correlationId: event.correlationId,
         outcome: event.outcome,
+        integrity: {
+          hash,
+          prevHash,
+          sequence,
+        },
       },
     };
 
@@ -295,6 +327,14 @@ export async function recordAdminAuditEvent(
       userAgent: event.userAgent ?? null,
       requestId: event.correlationId,
     });
+
+    try {
+      auditWriteCounter.add(1, {
+        operationName: event.operationName,
+        outcome: event.outcome,
+        status,
+      });
+    } catch {}
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     logger.error({
@@ -304,6 +344,91 @@ export async function recordAdminAuditEvent(
       outcome: "internal_error",
       durationMs: 0,
       errorMessage: message,
+    });
+
+    try {
+      auditWriteCounter.add(1, {
+        operationName: event.operationName,
+        outcome: "internal_error",
+        status: AuditStatus.FAILURE,
+      });
+    } catch {}
+
+    throw error; // Rethrow to propagate to safeAction / recordDeclarativeAudit!
+  }
+}
+
+export async function verifyAuditLogIntegrity(
+  actor: AuditActor,
+): Promise<
+  Result<
+    { isValid: boolean; corruptLogId?: string; message: string },
+    AuditDomainError
+  >
+> {
+  const capability = requireAuditReadCapability(actor);
+  if (!capability.ok) return capability;
+
+  try {
+    const logs = await prisma.adminAuditLog.findMany({
+      orderBy: { createdAt: "asc" },
+    });
+
+    let prevHash = "genesis";
+
+    for (const log of logs) {
+      const details = log.details as any;
+      const integrity = details?._audit?.integrity;
+
+      if (!integrity) {
+        // Skip log rows that pre-date hash chaining rollout
+        continue;
+      }
+
+      const hashPayload = JSON.stringify({
+        prevHash: integrity.prevHash,
+        sequence: integrity.sequence,
+        adminId: log.adminId,
+        action: log.action,
+        severity: log.severity,
+        status: log.status,
+        targetId: log.targetId,
+        targetType: log.targetType,
+        reason: log.reason,
+        createdAt: details._audit.loggedAt || log.createdAt.toISOString(),
+      });
+
+      const calculatedHash = createHash("sha256")
+        .update(hashPayload)
+        .digest("hex");
+
+      if (integrity.hash !== calculatedHash) {
+        return ok({
+          isValid: false,
+          corruptLogId: log.id,
+          message: `Hash mismatch at sequence ${integrity.sequence}, log ID ${log.id}. Calculated: ${calculatedHash}, stored: ${integrity.hash}`,
+        });
+      }
+
+      if (integrity.prevHash !== prevHash) {
+        return ok({
+          isValid: false,
+          corruptLogId: log.id,
+          message: `Chaining mismatch at sequence ${integrity.sequence}, log ID ${log.id}. Stored prevHash: ${integrity.prevHash}, expected: ${prevHash}`,
+        });
+      }
+
+      prevHash = integrity.hash;
+    }
+
+    return ok({
+      isValid: true,
+      message: "All audit log hashes verified successfully.",
+    });
+  } catch (error) {
+    return err({
+      code: "AUDIT_VERIFICATION_FAILED" as any,
+      message: error instanceof Error ? error.message : "Unknown error",
     });
   }
 }
@@ -315,4 +440,5 @@ export const auditService = {
   getDistinctActions,
   exportAuditLogs,
   recordAdminAuditEvent,
+  verifyAuditLogIntegrity,
 };

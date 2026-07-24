@@ -16,10 +16,11 @@
     "check-types": "turbo run check-types",
     "sync:instructions-aligned-date": "node ./scripts/sync-instruction-alignment-date.mjs",
     "check:instructions": "pnpm run sync:instructions-aligned-date && node ./scripts/check-instructions-frontmatter.mjs",
-    "check:workspace-versions": "node ./scripts/check-package-manager-consistency.mjs",
+    "check:catalog": "node ./scripts/check-catalog-consistency.mjs",
+    "check:workspace-versions": "node ./scripts/check-package-manager-consistency.mjs && node ./scripts/check-catalog-consistency.mjs",
     "test": "turbo run test",
     "validate": "pnpm run check:workspace-versions && pnpm run format && pnpm run format:check && pnpm run lint && pnpm run check-types && pnpm run test",
-    "ci:local": "pnpm run check:workspace-versions && pnpm run deps:audit && pnpm run format:check && pnpm run lint && pnpm run client:check-env-contract && pnpm run client:check-security-drift && pnpm run client:report-security-drift:strict && pnpm run admin:check-env-contract && pnpm run admin:check-security-drift && pnpm run admin:report-security-drift:strict && pnpm run check-types && pnpm run test",
+    "ci:local": "pnpm run check:workspace-versions && pnpm run deps:audit && pnpm run format:check && pnpm run lint && pnpm run client:check-env-contract && pnpm run client:check-security-drift && pnpm run client:report-security-drift:strict && pnpm run admin:check-env-contract && pnpm run admin:check-security-drift && pnpm run admin:report-security-drift:strict && pnpm run check-types && pnpm run admin:check-governance && pnpm run admin:check-all && pnpm run test",
     "ci:local:full": "pnpm install --frozen-lockfile && pnpm run ci:local",
     "clean": "turbo run clean && rimraf node_modules",
     "clean:cache": "turbo daemon clean && rimraf .turbo",
@@ -39,6 +40,8 @@
     "admin:check-security-drift": "pnpm -C apps/admin run check-security-drift",
     "admin:report-security-drift": "pnpm -C apps/admin run report-security-drift",
     "admin:report-security-drift:strict": "pnpm -C apps/admin run report-security-drift:strict",
+    "admin:check-governance": "pnpm -C apps/admin run check-governance",
+    "admin:check-all": "pnpm -C apps/admin run check-all",
     "queue-server:check-types": "pnpm -C packages/queue-server run check-types",
     "client:tsc-noemit": "pnpm -C apps/client exec tsc --noEmit",
     "client:build:cloudflare-worker": "pnpm -C apps/client run build:cloudflare-worker",
@@ -80,7 +83,7 @@
   },
   "devDependencies": {
     "@typescript/typescript6": "catalog:",
-    "next": "16.2.6",
+    "next": "catalog:",
     "ngrok": "5.0.0-beta.2",
     "prettier": "catalog:",
     "rimraf": "^6.1.3",
@@ -93,6 +96,6 @@
     "pnpm": ">=11.1.2 <12.0.0"
   },
   "dependencies": {
-    "js-cookie": "3.0.6"
+    "js-cookie": "catalog:"
   }
 }

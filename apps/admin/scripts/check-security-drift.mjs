@@ -534,8 +534,182 @@ function checkReqJsonInGet(file, source) {
   }
 }
 
+function checkIgnoreBuildErrors() {
+  const ruleId = "no-ignore-build-errors";
+  const configPath = path.join(ROOT, "next.config.ts");
+  if (!existsSync(configPath)) return;
+  const source = readFileSync(configPath, "utf8");
+  if (isAllowed(source, ruleId)) return;
+  if (/ignoreBuildErrors\s*:\s*true/.test(source)) {
+    violations.push({
+      id: ruleId,
+      message: `apps/admin/next.config.ts has typescript.ignoreBuildErrors set to true. Build errors must not be ignored in production builds (P0-1).`,
+    });
+  }
+}
+
+// --- Rule: direct fetch usage restriction (SSRF protection) ---
+const FETCH_ALLOWLIST_MARKER = "SECURITY_FETCH_ALLOWLIST";
+
+function checkDirectOutboundFetch(file, source) {
+  const ruleId = "no-direct-outbound-fetch";
+  if (isAllowed(source, ruleId)) return;
+
+  const rel = relPath(file).replace(/\\/g, "/");
+  // SSRF protection targets server-side outbound HTTP requests in services/actions.
+  // Browser components (src/components/), low-level fetch abstractions (src/lib/api/, client-api.ts),
+  // and notification HTTP wrappers are excluded from server-side SSRF checks.
+  if (
+    rel.includes("src/lib/infrastructure/") ||
+    rel.includes("src/lib/api/") ||
+    rel.includes("src/components/") ||
+    rel.includes("src/actions/admin/_core/client-api.ts") ||
+    rel.includes("src/lib/domains/verification/internal/")
+  ) {
+    return;
+  }
+
+  const matches = source.matchAll(/\bfetch\s*\(/g);
+  const lines = source.split(/\r?\n/);
+  for (const m of matches) {
+    if (m.index === undefined) continue;
+    const lineNum = source.slice(0, m.index).split(/\r?\n/).length;
+
+    let hasMarker = false;
+    const start = Math.max(0, lineNum - 4);
+    const end = Math.min(lines.length - 1, lineNum);
+    for (let i = start; i <= end; i++) {
+      if (lines[i].includes(FETCH_ALLOWLIST_MARKER)) {
+        hasMarker = true;
+        break;
+      }
+    }
+
+    if (!hasMarker) {
+      violations.push({
+        id: ruleId,
+        message: `${relPath(file)}: ${lineNum}: Direct fetch() call detected. Outbound HTTP requests should use "ssrfSafeFetch()" from "src/lib/infrastructure/ssrf-safe-fetch.ts" for SSRF validation, or be marked with "// ${FETCH_ALLOWLIST_MARKER}".`,
+      });
+    }
+  }
+}
+
+// --- Rule: direct ORM (prisma/db runtime instance queries) forbidden outside domain services, repositories, jobs, and infrastructure ---
+function checkDirectOrmAccess(file, source) {
+  const ruleId = "no-direct-orm-access";
+  if (isAllowed(source, ruleId)) return;
+
+  const rel = relPath(file).replace(/\\/g, "/");
+  if (rel.includes("src/lib/") || rel.includes("scripts/")) {
+    return;
+  }
+
+  // Check for importing runtime prisma/db instance from @build/db (excluding type-only imports)
+  const hasRuntimeDbImport =
+    /import\s+[^;]*\b(prisma|db)\b[^;]*from\s+["']@build\/db["']/.test(
+      source,
+    ) && !/import\s+type\s+/.test(source);
+
+  // Check for direct query calls like prisma.user.findMany, db.lead.update, etc.
+  const hasDirectQueryCall =
+    /\b(?:prisma|db)\.[a-zA-Z0-9_]+\.(?:findMany|findUnique|findFirst|create|update|delete|deleteMany|updateMany|upsert|aggregate|count|groupBy|executeRaw|queryRaw)\b/.test(
+      source,
+    );
+
+  if (hasRuntimeDbImport || hasDirectQueryCall) {
+    const lines = source.split(/\r?\n/);
+    const lineNum =
+      lines.findIndex((l) =>
+        hasDirectQueryCall
+          ? /\b(prisma|db)\.[a-zA-Z0-9_]+\./.test(l)
+          : /\b(prisma|db)\b/.test(l),
+      ) + 1;
+    violations.push({
+      id: ruleId,
+      message: `${relPath(file)}: ${lineNum}: direct runtime ORM query/instance (prisma/db) detected in presentation/action layer outside domain & repository services (ADR-ADMIN-002).`,
+    });
+  }
+}
+
+// --- Rule: raw Clerk server imports forbidden outside auth adapters and shell ---
+function checkRawClerkServer(file, source) {
+  const ruleId = "no-raw-clerk-server";
+  if (isAllowed(source, ruleId)) return;
+
+  const rel = relPath(file).replace(/\\/g, "/");
+  if (
+    rel.includes("src/lib/") ||
+    rel.includes("src/actions/admin/") ||
+    rel === "src/middleware.ts" ||
+    rel === "src/app/layout.tsx" ||
+    rel.includes("src/app/(dashboard)/layout.tsx") ||
+    rel.includes("src/components/admin/shell/") ||
+    rel.includes("scripts/")
+  ) {
+    return;
+  }
+
+  if (/import\s+.*from\s+["']@clerk\/nextjs\/server["']/.test(source)) {
+    const lines = source.split(/\r?\n/);
+    const lineNum =
+      lines.findIndex((l) => l.includes("@clerk/nextjs/server")) + 1;
+    violations.push({
+      id: ruleId,
+      message: `${relPath(file)}: ${lineNum}: raw @clerk/nextjs/server import detected outside designated security/auth adapter boundaries.`,
+    });
+  }
+}
+
+// --- Rule: feature flag lifecycle metadata & lifetime expiration check ---
+function checkFeatureFlagLifecycle() {
+  const ruleId = "feature-flag-lifecycle";
+  const flagsPath = path.join(ROOT, "src/lib/config/feature-flags.ts");
+  if (!existsSync(flagsPath)) return;
+  const source = readFileSync(flagsPath, "utf8");
+  if (isAllowed(source, ruleId)) return;
+
+  if (!source.includes("FEATURE_FLAG_LIFECYCLE_METADATA")) {
+    violations.push({
+      id: ruleId,
+      message: `src/lib/config/feature-flags.ts missing FEATURE_FLAG_LIFECYCLE_METADATA dictionary documenting owner, createdAt, targetRetirementDate, and maxLifetimeDays.`,
+    });
+    return;
+  }
+
+  const flagRegex =
+    /\[AdminFeatureFlag\.([A-Z0-9_]+)\]:\s*\{[\s\S]*?createdAt:\s*"([^"]+)"[\s\S]*?targetRetirementDate:\s*"([^"]+)"[\s\S]*?maxLifetimeDays:\s*(\d+)/g;
+  let match;
+  const now = new Date();
+
+  while ((match = flagRegex.exec(source)) !== null) {
+    const [, key, createdAtStr, targetRetirementStr, maxLifetimeStr] = match;
+    const createdAt = new Date(createdAtStr);
+    const targetRetirement = new Date(targetRetirementStr);
+    const maxLifetimeDays = parseInt(maxLifetimeStr, 10);
+
+    const daysActive = Math.floor(
+      (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24),
+    );
+    if (daysActive > maxLifetimeDays) {
+      violations.push({
+        id: "feature-flag-expired",
+        message: `Feature flag AdminFeatureFlag.${key} active for ${daysActive} days, exceeding approved maxLifetimeDays of ${maxLifetimeDays} days. Retire flag per RETIREMENT.md.`,
+      });
+    }
+
+    if (now.getTime() > targetRetirement.getTime() + 86400000) {
+      violations.push({
+        id: "feature-flag-overdue",
+        message: `Feature flag AdminFeatureFlag.${key} passed targetRetirementDate (${targetRetirementStr}). Execute flag retirement per RETIREMENT.md.`,
+      });
+    }
+  }
+}
+
 async function main() {
   checkMiddlewarePresence();
+  checkIgnoreBuildErrors();
+  checkFeatureFlagLifecycle();
 
   const files = (
     await Promise.all(
@@ -559,6 +733,9 @@ async function main() {
     checkZodPassthrough(file, source);
     checkUnsafeClientErrors(file, source);
     checkReqJsonInGet(file, source);
+    checkDirectOutboundFetch(file, source);
+    checkDirectOrmAccess(file, source);
+    checkRawClerkServer(file, source);
   }
 
   if (violations.length > 0) {

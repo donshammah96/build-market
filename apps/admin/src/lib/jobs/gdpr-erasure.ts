@@ -5,6 +5,11 @@ import { prisma } from "@build/db";
 import { ErasureService } from "@/lib/domains/gdpr/erasure/service";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { validateJobPayload } from "@/lib/queues/queue-registry";
+import {
+  jobAttemptCounter,
+  jobDurationHistogram,
+} from "@/lib/infrastructure/metrics";
 
 const logger = new StructuredLogger("gdpr-erasure-job");
 
@@ -111,6 +116,7 @@ export function createGdprErasureWorker() {
   const worker = new Worker(
     "gdpr-erasure",
     async (job: Job) => {
+      validateJobPayload("gdpr-erasure", job.name, job.data);
       const correlationId = CorrelationIdManager.generate();
       CorrelationIdManager.set(correlationId);
 
@@ -240,6 +246,15 @@ export function createGdprErasureWorker() {
 
   worker.on("completed", (job: Job) => {
     logger.info("Job completed", { jobId: job.id });
+    try {
+      jobAttemptCounter.add(1, { jobName: job.name, status: "completed" });
+      if (job.finishedOn && job.processedOn) {
+        jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+          jobName: job.name,
+          status: "completed",
+        });
+      }
+    } catch {}
   });
 
   worker.on("failed", (job: Job | undefined, error: Error) => {
@@ -248,6 +263,18 @@ export function createGdprErasureWorker() {
       error instanceof Error ? error : new Error(String(error)),
       { jobId: job?.id },
     );
+    try {
+      jobAttemptCounter.add(1, {
+        jobName: job?.name ?? "unknown",
+        status: "failed",
+      });
+      if (job && job.finishedOn && job.processedOn) {
+        jobDurationHistogram.record(job.finishedOn - job.processedOn, {
+          jobName: job.name,
+          status: "failed",
+        });
+      }
+    } catch {}
   });
 
   worker.on("error", (error: Error) => {
