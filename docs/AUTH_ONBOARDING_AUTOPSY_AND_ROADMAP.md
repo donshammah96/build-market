@@ -562,6 +562,96 @@ For **every phase implementation** (`Phase 1`, `Phase 2`, `Phase 3`), a sub-bran
 3. **Documentation & Progress Synchronization**:
    - Update relevant root and app-level `CHANGELOG.md` files (`docs/CHANGELOG.md`, `apps/client/docs/CHANGELOG.md`, `apps/admin/docs/CHANGELOG.md`).
    - Update relevant progress summary documents (`docs/PROGRESS-SUMMARY.md`, `apps/admin/docs/PROGRESS-SUMMARY.md`).
+4. **Staff-Level Commit & Remote Push**:
+   - Format a structured staff-level commit message adhering to Conventional Commits with context, invariants, and verification.
+   - Sign the commit using GPG/OpenPGP key `D723DC268434EF4D` (`Don Shammah <donshammah1@gmail.com>`) when GPG signing is enabled.
+   - Push to `origin` tracking branch (`git push -u origin <phase-branch-name>`).
+
+---
+
+### Staff-Level Git Commit & Push Protocol
+
+Upon completing a phase implementation and passing all exit gates, execute the following commit and push procedure:
+
+#### Step 1: Structure the Staff-Level Commit Message
+
+Write a conventional commit message with a detailed body explaining **Why**, **What**, **Invariants Maintained**, and **Verification Evidence**:
+
+```text
+<type>(<scope>): <concise staff-level summary (max 72 chars)>
+
+[Intent & Business Rationale]
+Detailed explanation of why this change was made and what security vulnerability or architectural flaw was remediated.
+
+[Architectural Changes & Invariants]
+- List of specific schema, middleware, service, or API action modifications.
+- State invariants preserved (e.g., thin adapters, atomic transactions, no PII logging).
+
+[Verification & Quality Evidence]
+- Targeted Vitest suite results (e.g., 14/14 tests passing).
+- Static analysis pass: pnpm check-types, pnpm lint, pnpm check-security-drift.
+- Documentation synced: CHANGELOG.md and PROGRESS-SUMMARY.md updated.
+
+Co-authored-by: Don Shammah <donshammah1@gmail.com>
+```
+
+#### Step 2: Example Commit Messages by Phase
+
+- **Phase 1 Commit Example**:
+
+  ```bash
+  git commit -m "fix(auth): harden server-action CSRF origin validation and onboarding idempotency
+
+  [Intent & Business Rationale]
+  Remediates P0 CSRF origin bypass for unauthenticated onboarding actions by enforcing origin validation outside the requireActor check. Replaces deterministic idempotency keys with request-scoped client UUIDs to prevent stale replay attacks.
+
+  [Architectural Changes & Invariants]
+  - Enforced validateTrustedMutationOriginForServerAction across all secureAction paths.
+  - Added /dashboard(.*) to protected route matcher.
+  - Sanitized unexpected server action error envelopes to prevent internal trace leakage.
+
+  [Verification & Quality Evidence]
+  - Targeted tests: vitest run app/lib/actions/__tests__/onboarding.test.ts (PASS)
+  - Static checks: check-types, lint, report-security-drift:strict (PASS)
+  - Documentation: updated docs/CHANGELOG.md and docs/PROGRESS-SUMMARY.md"
+  ```
+
+- **Phase 2 Commit Example**:
+
+  ```bash
+  git commit -m "refactor(auth): implement onboarding transition table and outbox metadata sync
+
+  [Intent & Business Rationale]
+  Establishes a single authoritative database transition ledger for onboarding state changes and introduces an asynchronous outbox worker for Clerk metadata synchronization.
+
+  [Architectural Changes & Invariants]
+  - Added OnboardingState, OnboardingTransition, and AuthOutboxEvent Prisma models.
+  - Converted synchronous Clerk metadata update to durable event outbox.
+  - Added immutable audit trail logging for USER_REGISTERED and ONBOARDING_COMPLETED events.
+
+  [Verification & Quality Evidence]
+  - Targeted tests: vitest run src/lib/domains/auth/__tests__/outbox.test.ts (PASS)
+  - Static checks: check-types, lint, report-security-drift:strict (PASS)
+  - Documentation: updated apps/client/docs/CHANGELOG.md and apps/admin/docs/PROGRESS-SUMMARY.md"
+  ```
+
+#### Step 3: OpenPGP Commit Signing & Remote Push
+
+```bash
+# Optional: Ensure GPG signing is configured for key D723DC268434EF4D (Ed25519)
+git config user.name "Don Shammah"
+git config user.email "donshammah1@gmail.com"
+git config user.signingkey D723DC268434EF4D
+
+# Stage changes (use -f if path is ignored by root .gitignore, e.g., docs/...)
+git add -f <touched-files> docs/CHANGELOG.md docs/PROGRESS-SUMMARY.md
+
+# Commit (add -S for signed commit)
+git commit -S -m "<type>(<scope>): <summary>"
+
+# Push branch to remote origin
+git push -u origin <phase-branch-name>
+```
 
 ---
 
@@ -572,7 +662,7 @@ For **every phase implementation** (`Phase 1`, `Phase 2`, `Phase 3`), a sub-bran
 - Replace deterministic onboarding idempotency with client-supplied UUID keys and atomic `createMany`/unique conflict handling.
 - Sanitize unexpected server-action error messages.
 - Add tests for concurrent onboarding submissions and CSRF rejection.
-- **Phase Exit Gate**: Pass targeted vitest tests on touched files; pass `pnpm check-types`, `pnpm lint`, and `pnpm check-security-drift` / `pnpm report-security-drift:strict`; update `CHANGELOG.md` and `PROGRESS-SUMMARY.md`.
+- **Phase Exit Gate**: Pass targeted vitest tests on touched files; pass `pnpm check-types`, `pnpm lint`, and `pnpm check-security-drift` / `pnpm report-security-drift:strict`; update `CHANGELOG.md` and `PROGRESS-SUMMARY.md`; commit with staff-level message and push to `origin`.
 
 ### Phase 2: Architectural Alignment & State Machine Refactoring
 
@@ -581,7 +671,7 @@ For **every phase implementation** (`Phase 1`, `Phase 2`, `Phase 3`), a sub-bran
 - Move Clerk metadata sync to outbox-backed eventual consistency.
 - Make store/property side effects idempotency-keyed by onboarding transition ID.
 - Add immutable audit events for `USER_REGISTERED`, `ONBOARDING_STARTED`, `ONBOARDING_COMPLETED`, `CLERK_METADATA_SYNC_FAILED`, `LOGIN_FAILED`, `MFA_VERIFIED`, and `SESSION_REVOKED`.
-- **Phase Exit Gate**: Pass targeted vitest tests on touched files; pass `pnpm check-types`, `pnpm lint`, and `pnpm check-security-drift` / `pnpm report-security-drift:strict`; update `CHANGELOG.md` and `PROGRESS-SUMMARY.md`.
+- **Phase Exit Gate**: Pass targeted vitest tests on touched files; pass `pnpm check-types`, `pnpm lint`, and `pnpm check-security-drift` / `pnpm report-security-drift:strict`; update `CHANGELOG.md` and `PROGRESS-SUMMARY.md`; commit with staff-level message and push to `origin`.
 
 ### Phase 3: Observability, UX Polish & Edge-Case Resilience
 
@@ -590,7 +680,7 @@ For **every phase implementation** (`Phase 1`, `Phase 2`, `Phase 3`), a sub-bran
 - Persist non-sensitive draft data with explicit sensitive-key redaction.
 - Add user-facing retry-after and recent-auth remediation screens.
 - Add SLO dashboards for onboarding completion rate, webhook replay rejects, Clerk sync lag, middleware fallback rate, and redirect-loop detection.
-- **Phase Exit Gate**: Pass targeted vitest tests on touched files; pass `pnpm check-types`, `pnpm lint`, and `pnpm check-security-drift` / `pnpm report-security-drift:strict`; update `CHANGELOG.md` and `PROGRESS-SUMMARY.md`.
+- **Phase Exit Gate**: Pass targeted vitest tests on touched files; pass `pnpm check-types`, `pnpm lint`, and `pnpm check-security-drift` / `pnpm report-security-drift:strict`; update `CHANGELOG.md` and `PROGRESS-SUMMARY.md`; commit with staff-level message and push to `origin`.
 
 ## Verification & Testing Strategy
 
@@ -629,4 +719,5 @@ Do not declare the auth/onboarding funnel production-ready until:
 5. All targeted unit/integration tests on touched files pass cleanly.
 6. All static checks pass cleanly across every phase (`pnpm check-types`, `pnpm lint`, `pnpm check-security-drift`, and `pnpm report-security-drift:strict`).
 7. Relevant `CHANGELOG.md` and `PROGRESS-SUMMARY.md` files are fully updated for all implemented phases.
-8. Manual QA verifies sign-in, sign-up, onboarding, pending verification, blocked account, multi-tab, reload, and network-failure paths.
+8. Every phase commit follows Conventional Commits with staff-level context, is signed (OpenPGP key `D723DC268434EF4D`), and pushed to `origin`.
+9. Manual QA verifies sign-in, sign-up, onboarding, pending verification, blocked account, multi-tab, reload, and network-failure paths.
