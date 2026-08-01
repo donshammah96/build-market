@@ -24,6 +24,7 @@ import {
   Profession,
   type Prisma,
 } from "@prisma/client";
+import { uploadRepository } from "@/app/lib/domains/uploads";
 
 export type ProfessionalSettingsActor = {
   userId: string;
@@ -589,14 +590,11 @@ export const professionalSettingsService = {
 
               assetId = asset.id;
 
-              await tx.onboardingUpload.update({
-                where: { id: staged.id },
-                data: {
-                  status: "CONSUMED",
-                  consumedAt: new Date(),
-                  consumedByUserId: actor.userId,
-                },
-              });
+              await uploadRepository.markStagedUploadConsumed(
+                staged.id,
+                actor.userId,
+                tx,
+              );
             }
 
             await tx.professionalDocument.create({

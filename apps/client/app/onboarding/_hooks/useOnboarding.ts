@@ -39,11 +39,29 @@ export function clearOnboardingDrafts(): void {
 }
 
 export type UserRole = "client" | "professional";
+
+function onboardingDestinationForMetadata(
+  metadata: ClerkPublicMetadataLike,
+): string {
+  const normalizedRole = normalizeRole(metadata?.role);
+  if (normalizedRole !== "PROFESSIONAL")
+    return dashboardForRole(normalizedRole);
+  return metadata?.status === "PENDING_VERIFICATION"
+    ? ROUTES.professionalPendingVerification
+    : ROUTES.professionalDashboard;
+}
+
+function onboardingDestinationForRole(role: UserRole): string {
+  return role === "professional"
+    ? ROUTES.professionalPendingVerification
+    : dashboardForRole(role);
+}
 const MIN_ONBOARDING_STEP = 1;
 const MAX_ONBOARDING_STEP = 2;
 
 const ONBOARDING_STEP_PARAM = "step";
 const ONBOARDING_ROLE_PARAM = "role";
+const ONBOARDING_SOURCE_PARAM = "source";
 
 function isStepWithinBounds(step: number): boolean {
   return (
@@ -65,6 +83,7 @@ export function useOnboarding() {
   const [role, setRole] = useState<UserRole | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [roleLocked, setRoleLocked] = useState(false);
 
   // Sync step/role with URL params (read on mount only, no SSR access)
   useEffect(() => {
@@ -76,6 +95,12 @@ export function useOnboarding() {
     }
     if (roleParam === "client" || roleParam === "professional") {
       setRole(roleParam);
+      if (roleParam === "professional") {
+        setStep(2);
+        setRoleLocked(
+          searchParams.get(ONBOARDING_SOURCE_PARAM) === "join-as-pro",
+        );
+      }
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- only on mount
 
@@ -89,8 +114,11 @@ export function useOnboarding() {
     const params = new URLSearchParams();
     params.set(ONBOARDING_STEP_PARAM, String(step));
     if (role) params.set(ONBOARDING_ROLE_PARAM, role);
+    if (roleLocked && role === "professional") {
+      params.set(ONBOARDING_SOURCE_PARAM, "join-as-pro");
+    }
     router.replace(`/onboarding?${params.toString()}`, { scroll: false });
-  }, [step, role, router]);
+  }, [step, role, roleLocked, router]);
 
   // Redirect unauthenticated users to sign-in (covers BYPASS_AUTH dev scenario)
   useEffect(() => {
@@ -109,7 +137,7 @@ export function useOnboarding() {
     const normalizedRole = normalizeRole(metadata?.role);
 
     if (metadata?.isOnboarded) {
-      router.replace(dashboardForRole(normalizedRole));
+      router.replace(onboardingDestinationForMetadata(metadata));
     }
   }, [userLoaded, user, router]);
 
@@ -132,7 +160,7 @@ export function useOnboarding() {
 
   const navigateToDashboard = useCallback(
     async (targetRole: UserRole) => {
-      const dashboardPath = dashboardForRole(targetRole);
+      const dashboardPath = onboardingDestinationForRole(targetRole);
 
       const metadataReady = await waitForMetadataPropagation(targetRole);
 
@@ -148,7 +176,36 @@ export function useOnboarding() {
     [router, waitForMetadataPropagation],
   );
 
+  const broadcastCompletion = useCallback((targetRole: UserRole) => {
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      try {
+        const channel = new BroadcastChannel("auth-onboarding");
+        channel.postMessage({ type: "ONBOARDING_COMPLETED", role: targetRole });
+        channel.close();
+      } catch {
+        // BroadcastChannel optional fallback
+      }
+    }
+  }, []);
+
+  // Multi-tab synchronization: redirect if completed in another tab
+  useEffect(() => {
+    if (typeof window === "undefined" || !("BroadcastChannel" in window))
+      return;
+    const channel = new BroadcastChannel("auth-onboarding");
+    channel.onmessage = (event) => {
+      if (event.data?.type === "ONBOARDING_COMPLETED" && event.data?.role) {
+        toast.info("Onboarding completed in another tab. Redirecting...");
+        router.replace(dashboardForRole(event.data.role));
+      }
+    };
+    return () => {
+      channel.close();
+    };
+  }, [router]);
+
   const handleRoleSelect = (selectedRole: UserRole) => {
+    if (roleLocked && selectedRole !== "professional") return;
     analytics.trackStepCompleted("role_selection", selectedRole);
     setRole(selectedRole);
     setStep(2);
@@ -174,6 +231,7 @@ export function useOnboarding() {
         throw new Error(result.error || "Failed to skip onboarding");
       }
 
+      broadcastCompletion(roleToSkip);
       analytics.trackStepCompleted("skip", roleToSkip);
       toast.info(
         `Welcome! Redirecting to your ${roleToSkip === "professional" ? "professional " : ""}dashboard...`,
@@ -198,6 +256,7 @@ export function useOnboarding() {
         throw new Error(result.error || "Failed to complete onboarding");
       }
 
+      broadcastCompletion(role || "client");
       analytics.trackStepCompleted("form_submit", role || "client");
       toast.success("Profile created! Redirecting...");
       await navigateToDashboard(role || "client"); // Fallback to client if role is null (shouldn't be)
@@ -209,9 +268,13 @@ export function useOnboarding() {
     }
   };
 
-  const jumpToStep = useCallback((index: number) => {
-    if (isStepWithinBounds(index)) setStep(index);
-  }, []);
+  const jumpToStep = useCallback(
+    (index: number) => {
+      if (roleLocked && index === 1) return;
+      if (isStepWithinBounds(index)) setStep(index);
+    },
+    [roleLocked],
+  );
 
   return {
     step,
@@ -227,5 +290,6 @@ export function useOnboarding() {
     handleSkip,
     handleSubmit,
     userLoaded,
+    roleLocked,
   };
 }

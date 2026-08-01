@@ -330,7 +330,7 @@ jobs:
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
           NEXT_PUBLIC_APP_URL: http://localhost:3005
           CLIENT_APP_URL: http://localhost:3500
-          ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef789abcdef0123456789abcdef"
+          ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         run: pnpm exec turbo run lint --filter=admin
 
       - name: Env contract check (client)
@@ -1059,7 +1059,15 @@ jobs:
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3005/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
-      UPSTASH_REDIS_REST_URL: https://127.0.0.1:6378
+      QUEUE_PROVIDER: memory
+      # FIX: was https://127.0.0.1:6378 — the pre-fix closed-port approach
+      # both smoke-gate jobs' comments document as insufficient, since
+      # @upstash/redis retries with backoff and multiple Redis-touching
+      # calls stack those retries into a multi-minute hang. Individual test
+      # cases can still construct a real Upstash client — the stub removes
+      # that failure mode instead of relying on assumptions about what the
+      # test suite touches.
+      UPSTASH_REDIS_REST_URL: http://127.0.0.1:8079
       UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
       REDIS_URL: redis://127.0.0.1:6379
 
@@ -1076,17 +1084,88 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
 
+      # FIX: added — identical stub used by client-preview-smoke-gate and
+      # admin-preview-smoke-gate. Must be up before any test that might
+      # touch Redis, same reasoning as those jobs.
+      - name: Start Upstash REST stub (always-200, no retries triggered)
+        run: |
+          nohup python3 -c '
+          import http.server
+          import json
+
+          class UpstashStubHandler(http.server.BaseHTTPRequestHandler):
+              def _respond(self):
+                  length = int(self.headers.get("Content-Length", 0) or 0)
+                  raw = self.rfile.read(length) if length else b""
+                  is_pipeline_path = "pipeline" in self.path or "multi-exec" in self.path
+
+                  if is_pipeline_path:
+                      count = 1
+                      try:
+                          parsed = json.loads(raw) if raw else None
+                          if isinstance(parsed, list):
+                              count = max(len(parsed), 1)
+                      except (json.JSONDecodeError, ValueError):
+                          pass
+                      body = json.dumps([{"result": None} for _ in range(count)]).encode()
+                  else:
+                      body = json.dumps({"result": None}).encode()
+
+                  self.send_response(200)
+                  self.send_header("Content-Type", "application/json")
+                  self.send_header("Content-Length", str(len(body)))
+                  self.end_headers()
+                  self.wfile.write(body)
+
+              def do_GET(self):
+                  self._respond()
+
+              def do_POST(self):
+                  self._respond()
+
+              def log_message(self, fmt, *args):
+                  pass
+
+          http.server.ThreadingHTTPServer(("127.0.0.1", 8079), UpstashStubHandler).serve_forever()
+          ' > /tmp/upstash-rest-stub.log 2>&1 &
+          echo $! > /tmp/upstash-rest-stub.pid
+
+          for i in $(seq 1 15); do
+            if curl --silent --max-time 1 --output /dev/null http://127.0.0.1:8079/; then
+              echo "Upstash REST stub is accepting requests."
+              break
+            fi
+            if [ "$i" -eq 15 ]; then
+              echo "Upstash REST stub failed to start within 15s."
+              cat /tmp/upstash-rest-stub.log || true
+              exit 1
+            fi
+            sleep 1
+          done
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Apply database migrations
         run: pnpm run db:migrate:deploy
 
-      - name: Build workspace dependencies then admin
-        run: pnpm --filter="admin..." run build
+      - name: Build shared packages
+        # Vitest executes TypeScript source files directly via SWC/Vite transforms,
+        # so `admin:test:all` does not require a compiled `next build` (.next output).
+        # Building workspace `@build/*` packages provides the compiled entrypoints
+        # required for cross-package imports, saving 10–15 cold-cache minutes nightly.
+        run: pnpm run build --filter="@build/*"
 
       - name: Run admin nightly/flake-focused test suite
         run: pnpm run admin:test:all
+
+      # FIX (parity with smoke gates): stop the stub cleanly rather than
+      # leaving it as an orphaned background process for the rest of the
+      # job's runtime — harmless on a fresh runner, but cheap to be tidy.
+      - name: Stop Upstash REST stub
+        if: always()
+        run: |
+          [ -f /tmp/upstash-rest-stub.pid ] && kill "$(cat /tmp/upstash-rest-stub.pid)" >/dev/null 2>&1 || true
 
   ci-success:
     name: CI Success

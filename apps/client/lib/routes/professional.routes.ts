@@ -11,7 +11,8 @@ export const PROFESSIONAL_ROUTES = {
   professionalDetail: "/professionals/:id",
   joinAsPro: "/professional/sign-up",
   professionalProfile: "/professional/profile",
-  professionalOnboarding: "/professional/onboarding",
+  professionalOnboarding:
+    "/onboarding?role=professional&step=2&source=join-as-pro",
 
   // Professional Category Routes
   generalContractors: "/professionals/general-contractors",

@@ -21,6 +21,8 @@ import {
 import { cn } from "@/lib/utils";
 import { getRegulatoryAuthorityCode } from "@/lib/constants/professionOptions";
 import { StepComponentProps, WIZARD_STYLES } from "./types";
+import { UploadStatusList } from "@/components/ui/UploadStatusList";
+import { useStagedUploadQueue } from "@/app/hooks/use-staged-upload-queue";
 
 // ============================================================================
 // CONSTANTS
@@ -95,12 +97,12 @@ const FileListItem = memo<FileListItemProps>(function FileListItem({
       className="flex items-center justify-between bg-white/[0.07] px-4 py-3 rounded-lg border border-white/18"
     >
       <div className="flex items-center gap-3">
-        <div className="p-2 bg-(--color-onboarding-primary)/18 rounded-lg">
-          <FileText className="h-4 w-4 text-(--color-onboarding-primary)" />
+        <div className="p-2 bg-onboarding-primary/18 rounded-lg">
+          <FileText className="h-4 w-4 text-onboarding-primary" />
         </div>
         <div>
           <p className="text-sm text-white truncate max-w-50">{file.name}</p>
-          <p className="text-xs text-(--color-onboarding-ink)/55">
+          <p className="text-xs text-onboarding-ink/55">
             {(file.size / 1024).toFixed(0)} KB
           </p>
         </div>
@@ -108,7 +110,7 @@ const FileListItem = memo<FileListItemProps>(function FileListItem({
       <button
         type="button"
         onClick={onRemove}
-        className="p-1.5 text-(--color-onboarding-ink)/55 hover:text-(--color-error) hover:bg-error/10 rounded-lg transition-colors"
+        className="p-1.5 text-onboarding-ink/55 hover:text-(--color-error) hover:bg-error/10 rounded-lg transition-colors"
         aria-label={`Remove ${file.name}`}
       >
         <X className="h-4 w-4" />
@@ -144,6 +146,9 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const uploadQueue = useStagedUploadQueue({
+    maxItems: maxFiles,
+  });
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -183,6 +188,7 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
         setValidationError(error);
       } else {
         filesToAdd.push(file);
+        uploadQueue.enqueue(file);
       }
     }
 
@@ -196,14 +202,12 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-3">
-        <div className="p-2 bg--onboarding-primary/12 rounded-lg text-(--color-onboarding-primary)">
+        <div className="p-2 bg--onboarding-primary/12 rounded-lg text-onboarding-primary">
           {icon}
         </div>
         <div>
           <h3 className="font-medium text-white">{title}</h3>
-          <p className="text-sm text-(--color-onboarding-ink)/65">
-            {description}
-          </p>
+          <p className="text-sm text-onboarding-ink/65">{description}</p>
         </div>
       </div>
 
@@ -213,7 +217,7 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           "border-2 border-dashed rounded-xl p-6 transition-all cursor-pointer",
           isDragging
             ? "border-(--color-onboarding-primary) bg--onboarding-primary/10"
-            : "border-white/18 hover:border-(--color-onboarding-primary)/35 bg-white/[0.07]",
+            : "border-white/18 hover:border-onboarding-primary/35 bg-white/[0.07]",
           files.length >= maxFiles && "opacity-50 cursor-not-allowed",
         )}
         onDragOver={files.length < maxFiles ? handleDragOver : undefined}
@@ -234,10 +238,10 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               "h-8 w-8 mb-3 transition-colors",
               isDragging
                 ? "text-(--color-onboarding-primary)"
-                : "text-(--color-onboarding-ink)/45",
+                : "text-onboarding-ink/45",
             )}
           />
-          <p className="text-sm text-(--color-onboarding-ink)/65 text-center">
+          <p className="text-sm text-onboarding-ink/65 text-center">
             {isDragging
               ? "Drop files here..."
               : "Drag & drop files or click to browse"}
@@ -256,8 +260,18 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
         </p>
       )}
 
+      {/* Live Upload Status List */}
+      <UploadStatusList
+        items={uploadQueue.items}
+        onRetry={uploadQueue.retry}
+        onCancel={uploadQueue.cancel}
+        onRemove={(id) => {
+          uploadQueue.remove(id);
+        }}
+      />
+
       {/* File List */}
-      {files.length > 0 && (
+      {files.length > 0 && uploadQueue.items.length === 0 && (
         <div className="space-y-2">
           <p className="text-xs text-onboarding-ink/52">
             {files.length} of {maxFiles} files
@@ -391,7 +405,7 @@ export default function DocumentsStep({
         <h2 className="font-['Syne'] text-2xl md:text-3xl font-bold leading-[1.1] text-white mb-2 tracking-tight">
           Verification Documents
         </h2>
-        <p className="text-(--color-onboarding-ink)/62 max-w-md mx-auto">
+        <p className="text-onboarding-ink/62 max-w-md mx-auto">
           Upload your professional certificates and ID for verification
         </p>
       </motion.div>
@@ -401,7 +415,7 @@ export default function DocumentsStep({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="bg--onboarding-primary/10 border border-(--color-onboarding-primary)/30 rounded-xl p-4"
+        className="bg--onboarding-primary/10 border border-onboarding-primary/30 rounded-xl p-4"
       >
         <div className="flex items-start gap-3">
           <ShieldCheck className="h-5 w-5 text-(--color-onboarding-primary) shrink-0 mt-0.5" />
@@ -409,7 +423,7 @@ export default function DocumentsStep({
             <p className="text-sm text-(--color-onboarding-primary) font-medium">
               Documents help verify your credentials
             </p>
-            <p className="text-xs text-(--color-onboarding-ink)/62 mt-1">
+            <p className="text-xs text-onboarding-ink/62 mt-1">
               Your documents are securely stored and only reviewed by our
               verification team.
             </p>
@@ -487,7 +501,7 @@ export default function DocumentsStep({
           <button
             type="button"
             onClick={handleSkip}
-            className="text-sm text-(--color-onboarding-ink)/62 hover:text-onboarding-ink/92 transition-colors flex items-center gap-1.5 underline-offset-2 hover:underline"
+            className="text-sm text-onboarding-ink/62 hover:text-onboarding-ink/92 transition-colors flex items-center gap-1.5 underline-offset-2 hover:underline"
           >
             <SkipForward className="h-3.5 w-3.5" aria-hidden="true" />
             Skip for now

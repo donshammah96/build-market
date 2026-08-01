@@ -730,6 +730,8 @@ enum AuditAction {
   RETENTION_POLICY_ENFORCED
   AUTO_ANONYMIZATION_EXECUTED
   BREACH_NOTIFICATION_SENT
+  DOCUMENT_VIEWED
+  DOCUMENT_DOWNLOADED
 }
 
 enum LegalBasis {
@@ -861,6 +863,8 @@ model IdempotencyKey {
   storeId    String?
   propertyId String?
   userId     String
+  actorClerkId String?
+  appUserId    String?
   expiresAt  DateTime
   createdAt  DateTime          @default(now())
 
@@ -868,6 +872,8 @@ model IdempotencyKey {
   property Property? @relation(fields: [propertyId], references: [id])
 
   @@index([key, scope])
+  @@index([scope, actorClerkId, status])
+  @@index([appUserId])
   @@index([expiresAt]) // For cleanup jobs
 }
 
@@ -875,6 +881,64 @@ enum IdempotencyStatus {
   PENDING
   COMPLETED
   FAILED
+}
+
+enum OnboardingWorkflowState {
+  NOT_STARTED
+  ROLE_SELECTED
+  PROFILE_SUBMITTED
+  COMPLETED
+  PENDING_VERIFICATION
+  FAILED_RETRYABLE
+}
+
+model OnboardingState {
+  userId          String                  @id
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  state           OnboardingWorkflowState @default(NOT_STARTED)
+  role            UserRole?
+  currentStep     Int                     @default(1)
+  completedAt     DateTime?
+  lastErrorCode   String?
+  version         Int                     @default(0)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  transitions     OnboardingTransition[]
+
+  @@index([state, role])
+  @@index([updatedAt])
+}
+
+model OnboardingTransition {
+  id              String                  @id @default(uuid())
+  userId          String
+  onboardingState OnboardingState         @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  idempotencyKey  String                  @unique
+  fromState       OnboardingWorkflowState
+  toState         OnboardingWorkflowState
+  actorClerkId    String
+  correlationId   String
+  reason          String?
+  createdAt       DateTime                @default(now())
+
+  @@index([userId, createdAt])
+  @@index([actorClerkId, createdAt])
+}
+
+model AuthOutboxEvent {
+  id             String   @id @default(uuid())
+  aggregateType  String
+  aggregateId    String
+  eventType      String
+  payload        Json     @db.JsonB
+  status         String   @default("PENDING")
+  attempts       Int      @default(0)
+  nextAttemptAt  DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([aggregateType, aggregateId])
 }
 
 model User {
@@ -947,6 +1011,7 @@ model User {
   clientProfile       ClientProfile?
   professionalProfile ProfessionalProfile?
   adminProfile        AdminProfile?
+  onboardingState     OnboardingState?
 
   // Assets ownership (centralized)
   uploads       Asset[]        @relation("Uploader")
@@ -1739,8 +1804,13 @@ model DirectUpload {
 
 enum OnboardingUploadStatus {
   STAGED
+  ATTACHED
   CONSUMED
   EXPIRED
+  DELETED
+  QUARANTINED
+  SCAN_PENDING
+  SCAN_FAILED
 }
 
 model OnboardingUpload {
@@ -3129,4 +3199,19 @@ model NewsletterSubscriber {
   @@index([userId])
   @@index([createdAt])
   @@map("newsletter_subscribers")
+}
+
+model UploadScanEvent {
+  id            String   @id @default(uuid())
+  scanRequestId String   @unique
+  uploadId      String
+  status        String   // "CLEAN" | "INFECTED" | "ERROR"
+  virusName     String?
+  engineVersion String
+  createdAt     DateTime @default(now())
+
+  @@index([uploadId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("upload_scan_events")
 }

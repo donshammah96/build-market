@@ -23,8 +23,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.9.1",
-    "nats": "^2.19.0"
+    "@opentelemetry/api": "catalog:",
+    "nats": "catalog:"
   },
   "devDependencies": {
     "@build/eslint-config": "workspace:*",

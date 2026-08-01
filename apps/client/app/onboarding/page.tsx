@@ -26,6 +26,7 @@ export default function Onboarding() {
     handleCancelOnboarding,
     handleSkip,
     handleSubmit,
+    roleLocked,
   } = useOnboarding();
 
   return (
@@ -49,6 +50,7 @@ export default function Onboarding() {
           handleCancelOnboarding={handleCancelOnboarding}
           handleSkip={handleSkip}
           handleSubmit={handleSubmit}
+          roleLocked={roleLocked}
         />
       </div>
     </OnboardingAnalyticsProvider>

@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Fixed (CI Workflow Hardening & Admin Nightly Job Optimization)
+
+- **Admin Lint ENCRYPTION_KEY_V1 Fix (`.github/workflows/ci.yml`)**: Fixed corrupted 96-character `ENCRYPTION_KEY_V1` value in the `Lint (admin)` step back to the canonical 64-character (256-bit AES) hex key.
+- **Admin Nightly Job Redis Stub & Teardown (`.github/workflows/ci.yml`)**: Added inline Python Upstash REST HTTP stub server (`http://127.0.0.1:8079`) to `admin-nightly-test-all` job to eliminate `@upstash/redis` client backoff retry hangs, added `QUEUE_PROVIDER: memory` to job env, and added clean stub process teardown step with `if: always()`.
+- **Nightly Job Build Optimization (`.github/workflows/ci.yml`)**: Replaced redundant `pnpm --filter="admin..." run build` (`next build` + `@build/*`) with `pnpm run build --filter="@build/*"`, saving 10–15 cold-cache build minutes per nightly run as Vitest executes against TypeScript source directly and only requires compiled `@build/*` workspace entrypoints.
+
+**Files changed:**
+
+- `.github/workflows/ci.yml`
+
 ### Changed (Admin Super Admin Promotion Script & Clerk User Sync)
 
 - **Admin Promotion CLI Script (`scripts/set-admin.ts`)**: Updated script to promote target users to `super_admin` in Clerk `publicMetadata` (`role: "super_admin"`). Upgraded Clerk API call to non-deprecated `clerkClient.users.updateUserMetadata` for safe partial metadata mutation. Executed promotion for user.

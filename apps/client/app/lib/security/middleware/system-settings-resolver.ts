@@ -1,4 +1,5 @@
 import { env } from "@/app/lib/infrastructure/env";
+import { recordMiddlewareFallback } from "@/app/lib/auth/telemetry-metrics";
 
 export type SystemSettingsSnapshot = {
   maintenanceMode: boolean;
@@ -33,6 +34,10 @@ export async function resolveSystemSettings(
 ): Promise<SystemSettingsResult> {
   const internalSecret = env.services.internalApiSecret;
   if (!internalSecret) {
+    recordMiddlewareFallback(
+      "/middleware/system-settings",
+      "settings_fallback_secret_missing",
+    );
     return {
       state: "fallback",
       settings: DEFAULT_SETTINGS,
@@ -51,6 +56,10 @@ export async function resolveSystemSettings(
     });
 
     if (!response.ok) {
+      recordMiddlewareFallback(
+        "/middleware/system-settings",
+        "settings_fallback_non_ok",
+      );
       return {
         state: "fallback",
         settings: DEFAULT_SETTINGS,
@@ -75,6 +84,10 @@ export async function resolveSystemSettings(
       },
     };
   } catch {
+    recordMiddlewareFallback(
+      "/middleware/system-settings",
+      "settings_fallback_error",
+    );
     return {
       state: "fallback",
       settings: DEFAULT_SETTINGS,

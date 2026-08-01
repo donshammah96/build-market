@@ -1,0 +1,85 @@
+name = "r2-scan-worker"
+main = "r2-scan-worker.ts"
+compatibility_date = "2026-04-18"
+
+[observability]
+enabled = true
+
+# Consider: workers_dev = false
+# The fetch() handler exposes an unauthenticated /scan-trigger?key=...
+# endpoint. If this Worker has a public *.workers.dev URL (the default),
+# anyone who finds it can trigger arbitrary scans — cost abuse and a
+# double-processing race vector. Either disable the public dev URL and
+# rely solely on the queue consumer, or (better, if you want /scan-trigger
+# for manual ops) add a shared-secret header check in the fetch handler
+# before wiring workers_dev = false back on. Don't ship this endpoint
+# open in either environment below.
+
+# --- Staging Environment ---
+[env.staging]
+name = "r2-scan-worker-staging"
+workers_dev = false
+
+[env.staging.vars]
+APP_CALLBACK_URL = "https://staging.buildmarket.app/api/internal/uploads/scan-callback"
+
+[[env.staging.r2_buckets]]
+binding = "R2_BUCKET_STAGED"
+bucket_name = "buildmarket-staged-staging"
+
+[[env.staging.r2_buckets]]
+binding = "R2_BUCKET_VERIFIED_PRIVATE"
+bucket_name = "buildmarket-verified-private-staging"
+
+[[env.staging.r2_buckets]]
+binding = "R2_BUCKET_QUARANTINE"
+bucket_name = "buildmarket-quarantine-staging"
+
+[[env.staging.queues.producers]]
+queue = "upload-scan-queue-staging"
+binding = "UPLOAD_SCAN_QUEUE"
+
+[[env.staging.queues.consumers]]
+queue = "upload-scan-queue-staging"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "upload-scan-queue-staging-dlq"
+
+# --- Production Environment ---
+[env.production]
+name = "r2-scan-worker-production"
+workers_dev = false
+
+[env.production.vars]
+APP_CALLBACK_URL = "https://buildmarket.app/api/internal/uploads/scan-callback"
+
+[[env.production.r2_buckets]]
+binding = "R2_BUCKET_STAGED"
+bucket_name = "buildmarket-staged"
+
+[[env.production.r2_buckets]]
+binding = "R2_BUCKET_VERIFIED_PRIVATE"
+bucket_name = "buildmarket-verified-private"
+
+[[env.production.r2_buckets]]
+binding = "R2_BUCKET_QUARANTINE"
+bucket_name = "buildmarket-quarantine"
+
+[[env.production.queues.producers]]
+queue = "upload-scan-queue-production"
+binding = "UPLOAD_SCAN_QUEUE"
+
+[[env.production.queues.consumers]]
+queue = "upload-scan-queue-production"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "upload-scan-queue-production-dlq"
+
+# The DLQ names above need to actually exist first:
+#   npx wrangler queues create upload-scan-queue-staging-dlq
+#   npx wrangler queues create upload-scan-queue-production-dlq
+# Add a lightweight alert (or just a periodic manual check) on DLQ depth —
+# a message landing there means a scan permanently failed and that
+# upload's row is stuck at SCAN_PENDING with no further automatic retry.

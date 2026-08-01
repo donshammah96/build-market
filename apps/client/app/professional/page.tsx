@@ -20,6 +20,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ROUTES } from "@/lib/links";
 import { MockDashboard } from "@/components/professional/MockDashboardUi";
+import { JoinAsProIntentLink } from "./_components/JoinAsProIntentLink";
 
 export default function ProfessionalLandingPage() {
   return (
@@ -63,7 +64,7 @@ function HeroSection() {
           className="object-cover opacity-40"
           priority
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/50 to-transparent" />
+        <div className="absolute inset-0 bg-linear-to-t from-zinc-900 via-zinc-900/50 to-transparent" />
       </motion.div>
 
       {/* Content */}
@@ -82,7 +83,7 @@ function HeroSection() {
 
           <h1 className="text-5xl md:text-7xl font-bold text-white tracking-tight leading-[1.1] mb-8">
             Build your legacy on <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-200">
+            <span className="text-transparent bg-clip-text bg-linear-to-r from-emerald-400 to-teal-200">
               solid ground.
             </span>
           </h1>
@@ -99,10 +100,10 @@ function HeroSection() {
               className="h-14 px-8 text-lg bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-lg shadow-emerald-900/20 w-full sm:w-auto"
               asChild
             >
-              <Link href={ROUTES.joinAsPro}>
+              <JoinAsProIntentLink>
                 Join as a Pro
                 <ArrowRight className="ml-2 h-5 w-5" />
-              </Link>
+              </JoinAsProIntentLink>
             </Button>
             <Button
               variant="outline"
@@ -225,7 +226,7 @@ function FeatureShowcase() {
           <div className="lg:w-1/2">
             <div className="relative">
               <div className="absolute -inset-4 bg-emerald-100 rounded-2xl transform -rotate-2" />
-              <div className="relative bg-zinc-900 rounded-xl overflow-hidden shadow-2xl border border-zinc-800 aspect-[4/3]">
+              <div className="relative bg-zinc-900 rounded-xl overflow-hidden shadow-2xl border border-zinc-800 aspect-4/3">
                 <MockDashboard />
               </div>
             </div>
@@ -274,7 +275,7 @@ function FeatureShowcase() {
                 fill
                 className="object-cover"
               />
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-8">
+              <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/80 to-transparent p-8">
                 <div className="flex items-center gap-3 text-white mb-2">
                   <div className="h-10 w-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center">
                     <Briefcase className="h-5 w-5" />
@@ -405,7 +406,7 @@ function CTASection() {
             className="bg-white text-emerald-700 hover:bg-emerald-50 h-16 px-10 text-lg rounded-full font-bold shadow-2xl"
             asChild
           >
-            <Link href={ROUTES.joinAsPro}>Get Started for Free</Link>
+            <JoinAsProIntentLink>Get Started for Free</JoinAsProIntentLink>
           </Button>
         </div>
         <p className="mt-6 text-sm text-emerald-200/80">

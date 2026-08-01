@@ -28,6 +28,7 @@ import "server-only";
  */
 
 import { clerkClient } from "@clerk/nextjs/server";
+import { recordClerkSyncLag } from "@/app/lib/auth/telemetry-metrics";
 
 export const CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE =
   "Unable to finalize account state. Please retry.";
@@ -53,6 +54,7 @@ export async function updateClerkOnboardingMetadata(
   metadata: ClerkOnboardingMetadata,
   context: { correlationId?: string; operation: string },
 ): Promise<void> {
+  const startTime = Date.now();
   try {
     const client = (await clerkClient()) as {
       users: {
@@ -65,6 +67,7 @@ export async function updateClerkOnboardingMetadata(
     await client.users.updateUserMetadata(clerkId, {
       publicMetadata: metadata,
     });
+    recordClerkSyncLag(Math.max(0, Date.now() - startTime));
   } catch (error) {
     console.error(
       `Failed to update Clerk metadata during ${context.operation}`,

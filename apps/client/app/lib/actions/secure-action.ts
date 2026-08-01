@@ -195,6 +195,21 @@ export async function secureAction<TInput, TParsed = TInput, TOutput = void>(
 
   try {
     const input = parseInput(options.schema, options.input) as TParsed;
+
+    const csrfCheck = await validateTrustedMutationOriginForServerAction(
+      options.csrf,
+    );
+
+    if (!csrfCheck.ok) {
+      throwActionFailure(
+        createActionFailure(
+          "forbidden",
+          mutationOriginFailureMessage(csrfCheck.reason),
+          403,
+        ),
+      );
+    }
+
     if (options.requireActor === false) {
       actor = null;
 
@@ -232,20 +247,6 @@ export async function secureAction<TInput, TParsed = TInput, TOutput = void>(
         }
       }
     } else {
-      const csrfCheck = await validateTrustedMutationOriginForServerAction(
-        options.csrf,
-      );
-
-      if (!csrfCheck.ok) {
-        throwActionFailure(
-          createActionFailure(
-            "forbidden",
-            mutationOriginFailureMessage(csrfCheck.reason),
-            403,
-          ),
-        );
-      }
-
       authResult = await auth();
 
       if (options.recentAuth && authResult.userId) {
@@ -363,9 +364,7 @@ export async function secureAction<TInput, TParsed = TInput, TOutput = void>(
             )
           : createActionFailure(
               "internal",
-              error instanceof Error
-                ? error.message || "Unexpected server action error"
-                : "Unexpected server action error",
+              "Unexpected server action error",
               500,
             ));
 

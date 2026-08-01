@@ -1,5 +1,6 @@
 import { normalizeRole, type AppRole } from "@/app/lib/security/roles";
 import { env } from "@/app/lib/infrastructure/env";
+import { recordMiddlewareFallback } from "@/app/lib/auth/telemetry-metrics";
 
 const OPERATION_NAME = "resolve_onboarding_status";
 
@@ -83,6 +84,10 @@ export async function resolveOnboardingStatus(
       mode,
       durationMs: Date.now() - startedAt,
     });
+    recordMiddlewareFallback(
+      "/middleware/onboarding-resolver",
+      `onboarding_fallback_${fallbackResult.reason}`,
+    );
 
     return fallbackResult;
   }
@@ -117,6 +122,10 @@ export async function resolveOnboardingStatus(
         httpStatus: response.status,
         durationMs: Date.now() - startedAt,
       });
+      recordMiddlewareFallback(
+        "/middleware/onboarding-resolver",
+        `onboarding_fallback_${fallbackResult.reason}`,
+      );
 
       return fallbackResult;
     }
@@ -167,6 +176,10 @@ export async function resolveOnboardingStatus(
       mode,
       durationMs: Date.now() - startedAt,
     });
+    recordMiddlewareFallback(
+      "/middleware/onboarding-resolver",
+      `onboarding_fallback_${fallbackResult.reason}`,
+    );
 
     return fallbackResult;
   }

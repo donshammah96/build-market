@@ -45,6 +45,10 @@ import {
 } from "@/app/lib/domains/user-profile/clerk-metadata";
 import { logOnboardingRouteOutcome, now } from "@/app/api/onboarding/shared";
 import { normalizeRole } from "@/app/lib/security/roles";
+import {
+  PROFESSIONAL_ONBOARDING_INTENT_COOKIE,
+  verifyProfessionalOnboardingIntent,
+} from "@/app/lib/auth/professional-onboarding-intent";
 
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 const ROUTE_PATTERN = "/api/onboarding";
@@ -192,6 +196,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return apiError("Invalid onboarding role", HttpStatus.BAD_REQUEST);
   }
   actorRole = resolvedActorRole;
+
+  const onboardingSource = req.headers.get("x-onboarding-source");
+  if (
+    resolvedActorRole === "PROFESSIONAL" &&
+    onboardingSource === "join-as-pro"
+  ) {
+    const intent = verifyProfessionalOnboardingIntent(
+      req.cookies.get(PROFESSIONAL_ONBOARDING_INTENT_COOKIE)?.value,
+    );
+
+    if (!intent.ok) {
+      logOutcome("forbidden", HttpStatus.FORBIDDEN, {
+        reason: "missing_or_invalid_professional_intent",
+      });
+      return apiError(
+        "Professional onboarding intent expired. Please restart from Join as a Pro.",
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
 
   const idempotencyKey =
     req.headers.get("Idempotency-Key") ||

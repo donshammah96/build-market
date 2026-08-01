@@ -16,7 +16,9 @@ const mockStorageGetPresignedUploadUrl = vi.hoisted(() => vi.fn());
 const mockStorageGetPresignedDownloadUrl = vi.hoisted(() => vi.fn());
 const mockStorageExists = vi.hoisted(() => vi.fn());
 const mockStorageGetMetadata = vi.hoisted(() => vi.fn());
-const mockStorageReadObject = vi.hoisted(() => vi.fn());
+const mockStorageReadObject = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(Buffer.from("pdf-bytes")),
+);
 const mockStoragePutObject = vi.hoisted(() => vi.fn());
 const mockFindAssetByChecksum = vi.hoisted(() => vi.fn());
 const mockFindOwnedAssetByChecksum = vi.hoisted(() => vi.fn());
@@ -66,8 +68,28 @@ vi.mock("@build/db", () => ({
   },
 }));
 
+const { mockTransitionStagedUploadStatus, InvalidStatusTransitionError } =
+  vi.hoisted(() => {
+    class InvalidStatusTransitionError extends Error {
+      constructor(
+        public readonly from: string,
+        public readonly to: string,
+      ) {
+        super(`Invalid staged-upload transition: ${from} -> ${to}`);
+        this.name = "InvalidStatusTransitionError";
+      }
+    }
+    return {
+      mockTransitionStagedUploadStatus: vi
+        .fn()
+        .mockResolvedValue({ from: "SCAN_PENDING", to: "STAGED" }),
+      InvalidStatusTransitionError,
+    };
+  });
+
 vi.mock("@/app/lib/domains/uploads/repository", () => ({
   assetDetailSelect: {},
+  InvalidStatusTransitionError,
   uploadRepository: {
     findAssetByChecksum: mockFindAssetByChecksum,
     findOwnedAssetByChecksum: mockFindOwnedAssetByChecksum,
@@ -82,6 +104,8 @@ vi.mock("@/app/lib/domains/uploads/repository", () => ({
     findStagedUploads: mockFindStagedUploads,
     createStagedOnboardingUpload: mockCreateStagedOnboardingUpload,
     markStagedUploadConsumed: mockMarkStagedUploadConsumed,
+    updateStagedUploadStatus: mockMarkStagedUploadConsumed,
+    transitionStagedUploadStatus: mockTransitionStagedUploadStatus,
     findExpiredStagedUploadsForCleanup: mockFindExpiredStagedUploadsForCleanup,
     markStagedUploadsExpiredByIds: mockMarkStagedUploadsExpiredByIds,
     createDirectUpload: mockCreateDirectUpload,
@@ -119,6 +143,7 @@ describe("uploadService", () => {
         "f4d5f1d31dcf2de4f2f801a2f6a76dd5352f53e5af97f4884de6f9f96fcbec6e",
       storageBucket: "local",
       storageKey: "1710000000000-upload.pdf",
+      status: "SCAN_PENDING",
       expiresAt: new Date("2026-03-13T10:00:00.000Z"),
     });
 
@@ -143,7 +168,7 @@ describe("uploadService", () => {
       expect.any(Buffer),
       "id-document.pdf",
       "application/pdf",
-      { visibility: "public" },
+      { visibility: "private" },
     );
     expect(mockCreateStagedOnboardingUpload).toHaveBeenCalledWith(
       expect.objectContaining({

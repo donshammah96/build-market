@@ -33,6 +33,7 @@ import {
   PropertyStep,
   CredentialsStep,
   DocumentsStep,
+  ConsentStep,
   ReviewStep,
   getActiveSteps,
   ProfessionalWizardData,
@@ -60,6 +61,48 @@ const STORAGE_KEYS = {
 
 const StorePayloadSchema = StoreOnboardingSchema.omit({ role: true });
 const PropertyPayloadSchema = PropertyOnboardingSchema.omit({ role: true });
+
+// ============================================================================
+// DRAFT PERSISTENCE SECURITY
+// ============================================================================
+
+/**
+ * Fields that MUST NOT be persisted in sessionStorage drafts.
+ * These contain sensitive identifiers, document references, or consent
+ * records that must be re-entered on each session for security and
+ * legal compliance.
+ */
+const DRAFT_DENYLIST: ReadonlySet<string> = new Set([
+  "licenseNumber",
+  "boardRegistrationNumber",
+  "kraPin",
+  "idNumber",
+  "nationalId",
+  "passportNumber",
+  "uploadId",
+  "previewUrl",
+  "documents",
+  "consents",
+  "certificates",
+  "idDocuments",
+]);
+
+/**
+ * Recursively strip sensitive fields from an object before persisting.
+ * Returns a shallow clone with denied keys removed.
+ */
+function stripSensitiveFields(
+  obj: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (DRAFT_DENYLIST.has(key)) continue;
+    // Strip fields matching sensitive patterns
+    if (/\b(pin|passport|national.?id)\b/i.test(key)) continue;
+    result[key] = value;
+  }
+  return result;
+}
 
 // Theme-aware styles
 const createTheme = (_variant: ProfessionalFormVariant) => {
@@ -292,16 +335,16 @@ const ProfessionalForm: React.FC<Props> = ({
   // PERSISTENCE
   // ========================================
 
-  // Save to sessionStorage when form data changes (excluding files)
+  // Save to sessionStorage when form data changes (excluding files and sensitive fields)
   useEffect(() => {
     if (formData.profession) {
-      const dataToSave = {
+      const dataToSave = stripSensitiveFields({
         ...formData,
         certificates: undefined,
         idDocuments: undefined,
         stores: formData.stores,
         properties: formData.properties,
-      };
+      } as Record<string, unknown>);
       // SECURITY_PERSISTENCE_ALLOWLIST: Persists non-sensitive professional onboarding draft state.
       sessionStorage.setItem(storageKey, JSON.stringify(dataToSave));
     }
@@ -396,7 +439,7 @@ const ProfessionalForm: React.FC<Props> = ({
   }, [shouldSubmit, isSubmitting]);
 
   // ========================================
-  // FILE UPLOAD HELPER
+  // FILE UPLOAD HELPER (bounded concurrency + retry)
   // ========================================
 
   const uploadFiles = useCallback(
@@ -411,44 +454,74 @@ const ProfessionalForm: React.FC<Props> = ({
       const results: Array<{ uploadId: string; previewUrl: string }> = [];
       const totalFiles = files.length;
       let uploadedIndex = 0;
+      const MAX_CONCURRENT = 2;
+      const MAX_RETRIES = 1;
 
-      for (const file of files) {
-        if (signal?.aborted) {
-          throw new DOMException("Upload cancelled", "AbortError");
+      // Process files in batches of MAX_CONCURRENT
+      for (
+        let batchStart = 0;
+        batchStart < files.length;
+        batchStart += MAX_CONCURRENT
+      ) {
+        const batch = files.slice(batchStart, batchStart + MAX_CONCURRENT);
+
+        const batchResults = await Promise.all(
+          batch.map(async (file) => {
+            if (signal?.aborted) {
+              throw new DOMException("Upload cancelled", "AbortError");
+            }
+
+            onProgress?.(uploadedIndex, totalFiles, file.name);
+
+            let lastError: Error | null = null;
+
+            for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+              try {
+                const res = await onboardingClient.uploadFiles(
+                  [file],
+                  fieldName,
+                  signal,
+                );
+
+                if (!res.success) {
+                  throw new Error(res.error || "Upload failed");
+                }
+
+                const uploadedResult = res.data?.[0];
+
+                if (uploadedResult?.uploadId) {
+                  return {
+                    uploadId: uploadedResult.uploadId,
+                    previewUrl: uploadedResult.previewUrl || "",
+                  };
+                }
+                throw new Error("No uploadId returned from server");
+              } catch (err) {
+                if (err instanceof Error && err.name === "AbortError") {
+                  throw err;
+                }
+                lastError = err instanceof Error ? err : new Error(String(err));
+                // Only retry on non-abort errors
+                if (attempt < MAX_RETRIES) {
+                  // Brief delay before retry
+                  await new Promise((r) => setTimeout(r, 500));
+                }
+              }
+            }
+
+            // All retries exhausted
+            console.error(`Failed to upload ${file.name}:`, lastError);
+            toast.error(`Failed to upload "${file.name}"`);
+            return null;
+          }),
+        );
+
+        for (const result of batchResults) {
+          if (result) {
+            results.push(result);
+          }
+          uploadedIndex++;
         }
-
-        onProgress?.(uploadedIndex, totalFiles, file.name);
-
-        try {
-          const res = await onboardingClient.uploadFiles(
-            [file],
-            fieldName,
-            signal,
-          );
-
-          if (!res.success) {
-            throw new Error(res.error || "Upload failed");
-          }
-
-          const uploadedResult = res.data?.[0];
-
-          if (uploadedResult?.uploadId) {
-            results.push({
-              uploadId: uploadedResult.uploadId,
-              previewUrl: uploadedResult.previewUrl || "",
-            });
-          } else {
-            throw new Error("No uploadId returned from server");
-          }
-        } catch (err) {
-          if (err instanceof Error && err.name === "AbortError") {
-            throw err;
-          }
-          console.error(`Failed to upload ${file.name}:`, err);
-          toast.error(`Failed to upload "${file.name}"`);
-        }
-
-        uploadedIndex++;
       }
 
       onProgress?.(totalFiles, totalFiles, "");
@@ -531,9 +604,8 @@ const ProfessionalForm: React.FC<Props> = ({
         getRegulatoryAuthorityCode(formData.profession || "") ||
         "OTHER";
 
-      // STAFF FIX: Unified License Mapping
       const finalLicenseNumber =
-        formData.boardRegistrationNumber || formData.licenseNumber || "PENDING";
+        formData.boardRegistrationNumber || formData.licenseNumber || undefined;
 
       const stores = formData.stores?.length
         ? formData.stores.map((store, index) => {
@@ -568,13 +640,17 @@ const ProfessionalForm: React.FC<Props> = ({
         yearsExperience: formData.yearsExperience,
         website: formData.website,
         bio: formData.bio,
-        license: {
-          authority,
-          licenseNumber: finalLicenseNumber,
-          certificateUrl:
-            uploadedDocuments.find((d) => d.category === "EDUCATION_CERT")
-              ?.previewUrl || "",
-        },
+        ...(finalLicenseNumber
+          ? {
+              license: {
+                authority,
+                licenseNumber: finalLicenseNumber,
+                certificateUrl:
+                  uploadedDocuments.find((d) => d.category === "EDUCATION_CERT")
+                    ?.previewUrl || "",
+              },
+            }
+          : { licensePending: true }),
         documents: uploadedDocuments,
         ...(stores && {
           stores,
@@ -701,6 +777,8 @@ const ProfessionalForm: React.FC<Props> = ({
         return <CredentialsStep {...stepProps} />;
       case "documents":
         return <DocumentsStep {...stepProps} />;
+      case "consent":
+        return <ConsentStep {...stepProps} />;
       case "review":
         return <ReviewStep {...stepProps} />;
       default:
