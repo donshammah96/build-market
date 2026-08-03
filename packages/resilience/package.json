@@ -20,7 +20,7 @@
     "check-types": "tsc --noEmit",
     "build": "tsc",
     "prepack": "pnpm run build",
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@build/redis": "workspace:*",

@@ -36,6 +36,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialogue";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
+import { useProfessionalFunnelTracking } from "@/app/lib/analytics/use-professional-funnel-tracking";
+import { PROFESSIONAL_FUNNEL_EVENTS } from "@/app/lib/analytics/professional-funnel-events";
 import { RoleCard } from "./RoleCard";
 import { StepIndicator } from "./StepIndicator";
 import type { OnboardingData } from "@build/types";
@@ -94,6 +96,20 @@ export function OnboardingView({
 }: OnboardingViewProps) {
   const prefersReducedMotion = useReducedMotion();
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const trackFunnel = useProfessionalFunnelTracking();
+
+  const onSelectRole = (selectedRole: OnboardingRole) => {
+    if (selectedRole === "professional") {
+      trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.landingCtaClicked, {
+        source: "onboarding_role_card",
+        role: "professional",
+      });
+      trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.onboardingStarted, {
+        role: "professional",
+      });
+    }
+    handleRoleSelect(selectedRole);
+  };
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
@@ -275,7 +291,7 @@ export function OnboardingView({
                 icon={<Home size={32} />}
                 title="I Am a Project Owner"
                 description="I am planning a project and I need verified experts."
-                onClick={() => handleRoleSelect("client")}
+                onClick={() => onSelectRole("client")}
                 delay={prefersReducedMotion ? 0 : 0.1}
                 highlight
                 prefersReducedMotion={prefersReducedMotion}
@@ -288,7 +304,7 @@ export function OnboardingView({
                 icon={<Briefcase size={32} />}
                 title="I am a Professional"
                 description="I am an Architect, Engineer, or Contractor looking for quality leads."
-                onClick={() => handleRoleSelect("professional")}
+                onClick={() => onSelectRole("professional")}
                 delay={prefersReducedMotion ? 0 : 0.2}
                 prefersReducedMotion={prefersReducedMotion}
                 disabled={roleSelectionPending}

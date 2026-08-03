@@ -1,14 +1,14 @@
 # Build Market — Copilot Instructions
 
-> **Agent guideline:** For the detailed API-to-frontend blueprint, migration playbook, and architecture change log, see [`.agent/API-TO-FRONTEND-ARCHITECTURE.md`](../.agent/API-TO-FRONTEND-ARCHITECTURE.md).
+> **Agent guideline:** For the detailed API-to-frontend blueprint, migration playbook, and architecture change log, see [`.agent/API-TO-FRONTEND-ARCHITECTURE.md`](../../.agent/API-TO-FRONTEND-ARCHITECTURE.md).
 >
-> For the document hierarchy and conflict-resolution algorithm, see [`.agent/DOCUMENT-HIERARCHY.md`](../.agent/DOCUMENT-HIERARCHY.md).
+> For the document hierarchy and conflict-resolution algorithm, see [`.agent/DOCUMENT-HIERARCHY.md`](../../.agent/DOCUMENT-HIERARCHY.md).
 
 ## Instruction Discovery And Precedence
 
 Use the instruction surfaces in this order:
 
-1. `.github/copilot-instructions.md` — repo-wide defaults and hard rules.
+1. `.github/instructions/copilot-instructions.md` — repo-wide defaults and hard rules.
 2. `.agent/API-TO-FRONTEND-ARCHITECTURE.md` — when work touches `apps/client` routes, actions, domain services, client facades, hooks, or migration planning. **This is the implementational canon for `apps/client`. Do not duplicate its content here.**
 3. `.agent/ADMIN-ARCHITECTURE.md` — when work touches `apps/admin` actions, domain services, or admin-specific patterns. **This is the implementational canon for `apps/admin`. Do not apply `apps/client` route patterns there.**
 4. Slice-local docs such as `app/lib/domains/README.md` or route-family READMEs for implementation detail inside a single vertical.

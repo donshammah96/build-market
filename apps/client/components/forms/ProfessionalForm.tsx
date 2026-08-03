@@ -40,6 +40,8 @@ import {
   professionalDraftSchema,
 } from "./professional-wizard";
 import { useOnboardingAnalytics } from "@/lib/analytics/OnboardingAnalyticsContext";
+import { useProfessionalFunnelTracking } from "@/app/lib/analytics/use-professional-funnel-tracking";
+import { PROFESSIONAL_FUNNEL_EVENTS } from "@/app/lib/analytics/professional-funnel-events";
 
 // SECURITY_PERSISTENCE_ALLOWLIST: Stores non-sensitive onboarding draft state in sessionStorage.
 
@@ -254,6 +256,7 @@ const ProfessionalForm: React.FC<Props> = ({
   const storageKey = STORAGE_KEYS[mode];
   const theme = createTheme(variant);
   const analytics = useOnboardingAnalytics();
+  const trackFunnel = useProfessionalFunnelTracking();
   // Respect the user's OS/browser reduced-motion preference for step animations.
   const prefersReducedMotion = useReducedMotion() ?? false;
   const stepVariants = useMemo(
@@ -490,6 +493,9 @@ const ProfessionalForm: React.FC<Props> = ({
                 const uploadedResult = res.data?.[0];
 
                 if (uploadedResult?.uploadId) {
+                  trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.uploadSucceeded, {
+                    source: fieldName,
+                  });
                   return {
                     uploadId: uploadedResult.uploadId,
                     previewUrl: uploadedResult.previewUrl || "",
@@ -511,6 +517,10 @@ const ProfessionalForm: React.FC<Props> = ({
 
             // All retries exhausted
             console.error(`Failed to upload ${file.name}:`, lastError);
+            trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.uploadFailed, {
+              source: fieldName,
+              errorCode: lastError?.message || "Upload failed",
+            });
             toast.error(`Failed to upload "${file.name}"`);
             return null;
           }),
@@ -527,7 +537,7 @@ const ProfessionalForm: React.FC<Props> = ({
       onProgress?.(totalFiles, totalFiles, "");
       return results;
     },
-    [],
+    [trackFunnel],
   );
 
   // ========================================
@@ -666,6 +676,12 @@ const ProfessionalForm: React.FC<Props> = ({
       // 6. Cleanup & Success States
       clearSavedData();
       setSuccess(true);
+      trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.submitSucceeded, {
+        role: "professional",
+      });
+      trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.pendingVerificationViewed, {
+        status: "pending",
+      });
       toast.success(
         mode === "completion"
           ? "Profile updated successfully!"
@@ -677,6 +693,12 @@ const ProfessionalForm: React.FC<Props> = ({
       if (onSuccess) onSuccess(payload);
       else if (onAuthSuccess) onAuthSuccess(payload);
     } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to submit application";
+      trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.submitFailed, {
+        role: "professional",
+        errorCode: errorMessage,
+      });
       toast.error(
         err instanceof Error
           ? err.message
@@ -695,6 +717,7 @@ const ProfessionalForm: React.FC<Props> = ({
     clearSavedData,
     onSuccess,
     onAuthSuccess,
+    trackFunnel,
   ]);
 
   // ========================================
@@ -702,12 +725,16 @@ const ProfessionalForm: React.FC<Props> = ({
   // ========================================
   const handleNext = useCallback(() => {
     if (currentStepIndex < activeSteps.length - 1) {
+      const currentStep = activeSteps[currentStepIndex];
+      trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.wizardStepCompleted, {
+        step: currentStep,
+      });
       setDirection(1);
       setCurrentStepIndex((prev) => prev + 1);
     } else {
       handleSubmitForm();
     }
-  }, [currentStepIndex, activeSteps.length, handleSubmitForm]);
+  }, [currentStepIndex, activeSteps, handleSubmitForm, trackFunnel]);
 
   const handleGoDashboard = useCallback(() => {
     setNavigating(true);

@@ -23,6 +23,8 @@ import { getRegulatoryAuthorityCode } from "@/lib/constants/professionOptions";
 import { StepComponentProps, WIZARD_STYLES } from "./types";
 import { UploadStatusList } from "@/components/ui/UploadStatusList";
 import { useStagedUploadQueue } from "@/app/hooks/use-staged-upload-queue";
+import { useProfessionalFunnelTracking } from "@/app/lib/analytics/use-professional-funnel-tracking";
+import { PROFESSIONAL_FUNNEL_EVENTS } from "@/app/lib/analytics/professional-funnel-events";
 
 // ============================================================================
 // CONSTANTS
@@ -146,6 +148,7 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const trackFunnel = useProfessionalFunnelTracking();
   const uploadQueue = useStagedUploadQueue({
     maxItems: maxFiles,
   });
@@ -177,7 +180,12 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     const canAdd = maxFiles - files.length;
 
     if (canAdd <= 0) {
-      setValidationError(`Maximum ${maxFiles} files allowed.`);
+      const err = `Maximum ${maxFiles} files allowed.`;
+      setValidationError(err);
+      trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.uploadFailed, {
+        step: "documents",
+        errorCode: "MAX_FILES_EXCEEDED",
+      });
       return;
     }
 
@@ -186,6 +194,10 @@ const FileUploadSection: React.FC<FileUploadSectionProps> = ({
       const error = validateFile(file);
       if (error) {
         setValidationError(error);
+        trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.uploadFailed, {
+          step: "documents",
+          errorCode: "FILE_VALIDATION_ERROR",
+        });
       } else {
         filesToAdd.push(file);
         uploadQueue.enqueue(file);

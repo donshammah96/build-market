@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { AdminRole } from "@build/db";
+import { AdminRole } from "@build/enums";
 import { type AuthContext, withAdminRole } from "@/lib/api/api-middleware";
 import { HttpStatus } from "@/lib/api/api-response";
 import {

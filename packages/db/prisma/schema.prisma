@@ -38,6 +38,8 @@ enum ClientType {
 
 enum AdminRole {
   SUPER_ADMIN // Full system access
+  OPS_ADMIN // Operations admin managing workflows and queues
+  VERIFICATION_ADMIN // Specialist manual verification reviewer
   CONTENT_MODERATOR // Can approve portfolios/properties, no payments
   SUPPORT_AGENT // Can view messages for dispute resolution
   FINANCE_MANAGER // Can process refunds, view transactions
@@ -732,6 +734,7 @@ enum AuditAction {
   BREACH_NOTIFICATION_SENT
   DOCUMENT_VIEWED
   DOCUMENT_DOWNLOADED
+  EVIDENCE_VIEWED
 }
 
 enum LegalBasis {
@@ -818,11 +821,17 @@ model SystemSettings {
   kraTaxPinValidation Boolean @default(false)
 
   // Verification & Compliance
+  verificationSlaHours        Int     @default(48)
   enforceStrictVerification   Boolean @default(true)
   enforceProfessionalLicenses Boolean @default(true)
   enableAutoVerifyNCA         Boolean @default(false)
   enableAutoVerifyEPRA        Boolean @default(false) // Renamed from ERC
   enableAutoVerifyBORAQS      Boolean @default(false)
+  enableAutoVerifyEBK         Boolean @default(false)
+  enableAutoVerifyEARB        Boolean @default(false)
+  enableAutoVerifyVRB         Boolean @default(false)
+  enableAutoVerifyISK         Boolean @default(false)
+
   enforcePropertyDocuments    Boolean @default(true)
   enableLandRegistryCheck     Boolean @default(false)
   enforceStorePermits         Boolean @default(true)
@@ -1031,6 +1040,8 @@ model User {
   analytics            UserAnalytics[]
   verifiedCertificates ProfessionalDocument[] @relation("DocumentVerifier")
   verifiedLicenses     ProfessionalLicense[]  @relation("LicenseVerifier")
+  regulatorVerificationDecisions RegulatorVerificationDecision[] @relation("RegulatorVerificationDecisionMaker")
+  regulatorVerificationEvidenceViews RegulatorVerificationEvidenceView[] @relation("RegulatorVerificationEvidenceViewer")
   verifiedStores       Store[]                @relation("StoreVerifier")
   verifiedProperties   Property[]             @relation("PropertyVerifier")
   calendarEvents       CalendarEvent[]        @relation("ClientCalendarEvents")
@@ -1301,6 +1312,8 @@ model ProfessionalLicense {
   verifiedBy         User?     @relation("LicenseVerifier", fields: [verifiedById], references: [id])
   verificationMethod String? // "MANUAL", "API_NCA", "API_EBK"
   notes              String?   @db.Text
+
+  verificationCases RegulatorVerificationCase[]
 
   @@unique([professionalId, authority, licenseNumber])
   @@index([authority, licenseNumber]) // For duplicate detection
@@ -3214,4 +3227,125 @@ model UploadScanEvent {
   @@index([status])
   @@index([createdAt])
   @@map("upload_scan_events")
+}
+
+// ========================================================
+// 20. REGULATOR VERIFICATION (PHASE 9 - PROFESSIONAL ONBOARDING)
+// ========================================================
+// Durable, queryable record of every regulator verification attempt made by
+// RegulatorVerificationGateway. This is the system of record for evidence,
+// confidence scoring, manual-fallback routing, and dead-letter handling -
+// the license-verification BullMQ queue and manual operator workflow both
+// read/write through this model rather than trusting worker logs alone.
+
+enum RegulatorVerificationCaseStatus {
+  QUEUED // enqueued, not yet picked up by a worker
+  PROCESSING // a worker has claimed this attempt (msg.working() equivalent)
+  AUTO_VERIFIED
+  AUTO_REJECTED
+  NEEDS_MANUAL_REVIEW
+  REGULATOR_UNAVAILABLE
+  LOW_CONFIDENCE
+  MANUALLY_VERIFIED // operator decision recorded via RegulatorVerificationDecision
+  MANUALLY_REJECTED
+  DEAD_LETTER // attempt budget exhausted, requires manual intervention to requeue
+}
+
+enum RegulatorVerificationDecisionOutcome {
+  APPROVE
+  REJECT
+  REQUEST_MORE_INFO
+}
+
+model RegulatorVerificationCase {
+  id             String               @id @default(uuid())
+  professionalId String
+  licenseId      String?
+  license        ProfessionalLicense? @relation(fields: [licenseId], references: [id], onDelete: SetNull)
+
+  authority     LicenseAuthority
+  licenseNumber String
+
+  // Dedupe key mirrors buildRegulatorVerificationJobId() in gateway.ts so the
+  // BullMQ jobId and this row's uniqueness constraint can never diverge.
+  dedupeKey String @unique
+
+  status RegulatorVerificationCaseStatus @default(QUEUED)
+
+  // Queue/backoff bookkeeping (mirrors AuthOutboxEvent conventions)
+  attempts      Int      @default(0)
+  maxAttempts   Int      @default(5)
+  nextAttemptAt DateTime @default(now())
+  deadLetteredAt DateTime?
+  deadLetterReason String?
+
+  // Latest RegulatorVerificationResult snapshot
+  confidence                 Float?
+  confidenceReasons          Json?   @db.JsonB // string[]
+  confidenceAlgorithmVersion String?
+  confidenceBreakdown        Json?   @db.JsonB
+  evidence                   Json?   @db.JsonB // RegulatorEvidenceSnapshot
+  retryable                  Boolean @default(false)
+  retryAfterSeconds          Int?
+  manualFallbackReason       String?
+
+  correlationId String?
+  requestedAt   DateTime  @default(now())
+  completedAt   DateTime?
+
+  decisions     RegulatorVerificationDecision[]
+  evidenceViews RegulatorVerificationEvidenceView[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, nextAttemptAt]) // worker poll / DLQ dashboard
+  @@index([authority, licenseNumber]) // duplicate/history lookup for operators
+  @@index([professionalId])
+  @@index([status, deadLetteredAt])
+}
+
+// Immutable manual decision trail. Never updated in place - a correction is a
+// new row - so this table doubles as the audit log required for high-risk
+// four-eyes approval (a case needs two DISTINCT adminId rows with matching
+// outcome before its RegulatorVerificationCase.status is allowed to flip to
+// MANUALLY_VERIFIED/MANUALLY_REJECTED when highRiskReview = true).
+model RegulatorVerificationDecision {
+  id     String                    @id @default(uuid())
+  caseId String
+  case   RegulatorVerificationCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+
+  adminId    String
+  admin      User    @relation("RegulatorVerificationDecisionMaker", fields: [adminId], references: [id])
+  adminName  String // snapshot, matches AdminAuditLog convention
+  adminEmail String // snapshot
+
+  outcome      RegulatorVerificationDecisionOutcome
+  reasonCode   String // required, e.g. "NAME_MISMATCH_CONFIRMED_SAME_PERSON"
+  reasonNotes  String? @db.Text
+  highRiskReview Boolean @default(false) // true when confidence < threshold or explicit regulator rejection is being overridden
+  isSecondApprover Boolean @default(false) // true when this row satisfies the four-eyes requirement
+
+  createdAt DateTime @default(now())
+
+  @@index([caseId, createdAt])
+  @@index([adminId, createdAt])
+}
+
+// Append-only evidence view audit trail for regulator verification cases.
+model RegulatorVerificationEvidenceView {
+  id     String                    @id @default(uuid())
+  caseId String
+  case   RegulatorVerificationCase @relation(fields: [caseId], references: [id], onDelete: Restrict)
+
+  viewerId   String
+  viewer     User   @relation("RegulatorVerificationEvidenceViewer", fields: [viewerId], references: [id])
+  viewerRole String // snapshot, matches AdminAuditLog convention
+  unredacted Boolean // true if this view included evidence.rawRecord
+
+  createdAt DateTime @default(now())
+
+  @@index([caseId, createdAt])
+  @@index([viewerId, createdAt])
+  @@map("regulator_verification_evidence_views")
 }

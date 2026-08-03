@@ -16,6 +16,11 @@ export default async function SettingsPage() {
     enableAutoVerifyNCA: false,
     enableAutoVerifyEPRA: false,
     enableAutoVerifyBORAQS: false,
+    enableAutoVerifyEBK: false,
+    enableAutoVerifyEARB: false,
+    enableAutoVerifyVRB: false,
+    enableAutoVerifyISK: false,
+
     enforceProfessionalLicenses: false,
     enforcePropertyDocuments: false,
     enableLandRegistryCheck: false,

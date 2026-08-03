@@ -87,6 +87,11 @@ export {
   batchVerifyEntities,
   getVerificationUpdates,
 } from "./verification";
+export {
+  listRegulatorVerificationCases,
+  getRegulatorVerificationCaseDetail,
+  recordRegulatorManualDecision,
+} from "./regulator-verification";
 export type {
   EntityType,
   VerificationAction,

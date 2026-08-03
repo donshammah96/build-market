@@ -29,5 +29,18 @@
     "next.config.ts",
     ".next/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "docs", ".next"]
+  "exclude": ["node_modules", "docs", ".next"],
+  "references": [
+    { "path": "../../packages/resilience" },
+    { "path": "../../packages/db" },
+    { "path": "../../packages/types" },
+    { "path": "../../packages/enums" },
+    { "path": "../../packages/redis" },
+    { "path": "../../packages/nats" },
+    { "path": "../../packages/auth-server" },
+    { "path": "../../packages/mail-server" },
+    { "path": "../../packages/messaging-server" },
+    { "path": "../../packages/queue-server" },
+    { "path": "../../packages/ui" }
+  ]
 }

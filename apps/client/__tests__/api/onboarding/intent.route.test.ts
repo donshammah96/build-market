@@ -3,8 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { POST } from "@/app/api/onboarding/intent/route";
 
 vi.mock("server-only", () => ({}));
+const mockCheckRateLimit = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ success: true }),
+);
+
 vi.mock("@/app/lib/api/rate-limit", () => ({
-  checkRateLimit: vi.fn().mockResolvedValue({ success: true }),
+  checkRateLimit: mockCheckRateLimit,
   getActorRateLimitIdentifier: vi.fn(
     (actorId: string, namespace: string) => `${namespace}:${actorId}`,
   ),
@@ -32,7 +36,10 @@ function request(body: unknown) {
 }
 
 describe("POST /api/onboarding/intent", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue({ success: true });
+  });
 
   it("sets a signed HttpOnly professional intent cookie", async () => {
     const response = await POST(
@@ -54,6 +61,44 @@ describe("POST /api/onboarding/intent", () => {
     const json = await response.json();
 
     expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+  });
+
+  it("preserves safe returnTo and returns an expiry timestamp", async () => {
+    const response = await POST(
+      request({
+        role: "professional",
+        source: "professional_landing",
+        returnTo: "/professional-portal/pending-verification",
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(Date.parse(json.data.expiresAt)).not.toBeNaN();
+    expect(json.data.signUpUrl).toBe("/professional/sign-up");
+  });
+
+  it("rejects protocol-relative returnTo values", async () => {
+    const response = await POST(
+      request({ role: "professional", returnTo: "//evil.example" }),
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it("rate-limits intent abuse", async () => {
+    mockCheckRateLimit.mockResolvedValueOnce({
+      success: false,
+      limit: 5,
+      remaining: 0,
+      reset: Date.now() + 60000,
+    });
+
+    const response = await POST(request({ role: "professional" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(429);
     expect(json.success).toBe(false);
   });
 });

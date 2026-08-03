@@ -1,4 +1,5 @@
-import type { AdminRole, VerificationStatus } from "@build/db";
+import type { AdminRole } from "@build/enums";
+import type { VerificationStatus } from "@build/db";
 
 export type VerificationActor = {
   dbUserId: string;

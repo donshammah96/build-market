@@ -16,7 +16,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
-import type { AdminRole } from "@build/db";
+import type { AdminRole } from "@build/enums";
 import { getPendingVerifications } from "@/actions/admin";
 import { AdminFeatureFlag, getAdminV2Route } from "@/lib/config/feature-flags";
 import {

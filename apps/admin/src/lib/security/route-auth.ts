@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { prisma, UserRole, AdminRole } from "@build/db";
+import { prisma } from "@build/db";
+import { UserRole, AdminRole } from "@build/enums";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 import { toBool } from "@/lib/infrastructure/env-utils";
 import { routeOutcomeCounter } from "@/lib/infrastructure/metrics";

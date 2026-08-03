@@ -1,4 +1,3 @@
-import { createHmac, randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
@@ -8,22 +7,26 @@ import {
   RateLimits,
 } from "@/app/lib/api/rate-limit";
 import { envConfig } from "@/app/lib/infrastructure/env";
+import {
+  createProfessionalOnboardingIntent,
+  PROFESSIONAL_ONBOARDING_INTENT_COOKIE,
+  PROFESSIONAL_ONBOARDING_INTENT_TTL_SECONDS,
+} from "@/app/lib/auth/professional-onboarding-intent";
 import { ROUTES } from "@/lib/links";
 
-const INTENT_COOKIE = "bm_onboarding_intent";
-const INTENT_TTL_SECONDS = 60 * 60;
+const SafeReturnToSchema = z
+  .string()
+  .startsWith("/")
+  .max(200)
+  .refine((value) => !value.startsWith("//"), {
+    message: "returnTo must be an application-relative path",
+  });
 
 const IntentSchema = z.object({
   role: z.literal("professional"),
   source: z.string().min(1).max(80).default("professional_landing"),
-  returnTo: z.string().startsWith("/").max(200).optional(),
+  returnTo: SafeReturnToSchema.optional(),
 });
-
-function sign(value: string): string {
-  return createHmac("sha256", envConfig.auth.secret)
-    .update(value)
-    .digest("base64url");
-}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const rateLimitResult = await checkRateLimit(
@@ -58,30 +61,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const issuedAt = Date.now();
-  const expiresAt = new Date(issuedAt + INTENT_TTL_SECONDS * 1000);
-  const payload = Buffer.from(
-    JSON.stringify({
-      role: parsed.data.role,
-      source: parsed.data.source,
-      returnTo: parsed.data.returnTo,
-      nonce: randomUUID(),
-      iat: issuedAt,
-      exp: expiresAt.getTime(),
-    }),
-  ).toString("base64url");
-  const cookieValue = `${payload}.${sign(payload)}`;
+  const intent = createProfessionalOnboardingIntent({
+    source: parsed.data.source,
+    returnTo: parsed.data.returnTo,
+  });
 
   const response = apiSuccess(
-    { signUpUrl: ROUTES.joinAsPro, expiresAt: expiresAt.toISOString() },
+    { signUpUrl: ROUTES.joinAsPro, expiresAt: intent.expiresAt.toISOString() },
     HttpStatus.OK,
   );
-  response.cookies.set(INTENT_COOKIE, cookieValue, {
+  response.cookies.set(PROFESSIONAL_ONBOARDING_INTENT_COOKIE, intent.value, {
     httpOnly: true,
     sameSite: "lax",
     secure: envConfig.isProd,
     path: "/",
-    maxAge: INTENT_TTL_SECONDS,
+    maxAge: PROFESSIONAL_ONBOARDING_INTENT_TTL_SECONDS,
   });
 
   return response;

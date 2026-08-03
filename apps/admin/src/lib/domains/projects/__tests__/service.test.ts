@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const dbMock = vi.hoisted(() => ({
   AdminRole: {
     SUPER_ADMIN: "SUPER_ADMIN",
+    OPS_ADMIN: "OPS_ADMIN",
+    VERIFICATION_ADMIN: "VERIFICATION_ADMIN",
     SUPPORT_AGENT: "SUPPORT_AGENT",
     CONTENT_MODERATOR: "CONTENT_MODERATOR",
     FINANCE_MANAGER: "FINANCE_MANAGER",

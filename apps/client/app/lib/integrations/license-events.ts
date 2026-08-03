@@ -76,3 +76,54 @@ export async function publishLicenseEvent(
     );
   }
 }
+
+export type ProfessionalOnboardingSubmittedEvent = {
+  professionalId: string;
+  correlationId: string;
+  licenses: Array<{
+    licenseId: string;
+    authority: string;
+    licenseNumber: string;
+    submittedName?: string | null;
+    companyName?: string | null;
+  }>;
+};
+
+export async function publishOnboardingSubmittedEvent(
+  event: ProfessionalOnboardingSubmittedEvent,
+): Promise<void> {
+  try {
+    const producer = await getNatsProducer();
+    if (!producer) {
+      getClientLogger().info(
+        "NATS client is not configured or in build phase, skipping onboarding submitted event publish",
+        { professionalId: event.professionalId },
+      );
+      return;
+    }
+
+    const subject = "professional.onboarding_submitted";
+    const msgId = `onboarding-sub-${event.professionalId}-${Date.now()}`;
+
+    await producer.publishWithRetry(subject, event, {
+      msgId,
+      maxRetries: 3,
+      retryDelayMs: 1000,
+    });
+
+    getClientLogger().info(
+      "Professional onboarding submitted event published to NATS",
+      {
+        subject,
+        professionalId: event.professionalId,
+        licenseCount: event.licenses.length,
+      },
+    );
+  } catch (error) {
+    getClientLogger().error(
+      "Failed to publish onboarding submitted event to NATS",
+      error as Error,
+      { professionalId: event.professionalId },
+    );
+  }
+}

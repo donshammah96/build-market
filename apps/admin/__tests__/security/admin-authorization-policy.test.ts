@@ -22,6 +22,8 @@ const rateLimitMock = vi.hoisted(() => ({
 vi.mock("@build/db", () => ({
   AdminRole: {
     SUPER_ADMIN: "SUPER_ADMIN",
+    OPS_ADMIN: "OPS_ADMIN",
+    VERIFICATION_ADMIN: "VERIFICATION_ADMIN",
     CONTENT_MODERATOR: "CONTENT_MODERATOR",
     SUPPORT_AGENT: "SUPPORT_AGENT",
     FINANCE_MANAGER: "FINANCE_MANAGER",

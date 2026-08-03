@@ -43,6 +43,7 @@
     { "path": "../../packages/mail-server" },
     { "path": "../../packages/messaging-server" },
     { "path": "../../packages/queue-server" },
-    { "path": "../../packages/ui" }
+    { "path": "../../packages/ui" },
+    { "path": "../../packages/verification-domain" }
   ]
 }

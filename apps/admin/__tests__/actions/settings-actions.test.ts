@@ -142,6 +142,11 @@ describe("updateSystemSettings action", () => {
     enableAutoVerifyNCA: true,
     enableAutoVerifyEPRA: true,
     enableAutoVerifyBORAQS: true,
+    enableAutoVerifyEBK: true,
+    enableAutoVerifyEARB: true,
+    enableAutoVerifyVRB: true,
+    enableAutoVerifyISK: true,
+
     enforceProfessionalLicenses: true,
     enforcePropertyDocuments: true,
     enableLandRegistryCheck: true,

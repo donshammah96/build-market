@@ -258,6 +258,11 @@ export const SystemSettingsSchema = z
     enableAutoVerifyNCA: z.boolean(),
     enableAutoVerifyEPRA: z.boolean(),
     enableAutoVerifyBORAQS: z.boolean(),
+    enableAutoVerifyEBK: z.boolean(),
+    enableAutoVerifyEARB: z.boolean(),
+    enableAutoVerifyVRB: z.boolean(),
+    enableAutoVerifyISK: z.boolean(),
+
     enforceProfessionalLicenses: z.boolean(),
     enforcePropertyDocuments: z.boolean(),
     enableLandRegistryCheck: z.boolean(),

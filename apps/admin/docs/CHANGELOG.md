@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+### Added — Verification UI standalone workspace app migration & admin shadow mode (Phase 8)
+
+- **Prisma Schema Enums Extension (`packages/db/prisma/schema.prisma`)**:
+  added `AuditAction.EVIDENCE_VIEWED` to Prisma schema `AuditAction` enum and added `AdminRole.OPS_ADMIN` and `AdminRole.VERIFICATION_ADMIN` to `AdminRole` enum, enabling audit logging of evidence reads and role mapping in `apps/verification-ops`.
+- **Standalone workspace app topology (`apps/verification-ops`)**:
+  migrated verification operations out of `apps/admin` into a dedicated Next.js application in the `pnpm` workspace (`apps/verification-ops`) with isolated deploy unit, header navigation, role-based permission context (`VERIFICATION_READ_ONLY`, `VERIFICATION_REVIEWER`, `VERIFICATION_SENIOR_REVIEWER`, `VERIFICATION_COMPLIANCE_OFFICER`), and SLA breach indicators (§1 & §2 of Phase 8 Guideline).
+- **Shared verification domain package (`@build/verification-domain`)**:
+  created `@build/verification-domain` shared monorepo package exporting case DTOs, decision commands, `VerificationReasonCode` enum, audit event schemas, and NATS JetStream event definitions (`license.manual_decision_recorded`).
+- **Read-Only Shadow Mode Banner in `apps/admin`** (`apps/admin/src/app/(dashboard)/verifications/regulator/page.tsx`):
+  added Read-Only Shadow Mode notification banner in admin verifications dashboard linking operators directly to `apps/verification-ops` (`http://localhost:3501`).
+- **Evidence View Auditability & Verification Ops Domain Service** (`apps/admin/src/lib/domains/verification/verification-ops.ts`, `evidence-store.ts`):
+  implemented `VerificationOpsService` supporting compound queue filtering (`PENDING`, `AUTOMATED_REVIEW`, `NEEDS_CHANGES`, `ESCALATED`, `REJECTED`, `VERIFIED`, `SLA_BREACHED`), 48-hour SLA breach indicators, and compliance decision packet exports (`exportDecisionPacket`). Added `EVIDENCE_VIEWED` audit logging on unredacted case evidence reads.
+- **Verification ops unit test suite** (`apps/admin/src/lib/domains/verification/__tests__/verification-ops.test.ts`):
+  verified 100% passing Vitest test suite.
+
+**Files changed:**
+
+- `packages/db/prisma/schema.prisma`
+- `packages/enums/src/audit.ts`
+- `apps/verification-ops/` (new Next.js application)
+- `packages/verification-domain/` (new shared domain package `@build/verification-domain`)
+- `apps/admin/src/app/(dashboard)/verifications/regulator/page.tsx`
+- `apps/admin/src/app/(dashboard)/verification-ops/page.tsx`
+- `apps/admin/src/lib/domains/verification/verification-ops.ts`
+- `apps/admin/src/lib/infrastructure/env.ts`
+- `apps/admin/src/lib/domains/verification/__tests__/verification-ops.test.ts`
+- `apps/admin/src/lib/domains/verification/verification-ops.ts`
+
 ### Fixed (CI Workflow Hardening & Admin Nightly Job Optimization)
 
 - **Admin Lint ENCRYPTION_KEY_V1 Fix (`.github/workflows/ci.yml`)**: Fixed corrupted 96-character `ENCRYPTION_KEY_V1` value in the `Lint (admin)` step back to the canonical 64-character (256-bit AES) hex key.

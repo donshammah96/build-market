@@ -26,7 +26,134 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
-## [Unreleased]
+### Added — Observability, analytics, and operations (Phase 9)
+
+- **Client-side funnel tracking hook (`apps/client/hooks/use-professional-funnel-tracking.ts`)**:
+  built React client hook exposing tracking methods across all 11 funnel milestones (`landingCtaClicked`, `signUpStarted`, `signUpCompleted`, `onboardingStarted`, `wizardStepCompleted`, `uploadSucceeded`, `uploadFailed`, `submitSucceeded`, `submitFailed`, `pendingVerificationViewed`, `verificationTransitioned`).
+- **Production OTel analytics sink & API ingestion boundary** (`apps/client/app/lib/analytics/professional-funnel-sink.ts`, `apps/client/app/api/analytics/professional-funnel/route.ts`):
+  wired OTel counter (`professional_funnel_events_total`) and span event sink with POST ingestion route executing defensive PII sanitization (`sanitizeProfessionalFunnelPayload`).
+- **Professional onboarding observability runbook** (`apps/client/docs/professional-onboarding-observability-runbook.md`):
+  created operational runbook detailing metric counters, alert thresholds (`OnboardingSubmitFailureRateHigh`, `ProfessionalDocumentUploadFailureHigh`, `VerificationSlaBreachedBacklogHigh`), SLA budgets (48h breach), and statutory regulator circuit breaker procedures.
+
+### Added — Day-one regulator automation with manual fallback (Phase 7)
+
+- **Regulator verification gateway & statutory adapters** (`apps/client/app/lib/domains/regulator-verification/gateway.ts`, `apps/client/app/lib/domains/regulator-verification/adapters/`):
+  wired automated statutory regulator verification gateway supporting all 7 Kenyan authorities (`EBK`, `BORAQS`, `NCA`, `EARB`, `VRB`, `ISK`, `EPRA`) with confidence scoring, evidence snapshot versioning (`confidenceAlgorithmVersion`), and per-authority kill switches (`SystemSettings.enableAutoVerify<AUTHORITY>`).
+- **Asynchronous event-driven job queueing & deduplication** (`apps/client/app/lib/domains/regulator-verification/queue.ts`):
+  enqueued verification jobs from `professional.onboarding_submitted` events via BullMQ (`license-verification` queue) deduplicated by `(authority, licenseNumber, professionalId)` to ensure non-blocking onboarding submissions.
+- **Manual review fallback & two-approver override governance** (`apps/client/app/lib/domains/regulator-verification/operator-service.ts`, `apps/client/app/lib/domains/regulator-verification/outcomes.ts`):
+  routed unsupported authorities, outages, mismatches, and low-confidence checks to operator queues with redacted evidence views, duplicate warning banners, and mandatory two-approver enforcement for manual decision overrides per ADR-ADMIN-008.
+- **Regulator verification test suite** (`apps/client/__tests__/lib/domains/regulator-verification/`):
+  verified 100% passing test suite across gateway execution, confidence scoring, evidence store retention, operator decisions, HTTP adapter resilience, and BullMQ queue deduplication (26 passing tests).
+
+### Added — Full professional portal rebuild and capability-driven application shell (Phase 6)
+
+- **Professional portal capability service** (`apps/client/app/lib/domains/professionals/capability.service.ts`):
+  implemented `ProfessionalPortalCapabilityService` as the single source of truth for status-aware capability resolution (`VERIFIED`, `PENDING`, `NEEDS_CHANGES`, `REJECTED`, `SUSPENDED`), route entitlement assertions, and capability restriction reason messaging per ADR-002.
+- **Strangler-fig feature flag inventory extension** (`apps/client/app/lib/domains/professionals/portal-feature-flags.ts`, `apps/client/app/lib/infrastructure/env.ts`):
+  expanded portal feature flags to cover all 8 portal modules (`portal_dashboard_v2`, `portal_leads_v2`, `portal_finance_v2`, `portal_projects_v2`, `portal_quotes_v2`, `portal_stores_v2`, `portal_calendar_v2`, `portal_portfolio_v2`) gated through typed environment configuration.
+- **Shared portal domain DTO contracts** (`apps/client/app/lib/domains/shared/contracts.ts`):
+  defined canonical contracts for pagination (`PaginatedResult<T>`), sorting, multi-criterion filtering, and data exports (`csv`, `json`, `pdf`) across portal domain boundaries.
+- **Portal client facade & TanStack Query module hook** (`apps/client/lib/facades/portal-client.ts`, `apps/client/hooks/use-portal-module.ts`):
+  created browser client facade with concurrency limiter and React Query custom hooks (`usePortalCapabilities`, `usePortalModuleData`, `usePortalModuleMutation`) supporting optimistic UI updates and server state reconciliation.
+- **Domain unit test suite** (`apps/client/__tests__/domains/professionals/portal-capability-service.test.ts`):
+  added 100% passing Vitest test suite covering capability context resolution, restricted state locking, 403 Forbidden enforcement, and feature flag resolution.
+
+### Added — Pending verification UX, submission event lifecycle, and admin handoff (Phase 5)
+
+- **Pending verification UX & support contact** (`apps/client/app/professional-portal/pending-verification/page.tsx`):
+  updated pending verification experience with SLA indicators (1–3 business days), capability access grid, reviewer notes callouts, support contact (`support@buildmarket.app`), and targeted document re-upload CTA when status is `NEEDS_CHANGES`.
+- **Onboarding submission event emission** (`apps/client/app/lib/integrations/license-events.ts`, `apps/client/app/lib/domains/user-profile/onboarding.ts`):
+  wired `publishOnboardingSubmittedEvent` to publish `professional.onboarding_submitted` NATS JetStream events carrying statutory licenses upon professional onboarding completion, connecting to BullMQ regulator verification queues.
+- **Admin verification queue & document link handoff** (`apps/admin/src/lib/domains/verification/repository.ts`, `apps/admin/src/lib/domains/verification/internal/professional-verification.service.ts`):
+  fixed `submittedAt` timestamp in `listProfessionalQueue` to return `createdAt` instead of `null`, and expanded `getProfessionalVerificationDetails` to return uploaded document titles, asset URLs (`publicUrl`, `mimeType`), and professional license models for admin verification review.
+
+### Added — Regulator verification hardening, durable queue, and funnel observability (Phase 9 follow-up)
+
+- **Professional onboarding funnel analytics tracking wiring** (`app/lib/analytics/use-professional-funnel-tracking.ts`, `components/forms/ProfessionalForm.tsx`, `app/onboarding/_components/OnboardingView.tsx`, `components/forms/professional-wizard/DocumentsStep.tsx`):
+  wired client-side funnel tracking events (`landingCtaClicked`, `onboardingStarted`, `wizardStepCompleted`, `uploadSucceeded`, `uploadFailed`, `submitSucceeded`, `submitFailed`, `pendingVerificationViewed`) across role selection cards, professional form wizard steps, submission handlers, and document upload validation flows.
+- **Admin manual verification operator UI & multi-approver workflow** (`apps/admin/src/app/(dashboard)/verifications/regulator/page.tsx`, `apps/admin/src/components/admin/verification/RegulatorVerificationQueue.tsx`, `apps/admin/src/components/admin/verification/RegulatorVerificationDetailDialog.tsx`, `apps/admin/src/actions/admin/regulator-verification.ts`):
+  built the admin-facing operator queue and detail dialog for triage of dead-letter and manual-review regulator verification cases. Supports viewer-role evidence redaction (SUPER_ADMIN vs standard admin), duplicate license warning banners across professionals, and mandatory two-approver enforcement for high-risk decisions (overriding regulator rejections or low confidence).
+- **Typed per-authority regulator contracts & CI drift enforcement** (`app/lib/domains/regulator-verification/adapters/`):
+  implemented per-authority Zod response contracts (`contract.ts`), endpoint path builders (`path.ts`),
+  and redacted JSON response fixtures (`exact_match.json`, `not_found.json`, `suspended.json`, `malformed.json`)
+  for all 7 statutory regulators (`NCA`, `EPRA`, `BORAQS`, `EBK`, `EARB`, `VRB`, `ISK`). Response contract
+  drift now throws explicit Zod parsing errors that `HttpRegulatorAdapter` classifies as `MALFORMED_RESPONSE`
+  (non-retryable adapter failure triggering on-call alerts) instead of silently degrading to low-confidence
+  manual review. Threaded version strings (`NCA_CONTRACT_VERSION = "2026-08-01"`) into `RegulatorAdapterResult`
+  and `RegulatorEvidenceSnapshot`. Added `scripts/check-regulator-contract-drift.mjs` to CI security/drift
+  checks, enforcing that no statutory authority auto-verify flag can reach production without a complete
+  contract module, test fixtures, and passing unit test suite (`<authority>.contract.test.ts`).
+- **Real per-authority regulator adapters** (`app/lib/domains/regulator-verification/adapters/`):
+  a shared `HttpRegulatorAdapter` base class owning timeout budget, HMAC request signing, and an
+  explicit error taxonomy (`TIMEOUT`/`NETWORK`/`RATE_LIMITED`/`SERVER_ERROR`/`AUTH`/`NOT_FOUND`/
+  `MALFORMED_RESPONSE`), plus adapters for EBK, BORAQS, NCA, EARB, VRB, ISK, and EPRA. Adapter
+  selection is gated by `SystemSettings.enableAutoVerify<AUTHORITY>` kill switches for all 7 statutory authorities.
+- **Durable verification-case persistence** (`RegulatorVerificationCase`,
+  `RegulatorVerificationDecision` Prisma models): every verification attempt — auto or manual —
+  is now recorded with its evidence snapshot, confidence reasons, and retry/dead-letter state,
+  instead of relying only on worker logs and the `ProfessionalLicense` status column.
+- **Durable license-verification queue** (`app/workers/license-verification/`): a BullMQ queue
+  enqueued explicitly from a new `professional.onboarding_submitted` NATS consumer, deduped by
+  authority + license number + professional ID (shared dedupe key with the case row), retried
+  with exponential backoff, and moved to `DEAD_LETTER` after 5 attempts with an ops alert
+  published on `license.verification_dead_lettered`.
+- **Manual verification operator service** (`operator-service.ts`): case listing, a redacted
+  detail view (raw regulator payload hidden from non-`SUPER_ADMIN` roles), and
+  `recordManualDecision` requiring a `reasonCode` on every call, with four-eyes approval enforced
+  for high-risk decisions (two different admins must submit the same outcome) and an immutable
+  decision trail mirrored into `AdminAuditLog`. **UI not yet built** — backend only.
+- **Evidence retention enforcement** (`enforceEvidenceRetention`): strips raw regulator payloads
+  from cases older than a configurable retention window while preserving the normalized record
+  and full decision trail.
+- **Production analytics sink for `professional_funnel.*` events**: an OTel-based sink
+  (`professional-funnel-sink.ts`) emitting a `professional_funnel_events_total` counter plus span
+  events, following the existing `nats_client_*` instrumentation convention; a client ingestion
+  route (`/api/analytics/professional-funnel`) and a `useProfessionalFunnelTracking()` hook for
+  wiring the wizard/upload/CTA boundaries; and the `verificationTransitioned` event now emitted
+  directly from the verification worker (the one boundary the backend fully owns).
+- Refactored `license-auto-verify.consumer.ts` to build its regulator gateway from the real
+  adapter registry (respecting `SystemSettings` flags) and to share success/failure handling with
+  the new BullMQ worker via `verification-outcomes.ts`, instead of duplicating that logic.
+
+### Tests
+
+- `__tests__/lib/domains/regulator-verification/adapters/http-regulator-adapter.test.ts` (8 tests)
+- `__tests__/lib/domains/regulator-verification/evidence-store.test.ts` (5 tests)
+- `__tests__/lib/domains/regulator-verification/operator-service.test.ts` (5 tests)
+- `__tests__/workers/license-verification-queue.test.ts` (2 tests)
+- `__tests__/lib/analytics/professional-funnel-sink.test.ts` (2 tests)
+- Existing `gateway.test.ts` (5 tests) and `professional-funnel-events.test.ts` (3 tests) pass
+  unmodified.
+- All 30 tests above were executed in a sandboxed vitest environment against this change set and
+  pass. They have **not** been run inside the actual monorepo (workspace deps, generated Prisma
+  client, and lint config weren't available) — run `pnpm vitest run` and `pnpm lint` on these
+  paths before merging.
+
+### Known follow-ups
+
+See `docs/operations/professional-onboarding-observability-runbook.md` §8.
+
+### Added / Changed (Join-as-Pro Phases 7 & 9 — Regulator Automation and Observability)
+
+- **Regulator Verification Gateway (`app/lib/domains/regulator-verification`)**: Added a typed gateway for day-one regulator automation with normalized outcomes (`AUTO_VERIFIED`, `AUTO_REJECTED`, `NEEDS_MANUAL_REVIEW`, `REGULATOR_UNAVAILABLE`, `LOW_CONFIDENCE`), evidence snapshots, deterministic confidence reasons, retry metadata, and replay-safe dedupe job IDs.
+- **License Auto-Verification Worker Integration (`app/workers/license-auto-verify.consumer.ts`)**: Replaced inline mock validity branching with the regulator gateway so high-confidence checks continue to auto-verify and all outages, invalid records, unsupported authorities, and low-confidence matches route through manual-fallback observability.
+- **Professional Funnel Analytics Contract (`app/lib/analytics/professional-funnel-events.ts`)**: Added `professional_funnel.*` event names and a sanitizer that removes email, phone, names, license numbers, KRA PINs, identity/document URLs, preview URLs, and non-scalar payload values before analytics capture.
+- **Operations Runbook (`apps/client/docs/operations/professional-onboarding-observability-runbook.md`)**: Documented required funnel events, dashboard and alert thresholds, and runbooks for Clerk metadata drift, stuck idempotency keys, staged upload cleanup, professional signup closed mode, and professional-intent rollback.
+- **Test Coverage**: Added focused unit tests covering auto-verified, unsupported, outage, low-confidence, and dedupe regulator paths plus analytics event-contract and PII-sanitization behavior.
+
+**Files changed:**
+
+- `apps/client/app/lib/domains/regulator-verification/gateway.ts`
+- `apps/client/app/lib/domains/regulator-verification/index.ts`
+- `apps/client/app/workers/license-auto-verify.consumer.ts`
+- `apps/client/app/lib/analytics/professional-funnel-events.ts`
+- `apps/client/__tests__/lib/domains/regulator-verification/gateway.test.ts`
+- `apps/client/__tests__/lib/analytics/professional-funnel-events.test.ts`
+- `apps/client/docs/operations/professional-onboarding-observability-runbook.md`
+- `apps/client/docs/CHANGELOG.md`
+- `apps/client/docs/PROGRESS-SUMMARY.md`
+- `CHANGELOG.md`
 
 ### Added / Changed (Join-as-Pro Phase 4: Upload Lifecycle, Virus Scanner Bootstrap & Security UX)
 

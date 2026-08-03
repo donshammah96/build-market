@@ -36,6 +36,7 @@ import {
   professionalReadinessService,
   type ProfessionalCapabilities,
 } from "@/app/lib/domains/professionals/readiness.service";
+import { publishOnboardingSubmittedEvent } from "@/app/lib/integrations/license-events";
 
 export type ClerkUserProfile = {
   emailAddresses?: Array<{ emailAddress?: string | null }>;
@@ -599,6 +600,33 @@ export const userProfileOnboardingService = {
         if (readinessRes.ok) {
           capabilities = readinessRes.data.capabilities;
           nextRoute = readinessRes.data.nextRoute;
+        }
+
+        // Fetch licenses for regulator verification event publishing
+        const proLicenses = await prisma.professionalLicense.findMany({
+          where: { professionalId: user.id },
+          select: {
+            id: true,
+            authority: true,
+            licenseNumber: true,
+            professional: { select: { companyName: true } },
+          },
+        });
+
+        if (proLicenses.length > 0) {
+          publishOnboardingSubmittedEvent({
+            professionalId: user.id,
+            correlationId:
+              actor.correlationId ?? `onboarding_${user.id}_${Date.now()}`,
+            licenses: proLicenses.map((l) => ({
+              licenseId: l.id,
+              authority: l.authority,
+              licenseNumber: l.licenseNumber,
+              companyName: l.professional.companyName,
+            })),
+          }).catch(() => {
+            // Non-blocking background event dispatch
+          });
         }
       }
 

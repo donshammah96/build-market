@@ -102,7 +102,7 @@ export async function listProfessionalQueue(
     entityId: profile.userId,
     name: profile.companyName,
     status: profile.verificationStatus,
-    submittedAt: null,
+    submittedAt: profile.createdAt,
     createdAt: profile.createdAt,
     owner: profile.user,
     documentCount: profile._count.documents,

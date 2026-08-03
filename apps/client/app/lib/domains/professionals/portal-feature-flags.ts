@@ -8,9 +8,11 @@
 import { env } from "@/app/lib/infrastructure/env";
 
 export type ProfessionalFeatureFlag =
+  | "portal_dashboard_v2"
   | "portal_leads_v2"
   | "portal_finance_v2"
   | "portal_projects_v2"
+  | "portal_quotes_v2"
   | "portal_stores_v2"
   | "portal_calendar_v2"
   | "portal_portfolio_v2";
@@ -19,9 +21,11 @@ const FLAG_TO_ENV_KEY: Record<
   ProfessionalFeatureFlag,
   keyof typeof env.features
 > = {
+  portal_dashboard_v2: "portalDashboardV2",
   portal_leads_v2: "portalLeadsV2",
   portal_finance_v2: "portalFinanceV2",
   portal_projects_v2: "portalProjectsV2",
+  portal_quotes_v2: "portalQuotesV2",
   portal_stores_v2: "portalStoresV2",
   portal_calendar_v2: "portalCalendarV2",
   portal_portfolio_v2: "portalPortfolioV2",

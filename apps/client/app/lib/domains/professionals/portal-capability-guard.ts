@@ -7,9 +7,9 @@
  */
 
 import {
-  professionalReadinessService,
-  type ProfessionalCapabilities,
-} from "./readiness.service";
+  professionalPortalCapabilityService,
+  type ExtendedProfessionalCapabilities,
+} from "./capability.service";
 import {
   ok,
   err,
@@ -17,7 +17,12 @@ import {
   type Result,
 } from "@/app/lib/errors/result";
 
-export type CapabilityGuardErrorCode = "forbidden" | "not_found" | "internal";
+export type CapabilityGuardErrorCode =
+  | "forbidden"
+  | "not_found"
+  | "account_suspended"
+  | "account_rejected"
+  | "internal";
 
 /**
  * Ensure a professional has a specific capability.
@@ -25,34 +30,16 @@ export type CapabilityGuardErrorCode = "forbidden" | "not_found" | "internal";
  */
 export async function ensureProfessionalCapability(
   userId: string,
-  requiredCapability: keyof ProfessionalCapabilities,
+  requiredCapability: keyof ExtendedProfessionalCapabilities,
 ): Promise<Result<true, DomainError<CapabilityGuardErrorCode>>> {
-  const readinessRes = await professionalReadinessService.getReadiness(userId);
+  const checkRes =
+    await professionalPortalCapabilityService.assertCapabilityAccess(
+      userId,
+      requiredCapability,
+    );
 
-  if (!readinessRes.ok) {
-    if (readinessRes.error === "not_found") {
-      return err({
-        error: "not_found",
-        message: "Professional profile not found",
-        status: 404,
-      });
-    }
-    return err({
-      error: "internal",
-      message: "Failed to verify capability",
-      status: 500,
-    });
-  }
-
-  const { capabilities, verificationStatus } = readinessRes.data;
-  const isAllowed = capabilities[requiredCapability];
-
-  if (!isAllowed) {
-    return err({
-      error: "forbidden",
-      message: `Account ${verificationStatus.toLowerCase()}: capability '${requiredCapability}' is restricted until verification is complete`,
-      status: 403,
-    });
+  if (!checkRes.ok) {
+    return checkRes;
   }
 
   return ok(true);

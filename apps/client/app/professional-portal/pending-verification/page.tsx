@@ -255,6 +255,20 @@ export default async function ProfessionalPendingVerificationPage() {
                 Reviewer notes:
               </h3>
               <p className="text-sm text-zinc-700">{data.verificationNotes}</p>
+              {isNeedsChanges && (
+                <div className="mt-3">
+                  <Button
+                    asChild
+                    size="sm"
+                    className="bg-amber-600 text-white hover:bg-amber-700"
+                  >
+                    <Link href="/professional-portal/settings/complete-profile">
+                      Update Profile & Documents
+                      <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                    </Link>
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -388,11 +402,11 @@ export default async function ProfessionalPendingVerificationPage() {
               update your submitted documents, contact our support team.
             </p>
             <a
-              href="mailto:support@buildmarket.co.ke"
+              href="mailto:support@buildmarket.app"
               className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"
             >
               <Mail className="h-4 w-4" />
-              support@buildmarket.co.ke
+              support@buildmarket.app
             </a>
           </div>
         </CardContent>
