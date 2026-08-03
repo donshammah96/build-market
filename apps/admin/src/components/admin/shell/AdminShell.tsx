@@ -1,6 +1,6 @@
 import { UserButton } from "@clerk/nextjs";
 import { ShieldCheck } from "lucide-react";
-import type { AdminRole } from "@build/db";
+import type { AdminRole } from "@build/enums";
 import { NavigationSidebar } from "@/components/admin/navigation-sidebar";
 import { AdminUserMenu } from "./AdminUserMenu";
 

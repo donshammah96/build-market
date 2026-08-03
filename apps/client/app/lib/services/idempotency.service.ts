@@ -322,6 +322,8 @@ export class IdempotencyService {
     userId: string,
     operation: string,
     options?: {
+      actorClerkId?: string;
+      appUserId?: string;
       entityConnect?: Record<string, { connect: { id: string } }>;
       ttlHours?: number;
     },
@@ -369,10 +371,23 @@ export class IdempotencyService {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + ttlHours);
 
+    const actorClerkId =
+      options?.actorClerkId ??
+      (userId.startsWith("clerk_") || userId.startsWith("user_")
+        ? userId
+        : undefined);
+    const appUserId =
+      options?.appUserId ??
+      (!userId.startsWith("clerk_") && !userId.startsWith("user_")
+        ? userId
+        : undefined);
+
     await prisma.idempotencyKey.create({
       data: {
         key,
         userId,
+        actorClerkId,
+        appUserId,
         scope: resolvedScope,
         operation,
         ...(entityConnect ?? {}),

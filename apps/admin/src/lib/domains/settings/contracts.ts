@@ -1,4 +1,4 @@
-import type { AdminRole } from "@build/db";
+import type { AdminRole } from "@build/enums";
 
 // ============================================================================
 // Actor
@@ -20,6 +20,11 @@ export type SystemSettings = {
   enableAutoVerifyNCA: boolean;
   enableAutoVerifyEPRA: boolean;
   enableAutoVerifyBORAQS: boolean;
+  enableAutoVerifyEBK: boolean;
+  enableAutoVerifyEARB: boolean;
+  enableAutoVerifyVRB: boolean;
+  enableAutoVerifyISK: boolean;
+
   enforceProfessionalLicenses: boolean;
   enforcePropertyDocuments: boolean;
   enableLandRegistryCheck: boolean;

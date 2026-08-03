@@ -7,6 +7,7 @@ import { RegulatoryAuthority } from "@build/types";
 import type { County } from "@build/enums";
 import { StoreFormSubmitData } from "../StoreForm";
 import type { PropertyFormSubmitData } from "../PropertyForm";
+import type { ConsentData } from "./ConsentStep";
 import {
   isSupplierProfession,
   isRealEstateProfession,
@@ -55,6 +56,9 @@ export interface ProfessionalWizardData {
     category: string;
     title?: string;
   }>;
+
+  // Consent step data
+  consents?: ConsentData;
 }
 
 /**
@@ -133,6 +137,11 @@ export const WIZARD_STEPS: WizardStep[] = [
     id: "documents",
     label: "Documents",
     description: "Upload verification docs",
+  },
+  {
+    id: "consent",
+    label: "Consent",
+    description: "Terms & agreements",
   },
   { id: "review", label: "Review", description: "Confirm and submit" },
 ];

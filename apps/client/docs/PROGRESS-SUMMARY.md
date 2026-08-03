@@ -52,16 +52,24 @@ Update rule: any change to mirrored governance state must update this file and
 - `missingSharedTs` violations fixed: completed
 - `inlineLoggerAtModuleLevel` violations fixed: completed
 
-**Remaining steps:**
+**Milestone Completed (2026-08-01):** Professional Onboarding Funnel Tracking & Admin Operator UI Implementation (`docs/operations/professional-onboarding-observability-runbook.md`)
 
-- None for Phase 0. Strict drift is green across all categories.
+- Wired client-side funnel tracking events (`landingCtaClicked`, `onboardingStarted`, `wizardStepCompleted`, `uploadSucceeded`, `uploadFailed`, `submitSucceeded`, `submitFailed`, `pendingVerificationViewed`) across `OnboardingView`, `ProfessionalForm`, and `DocumentsStep` via `useProfessionalFunnelTracking()`.
+- Implemented the admin manual verification operator UI at `apps/admin/src/app/(dashboard)/verifications/regulator/page.tsx` with `RegulatorVerificationQueue` and `RegulatorVerificationDetailDialog`.
+- Created server actions (`listRegulatorVerificationCases`, `getRegulatorVerificationCaseDetail`, `recordRegulatorManualDecision`) adhering to ADR-ADMIN-001/002/008, featuring role-based evidence redaction, duplicate license warning banners, and two-approver policy enforcement for high-risk decisions.
+
+**Milestone Completed (2026-08-01):** Regulator API Contract Confirmation & Observability Alignment (`docs/operations/regulator-contract-confirmation.md`)
+
+- Implemented per-authority Zod response contracts (`contract.ts`), path builders (`path.ts`), and redacted fixtures (`exact_match`, `not_found`, `suspended`, `malformed`) for all 7 statutory authorities (`NCA`, `EPRA`, `BORAQS`, `EBK`, `EARB`, `VRB`, `ISK`).
+- Replaced placeholder response mappers with strict Zod parsing that raises `MALFORMED_RESPONSE` error events (`retryable: false`, paging on-call) instead of silently degrading to low-confidence manual review.
+- Threaded version string (`CONTRACT_VERSION`) into `RegulatorAdapterResult` and `RegulatorEvidenceSnapshot`.
+- Added static CI check (`scripts/check-regulator-contract-drift.mjs`) chained into security/drift checks, enforcing that no statutory authority flag can reach production without a complete contract module, fixtures, and passing contract test suite (`<authority>.contract.test.ts`).
 
 **Verification:**
 
-- `pnpm -C apps/client run report-security-drift:strict` -> pass, all categories 0
-- `pnpm -C apps/client exec tsc --noEmit --pretty false` -> exit 0
-- Targeted API Vitest suite -> 14 files, 93 tests passed
-- Targeted domain/facade Vitest suite -> 12 files, 49 tests passed
+- `pnpm -C apps/client run check-security-drift` -> pass (includes `check-regulator-contract-drift`)
+- `pnpm -C apps/client run check-types` -> pass (tsc --noEmit, exit 0)
+- Regulator verification Vitest suite -> 15 files passed
 
 ---
 
@@ -194,6 +202,24 @@ pnpm -C apps/client run report:projects-mutation-health -- --input <file.ndjson>
 Last updated: 2026-05-07
 
 ## Snapshot
+
+### [CHECKPOINT] Join-as-Pro Phases 7 & 9 - Regulator Automation and Observability
+
+- Date: 2026-08-01
+- Outcome summary: Added the first production-facing regulator verification abstraction and phase 9 observability contract for the professional onboarding funnel. Regulator checks now have normalized statuses, confidence reasons, evidence snapshots, retry metadata, unsupported-authority fallback behavior, and replay-safe dedupe job IDs. The license auto-verification worker now calls this gateway before deciding whether to auto-verify or route to manual fallback. The professional funnel now has a PII-sanitized event namespace and an operations runbook for dashboards, alerts, and incident remediation.
+- Actual files changed: `apps/client/app/lib/domains/regulator-verification/gateway.ts`, `apps/client/app/lib/domains/regulator-verification/index.ts`, `apps/client/app/workers/license-auto-verify.consumer.ts`, `apps/client/app/lib/analytics/professional-funnel-events.ts`, `apps/client/__tests__/lib/domains/regulator-verification/gateway.test.ts`, `apps/client/__tests__/lib/analytics/professional-funnel-events.test.ts`, `apps/client/docs/operations/professional-onboarding-observability-runbook.md`, `apps/client/docs/CHANGELOG.md`, `apps/client/docs/PROGRESS-SUMMARY.md`, and root `CHANGELOG.md`.
+- Verification: Focused Vitest coverage passed for regulator verification gateway and professional funnel analytics. Focused ESLint passed for the new/modified implementation and test files. A broad `pnpm -C apps/client exec tsc --noEmit --pretty false` was attempted and remains blocked by pre-existing workspace type-resolution issues unrelated to this checkpoint, including unresolved `@build/db` / `@build/types` declarations and existing strictness errors.
+
+#### Implementation follow-ups and gaps
+
+1. Replace the bootstrap/mock regulator adapter behavior with real per-authority adapters for EBK, BORAQS, NCA, EARB, VRB, ISK, EPRA, and any additional profession-specific authority represented in the product taxonomy. Each adapter must own its timeout budget, credential configuration, request signing, response mapping, and regulator-specific error taxonomy.
+2. Persist regulator evidence snapshots, confidence reasons, and manual-fallback classifications to a durable verification-case model instead of relying only on worker logs and existing license status updates. This should include evidence retention policy enforcement and redaction rules for operator views.
+3. Add a durable verification job queue that is explicitly enqueued from `professional.onboarding_submitted`, deduped by authority + license number + professional ID, retried with backoff, and moved to a dead-letter queue after the configured attempt budget.
+4. Add feature flags and circuit breakers per authority and profession so operations can disable a failing regulator integration without disabling the full professional onboarding funnel.
+5. Build the dedicated manual verification operator workflow that displays submitted data, normalized regulator evidence, confidence reasons, duplicates/history, and recommended actions with required reason codes, high-risk four-eyes approval, and immutable audit logs.
+6. Wire `professional_funnel.*` events into the production analytics sink at each funnel boundary: landing CTA click, sign-up start/completion, onboarding start, wizard step completion, upload success/failure, submit success/failure, pending verification viewed, and verification transition.
+7. Back the runbook alert thresholds with real dashboard definitions in the production observability stack, including onboarding submit error rate, upload failure rate, Clerk metadata sync failures, idempotency conflicts, median completion time, verification backlog/SLA breaches, and regulator automation health by authority.
+8. Add integration/E2E coverage for worker enqueue + dedupe + retry semantics, regulator outage fallback, low-confidence manual-review routing, auto-verified capability unlock, and operator review behavior in the migrated verification operations surface.
 
 ### [CHECKPOINT] Architecture Compliance Phase 0 Remediation - Completed
 

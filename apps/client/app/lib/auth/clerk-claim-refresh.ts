@@ -6,6 +6,7 @@ export type ClerkPublicMetadataLike = {
   isOnboarded?: boolean;
   role?: unknown;
   profileId?: string;
+  status?: string;
 };
 
 type ClerkUserLike = {

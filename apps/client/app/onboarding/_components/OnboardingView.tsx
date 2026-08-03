@@ -36,6 +36,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialogue";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
+import { useProfessionalFunnelTracking } from "@/app/lib/analytics/use-professional-funnel-tracking";
+import { PROFESSIONAL_FUNNEL_EVENTS } from "@/app/lib/analytics/professional-funnel-events";
 import { RoleCard } from "./RoleCard";
 import { StepIndicator } from "./StepIndicator";
 import type { OnboardingData } from "@build/types";
@@ -76,6 +78,7 @@ export type OnboardingViewProps = {
   handleCancelOnboarding: () => Promise<void>;
   handleSkip: (role: OnboardingRole) => Promise<void>;
   handleSubmit: (data: OnboardingData) => Promise<void>;
+  roleLocked?: boolean;
 };
 
 export function OnboardingView({
@@ -89,9 +92,24 @@ export function OnboardingView({
   handleCancelOnboarding,
   handleSkip,
   handleSubmit,
+  roleLocked = false,
 }: OnboardingViewProps) {
   const prefersReducedMotion = useReducedMotion();
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const trackFunnel = useProfessionalFunnelTracking();
+
+  const onSelectRole = (selectedRole: OnboardingRole) => {
+    if (selectedRole === "professional") {
+      trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.landingCtaClicked, {
+        source: "onboarding_role_card",
+        role: "professional",
+      });
+      trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.onboardingStarted, {
+        role: "professional",
+      });
+    }
+    handleRoleSelect(selectedRole);
+  };
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
@@ -207,18 +225,20 @@ export function OnboardingView({
           {...variants.fadeIn}
           className="flex flex-col items-center text-center"
         >
-          <div className="mb-4 flex flex-wrap items-center justify-center gap-3">
-            <StepIndicator current={step} stepNumber={1} label="Role" />
-            <div
-              className={cn(
-                "h-px w-12 transition-colors duration-500 sm:w-16",
-                step >= 2
-                  ? "bg-(--color-onboarding-primary)"
-                  : "bg-onboarding-ink/35",
-              )}
-            />
-            <StepIndicator current={step} stepNumber={2} label="Details" />
-          </div>
+          {role !== "professional" && (
+            <div className="mb-4 flex flex-wrap items-center justify-center gap-3">
+              <StepIndicator current={step} stepNumber={1} label="Role" />
+              <div
+                className={cn(
+                  "h-px w-12 transition-colors duration-500 sm:w-16",
+                  step >= 2
+                    ? "bg-(--color-onboarding-primary)"
+                    : "bg-onboarding-ink/35",
+                )}
+              />
+              <StepIndicator current={step} stepNumber={2} label="Details" />
+            </div>
+          )}
 
           <h1
             ref={stepHeadingRef}
@@ -232,24 +252,26 @@ export function OnboardingView({
                 : "Showcase your expertise."}
           </h1>
 
-          <div className="mb-5 w-full max-w-sm px-2">
-            <div className="mb-1.5 flex items-center justify-between text-[11px] text-onboarding-ink/45">
-              <span>
-                Step {currentStep} of {totalSteps}
-              </span>
-              <span className="font-semibold text-(--color-onboarding-primary)">
-                {progressPercent}%
-              </span>
+          {role !== "professional" && (
+            <div className="mb-5 w-full max-w-sm px-2">
+              <div className="mb-1.5 flex items-center justify-between text-[11px] text-onboarding-ink/45">
+                <span>
+                  Step {currentStep} of {totalSteps}
+                </span>
+                <span className="font-semibold text-(--color-onboarding-primary)">
+                  {progressPercent}%
+                </span>
+              </div>
+              <div className="h-0.5 overflow-hidden rounded-full bg-white/8">
+                <motion.div
+                  className="h-full rounded-full bg-(--color-onboarding-primary)"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progressPercent}%` }}
+                  transition={{ duration: prefersReducedMotion ? 0 : 0.35 }}
+                />
+              </div>
             </div>
-            <div className="h-0.5 overflow-hidden rounded-full bg-white/8">
-              <motion.div
-                className="h-full rounded-full bg-(--color-onboarding-primary)"
-                initial={{ width: 0 }}
-                animate={{ width: `${progressPercent}%` }}
-                transition={{ duration: prefersReducedMotion ? 0 : 0.35 }}
-              />
-            </div>
-          </div>
+          )}
 
           <p className="max-w-2xl text-base leading-7 text-onboarding-ink/80 sm:text-lg sm:leading-8">
             {step === 1
@@ -269,7 +291,7 @@ export function OnboardingView({
                 icon={<Home size={32} />}
                 title="I Am a Project Owner"
                 description="I am planning a project and I need verified experts."
-                onClick={() => handleRoleSelect("client")}
+                onClick={() => onSelectRole("client")}
                 delay={prefersReducedMotion ? 0 : 0.1}
                 highlight
                 prefersReducedMotion={prefersReducedMotion}
@@ -282,7 +304,7 @@ export function OnboardingView({
                 icon={<Briefcase size={32} />}
                 title="I am a Professional"
                 description="I am an Architect, Engineer, or Contractor looking for quality leads."
-                onClick={() => handleRoleSelect("professional")}
+                onClick={() => onSelectRole("professional")}
                 delay={prefersReducedMotion ? 0 : 0.2}
                 prefersReducedMotion={prefersReducedMotion}
                 disabled={roleSelectionPending}
@@ -317,15 +339,17 @@ export function OnboardingView({
               {role === "client" ? (
                 <div className="relative mx-auto max-w-2xl rounded-2xl border border-onboarding-primary/30 bg-onboarding-surface/90 p-1 shadow-[0_32px_64px_-24px_rgba(4,10,18,0.90),0_0_0_1px_oklch(0.70_0.21_162/0.10)] backdrop-blur-xl">
                   <div className="absolute left-3 top-3 z-20 sm:left-4 sm:top-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setStep(1)}
-                      disabled={submitting}
-                      className="min-h-11 border-onboarding-primary/35 bg-onboarding-surface/60 text-onboarding-ink/80 hover:bg-onboarding-primary/10 hover:text-(--color-onboarding-ink)"
-                    >
-                      <ArrowLeft className="mr-2 h-4 w-4" /> Back
-                    </Button>
+                    {!roleLocked && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setStep(1)}
+                        disabled={submitting}
+                        className="min-h-11 border-onboarding-primary/35 bg-onboarding-surface/60 text-onboarding-ink/80 hover:bg-onboarding-primary/10 hover:text-(--color-onboarding-ink)"
+                      >
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Back
+                      </Button>
+                    )}
                   </div>
 
                   <div className="rounded-xl border border-white/8 bg-onboarding-surface/95 p-4 pt-16 sm:p-6 sm:pt-16 md:p-8 md:pt-16">
@@ -341,7 +365,9 @@ export function OnboardingView({
                     )}
 
                     <HomeownerForm
-                      onBack={() => setStep(1)}
+                      onBack={() => {
+                        if (!roleLocked) setStep(1);
+                      }}
                       onSubmit={handleSubmit}
                       onAuthSuccess={() => {}}
                       onSkip={() => handleSkip("client")}
@@ -351,7 +377,9 @@ export function OnboardingView({
               ) : (
                 <div className="relative">
                   <ProfessionalForm
-                    onBack={() => setStep(1)}
+                    onBack={() => {
+                      if (!roleLocked) setStep(1);
+                    }}
                     onSubmit={handleSubmit}
                     onAuthSuccess={() => {}}
                   />

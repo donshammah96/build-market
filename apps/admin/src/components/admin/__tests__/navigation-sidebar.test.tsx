@@ -5,7 +5,12 @@ import { vi } from "vitest";
 vi.mock("@build/db", () => ({
   AdminRole: {
     SUPER_ADMIN: "SUPER_ADMIN",
+    OPS_ADMIN: "OPS_ADMIN",
+    VERIFICATION_ADMIN: "VERIFICATION_ADMIN",
+    CONTENT_MODERATOR: "CONTENT_MODERATOR",
     SUPPORT_AGENT: "SUPPORT_AGENT",
+    FINANCE_MANAGER: "FINANCE_MANAGER",
+    AUDITOR: "AUDITOR",
   },
 }));
 
@@ -13,7 +18,7 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, beforeEach } from "vitest";
 import { NavigationSidebar } from "../navigation-sidebar";
-import { AdminRole } from "@build/db";
+import { AdminRole } from "@build/enums";
 
 // Mock @/actions/admin
 vi.mock("@/actions/admin", () => ({

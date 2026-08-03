@@ -45,10 +45,41 @@ import {
 } from "@/app/lib/domains/user-profile/clerk-metadata";
 import { logOnboardingRouteOutcome, now } from "@/app/api/onboarding/shared";
 import { normalizeRole } from "@/app/lib/security/roles";
+import {
+  PROFESSIONAL_ONBOARDING_INTENT_COOKIE,
+  verifyProfessionalOnboardingIntent,
+} from "@/app/lib/auth/professional-onboarding-intent";
 
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 const ROUTE_PATTERN = "/api/onboarding";
 const OPERATION_NAME = "complete_onboarding";
+
+function normalizeOnboardingApiResponse<T extends Record<string, unknown>>(
+  data: T,
+): T & { warnings: string[] } {
+  if (data.role === "PROFESSIONAL") {
+    return {
+      ...data,
+      status: data.status ?? "PENDING_VERIFICATION",
+      profileId: data.profileId ?? data.userId,
+      nextRoute: data.nextRoute ?? "/professional-portal/pending-verification",
+      warnings: Array.isArray(data.warnings)
+        ? data.warnings.filter(
+            (warning): warning is string => typeof warning === "string",
+          )
+        : [],
+    } as T & { warnings: string[] };
+  }
+
+  return {
+    ...data,
+    warnings: Array.isArray(data.warnings)
+      ? data.warnings.filter(
+          (warning): warning is string => typeof warning === "string",
+        )
+      : [],
+  };
+}
 
 const ONBOARDING_ERROR_MESSAGE_MAP: Partial<Record<string, string>> = {
   conflict: "Onboarding already completed",
@@ -193,6 +224,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   actorRole = resolvedActorRole;
 
+  const onboardingSource = req.headers.get("x-onboarding-source");
+  if (
+    resolvedActorRole === "PROFESSIONAL" &&
+    onboardingSource === "join-as-pro"
+  ) {
+    const intent = verifyProfessionalOnboardingIntent(
+      req.cookies.get(PROFESSIONAL_ONBOARDING_INTENT_COOKIE)?.value,
+    );
+
+    if (!intent.ok) {
+      logOutcome("forbidden", HttpStatus.FORBIDDEN, {
+        reason: "missing_or_invalid_professional_intent",
+      });
+      return apiError(
+        "Professional onboarding intent expired. Please restart from Join as a Pro.",
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
   const idempotencyKey =
     req.headers.get("Idempotency-Key") ||
     IdempotencyService.generateKey(clerkId, "POST", {
@@ -210,7 +261,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     logOutcome("succeeded", HttpStatus.OK, {
       source: "idempotency_cache",
     });
-    return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
+    return apiSuccess(
+      normalizeOnboardingApiResponse(
+        idempotencyCheck.response as Record<string, unknown>,
+      ),
+      HttpStatus.OK,
+    );
   }
   if (idempotencyCheck.status === "pending") {
     logOutcome("conflict", HttpStatus.CONFLICT, {
@@ -281,7 +337,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return apiError(safeMessage, status);
   }
 
-  const responseData = result.data.data;
+  const domainResponseData = result.data.data;
+  const responseData = normalizeOnboardingApiResponse(
+    domainResponseData as Record<string, unknown>,
+  );
   const clerkRole = responseData.role as string;
 
   // ORDERING INVARIANT: Clerk update BEFORE safeIdempotencyComplete().
@@ -321,7 +380,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   });
 
   logOutcome("succeeded", HttpStatus.OK, {
-    completedRole: responseData.role,
+    completedRole: clerkRole,
   });
 
   return apiSuccess(responseData, HttpStatus.OK);

@@ -39,8 +39,18 @@ try {
   // Update typescript's package.json to be CommonJS for standard compiler require compatibility
   const pkgJsonPath = path.join(tsDir, "package.json");
   if (fs.existsSync(pkgJsonPath)) {
-    const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, "utf8"));
+    let pkg = {};
+    try {
+      const rawContent = fs.readFileSync(pkgJsonPath, "utf8").replace(/\0/g, "").trim();
+      if (rawContent) {
+        pkg = JSON.parse(rawContent);
+      }
+    } catch (e) {
+      console.warn("Failed to parse existing package.json, re-creating clean manifest:", e.message);
+    }
     delete pkg.type;
+    pkg.name = pkg.name || "typescript";
+    pkg.version = pkg.version || "7.0.2";
     pkg.main = "./lib/typescript.js";
     pkg.exports = {
       ".": "./lib/typescript.js",
@@ -54,8 +64,10 @@ try {
 
   const dummyFile = path.join(libDir, "typescript.js");
   const versionFile = path.join(libDir, "version.cjs");
+  const tscFile = path.join(libDir, "tsc.js");
 
   const ts6Path = path.join(ts6Dir, "lib", "typescript.js").replace(/\\/g, "/");
+  const ts6TscPath = path.join(ts6Dir, "lib", "tsc.js").replace(/\\/g, "/");
 
   fs.writeFileSync(
     dummyFile,
@@ -64,6 +76,10 @@ try {
   fs.writeFileSync(
     versionFile,
     `module.exports = require("${ts6Path}");\n`,
+  );
+  fs.writeFileSync(
+    tscFile,
+    `module.exports = require("${ts6TscPath}");\n`,
   );
 
   console.log("Successfully patched typescript (v7.0.2) with TS6 bridge.");

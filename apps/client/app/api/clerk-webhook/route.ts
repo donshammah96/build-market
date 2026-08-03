@@ -27,6 +27,7 @@ import {
   releaseClerkWebhookDelivery,
 } from "@/app/lib/infrastructure/webhook-replay";
 import { applyPrivateNoStoreHeaders } from "@/app/lib/api/http-security";
+import { recordWebhookReplayReject } from "@/app/lib/auth/telemetry-metrics";
 
 function mapClerkWebhookResult<T extends { message: string }>(
   result:
@@ -112,6 +113,7 @@ export async function POST(req: NextRequest) {
     );
 
     if (missingSvixHeaders.length > 0) {
+      recordWebhookReplayReject("missing_headers");
       getClientLogger().warn("Missing Svix headers", {
         correlationId,
         missing: missingSvixHeaders,
@@ -128,6 +130,7 @@ export async function POST(req: NextRequest) {
     try {
       event = wh.verify(payload, headers) as ClerkWebhookEvent;
     } catch (verifyError) {
+      recordWebhookReplayReject("invalid_signature");
       getClientLogger().error(
         "Webhook signature verification failed",
         verifyError instanceof Error
@@ -151,6 +154,7 @@ export async function POST(req: NextRequest) {
     if (
       !isWebhookTimestampFresh(timestampHeader, env.clerk.replayWindowSeconds)
     ) {
+      recordWebhookReplayReject("stale_timestamp");
       getClientLogger().warn("Rejected stale webhook delivery", {
         correlationId,
         eventType: event.type,
@@ -164,6 +168,7 @@ export async function POST(req: NextRequest) {
     try {
       const replayClaim = await claimClerkWebhookDelivery(deliveryId ?? "");
       if (replayClaim.status === "duplicate") {
+        recordWebhookReplayReject("duplicate_delivery");
         getClientLogger().info("Duplicate webhook delivery acknowledged", {
           correlationId,
           eventType: event.type,
@@ -180,6 +185,7 @@ export async function POST(req: NextRequest) {
 
       claimedDeliveryId = replayClaim.deliveryId;
     } catch (replayError) {
+      recordWebhookReplayReject("replay_store_unavailable");
       getClientLogger().error(
         "Webhook replay protection unavailable",
         replayError instanceof Error

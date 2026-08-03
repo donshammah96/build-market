@@ -7,6 +7,10 @@ import {
   isProfessionalRoute,
   isProtectedRoute,
   isPublicRoute,
+  isPublicApiRoute,
+  isInternalApiRoute,
+  isProtectedApiRoute,
+  isApiRoute,
   isSettingsExemptRoute,
   isSignUpRoute,
 } from "@/app/lib/security/middleware/route-matcher";
@@ -23,12 +27,14 @@ import {
 } from "@/app/lib/security/middleware/redirect-policy";
 import { resolveSystemSettings } from "@/app/lib/security/middleware/system-settings-resolver";
 import { logMiddlewareDecision } from "@/app/lib/security/middleware/decision-log";
+import { ensureValidInternalSecret } from "@/app/lib/security/internal-secret";
 import { env } from "@/app/lib/infrastructure/env";
 import {
   buildCspWithNonce,
   generateCspNonce,
 } from "@/app/lib/security/middleware/csp-nonce";
 import { PROFESSIONAL_ROUTES } from "@/lib/routes";
+import { recordMiddlewareFallback } from "@/app/lib/auth/telemetry-metrics";
 
 // =============================================================================
 // Middleware
@@ -58,6 +64,18 @@ const applyDocumentCspHeaders = (
   response.headers.set("Content-Security-Policy", cspValue);
   return response;
 };
+
+const BLOCKED_ACCOUNT_STATUSES = [
+  "SUSPENDED",
+  "BANNED",
+  "DEACTIVATED",
+  "ARCHIVED",
+];
+
+// API routes are called by fetch/XHR/tRPC clients, not browser navigation,
+// so failures must be JSON responses rather than sign-in redirects.
+const unauthorizedApiResponse = (message = "Unauthorized"): NextResponse =>
+  NextResponse.json({ error: message }, { status: 401 });
 
 const isBypassActive = env.auth.bypassEnabled && (env.isDev || env.isCI);
 
@@ -130,6 +148,7 @@ const middleware = isBypassActive
             logMiddlewareDecision(nextReq, "mw_redirect_maintenance", {
               reason: settingsResult.reason,
             });
+            recordMiddlewareFallback(pathname, "maintenance_redirect");
             return redirectToMaintenance(nextReq);
           }
         }
@@ -140,6 +159,7 @@ const middleware = isBypassActive
             logMiddlewareDecision(nextReq, "mw_redirect_registration_closed", {
               reason: settingsResult.reason,
             });
+            recordMiddlewareFallback(pathname, "registration_closed_redirect");
             return redirectToRegistrationClosed(nextReq);
           }
           if (
@@ -153,6 +173,10 @@ const middleware = isBypassActive
                 reason: settingsResult.reason,
               },
             );
+            recordMiddlewareFallback(
+              pathname,
+              "professional_signup_closed_redirect",
+            );
             return redirectToProfessionalSignupClosed(nextReq);
           }
         }
@@ -164,7 +188,78 @@ const middleware = isBypassActive
         return applyDocumentCspHeaders(nextReq, nonce, cspValue);
       }
 
-      // 1a. Blocked-user gate — fires before any role/onboarding checks.
+      // 1a. Public API routes - explicit allow-list, no auth required.
+      if (isPublicApiRoute(nextReq)) {
+        logMiddlewareDecision(nextReq, "mw_allow_public_api");
+        return applyDocumentCspHeaders(nextReq, nonce, cspValue);
+      }
+
+      // 1b. Internal API routes - service-to-service routes protected by
+      // x-internal-secret. Delegates to ensureValidInternalSecret (constant-
+      // time comparison) rather than comparing strings directly here, and
+      // logs the actual failure reason (missing secret vs. env misconfig)
+      // instead of a single undifferentiated denial.
+      if (isInternalApiRoute(nextReq)) {
+        const secret = nextReq.headers.get("x-internal-secret");
+        const secretError = ensureValidInternalSecret(secret);
+
+        if (secretError) {
+          logMiddlewareDecision(nextReq, "mw_deny_internal_api_unauthorized", {
+            status: secretError.status,
+          });
+          return secretError;
+        }
+
+        logMiddlewareDecision(nextReq, "mw_allow_internal_api");
+        return applyDocumentCspHeaders(nextReq, nonce, cspValue);
+      }
+
+      // 1c. Protected API routes - require authentication. This used to be
+      // checked only after all page-route logic (and was unreachable in
+      // practice, since isPublicRoute previously matched every /api path
+      // before this point was ever reached). It now runs here, and
+      // actually enforces auth instead of allowing unconditionally.
+      if (isProtectedApiRoute(nextReq)) {
+        const authObject = await auth();
+        if (!authObject.userId) {
+          logMiddlewareDecision(
+            nextReq,
+            "mw_deny_protected_api_unauthenticated",
+          );
+          return unauthorizedApiResponse();
+        }
+
+        const quickMeta = parseMiddlewareSessionMetadata(
+          authObject.sessionClaims,
+        );
+        if (
+          quickMeta?.status &&
+          BLOCKED_ACCOUNT_STATUSES.includes(quickMeta.status)
+        ) {
+          logMiddlewareDecision(nextReq, "mw_deny_protected_api_blocked", {
+            status: quickMeta.status,
+          });
+          return unauthorizedApiResponse("Account suspended");
+        }
+
+        logMiddlewareDecision(nextReq, "mw_allow_protected_api", {
+          userId: authObject.userId,
+        });
+        return applyDocumentCspHeaders(nextReq, nonce, cspValue);
+      }
+
+      // 1d. Any other /api path must be explicitly classified above as
+      // public, internal, or protected. Fail closed instead of falling through to the
+      // page-route logic below (which assumes browser navigation) or to
+      // the generic "allow everything else" branch at the bottom.
+      // /trpc(.*) is deliberately excluded - assumed to enforce auth at
+      // the procedure level via protectedProcedure context.
+      if (isApiRoute(nextReq)) {
+        logMiddlewareDecision(nextReq, "mw_deny_api_unclassified");
+        return unauthorizedApiResponse("Not found");
+      }
+
+      // 1e. Blocked-user gate — fires before any role/onboarding checks.
       //     Reads `status` from Clerk session claims (synced by admin suspend/unsuspend
       //     actions). Prevents redirect loops by landing on the public
       //     /unauthorized-sign-in page where Clerk signOut() is called.
@@ -173,16 +268,14 @@ const middleware = isBypassActive
         const quickMeta = parseMiddlewareSessionMetadata(
           authObject.sessionClaims,
         );
-        const blockedStatuses = [
-          "SUSPENDED",
-          "BANNED",
-          "DEACTIVATED",
-          "ARCHIVED",
-        ];
-        if (quickMeta?.status && blockedStatuses.includes(quickMeta.status)) {
+        if (
+          quickMeta?.status &&
+          BLOCKED_ACCOUNT_STATUSES.includes(quickMeta.status)
+        ) {
           logMiddlewareDecision(nextReq, "mw_redirect_unauthorized_sign_in", {
             status: quickMeta.status,
           });
+          recordMiddlewareFallback(pathname, "blocked_account_redirect");
           return redirectToUnauthorizedSignIn(nextReq, quickMeta.status);
         }
       }
@@ -296,9 +389,13 @@ const middleware = isBypassActive
           status.status === "PENDING_VERIFICATION";
         const isPendingVerificationRoute =
           pathname === PROFESSIONAL_ROUTES.professionalPendingVerification;
+        const isAllowedPendingRoute =
+          isPendingVerificationRoute ||
+          pathname.startsWith("/professional-portal/profile") ||
+          pathname.startsWith("/professional-portal/settings");
 
         if (isPendingVerification) {
-          if (!isPendingVerificationRoute) {
+          if (!isAllowedPendingRoute) {
             logMiddlewareDecision(
               nextReq,
               "mw_redirect_professional_pending_verification",
@@ -337,6 +434,7 @@ const middleware = isBypassActive
             source: status.source,
             reason: status.reason,
           });
+          recordMiddlewareFallback(pathname, "unonboarded_redirect");
           return redirectToOnboarding(nextReq);
         }
 

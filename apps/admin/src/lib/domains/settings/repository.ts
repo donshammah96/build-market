@@ -9,13 +9,17 @@ const DEFAULT_SETTINGS: SystemSettings = {
   enableAutoVerifyNCA: false,
   enableAutoVerifyEPRA: false,
   enableAutoVerifyBORAQS: false,
+  enableAutoVerifyEBK: false,
+  enableAutoVerifyEARB: false,
+  enableAutoVerifyVRB: false,
+  enableAutoVerifyISK: false,
   enforceProfessionalLicenses: false,
   enforcePropertyDocuments: false,
   enableLandRegistryCheck: false,
   enforceStorePermits: false,
   requireTaxCompliance: false,
   platformCommission: 10,
-  supportEmail: "support@buildmarket.co.ke",
+  supportEmail: "support@buildmarket.app",
   adminEmailAlerts: true,
   securityMFA: true,
 };
@@ -40,12 +44,13 @@ export const settingsRepository = {
       ...settings,
       platformCommission: Number(settings.platformCommission ?? 10),
       enableAutoVerifyNCA: settings.enableAutoVerifyNCA ?? false,
-      enableAutoVerifyEPRA:
-        ((settings as Record<string, unknown>)
-          .enableAutoVerifyEPRA as boolean) ?? false,
-      enableAutoVerifyBORAQS:
-        ((settings as Record<string, unknown>)
-          .enableAutoVerifyBORAQS as boolean) ?? false,
+      enableAutoVerifyEPRA: settings.enableAutoVerifyEPRA ?? false,
+      enableAutoVerifyBORAQS: settings.enableAutoVerifyBORAQS ?? false,
+      enableAutoVerifyEBK: settings.enableAutoVerifyEBK ?? false,
+      enableAutoVerifyEARB: settings.enableAutoVerifyEARB ?? false,
+      enableAutoVerifyVRB: settings.enableAutoVerifyVRB ?? false,
+      enableAutoVerifyISK: settings.enableAutoVerifyISK ?? false,
+
       enforceProfessionalLicenses:
         ((settings as Record<string, unknown>)
           .enforceProfessionalLicenses as boolean) ?? false,

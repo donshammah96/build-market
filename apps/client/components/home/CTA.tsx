@@ -18,7 +18,7 @@ export const CTA: FC = memo(function CTA() {
   return (
     <section
       ref={ref as React.RefObject<HTMLElement>}
-      className="py-20 px-4 sm:px-6 md:px-20 bg-gradient-to-br from-foreground via-foreground to-primary overflow-hidden relative"
+      className="py-20 px-4 sm:px-6 md:px-20 bg-linear-to-br from-foreground via-foreground to-primary overflow-hidden relative"
       aria-labelledby="cta-heading"
     >
       {/* Abstract Background shapes - GPU optimized with will-change */}
@@ -31,7 +31,7 @@ export const CTA: FC = memo(function CTA() {
         aria-hidden="true"
       />
 
-      <div className="max-w-[1280px] mx-auto relative z-10 flex flex-col md:flex-row justify-between items-center gap-10">
+      <div className="max-w-7x1 mx-auto relative z-10 flex flex-col md:flex-row justify-between items-center gap-10">
         {/* Text Content */}
         <div
           className={cn(

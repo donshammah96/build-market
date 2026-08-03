@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma, UserRole, UserStatus, AdminRole } from "@build/db";
+import { prisma, UserStatus } from "@build/db";
+import { UserRole, AdminRole } from "@build/enums";
 import { apiError, HttpStatus } from "./api-response";
 import { initializeCorrelationId, getClientLogger } from "./resilient-api";
 import { withTimeout, CorrelationIdManager } from "@build/resilience";

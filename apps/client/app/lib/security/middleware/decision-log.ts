@@ -15,7 +15,14 @@ export type MiddlewareDecisionEvent =
   | "mw_allow_protected"
   | "mw_redirect_professional_pending_verification"
   | "mw_allow_professional_pending_verification"
-  | "mw_redirect_professional_dashboard";
+  | "mw_redirect_professional_dashboard"
+  | "mw_allow_public_api"
+  | "mw_allow_internal_api"
+  | "mw_allow_protected_api"
+  | "mw_deny_protected_api_unauthenticated"
+  | "mw_deny_protected_api_blocked"
+  | "mw_deny_internal_api_unauthorized"
+  | "mw_deny_api_unclassified";
 
 export function logMiddlewareDecision(
   req: NextRequest,

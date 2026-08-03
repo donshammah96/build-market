@@ -1,6 +1,6 @@
 "use server";
 
-import { AdminRole } from "@build/db";
+import { AdminRole } from "@build/enums";
 import { auth } from "@clerk/nextjs/server";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 import {

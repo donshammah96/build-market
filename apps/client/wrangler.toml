@@ -3,9 +3,65 @@ main = ".open-next/worker.js"
 compatibility_date = "2026-04-18"
 compatibility_flags = ["nodejs_compat"]
 
+# Shared across all environments unless a [env.X.build] override is
+# needed later. If your actual deploy path is CI-driven (GitHub Actions
+# running `pnpm build` then `wrangler deploy --env X`) rather than
+# Cloudflare's dashboard Git integration, this [build] block does
+# nothing and can be removed — confirm which deploy path is real before
+# keeping it, since an unused config block that LOOKS load-bearing is
+# its own source of confusion.
+[build]
+command = "pnpm run build:cloudflare-worker"
+
 [assets]
 directory = ".open-next/assets"
 binding = "ASSETS"
 
 [observability]
 enabled = true
+
+# No top-level [[r2_buckets]] block on purpose: a bare `wrangler deploy`
+# with no --env should fail loudly (missing binding) rather than quietly
+# deploying something bound to nothing, or worse, to production by
+# accident. Every real deploy must specify --env staging or
+# --env production explicitly. Enforce this in CI, don't rely on people
+# remembering the flag.
+
+# --- Staging Environment ---
+[env.staging]
+name = "build-market-client-staging"
+
+[[env.staging.r2_buckets]]
+binding = "STAGED_BUCKET"
+bucket_name = "buildmarket-staged-staging"
+
+[[env.staging.r2_buckets]]
+binding = "VERIFIED_PRIVATE_BUCKET"
+bucket_name = "buildmarket-verified-private-staging"
+
+[[env.staging.queues.producers]]
+queue = "upload-scan-queue-staging"
+binding = "UPLOAD_SCAN_QUEUE"
+
+# VERIFIED_PRIVATE_BUCKET is bound because authorized Next.js route handlers (e.g. download)
+# read clean documents server-side via storage.readObject() after authorization.
+# QUARANTINE_BUCKET is intentionally excluded here, same as production —
+# the client app has no legitimate reason to read quarantined files.
+# Keep this exclusion; it's a correct least-privilege decision already
+# made in the original config, just carried forward per-environment now.
+
+# --- Production Environment ---
+[env.production]
+name = "build-market-client-production"
+
+[[env.production.r2_buckets]]
+binding = "STAGED_BUCKET"
+bucket_name = "buildmarket-staged"
+
+[[env.production.r2_buckets]]
+binding = "VERIFIED_PRIVATE_BUCKET"
+bucket_name = "buildmarket-verified-private"
+
+[[env.production.queues.producers]]
+queue = "upload-scan-queue-production"
+binding = "UPLOAD_SCAN_QUEUE"

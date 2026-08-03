@@ -22,6 +22,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from "crypto";
 import { env } from "@/app/lib/infrastructure/env";
 
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -46,6 +47,8 @@ export interface StorageConfig {
   localPath?: string;
   bucket?: string;
   privateBucket?: string;
+  stagedBucket?: string;
+  quarantineBucket?: string;
   region?: string;
   endpoint?: string;
   cdnUrl?: string;
@@ -107,6 +110,20 @@ export interface StorageProvider {
       checksumSha256?: string;
     },
   ): Promise<PresignedUploadResult>;
+  /**
+   * Promotes a verified clean object from staged bucket to private verified bucket.
+   */
+  promoteStagedObject(
+    stagedKey: string,
+    targetKey: string,
+  ): Promise<{ checksum: string; size: number }>;
+  /**
+   * Offloads an infected object from staged bucket to quarantine bucket.
+   */
+  quarantineStagedObject(
+    stagedKey: string,
+    quarantineKey: string,
+  ): Promise<void>;
 
   getPresignedDownloadUrl(
     key: string,
@@ -548,6 +565,45 @@ class LocalStorageProvider implements StorageProvider {
     };
   }
 
+  async promoteStagedObject(
+    stagedKey: string,
+    targetKey: string,
+  ): Promise<{ checksum: string; size: number }> {
+    const stagedPath = this.resolvePath(stagedKey);
+    const targetPath = this.resolvePath(targetKey);
+
+    await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.promises.copyFile(stagedPath, targetPath);
+
+    // Copy metadata sidecar if present
+    const stagedMetaPath = this.metadataPath(stagedKey);
+    const targetMetaPath = this.metadataPath(targetKey);
+    await fs.promises
+      .copyFile(stagedMetaPath, targetMetaPath)
+      .catch(() => undefined);
+
+    const buffer = await fs.promises.readFile(targetPath);
+    const checksum = createHash("sha256").update(buffer).digest("hex");
+    const stats = await fs.promises.stat(targetPath);
+
+    return {
+      checksum,
+      size: stats.size,
+    };
+  }
+
+  async quarantineStagedObject(
+    stagedKey: string,
+    quarantineKey: string,
+  ): Promise<void> {
+    const stagedPath = this.resolvePath(stagedKey);
+    const quarantinePath = this.resolvePath(`quarantine/${quarantineKey}`);
+
+    await fs.promises.mkdir(path.dirname(quarantinePath), { recursive: true });
+    await fs.promises.copyFile(stagedPath, quarantinePath);
+    await this.delete(stagedKey);
+  }
+
   async putObject(
     key: string,
     buffer: Buffer,
@@ -637,6 +693,8 @@ class S3StorageProvider implements StorageProvider {
   private readonly client: S3Client;
   private readonly publicBucket: string;
   private readonly privateBucket?: string;
+  private readonly stagedBucket: string;
+  private readonly quarantineBucket: string;
   private readonly publicUrl: string;
 
   constructor(config: StorageConfig) {
@@ -658,6 +716,12 @@ class S3StorageProvider implements StorageProvider {
 
     this.publicBucket = config.bucket;
     this.privateBucket = config.privateBucket;
+    this.stagedBucket =
+      config.stagedBucket ?? env.storage.stagedBucket ?? "buildmarket-staged";
+    this.quarantineBucket =
+      config.quarantineBucket ??
+      env.storage.quarantineBucket ??
+      "buildmarket-quarantine";
     this.publicUrl = config.cdnUrl.replace(/\/+$/, "");
 
     const credentials =
@@ -758,7 +822,72 @@ class S3StorageProvider implements StorageProvider {
       expiresAt,
     };
   }
+  async promoteStagedObject(
+    stagedKey: string,
+    targetKey: string,
+  ): Promise<{ checksum: string; size: number }> {
+    const targetBucket = this.privateBucket ?? this.publicBucket;
+    const copySource = encodeURI(`${this.stagedBucket}/${stagedKey}`);
 
+    // 1. Copy from stagedBucket -> targetBucket
+    await this.client.send(
+      new CopyObjectCommand({
+        CopySource: copySource,
+        Bucket: targetBucket,
+        Key: targetKey,
+      }),
+    );
+
+    // 2. Head object to retrieve size & checksum
+    const targetMeta = await this.client.send(
+      new HeadObjectCommand({
+        Bucket: targetBucket,
+        Key: targetKey,
+      }),
+    );
+
+    // 3. Delete original object from stagedBucket
+    await this.client.send(
+      new DeleteObjectCommand({
+        Bucket: this.stagedBucket,
+        Key: stagedKey,
+      }),
+    );
+
+    const checksum =
+      targetMeta.Metadata?.["checksum"] ??
+      targetMeta.ETag?.replace(/"/g, "") ??
+      "";
+
+    return {
+      checksum,
+      size: targetMeta.ContentLength ?? 0,
+    };
+  }
+
+  async quarantineStagedObject(
+    stagedKey: string,
+    quarantineKey: string,
+  ): Promise<void> {
+    const copySource = encodeURI(`${this.stagedBucket}/${stagedKey}`);
+
+    // 1. Copy from stagedBucket -> quarantineBucket
+    await this.client.send(
+      new CopyObjectCommand({
+        CopySource: copySource,
+        Bucket: this.quarantineBucket,
+        Key: quarantineKey,
+      }),
+    );
+
+    // 2. Delete original object from stagedBucket
+    await this.client.send(
+      new DeleteObjectCommand({
+        Bucket: this.stagedBucket,
+        Key: stagedKey,
+      }),
+    );
+  }
   async getPresignedDownloadUrl(
     key: string,
     options?: StorageObjectOptions & {
@@ -886,7 +1015,10 @@ export function createStorageProvider(
     provider: env.storage.provider,
     localPath: resolvedLocalPath,
     bucket: env.storage.bucket ?? env.storage.assetBucket,
-    privateBucket: env.storage.privateBucket,
+    privateBucket:
+      env.storage.privateBucket ?? env.storage.verifiedPrivateBucket,
+    stagedBucket: env.storage.stagedBucket,
+    quarantineBucket: env.storage.quarantineBucket,
     region: env.storage.region,
     endpoint: env.storage.endpoint,
     cdnUrl: env.storage.cdnUrl,

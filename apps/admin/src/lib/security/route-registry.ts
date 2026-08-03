@@ -71,6 +71,18 @@ export const ADMIN_ROUTE_REGISTRY: readonly AdminRouteMetadata[] = [
     allowedRoles: ["super_admin", "ops_admin", "verification_admin"],
   },
   {
+    path: "/verifications/regulator",
+    section: "compliance",
+    title: "Regulator Manual Verification Queue",
+    allowedRoles: ["super_admin", "ops_admin", "verification_admin"],
+  },
+  {
+    path: "/verification-ops",
+    section: "compliance",
+    title: "Verification Operations Center",
+    allowedRoles: ["super_admin", "ops_admin", "verification_admin"],
+  },
+  {
     path: "/audit",
     section: "compliance",
     title: "System Audit Log",
@@ -199,4 +211,7 @@ export const isDashboardRoute = createRouteMatcher([
 ]);
 
 /** Matcher for verification queues requiring verification_admin or super_admin */
-export const isVerificationRoute = createRouteMatcher(["/verifications(.*)"]);
+export const isVerificationRoute = createRouteMatcher([
+  "/verifications(.*)",
+  "/verification-ops(.*)",
+]);

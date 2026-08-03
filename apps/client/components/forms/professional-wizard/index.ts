@@ -12,7 +12,9 @@ export { default as StoreStep } from "./StoreStep";
 export { default as PropertyStep } from "./PropertyStep";
 export { default as CredentialsStep } from "./CredentialsStep";
 export { default as DocumentsStep } from "./DocumentsStep";
+export { default as ConsentStep } from "./ConsentStep";
 export { default as ReviewStep } from "./ReviewStep";
 
 // Types and utilities
 export * from "./types";
+export type { ConsentData, ConsentRecord } from "./ConsentStep";

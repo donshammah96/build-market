@@ -1,3 +1,14 @@
+/**
+ * Upload Processing Status (Image & Asset Derivatives)
+ *
+ * NOTE (L1): `UploadProcessingState` tracks in-memory / Redis cache state for
+ * background image thumbnail/derivative processing (`pending` → `processing`
+ * → `ready` / `failed`).
+ * This is NOT the same state machine as `UploadLifecycleState` in
+ * `upload-lifecycle.ts` (which tracks database-backed onboarding document
+ * upload scanning & staging: `STAGED` → `SCAN_PENDING` → `ATTACHED` / `QUARANTINED`).
+ */
+
 import { redisCache } from "@build/redis";
 import { env } from "@/app/lib/infrastructure/env";
 

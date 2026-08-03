@@ -20,11 +20,14 @@ import {
 import {
   assetDetailSelect,
   uploadRepository,
+  InvalidStatusTransitionError,
   type CreateStagedUploadInput,
   type UploadAssetRecord,
 } from "@/app/lib/domains/uploads/repository";
-import { toUploadDto } from "@/app/lib/domains/uploads/mappers";
+import { toUploadDto, toIsoString } from "@/app/lib/domains/uploads/mappers";
 import { prisma, type Prisma } from "@build/db";
+import { getVirusScanner, type ScanResult } from "./virus-scanner";
+import { type UploadLifecycleState } from "./upload-lifecycle";
 
 let storageProviderOverride: StorageProvider | null = null;
 const STORAGE_KEY_PATTERN = /^[A-Za-z0-9/_.-]+$/;
@@ -55,6 +58,32 @@ export function setUploadServiceStorageProviderForTests(
 
 function resolveStorageProvider(): StorageProvider {
   return storageProviderOverride ?? getStorageProvider();
+}
+
+async function runScan(
+  storage: StorageProvider,
+  staged: {
+    id: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    storageKey: string;
+  },
+): Promise<ScanResult> {
+  const buffer = await storage
+    .readObject(staged.storageKey, {
+      visibility: "private",
+    })
+    .catch(() => undefined);
+
+  return getVirusScanner().scanUpload({
+    uploadId: staged.id,
+    originalName: staged.originalName,
+    mimeType: staged.mimeType,
+    size: staged.size,
+    storageKey: staged.storageKey,
+    buffer,
+  });
 }
 
 type UploadClient = Prisma.TransactionClient | typeof prisma;
@@ -525,11 +554,14 @@ export const uploadService = {
     );
 
     try {
+      // FIX (H3, partial): private, not public — a signed short-lived
+      // preview URL only means something if the underlying object isn't
+      // already world-readable at a stable URL.
       const uploaded = await storage.upload(
         input.file.buffer,
         input.file.originalName,
         input.file.mimeType,
-        { visibility: "public" },
+        { visibility: "private" },
       );
 
       const stagingInput: CreateStagedUploadInput = {
@@ -542,9 +574,42 @@ export const uploadService = {
         storageBucket: uploaded.bucket,
         storageKey: uploaded.key,
         expiresAt,
+        // FIX (C1): row is created already SCAN_PENDING, never a
+        // silently-trusted default.
+        initialStatus: "SCAN_PENDING" as const,
       };
       const staged =
         await uploadRepository.createStagedOnboardingUpload(stagingInput);
+
+      if (staged.status !== "SCAN_PENDING") {
+        throw new Error(
+          `Defensive check failed: created upload status is ${staged.status}, expected SCAN_PENDING`,
+        );
+      }
+
+      const scanResult = await runScan(storage, staged);
+
+      let finalStatus: UploadLifecycleState = "STAGED";
+      if (scanResult.status === "INFECTED") finalStatus = "QUARANTINED";
+      else if (scanResult.status === "ERROR") finalStatus = "SCAN_FAILED";
+
+      await uploadRepository.transitionStagedUploadStatus(
+        staged.id,
+        finalStatus,
+      );
+
+      if (finalStatus !== "STAGED") {
+        // Surface the scan outcome to the caller as a domain error instead
+        // of silently returning a preview URL for a file nobody can/should
+        // use yet.
+        return fail(
+          "invalid_input",
+          finalStatus === "QUARANTINED"
+            ? "Uploaded file failed malware scanning and has been quarantined"
+            : "Malware scanning could not be completed; please retry the upload",
+          { scanResult },
+        );
+      }
 
       return ok({
         uploadId: staged.id,
@@ -552,8 +617,11 @@ export const uploadService = {
         previewUrl: staged.tempUrl,
         expiresAt: toUploadDto(staged.expiresAt) as unknown as string,
       });
-    } catch {
-      return fail("processing_failed", "Failed to stage upload");
+    } catch (error) {
+      return fail("processing_failed", "Failed to stage upload", {
+        // FIX (M5): preserve the real failure reason instead of discarding it.
+        reason: error instanceof Error ? error.message : String(error),
+      });
     }
   },
 
@@ -1101,6 +1169,142 @@ export const uploadService = {
   },
 
   /**
+   * Rescans a staged upload. Only valid as a retry from SCAN_FAILED.
+   * Transition-guarded via transitionStagedUploadStatus so it can never move
+   * an ATTACHED / CONSUMED / EXPIRED / DELETED / STAGED row backwards.
+   */
+  async rescanStagedUpload(input: {
+    uploadId: string;
+    clerkId: string;
+  }): Promise<
+    UploadServiceResult<{
+      uploadId: string;
+      status: UploadLifecycleState;
+      scanResult: ScanResult;
+    }>
+  > {
+    const storage = resolveStorageProvider();
+
+    try {
+      const staged = await uploadRepository.findStagedUploadById(
+        input.uploadId,
+        input.clerkId,
+      );
+      if (!staged) {
+        return fail("not_found", "Staged upload not found");
+      }
+
+      if (
+        staged.status === "ATTACHED" ||
+        staged.status === "CONSUMED" ||
+        staged.status === "EXPIRED" ||
+        staged.status === "DELETED" ||
+        staged.status === "STAGED"
+      ) {
+        return fail(
+          "conflict",
+          `Cannot rescan an upload in ${staged.status} state`,
+        );
+      }
+
+      if (staged.status !== "SCAN_PENDING") {
+        await uploadRepository.transitionStagedUploadStatus(
+          input.uploadId,
+          "SCAN_PENDING",
+        );
+      }
+
+      const scanResult = await runScan(storage, staged);
+
+      let nextStatus: UploadLifecycleState = "STAGED";
+      if (scanResult.status === "INFECTED") nextStatus = "QUARANTINED";
+      else if (scanResult.status === "ERROR") nextStatus = "SCAN_FAILED";
+
+      await uploadRepository.transitionStagedUploadStatus(
+        input.uploadId,
+        nextStatus,
+      );
+
+      return ok({ uploadId: staged.id, status: nextStatus, scanResult });
+    } catch (error) {
+      if (error instanceof InvalidStatusTransitionError) {
+        return fail("conflict", error.message);
+      }
+      await uploadRepository
+        .transitionStagedUploadStatus(input.uploadId, "SCAN_FAILED")
+        .catch(() => {});
+      return fail("processing_failed", "Malware scanning failed", {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+
+  /**
+   * Generates a short-lived (max 15 min / 900 seconds) signed preview URL for an authorized staged upload.
+   * Ensures raw storage URLs are not persisted long-term in browser drafts.
+   */
+  async generateShortLivedPreviewUrl(input: {
+    uploadId: string;
+    clerkId: string;
+    expiresInSeconds?: number;
+  }): Promise<
+    UploadServiceResult<{
+      uploadId: string;
+      previewUrl: string;
+      expiresAt: string;
+    }>
+  > {
+    try {
+      const staged = await uploadRepository.findStagedUploadById(
+        input.uploadId,
+        input.clerkId,
+      );
+      if (!staged) {
+        return fail("not_found", "Staged upload not found");
+      }
+
+      if (
+        staged.status === "QUARANTINED" ||
+        staged.status === "EXPIRED" ||
+        staged.status === "DELETED"
+      ) {
+        return fail(
+          "forbidden",
+          `Cannot preview upload in ${staged.status} state`,
+        );
+      }
+
+      const storage = resolveStorageProvider();
+      const ttlSeconds = Math.min(input.expiresInSeconds ?? 900, 900); // Hard max 15 min
+      const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
+
+      const presigned = await storage.getPresignedDownloadUrl(
+        staged.storageKey,
+        {
+          expiresInSeconds: ttlSeconds,
+          visibility: "public",
+          filename: staged.originalName,
+        },
+      );
+
+      const previewUrl =
+        typeof presigned === "string"
+          ? presigned
+          : presigned.downloadUrl ||
+            (presigned as unknown as { url?: string }).url ||
+            "";
+
+      return ok({
+        uploadId: staged.id,
+        previewUrl,
+        expiresAt: toIsoString(expiresAt),
+      });
+    } catch {
+      return fail("processing_failed", "Failed to generate preview URL");
+    }
+  },
+
+  /**
    * Cleanup expired staged uploads: delete storage blobs and mark as EXPIRED.
    * Call from scheduled job (e.g. onboarding-upload-cleanup).
    */
@@ -1130,6 +1334,24 @@ export const uploadService = {
       ids,
       prisma,
     );
+
+    // Also clean up unattached temporary assets past deleteAfter
+    try {
+      const unattached =
+        await uploadRepository.findUnattachedTemporaryAssetsForCleanup(prisma);
+      for (const asset of unattached) {
+        try {
+          await storage.delete(asset.key, {
+            visibility: storageVisibilityFromAsset(asset.visibility),
+          });
+          await uploadRepository.hardDeleteAsset(asset.id, prisma);
+        } catch {
+          // Continue cleanup
+        }
+      }
+    } catch {
+      // Ignore unattached asset cleanup failure
+    }
 
     return {
       count,

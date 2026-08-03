@@ -1,4 +1,4 @@
-import { AdminRole } from "@build/db";
+import { AdminRole } from "@build/enums";
 import { err, ok, type Result } from "@/lib/result";
 import {
   AdminCapability,

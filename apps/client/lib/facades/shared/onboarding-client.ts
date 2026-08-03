@@ -22,8 +22,18 @@ export const onboardingClient = {
   async submit(
     data: OnboardingData,
   ): Promise<ApiResponse<OnboardingSubmitPayload>> {
+    const headers: Record<string, string> = {};
+    if (
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("source") ===
+        "join-as-pro"
+    ) {
+      headers["x-onboarding-source"] = "join-as-pro";
+    }
+
     return apiFetch<OnboardingSubmitPayload>(API_ROUTES.onboarding, {
       method: "POST",
+      headers,
       body: JSON.stringify(data),
     });
   },

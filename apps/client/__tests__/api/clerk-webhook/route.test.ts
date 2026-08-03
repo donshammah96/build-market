@@ -21,6 +21,7 @@ const mockClaimWebhookDelivery = vi.hoisted(() => vi.fn());
 const mockMarkWebhookProcessed = vi.hoisted(() => vi.fn());
 const mockReleaseWebhookDelivery = vi.hoisted(() => vi.fn());
 const mockIsWebhookTimestampFresh = vi.hoisted(() => vi.fn());
+const mockRecordWebhookReplayReject = vi.hoisted(() => vi.fn());
 const mockEnv = vi.hoisted(() => ({
   isProd: false,
   clerk: {
@@ -112,6 +113,10 @@ vi.mock("@/app/lib/infrastructure/webhook-replay", () => ({
   releaseClerkWebhookDelivery: mockReleaseWebhookDelivery,
 }));
 
+vi.mock("@/app/lib/auth/telemetry-metrics", () => ({
+  recordWebhookReplayReject: mockRecordWebhookReplayReject,
+}));
+
 function buildRequest(headers?: HeadersInit) {
   return new NextRequest("http://localhost:3500/api/clerk-webhook", {
     method: "POST",
@@ -180,6 +185,9 @@ describe("POST /api/clerk-webhook", () => {
     expect(mockVerify).not.toHaveBeenCalled();
     expect(mockClaimWebhookDelivery).not.toHaveBeenCalled();
     expect(mockHandleUserCreated).not.toHaveBeenCalled();
+    expect(mockRecordWebhookReplayReject).toHaveBeenCalledWith(
+      "missing_headers",
+    );
     expect(payload.error).toContain("Missing webhook signature headers");
   });
 
@@ -194,6 +202,9 @@ describe("POST /api/clerk-webhook", () => {
     expect(response.status).toBe(401);
     expect(mockClaimWebhookDelivery).not.toHaveBeenCalled();
     expect(mockHandleUserCreated).not.toHaveBeenCalled();
+    expect(mockRecordWebhookReplayReject).toHaveBeenCalledWith(
+      "invalid_signature",
+    );
     expect(payload.error).toContain("Invalid webhook signature");
   });
 
@@ -239,6 +250,9 @@ describe("POST /api/clerk-webhook", () => {
     expect(mockHandleUserCreated).not.toHaveBeenCalled();
     expect(mockMarkWebhookProcessed).not.toHaveBeenCalled();
     expect(mockReleaseWebhookDelivery).not.toHaveBeenCalled();
+    expect(mockRecordWebhookReplayReject).toHaveBeenCalledWith(
+      "duplicate_delivery",
+    );
   });
 
   it("rejects stale webhook timestamps before replay claim", async () => {
@@ -256,6 +270,9 @@ describe("POST /api/clerk-webhook", () => {
     expect(payload.error).toContain("Stale webhook timestamp");
     expect(mockClaimWebhookDelivery).not.toHaveBeenCalled();
     expect(mockHandleUserCreated).not.toHaveBeenCalled();
+    expect(mockRecordWebhookReplayReject).toHaveBeenCalledWith(
+      "stale_timestamp",
+    );
   });
 
   it("returns 503 in production when replay protection is unavailable", async () => {
@@ -272,6 +289,9 @@ describe("POST /api/clerk-webhook", () => {
     expect(response.status).toBe(503);
     expect(payload.error).toContain("Webhook replay protection unavailable");
     expect(mockHandleUserCreated).not.toHaveBeenCalled();
+    expect(mockRecordWebhookReplayReject).toHaveBeenCalledWith(
+      "replay_store_unavailable",
+    );
   });
 
   it("releases the replay claim when rate limited after claim", async () => {

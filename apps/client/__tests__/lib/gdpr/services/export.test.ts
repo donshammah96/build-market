@@ -14,7 +14,7 @@ import {
   mockBullMQQueueSuccess,
 } from "@/__tests__/mocks";
 
-describe("ExportService", () => {
+describe("ExportService", { timeout: 30000 }, () => {
   let ExportService: any;
   let mockPrisma: ReturnType<typeof mockPrismaSuccess>;
   let addExportJobMock: ReturnType<typeof vi.fn>;

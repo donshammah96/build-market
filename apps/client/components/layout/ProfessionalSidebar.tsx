@@ -1,23 +1,42 @@
 "use client";
 
 import Link from "next/link";
-import { useUser, useClerk } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { BadgeCheck, Store, UserCircle, Settings, LogOut } from "lucide-react";
+import {
+  BadgeCheck,
+  Store,
+  UserCircle,
+  Settings,
+  Lock,
+  Clock,
+} from "lucide-react";
 import { useProfileCompletion } from "@/hooks/useProfileStatus";
 import { professionalNavItems } from "@/app/lib/config/nav-config";
+import type { ProfessionalCapabilities } from "@/app/lib/domains/professionals/readiness.service";
 
 interface ProfessionalSidebarProps {
   verified?: boolean;
+  verificationStatus?: string;
+  capabilities?: ProfessionalCapabilities;
 }
+
+/** Map navigation item key to required capability flag */
+const NAV_ITEM_CAPABILITIES: Record<string, keyof ProfessionalCapabilities> = {
+  leads: "canReceiveLeads",
+  projects: "canCreateQuotes",
+  finance: "canWithdrawFunds",
+};
 
 export function ProfessionalSidebar({
   verified = false,
+  verificationStatus = "PENDING",
+  capabilities,
 }: ProfessionalSidebarProps) {
   const pathname = usePathname();
   const { user } = useUser();
-  const { signOut } = useClerk();
+
   const { percentage, isComplete, isLoading } = useProfileCompletion();
 
   // Show completion prompt in sidebar
@@ -50,10 +69,19 @@ export function ProfessionalSidebar({
             <p className="text-sm font-medium text-white truncate">
               {user?.fullName || user?.firstName || "Professional"}
             </p>
-            {verified && (
+            {verified ? (
               <div className="flex items-center gap-1">
                 <BadgeCheck className="h-3 w-3 text-primary" />
                 <p className="text-xs text-white/70">Verified Pro</p>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                <Clock className="h-3 w-3 text-amber-400" />
+                <p className="text-xs text-amber-400/90 font-medium">
+                  {verificationStatus === "NEEDS_CHANGES"
+                    ? "Action Needed"
+                    : "Pending Verification"}
+                </p>
               </div>
             )}
           </div>
@@ -68,17 +96,31 @@ export function ProfessionalSidebar({
         {professionalNavItems.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
+          const requiredCap = NAV_ITEM_CAPABILITIES[item.key];
+          const isRestricted =
+            capabilities && requiredCap ? !capabilities[requiredCap] : false;
+
+          const targetHref = isRestricted
+            ? "/professional-portal/pending-verification"
+            : item.href;
 
           return (
-            <Link key={item.key} href={item.href}>
+            <Link key={item.key} href={targetHref}>
               <div
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative",
                   isActive
                     ? "bg-primary text-primary-foreground shadow-lg"
-                    : "text-white/70 hover:bg-white/10 hover:text-white",
+                    : isRestricted
+                      ? "text-white/40 hover:bg-white/5 cursor-not-allowed"
+                      : "text-white/70 hover:bg-white/10 hover:text-white",
                 )}
                 aria-current={isActive ? "page" : undefined}
+                title={
+                  isRestricted
+                    ? `${item.label} requires account verification`
+                    : undefined
+                }
               >
                 {Icon && (
                   <Icon
@@ -86,21 +128,24 @@ export function ProfessionalSidebar({
                       "h-4 w-4",
                       isActive
                         ? "text-white"
-                        : "text-white/60 group-hover:text-white",
+                        : isRestricted
+                          ? "text-white/30"
+                          : "text-white/60 group-hover:text-white",
                     )}
                   />
                 )}
-                <span>{item.label}</span>
-                {/*
-                  Was `{item.badge && (...)}` — if badge is ever 0, React
-                  renders the literal text "0" into the sidebar because 0
-                  is falsy-but-renderable. Explicit numeric + >0 check
-                  avoids that class of bug for any future zero-count badge.
-                */}
-                {typeof item.badge === "number" && item.badge > 0 && (
-                  <span className="absolute right-2 bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-md">
-                    {item.badge}
-                  </span>
+                <span className="flex-1">{item.label}</span>
+
+                {/* Restricted Lock Icon or Numeric Badge */}
+                {isRestricted ? (
+                  <Lock className="h-3.5 w-3.5 text-white/40" />
+                ) : (
+                  typeof item.badge === "number" &&
+                  item.badge > 0 && (
+                    <span className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                      {item.badge}
+                    </span>
+                  )
                 )}
               </div>
             </Link>
@@ -147,28 +192,10 @@ export function ProfessionalSidebar({
             >
               <Settings className="h-4 w-4" />
               <span>Settings</span>
-              {/* Badge indicator if profile incomplete */}
-              {showCompletionPrompt &&
-                pathname !==
-                  "/professional-portal/settings/complete-profile" && (
-                  <span className="absolute right-2 w-2 h-2 bg-amber-500 rounded-full" />
-                )}
             </div>
           </Link>
         </div>
       </nav>
-
-      {/* Footer Actions */}
-      <div className="p-4 border-t border-white/10">
-        <button
-          type="button"
-          onClick={() => signOut()}
-          className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-white/70 hover:text-destructive transition-colors"
-        >
-          <LogOut className="h-4 w-4" />
-          <span>Sign Out</span>
-        </button>
-      </div>
     </aside>
   );
 }

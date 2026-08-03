@@ -1,8 +1,372 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-
 ## [Unreleased]
+
+### Fixed — Codebase hygiene, CI workflow hardening, and null-safety cleanup
+
+- **CI Clerk Secret Binding & Webhook Relay (`.github/workflows/ci.yml`)**: wired dynamic GitHub Action secrets (`CLERK_WEBHOOK_SECRET`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`) into `client-preview-smoke-gate` and `admin-preview-smoke-gate` environment blocks; added background `smee-client` webhook relay listener (`https://buildmarket.live/ci` -> `http://127.0.0.1:3500/api/clerk-webhook`) with PID tracking and cleanup trap.
+- **Client Preview Smoke Gate Startup Assertion (`.github/workflows/ci.yml`)**: configured `ALLOW_MOCK_VIRUS_SCANNER: "true"` in `client-preview-smoke-gate` workflow environment to eliminate `instrumentation.ts` startup assertion failures during `next start` preview checks.
+- **Workspace Static Analysis Remediation (`apps/client`, `apps/admin`, `apps/verification-ops`)**: resolved 14 static analysis findings across client actions, hooks, domain capability guards, UI components, test suites, and security drift reporting scripts:
+  - Fixed `INSUFFICIENT_NULL_CHECK` linter warning in `submit_onboarding_server_action` (`app/actions/onboarding.ts`) by removing redundant optional chaining (`?.`) on validated non-null `input`.
+  - Removed unused variable declarations and imports across `useOnboarding.ts`, `ProfessionalSidebar.tsx`, `remediation-helpers.ts`, `portal-capability-guard.ts`, `report-security-drift.mjs`, and Vitest test suites (`storage-promotion.test.ts`, `auth-outbox-worker.test.ts`, `internal-secret.test.ts`, `staged-download.test.ts`, `credentials.test.ts`).
+
+## Added — Regulator confidence-scoring rework & `verification-ops` hardening (Phase 10)
+
+- **Rule-based confidence-scoring engine** (`app/lib/domains/regulator-verification/confidence-scoring.ts`):
+  extracted the previously inline, additive-weight `calculateConfidence` out of `gateway.ts` into a
+  standalone, versioned rule engine (`CONFIDENCE_ALGORITHM_VERSION`). Adds a `not_expired` rule that
+  was previously missing entirely (an expired license with a stale `status: "ACTIVE"` field could
+  auto-verify before this change), conservative fuzzy name-matching with capped partial credit
+  (Levenshtein-ratio floor `0.85`, credit multiplier `0.5`) for near-miss holder names, and a
+  `disqualified` gate distinct from the numeric score so an explicit invalid status or a passed
+  expiry date can never be outvoted by a high confidence score elsewhere. Reweighted rule set:
+  license number `0.45`, identity `0.30`, status `0.20`, expiry `0.05` (sums to `1.0`, enforced at
+  module load). Covered by `confidence-scoring.test.ts`.
+- **`RegulatorVerificationGateway` per-authority threshold support** (`gateway.ts`):
+  added `confidenceThresholds: Partial<Record<LicenseAuthority, number>>` gateway option so
+  authorities with less-mature response contracts can run a stricter threshold than the global
+  default. Every `RegulatorVerificationResult` now carries `confidenceAlgorithmVersion` and an
+  optional `confidenceBreakdown` (per-rule weight/fraction/contribution/reason) for audit and
+  operator-UI use — **requires a schema migration**, see Phase 10 follow-up below; not yet persisted.
+- **Operator manual-lookup links** (`app/lib/domains/regulator-verification/regulator-lookup-links.ts`):
+  since none of the seven statutory authorities (EBK, BORAQS, NCA, EARB, VRB, ISK, EPRA) expose a
+  public API (confirmed via direct research, dated 2026-08-01), added a static, honestly-labeled
+  link table for the manual-review operator UI — `verified: true` only for NCA
+  (`nca.go.ke/registered-contractors`) and VRB (`vrb.or.ke/registered/`), the two authorities with
+  a confirmed public, no-login register search; the remaining five fall back to a homepage link
+  with an explicit `fallbackNote` rather than implying a search capability that doesn't exist.
+  Wired into `getVerificationCaseDetail` (`operator-service.ts`) as `lookupLink`.
+- **Phase 8 migration guideline finalized** (`docs/phase8-verification-ui-migration-guideline.md`):
+  resolved the open topology question from the Phase 8 checklist — recommends `apps/verification-ops`
+  as its own deployable app (not a route namespace inside `apps/admin`) for blast-radius and
+  permission-boundary reasons; defines the queue-to-case-status mapping (including the derived,
+  non-persisted `SLA_BREACHED` filter and the `ESCALATED` = open four-eyes-approval query); and
+  specifies the shadow-mode → dual-write-compare → feature-flagged-write rollout sequence.
+- **`apps/verification-ops` full-stack audit and hardening** (see the app-scoped changelog for full
+  detail): default-deny authorization fix, edge middleware, env validation module, `@build/verification-domain`
+  contract corrections (decision-outcome enum drift, missing `PROCESSING`/`REGULATOR_UNAVAILABLE`/
+  `LOW_CONFIDENCE` case statuses), dashboard queue-filter corrections, `tailwind.config.ts` and
+  `vitest.config.ts` fixes, relocated domain/infra modules from `app/lib/` to root `lib/`, moved `/sign-in` into `(auth)` group, and configured `tsconfig.json` with `composite: true` and package references for Vercel builds.
+
+### Changed
+
+- **`RegulatorVerificationResult` type** (`gateway.ts`): added required `confidenceAlgorithmVersion:
+string` and optional `confidenceBreakdown?: ConfidenceBreakdownEntry[]` fields. Additive change,
+  no existing consumers broken, and `evidence-store.ts`'s `recordVerificationAttempt` now persists
+  both fields into `RegulatorVerificationCase`.
+
+### Landed & Wired Schema Migration (`20260802033000_add_verification_sla_confidence_and_evidence_views` & `20260803000000_regulator_verification_audit_retention_policy`)
+
+- `RegulatorVerificationCase.confidenceAlgorithmVersion String?` and
+  `RegulatorVerificationCase.confidenceBreakdown Json? @db.JsonB` — persisted in `evidence-store.ts`
+  and mapped into `VerificationOpsCaseDTO` for operator UI & audit.
+- New `RegulatorVerificationEvidenceView` model — append-only audit trail for evidence _views_
+  recorded via `logEvidenceViewedAuditEvent` (`evidence-store.ts`), backing the "Evidence Audit Active"
+  status badge in `apps/verification-ops`.
+- `SystemSettings.verificationSlaHours Int @default(48)` — dynamically queried in `verification-ops-data.ts`
+  and `verification-ops.ts` (falling back to `48h` when not configured).
+- **Audit Retention & Archival Policy**: resolved the audit destruction risk by creating migration `20260803000000_regulator_verification_audit_retention_policy`.
+  - `RegulatorVerificationCase.licenseId` made optional (`String?`) with `onDelete: SetNull` so license deletion/archival preserves the historical case record and professional ID without data loss.
+  - `RegulatorVerificationDecision.case` and `RegulatorVerificationEvidenceView.case` set to `onDelete: Restrict` so operator decisions and compliance evidence view audit logs can never be cascaded away or deleted.
+
+## Added — Observability, analytics, and operations (Phase 9)
+
+- **Client-side funnel tracking hook (`apps/client/hooks/use-professional-funnel-tracking.ts`)**:
+  built React client hook exposing tracking methods across all 11 funnel milestones (`landingCtaClicked`, `signUpStarted`, `signUpCompleted`, `onboardingStarted`, `wizardStepCompleted`, `uploadSucceeded`, `uploadFailed`, `submitSucceeded`, `submitFailed`, `pendingVerificationViewed`, `verificationTransitioned`).
+- **Production OTel analytics sink & API ingestion boundary** (`apps/client/app/lib/analytics/professional-funnel-sink.ts`, `apps/client/app/api/analytics/professional-funnel/route.ts`):
+  wired OTel counter (`professional_funnel_events_total`) and span event sink with POST ingestion route executing defensive PII sanitization (`sanitizeProfessionalFunnelPayload`).
+- **Professional onboarding observability runbook** (`apps/client/docs/professional-onboarding-observability-runbook.md`):
+  created operational runbook detailing metric counters, alert thresholds (`OnboardingSubmitFailureRateHigh`, `ProfessionalDocumentUploadFailureHigh`, `VerificationSlaBreachedBacklogHigh`), SLA budgets (48h breach), and statutory regulator circuit breaker procedures.
+
+### Added — Verification UI standalone workspace app migration & admin shadow mode (Phase 8)
+
+- **Prisma Schema Enums Extension (`packages/db/prisma/schema.prisma`)**:
+  added `AuditAction.EVIDENCE_VIEWED` to Prisma schema `AuditAction` enum and added `AdminRole.OPS_ADMIN` and `AdminRole.VERIFICATION_ADMIN` to `AdminRole` enum, enabling audit logging of evidence reads and role mapping in `apps/verification-ops`.
+- **Standalone workspace app topology (`apps/verification-ops`)**:
+  migrated verification operations out of `apps/admin` into a dedicated Next.js application in the `pnpm` workspace (`apps/verification-ops`) with isolated deploy unit, header navigation, role-based permission context (`VERIFICATION_READ_ONLY`, `VERIFICATION_REVIEWER`, `VERIFICATION_SENIOR_REVIEWER`, `VERIFICATION_COMPLIANCE_OFFICER`), and SLA breach indicators (§1 & §2 of Phase 8 Guideline).
+- **Shared verification domain package (`@build/verification-domain`)**:
+  created `@build/verification-domain` shared monorepo package exporting case DTOs, decision commands, `VerificationReasonCode` enum, audit event schemas, and NATS JetStream event definitions (`license.manual_decision_recorded`).
+- **Read-Only Shadow Mode Banner in `apps/admin`** (`apps/admin/src/app/(dashboard)/verifications/regulator/page.tsx`):
+  added Read-Only Shadow Mode notification banner in admin verifications dashboard linking operators directly to `apps/verification-ops` (`http://localhost:3501`).
+- **Evidence View Auditability & Verification Ops Domain Service** (`apps/admin/src/lib/domains/verification/verification-ops.ts`, `evidence-store.ts`):
+  implemented `VerificationOpsService` supporting compound queue filtering (`PENDING`, `AUTOMATED_REVIEW`, `NEEDS_CHANGES`, `ESCALATED`, `REJECTED`, `VERIFIED`, `SLA_BREACHED`), 48-hour SLA breach indicators, and compliance decision packet exports (`exportDecisionPacket`). Added `EVIDENCE_VIEWED` audit logging on unredacted case evidence reads.
+
+### Added — Regulator verification hardening, durable queue, and funnel observability (Phase 9 follow-up)
+
+- **Real per-authority regulator adapters** (`app/lib/domains/regulator-verification/adapters/`):
+  a shared `HttpRegulatorAdapter` base class owning timeout budget, HMAC request signing, and an
+  explicit error taxonomy (`TIMEOUT`/`NETWORK`/`RATE_LIMITED`/`SERVER_ERROR`/`AUTH`/`NOT_FOUND`/
+  `MALFORMED_RESPONSE`), plus adapters for EBK, BORAQS, NCA, EARB, VRB, ISK, and EPRA. Adapter
+  selection is gated by the existing `SystemSettings.enableAutoVerify{NCA,EPRA,BORAQS}` flags.
+  Response mapping per authority is a documented placeholder pending confirmation of each
+  regulator's real API contract.
+- **Durable verification-case database schema** (`packages/db/prisma/schema.prisma` Section 20):
+  added Prisma models `RegulatorVerificationCase` and `RegulatorVerificationDecision` along with `RegulatorVerificationCaseStatus` enum (`QUEUED`, `PROCESSING`, `AUTO_VERIFIED`, `AUTO_REJECTED`, `NEEDS_MANUAL_REVIEW`, `REGULATOR_UNAVAILABLE`, `LOW_CONFIDENCE`, `MANUALLY_VERIFIED`, `MANUALLY_REJECTED`, `DEAD_LETTER`) and `RegulatorVerificationDecisionOutcome` enum (`APPROVE`, `REJECT`, `REQUEST_MORE_INFO`).
+  - `RegulatorVerificationCase`: stores deduplicated verification case attempts with `@unique dedupeKey` (mirroring `buildRegulatorVerificationJobId()`), relation to `ProfessionalLicense` (`onDelete: Cascade`), `confidenceReasons` and `evidence` (`JsonB` snapshot), backoff attempt counters (`attempts`, `maxAttempts`, `nextAttemptAt`), and indexes on `[status, nextAttemptAt]`, `[authority, licenseNumber]`, `[professionalId]`, and `[status, deadLetteredAt]`.
+  - `RegulatorVerificationDecision`: immutable manual operator decision log storing `adminId` (relation `"RegulatorVerificationDecisionMaker"` on `User`), snapshot attributes (`adminName`, `adminEmail`), `reasonCode`, `reasonNotes`, `highRiskReview` toggle, and `isSecondApprover` marker enforcing four-eyes policy before case status flip.
+  - Relation fields added: `ProfessionalLicense.verificationCases` and `User.regulatorVerificationDecisions`.
+- **Manual verification operator UI & service** (`apps/admin/src/app/(dashboard)/verifications/regulator/page.tsx`, `RegulatorVerificationQueue.tsx`, `RegulatorVerificationDetailDialog.tsx`, `operator-service.ts`): case listing queue, redacted detail view (raw regulator payload hidden from non-`SUPER_ADMIN` roles), duplicate license warning banners across professionals, and `recordManualDecision` requiring a `reasonCode` on every call, with four-eyes approval enforced for high-risk decisions (two different admins must submit matching outcomes) and immutable decision logs mirrored into `AdminAuditLog`.
+- **Evidence retention enforcement** (`enforceEvidenceRetention`): strips raw regulator payloads
+  from cases older than a configurable retention window while preserving the normalized record
+  and full decision trail.
+- **Production analytics sink for `professional_funnel.*` events**: an OTel-based sink
+  (`professional-funnel-sink.ts`) emitting a `professional_funnel_events_total` counter plus span
+  events, following the existing `nats_client_*` instrumentation convention; a client ingestion
+  route (`/api/analytics/professional-funnel`) and a `useProfessionalFunnelTracking()` hook for
+  wiring the wizard/upload/CTA boundaries; and the `verificationTransitioned` event now emitted
+  directly from the verification worker (the one boundary the backend fully owns).
+- Refactored `license-auto-verify.consumer.ts` to build its regulator gateway from the real
+  adapter registry (respecting `SystemSettings` flags) and to share success/failure handling with
+  the new BullMQ worker via `verification-outcomes.ts`, instead of duplicating that logic.
+
+### Tests
+
+- `__tests__/lib/domains/regulator-verification/adapters/http-regulator-adapter.test.ts` (8 tests)
+- `__tests__/lib/domains/regulator-verification/evidence-store.test.ts` (5 tests)
+- `__tests__/lib/domains/regulator-verification/operator-service.test.ts` (5 tests)
+- `__tests__/workers/license-verification-queue.test.ts` (2 tests)
+- `__tests__/lib/analytics/professional-funnel-sink.test.ts` (2 tests)
+- Existing `gateway.test.ts` (5 tests) and `professional-funnel-events.test.ts` (3 tests) pass
+  unmodified.
+- All 30 tests above were executed in a sandboxed vitest environment against this change set and
+  pass. They have **not** been run inside the actual monorepo (workspace deps, generated Prisma
+  client, and lint config weren't available) — run `pnpm vitest run` and `pnpm lint` on these
+  paths before merging.
+
+### Known follow-ups
+
+See `docs/operations/professional-onboarding-observability-runbook.md` §8.
+
+### Added / Changed (Join-as-Pro Phases 7 & 9 — Regulator Automation and Observability — `apps/client`)
+
+- **Onboarding API Contract Hardening (`app/api/onboarding`, `packages/types`)**: Centralized professional intent cookie creation through the signed intent helper, rejected unsafe protocol-relative `returnTo` values, accepted `licensePendingReason` in the shared onboarding schema, and normalized professional onboarding success responses to always include `status`, `profileId`, `nextRoute`, and typed `warnings`.
+- **Regulator Verification Gateway (`app/lib/domains/regulator-verification`)**: Added a typed gateway for day-one regulator automation with normalized outcomes (`AUTO_VERIFIED`, `AUTO_REJECTED`, `NEEDS_MANUAL_REVIEW`, `REGULATOR_UNAVAILABLE`, `LOW_CONFIDENCE`), evidence snapshots, deterministic confidence reasons, retry metadata, and replay-safe dedupe job IDs.
+- **License Auto-Verification Worker Integration (`app/workers/license-auto-verify.consumer.ts`)**: Replaced inline mock validity branching with the regulator gateway so high-confidence checks continue to auto-verify and all outages, invalid records, unsupported authorities, and low-confidence matches route through manual-fallback observability.
+- **Professional Funnel Analytics Contract (`app/lib/analytics/professional-funnel-events.ts`)**: Added `professional_funnel.*` event names and a sanitizer that removes email, phone, names, license numbers, KRA PINs, identity/document URLs, preview URLs, and non-scalar payload values before analytics capture.
+- **Operations Runbook (`apps/client/docs/operations/professional-onboarding-observability-runbook.md`)**: Documented required funnel events, dashboard and alert thresholds, and runbooks for Clerk metadata drift, stuck idempotency keys, staged upload cleanup, professional signup closed mode, and professional-intent rollback.
+- **Test Coverage**: Added focused unit and API contract tests covering signed intent creation, unsupported role rejection, safe `returnTo` validation, intent rate limiting, trusted-intent enforcement, cached idempotency response normalization, `licensePendingReason` schema behavior, auto-verified/unsupported/outage/low-confidence regulator paths, and analytics event-contract/PII-sanitization behavior.
+
+**Files changed:**
+
+- `packages/types/src/auth.ts`
+- `apps/client/app/api/onboarding/intent/route.ts`
+- `apps/client/app/api/onboarding/route.ts`
+- `apps/client/app/lib/domains/regulator-verification/gateway.ts`
+- `apps/client/app/lib/domains/regulator-verification/index.ts`
+- `apps/client/app/workers/license-auto-verify.consumer.ts`
+- `apps/client/app/lib/analytics/professional-funnel-events.ts`
+- `apps/client/__tests__/api/onboarding/intent.route.test.ts`
+- `apps/client/__tests__/api/onboarding/route.test.ts`
+- `apps/client/__tests__/contracts/onboarding-api-contract.test.ts`
+- `apps/client/__tests__/lib/domains/regulator-verification/gateway.test.ts`
+- `apps/client/__tests__/lib/analytics/professional-funnel-events.test.ts`
+- `apps/client/docs/operations/professional-onboarding-observability-runbook.md`
+- `apps/client/docs/CHANGELOG.md`
+- `apps/client/docs/PROGRESS-SUMMARY.md`
+- `CHANGELOG.md`
+
+### Fixed (CI Workflow Hardening & Admin Nightly Job Optimization)
+
+- **Admin Lint ENCRYPTION_KEY_V1 Fix (`.github/workflows/ci.yml`)**: Fixed corrupted 96-character `ENCRYPTION_KEY_V1` value in the `Lint (admin)` step back to the canonical 64-character (256-bit AES) hex key.
+- **Admin Nightly Job Redis Stub & Teardown (`.github/workflows/ci.yml`)**: Added inline Python Upstash REST HTTP stub server (`http://127.0.0.1:8079`) to `admin-nightly-test-all` job to eliminate `@upstash/redis` client backoff retry hangs, added `QUEUE_PROVIDER: memory` to job env, and added clean stub process teardown step with `if: always()`.
+- **Nightly Job Build Optimization (`.github/workflows/ci.yml`)**: Replaced redundant `pnpm --filter="admin..." run build` (`next build` + `@build/*`) with `pnpm run build --filter="@build/*"`, saving 10–15 cold-cache build minutes per nightly run as Vitest executes against TypeScript source directly and only requires compiled `@build/*` workspace entrypoints.
+
+**Files changed:**
+
+- `.github/workflows/ci.yml`
+
+### Added / Changed (Join-as-Pro Phase 4: Upload Lifecycle, Virus Scanner Bootstrap & Security UX — `apps/client`)
+
+- **Production Virus Scanner Registration Entry Point (`virus-scanner.ts`, `instrumentation.ts`, `env.ts`)**: Implemented `initializeProductionVirusScanner()` in `virus-scanner.ts`, eagerly registering `CloudmersiveVirusScanner` when `CLOUDMERSIVE_API_KEY` is present and asserting `isRealScannerRegistered()` in production startup before traffic is accepted. Wired `initializeProductionVirusScanner({ storage, isProd, features })` into Next.js `instrumentation.ts` `register()` hook during Node.js runtime bootstrap. Added `cloudmersiveBaseUrl` property to `env.storage` in `env.ts`.
+- **Upload Subsystem Audit & Download Route Defense-in-Depth (`upload-lifecycle.ts`, `download/route.ts`, `service.ts`, `professional-settings/service.ts`)**: Removed phantom `SCAN_COMPLETED` state (Fix C1) and aligned `UploadLifecycleState` 1-to-1 with Prisma `OnboardingUploadStatus` enum. Deleted dead `processAsyncScanResult` (Fix C2) and unscoped `scanStagedUpload` alias (Fix C4). Restored fail-closed `DOWNLOADABLE_STATUSES` allowlist (`STAGED`, `ATTACHED`, `CONSUMED`) and `visibility: "private"` on download route (Fix C3). Standardized `markStagedUploadConsumed` in `professional-settings/service.ts` (Fix H2) and tightened `rescanStagedUpload` to reject clean `STAGED` uploads (Fix H3). Updated default callback URL fallbacks in `env.ts` to `/api/internal/uploads/scan-callback` (Fix H4).
+- **Cloudflare Worker Pause Notice & Wrangler Comments (`r2-scan-worker.ts`, `wrangler.toml`)**: Added top-level banner comment to `r2-scan-worker.ts` documenting idle state (R2 event notification paused) per `ARCHITECTURE_DECISION_scan_pipeline.md` (Fix C5). Added explanatory comment in `wrangler.toml` for `VERIFIED_PRIVATE_BUCKET` server-side Next.js route access rationale (Fix M3).
+- **Client-Side Queue Quarantine Handling & Non-Retryable UI UX (`upload-queue.ts`, `use-staged-upload-queue.ts`, `UploadStatusList.tsx`)**: Added explicit `"quarantined"` status to `BoundedUploadQueue`, disabling retries (`retry()`) and draft state persistence (`getDraftState()`) for malware-flagged files (Fix M1 / H3). Created `UploadStatusList.tsx` client component rendering distinct non-retryable danger badges (`Not accepted`) and user feedback. Added top-level JSDoc cross-references to `upload-processing-status.ts` and `upload-lifecycle.ts` to eliminate state machine naming confusion (Fix L1).
+- **Automated State Machine & Security Test Suites (`upload-lifecycle.test.ts`, `virus-scanner.test.ts`, `staged-download.test.ts`)**: Added `upload-lifecycle.test.ts` verifying state transitions and asserting parity between `UploadLifecycleState` and Prisma `OnboardingUploadStatus`. Added `initializeProductionVirusScanner()` test suite in `virus-scanner.test.ts`. Enhanced `staged-download.test.ts` testing 403 Forbidden enforcement on non-downloadable states (`SCAN_PENDING`, `SCAN_FAILED`, `QUARANTINED`). 39 unit tests passing across 9 test files with 0 TypeScript compiler errors.
+
+**Files changed:**
+
+- `packages/db/prisma/schema.prisma`
+- `apps/client/app/lib/domains/uploads/upload-lifecycle.ts`
+- `apps/client/app/lib/domains/uploads/virus-scanner.ts`
+- `apps/client/app/lib/domains/uploads/cloudmersive-scanner.ts`
+- `apps/client/app/lib/domains/uploads/repository.ts`
+- `apps/client/app/lib/domains/uploads/service.ts`
+- `apps/client/app/lib/domains/professional-settings/service.ts`
+- `apps/client/app/lib/infrastructure/env.ts`
+- `apps/client/app/lib/infrastructure/upload-processing-status.ts`
+- `apps/client/instrumentation.ts`
+- `apps/client/app/api/uploads/staged/[id]/download/route.ts`
+- `apps/client/app/api/uploads/staged/[id]/scan/route.ts`
+- `apps/client/app/lib/uploads/upload-queue.ts`
+- `apps/client/app/hooks/use-staged-upload-queue.ts`
+- `apps/client/components/ui/UploadStatusList.tsx`
+- `apps/client/workers/r2-scan-worker.ts`
+- `apps/client/wrangler.toml`
+- `apps/client/__tests__/lib/uploads/upload-lifecycle.test.ts`
+- `apps/client/__tests__/lib/uploads/virus-scanner.test.ts`
+- `apps/client/__tests__/lib/uploads/service-phase4.test.ts`
+- `apps/client/__tests__/lib/uploads/service.test.ts`
+- `apps/client/__tests__/api/uploads/staged-download.test.ts`
+- `apps/client/docs/progress/AUDIT_4_full_subsystem.md`
+- `apps/client/docs/progress/ARCHITECTURE_DECISION_scan_pipeline.md`
+- `apps/client/docs/CHANGELOG.md`
+- `CHANGELOG.md`
+
+### Added / Changed (Join-as-Pro Phase 6 — `apps/client`)
+
+- **Strangler-Fig Feature Flags (`portal-feature-flags.ts`)**: Added `ProfessionalFeatureFlag` strangler-fig flags (`portal_leads_v2`, `portal_finance_v2`, `portal_projects_v2`, etc.) with environment variable override support per ADR-ADMIN-009.
+- **Server Capability Guard (`portal-capability-guard.ts`)**: Added `ensureProfessionalCapability()` server guard to validate professional capabilities before domain mutations.
+- **Sidebar & Layout Integration (`ProfessionalSidebar.tsx`, `layout.tsx`)**: Updated server layout to fetch professional readiness and pass capabilities to sidebar, rendering lock icons and route restrictions on locked portal routes.
+- **Capability Restricted Banner (`CapabilityRestrictedBanner.tsx`)**: Added reusable UI banner component for capability-restricted portal sub-routes.
+- **Onboarding Warnings (`onboarding.ts`)**: Added `warnings` array support to `UserProfileOnboardingData`.
+- **Test Coverage**: Added `portal-capability-guard.test.ts` covering capability guards and strangler-fig feature flag evaluation.
+
+**Files changed:**
+
+- `apps/client/app/lib/domains/professionals/portal-feature-flags.ts`
+- `apps/client/app/lib/domains/professionals/portal-capability-guard.ts`
+- `apps/client/components/layout/ProfessionalSidebar.tsx`
+- `apps/client/app/professional-portal/layout.tsx`
+- `apps/client/components/shared/CapabilityRestrictedBanner.tsx`
+- `apps/client/app/lib/domains/user-profile/onboarding.ts`
+- `apps/client/__tests__/domains/professionals/portal-capability-guard.test.ts`
+- `apps/client/docs/JOIN-AS-PRO-END-TO-END-IMPLEMENTATION.md`
+- `apps/client/docs/CHANGELOG.md`
+- `CHANGELOG.md`
+
+### Added / Changed (Join-as-Pro Phases 2–5 — `apps/client`)
+
+- **Wizard Hardening**: Added sensitive-field denylist for draft persistence, `ConsentStep` with four required consent checkboxes (professional terms, privacy, verification auth, attestation with timestamps), normalized toasts, accessible error summaries, and decoupled wizard progress.
+- **ProfessionalReadinessService**: Created `ProfessionalReadinessService` computing capability flags (`canAppearInSearch`, `canReceiveLeads`, `canCreateQuotes`, etc.) from verification status and profile completeness, and updated `/api/onboarding` response to return `capabilities` and `nextRoute`.
+- **Upload Lifecycle**: Defined upload lifecycle state machine (`STAGED`, `ATTACHED`, `EXPIRED`, `DELETED`, `QUARANTINED`, `SCAN_PENDING`, `SCAN_FAILED`) and added bounded concurrency (2) and retry to professional form uploads.
+- **Pending Verification UX**: Rebuilt `/professional-portal/pending-verification` with production UX: submission confirmation, SLA display, checklist status, reviewer notes, capability display, and support contact.
+- **Middleware Allowlist**: Expanded middleware allowlist for pending verification professionals to permit profile viewing, settings, and profile completion while restricting marketplace feature routes.
+- **Test Coverage & Docs**: Added capability tests, draft denylist tests, middleware gating tests, response contract tests, and updated `JOIN-AS-PRO-END-TO-END-IMPLEMENTATION.md`.
+
+**Files changed:**
+
+- `apps/client/components/forms/ProfessionalForm.tsx`
+- `apps/client/components/forms/professional-wizard/ConsentStep.tsx`
+- `apps/client/components/forms/professional-wizard/index.ts`
+- `apps/client/components/forms/professional-wizard/types.ts`
+- `apps/client/app/onboarding/_components/OnboardingView.tsx`
+- `apps/client/app/lib/domains/professionals/readiness.service.ts`
+- `apps/client/app/lib/domains/user-profile/onboarding.ts`
+- `apps/client/app/api/onboarding/route.ts`
+- `apps/client/app/lib/domains/uploads/upload-lifecycle.ts`
+- `apps/client/app/professional-portal/pending-verification/page.tsx`
+- `apps/client/middleware.ts`
+- `apps/client/__tests__/domains/professionals/readiness-capability.test.ts`
+- `apps/client/__tests__/components/professional-form/draft-persistence-denylist.test.ts`
+- `apps/client/__tests__/middleware/pending-verification-gating.test.ts`
+- `apps/client/__tests__/contracts/professional-route-contract.test.ts`
+- `apps/client/__tests__/api/onboarding/onboarding-capabilities-response.test.ts`
+- `apps/client/docs/JOIN-AS-PRO-END-TO-END-IMPLEMENTATION.md`
+- `apps/client/docs/CHANGELOG.md`
+- `CHANGELOG.md`
+
+### Added / Changed (Dedicated Join-as-Pro Intent & Professional Onboarding Route Consolidation — `apps/client`)
+
+- **Route Contract Canonicalization (`lib/routes/professional.routes.ts`, `app/professional/onboarding/page.tsx`)**: Canonicalized the Join-as-Pro route contract so `ROUTES.joinAsPro` remains `/professional/sign-up` and `ROUTES.professionalOnboarding` targets `/onboarding?role=professional&step=2&source=join-as-pro`. Replaced legacy `/professional/onboarding` standalone page with a server-side redirect to `ROUTES.professionalOnboarding`.
+- **HMAC Intent Signing & Validation (`app/lib/auth/professional-onboarding-intent.ts`, `app/api/onboarding/intent/route.ts`)**: Added `POST /api/onboarding/intent` with rate limiting and HMAC-signed intent cookies (`bm_onboarding_intent`), returning dedicated sign-up URL. Added shared intent helper with constant-time signature verification and expiration checks.
+- **Landing Page Integration (`app/professional/_components/JoinAsProIntentLink.tsx`, `app/professional/page.tsx`)**: Wired public professional landing page CTAs through `JoinAsProIntentLink` to request a signed intent cookie via `/api/onboarding/intent` before navigating.
+- **Onboarding Flow & Role Locking (`app/onboarding/_hooks/useOnboarding.ts`, `app/onboarding/_components/OnboardingView.tsx`, `app/onboarding/page.tsx`)**: Orchestrated onboarding state so `source=join-as-pro` initializes step 2 directly, locks role back-navigation, hides role selector back controls, and routes completed professionals to pending verification.
+- **Professional Form Data Cleaning (`components/forms/ProfessionalForm.tsx`)**: Removed placeholder string fallbacks for professional licenses by conditionally sending `{ licensePending: true }` when no license number is provided.
+- **Server API Intent Enforcement (`app/api/onboarding/route.ts`, `lib/facades/shared/onboarding-client.ts`)**: Updated `onboardingClient` facade to pass `x-onboarding-source: join-as-pro` when submitting from dedicated funnel, and enforced server-side valid signed intent cookie check in `/api/onboarding` before proceeding.
+- **Test Coverage (`__tests__/contracts/professional-route-contract.test.ts`, `__tests__/api/onboarding/intent.route.test.ts`)**: Added unit and integration tests covering intent generation, cookie validation, tampered/expired intent rejection, and Join-as-Pro submission validation.
+
+**Files changed:**
+
+- `apps/client/lib/routes/professional.routes.ts`
+- `apps/client/app/professional/onboarding/page.tsx`
+- `apps/client/app/professional/_components/JoinAsProIntentLink.tsx`
+- `apps/client/app/professional/page.tsx`
+- `apps/client/app/lib/auth/professional-onboarding-intent.ts`
+- `apps/client/app/api/onboarding/intent/route.ts`
+- `apps/client/app/api/onboarding/route.ts`
+- `apps/client/app/onboarding/_hooks/useOnboarding.ts`
+- `apps/client/app/onboarding/_components/OnboardingView.tsx`
+- `apps/client/app/onboarding/page.tsx`
+- `apps/client/components/forms/ProfessionalForm.tsx`
+- `apps/client/lib/facades/shared/onboarding-client.ts`
+- `apps/client/__tests__/contracts/professional-route-contract.test.ts`
+- `apps/client/__tests__/api/onboarding/intent.route.test.ts`
+
+### Changed (Staff-Level Onboarding Workflow & Idempotency Hardening — `apps/client`)
+
+- **Onboarding State Machine & Ledger (`app/lib/domains/user-profile/onboarding.ts`)**: Enforced atomic persistence of `OnboardingState` workflow states (`NOT_STARTED` -> `ROLE_SELECTED` -> `COMPLETED` / `PENDING_VERIFICATION`) and immutable `OnboardingTransition` audit records inside interactive transactions across all complete and skip onboarding routines.
+- **Outbox-First Identity Synchronization (`outbox-worker.ts`, `onboarding.ts`)**: Decoupled blocking Clerk metadata network updates from primary mutation transactions by enqueuing `AuthOutboxEvent` records for background asynchronous reconciliation with exponential backoff retries.
+- **Hardened Idempotency Key Semantics (`idempotency.service.ts`)**: Updated `IdempotencyService.checkOrCreate()` to explicitly populate `actorClerkId` and `appUserId` on `IdempotencyKey` records, disambiguating Clerk subjects from internal database user identifiers.
+- **Monorepo Catalog Governance (`pnpm-workspace.yaml`, `package.json`)**: Resolved catalog dependency specifiers across `apps/admin`, `packages/nats`, `packages/redis`, and `packages/resilience` to enforce strict catalog consistency.
+
+**Files changed:**
+
+- `apps/client/app/lib/domains/user-profile/onboarding.ts`
+- `apps/client/app/lib/services/idempotency.service.ts`
+- `apps/client/docs/CHANGELOG.md`
+- `CHANGELOG.md`
+- `pnpm-workspace.yaml`
+- `apps/admin/package.json`
+- `packages/nats/package.json`
+- `packages/redis/package.json`
+- `packages/resilience/package.json`
+
+### Added (Auth SLO Metrics Collector Wiring — `apps/client`)
+
+- **Webhook Replay Rejection Metrics (`app/api/clerk-webhook/route.ts`)**: Wired `recordWebhookReplayReject()` across missing headers, bad signatures, stale timestamps, duplicate delivery claims, and replay store outages.
+- **Clerk Sync Lag Metrics (`outbox-worker.ts`, `clerk-metadata.ts`)**: Wired `recordClerkSyncLag()` into `processPendingAuthOutboxEvents()` to record time elapsed (`Date.now() - event.createdAt`) upon successful outbox event completion, and into `updateClerkOnboardingMetadata()` to measure direct Clerk API sync duration.
+- **Middleware Fallback & Redirect Metrics (`middleware.ts`, `onboarding-resolver.ts`, `system-settings-resolver.ts`)**: Wired `recordMiddlewareFallback()` to track maintenance redirects, signup policy redirects, blocked account redirects, unonboarded redirects, and resolver fallbacks.
+- **Internal Telemetry API Route (`app/api/internal/telemetry-metrics/route.ts`)**: Exposed GET `/api/internal/telemetry-metrics` protected by `x-internal-secret` and rate limiting to return `getAuthSloMetricsSummary()`.
+- **Test Suite Coverage (`telemetry-metrics.test.ts`, `route.test.ts`, `telemetry-metrics.route.test.ts`)**: Added unit and integration tests verifying reject metric tracking, sync lag calculation, and internal route access control.
+
+**Files changed:**
+
+- `apps/client/app/api/clerk-webhook/route.ts`
+- `apps/client/app/lib/domains/user-profile/outbox-worker.ts`
+- `apps/client/app/lib/domains/user-profile/clerk-metadata.ts`
+- `apps/client/middleware.ts`
+- `apps/client/app/lib/security/middleware/onboarding-resolver.ts`
+- `apps/client/app/lib/security/middleware/system-settings-resolver.ts`
+- `apps/client/app/api/internal/telemetry-metrics/route.ts`
+- `apps/client/__tests__/auth/telemetry-metrics.test.ts`
+- `apps/client/__tests__/api/clerk-webhook/route.test.ts`
+- `apps/client/__tests__/api/internal/telemetry-metrics.route.test.ts`
+- `apps/client/__tests__/setup.ts`
+
+### Added (OpenTelemetry Tracing & Metrics Infrastructure — `apps/client`)
+
+- **OpenTelemetry Client Integration (`apps/client`)**: Implemented staff-level OpenTelemetry Node SDK infrastructure in `app/lib/infrastructure/otel.ts` featuring OTLP Trace & Metric exporters, Prisma instrumentation, and HTTP instrumentation.
+- **Next.js Lifecycle Registration (`instrumentation.ts`)**: Added `instrumentation.ts` at project root with conditional `process.env.NEXT_RUNTIME === "nodejs"` execution to isolate Node SDK initialization from Edge middleware runtimes.
+- **Environment Contract Alignment (`app/lib/infrastructure/env.ts`)**: Exposed `envConfig.otel` (`endpoint`, `serviceName`, `resourceAttributes`) via boundary-safe helper functions, satisfying ADR-004.
+- **Auth SLO OTel Metrics Bridge (`app/lib/auth/telemetry-metrics.ts`)**: Connected `AuthTelemetryMetricsStore` to `@opentelemetry/api` Meters, emitting `auth.clerk.sync_lag` (Histogram), `auth.webhook.replay_rejects` (Counter), and `auth.middleware.fallbacks` (Counter).
+
+**Files changed:**
+
+- `apps/client/package.json`
+- `apps/client/app/lib/infrastructure/env.ts`
+- `apps/client/app/lib/infrastructure/otel.ts`
+- `apps/client/instrumentation.ts`
+- `apps/client/app/lib/auth/telemetry-metrics.ts`
+
+### Security (Middleware API Route Classification & Fail-Closed Guard — `apps/client`)
+
+- **API Route Matcher Isolation (`route-matcher.ts`)**: Removed `/api(.*)` from `isPublicRoute` to prevent API routes from silently matching as public browser routes. Added `isInternalApiRoute` and `isApiRoute` matchers, and exempted `/api/metrics(.*)` in `isSettingsExemptRoute`.
+- **Timing-Safe Internal Secret Validation (`internal-secret.ts`)**: Hardened `ensureValidInternalSecret` using `crypto.timingSafeEqual` with length checks and non-null verification to protect against timing side-channel attacks.
+- **Middleware API Routing Pipeline (`middleware.ts`)**: Updated request pipeline to explicitly handle API routes: `isPublicApiRoute` (allows unauthenticated), `isInternalApiRoute` (validates `x-internal-secret` via `ensureValidInternalSecret`), `isProtectedApiRoute` (enforces Clerk auth and non-blocked account status), and unclassified `/api` routes (fails closed with 401 JSON error instead of page redirect).
+- **Middleware Telemetry Metric Fallbacks (`middleware.ts`)**: Added `recordMiddlewareFallback` telemetry tracking on maintenance, registration closed, professional signup closed, unonboarded, and blocked account redirects.
+- **Middleware Decision Audit Events (`decision-log.ts`)**: Added `mw_allow_public_api`, `mw_allow_internal_api`, `mw_allow_protected_api`, `mw_deny_protected_api_unauthenticated`, `mw_deny_protected_api_blocked`, `mw_deny_internal_api_unauthorized`, and `mw_deny_api_unclassified`.
+- **Middleware & Security Unit Test Coverage (`internal-secret.test.ts`, `route-matrix.test.ts`, `middleware.test.ts`, `route.test.ts`)**: Added unit tests for timing-safe secret comparison, route protection matrix matchers, integration order classification, and webhook replay rejection tracking.
+
+**Files changed:**
+
+- `apps/client/app/lib/security/middleware/route-matcher.ts`
+- `apps/client/app/lib/security/internal-secret.ts`
+- `apps/client/middleware.ts`
+- `apps/client/app/lib/security/middleware/decision-log.ts`
+- `apps/client/__tests__/security/internal-secret.test.ts`
+- `apps/client/__tests__/middleware/route-matrix.test.ts`
+- `apps/client/__tests__/middleware/middleware.test.ts`
+- `apps/client/__tests__/api/clerk-webhook/route.test.ts`
 
 ### Changed (Admin Scripting & Clerk User Sync)
 

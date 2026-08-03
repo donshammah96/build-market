@@ -14,7 +14,20 @@
 
 **Phase:** Phase 4: Continuous Governance & Flag Retirement (Ongoing Operational Governance)
 
-**Status:** Enforced feature flag lifecycle limits and continuous governance in CI (`ci.yml` validate job); automated `admin:check-governance` and `admin:check-all`; eliminated all static security drift logger spread warnings; added `__tests__/config/feature-flags-lifecycle.test.ts` and `__tests__/security/verify-gdpr-replay.test.ts` (69 test files, 508 tests passing).
+**Status:** Enforced feature flag lifecycle limits and continuous governance in CI (`ci.yml` validate job); automated `admin:check-governance` and `admin:check-all`; eliminated all static security drift logger spread warnings; added `__tests__/config/feature-flags-lifecycle.test.ts` and `__tests__/security/verify-gdpr-replay.test.ts`.
+
+**Milestone Completed (2026-08-02):** Standalone Verification Operations Workspace App & Admin Shadow Mode (`apps/verification-ops`, `@build/verification-domain`)
+
+- Migrated verification operations out of `apps/admin` into a dedicated Next.js application in the `pnpm` workspace (`apps/verification-ops`).
+- Created `@build/verification-domain` shared monorepo package exporting case DTOs, decision commands, `VerificationReasonCode` enum, audit event schemas, and NATS JetStream event definitions (`license.manual_decision_recorded`).
+- Added Read-Only Shadow Mode notification banner in admin verifications dashboard (`apps/admin/src/app/(dashboard)/verifications/regulator/page.tsx`) linking operators to `apps/verification-ops`.
+- Extended Prisma schema `AuditAction` enum with `EVIDENCE_VIEWED` and `AdminRole` enum with `OPS_ADMIN` and `VERIFICATION_ADMIN`.
+
+**Milestone Completed (2026-08-01):** Regulator Verification Manual Operator Queue (`src/app/(dashboard)/verifications/regulator/page.tsx`)
+
+- Implemented full manual verification operator queue & detail view (`RegulatorVerificationQueue`, `RegulatorVerificationDetailDialog`) for dead-letter and manual-review statutory regulator cases (`NCA`, `EPRA`, `BORAQS`, `EBK`, `EARB`, `VRB`, `ISK`).
+- Built safe server actions (`listRegulatorVerificationCases`, `getRegulatorVerificationCaseDetail`, `recordRegulatorManualDecision`) adhering strictly to ADR-ADMIN-001/002/008.
+- Enforced evidence payload redaction for non-SUPER_ADMIN operators, duplicate license warning banners across professionals, and mandatory two-approver policy enforcement for high-risk decisions.
 
 ---
 

@@ -263,6 +263,35 @@ const envGroups: EnvGroup[] = [
       { name: "STORAGE_BUCKET", required: false },
       { name: "STORAGE_REGION", required: false, default: "eu" },
       { name: "CDN_URL", required: false, default: "/uploads" },
+      {
+        name: "R2_BUCKET_STAGED",
+        required: false,
+        default: "buildmarket-staged",
+      },
+      {
+        name: "R2_BUCKET_VERIFIED_PRIVATE",
+        required: false,
+        default: "buildmarket-verified-private",
+      },
+      {
+        name: "R2_BUCKET_QUARANTINE",
+        required: false,
+        default: "buildmarket-quarantine",
+      },
+      {
+        name: "R2_SCAN_CALLBACK_URL",
+        required: false,
+        default: "/api/internal/uploads/scan-callback",
+      },
+      {
+        name: "APP_CALLBACK_URL",
+        required: false,
+        default: "/api/internal/uploads/scan-callback",
+      },
+      {
+        name: "CLOUDMERSIVE_API_KEY",
+        required: false,
+      },
     ],
   },
   {
@@ -276,6 +305,13 @@ const envGroups: EnvGroup[] = [
       { name: "NOTIFICATION_SERVICE_URL", required: false },
       { name: "HCAPTCHA_SECRET_KEY", required: false },
       { name: "INTERNAL_API_SECRET", required: false },
+      {
+        name: "SCAN_CALLBACK_HMAC_SECRET",
+        required: true,
+        validate: (v) => v.length >= 32,
+        errorMessage:
+          "Must be at least 32 characters long for secure webhook HMAC validation (generate with: openssl rand -hex 32)",
+      },
     ],
   },
   {
@@ -411,11 +447,38 @@ const envGroups: EnvGroup[] = [
       {
         name: "DPO_EMAIL",
         required: false,
-        default: "security@buildmarket.co.ke",
+        default: "security@buildmarket.app",
       },
       { name: "ENCRYPTION_MIGRATION_MODE", required: false, default: "false" },
       { name: "LEGACY_FORMAT_DEADLINE", required: false },
       { name: "ROTATION_BATCH_SIZE", required: false, default: "100" },
+    ],
+  },
+  {
+    name: "features",
+    description: "Feature Flags and Strangler-Fig Rollouts",
+    variables: [
+      {
+        name: "ENABLE_NOTIFICATION_SERVICE",
+        required: false,
+        default: "false",
+      },
+      { name: "ENABLE_GDPR_FEATURES", required: false, default: "true" },
+      { name: "ENABLE_ENCRYPTION", required: false, default: "true" },
+      { name: "ENABLE_AUDIT_LOGGING", required: false, default: "true" },
+      {
+        name: "ALLOW_MOCK_VIRUS_SCANNER",
+        required: false,
+        default: "false",
+      },
+      { name: "FEATURE_PORTAL_DASHBOARD_V2", required: false, default: "true" },
+      { name: "FEATURE_PORTAL_LEADS_V2", required: false, default: "true" },
+      { name: "FEATURE_PORTAL_FINANCE_V2", required: false, default: "true" },
+      { name: "FEATURE_PORTAL_PROJECTS_V2", required: false, default: "true" },
+      { name: "FEATURE_PORTAL_QUOTES_V2", required: false, default: "true" },
+      { name: "FEATURE_PORTAL_STORES_V2", required: false, default: "true" },
+      { name: "FEATURE_PORTAL_CALENDAR_V2", required: false, default: "true" },
+      { name: "FEATURE_PORTAL_PORTFOLIO_V2", required: false, default: "true" },
     ],
   },
   {
@@ -500,6 +563,51 @@ const envGroups: EnvGroup[] = [
       },
     ],
   },
+  {
+    name: "otel",
+    description: "OpenTelemetry Tracing",
+    variables: [
+      {
+        name: "OTEL_EXPORTER_OTLP_ENDPOINT",
+        required: false,
+      },
+      {
+        name: "OTEL_SERVICE_NAME",
+        required: false,
+      },
+      {
+        name: "OTEL_RESOURCE_ATTRIBUTES",
+        required: false,
+      },
+    ],
+  },
+  {
+    name: "regulators",
+    description: "Regulator Verification API Credentials",
+    variables: [
+      { name: "REGULATOR_EBK_BASE_URL", required: false },
+      { name: "REGULATOR_EBK_API_KEY", required: false },
+      { name: "REGULATOR_EBK_SIGNING_SECRET", required: false },
+      { name: "REGULATOR_BORAQS_BASE_URL", required: false },
+      { name: "REGULATOR_BORAQS_API_KEY", required: false },
+      { name: "REGULATOR_BORAQS_SIGNING_SECRET", required: false },
+      { name: "REGULATOR_NCA_BASE_URL", required: false },
+      { name: "REGULATOR_NCA_API_KEY", required: false },
+      { name: "REGULATOR_NCA_SIGNING_SECRET", required: false },
+      { name: "REGULATOR_EARB_BASE_URL", required: false },
+      { name: "REGULATOR_EARB_API_KEY", required: false },
+      { name: "REGULATOR_EARB_SIGNING_SECRET", required: false },
+      { name: "REGULATOR_VRB_BASE_URL", required: false },
+      { name: "REGULATOR_VRB_API_KEY", required: false },
+      { name: "REGULATOR_VRB_SIGNING_SECRET", required: false },
+      { name: "REGULATOR_ISK_BASE_URL", required: false },
+      { name: "REGULATOR_ISK_API_KEY", required: false },
+      { name: "REGULATOR_ISK_SIGNING_SECRET", required: false },
+      { name: "REGULATOR_EPRA_BASE_URL", required: false },
+      { name: "REGULATOR_EPRA_API_KEY", required: false },
+      { name: "REGULATOR_EPRA_SIGNING_SECRET", required: false },
+    ],
+  },
 ];
 
 // ============================================
@@ -529,6 +637,7 @@ const BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS = new Set<string>([
   // It is never read at Next.js runtime, so it is deferred like DATABASE_URL.
   "DIRECT_URL",
   "ENCRYPTION_KEY_V1",
+  "SCAN_CALLBACK_HMAC_SECRET",
   // Upstash credentials are runtime-injected by Vercel; not available at build time.
   "UPSTASH_REDIS_REST_URL",
   "UPSTASH_REDIS_REST_TOKEN",
@@ -939,6 +1048,7 @@ function buildEnvConfig() {
 
     // Local-only auth bypass
     auth: {
+      secret: getStringEnv("AUTH_SECRET"),
       bypassEnabled: getBooleanEnv("BYPASS_AUTH"),
       devActor: {
         clerkId: getStringEnv(
@@ -1061,6 +1171,33 @@ function buildEnvConfig() {
       localPath: getStringEnv("UPLOAD_DIR", "./public/uploads"),
       bucket: resolvedStorageAssetBucket,
       privateBucket: resolvedStoragePrivateBucket,
+      stagedBucket: getStringEnv("R2_BUCKET_STAGED", "buildmarket-staged"),
+      verifiedPrivateBucket: getStringEnv(
+        "R2_BUCKET_VERIFIED_PRIVATE",
+        "buildmarket-verified-private",
+      ),
+      quarantineBucket: getStringEnv(
+        "R2_BUCKET_QUARANTINE",
+        "buildmarket-quarantine",
+      ),
+      r2ScanCallbackUrl: getStringEnv(
+        "R2_SCAN_CALLBACK_URL",
+        getStringEnv(
+          "APP_CALLBACK_URL",
+          "http://localhost:3500/api/internal/uploads/scan-callback",
+        ),
+      ),
+      appCallbackUrl: getStringEnv(
+        "APP_CALLBACK_URL",
+        getStringEnv(
+          "R2_SCAN_CALLBACK_URL",
+          "http://localhost:3500/api/internal/uploads/scan-callback",
+        ),
+      ),
+      cloudmersiveApiKey: getOptionalStringEnv("CLOUDMERSIVE_API_KEY"),
+      cloudmersiveBaseUrl:
+        getOptionalStringEnv("CLOUDMERSIVE_BASE_URL") ??
+        "https://api.cloudmersive.com",
       region: resolvedStorageRegion,
       endpoint: resolvedStorageEndpoint,
       cdnUrl: resolvedStoragePublicBaseUrl,
@@ -1089,6 +1226,7 @@ function buildEnvConfig() {
       ),
       hcaptchaSecretKey: getOptionalStringEnv("HCAPTCHA_SECRET_KEY"),
       internalApiSecret: getOptionalStringEnv("INTERNAL_API_SECRET"),
+      scanCallbackHmacSecret: getOptionalStringEnv("SCAN_CALLBACK_HMAC_SECRET"),
     },
 
     // Feature Flags
@@ -1096,7 +1234,16 @@ function buildEnvConfig() {
       notifications: getBooleanEnv("ENABLE_NOTIFICATION_SERVICE"),
       gdpr: getBooleanEnv("ENABLE_GDPR_FEATURES"),
       encryption: getBooleanEnv("ENABLE_ENCRYPTION"),
+      allowMockScanner: getBooleanEnv("ALLOW_MOCK_VIRUS_SCANNER"),
       auditLogging: getBooleanEnv("ENABLE_AUDIT_LOGGING"),
+      portalDashboardV2: getBooleanEnv("FEATURE_PORTAL_DASHBOARD_V2", true),
+      portalLeadsV2: getBooleanEnv("FEATURE_PORTAL_LEADS_V2", true),
+      portalFinanceV2: getBooleanEnv("FEATURE_PORTAL_FINANCE_V2", true),
+      portalProjectsV2: getBooleanEnv("FEATURE_PORTAL_PROJECTS_V2", true),
+      portalQuotesV2: getBooleanEnv("FEATURE_PORTAL_QUOTES_V2", true),
+      portalStoresV2: getBooleanEnv("FEATURE_PORTAL_STORES_V2", true),
+      portalCalendarV2: getBooleanEnv("FEATURE_PORTAL_CALENDAR_V2", true),
+      portalPortfolioV2: getBooleanEnv("FEATURE_PORTAL_PORTFOLIO_V2", true),
     },
 
     analytics: {
@@ -1202,6 +1349,55 @@ function buildEnvConfig() {
       timeout: getNumberEnv("NATS_TIMEOUT", isProd ? 10000 : 5000),
       verboseLogging: isDev,
     },
+
+    // OpenTelemetry Tracing & Metrics
+    otel: {
+      endpoint: getOptionalStringEnv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+      serviceName: getStringEnv(
+        "OTEL_SERVICE_NAME",
+        `build-market-client-${nodeEnv}`,
+      ),
+      resourceAttributes: getOptionalStringEnv("OTEL_RESOURCE_ATTRIBUTES"),
+    },
+
+    // Regulator Verification API Credentials (ADR-004 boundary compliant)
+    regulators: {
+      EBK: {
+        baseUrl: getOptionalStringEnv("REGULATOR_EBK_BASE_URL"),
+        apiKey: getOptionalStringEnv("REGULATOR_EBK_API_KEY"),
+        signingSecret: getOptionalStringEnv("REGULATOR_EBK_SIGNING_SECRET"),
+      },
+      BORAQS: {
+        baseUrl: getOptionalStringEnv("REGULATOR_BORAQS_BASE_URL"),
+        apiKey: getOptionalStringEnv("REGULATOR_BORAQS_API_KEY"),
+        signingSecret: getOptionalStringEnv("REGULATOR_BORAQS_SIGNING_SECRET"),
+      },
+      NCA: {
+        baseUrl: getOptionalStringEnv("REGULATOR_NCA_BASE_URL"),
+        apiKey: getOptionalStringEnv("REGULATOR_NCA_API_KEY"),
+        signingSecret: getOptionalStringEnv("REGULATOR_NCA_SIGNING_SECRET"),
+      },
+      EARB: {
+        baseUrl: getOptionalStringEnv("REGULATOR_EARB_BASE_URL"),
+        apiKey: getOptionalStringEnv("REGULATOR_EARB_API_KEY"),
+        signingSecret: getOptionalStringEnv("REGULATOR_EARB_SIGNING_SECRET"),
+      },
+      VRB: {
+        baseUrl: getOptionalStringEnv("REGULATOR_VRB_BASE_URL"),
+        apiKey: getOptionalStringEnv("REGULATOR_VRB_API_KEY"),
+        signingSecret: getOptionalStringEnv("REGULATOR_VRB_SIGNING_SECRET"),
+      },
+      ISK: {
+        baseUrl: getOptionalStringEnv("REGULATOR_ISK_BASE_URL"),
+        apiKey: getOptionalStringEnv("REGULATOR_ISK_API_KEY"),
+        signingSecret: getOptionalStringEnv("REGULATOR_ISK_SIGNING_SECRET"),
+      },
+      EPRA: {
+        baseUrl: getOptionalStringEnv("REGULATOR_EPRA_BASE_URL"),
+        apiKey: getOptionalStringEnv("REGULATOR_EPRA_API_KEY"),
+        signingSecret: getOptionalStringEnv("REGULATOR_EPRA_SIGNING_SECRET"),
+      },
+    },
   } as const;
 }
 
@@ -1215,6 +1411,7 @@ function buildEnvConfig() {
  * Import this instead of reading process.env directly (ADR-004).
  */
 export const envConfig = buildEnvConfig();
+export type ClientEnvConfig = typeof envConfig;
 
 // ============================================
 // Auto-validate on import (server runtime only)

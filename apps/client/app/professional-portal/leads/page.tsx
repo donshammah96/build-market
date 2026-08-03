@@ -53,6 +53,8 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 import { useLeads, useCreateLead, useUpdateLead } from "@/hooks/useLeads";
+import { useProfileStatus } from "@/hooks/useProfileStatus";
+import { CapabilityRestrictedBanner } from "@/components/shared/CapabilityRestrictedBanner";
 import type { LeadListItem } from "@/app/lib/domains/leads/contracts";
 import {
   CreateLeadSchema,
@@ -62,9 +64,14 @@ import {
 type LeadFormValues = z.input<typeof CreateLeadSchema>;
 
 export default function LeadsPage() {
+  const { profile } = useProfileStatus();
   const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
   const [isUpdateStatusOpen, setIsUpdateStatusOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<LeadListItem | null>(null);
+
+  const isUnverified =
+    profile &&
+    (profile as unknown as { verified?: boolean }).verified === false;
 
   const { data: leadsData, isLoading } = useLeads();
   const leads: LeadListItem[] = useMemo(() => leadsData ?? [], [leadsData]);
@@ -112,6 +119,16 @@ export default function LeadsPage() {
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
+      {isUnverified && (
+        <CapabilityRestrictedBanner
+          featureName="Leads Pipeline"
+          verificationStatus={
+            (profile as unknown as { verificationStatus?: string })
+              .verificationStatus
+          }
+        />
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between gap-4 items-end border-b border-zinc-100 pb-6">
         <div>

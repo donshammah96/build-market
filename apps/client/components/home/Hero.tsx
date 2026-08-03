@@ -30,7 +30,7 @@ export const Hero: FC = memo(function Hero() {
       {/* Background Layer */}
       <div className="absolute inset-0 z-0 bg-background">
         {/* Fallback gradient (shown immediately or on image error) */}
-        <div className="absolute inset-0 bg-gradient-to-br from-foreground via-foreground/95 to-primary z-0" />
+        <div className="absolute inset-0 bg-linear-to-br from-foreground via-foreground/95 to-primary z-0" />
 
         <div
           className="absolute -left-28 top-20 h-80 w-80 rounded-full bg-primary/30 blur-3xl z-10"
@@ -67,7 +67,7 @@ export const Hero: FC = memo(function Hero() {
 
         {/* Overlay gradient for text readability */}
         <div
-          className="absolute inset-0 z-20 bg-gradient-to-r from-black/80 via-black/55 to-black/15"
+          className="absolute inset-0 z-20 bg-linear-to-r from-black/80 via-black/55 to-black/15"
           aria-hidden="true"
         />
       </div>
@@ -90,7 +90,7 @@ export const Hero: FC = memo(function Hero() {
               style={{ animationDelay: shouldAnimate ? "100ms" : "0ms" }}
             >
               Build with <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-chart-2">
+              <span className="text-transparent bg-clip-text bg-linear-to-r from-primary to-chart-2">
                 Confidence.
               </span>
             </h1>
@@ -151,7 +151,7 @@ export const Hero: FC = memo(function Hero() {
                 </div>
 
                 <Suspense fallback={<FormSkeleton />}>
-                  <div className="min-h-[320px]">
+                  <div className="min-h-80">
                     <RegisterForm />
                   </div>
                 </Suspense>
@@ -171,7 +171,7 @@ export const Hero: FC = memo(function Hero() {
 /** Skeleton loader for the registration form */
 const FormSkeleton: FC = () => (
   <div
-    className="space-y-4 w-full h-[320px] flex flex-col justify-center"
+    className="space-y-4 w-full h-80 flex flex-col justify-center"
     role="status"
     aria-label="Loading registration form"
   >

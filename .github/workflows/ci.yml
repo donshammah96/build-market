@@ -256,6 +256,68 @@ jobs:
               core.info("Admin changelog guard passed.");
             }
 
+  verification-ops-changelog-guard:
+    name: Verification Ops Changelog Guard
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    permissions:
+      contents: read
+      pull-requests: read
+    timeout-minutes: 5
+    steps:
+      - name: Require verification-ops changelog update for verification-ops code changes
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            let changedFiles = [];
+
+            if (context.eventName === "pull_request") {
+              const pull_number = context.payload.pull_request.number;
+              const files = await github.paginate(
+                github.rest.pulls.listFiles,
+                { owner, repo, pull_number, per_page: 100 },
+              );
+              changedFiles = files.map((f) => ({ filename: f.filename, status: f.status }));
+            } else {
+              const commits = context.payload.commits || [];
+              const byFilename = new Map();
+              for (const commit of commits) {
+                for (const filename of commit.added || []) byFilename.set(filename, "added");
+                for (const filename of commit.modified || []) byFilename.set(filename, "modified");
+                for (const filename of commit.removed || []) byFilename.set(filename, "removed");
+              }
+              changedFiles = Array.from(byFilename, ([filename, status]) => ({ filename, status }));
+
+              if (changedFiles.length === 0) {
+                core.info(
+                  "Verification Ops changelog guard: push event carried no file changes to check; skipping.",
+                );
+                return;
+              }
+            }
+
+            const isVerificationOpsCodeFile = (filename) =>
+              filename.startsWith("apps/verification-ops/") &&
+              !filename.startsWith("apps/verification-ops/docs/");
+
+            const verificationOpsCodeChanged = changedFiles.some((f) => isVerificationOpsCodeFile(f.filename));
+            const changelogUpdated = changedFiles.some(
+              (f) =>
+                f.filename === "apps/verification-ops/docs/CHANGELOG.md" &&
+                f.status !== "removed",
+            );
+
+            if (verificationOpsCodeChanged && !changelogUpdated) {
+              core.setFailed(
+                "apps/verification-ops code changed but apps/verification-ops/docs/CHANGELOG.md was not updated.",
+              );
+            } else {
+              core.info("Verification Ops changelog guard passed.");
+            }
+
   validate:
     name: Validate
     runs-on: ubuntu-latest
@@ -330,7 +392,7 @@ jobs:
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
           NEXT_PUBLIC_APP_URL: http://localhost:3005
           CLIENT_APP_URL: http://localhost:3500
-          ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef789abcdef0123456789abcdef"
+          ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         run: pnpm exec turbo run lint --filter=admin
 
       - name: Env contract check (client)
@@ -361,6 +423,27 @@ jobs:
 
       - name: Admin full workspace gate
         run: pnpm run admin:check-all
+
+      - name: Lint (verification-ops)
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
+          CLERK_SECRET_KEY: sk_test_ci_placeholder
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
+          NEXT_PUBLIC_VERIFICATION_OPS_URL: http://localhost:3501
+          ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        run: pnpm exec turbo run lint --filter=verification-ops
+
+      - name: Env contract check (verification-ops)
+        run: pnpm run verification-ops:check-env-contract
+
+      - name: Verification ops security drift checks
+        run: pnpm run verification-ops:check-security-drift
+
+      - name: Verification ops security drift report
+        run: pnpm run verification-ops:report-security-drift:strict
+
+      - name: Verification ops full workspace gate
+        run: pnpm run verification-ops:check-all
 
       # Type check and test are intentionally NOT duplicated per-app here:
       # `turbo run check-types` / `turbo run test` already fan out to every
@@ -426,15 +509,16 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     env:
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
-      CLERK_SECRET_KEY: sk_test_ci_placeholder
-      CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+      CLERK_WEBHOOK_SECRET: ${{ secrets.CLERK_WEBHOOK_SECRET }}
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3500
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3500/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
       BYPASS_AUTH: "true"
+      ALLOW_MOCK_VIRUS_SCANNER: "true"
       # Was `https://stub.upstash.io`, then `https://127.0.0.1:6378` (an
       # unbound local port, on the theory that a closed port fails at the
       # kernel level — instant ECONNREFUSED, no DNS, no ambiguity). That
@@ -596,6 +680,12 @@ jobs:
         # step in the future is automatically included here without a CI change.
         run: pnpm --filter="client..." run build
 
+      - name: Start Clerk Webhook Relay (smee-client)
+        run: |
+          nohup npx --yes smee-client -u https://buildmarket.live/ci -t http://127.0.0.1:3500/api/clerk-webhook > /tmp/clerk-webhook-relay.log 2>&1 &
+          echo $! > /tmp/clerk-webhook-relay.pid
+          echo "Clerk Webhook Relay started (https://buildmarket.live/ci -> http://127.0.0.1:3500/api/clerk-webhook)"
+
       - name: Smoke check root route (fail on 5xx)
         run: |
           set -uo pipefail
@@ -614,6 +704,7 @@ jobs:
           cleanup() {
             kill "$APP_PID" >/dev/null 2>&1 || true
             [ -f /tmp/upstash-rest-stub.pid ] && kill "$(cat /tmp/upstash-rest-stub.pid)" >/dev/null 2>&1 || true
+            [ -f /tmp/clerk-webhook-relay.pid ] && kill "$(cat /tmp/clerk-webhook-relay.pid)" >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
 
@@ -798,9 +889,9 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     env:
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
-      CLERK_SECRET_KEY: sk_test_ci_placeholder
-      CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+      CLERK_WEBHOOK_SECRET: ${{ secrets.CLERK_WEBHOOK_SECRET }}
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3005
       CLIENT_APP_URL: http://127.0.0.1:3500
@@ -1007,6 +1098,212 @@ jobs:
 
           echo "Smoke gate passed: root route returned non-5xx status $STATUS."
 
+  verification-ops-preview-smoke-gate:
+    name: Verification Ops Preview Smoke Gate
+    runs-on: ubuntu-latest
+    needs: [validate]
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    timeout-minutes: 25
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: build_market_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ci -d build_market_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
+      CLERK_SECRET_KEY: sk_test_ci_placeholder
+      CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
+      NEXT_PUBLIC_VERIFICATION_OPS_URL: http://127.0.0.1:3501
+      ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      RATE_LIMIT_BACKEND: memory
+      UPSTASH_REDIS_REST_URL: http://127.0.0.1:8079
+      UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
+      REDIS_URL: redis://127.0.0.1:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Start Upstash REST stub (always-200, no retries triggered)
+        run: |
+          nohup python3 -c '
+          import http.server
+          import json
+
+          class UpstashStubHandler(http.server.BaseHTTPRequestHandler):
+              def _respond(self):
+                  length = int(self.headers.get("Content-Length", 0) or 0)
+                  raw = self.rfile.read(length) if length else b""
+                  is_pipeline_path = "pipeline" in self.path or "multi-exec" in self.path
+
+                  if is_pipeline_path:
+                      count = 1
+                      try:
+                          parsed = json.loads(raw) if raw else None
+                          if isinstance(parsed, list):
+                              count = max(len(parsed), 1)
+                      except (json.JSONDecodeError, ValueError):
+                          pass
+                      body = json.dumps([{"result": None} for _ in range(count)]).encode()
+                  else:
+                      body = json.dumps({"result": None}).encode()
+
+                  self.send_response(200)
+                  self.send_header("Content-Type", "application/json")
+                  self.send_header("Content-Length", str(len(body)))
+                  self.end_headers()
+                  self.wfile.write(body)
+
+              def do_GET(self):
+                  self._respond()
+
+              def do_POST(self):
+                  self._respond()
+
+              def log_message(self, fmt, *args):
+                  pass
+
+          http.server.ThreadingHTTPServer(("127.0.0.1", 8079), UpstashStubHandler).serve_forever()
+          ' > /tmp/upstash-rest-stub.log 2>&1 &
+          echo $! > /tmp/upstash-rest-stub.pid
+
+          for i in $(seq 1 15); do
+            if curl --silent --max-time 1 --output /dev/null http://127.0.0.1:8079/; then
+              echo "Upstash REST stub is accepting requests."
+              break
+            fi
+            if [ "$i" -eq 15 ]; then
+              echo "Upstash REST stub failed to start within 15s."
+              cat /tmp/upstash-rest-stub.log || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Cache Next.js build
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: |
+            ${{ github.workspace }}/apps/verification-ops/.next/cache
+          key: ${{ runner.os }}-nextjs-verification-ops-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ hashFiles('apps/verification-ops/**/*.{js,jsx,ts,tsx,css}') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-verification-ops-${{ hashFiles('**/pnpm-lock.yaml') }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply database migrations
+        run: pnpm run db:migrate:deploy
+
+      - name: Build workspace dependencies then verification-ops
+        run: pnpm --filter="verification-ops..." run build
+
+      - name: Smoke check root route (fail on 5xx)
+        run: |
+          set -uo pipefail
+
+          pnpm -C apps/verification-ops run start --hostname 127.0.0.1 --port 3501 > /tmp/verification-ops-preview-smoke.log 2>&1 &
+          APP_PID=$!
+
+          cleanup() {
+            kill "$APP_PID" >/dev/null 2>&1 || true
+            [ -f /tmp/upstash-rest-stub.pid ] && kill "$(cat /tmp/upstash-rest-stub.pid)" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          PORT_OPEN=""
+          PORT_MAX_ATTEMPTS=60
+          for i in $(seq 1 "$PORT_MAX_ATTEMPTS"); do
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "Smoke gate failed: verification-ops preview process exited before opening a port."
+              cat /tmp/verification-ops-preview-smoke.log || true
+              exit 1
+            fi
+
+            if (exec 3<>/dev/tcp/127.0.0.1/3501) 2>/dev/null; then
+              exec 3>&- 3<&-
+              PORT_OPEN=1
+              echo "Port 3501 opened after ~$((i * 2))s."
+              break
+            fi
+
+            if [ $(( i % 10 )) -eq 0 ]; then
+              echo "Still waiting for port 3501 to open (attempt $i/$PORT_MAX_ATTEMPTS)..."
+            fi
+            sleep 2
+          done
+
+          if [ -z "$PORT_OPEN" ]; then
+            echo "Smoke gate failed: port 3501 never opened after $PORT_MAX_ATTEMPTS attempts (~2 minutes)."
+            cat /tmp/verification-ops-preview-smoke.log || true
+            exit 1
+          fi
+
+          STATUS="000"
+          HTTP_MAX_ATTEMPTS=10
+          for i in $(seq 1 "$HTTP_MAX_ATTEMPTS"); do
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "Smoke gate failed: verification-ops preview process exited while waiting for a response."
+              cat /tmp/verification-ops-preview-smoke.log || true
+              exit 1
+            fi
+
+            STATUS="$(curl --silent --show-error --max-time 15 --output /tmp/verification-ops-preview-body.txt --write-out "%{http_code}" http://127.0.0.1:3501/ || true)"
+            if [ "$STATUS" != "000" ] && [ -n "$STATUS" ]; then
+              break
+            fi
+
+            echo "Port is open but no HTTP response yet (attempt $i/$HTTP_MAX_ATTEMPTS) — recent app output:"
+            tail -n 15 /tmp/verification-ops-preview-smoke.log || true
+            sleep 2
+          done
+
+          echo "Smoke status: $STATUS"
+
+          if [ -z "$STATUS" ] || [ "$STATUS" = "000" ]; then
+            echo "Smoke gate failed: port 3501 opened but never completed an HTTP response"
+            echo "after $HTTP_MAX_ATTEMPTS attempts (~50s)."
+            cat /tmp/verification-ops-preview-smoke.log || true
+            exit 1
+          fi
+
+          if [ "${STATUS:0:1}" = "5" ]; then
+            echo "Smoke gate failed: root route returned 5xx."
+            cat /tmp/verification-ops-preview-smoke.log || true
+            cat /tmp/verification-ops-preview-body.txt || true
+            exit 1
+          fi
+
+          echo "Smoke gate passed: root route returned non-5xx status $STATUS."
+
   admin-nightly-test-all:
     name: Admin Nightly Test Suite (flake-focused)
     runs-on: ubuntu-latest
@@ -1059,7 +1356,15 @@ jobs:
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3005/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
-      UPSTASH_REDIS_REST_URL: https://127.0.0.1:6378
+      QUEUE_PROVIDER: memory
+      # FIX: was https://127.0.0.1:6378 — the pre-fix closed-port approach
+      # both smoke-gate jobs' comments document as insufficient, since
+      # @upstash/redis retries with backoff and multiple Redis-touching
+      # calls stack those retries into a multi-minute hang. Individual test
+      # cases can still construct a real Upstash client — the stub removes
+      # that failure mode instead of relying on assumptions about what the
+      # test suite touches.
+      UPSTASH_REDIS_REST_URL: http://127.0.0.1:8079
       UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
       REDIS_URL: redis://127.0.0.1:6379
 
@@ -1076,17 +1381,88 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
 
+      # FIX: added — identical stub used by client-preview-smoke-gate and
+      # admin-preview-smoke-gate. Must be up before any test that might
+      # touch Redis, same reasoning as those jobs.
+      - name: Start Upstash REST stub (always-200, no retries triggered)
+        run: |
+          nohup python3 -c '
+          import http.server
+          import json
+
+          class UpstashStubHandler(http.server.BaseHTTPRequestHandler):
+              def _respond(self):
+                  length = int(self.headers.get("Content-Length", 0) or 0)
+                  raw = self.rfile.read(length) if length else b""
+                  is_pipeline_path = "pipeline" in self.path or "multi-exec" in self.path
+
+                  if is_pipeline_path:
+                      count = 1
+                      try:
+                          parsed = json.loads(raw) if raw else None
+                          if isinstance(parsed, list):
+                              count = max(len(parsed), 1)
+                      except (json.JSONDecodeError, ValueError):
+                          pass
+                      body = json.dumps([{"result": None} for _ in range(count)]).encode()
+                  else:
+                      body = json.dumps({"result": None}).encode()
+
+                  self.send_response(200)
+                  self.send_header("Content-Type", "application/json")
+                  self.send_header("Content-Length", str(len(body)))
+                  self.end_headers()
+                  self.wfile.write(body)
+
+              def do_GET(self):
+                  self._respond()
+
+              def do_POST(self):
+                  self._respond()
+
+              def log_message(self, fmt, *args):
+                  pass
+
+          http.server.ThreadingHTTPServer(("127.0.0.1", 8079), UpstashStubHandler).serve_forever()
+          ' > /tmp/upstash-rest-stub.log 2>&1 &
+          echo $! > /tmp/upstash-rest-stub.pid
+
+          for i in $(seq 1 15); do
+            if curl --silent --max-time 1 --output /dev/null http://127.0.0.1:8079/; then
+              echo "Upstash REST stub is accepting requests."
+              break
+            fi
+            if [ "$i" -eq 15 ]; then
+              echo "Upstash REST stub failed to start within 15s."
+              cat /tmp/upstash-rest-stub.log || true
+              exit 1
+            fi
+            sleep 1
+          done
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Apply database migrations
         run: pnpm run db:migrate:deploy
 
-      - name: Build workspace dependencies then admin
-        run: pnpm --filter="admin..." run build
+      - name: Build shared packages
+        # Vitest executes TypeScript source files directly via SWC/Vite transforms,
+        # so `admin:test:all` does not require a compiled `next build` (.next output).
+        # Building workspace `@build/*` packages provides the compiled entrypoints
+        # required for cross-package imports, saving 10–15 cold-cache minutes nightly.
+        run: pnpm run build --filter="@build/*"
 
       - name: Run admin nightly/flake-focused test suite
         run: pnpm run admin:test:all
+
+      # FIX (parity with smoke gates): stop the stub cleanly rather than
+      # leaving it as an orphaned background process for the rest of the
+      # job's runtime — harmless on a fresh runner, but cheap to be tidy.
+      - name: Stop Upstash REST stub
+        if: always()
+        run: |
+          [ -f /tmp/upstash-rest-stub.pid ] && kill "$(cat /tmp/upstash-rest-stub.pid)" >/dev/null 2>&1 || true
 
   ci-success:
     name: CI Success
@@ -1101,9 +1477,11 @@ jobs:
       - pinned-actions-guard
       - client-changelog-guard
       - admin-changelog-guard
+      - verification-ops-changelog-guard
       - validate
       - client-preview-smoke-gate
       - admin-preview-smoke-gate
+      - verification-ops-preview-smoke-gate
       - admin-nightly-test-all
     timeout-minutes: 5
     steps:

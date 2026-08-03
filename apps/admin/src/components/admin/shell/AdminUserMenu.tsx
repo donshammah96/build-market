@@ -1,5 +1,5 @@
 import { UserButton } from "@clerk/nextjs";
-import type { AdminRole } from "@build/db";
+import type { AdminRole } from "@build/enums";
 
 export interface AdminUserMenuProps {
   adminRole?: AdminRole | string | null | undefined;
