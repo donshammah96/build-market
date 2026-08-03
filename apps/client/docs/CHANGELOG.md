@@ -28,9 +28,17 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
-### Fixed — Static analysis, dead-code, and null-safety cleanup
+### Fixed — Satellite cross-domain auth redirects, static analysis, dead-code, and null-safety cleanup
 
+- **Satellite Cross-Domain Auth Redirects (`app/sign-in/`, `app/auth-callback/`, `app/lib/security/middleware/redirect-policy.ts`)**: fixed stuck "Welcome Back" sign-in card loop when navigating from satellite domains (`verification.buildmarket.app`, `admin.buildmarket.app`) to `https://buildmarket.app/sign-in?redirect_url=...`:
+  - **Environment Configuration (`env.ts`)**: declared `NEXT_PUBLIC_VERIFICATION_APP_URL` / `NEXT_PUBLIC_VERIFICATION_OPS_URL` in `urls` group and wired `verificationAppUrl` property into `buildEnvConfig()` with `http://localhost:3501` dev fallback.
+  - **Redirect Target Sanitizer (`redirect-policy.ts`)**: implemented `getSafeRedirectUrl(target)` validating relative paths, `*.buildmarket.app` subdomains, configured app/admin/verification origins, and local loopback hosts (`localhost`, `127.0.0.1`) while blocking open-redirect attack vectors (`//evil.com`, `javascript:`, untrusted domains).
+
+  - **Server Page Pre-Redirection (`app/sign-in/[[...sign-in]]/page.tsx`)**: checked server-side `auth()` in `SignInPage` to immediately redirect signed-in users to `safeRedirectUrl` or `/auth-callback`.
+  - **Client Widget & Auth Callback (`ClerkSignInWidget.tsx`, `app/auth-callback/page.tsx`)**: added client-side `useUser` hydration redirect and updated `AuthCallbackPage` to honor `redirect_url` search parameter post-sign-in.
+  - **Vitest Test Suite (`__tests__/lib/redirect-policy.test.ts`)**: added 17 passing test cases verifying satellite redirection and open-redirect sanitization.
 - **CI Client Preview Smoke Gate (`.github/workflows/ci.yml`)**: configured `ALLOW_MOCK_VIRUS_SCANNER: "true"` in `client-preview-smoke-gate` job environment to resolve `instrumentation.ts` virus-scanner startup assertion failures during `next start` preview checks.
+
 - **Onboarding server action (`apps/client/app/actions/onboarding.ts`)**: resolved `INSUFFICIENT_NULL_CHECK` linter warning by removing redundant optional chaining (`?.`) on validated non-null `input` before accessing property `idempotencyKey`.
 - **Client onboarding hooks & layout components (`apps/client/app/onboarding/_hooks/useOnboarding.ts`, `apps/client/components/layout/ProfessionalSidebar.tsx`)**: removed unused local variable `normalizedRole` and unused `useClerk` import.
 - **Domain utilities & security adapters (`apps/client/app/lib/auth/remediation-helpers.ts`, `apps/client/app/lib/domains/professionals/portal-capability-guard.ts`)**: removed unused `ActionFailure` type and unused `err` import.

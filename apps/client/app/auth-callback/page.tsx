@@ -13,6 +13,7 @@ import {
   type ClerkPublicMetadataLike,
   waitForClerkClaimRefresh,
 } from "@/app/lib/auth/clerk-claim-refresh";
+import { getSafeRedirectUrl } from "@/app/lib/security/middleware/redirect-policy";
 
 /**
  * AuthCallbackPage handles post-authentication redirect logic.
@@ -67,6 +68,8 @@ export function AuthCallbackPage() {
   const expectedRole = parseExpectedRole(searchParams.get("expectedRole"));
   const isOnboardingTransition =
     transitionSource === "onboarding" && Boolean(expectedRole);
+  const rawRedirectUrl = searchParams.get("redirect_url");
+  const safeRedirectUrl = getSafeRedirectUrl(rawRedirectUrl);
 
   /**
    * Get the appropriate redirect path based on user metadata
@@ -136,6 +139,18 @@ export function AuthCallbackPage() {
     });
 
     if (refreshResult.ok) {
+      const metadata = refreshResult.metadata as UserMetadata | undefined;
+      const normalizedRole =
+        typeof metadata?.role === "string"
+          ? metadata.role.trim().toUpperCase()
+          : undefined;
+      const isOnboarded = metadata?.isOnboarded === true;
+
+      if (safeRedirectUrl && (isOnboarded || normalizedRole === "ADMIN")) {
+        performRedirect(safeRedirectUrl);
+        return;
+      }
+
       performRedirect(getRedirectPath(refreshResult.metadata));
       return;
     }
@@ -162,6 +177,7 @@ export function AuthCallbackPage() {
     isOnboardingTransition,
     performRedirect,
     router,
+    safeRedirectUrl,
     user,
   ]);
 

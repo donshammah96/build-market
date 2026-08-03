@@ -1,26 +1,51 @@
 "use client";
 
-import { SignIn } from "@clerk/nextjs";
+import { SignIn, useUser } from "@clerk/nextjs";
 import { ROUTES } from "@/lib/links";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { getSafeRedirectUrl } from "@/app/lib/security/middleware/redirect-policy";
 import { AuthPageSkeleton } from "./AuthPageSkeleton";
 
-export default function ClerkSignInWidget() {
+interface ClerkSignInWidgetProps {
+  redirectUrl?: string;
+}
+
+export default function ClerkSignInWidget({
+  redirectUrl: initialRedirectUrl,
+}: ClerkSignInWidgetProps = {}) {
   const [mounted, setMounted] = useState(false);
+  const { isLoaded, isSignedIn } = useUser();
+  const searchParams = useSearchParams();
+
+  const rawRedirectUrl = initialRedirectUrl ?? searchParams.get("redirect_url");
+  const safeTargetUrl = getSafeRedirectUrl(rawRedirectUrl);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  if (!mounted) {
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      const target = safeTargetUrl || ROUTES.authCallback;
+      window.location.href = target;
+    }
+  }, [isLoaded, isSignedIn, safeTargetUrl]);
+
+  if (!mounted || (isLoaded && isSignedIn)) {
     return <AuthPageSkeleton variant="sign-in" />;
   }
+
+  const authCallbackWithRedirect = safeTargetUrl
+    ? `${ROUTES.authCallback}?redirect_url=${encodeURIComponent(safeTargetUrl)}`
+    : ROUTES.authCallback;
 
   return (
     <SignIn
       routing="path"
       path="/sign-in"
-      fallbackRedirectUrl={ROUTES.authCallback}
+      forceRedirectUrl={safeTargetUrl ?? undefined}
+      fallbackRedirectUrl={authCallbackWithRedirect}
       signUpUrl={ROUTES.signUp}
       appearance={
         {
