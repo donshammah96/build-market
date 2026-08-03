@@ -26,6 +26,16 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
 
+## [Unreleased]
+
+### Fixed — Static analysis, dead-code, and null-safety cleanup
+
+- **CI Client Preview Smoke Gate (`.github/workflows/ci.yml`)**: configured `ALLOW_MOCK_VIRUS_SCANNER: "true"` in `client-preview-smoke-gate` job environment to resolve `instrumentation.ts` virus-scanner startup assertion failures during `next start` preview checks.
+- **Onboarding server action (`apps/client/app/actions/onboarding.ts`)**: resolved `INSUFFICIENT_NULL_CHECK` linter warning by removing redundant optional chaining (`?.`) on validated non-null `input` before accessing property `idempotencyKey`.
+- **Client onboarding hooks & layout components (`apps/client/app/onboarding/_hooks/useOnboarding.ts`, `apps/client/components/layout/ProfessionalSidebar.tsx`)**: removed unused local variable `normalizedRole` and unused `useClerk` import.
+- **Domain utilities & security adapters (`apps/client/app/lib/auth/remediation-helpers.ts`, `apps/client/app/lib/domains/professionals/portal-capability-guard.ts`)**: removed unused `ActionFailure` type and unused `err` import.
+- **Client unit test suites (`apps/client/__tests__/`)**: removed unused imports across storage promotion (`path`, `StorageProvider`), auth outbox worker (`updateClerkOnboardingMetadata`), internal secret security (`vi`), staged download (`getStorageProvider`, `uploadRepository`, `uploadService`), and regulator credentials (`vi`).
+
 ### Added — Observability, analytics, and operations (Phase 9)
 
 - **Client-side funnel tracking hook (`apps/client/hooks/use-professional-funnel-tracking.ts`)**:

@@ -59,10 +59,6 @@ function collectMatches(paths, pattern, ignore = []) {
   return findings;
 }
 
-function uniqueFiles(findings) {
-  return [...new Set(findings.map((finding) => finding.file))].sort();
-}
-
 const tsNoCheck = collectMatches(["app", "lib"], /@ts-nocheck/g);
 
 const envBoundaryDrift = collectMatches(

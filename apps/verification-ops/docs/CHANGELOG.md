@@ -11,6 +11,7 @@ conventions, reverse-chronological.
 
 ### Fixed
 
+- **Security drift reporting script (`apps/verification-ops/scripts/report-security-drift.mjs`)**: removed unused function `uniqueFiles` to ensure clean static analysis execution and zero unused-declaration warnings.
 - **Directory layout & Vercel tsconfig build configuration** — resolved structural mislocations and TypeScript build failures for Vercel builds (`pnpm tsc --build tsconfig.json`):
   - Relocated domain logic and infrastructure files out of Next.js App Router route directory `app/lib/` to root `lib/` (`lib/auth.ts`, `lib/verification-ops-data.ts`, `lib/infrastructure/env.ts`, `lib/infrastructure/env-utils.ts`), eliminating path alias conflicts between `@/*` and `@/lib/*`.
   - Relocated `/sign-in` route into `(auth)` route group (`app/(auth)/sign-in/[[...sign-in]]/page.tsx`), matching workspace conventions.

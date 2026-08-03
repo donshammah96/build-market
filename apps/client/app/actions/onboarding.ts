@@ -227,7 +227,7 @@ export async function submitOnboarding(
       }
 
       const clientKey =
-        (input as { idempotencyKey?: string })?.idempotencyKey ?? randomUUID();
+        (input as { idempotencyKey?: string }).idempotencyKey ?? randomUUID();
 
       const idempotencyKey = IdempotencyService.generateKey(clerkId, "POST", {
         domain: "onboarding",

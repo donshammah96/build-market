@@ -3,8 +3,6 @@ import { NextRequest } from "next/server";
 import { GET as previewHandler } from "@/app/api/uploads/staged/[id]/preview/route";
 import { GET as downloadHandler } from "@/app/api/uploads/staged/[id]/download/route";
 import { POST as scanHandler } from "@/app/api/uploads/staged/[id]/scan/route";
-import { uploadRepository, uploadService } from "@/app/lib/domains/uploads";
-import { getStorageProvider } from "@/app/lib/infrastructure/storage";
 
 const mockFindStagedUploadById = vi.hoisted(() => vi.fn());
 const mockRecordAuditLog = vi.hoisted(() =>

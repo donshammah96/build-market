@@ -134,7 +134,6 @@ export function useOnboarding() {
   useEffect(() => {
     if (!userLoaded || !user) return;
     const metadata = user.publicMetadata as ClerkPublicMetadataLike;
-    const normalizedRole = normalizeRole(metadata?.role);
 
     if (metadata?.isOnboarded) {
       router.replace(onboardingDestinationForMetadata(metadata));

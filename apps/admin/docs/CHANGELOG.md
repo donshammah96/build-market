@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed — Workspace hygiene and static check alignment
+
+- **Codebase hygiene & static check alignment**: aligned admin application surface with workspace-wide lint and dead-code elimination standards across client, admin, and verification-ops boundaries.
+
 ### Added — Verification UI standalone workspace app migration & admin shadow mode (Phase 8)
 
 - **Prisma Schema Enums Extension (`packages/db/prisma/schema.prisma`)**:

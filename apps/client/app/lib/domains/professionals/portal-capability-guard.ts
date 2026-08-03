@@ -10,12 +10,7 @@ import {
   professionalPortalCapabilityService,
   type ExtendedProfessionalCapabilities,
 } from "./capability.service";
-import {
-  ok,
-  err,
-  type DomainError,
-  type Result,
-} from "@/app/lib/errors/result";
+import { ok, type DomainError, type Result } from "@/app/lib/errors/result";
 
 export type CapabilityGuardErrorCode =
   | "forbidden"

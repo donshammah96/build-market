@@ -3,7 +3,6 @@ import {
   enqueueClerkMetadataSyncEvent,
   processPendingAuthOutboxEvents,
 } from "@/app/lib/domains/user-profile/outbox-worker";
-import { updateClerkOnboardingMetadata } from "@/app/lib/domains/user-profile/clerk-metadata";
 
 vi.mock("server-only", () => ({}));
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { loadRegulatorCredentials } from "@/app/lib/domains/regulator-verification/adapters/credentials";
 import { envConfig } from "@/app/lib/infrastructure/env";
 

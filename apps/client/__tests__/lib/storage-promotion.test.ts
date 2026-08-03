@@ -1,10 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import fs from "fs";
-import path from "path";
-import {
-  createStorageProvider,
-  StorageProvider,
-} from "@/app/lib/infrastructure/storage";
+import { createStorageProvider } from "@/app/lib/infrastructure/storage";
 
 const { mockEnv, sendMock, TEST_DIR } = vi.hoisted(() => {
   const testDir = "./tmp/storage-promotion-test";

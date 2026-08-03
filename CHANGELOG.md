@@ -1,6 +1,14 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## [Unreleased]
+
+### Fixed — Codebase hygiene, CI workflow hardening, and null-safety cleanup
+
+- **CI Clerk Secret Binding & Webhook Relay (`.github/workflows/ci.yml`)**: wired dynamic GitHub Action secrets (`CLERK_WEBHOOK_SECRET`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`) into `client-preview-smoke-gate` and `admin-preview-smoke-gate` environment blocks; added background `smee-client` webhook relay listener (`https://buildmarket.live/ci` -> `http://127.0.0.1:3500/api/clerk-webhook`) with PID tracking and cleanup trap.
+- **Client Preview Smoke Gate Startup Assertion (`.github/workflows/ci.yml`)**: configured `ALLOW_MOCK_VIRUS_SCANNER: "true"` in `client-preview-smoke-gate` workflow environment to eliminate `instrumentation.ts` startup assertion failures during `next start` preview checks.
+- **Workspace Static Analysis Remediation (`apps/client`, `apps/admin`, `apps/verification-ops`)**: resolved 14 static analysis findings across client actions, hooks, domain capability guards, UI components, test suites, and security drift reporting scripts:
+  - Fixed `INSUFFICIENT_NULL_CHECK` linter warning in `submit_onboarding_server_action` (`app/actions/onboarding.ts`) by removing redundant optional chaining (`?.`) on validated non-null `input`.
+  - Removed unused variable declarations and imports across `useOnboarding.ts`, `ProfessionalSidebar.tsx`, `remediation-helpers.ts`, `portal-capability-guard.ts`, `report-security-drift.mjs`, and Vitest test suites (`storage-promotion.test.ts`, `auth-outbox-worker.test.ts`, `internal-secret.test.ts`, `staged-download.test.ts`, `credentials.test.ts`).
 
 ## Added — Regulator confidence-scoring rework & `verification-ops` hardening (Phase 10)
 

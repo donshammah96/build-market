@@ -1,9 +1,6 @@
 import "server-only";
 
-import {
-  type ActionErrorCode,
-  type ActionFailure,
-} from "@/app/lib/actions/secure-action";
+import { type ActionErrorCode } from "@/app/lib/actions/secure-action";
 
 const RESTRICTED_KEYS = new Set([
   "password",
