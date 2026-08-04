@@ -1130,6 +1130,9 @@ function buildEnvConfig() {
         "CLERK_WEBHOOK_PROCESSED_TTL_SECONDS",
         86400,
       ),
+      isSatellite: getBooleanEnv("CLERK_IS_SATELLITE", false),
+      domain: getOptionalStringEnv("CLERK_DOMAIN"),
+      primarySignInUrl: getOptionalStringEnv("NEXT_PUBLIC_CLERK_SIGN_IN_URL"),
     },
 
     // Database

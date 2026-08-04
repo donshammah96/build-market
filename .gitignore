@@ -106,3 +106,4 @@ terminal-smoke.txt
 vitest-*.json
 vitest-*.txt
 cypress/screenshots/
+.env*

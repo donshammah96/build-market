@@ -44,6 +44,7 @@ This format is based on Keep a Changelog and uses semantic categories:
 - **Onboarding server action (`apps/client/app/actions/onboarding.ts`)**: resolved `INSUFFICIENT_NULL_CHECK` linter warning by removing redundant optional chaining (`?.`) on validated non-null `input` before accessing property `idempotencyKey`.
 - **Client onboarding hooks & layout components (`apps/client/app/onboarding/_hooks/useOnboarding.ts`, `apps/client/components/layout/ProfessionalSidebar.tsx`)**: removed unused local variable `normalizedRole` and unused `useClerk` import.
 - **Domain utilities & security adapters (`apps/client/app/lib/auth/remediation-helpers.ts`, `apps/client/app/lib/domains/professionals/portal-capability-guard.ts`)**: removed unused `ActionFailure` type and unused `err` import.
+- **Clerk Middleware Ambient Types (`types/clerk-nextjs-server.d.ts`)**: fixed TypeScript compiler error (`Expected 1 arguments, but got 2`) when passing satellite config options (`clerkMiddlewareOptions`) to `clerkMiddleware` by declaring `ClerkMiddlewareOptions` and adding the optional `options` parameter to the `clerkMiddleware` signature in `@clerk/nextjs/server` module augmentation.
 - **Client unit test suites (`apps/client/__tests__/`)**: removed unused imports across storage promotion (`path`, `StorageProvider`), auth outbox worker (`updateClerkOnboardingMetadata`), internal secret security (`vi`), staged download (`getStorageProvider`, `uploadRepository`, `uploadService`), and regulator credentials (`vi`).
 
 ### Added — Observability, analytics, and operations (Phase 9)

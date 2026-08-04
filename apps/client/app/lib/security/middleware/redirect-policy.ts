@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { AppRole } from "@/app/lib/security/roles";
+import { env } from "@/app/lib/infrastructure/env";
 import {
   CLIENT_ROUTES,
   PROFESSIONAL_ROUTES,
@@ -8,12 +9,74 @@ import {
 
 export { getSafeRedirectUrl } from "@/app/lib/security/redirect-url";
 
+/**
+ * Redirects to the sign-in page.
+ *
+ * CRITICAL: This helper may run in middleware on the primary domain OR on a
+ * satellite domain (admin.buildmarket.app, verification.buildmarket.app).
+ * Two invariants must hold regardless of which domain called it:
+ *
+ *   1. The sign-in URL itself must always point at the PRIMARY app
+ *      (env.appUrl), never at `req.url`'s origin. Only the primary domain
+ *      renders the Clerk <SignIn/> UI; satellites do not.
+ *   2. The `redirect_url` value must be an ABSOLUTE URL back to the
+ *      originating domain whenever the request did not originate on the
+ *      primary domain. A bare pathname (e.g. "/dashboard") is only safe
+ *      when the caller and the sign-in page share an origin — on a
+ *      satellite it would silently resolve against the primary domain
+ *      after login and send the user to the wrong app.
+ *
+ * `pathname` is accepted for same-origin callers that want to pass a
+ * pre-computed path (e.g. including query string) rather than deriving it
+ * from `req`. Satellite callers should generally omit it and let this
+ * function derive the full absolute URL from `req` automatically.
+ */
 export function redirectToSignIn(
   req: NextRequest,
-  pathname: string,
+  pathname?: string,
 ): NextResponse {
-  const signInUrl = new URL(CLIENT_ROUTES.signIn, req.url);
-  signInUrl.searchParams.set("redirect_url", pathname);
+  // FAIL FAST, NOT SILENT: `env.appUrl` must be the PRIMARY app's absolute
+  // base URL (e.g. "https://buildmarket.app") on every app that imports this
+  // module — including satellites. If it's missing/misconfigured, `new
+  // URL(path, undefined)` throws a bare "Invalid URL" deep inside
+  // middleware, which is nearly impossible to diagnose from a "stuck page"
+  // bug report. Surface the real cause instead. See
+  // REDIRECT_LOOP_AUTOPSY_AND_FIX.md, Finding #2.
+  if (!env.appUrl) {
+    throw new Error(
+      "[redirectToSignIn] env.appUrl is not configured. This must be the " +
+        "PRIMARY app's absolute URL (e.g. https://buildmarket.app) on every " +
+        "app — including satellites — not that app's own URL. Check " +
+        "APP_URL / NEXT_PUBLIC_APP_URL / CLIENT_APP_URL resolution in " +
+        "lib/infrastructure/env.ts.",
+    );
+  }
+
+  const primaryOrigin = new URL(env.appUrl).origin;
+  const signInUrl = new URL(CLIENT_ROUTES.signIn, env.appUrl);
+
+  const requestOrigin = req.nextUrl.origin;
+  const isPrimaryOrigin = requestOrigin === primaryOrigin;
+
+  // Defensive loop breaker: if we're already ON the sign-in page's own
+  // origin+path (e.g. a misclassified route matcher sent /sign-in itself
+  // through this function), don't re-redirect to a URL identical to the
+  // one the browser is already looking at — that's exactly what produces
+  // an infinite-redirect / "stuck" tab. Let the request through instead so
+  // the real page (or a real error) renders and the loop surfaces in logs
+  // rather than as a silent browser hang.
+  if (isPrimaryOrigin && req.nextUrl.pathname === CLIENT_ROUTES.signIn) {
+    return NextResponse.next();
+  }
+
+  const redirectTarget = isPrimaryOrigin
+    ? (pathname ?? req.nextUrl.pathname + req.nextUrl.search)
+    : // Non-primary (satellite) origin: always carry the full absolute URL,
+      // never a bare pathname, or the post-login redirect resolves against
+      // the primary domain instead of the satellite that sent the user here.
+      req.nextUrl.href;
+
+  signInUrl.searchParams.set("redirect_url", redirectTarget);
   return NextResponse.redirect(signInUrl);
 }
 
