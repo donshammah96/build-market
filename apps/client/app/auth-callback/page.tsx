@@ -13,7 +13,7 @@ import {
   type ClerkPublicMetadataLike,
   waitForClerkClaimRefresh,
 } from "@/app/lib/auth/clerk-claim-refresh";
-import { getSafeRedirectUrl } from "@/app/lib/security/middleware/redirect-policy";
+import { getSafeRedirectUrl } from "@/app/lib/security/redirect-url";
 
 /**
  * AuthCallbackPage handles post-authentication redirect logic.

@@ -4,7 +4,7 @@ import { SignIn, useUser } from "@clerk/nextjs";
 import { ROUTES } from "@/lib/links";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { getSafeRedirectUrl } from "@/app/lib/security/middleware/redirect-policy";
+import { getSafeRedirectUrl } from "@/app/lib/security/redirect-url";
 import { AuthPageSkeleton } from "./AuthPageSkeleton";
 
 interface ClerkSignInWidgetProps {

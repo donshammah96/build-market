@@ -7,7 +7,7 @@ import type { Metadata } from "next";
 import ClerkSignInWidget from "@/components/auth/ClerkSignInWidget";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { getSafeRedirectUrl } from "@/app/lib/security/middleware/redirect-policy";
+import { getSafeRedirectUrl } from "@/app/lib/security/redirect-url";
 
 export const dynamic = "force-dynamic";
 
