@@ -92,7 +92,7 @@ catalog:
   # forced 5.11.1 everywhere. Catalog value matches the enforced version so
   # the manifest stops lying about what's actually installed.
   ioredis: 5.11.1
-  uuid: 11.1.1
+  uuid: 14.0.0
 
   # --- UI feedback / charts (client + admin) ---
   react-toastify: ^11.0.5
