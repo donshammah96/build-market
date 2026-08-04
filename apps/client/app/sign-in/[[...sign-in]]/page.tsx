@@ -5,6 +5,9 @@ import { Suspense } from "react";
 import { AuthPageSkeleton } from "@/components/auth/AuthPageSkeleton";
 import type { Metadata } from "next";
 import ClerkSignInWidget from "@/components/auth/ClerkSignInWidget";
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+import { getSafeRedirectUrl } from "@/app/lib/security/redirect-url";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +17,28 @@ export const metadata: Metadata = {
     "Sign in to your Build Market account to manage your projects, find pros, and browse construction designs in Kenya.",
 };
 
-export default function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams?:
+    | Promise<Record<string, string | string[] | undefined>>
+    | Record<string, string | string[] | undefined>;
+}) {
+  const resolvedParams = searchParams ? await searchParams : undefined;
+  const rawRedirectUrl =
+    typeof resolvedParams?.redirect_url === "string"
+      ? resolvedParams.redirect_url
+      : Array.isArray(resolvedParams?.redirect_url)
+        ? resolvedParams.redirect_url[0]
+        : null;
+
+  const safeRedirectUrl = getSafeRedirectUrl(rawRedirectUrl);
+
+  const { userId } = await auth();
+  if (userId) {
+    redirect(safeRedirectUrl ?? "/auth-callback");
+  }
+
   return (
     <div className="flex min-h-screen w-full bg-white">
       {/* Left Panel (Desktop) */}
@@ -54,7 +78,7 @@ export default function SignInPage() {
 
           <div className="bg-white p-1 rounded-2xl shadow-xl shadow-zinc-200/50 border border-zinc-100 min-h-100 flex items-center justify-center">
             <Suspense fallback={<AuthPageSkeleton variant="sign-in" />}>
-              <ClerkSignInWidget />
+              <ClerkSignInWidget redirectUrl={safeRedirectUrl ?? undefined} />
             </Suspense>
           </div>
 

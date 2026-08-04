@@ -173,8 +173,11 @@ const envGroups: EnvGroup[] = [
       { name: "NEXT_PUBLIC_API_URL", required: true },
       { name: "NEXT_PUBLIC_SEARCH_SERVICE_URL", required: false },
       { name: "NEXT_PUBLIC_ADMIN_APP_URL", required: false },
+      { name: "NEXT_PUBLIC_VERIFICATION_APP_URL", required: false },
+      { name: "NEXT_PUBLIC_VERIFICATION_OPS_URL", required: false },
     ],
   },
+
   {
     name: "csrf",
     description: "Trusted same-origin mutation policy",
@@ -1043,6 +1046,15 @@ function buildEnvConfig() {
     adminAppUrl: getStringEnv(
       "NEXT_PUBLIC_ADMIN_APP_URL",
       isProd ? "https://admin.buildmarket.app" : "http://localhost:3005",
+    ),
+    verificationAppUrl: getStringEnv(
+      "NEXT_PUBLIC_VERIFICATION_APP_URL",
+      getStringEnv(
+        "NEXT_PUBLIC_VERIFICATION_OPS_URL",
+        isProd
+          ? "https://verification.buildmarket.app"
+          : "http://localhost:3501",
+      ),
     ),
     appVersion: getStringEnv("npm_package_version", "0.1.0"),
 

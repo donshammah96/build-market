@@ -6,6 +6,8 @@ import {
   dashboardForRole,
 } from "@/lib/routes";
 
+export { getSafeRedirectUrl } from "@/app/lib/security/redirect-url";
+
 export function redirectToSignIn(
   req: NextRequest,
   pathname: string,

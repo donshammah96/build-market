@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Security — Workspace dependency vulnerability remediation & governance SLO alignment
+
+- **Dependency Security Patch SLOs & Workspace Overrides (`pnpm-workspace.yaml`, `apps/admin/scripts/check-continuous-governance.mjs`)**:
+  remediated 5 dependency security vulnerabilities across root workspace catalog and overrides: updated `postcss` catalog version to `8.5.23` (GHSA-fxqj-rqcc-2cmp), `brace-expansion` override to `2.1.4` (GHSA-rgw5-rvv9-x895), `hono` override to `>=4.12.34` (GHSA-8j4g-w8fx-2239), `fast-uri` override to `>=4.1.2` (GHSA-7p8r-x3mc-p8w7), and added `socket.io-parser` override `>=4.2.7` (GHSA-2m8v-j782-fhvr). Updated `checkDependencyPatchSlo()` assertion in `apps/admin/scripts/check-continuous-governance.mjs` to expect `brace-expansion@2.1.4`. Verified `pnpm run deps:audit` passes with 0 vulnerabilities and `pnpm admin:check-governance` passes cleanly.
+
+**Files changed:**
+
+- `pnpm-workspace.yaml`
+- `pnpm-lock.yaml`
+- `apps/admin/scripts/check-continuous-governance.mjs`
+
 ### Fixed — Workspace hygiene and static check alignment
 
 - **Codebase hygiene & static check alignment**: aligned admin application surface with workspace-wide lint and dead-code elimination standards across client, admin, and verification-ops boundaries.

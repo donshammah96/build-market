@@ -2,9 +2,17 @@
 
 ## [Unreleased]
 
-### Fixed — Codebase hygiene, CI workflow hardening, and null-safety cleanup
+### Fixed — Satellite cross-domain auth redirects, codebase hygiene, CI workflow hardening, and null-safety cleanup
 
+- **Satellite Cross-Domain Auth Redirects (`apps/client`)**: fixed stuck "Welcome Back" page loop when navigating from satellite domains (`verification.buildmarket.app`, `admin.buildmarket.app`) to `https://buildmarket.app/sign-in?redirect_url=...`:
+  - **Environment Configuration (`app/lib/infrastructure/env.ts`)**: declared `NEXT_PUBLIC_VERIFICATION_APP_URL` and `NEXT_PUBLIC_VERIFICATION_OPS_URL` environment variables in `urls` group and wired `verificationAppUrl` into `buildEnvConfig()` with production apex (`https://verification.buildmarket.app`) and local dev (`http://localhost:3501`) fallbacks.
+  - **Open-Redirect Sanitizer (`app/lib/security/middleware/redirect-policy.ts`)**: implemented `getSafeRedirectUrl(target)` allowing relative paths, `*.buildmarket.app` subdomains, configured app/admin/verification URLs, and local loopbacks (`localhost`, `127.0.0.1`) while rejecting arbitrary external origins.
+
+  - **Server-Side Auth Inspection (`app/sign-in/[[...sign-in]]/page.tsx`)**: evaluated `auth()` on the server side to immediately redirect already-signed-in users back to `safeRedirectUrl` or `/auth-callback` instead of rendering a static sign-in card.
+  - **Client Hydration & Callback Support (`components/auth/ClerkSignInWidget.tsx`, `app/auth-callback/page.tsx`)**: added client-side `useUser` hydration redirect via `window.location.href` and updated `AuthCallbackPage` to honor `redirect_url` post sign-in for onboarded users and admins.
+  - **Unit Tests (`__tests__/lib/redirect-policy.test.ts`)**: added 17 passing vitest assertions covering relative paths, satellite subdomains, local dev loopbacks, and protocol/domain security checks.
 - **CI Clerk Secret Binding & Webhook Relay (`.github/workflows/ci.yml`)**: wired dynamic GitHub Action secrets (`CLERK_WEBHOOK_SECRET`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`) into `client-preview-smoke-gate` and `admin-preview-smoke-gate` environment blocks; added background `smee-client` webhook relay listener (`https://buildmarket.live/ci` -> `http://127.0.0.1:3500/api/clerk-webhook`) with PID tracking and cleanup trap.
+
 - **Client Preview Smoke Gate Startup Assertion (`.github/workflows/ci.yml`)**: configured `ALLOW_MOCK_VIRUS_SCANNER: "true"` in `client-preview-smoke-gate` workflow environment to eliminate `instrumentation.ts` startup assertion failures during `next start` preview checks.
 - **Workspace Static Analysis Remediation (`apps/client`, `apps/admin`, `apps/verification-ops`)**: resolved 14 static analysis findings across client actions, hooks, domain capability guards, UI components, test suites, and security drift reporting scripts:
   - Fixed `INSUFFICIENT_NULL_CHECK` linter warning in `submit_onboarding_server_action` (`app/actions/onboarding.ts`) by removing redundant optional chaining (`?.`) on validated non-null `input`.
@@ -784,7 +792,7 @@ See `docs/operations/professional-onboarding-observability-runbook.md` §8.
 - **TypeScript/Build Pipeline**: Resolved CI and Vercel build failures caused by the native compiler upgrade to TypeScript `7.0.2`. Next.js 16.2.6 expects a programmatic `typescript/lib/typescript.js` file, which is missing from TS7's native binary bundle. Added a workspace `postinstall` script ([patch-typescript.mjs](file:///c:/Users/User/build-market/scripts/patch-typescript.mjs)) that patches the `typescript` package in `node_modules` by bridging it to standard `@typescript/typescript6` compiler APIs. This resolves programmatic compilation checks by Next.js and `tsx` in CI while retaining the fast native `tsc` binary for CLI compilation.
 - **Dependencies**: Added `tsx` to `apps/client` devDependencies and cataloged it monorepo-wide to ensure clean execution under CI.
 
-### Changed
+### Changed (Typescript)
 
 - **TypeScript**: Configured `@typescript-eslint` compiler compatibility routing via `pnpm` workspace overrides ([pnpm-workspace.yaml](file:///c:/Users/User/build-market/pnpm-workspace.yaml)), mapping `typescript` dependency inside `@typescript-eslint/*`, `@build/eslint-config`, and `eslint-config-next` packages to resolve to `@typescript/typescript6`. This enables using TypeScript 7's Go-powered native compiler for building while keeping `typescript-eslint` routed through the backward compatible TypeScript 6 wrapper for static analysis.
 - **TypeScript**: Removed deprecated/removed `"baseUrl": "."` option from `apps/client/tsconfig.json` ([tsconfig.json](file:///c:/Users/User/build-market/apps/client/tsconfig.json)) to satisfy TypeScript 7 compiler rules.
