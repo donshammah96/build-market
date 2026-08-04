@@ -79,6 +79,45 @@ const unauthorizedApiResponse = (message = "Unauthorized"): NextResponse =>
 
 const isBypassActive = env.auth.bypassEnabled && (env.isDev || env.isCI);
 
+// =============================================================================
+// Satellite wiring (ROOT CAUSE FIX — see REDIRECT_LOOP_AUTOPSY_AND_FIX.md)
+// =============================================================================
+// Clerk satellite domains (admin.buildmarket.app, verification.buildmarket.app,
+// ...) MUST pass `isSatellite`/`domain` into clerkMiddleware() so Clerk can
+// perform the cross-domain session handshake (the `__clerk_handshake` /
+// `__clerk_db_jwt` round trip) when a user lands back on the satellite after
+// signing in on the primary domain (buildmarket.app).
+//
+// Without this, the satellite's own clerkMiddleware never recognizes the
+// freshly-created session: every request still looks signed-out, so the
+// satellite sends the user to /sign-in on the primary again, which sends
+// them right back to the satellite via `redirect_url` — an infinite loop.
+//
+// env.clerk.isSatellite / env.clerk.domain were already being computed by
+// lib/infrastructure/env.ts, but were never read here. That's the bug.
+//
+// Fails OPEN (falls back to non-satellite behavior) rather than throwing, so
+// a misconfigured env var degrades this satellite's auth instead of taking
+// the whole app down — matching the "fail open + log" contract documented
+// in env.ts's satellite config comments.
+const satelliteDomain = env.clerk.domain?.trim() || undefined;
+const isSatelliteConfigured = Boolean(env.clerk.isSatellite && satelliteDomain);
+
+if (env.clerk.isSatellite && !satelliteDomain) {
+  console.error(
+    "[middleware] NEXT_PUBLIC_CLERK_IS_SATELLITE=true but " +
+      "NEXT_PUBLIC_CLERK_DOMAIN is unset/empty. Falling back to non-satellite " +
+      "mode: this app will NOT complete the Clerk cross-domain handshake and " +
+      "authenticated users WILL be stuck in a sign-in redirect loop. Set " +
+      "NEXT_PUBLIC_CLERK_DOMAIN to this app's own hostname, e.g. " +
+      "'verification.buildmarket.app' (no protocol, no path).",
+  );
+}
+
+const clerkMiddlewareOptions = isSatelliteConfigured
+  ? { isSatellite: true as const, domain: satelliteDomain as string }
+  : undefined;
+
 const middleware = isBypassActive
   ? (req: NextRequest) => {
       const nonce = generateCspNonce();
@@ -298,7 +337,11 @@ const middleware = isBypassActive
           logMiddlewareDecision(nextReq, "mw_redirect_signin", {
             routeClass: "onboarding",
           });
-          return redirectToSignIn(nextReq, pathname);
+          // NOTE: pass pathname + search, not bare pathname — otherwise any
+          // query params (e.g. ?expectedRole=professional) are silently
+          // dropped on same-origin redirects and the post-login handoff
+          // loses context.
+          return redirectToSignIn(nextReq, pathname + nextReq.nextUrl.search);
         }
 
         const metadata = parseMiddlewareSessionMetadata(sessionClaims);
@@ -367,7 +410,8 @@ const middleware = isBypassActive
           logMiddlewareDecision(nextReq, "mw_redirect_signin", {
             routeClass: "protected",
           });
-          return redirectToSignIn(nextReq, pathname);
+          // See onboarding-route note above: must include the search string.
+          return redirectToSignIn(nextReq, pathname + nextReq.nextUrl.search);
         }
 
         const metadata = parseMiddlewareSessionMetadata(sessionClaims);
@@ -458,7 +502,7 @@ const middleware = isBypassActive
       // 4. All other routes - allow access
       logMiddlewareDecision(nextReq, "mw_allow_default");
       return applyDocumentCspHeaders(nextReq, nonce, cspValue);
-    });
+    }, clerkMiddlewareOptions);
 
 export default middleware;
 

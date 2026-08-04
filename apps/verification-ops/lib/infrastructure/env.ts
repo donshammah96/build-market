@@ -254,9 +254,21 @@ function buildEnvConfig() {
         "http://localhost:3501",
       ),
     },
+    appUrl: getOptionalStringEnv("NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL")
+      ? (() => {
+          try {
+            return new URL(
+              getStringEnv("NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL"),
+            ).origin;
+          } catch {
+            return undefined;
+          }
+        })()
+      : undefined,
   } as const;
 }
 
 export const envConfig = buildEnvConfig();
 export type VerificationOpsEnvConfig = typeof envConfig;
+export const env = envConfig;
 export default envConfig;
