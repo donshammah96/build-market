@@ -203,7 +203,7 @@ function checkDependencyPatchSlo() {
   const workspaceYaml = readFileSync(workspaceYamlPath, "utf8");
 
   const requiredOverrides = [
-    { pkg: "brace-expansion", expected: "2.1.3" },
+    { pkg: "brace-expansion", expected: "2.1.4" },
     { pkg: "protobufjs", expected: ">=8.6.6" },
     { pkg: "ws", expected: ">=8.20.1" },
   ];
