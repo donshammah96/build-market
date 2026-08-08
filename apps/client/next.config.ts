@@ -47,6 +47,8 @@ const nextConfig: NextConfig = {
     "@build/messaging-server",
     "@build/mail-server",
     "@build/queue-server",
+    "@build/env-validation",
+    "@build/security-clerk",
   ],
 
   // Turbopack configuration (used in dev mode with --turbopack flag)
@@ -170,6 +172,16 @@ const nextConfig: NextConfig = {
         source: "/home",
         destination: "/",
         permanent: true,
+      },
+    ];
+  },
+
+  // Rewrites for webhook alias routing
+  async rewrites() {
+    return [
+      {
+        source: "/clerk-webhook",
+        destination: "/api/clerk-webhook",
       },
     ];
   },

@@ -69,6 +69,8 @@
     "@build/resilience": "workspace:*",
     "@build/types": "workspace:*",
     "@build/ui": "workspace:*",
+    "@build/env-validation": "workspace:*",
+    "@build/security-clerk": "workspace:*",
     "@clerk/nextjs": "catalog:",
     "@dnd-kit/core": "catalog:",
     "@dnd-kit/modifiers": "catalog:",

@@ -172,7 +172,7 @@ export const DEFAULT_PUBLIC_SETTINGS = {
   allowProfessionalSignup: true,
   featureFlags: {},
   verificationRules: DEFAULT_VERIFICATION_RULES,
-  supportEmail: "support@buildmarket.co.ke",
+  supportEmail: "support@buildmarket.app",
   supportPhone: "+254798798770",
   whatsappNumber: "+254798798770",
 };
@@ -257,7 +257,7 @@ const PublicSettingsSchema = z.object({
   verificationRules: VerificationRulesSchema.default(
     DEFAULT_VERIFICATION_RULES as any,
   ),
-  supportEmail: z.string().default("support@buildmarket.co.ke"),
+  supportEmail: z.string().default("support@buildmarket.app"),
   supportPhone: z.string().nullable().default("+254798798770"),
   whatsappNumber: z.string().nullable().default("+254798798770"),
 });

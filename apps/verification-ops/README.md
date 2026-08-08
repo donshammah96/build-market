@@ -103,7 +103,7 @@ NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
 # apps/client instance.
 NEXT_PUBLIC_CLERK_IS_SATELLITE=false
 NEXT_PUBLIC_CLERK_DOMAIN=verification.buildmarket.app
-NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL=https://buildmarket.app/sign-in
+NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL=https://accounts.buildmarket.app/sign-in
 
 # Staging/Dev PostgreSQL Connection
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/buildmarket_dev?schema=public"

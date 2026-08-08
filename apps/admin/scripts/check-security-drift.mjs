@@ -258,7 +258,12 @@ function checkDirectEnv(file, source) {
   if (isAllowed(source, ruleId)) return;
 
   const rel = relPath(file).replace(/\\/g, "/");
-  if (rel === "src/lib/infrastructure/env.ts") return;
+  if (
+    rel === "src/lib/infrastructure/env.ts" ||
+    rel === "src/lib/infrastructure/env-schema.ts" ||
+    rel === "src/lib/infrastructure/env-wrapper.ts"
+  )
+    return;
 
   const matches = source.matchAll(/process\.env(?:\.|\[)/g);
   const lines = source.split(/\r?\n/);

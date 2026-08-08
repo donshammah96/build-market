@@ -2,7 +2,7 @@ import "./prisma/load-env";
 import { prisma } from "./lib/prisma";
 
 async function grantAdminAccess() {
-  const clerkId = "user_3Eew1oLhes43I3RPFKcDdihy5HE";
+  const clerkId = "user_3FKfonUuBhDFq41AfYXQ0yPHPdw";
   const email = "donshammah1@gmail.com";
 
   console.log(

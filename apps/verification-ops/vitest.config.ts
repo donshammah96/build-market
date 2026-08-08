@@ -16,7 +16,7 @@ export default defineConfig({
       "__tests__/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
       "app/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
     ],
-    testTimeout: 10000, // 10s threshold for async database & auth context tests
+    testTimeout: 30000, // 30s threshold for async database, auth context & middleware e2e tests
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

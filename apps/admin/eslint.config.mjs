@@ -8,6 +8,9 @@ const config = [
     files: ["**/*.{ts,tsx}"],
     ignores: [
       "src/lib/infrastructure/env.ts",
+      "src/lib/infrastructure/env-wrapper.ts",
+      "src/lib/infrastructure/env-schema.ts",
+      "scripts/verify-vercel-env.ts",
       "next.config.ts",
       "instrumentation.ts",
       "**/*.test.ts",

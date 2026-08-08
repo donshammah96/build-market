@@ -32,17 +32,17 @@ describe("csp nonce helpers", () => {
 
     expect(csp).toContain("script-src 'nonce-nonce-value'");
     expect(csp).toContain("script-src-elem 'nonce-nonce-value'");
-    expect(csp).not.toContain("script-src-elem 'unsafe-inline'");
   });
 
-  it("does not include unsafe-inline in script-src-elem", () => {
+  it("includes required Clerk fallback directives in script-src-elem", () => {
     const csp = buildCspWithNonce(baseOptions);
     const directive = csp
       .split("; ")
       .find((value) => value.startsWith("script-src-elem"));
 
     expect(directive).toBeTruthy();
-    expect(directive).not.toContain("unsafe-inline");
+    expect(directive).toContain("'unsafe-inline'");
+    expect(directive).toContain("'strict-dynamic'");
   });
 
   it("handles nonce values with special characters", () => {

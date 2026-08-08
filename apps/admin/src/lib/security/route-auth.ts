@@ -5,6 +5,7 @@ import { UserRole, AdminRole } from "@build/enums";
 import { adminEnvConfig } from "@/lib/infrastructure/env";
 import { toBool } from "@/lib/infrastructure/env-utils";
 import { routeOutcomeCounter } from "@/lib/infrastructure/metrics";
+import { isClaimFresh } from "@build/security-clerk";
 
 /**
  * Resolved admin identity for API route handlers.
@@ -20,18 +21,42 @@ type AuthRouteResult =
   | { authorized: true; actor: RouteAdminActor; adminRoleStr: string }
   | { authorized: false; response: NextResponse };
 
+/** Tier 2 session-freshness window (seconds) — see autopsy §6.3 / hardening doc §3. */
+const SENSITIVE_ROUTE_CLAIM_FRESHNESS_SECONDS = 300;
+
 /**
  * Resolves Clerk session → AdminProfile and enforces isActive guard.
  * Returns a typed actor or a pre-built 403 NextResponse.
  *
  * This is the canonical auth pattern for admin API route handlers,
  * mirroring the safeAction resolver for server actions (ADR-ADMIN-001).
+ *
+ * Tier 2 session freshness (`requireFreshSession`): pass `true` for
+ * sensitive/destructive route handlers — decision recording, senior
+ * approval, unredacted evidence export, and similar operations named in
+ * the autopsy's §6.3 ADR requirement. When set, the caller's session claim
+ * `iat` must be within `SENSITIVE_ROUTE_CLAIM_FRESHNESS_SECONDS` (300s) in
+ * addition to passing the existing DB `isActive`/role checks — a valid DB
+ * profile does not by itself prove the *token in hand* was minted
+ * recently, and destructive admin operations shouldn't ride on an
+ * arbitrarily long-lived JWT. On staleness this returns 403 with
+ * `reason: "stale_session"` rather than silently downgrading the actor, so
+ * the client can prompt one `getToken({ skipCache: true })` refresh and
+ * retry — the same pattern already used in apps/client's auth-callback
+ * page for the Tier 1 (180s) admin-redirect gate.
+ *
+ * Routes that only read data (dashboards, list views) should leave this
+ * `false` (the default) — freshness enforcement is deliberately scoped to
+ * destructive/sensitive operations per the "middleware never touches the
+ * DB, freshness lives at the DB-authority layer" split the codebase
+ * otherwise follows.
  */
 export async function resolveAdminRouteActor(
   correlationId: string,
   operationName: string,
   logWarn: (fields: Record<string, unknown>) => void,
   requestStartedAt: number,
+  requireFreshSession = false,
 ): Promise<AuthRouteResult> {
   const isDev = adminEnvConfig.NODE_ENV === "development";
   const devBypass = toBool(adminEnvConfig.DEV_ADMIN_BYPASS);
@@ -56,8 +81,15 @@ export async function resolveAdminRouteActor(
         adminRole: adminRoleStr,
         outcome: "success",
       });
-    } catch {}
+    } catch {
+      // intentional: metric emission must never fail a route
+    }
 
+    // Dev bypass mints a synthetic actor with no real Clerk session claims
+    // to check freshness against — freshness enforcement is a property of
+    // real sessions, so it's intentionally skipped here rather than always
+    // failing (which would make `requireFreshSession` routes untestable
+    // under the dev bypass at all).
     return {
       authorized: true,
       actor: {
@@ -69,7 +101,7 @@ export async function resolveAdminRouteActor(
     };
   }
 
-  const { userId: clerkId } = await auth();
+  const { userId: clerkId, sessionClaims } = await auth();
 
   if (!clerkId) {
     logWarn({
@@ -85,7 +117,9 @@ export async function resolveAdminRouteActor(
         adminRole: "unknown",
         outcome: "unauthorized",
       });
-    } catch {}
+    } catch {
+      // intentional: metric emission must never fail a route
+    }
     return {
       authorized: false,
       response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
@@ -115,7 +149,9 @@ export async function resolveAdminRouteActor(
         adminRole: "unknown",
         outcome: "unauthorized",
       });
-    } catch {}
+    } catch {
+      // intentional: metric emission must never fail a route
+    }
     return {
       authorized: false,
       response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
@@ -147,12 +183,48 @@ export async function resolveAdminRouteActor(
           adminRole: adminRoleStr,
           outcome: "forbidden",
         });
-      } catch {}
+      } catch {
+        // intentional: metric emission must never fail a route
+      }
       return {
         authorized: false,
         response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
       };
     }
+  }
+
+  // Tier 2 (300s) session freshness — sensitive/destructive routes only.
+  // Runs after the DB isActive/role check above (so a genuinely
+  // deactivated or non-admin user still gets a plain "forbidden", not a
+  // "stale_session" that implies they'd be fine if they just refreshed).
+  if (
+    requireFreshSession &&
+    !isClaimFresh(sessionClaims, SENSITIVE_ROUTE_CLAIM_FRESHNESS_SECONDS)
+  ) {
+    logWarn({
+      correlationId,
+      operationName,
+      adminRole: adminRoleStr,
+      outcome: "stale_session",
+      durationMs: Date.now() - requestStartedAt,
+      errorCode: "STALE_SESSION",
+    });
+    try {
+      routeOutcomeCounter.add(1, {
+        operationName,
+        adminRole: adminRoleStr,
+        outcome: "stale_session",
+      });
+    } catch {
+      // intentional: metric emission must never fail a route
+    }
+    return {
+      authorized: false,
+      response: NextResponse.json(
+        { error: "Forbidden", reason: "stale_session" },
+        { status: 403 },
+      ),
+    };
   }
 
   try {
@@ -161,7 +233,9 @@ export async function resolveAdminRouteActor(
       adminRole: adminRoleStr,
       outcome: "success",
     });
-  } catch {}
+  } catch {
+    // intentional: metric emission must never fail a route
+  }
 
   return {
     authorized: true,

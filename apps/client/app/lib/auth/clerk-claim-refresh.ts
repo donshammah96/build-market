@@ -1,6 +1,6 @@
 import { normalizeRole } from "@/app/lib/security/roles";
 
-export type ClaimRefreshRole = "client" | "professional";
+export type ClaimRefreshRole = "client" | "professional" | "admin";
 
 export type ClerkPublicMetadataLike = {
   isOnboarded?: boolean;
@@ -53,9 +53,13 @@ export function hasExpectedOnboardingClaims(
   metadata: ClerkPublicMetadataLike,
   expectedRole: ClaimRefreshRole,
 ): boolean {
+  const normalizedExpected = normalizeRole(expectedRole);
+  const normalizedActual = normalizeRole(metadata.role);
+  if (normalizedExpected === "ADMIN") {
+    return normalizedActual === "ADMIN";
+  }
   return (
-    metadata.isOnboarded === true &&
-    normalizeRole(metadata.role) === normalizeRole(expectedRole)
+    metadata.isOnboarded === true && normalizedActual === normalizedExpected
   );
 }
 

@@ -53,6 +53,8 @@ const nextConfig: NextConfig = {
     "@build/messaging-server",
     "@build/mail-server",
     "@build/queue-server",
+    "@build/env-validation",
+    "@build/security-clerk",
   ],
 
   images: {

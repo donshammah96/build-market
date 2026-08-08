@@ -1,0 +1,37 @@
+{
+    "name": "@build/clerk-test-harness",
+    "version": "0.0.0",
+    "private": true,
+    "description": "Test-only: mocks the @clerk/nextjs/server clerkMiddleware boundary for true e2e middleware tests. Never imported from application code.",
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "compilerOptions": {
+        "outDir": "./dist",
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "default": "./dist/index.js"
+        }
+    },
+    "scripts": {
+        "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true }); try { require('fs').unlinkSync('tsconfig.tsbuildinfo'); } catch(e) {}\"",
+        "prebuild": "pnpm run clean",
+        "check-types": "tsc --noEmit",
+        "build": "tsc",
+        "prepack": "pnpm run build",
+        "test": "vitest run"
+    },
+    "devDependencies": {
+        "@build/typescript-config": "workspace:*",
+        "@types/node": "catalog:",
+        "next": "catalog:",
+        "vitest": "catalog:",
+        "@clerk/nextjs": "catalog:"
+    }
+}

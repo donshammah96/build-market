@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useUser, useClerk } from "@clerk/nextjs";
 import { ROUTES, dashboardForRole } from "@/lib/links";
 import { env } from "@/app/lib/infrastructure/env";
+import { isBlockedUserStatus } from "@build/enums";
+import { isClaimFresh } from "@build/security-clerk";
 import {
   CLERK_CLAIM_REFRESH_FAILURE_MESSAGE,
   hasExpectedOnboardingClaims,
@@ -33,6 +35,12 @@ import { getSafeRedirectUrl } from "@/app/lib/security/redirect-url";
  * - Reuses the shared claim-refresh helper from onboarding flows
  * - Fails closed for onboarding transition callbacks if refreshed claims
  *   cannot be confirmed
+ * - Tier 1 (180s, `isClaimFresh` from `@build/security-clerk`): before
+ *   trusting a refreshed `role === "ADMIN"` claim and redirecting off-app to
+ *   `env.adminAppUrl`, the session claim's `iat` must be within 180s. If it
+ *   isn't, one `getToken({ skipCache: true })` cycle is forced first —
+ *   otherwise a stale JWT could carry a role that's since been revoked in
+ *   the DB but hasn't propagated to the token yet.
  */
 
 interface UserMetadata {
@@ -43,12 +51,14 @@ interface UserMetadata {
 
 const MAX_RETRIES = 5;
 const RETRY_DELAY = 300;
+const ADMIN_CLAIM_FRESHNESS_SECONDS = 180; // Tier 1
 
 function parseExpectedRole(value: string | null): ClaimRefreshRole | undefined {
-  if (value === "client" || value === "professional") {
-    return value;
+  if (!value) return undefined;
+  const lower = value.trim().toLowerCase();
+  if (lower === "client" || lower === "professional" || lower === "admin") {
+    return lower as ClaimRefreshRole;
   }
-
   return undefined;
 }
 
@@ -56,7 +66,7 @@ export function AuthCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isLoaded, isSignedIn, user } = useUser();
-  const { getToken } = useAuth();
+  const { getToken, sessionClaims } = useAuth();
   const { signOut } = useClerk();
   const [status, setStatus] = useState<"checking" | "redirecting" | "error">(
     "checking",
@@ -108,6 +118,28 @@ export function AuthCallbackPage() {
   );
 
   /**
+   * Tier 1 (180s) session freshness gate. Must pass before any redirect that
+   * trusts a `role === "ADMIN"` claim, since that redirect sends the user
+   * off-app to `env.adminAppUrl` — a stale claim here is a stale privilege
+   * grant, not just a stale dashboard link. Forces one hard token refresh if
+   * the current claim is older than `ADMIN_CLAIM_FRESHNESS_SECONDS`.
+   */
+  const ensureAdminClaimFresh = useCallback(async (): Promise<boolean> => {
+    if (isClaimFresh(sessionClaims, ADMIN_CLAIM_FRESHNESS_SECONDS)) {
+      return true;
+    }
+    try {
+      await getToken({ skipCache: true });
+      // A forced skipCache fetch mints a token with a fresh `iat`; treat the
+      // claim as fresh immediately after rather than waiting on the
+      // client-side session object to propagate the new claims payload.
+      return true;
+    } catch {
+      return false;
+    }
+  }, [getToken, sessionClaims]);
+
+  /**
    * Check metadata and redirect after forcing a Clerk claim refresh.
    */
   const checkAndRedirect = useCallback(async () => {
@@ -116,9 +148,8 @@ export function AuthCallbackPage() {
     // Block suspended/banned/deactivated/archived users before any routing.
     // publicMetadata is the authoritative source at this point because the JWT
     // claim may not yet reflect an admin status update.
-    const blockedStatuses = ["SUSPENDED", "BANNED", "DEACTIVATED", "ARCHIVED"];
     const rawStatus = (user.publicMetadata as UserMetadata | undefined)?.status;
-    if (typeof rawStatus === "string" && blockedStatuses.includes(rawStatus)) {
+    if (isBlockedUserStatus(rawStatus)) {
       router.replace(`/unauthorized-sign-in?reason=${rawStatus}`);
       return;
     }
@@ -145,8 +176,19 @@ export function AuthCallbackPage() {
           ? metadata.role.trim().toUpperCase()
           : undefined;
       const isOnboarded = metadata?.isOnboarded === true;
+      const isAdminRedirect = normalizedRole === "ADMIN";
 
-      if (safeRedirectUrl && (isOnboarded || normalizedRole === "ADMIN")) {
+      if (isAdminRedirect) {
+        setMessage("Confirming session...");
+        const isFresh = await ensureAdminClaimFresh();
+        if (!isFresh) {
+          setStatus("error");
+          setMessage(CLERK_CLAIM_REFRESH_FAILURE_MESSAGE);
+          return;
+        }
+      }
+
+      if (safeRedirectUrl && (isOnboarded || isAdminRedirect)) {
         performRedirect(safeRedirectUrl);
         return;
       }
@@ -171,6 +213,7 @@ export function AuthCallbackPage() {
     retryCount.current = 0;
     performRedirect(ROUTES.onboarding, "Taking you to onboarding...");
   }, [
+    ensureAdminClaimFresh,
     expectedRole,
     getRedirectPath,
     getToken,

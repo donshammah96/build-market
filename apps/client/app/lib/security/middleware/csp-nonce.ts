@@ -42,6 +42,11 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
 
   const connectOrigins = [
     ...selfAndFirstParty,
+    // Canonical www subdomain: Next.js RSC prefetch fetch() calls resolve against the
+    // page's href origin. If NEXT_PUBLIC_APP_URL is the Vercel deployment URL rather
+    // than www.buildmarket.app, appOrigin won't cover these requests. Explicit entry
+    // ensures connect-src allows them regardless of env var configuration.
+    "https://www.buildmarket.app",
     // Third-party (identity): Clerk frontend API for auth/session operations.
     clerkFrontendApiOrigin,
     // Third-party (identity): Clerk FAPI for admin satellite domain (clerk.admin.buildmarket.app).
@@ -63,6 +68,13 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
 
   const scriptOrigins = [
     ...selfAndFirstParty,
+    // Canonical production origins: Cloudflare injects /cdn-cgi/ scripts (email-decode,
+    // challenge platform, Insights) from whichever origin the request arrives on — the
+    // apex buildmarket.app or www.buildmarket.app. 'self' only covers the serving origin,
+    // so both must be listed explicitly. Also guards against NEXT_PUBLIC_APP_URL being
+    // set to the Vercel deployment URL instead of the canonical production domain.
+    "https://buildmarket.app",
+    "https://www.buildmarket.app",
     // Third-party (identity): Clerk JS assets. Derived from NEXT_PUBLIC_CLERK_FRONTEND_API
     // so the origin tracks env config rather than a hardcoded hostname.
     clerkFrontendApiOrigin,
@@ -77,6 +89,10 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     "https://img.clerk.com",
     // Third-party (analytics): PostHog web SDK assets.
     analyticsOrigin,
+    // Third-party (CDN): Cloudflare Insights beacon — served from Cloudflare's own CDN
+    // (static.cloudflareinsights.com), not from the site origin. Cloudflare injects
+    // this script via the Web Analytics product. Cannot be proxied to 'self'.
+    "https://static.cloudflareinsights.com",
     // Third-party (CDN): Cloudflare-injected /cdn-cgi/ scripts are served from
     // the site's own origin, so 'self' covers them. No additional origin needed.
   ].filter((value): value is string => Boolean(value));
@@ -123,7 +139,12 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     // 'strict-dynamic' delegates trust to scripts loaded by nonce-authorized scripts.
     // Origin allowlists are retained as fallbacks for browsers without strict-dynamic support.
     // 'self' covers Cloudflare-injected /cdn-cgi/ scripts served from the site origin.
-    `script-src-elem 'nonce-${nonce}' 'strict-dynamic' 'self' ${dedup(scriptOrigins).join(" ")}`,
+    // 'unsafe-inline' is required as a strict-dynamic fallback for Clerk's embedded components.
+    // Browsers supporting 'strict-dynamic' silently ignore 'unsafe-inline' (no security regression).
+    // Browsers that support script-src-elem but not strict-dynamic (e.g. older Safari) fall back
+    // to 'unsafe-inline', which Clerk needs to initialize its <SignIn>/<SignUp> component scripts.
+    // This matches the static CSP layer in next-config-csp.ts and Clerk's own CSP guidance.
+    `script-src-elem 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline' 'self' ${dedup(scriptOrigins).join(" ")}`,
     `style-src ${dedup(styleOrigins).join(" ")}`,
     `img-src ${dedup(imgOrigins).join(" ")}`,
     `font-src ${dedup(fontOrigins).join(" ")}`,

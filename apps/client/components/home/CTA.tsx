@@ -2,7 +2,7 @@
 
 import { memo, type FC } from "react";
 import Link from "next/link";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import { Button } from "../ui/button";
 import { ArrowRight, Hammer } from "lucide-react";
 import {

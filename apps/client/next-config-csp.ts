@@ -37,6 +37,12 @@ export function buildCspValue(sources: CspSources): string {
 
   const connectOrigins = [
     ...selfAndFirstParty,
+    // Canonical www subdomain: RSC prefetch fetch() calls (Next.js App Router server
+    // components) resolve against the page's href origin. If the page is served from
+    // www.buildmarket.app but NEXT_PUBLIC_APP_URL/APP_URL is set to the Vercel deployment
+    // URL, appOrigin won't cover these requests. Explicit entry ensures connect-src
+    // allows them regardless of env var configuration.
+    "https://www.buildmarket.app",
     // Third-party (identity): Clerk frontend API for auth/session operations.
     clerkFrontendApiOrigin,
     // Third-party (identity): Clerk FAPI for admin satellite domain (clerk.admin.buildmarket.app).
@@ -58,6 +64,13 @@ export function buildCspValue(sources: CspSources): string {
 
   const scriptOrigins = [
     ...selfAndFirstParty,
+    // Canonical production origins: if NEXT_PUBLIC_APP_URL is the Vercel deployment URL
+    // (e.g. build-market-ebon.vercel.app), appOrigin won't cover www.buildmarket.app or
+    // the apex buildmarket.app. Cloudflare injects /cdn-cgi/ scripts from whichever origin
+    // the request arrives on — apex when accessed via buildmarket.app, www when via
+    // www.buildmarket.app. Both must be explicit since 'self' only covers the serving origin.
+    "https://buildmarket.app",
+    "https://www.buildmarket.app",
     // Third-party (identity): Clerk JS assets. Derived from NEXT_PUBLIC_CLERK_FRONTEND_API
     // so the origin tracks env config rather than a hardcoded hostname.
     clerkFrontendApiOrigin,
@@ -72,10 +85,12 @@ export function buildCspValue(sources: CspSources): string {
     "https://img.clerk.com",
     // Third-party (analytics): PostHog web SDK assets.
     analyticsOrigin,
-    // Third-party (CDN): Cloudflare-injected scripts (e.g. email-decode.min.js).
-    // Cloudflare's proxy layer injects this script at the CDN edge; it is served
-    // from the site's own origin via the /cdn-cgi/ path, so 'self' covers it.
-    // No additional origin needed — listed here for audit clarity.
+    // Third-party (CDN): Cloudflare Insights beacon — served from Cloudflare's own CDN
+    // (static.cloudflareinsights.com), not from the site origin. Cannot be proxied to
+    // 'self'. Cloudflare injects this script via the Zaraz or Web Analytics product.
+    "https://static.cloudflareinsights.com",
+    // Third-party (CDN): Cloudflare-injected /cdn-cgi/ scripts are served from the
+    // site's own origin, so 'self' covers them. Listed here for audit clarity.
   ].filter((v): v is string => Boolean(v));
 
   const styleOrigins = [

@@ -25,7 +25,7 @@ describe("System Settings Service", () => {
     expect(settings.maintenanceMode).toBe(false);
     expect(settings.publicSignup).toBe(true);
     expect(settings.allowProfessionalSignup).toBe(true);
-    expect(settings.supportEmail).toBe("support@buildmarket.co.ke");
+    expect(settings.supportEmail).toBe("support@buildmarket.app");
     expect(settings.featureFlags).toEqual({});
   });
 
