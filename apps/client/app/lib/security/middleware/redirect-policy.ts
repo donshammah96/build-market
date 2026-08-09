@@ -66,8 +66,15 @@ function resolvePrimaryOrigin(): string {
     );
   }
 
-  return new URL(primarySource).origin;
-}
+  try {
+    return new URL(primarySource).origin;
+  } catch {
+    throw new Error(
+      isSatellite
+        ? "[redirectToSignIn] env.clerk.primarySignInUrl must be an absolute URL. Check NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL."
+        : "[redirectToSignIn] env.appUrl must be an absolute URL. Check APP_URL / NEXT_PUBLIC_APP_URL / CLIENT_APP_URL resolution in lib/infrastructure/env.ts.",
+    );
+  }
 
 export function redirectToSignIn(
   req: NextRequest,
