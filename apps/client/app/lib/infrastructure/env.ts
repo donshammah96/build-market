@@ -144,6 +144,19 @@ const envGroups: EnvGroup[] = [
         required: false,
         default: "false",
       },
+      {
+        name: "VERCEL_ENV",
+        required: false,
+      },
+      {
+        name: "NEXT_PUBLIC_VERCEL_ENV",
+        required: false,
+      },
+      {
+        name: "ENABLE_CSP_UNSAFE_EVAL",
+        required: false,
+        default: "false",
+      },
     ],
   },
   {
@@ -1124,12 +1137,21 @@ function buildEnvConfig() {
     }
   }
 
+  const vercelEnv =
+    getOptionalStringEnv("VERCEL_ENV") ||
+    getOptionalStringEnv("NEXT_PUBLIC_VERCEL_ENV");
+  const isVercelPreview = vercelEnv === "preview";
+  const allowCspUnsafeEval =
+    isDev || isVercelPreview || getBooleanEnv("ENABLE_CSP_UNSAFE_EVAL", false);
+
   return {
     // Environment
     nodeEnv,
     isDev,
     isProd,
     isTest,
+    isVercelPreview,
+    allowCspUnsafeEval,
     cspReportOnly: getBooleanEnv("NEXT_PUBLIC_CSP_REPORT_ONLY", false),
     isCI: getBooleanEnv("CI"),
     isBuildPhase: process.env.NEXT_PHASE === "phase-production-build",

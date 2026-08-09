@@ -225,8 +225,8 @@ export function isClaimFresh(
     return false;
   }
   const claims = sessionClaims as Record<string, unknown>;
-  const iat = typeof claims.iat === "number" ? claims.iat : undefined;
-  if (!iat || Number.isNaN(iat)) {
+  const iat = claims.iat;
+  if (typeof iat !== "number" || Number.isNaN(iat) || iat <= 0) {
     return false;
   }
 

@@ -28,21 +28,25 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
-### Security & Infrastructure — Strict CSP Implementation Plan & Violation Telemetry Endpoint
+### Security & Infrastructure — Strict CSP Implementation Plan, Vercel Preview Compatibility & Route Matcher Hardening
 
-- **Close Matcher Gap (`middleware.ts`, `scripts/check-csp-matcher-gap.mjs`)**: removed `html?` from `middleware.ts` negative lookahead matcher so all page routes route through middleware for strict nonce-based CSP and satellite auth checks. Added CI enforcement script `scripts/check-csp-matcher-gap.mjs` verifying no un-allowlisted HTML files bypass middleware.
+- **Close Matcher Gap & Route Matcher Hardening (`middleware.ts`, `route-matcher.ts`, `scripts/check-csp-matcher-gap.mjs`)**:
+  - Removed `html?` from `middleware.ts` negative lookahead matcher so all page routes pass through middleware for strict nonce-based CSP and satellite auth checks. Added CI enforcement script `scripts/check-csp-matcher-gap.mjs`.
+  - Replaced wildcard `/api/webhooks/(.*)` in `route-matcher.ts` with explicit public routes (`/api/webhooks/clerk`, `/api/webhooks/resend`) to prevent unauthenticated bypass of future webhook subpaths.
+- **Vercel Live & Preview Environment Compatibility (`app/lib/security/middleware/csp-nonce.ts`, `next-config-csp.ts`, `app/lib/infrastructure/env.ts`)**:
+  - Added Vercel Live preview/toolbar origins (`https://vercel.live`, `https://*.vercel.live`, `wss://*.vercel.live`) to `script-src`, `connect-src`, `style-src`, and `frame-src`.
+  - Gated `'unsafe-eval'` behind `env.allowCspUnsafeEval` (covering `isDev`, `VERCEL_ENV === "preview"`, and `ENABLE_CSP_UNSAFE_EVAL`), preserving strict production gating while enabling Vercel Preview Toolbar features.
+  - Documented `VERCEL_ENV`, `NEXT_PUBLIC_VERCEL_ENV`, and `ENABLE_CSP_UNSAFE_EVAL` in `app/lib/infrastructure/env.ts` and `.env.example` passing `client:check-env-contract`.
+- **Defensive Middleware State & Test Reliability (`middleware.ts`, `packages/clerk-test-harness`, `packages/security-clerk`)**:
+  - Refactored `clerkSatelliteOrigins` extraction in `middleware.ts` using optional chaining `(env.clerk?.satelliteOrigins ?? [])` to prevent mock state crashes in unit test runners.
+  - Removed unused imports in `packages/clerk-test-harness/src/index.test.ts` and refactored `isClaimFresh` in `packages/security-clerk/src/index.ts` to eliminate constant-condition lint warnings.
+  - Parameterized `packages/db/grant-admin.ts` to consume `GRANT_ADMIN_CLERK_ID` and `GRANT_ADMIN_EMAIL` env/CLI arguments.
 - **Public CSP Violation Telemetry Endpoint (`app/api/csp-reports/route.ts`, `app/lib/security/middleware/route-matcher.ts`)**:
   - Implemented `/api/csp-reports` route handler supporting legacy `report-uri` (`application/csp-report`) and modern Reporting API (`application/reports+json`).
   - Added request size caps (16KB) and batch limits (20 entries) with 413 Payload Too Large and 405 Method Not Allowed handling.
   - Registered `/api/csp-reports(.*)` in `isSettingsExemptRoute` and `PUBLIC_API_ROUTES` in `route-matcher.ts` so unauthenticated browser reports process cleanly without triggering 401s or satellite auth handshakes.
   - Integrated `getClientLogger()` from `@/app/lib/api/resilient-api` to log Tier 1 violations (`logger.info`) and Tier 2 fallback signals (`logger.warn` with `matcherGapSuspected: true`).
 - **Report-Only Mode Gating (`app/lib/infrastructure/env.ts`, `middleware.ts`, `.env.example`)**: added `NEXT_PUBLIC_CSP_REPORT_ONLY` boolean variable to `envGroups` and `env.ts`. Updated `applyDocumentCspHeaders` in `middleware.ts` to support `Content-Security-Policy-Report-Only` for non-blocking telemetry evaluation during pre-enforcement rollout phases.
-- **CSP Hardening Audit & Satellite Origins (`app/lib/security/middleware/csp-nonce.ts`, `next-config-csp.ts`, `app/layout.tsx`, `middleware.ts`)**:
-  - Gated `'unsafe-eval'` behind `isDev` in both `csp-nonce.ts` and `next-config-csp.ts` (eliminates production eval/new Function attack surface).
-  - Replaced wildcard `"https://*.buildmarket.app"` with explicit per-satellite `clerkSatelliteOrigins: string[]` in `script-src` and `connect-src`.
-  - Structured `style-src` / `style-src-elem` (nonce-scoped) / `style-src-attr` (`'unsafe-inline'`) policy split.
-  - Added support for `reportUri`, `clerkChallengeOrigins` (bot-protection Turnstile framing), and production `upgrade-insecure-requests`.
-  - Added production `console.error` warning in `app/layout.tsx` for missing `x-nonce` headers to immediately catch middleware matcher regressions.
 - **Automated Verification (`__tests__/api/csp-reports/route.test.ts`, `__tests__/middleware/csp-nonce.test.ts`, `__tests__/middleware/route-matrix.test.ts`)**: added unit tests for `/api/csp-reports` (204 success, 413 payload cap, 405 method rejection) and expanded Vitest suite (112 tests passed).
 
 ### Security & Infrastructure — Staff-Level Clerk Webhook Setup (`/api/webhooks/clerk`)

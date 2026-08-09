@@ -85,22 +85,10 @@ const applyDocumentCspHeaders = (
 // REDIRECT_LOOP_AUTOPSY_AND_FIX.md — e.g. the primary domain's client JS
 // reaching a satellite's FAPI, or vice versa.
 //
-// Exposes explicit Clerk satellite FAPI origins (validated via env.ts)
-// replacing the former "https://*.buildmarket.app" wildcard — see CSP_HARDENING_AUDIT.md finding #2.
-const clerkSatelliteOrigins = env.clerk.satelliteOrigins
-  .map((value) => toOrigin(value.trim()))
-  .filter((value): value is string => Boolean(value));
-
-if (clerkSatelliteOrigins.length === 0 && env.clerk.isSatellite === false) {
-  // Only warn on the primary domain — satellites typically don't need this
-  // list (their own FAPI is already covered by clerkFrontendApiOrigin).
-  console.warn(
-    "[middleware] NEXT_PUBLIC_CLERK_SATELLITE_ORIGINS is unset. If this app " +
-      "needs to reach a Clerk satellite's FAPI during the cross-domain " +
-      "handshake, CSP will silently block it now that the wildcard has been " +
-      "removed. See CSP_HARDENING_AUDIT.md finding #2.",
-  );
-}
+const getClerkSatelliteOrigins = (): string[] =>
+  (env.clerk?.satelliteOrigins ?? [])
+    .map((value) => toOrigin(value.trim()))
+    .filter((value): value is string => Boolean(value));
 
 const buildRequestCsp = (nonce: string): string =>
   buildCspWithNonce({
@@ -108,10 +96,11 @@ const buildRequestCsp = (nonce: string): string =>
     appOrigin: toOrigin(env.appUrl) ?? "http://localhost:3500",
     apiOrigin:
       toOrigin(env.apiUrl) ?? toOrigin(env.appUrl) ?? "http://localhost:3500",
-    clerkFrontendApiOrigin: toOrigin(env.clerk.frontendApi),
-    analyticsOrigin: toOrigin(env.analytics.posthogHost),
-    isDev: env.isDev,
-    clerkSatelliteOrigins,
+    clerkFrontendApiOrigin: toOrigin(env.clerk?.frontendApi),
+    analyticsOrigin: toOrigin(env.analytics?.posthogHost),
+    isDev: Boolean(env.isDev),
+    allowUnsafeEval: env.allowCspUnsafeEval,
+    clerkSatelliteOrigins: getClerkSatelliteOrigins(),
   });
 
 const BLOCKED_ACCOUNT_STATUSES = [

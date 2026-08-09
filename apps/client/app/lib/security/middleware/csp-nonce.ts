@@ -5,6 +5,8 @@ export type CspNonceOptions = {
   clerkFrontendApiOrigin: string | null;
   analyticsOrigin: string | null;
   isDev: boolean;
+  /** Whether to allow 'unsafe-eval' in script-src (dev server or Vercel preview toolbar requirement). */
+  allowUnsafeEval?: boolean;
   /**
    * Explicit Clerk satellite FAPI origins, e.g. "https://clerk.admin.buildmarket.app".
    * Replaces the former "https://*.buildmarket.app" wildcard, which granted script/
@@ -59,6 +61,7 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     clerkFrontendApiOrigin,
     analyticsOrigin,
     isDev,
+    allowUnsafeEval = isDev,
     clerkSatelliteOrigins = [],
     clerkChallengeOrigins = null,
     reportUri = null,
@@ -89,6 +92,11 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     // Third-party (analytics): PostHog EU/US ingest endpoints (explicit for CSP).
     "https://us.i.posthog.com",
     "https://eu.i.posthog.com",
+    // Vercel Live preview/toolbar endpoints & websockets
+    "https://vercel.live",
+    "https://*.vercel.live",
+    "wss://vercel.live",
+    "wss://*.vercel.live",
     // Dev-only HMR websocket endpoint; no wildcard host.
     isDev ? appOrigin.replace(/^http/, "ws") : null,
   ].filter((value): value is string => Boolean(value));
@@ -120,33 +128,26 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     // (static.cloudflareinsights.com), not from the site origin. Cloudflare injects
     // this script via the Web Analytics product. Cannot be proxied to 'self'.
     "https://static.cloudflareinsights.com",
-    // Third-party (CDN): Cloudflare-injected /cdn-cgi/ scripts are served from
-    // the site's own origin, so 'self' covers them. No additional origin needed.
+    // Vercel Live preview/toolbar scripts
+    "https://vercel.live",
+    "https://*.vercel.live",
   ].filter((value): value is string => Boolean(value));
 
-  // 'unsafe-eval' is a Next.js *development-server* requirement, not a Clerk
-  // production requirement — Clerk's own CSP guidance is explicit about this:
-  // https://clerk.com/docs/security/clerk-csp ("script-src 'unsafe-eval' is a
-  // requirement for Next.js to run in development environments"). Shipping it
-  // to production removes a real mitigation (eval/new Function/string-timer
-  // sinks) for no benefit, so it's gated to dev only.
   const scriptSrcTokens = [
     `'nonce-${nonce}'`,
     "'strict-dynamic'",
-    isDev ? "'unsafe-eval'" : null,
+    allowUnsafeEval ? "'unsafe-eval'" : null,
     ...dedup(scriptOrigins),
   ].filter((value): value is string => Boolean(value));
 
   const styleOrigins = [
     "'self'",
-    `'nonce-${nonce}'`,
-    // Fallback for browsers that predate nonce-source support on style-src.
-    // Browsers that DO support nonces ignore 'unsafe-inline' automatically once
-    // a nonce-source is present (CSP3 backward-compat behavior), so this adds
-    // no risk on modern browsers — same pattern already used for script-src-elem.
     "'unsafe-inline'",
     // Third-party (typography): Google Fonts stylesheet host.
     "https://fonts.googleapis.com",
+    // Vercel Live preview/toolbar inline styles
+    "https://vercel.live",
+    "https://*.vercel.live",
   ];
 
   const imgOrigins = [
@@ -173,42 +174,29 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     "https://fonts.gstatic.com",
   ];
 
+  const frameOrigins = [
+    "'self'",
+    "https://vercel.live",
+    "https://*.vercel.live",
+    ...(clerkChallengeOrigins ?? []),
+  ];
+
   const directives = [
     "default-src 'self'",
     `script-src ${scriptSrcTokens.join(" ")}`,
-    // 'strict-dynamic' delegates trust to scripts loaded by nonce-authorized scripts.
-    // Origin allowlists are retained as fallbacks for browsers without strict-dynamic support.
-    // 'self' covers Cloudflare-injected /cdn-cgi/ scripts served from the site origin.
-    // 'unsafe-inline' is required as a strict-dynamic fallback for Clerk's embedded components.
-    // Browsers supporting 'strict-dynamic' silently ignore 'unsafe-inline' (no security regression).
-    // Browsers that support script-src-elem but not strict-dynamic (e.g. older Safari) fall back
-    // to 'unsafe-inline', which Clerk needs to initialize its <SignIn>/<SignUp> component scripts.
-    // This matches the static CSP layer in next-config-csp.ts and Clerk's own CSP guidance.
     `script-src-elem ${dedup([`'nonce-${nonce}'`, "'strict-dynamic'", "'unsafe-inline'", ...scriptOrigins]).join(" ")}`,
-    // style-src: kept as the CSP2 fallback for browsers without style-src-elem/-attr support.
     `style-src ${dedup(styleOrigins).join(" ")}`,
-    // style-src-elem: covers <style> tags (styled-jsx output, CSS-in-JS libs) via nonce.
     `style-src-elem ${dedup(styleOrigins).join(" ")}`,
-    // style-src-attr: CSP nonces do NOT apply to inline style="" attributes (spec limitation —
-    // nonces are element-scoped, not attribute-scoped). Next.js and several UI libraries still
-    // set style="" at runtime, so 'unsafe-inline' remains required here. This is a known,
-    // tracked gap, not an oversight — closing it needs either auditing/removing those call
-    // sites or adopting 'unsafe-hashes' with per-value hashes (CSP3).
     "style-src-attr 'unsafe-inline'",
     `img-src ${dedup(imgOrigins).join(" ")}`,
     `font-src ${dedup(fontOrigins).join(" ")}`,
     `connect-src ${dedup(connectOrigins).join(" ")}`,
+    `frame-src ${dedup(frameOrigins).join(" ")}`,
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'self'",
-    // Only set if Clerk bot-protection (Cloudflare Turnstile) is enabled for this
-    // instance — see clerkChallengeOrigins doc comment above.
-    clerkChallengeOrigins && clerkChallengeOrigins.length > 0
-      ? `frame-src 'self' ${dedup(clerkChallengeOrigins).join(" ")}`
-      : null,
-    // Meaningless on http://localhost in dev; standard hardening in production.
     isDev ? null : "upgrade-insecure-requests",
     reportUri ? `report-uri ${reportUri}` : null,
   ].filter((value): value is string => Boolean(value));

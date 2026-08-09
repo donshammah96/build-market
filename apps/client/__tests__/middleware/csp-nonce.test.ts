@@ -139,12 +139,13 @@ describe("csp nonce helpers", () => {
     });
   });
 
-  describe("style-src nonce coverage", () => {
-    it("adds the nonce to style-src and style-src-elem", () => {
+  describe("style-src inline compatibility", () => {
+    it("includes unsafe-inline and Vercel Live origins in style-src and style-src-elem", () => {
       const csp = buildCspWithNonce(baseOptions);
 
-      expect(csp).toContain("style-src 'self' 'nonce-nonce-value'");
-      expect(csp).toContain("style-src-elem 'self' 'nonce-nonce-value'");
+      expect(csp).toContain("style-src 'self' 'unsafe-inline'");
+      expect(csp).toContain("style-src-elem 'self' 'unsafe-inline'");
+      expect(csp).toContain("https://vercel.live");
     });
 
     it("keeps style-src-attr unsafe-inline-only (nonces don't cover attributes)", () => {
@@ -178,20 +179,22 @@ describe("csp nonce helpers", () => {
       expect(csp).toContain("report-uri /api/csp-report");
     });
 
-    it("omits frame-src when no challenge origins are provided", () => {
+    it("includes frame-src with default Vercel Live origins", () => {
       const csp = buildCspWithNonce(baseOptions);
 
-      expect(csp).not.toContain("frame-src");
+      expect(csp).toContain(
+        "frame-src 'self' https://vercel.live https://*.vercel.live",
+      );
     });
 
-    it("adds frame-src with Clerk challenge origins when provided", () => {
+    it("adds Clerk challenge origins to frame-src when provided", () => {
       const csp = buildCspWithNonce({
         ...baseOptions,
         clerkChallengeOrigins: ["https://challenges.cloudflare.com"],
       });
 
       expect(csp).toContain(
-        "frame-src 'self' https://challenges.cloudflare.com",
+        "frame-src 'self' https://vercel.live https://*.vercel.live https://challenges.cloudflare.com",
       );
     });
   });
