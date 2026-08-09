@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadRegulatorCredentials } from "@/app/lib/domains/regulator-verification/adapters/credentials";
-import { envConfig } from "@/app/lib/infrastructure/env";
+import { env } from "@/app/lib/infrastructure/env";
 
 describe("loadRegulatorCredentials", () => {
   it("returns null when credentials are missing or unconfigured", () => {
@@ -16,7 +16,7 @@ describe("loadRegulatorCredentials", () => {
 
   it("returns credentials when baseUrl and apiKey are configured in envConfig", () => {
     // Temporarily mutate envConfig.regulators for the test boundary
-    const ncaConfig = envConfig.regulators.NCA as {
+    const ncaConfig = env.regulators.NCA as {
       baseUrl?: string;
       apiKey?: string;
       signingSecret?: string;

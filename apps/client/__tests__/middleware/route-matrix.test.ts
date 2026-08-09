@@ -147,6 +147,10 @@ describe("Middleware Route Protection Matrix", () => {
       "/api/health",
       "/api/health/live",
       "/api/internal/user-status",
+      "/api/webhooks/clerk",
+      "/api/webhooks/resend",
+      "/api/clerk-webhook",
+      "/api/csp-reports",
       "/maintenance",
     ])(
       "classifies %s as exempt from system settings maintenance block",
@@ -192,7 +196,10 @@ describe("Middleware Route Protection Matrix", () => {
       "/api/health",
       "/api/settings/public",
       "/api/newsletter/confirm",
+      "/api/webhooks/clerk",
+      "/api/webhooks/resend",
       "/api/clerk-webhook",
+      "/api/csp-reports",
     ])("classifies %s as a public API route", (pathname) => {
       const req = createMockRequest(pathname);
       expect(isPublicApiRoute(req)).toBe(true);

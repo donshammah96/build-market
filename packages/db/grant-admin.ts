@@ -2,8 +2,17 @@ import "./prisma/load-env";
 import { prisma } from "./lib/prisma";
 
 async function grantAdminAccess() {
-  const clerkId = "user_3Eew1oLhes43I3RPFKcDdihy5HE";
-  const email = "donshammah1@gmail.com";
+  const clerkId = process.env.GRANT_ADMIN_CLERK_ID || process.argv[2];
+  const email = process.env.GRANT_ADMIN_EMAIL || process.argv[3];
+
+  if (!clerkId || !email) {
+    console.error(
+      "❌ Missing required parameters. Provide GRANT_ADMIN_CLERK_ID and GRANT_ADMIN_EMAIL env vars, " +
+        "or pass them as command line arguments:\n" +
+        "   pnpm -C packages/db exec tsx grant-admin.ts <clerkId> <email>",
+    );
+    process.exit(1);
+  }
 
   console.log(
     `🔍 Searching for user with email "${email}" or clerkId "${clerkId}"...`,

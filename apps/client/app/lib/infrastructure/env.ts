@@ -27,23 +27,39 @@
  *     - NEXT_PUBLIC_API_URL   → configEnv.apiUrl
  *     - NEXT_PUBLIC_CLERK_FRONTEND_API → configEnv.clerkFrontendApi (optional)
  *     - NEXT_PUBLIC_POSTHOG_HOST       → configEnv.analyticsPosthogHost
+ *
+ * @build/env-validation (Drift 2):
+ *   The EnvVar/EnvGroup *types* and the getStringEnv/getOptionalStringEnv/
+ *   getBooleanEnv/isAbsoluteHttpUrl *primitives* below are now sourced from
+ *   the shared `@build/env-validation` package instead of being a local
+ *   copy — the same canonical engine apps/admin and apps/verification-ops
+ *   use. This app's ~30 `envGroups` declarations and its Redis/storage
+ *   readiness extensions stay local (they're this app's own contract, not
+ *   shared behavior). See `validateEnv()` below for how the shared
+ *   `validateEnvGroups()` core is composed with those app-specific checks.
+ *
+ *   NOTE ON A BEHAVIOR CHANGE: the shared package's `getBooleanEnv` accepts
+ *   "true" / "1" / "yes" (case-insensitive) as truthy, where this file's
+ *   previous local copy accepted only the exact string "true". This widens
+ *   truthy-parsing for every boolean env var in this file (S3_DISABLED,
+ *   ENABLE_GDPR_FEATURES, REDIS_TLS, etc.) — flagged here because it's a
+ *   real behavior change, not just a refactor, even though it brings this
+ *   app in line with how apps/admin/apps/verification-ops already parse
+ *   booleans.
  */
 
 import { assertUploadProcessingModeInvariant } from "./upload-processing-mode";
-
-type EnvVar = {
-  name: string;
-  required: boolean;
-  default?: string;
-  validate?: (value: string) => boolean;
-  errorMessage?: string;
-};
-
-type EnvGroup = {
-  name: string;
-  description: string;
-  variables: EnvVar[];
-};
+import {
+  type EnvGroup,
+  type ValidationResult,
+  getBooleanEnv as getBooleanEnvFromObj,
+  getOptionalStringEnv as getOptionalStringEnvFromObj,
+  getStringEnv as getStringEnvFromObj,
+  isAbsoluteHttpUrl,
+  resolveDevAuthBypass,
+  validateEnvGroups,
+  validateSatelliteInvariants,
+} from "@build/env-validation";
 
 /**
  * Canonical role set per ADR-007.
@@ -88,6 +104,58 @@ const envGroups: EnvGroup[] = [
       {
         name: "NEXT_PUBLIC_CLERK_FRONTEND_API",
         required: false,
+      },
+      // --- Satellite configuration ---------------------------------------
+      // apps/client is the PRIMARY app (not expected to run as a Clerk
+      // satellite), but these were previously undeclared here entirely —
+      // meaning validateEnv() silently never checked them, and the values
+      // actually consumed in buildEnvConfig()'s `clerk` block below were
+      // read from the WRONG env var names (see Finding 6 fix there). They
+      // are declared now for the same reason apps/admin and
+      // apps/verification-ops declare them: if this app is ever pointed at
+      // a non-default Clerk domain configuration, the individual-var
+      // validation (in particular, "must be absolute" for
+      // primarySignInUrl) actually fires instead of silently no-op'ing on
+      // an undeclared variable.
+      {
+        name: "NEXT_PUBLIC_CLERK_IS_SATELLITE",
+        required: false,
+        default: "false",
+      },
+      {
+        name: "NEXT_PUBLIC_CLERK_DOMAIN",
+        required: false,
+      },
+      {
+        name: "NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL",
+        required: false,
+        validate: isAbsoluteHttpUrl,
+        errorMessage:
+          "NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL must be an absolute http(s) URL " +
+          '(e.g. "https://buildmarket.app/sign-in"), not a relative path — that\'s ' +
+          "what NEXT_PUBLIC_CLERK_SIGN_IN_URL is for.",
+      },
+      {
+        name: "NEXT_PUBLIC_CLERK_SATELLITE_ORIGINS",
+        required: false,
+      },
+      {
+        name: "NEXT_PUBLIC_CSP_REPORT_ONLY",
+        required: false,
+        default: "false",
+      },
+      {
+        name: "VERCEL_ENV",
+        required: false,
+      },
+      {
+        name: "NEXT_PUBLIC_VERCEL_ENV",
+        required: false,
+      },
+      {
+        name: "ENABLE_CSP_UNSAFE_EVAL",
+        required: false,
+        default: "false",
       },
     ],
   },
@@ -519,6 +587,9 @@ const envGroups: EnvGroup[] = [
     name: "localDev",
     description: "Local-only developer auth bypass settings",
     variables: [
+      // Canonical flag (Drift 4) — BYPASS_AUTH is now the legacy fallback,
+      // resolved together via @build/env-validation's resolveDevAuthBypass.
+      { name: "AUTH_DEV_BYPASS", required: false, default: "false" },
       { name: "BYPASS_AUTH", required: false, default: "false" },
       { name: "DEV_CLERK_ID", required: false, default: "user_local_dev" },
       {
@@ -617,12 +688,6 @@ const envGroups: EnvGroup[] = [
 // Validation Functions
 // ============================================
 
-type ValidationResult = {
-  valid: boolean;
-  errors: string[];
-  warnings: string[];
-};
-
 /**
  * Server-only required variables that are deferred during Next.js production build
  * (NEXT_PHASE=phase-production-build). These variables are NOT available at build
@@ -668,61 +733,23 @@ export function validateEnv(
   groups: string[] | "all" = "all",
   throwOnError = true,
 ): ValidationResult {
-  const result: ValidationResult = {
-    valid: true,
-    errors: [],
-    warnings: [],
-  };
-
   const groupsToValidate =
     groups === "all"
       ? envGroups
       : envGroups.filter((g) => groups.includes(g.name));
-  const deferServerOnlyRequiredErrors =
-    shouldDeferServerOnlyValidationForBuild();
 
-  for (const group of groupsToValidate) {
-    for (const variable of group.variables) {
-      const value = process.env[variable.name];
-
-      // Check required variables
-      if (variable.required && !value) {
-        if (
-          deferServerOnlyRequiredErrors &&
-          BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS.has(variable.name)
-        ) {
-          result.warnings.push(
-            `[${group.name}] Deferring required server env until runtime: ${variable.name}`,
-          );
-          continue;
-        }
-
-        result.valid = false;
-        result.errors.push(
-          `[${group.name}] Missing required: ${variable.name}`,
-        );
-        continue;
-      }
-
-      // Skip validation for missing optional variables
-      if (!value) {
-        if (variable.default) {
-          result.warnings.push(
-            `[${group.name}] Using default for ${variable.name}: ${variable.default}`,
-          );
-        }
-        continue;
-      }
-
-      // Run custom validation
-      if (variable.validate && !variable.validate(value)) {
-        result.valid = false;
-        result.errors.push(
-          `[${group.name}] Invalid ${variable.name}: ${variable.errorMessage || "Validation failed"}`,
-        );
-      }
-    }
-  }
+  // Core per-variable validation (required/default/custom validate) now
+  // delegated to @build/env-validation's validateEnvGroups — same engine
+  // apps/admin and apps/verification-ops use. The app-specific extensions
+  // below (Redis rate-limit readiness, remote storage readiness) still run
+  // as a second pass over the same `result`, exactly as before.
+  const result = validateEnvGroups(
+    envGroups,
+    process.env,
+    groups,
+    BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS,
+    shouldDeferServerOnlyValidationForBuild(),
+  );
 
   const validatesRedisGroup = groupsToValidate.some(
     (group) => group.name === "redis",
@@ -761,9 +788,15 @@ export function validateEnv(
 // ============================================
 // Helper Functions (boundary-safe)
 // ============================================
+//
+// getStringEnv/getOptionalStringEnv/getBooleanEnv are now thin
+// process.env-bound wrappers over @build/env-validation's shared
+// primitives (Drift 2) rather than a local re-implementation. Every
+// existing call site in this file (`getStringEnv("X", "default")`, etc.)
+// is unchanged — only the underlying implementation moved.
 
 function getStringEnv(name: string, fallback = ""): string {
-  return process.env[name] || fallback;
+  return getStringEnvFromObj(process.env, name, fallback);
 }
 
 /**
@@ -771,13 +804,11 @@ function getStringEnv(name: string, fallback = ""): string {
  * Use this for credentials that must be absent (not empty) when not configured.
  */
 function getOptionalStringEnv(name: string): string | undefined {
-  const value = getStringEnv(name);
-  return value.length > 0 ? value : undefined;
+  return getOptionalStringEnvFromObj(process.env, name);
 }
 
 function getBooleanEnv(name: string, fallback = false): boolean {
-  const value = process.env[name];
-  return value === undefined ? fallback : value === "true";
+  return getBooleanEnvFromObj(process.env, name, fallback);
 }
 
 function getNumberEnv(name: string, fallback: number): number {
@@ -878,14 +909,8 @@ function parseOriginList(raw?: string): string[] {
     .filter(Boolean);
 }
 
-function isAbsoluteHttpUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "https:" || parsed.protocol === "http:";
-  } catch {
-    return false;
-  }
-}
+// isAbsoluteHttpUrl now imported from @build/env-validation (Drift 2) —
+// the local copy previously here was a byte-for-byte duplicate.
 
 /**
  * Enforces a fail-closed production posture for remote storage when the S3-compatible
@@ -1031,18 +1056,118 @@ function buildEnvConfig() {
     });
   }
 
+  // Clerk — pulled out to a local const (rather than inline in the return
+  // object below) so validateSatelliteInvariants() can run against it
+  // before buildEnvConfig() returns, matching the pattern in apps/admin's
+  // env-wrapper.ts. apps/client is the PRIMARY app and isSatellite should
+  // be false in every real deployment, but the check runs unconditionally
+  // (it's a no-op when isSatellite is false) so a future misconfiguration
+  // doesn't rely on someone remembering to add this check when satellite
+  // mode is first turned on here.
+  const clerk = {
+    publishableKey: getStringEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"),
+    frontendApi: getOptionalStringEnv("NEXT_PUBLIC_CLERK_FRONTEND_API"),
+    secretKey: getOptionalStringEnv("CLERK_SECRET_KEY"),
+    webhookSecret:
+      getOptionalStringEnv("CLERK_WEBHOOK_SECRET") ||
+      getOptionalStringEnv("CLERK_WEBHOOK_SIGNING_SECRET"),
+    replayWindowSeconds: getNumberEnv(
+      "CLERK_WEBHOOK_REPLAY_WINDOW_SECONDS",
+      300,
+    ),
+    processingTtlSeconds: getNumberEnv(
+      "CLERK_WEBHOOK_PROCESSING_TTL_SECONDS",
+      120,
+    ),
+    processedTtlSeconds: getNumberEnv(
+      "CLERK_WEBHOOK_PROCESSED_TTL_SECONDS",
+      86400,
+    ),
+    // FIX (most severe finding in this pass): these three previously read
+    // from the WRONG env var names entirely — "CLERK_IS_SATELLITE" and
+    // "CLERK_DOMAIN" (no NEXT_PUBLIC_ prefix, so never actually set by any
+    // deploy) and, worse, primarySignInUrl was reading
+    // NEXT_PUBLIC_CLERK_SIGN_IN_URL — the *relative* sign-in path
+    // variable, not NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL at all. That's
+    // not "borrowing a fallback" (Finding 6's usual shape elsewhere in
+    // this codebase) — it was the ONLY source, guaranteed to fail
+    // isAbsoluteHttpUrl() in any consumer, on every request, in every
+    // environment. Since apps/client's own envGroups declaration above
+    // never declared these three vars either, validateEnv() also never
+    // caught it. Fixed on both ends: declared above, and read from the
+    // correct NEXT_PUBLIC_-prefixed names below with primarySignInUrl
+    // resolving strictly (no relative-path fallback of any kind).
+    isSatellite: getBooleanEnv("NEXT_PUBLIC_CLERK_IS_SATELLITE", false),
+    domain: getOptionalStringEnv("NEXT_PUBLIC_CLERK_DOMAIN"),
+    primarySignInUrl: (() => {
+      const configured = getOptionalStringEnv(
+        "NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL",
+      );
+      return configured && isAbsoluteHttpUrl(configured)
+        ? configured
+        : undefined;
+    })(),
+    satelliteOrigins: (
+      getOptionalStringEnv("NEXT_PUBLIC_CLERK_SATELLITE_ORIGINS") ?? ""
+    )
+      .split(",")
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0),
+  };
+
+  const satelliteIssues = validateSatelliteInvariants({
+    isSatellite: clerk.isSatellite,
+    domain: clerk.domain,
+    primarySignInUrl: clerk.primarySignInUrl,
+    appName: "client",
+  });
+  if (
+    satelliteIssues.length > 0 &&
+    !shouldDeferServerOnlyValidationForBuild()
+  ) {
+    const message = `Invalid Clerk satellite configuration in apps/client:\n${satelliteIssues
+      .map((i) => `  - ${i}`)
+      .join("\n")}`;
+    if (isProd) {
+      // Fail CLOSED at boot in production — same posture as apps/admin's
+      // env-wrapper.ts for this exact misconfiguration class.
+      throw new Error(message);
+    } else {
+      console.warn(`[apps/client env] ${message}`); // bootstrap-only: env validation warning
+    }
+  }
+
+  const vercelEnv =
+    getOptionalStringEnv("VERCEL_ENV") ||
+    getOptionalStringEnv("NEXT_PUBLIC_VERCEL_ENV");
+  const isVercelPreview = vercelEnv === "preview";
+  const allowCspUnsafeEval =
+    isDev || isVercelPreview || getBooleanEnv("ENABLE_CSP_UNSAFE_EVAL", false);
+
   return {
     // Environment
     nodeEnv,
     isDev,
     isProd,
     isTest,
+    isVercelPreview,
+    allowCspUnsafeEval,
+    cspReportOnly: getBooleanEnv("NEXT_PUBLIC_CSP_REPORT_ONLY", false),
     isCI: getBooleanEnv("CI"),
     isBuildPhase: process.env.NEXT_PHASE === "phase-production-build",
 
     // URLs
     appUrl: getStringEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3500"),
     apiUrl: getStringEnv("NEXT_PUBLIC_API_URL", "http://localhost:3500/api"),
+    // BUG FIX (uncovered while wiring this app onto @build/security-clerk's
+    // getSafeRedirectUrl elsewhere): apps/client/app/lib/security/redirect-url.ts
+    // reads `env.clientAppUrl`, but this field never existed here — it
+    // would have been `undefined` at runtime (and a TS compile error under
+    // strict unknown-property checks). apps/client IS the primary/client
+    // app, so this is a self-alias to `appUrl`, mirroring the same
+    // `adminAppUrl: appUrl` self-alias pattern used in apps/admin's
+    // env-wrapper.ts.
+    clientAppUrl: getStringEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3500"),
     adminAppUrl: getStringEnv(
       "NEXT_PUBLIC_ADMIN_APP_URL",
       isProd ? "https://admin.buildmarket.app" : "http://localhost:3005",
@@ -1058,10 +1183,15 @@ function buildEnvConfig() {
     ),
     appVersion: getStringEnv("npm_package_version", "0.1.0"),
 
-    // Local-only auth bypass
+    // Local-only auth bypass — canonical AUTH_DEV_BYPASS with legacy
+    // BYPASS_AUTH fallback (Drift 4), fail-closed in prod via
+    // @build/env-validation's resolveDevAuthBypass (throws if somehow
+    // true in a production NODE_ENV, same as apps/admin/apps/client's
+    // other bypass-adjacent guards).
     auth: {
       secret: getStringEnv("AUTH_SECRET"),
-      bypassEnabled: getBooleanEnv("BYPASS_AUTH"),
+      bypassEnabled: resolveDevAuthBypass(process.env, isProd, "client")
+        .bypassEnabled,
       devActor: {
         clerkId: getStringEnv(
           "DEV_CLERK_ID",
@@ -1112,28 +1242,9 @@ function buildEnvConfig() {
       ),
     },
 
-    // Clerk
-    clerk: {
-      publishableKey: getStringEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"),
-      frontendApi: getOptionalStringEnv("NEXT_PUBLIC_CLERK_FRONTEND_API"),
-      secretKey: getOptionalStringEnv("CLERK_SECRET_KEY"),
-      webhookSecret: getOptionalStringEnv("CLERK_WEBHOOK_SECRET"),
-      replayWindowSeconds: getNumberEnv(
-        "CLERK_WEBHOOK_REPLAY_WINDOW_SECONDS",
-        300,
-      ),
-      processingTtlSeconds: getNumberEnv(
-        "CLERK_WEBHOOK_PROCESSING_TTL_SECONDS",
-        120,
-      ),
-      processedTtlSeconds: getNumberEnv(
-        "CLERK_WEBHOOK_PROCESSED_TTL_SECONDS",
-        86400,
-      ),
-      isSatellite: getBooleanEnv("CLERK_IS_SATELLITE", false),
-      domain: getOptionalStringEnv("CLERK_DOMAIN"),
-      primarySignInUrl: getOptionalStringEnv("NEXT_PUBLIC_CLERK_SIGN_IN_URL"),
-    },
+    // Clerk (computed above buildEnvConfig()'s return so
+    // validateSatelliteInvariants() can run against it first)
+    clerk,
 
     // Database
     databaseUrl: getOptionalStringEnv("DATABASE_URL"),

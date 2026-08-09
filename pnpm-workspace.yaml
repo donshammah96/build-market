@@ -149,7 +149,7 @@ catalog:
   embla-carousel-react: ^8.6.0
   framer-motion: ^12.23.24
   lru-cache: ^11.2.2
-  nanoid: ^5.1.6
+  nanoid: ^5.1.16
   postgres: ^3.4.6
   posthog-js: ^1.363.4
   react-day-picker: ^9.14.0
@@ -234,8 +234,9 @@ overrides:
   qs: ">=6.14.2"
   "rollup@^4.0.0": "4.60.1"
   "@clerk/express": ">=2.1.6"
-  yaml: ">=2.8.3"
-  dompurify: ">=3.4.12"
+  dompurify: ">=3.4.13"
+  nanoid: ">=5.1.16"
+  "postcss>nanoid": ">=5.1.16"
   axios: ">=1.15.0"
   protobufjs: ">=8.6.6"
   sharp: ">=0.35.0"

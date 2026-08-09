@@ -27,7 +27,10 @@ import {
   releaseClerkWebhookDelivery,
 } from "@/app/lib/infrastructure/webhook-replay";
 import { applyPrivateNoStoreHeaders } from "@/app/lib/api/http-security";
-import { recordWebhookReplayReject } from "@/app/lib/auth/telemetry-metrics";
+import {
+  recordWebhookFailure,
+  recordWebhookReplayReject,
+} from "@/app/lib/auth/telemetry-metrics";
 
 function mapClerkWebhookResult<T extends { message: string }>(
   result:
@@ -131,6 +134,7 @@ export async function POST(req: NextRequest) {
       event = wh.verify(payload, headers) as ClerkWebhookEvent;
     } catch (verifyError) {
       recordWebhookReplayReject("invalid_signature");
+      recordWebhookFailure("invalid_signature");
       getClientLogger().error(
         "Webhook signature verification failed",
         verifyError instanceof Error
@@ -296,6 +300,7 @@ export async function POST(req: NextRequest) {
     await finalizeWebhookClaim(claimedDeliveryId, "released").catch(
       () => undefined,
     );
+    recordWebhookFailure("processing_error");
     getClientLogger().error(
       "Webhook processing failed",
       error instanceof Error ? error : new Error(String(error)),

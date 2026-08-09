@@ -12,8 +12,8 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
-  Filter,
 } from "lucide-react";
+import { AuthorityFilterSelect } from "./authority-filter-select";
 import type {
   VerificationStatutoryAuthority,
   CompoundQueueType,
@@ -231,28 +231,12 @@ export default async function VerificationOpsDashboard({
               </span>
             </div>
 
-            {/* Authority Filter Select */}
-            <div className="flex items-center gap-2">
-              <Filter className="w-3.5 h-3.5 text-zinc-400" />
-              <form action="/" method="GET" className="inline-block">
-                <input type="hidden" name="queue" value={currentQueue} />
-                <select
-                  name="authority"
-                  defaultValue={currentAuthority || ""}
-                  onChange={(e) => {
-                    const form = e.target.form;
-                    if (form) form.submit();
-                  }}
-                  className="bg-zinc-900 border border-zinc-700 text-xs text-zinc-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
-                >
-                  {statutoryAuthorities.map((auth) => (
-                    <option key={auth.key} value={auth.key}>
-                      {auth.label}
-                    </option>
-                  ))}
-                </select>
-              </form>
-            </div>
+            {/* Authority Filter Select — Client Component (onChange cannot live in a Server Component) */}
+            <AuthorityFilterSelect
+              currentQueue={currentQueue}
+              currentAuthority={currentAuthority}
+              authorities={statutoryAuthorities}
+            />
           </div>
 
           {/* Case Table */}

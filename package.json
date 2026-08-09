@@ -53,7 +53,7 @@
     "verification-ops:report-security-drift:strict": "pnpm -C apps/verification-ops run report-security-drift:strict",
     "verification-ops:check-all": "pnpm -C apps/verification-ops run check-all",
     "queue-server:check-types": "pnpm -C packages/queue-server run check-types",
-    "client:tsc-noemit": "pnpm -C apps/client exec tsc --noEmit",
+    "client:check-types": "pnpm -C apps/client exec tsc --noEmit",
     "client:build:cloudflare-worker": "pnpm -C apps/client run build:cloudflare-worker",
     "client:deploy:cloudflare-worker": "pnpm -C apps/client exec wrangler deploy --config wrangler.toml",
     "client:check-env-contract": "pnpm -C apps/client run check-env-contract",

@@ -79,7 +79,10 @@ describe("getVerificationUserContext", () => {
   });
 
   it("maps SUPER_ADMIN correctly with full capabilities", async () => {
-    vi.mocked(auth).mockResolvedValue({ userId: "clerk_super" } as any);
+    vi.mocked(auth).mockResolvedValue({
+      userId: "clerk_super",
+      sessionClaims: { iat: Math.floor(Date.now() / 1000) },
+    } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "usr_super",
       email: "super@example.com",
@@ -95,6 +98,7 @@ describe("getVerificationUserContext", () => {
       email: "super@example.com",
       fullName: "Super Admin",
       verificationRole: "VERIFICATION_COMPLIANCE_OFFICER",
+      sessionFresh: true,
       canRecordDecisions: true,
       canSeniorApprove: true,
       canViewUnredactedEvidence: true,
@@ -103,7 +107,10 @@ describe("getVerificationUserContext", () => {
   });
 
   it("maps OPS_ADMIN correctly to VERIFICATION_SENIOR_REVIEWER", async () => {
-    vi.mocked(auth).mockResolvedValue({ userId: "clerk_ops" } as any);
+    vi.mocked(auth).mockResolvedValue({
+      userId: "clerk_ops",
+      sessionClaims: { iat: Math.floor(Date.now() / 1000) },
+    } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "usr_ops",
       email: "ops@example.com",
@@ -119,6 +126,7 @@ describe("getVerificationUserContext", () => {
       email: "ops@example.com",
       fullName: "Ops Lead",
       verificationRole: "VERIFICATION_SENIOR_REVIEWER",
+      sessionFresh: true,
       canRecordDecisions: true,
       canSeniorApprove: true,
       canViewUnredactedEvidence: false,
@@ -127,7 +135,10 @@ describe("getVerificationUserContext", () => {
   });
 
   it("maps VERIFICATION_ADMIN correctly to VERIFICATION_REVIEWER", async () => {
-    vi.mocked(auth).mockResolvedValue({ userId: "clerk_verifier" } as any);
+    vi.mocked(auth).mockResolvedValue({
+      userId: "clerk_verifier",
+      sessionClaims: { iat: Math.floor(Date.now() / 1000) },
+    } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "usr_verifier",
       email: "verifier@example.com",
@@ -143,6 +154,7 @@ describe("getVerificationUserContext", () => {
       email: "verifier@example.com",
       fullName: "Jane Reviewer",
       verificationRole: "VERIFICATION_REVIEWER",
+      sessionFresh: true,
       canRecordDecisions: true,
       canSeniorApprove: false,
       canViewUnredactedEvidence: false,
@@ -151,7 +163,10 @@ describe("getVerificationUserContext", () => {
   });
 
   it("maps AUDITOR correctly to VERIFICATION_AUDITOR with read/export rights", async () => {
-    vi.mocked(auth).mockResolvedValue({ userId: "clerk_auditor" } as any);
+    vi.mocked(auth).mockResolvedValue({
+      userId: "clerk_auditor",
+      sessionClaims: { iat: Math.floor(Date.now() / 1000) },
+    } as any);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "usr_auditor",
       email: "auditor@kra.go.ke",
@@ -167,6 +182,7 @@ describe("getVerificationUserContext", () => {
       email: "auditor@kra.go.ke",
       fullName: "Audit Officer",
       verificationRole: "VERIFICATION_AUDITOR",
+      sessionFresh: true,
       canRecordDecisions: false,
       canSeniorApprove: false,
       canViewUnredactedEvidence: true,

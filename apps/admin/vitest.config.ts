@@ -15,7 +15,7 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    testTimeout: 10000, // 10 seconds for tests with eventual consistency scenarios
+    testTimeout: 30000, // 30 seconds for tests with eventual consistency and middleware E2E scenarios
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

@@ -7,21 +7,22 @@ import {
   normalizeAdminAccessRole,
   parseSessionMetadata,
 } from "@/lib/security/claims";
-import { adminEnvConfig } from "@/lib/infrastructure/env";
+import { env } from "@/lib/infrastructure/env";
 import { NextResponse } from "next/server";
-import { toBool } from "@/lib/infrastructure/env-utils";
 import {
   isPublicRoute,
   isDashboardRoute,
   isVerificationRoute,
 } from "@/lib/security/route-registry";
+import { isBlockedUserStatus } from "@build/enums";
+import {
+  normalizeClerkDomain,
+  resolvePrimarySignInUrl,
+} from "@build/security-clerk";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Statuses that must be blocked before role checks are applied. */
-const BLOCKED_STATUSES = ["SUSPENDED", "BANNED", "DEACTIVATED", "ARCHIVED"];
 
 type MiddlewareAuthObject = {
   userId: string | null;
@@ -30,122 +31,51 @@ type MiddlewareAuthObject = {
   redirectToSignIn: (args: { returnBackUrl: string }) => Response;
 };
 
+/**
+ * Finding 8: `authObj.has({ role })` checks Clerk *Organizations*
+ * role/permission grants. Build Market does not use Clerk Organizations —
+ * authorization is modeled entirely through `AdminProfile` in Postgres,
+ * synced into `publicMetadata` / session claims. With Organizations
+ * unconfigured, `has()` returns `false` unconditionally for every request,
+ * making the "primary check" dead code that only added a false sense of
+ * defense-in-depth; 100% of real authorization decisions were already being
+ * made by the metadata fallback beneath it.
+ *
+ * This removes that dead branch per the hardening doc's option (b). If
+ * Build Market ever adopts Clerk Organizations for admin role management,
+ * reintroduce an explicit `authObj.has({ role })` check here deliberately —
+ * don't restore it silently as "defense-in-depth" without organizations
+ * actually being configured, or it regresses back to unverified dead code.
+ */
 function hasAllowedRole(
   authObj: MiddlewareAuthObject,
   allowedRoles: readonly AdminAccessRole[],
 ): boolean {
-  // Primary check: Clerk's built-in `has` helper (reads org roles / permissions)
-  for (const role of allowedRoles) {
-    if (authObj.has({ role })) {
-      return true;
-    }
-  }
-
-  // Fallback: read role from publicMetadata propagated into session claims
   const metadata = parseSessionMetadata(authObj.sessionClaims);
   const normalizedRole = normalizeAdminAccessRole(metadata?.role);
   return normalizedRole ? allowedRoles.includes(normalizedRole) : false;
 }
 
-/** Returns true only if `value` parses as a well-formed absolute http(s) URL. */
-function isAbsoluteHttpUrl(value: string | null | undefined): value is string {
-  if (!value) return false;
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Normalize a Clerk `domain` option to a bare host. Clerk expects just the
- * host (e.g. "buildmarket.app"), not a full URL. If someone accidentally
- * configures NEXT_PUBLIC_CLERK_DOMAIN with a scheme (e.g.
- * "https://buildmarket.app"), strip it down instead of passing a malformed
- * value through.
- */
-function normalizeClerkDomain(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
-    try {
-      return new URL(trimmed).host || null;
-    } catch {
-      return null;
-    }
-  }
-  return trimmed;
-}
-
-/**
- * Best-effort fallback for the primary domain's sign-in URL when
- * `NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL` is unset for the environment
- * serving this request (e.g. a Preview/branch deploy where only
- * Production has the var configured).
+ * Resolve the absolute primary sign-in URL to use for a satellite request.
+ * Thin app-local wrapper around `@build/security-clerk`'s
+ * `resolvePrimarySignInUrl` (Finding 7): the derivation/validation logic now
+ * lives in exactly one place, and this app just supplies its own
+ * `env.clerk.primarySignInUrl` and logger name.
  *
- * Heuristic: strip the leftmost subdomain label from the current host
- * (`admin.buildmarket.app` -> `buildmarket.app`) and assume `/sign-in`
- * lives at the apex. This only fires as a safety net — it should never
- * be relied on in place of setting the env var, since it assumes a
- * specific domain-naming convention (satellite = one subdomain deep
- * under the primary's apex). Returns null if the host doesn't look like
- * a subdomain (nothing sensible to strip), so callers can fall back
- * further.
+ * The shared function memoizes its result on the `req` reference (Finding
+ * 10), so calling this twice per request — once from the dynamic Clerk
+ * options resolver below, once from the unauthenticated-request handler
+ * branch — resolves and logs only once, not twice.
  */
-function deriveFallbackPrimarySignInUrl(req: {
+function resolveSatellitePrimarySignInUrl(req: {
   nextUrl: { protocol: string; host: string };
 }): string | null {
-  const { protocol, host } = req.nextUrl;
-  const labels = host.split(".");
-
-  // Need at least "sub.domain.tld" to safely strip one subdomain label.
-  if (labels.length <= 2) {
-    return null;
-  }
-
-  // Guard against stripping a label off a *.vercel.app (or similar shared
-  // hosting) preview host — that would derive a nonsense apex like
-  // "vercel.app" that is syntactically valid but not actually ours.
-  const KNOWN_SHARED_HOSTING_SUFFIXES = ["vercel.app", "vercel.sh"];
-  const apexCandidate = labels.slice(-2).join(".");
-  if (KNOWN_SHARED_HOSTING_SUFFIXES.includes(apexCandidate)) {
-    return null;
-  }
-
-  const apexHost = labels.slice(1).join(".");
-  return `${protocol}//${apexHost}/sign-in`;
-}
-
-/**
- * Resolve the absolute primary sign-in URL to use for a satellite request,
- * validating the env-provided value rather than trusting it blindly. A
- * relative or malformed `NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL` (e.g. copied
- * from the non-satellite `NEXT_PUBLIC_CLERK_SIGN_IN_URL`, which is meant to
- * be relative) must NOT be handed to Clerk — that is exactly what throws
- * "The signInUrl needs to have a absolute url format" and, because this is
- * evaluated for every request (including public ones), takes the whole site
- * down rather than just failing one redirect.
- */
-function resolvePrimarySignInUrl(req: {
-  nextUrl: { protocol: string; host: string };
-}): string | null {
-  const configured = adminEnvConfig.NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL;
-
-  if (configured) {
-    if (isAbsoluteHttpUrl(configured)) {
-      return configured;
-    }
-    console.error(
-      "[middleware] NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL=" +
-        `"${configured}" is not an absolute http(s) URL (did you mean to set ` +
-        "NEXT_PUBLIC_CLERK_SIGN_IN_URL instead, which IS relative?). Ignoring " +
-        "it and falling back to host-derivation instead of crashing.",
-    );
-  }
-
-  return deriveFallbackPrimarySignInUrl(req);
+  return resolvePrimarySignInUrl(
+    req,
+    env.clerk.primarySignInUrl,
+    "apps/admin middleware",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -161,9 +91,11 @@ export default clerkMiddleware(
     }
 
     // 2. Dev bypass: short-circuit all auth/role checks in local development
-    //    when DEV_ADMIN_BYPASS=true. Never enable in production.
-    const isDev = adminEnvConfig.NODE_ENV === "development";
-    const devBypass = toBool(adminEnvConfig.DEV_ADMIN_BYPASS);
+    //    when AUTH_DEV_BYPASS=true (canonical; legacy DEV_ADMIN_BYPASS still
+    //    honored via @build/env-validation's resolveDevAuthBypass). Never
+    //    enabled in production — enforced fail-closed at the env layer.
+    const isDev = env.nodeEnv === "development";
+    const devBypass = env.auth.bypassEnabled;
 
     if (isDev && devBypass) {
       return;
@@ -183,7 +115,7 @@ export default clerkMiddleware(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
 
-      if (toBool(adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE)) {
+      if (env.clerk.isSatellite) {
         // Prefer the explicit env var (validated). If it's unset or
         // malformed for this environment, derive a fallback from the
         // request host rather than silently dropping straight to
@@ -191,7 +123,7 @@ export default clerkMiddleware(
         // `NEXT_PUBLIC_CLERK_SIGN_IN_URL` (typically a *relative* path like
         // "/sign-in"), which on a satellite domain is exactly the
         // redirect-loop bug this middleware exists to prevent.
-        const primarySignIn = resolvePrimarySignInUrl(req);
+        const primarySignIn = resolveSatellitePrimarySignInUrl(req);
 
         if (primarySignIn) {
           const redirectUrl = new URL(primarySignIn);
@@ -223,7 +155,7 @@ export default clerkMiddleware(
     //    accounts cannot access any admin route even with valid role claims.
     //    Redirects to /unauthorized-sign-in (public) to avoid a protect-loop.
     const metadata = parseSessionMetadata(authObj.sessionClaims);
-    if (metadata?.status && BLOCKED_STATUSES.includes(metadata.status)) {
+    if (isBlockedUserStatus(metadata?.status)) {
       if (isApiRoute) {
         return NextResponse.json(
           { error: "Forbidden", reason: metadata.status },
@@ -231,7 +163,7 @@ export default clerkMiddleware(
         );
       }
       const url = new URL("/unauthorized-sign-in", req.url);
-      url.searchParams.set("reason", metadata.status);
+      url.searchParams.set("reason", String(metadata.status));
       return NextResponse.redirect(url);
     }
 
@@ -307,21 +239,19 @@ export default clerkMiddleware(
   // value. A relative/malformed `signInUrl`, or a truthy-but-wrong
   // `isSatellite` flag (e.g. from a raw "false" string), throws here and
   // takes down every route on the site, not just one redirect. Everything
-  // below is validated before being returned.
+  // below is validated (by @build/security-clerk) before being returned.
   // ---------------------------------------------------------------------
   (req) => {
-    const isSatellite = toBool(adminEnvConfig.NEXT_PUBLIC_CLERK_IS_SATELLITE);
+    const isSatellite = env.clerk.isSatellite;
 
     if (!isSatellite) {
       return {
         isSatellite: false,
-        domain:
-          normalizeClerkDomain(adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN) ||
-          req.nextUrl.host,
+        domain: normalizeClerkDomain(env.clerk.domain) || req.nextUrl.host,
       };
     }
 
-    const signInUrl = resolvePrimarySignInUrl(req) || undefined;
+    const signInUrl = resolveSatellitePrimarySignInUrl(req) || undefined;
 
     if (!signInUrl) {
       // Neither the env var nor host-derivation produced an absolute
@@ -338,17 +268,13 @@ export default clerkMiddleware(
       );
       return {
         isSatellite: false,
-        domain:
-          normalizeClerkDomain(adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN) ||
-          req.nextUrl.host,
+        domain: normalizeClerkDomain(env.clerk.domain) || req.nextUrl.host,
       };
     }
 
     return {
       isSatellite: true,
-      domain:
-        normalizeClerkDomain(adminEnvConfig.NEXT_PUBLIC_CLERK_DOMAIN) ||
-        req.nextUrl.host,
+      domain: normalizeClerkDomain(env.clerk.domain) || req.nextUrl.host,
       signInUrl,
     };
   },

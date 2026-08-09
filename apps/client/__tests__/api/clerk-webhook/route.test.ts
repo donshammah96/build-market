@@ -22,6 +22,7 @@ const mockMarkWebhookProcessed = vi.hoisted(() => vi.fn());
 const mockReleaseWebhookDelivery = vi.hoisted(() => vi.fn());
 const mockIsWebhookTimestampFresh = vi.hoisted(() => vi.fn());
 const mockRecordWebhookReplayReject = vi.hoisted(() => vi.fn());
+const mockRecordWebhookFailure = vi.hoisted(() => vi.fn());
 const mockEnv = vi.hoisted(() => ({
   isProd: false,
   clerk: {
@@ -115,6 +116,7 @@ vi.mock("@/app/lib/infrastructure/webhook-replay", () => ({
 
 vi.mock("@/app/lib/auth/telemetry-metrics", () => ({
   recordWebhookReplayReject: mockRecordWebhookReplayReject,
+  recordWebhookFailure: mockRecordWebhookFailure,
 }));
 
 function buildRequest(headers?: HeadersInit) {

@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
     "@build/db",
     "@build/types",
     "@build/enums",
+    "@build/env-validation",
+    "@build/security-clerk",
   ],
   // Don't advertise the framework on a compliance-sensitive internal tool.
   poweredByHeader: false,

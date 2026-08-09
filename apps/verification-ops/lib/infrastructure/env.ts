@@ -5,16 +5,12 @@
  * (`lib/infrastructure/env.ts`): all process.env reads in this app
  * should go through this module, not scattered raw `process.env.X` calls.
  *
- * SCOPE NOTE: this is a deliberately small, self-contained copy of the
- * validation *engine* (EnvVar/EnvGroup/validateEnv/helpers) rather than a
- * shared import from apps/client, because apps/client's env.ts is scoped to
- * that app (see its own header comment) and isn't published as a package.
- * This duplication is small today (3 groups) but will drift the same way
- * @build/verification-domain's types drifted from schema.prisma if it's
- * copy-pasted again for a third app. RECOMMENDATION: extract the generic
- * engine (types + validateEnv + getStringEnv/getOptionalStringEnv/
- * getNumberEnv/getBooleanEnv) into a `@build/env-validation` package once a
- * third app needs this, and have both apps.
+ * Now built on `@build/env-validation` — the canonical engine
+ * (EnvVar/EnvGroup/validateEnvGroups/validateSatelliteInvariants/
+ * getStringEnv/getOptionalStringEnv/getBooleanEnv) shared with apps/client
+ * and apps/admin, closing Drift 2 for this app. This file retains only
+ * its own `envGroups` variable *declarations* — the validation behavior
+ * itself is no longer a local copy.
  *
  * Usage:
  *   import { envConfig, validateEnv } from "@/lib/infrastructure/env";
@@ -26,39 +22,31 @@
  * NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL to the `clerk` group below. See
  * layout.tsx and middleware.ts for how these are consumed — both must be
  * kept in sync with apps/admin's equivalent files.
+ *
+ * DEV BYPASS — EXPLICIT DECISION: apps/verification-ops does NOT implement
+ * `AUTH_DEV_BYPASS` / any local auth bypass, even for local development.
+ * This is deliberate, not an oversight (AUTH_HARDENING_RECOMMENDATIONS.md
+ * §2, Drift 4 row): of the three apps, this one handles professional
+ * license verification decisions and unredacted evidence export — the
+ * most sensitive surface in the ecosystem. Local development against this
+ * app should exercise the real Clerk satellite handshake against a shared
+ * dev Clerk instance, not a bypass flag. Do not add bypass wiring here
+ * without deliberately revisiting this decision (and updating this
+ * comment to say so) — don't let it happen silently as a "convenience" fix
+ * during some unrelated local-dev-friction pass.
  */
 
-import { toBool } from "./env-utils";
+import {
+  type EnvGroup,
+  getBooleanEnv,
+  getOptionalStringEnv,
+  getStringEnv,
+  isAbsoluteHttpUrl,
+  validateEnvGroups,
+  validateSatelliteInvariants,
+} from "@build/env-validation";
 
-type EnvVar = {
-  name: string;
-  required: boolean;
-  default?: string;
-  validate?: (value: string) => boolean;
-  errorMessage?: string;
-};
-
-type EnvGroup = {
-  name: string;
-  description: string;
-  variables: EnvVar[];
-};
-
-export type ValidationResult = {
-  valid: boolean;
-  errors: string[];
-  warnings: string[];
-};
-
-/** Returns true only if `value` parses as a well-formed absolute http(s) URL. */
-function isAbsoluteHttpUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
+export type ValidationResult = ReturnType<typeof validateEnvGroups>;
 
 const envGroups: EnvGroup[] = [
   {
@@ -80,11 +68,7 @@ const envGroups: EnvGroup[] = [
       // --- Satellite configuration (mirrors apps/admin) -----------------
       // Not required: this app must keep working (as a plain, non-satellite
       // Clerk consumer) in local dev / any environment where satellite mode
-      // hasn't been configured yet. The *consequence* of isSatellite=true
-      // with a missing/invalid primarySignInUrl is enforced at runtime in
-      // layout.tsx (fail fast) and middleware.ts (fail open + log), not
-      // here — this engine validates individual vars, not cross-var
-      // invariants.
+      // hasn't been configured yet.
       {
         name: "NEXT_PUBLIC_CLERK_IS_SATELLITE",
         required: false,
@@ -100,7 +84,7 @@ const envGroups: EnvGroup[] = [
         validate: isAbsoluteHttpUrl,
         errorMessage:
           "NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL must be an absolute http(s) URL " +
-          '(e.g. "https://buildmarket.app/sign-in"), not a relative path — that\'s ' +
+          '(e.g. "https://accounts.buildmarket.app/sign-in"), not a relative path — that\'s ' +
           "what NEXT_PUBLIC_CLERK_SIGN_IN_URL is for.",
       },
     ],
@@ -160,52 +144,14 @@ export function validateEnv(
   groups: string[] | "all" = "all",
   throwOnError = true,
 ): ValidationResult {
-  const result: ValidationResult = { valid: true, errors: [], warnings: [] };
-  const groupsToValidate =
-    groups === "all"
-      ? envGroups
-      : envGroups.filter((g) => groups.includes(g.name));
-  const deferServerOnlyRequiredErrors =
-    shouldDeferServerOnlyValidationForBuild();
-
-  for (const group of groupsToValidate) {
-    for (const variable of group.variables) {
-      const value = process.env[variable.name];
-
-      if (variable.required && !value) {
-        if (
-          deferServerOnlyRequiredErrors &&
-          BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS.has(variable.name)
-        ) {
-          result.warnings.push(
-            `[${group.name}] Deferring required server env until runtime: ${variable.name}`,
-          );
-          continue;
-        }
-        result.valid = false;
-        result.errors.push(
-          `[${group.name}] Missing required: ${variable.name}`,
-        );
-        continue;
-      }
-
-      if (!value) {
-        if (variable.default) {
-          result.warnings.push(
-            `[${group.name}] Using default for ${variable.name}: ${variable.default}`,
-          );
-        }
-        continue;
-      }
-
-      if (variable.validate && !variable.validate(value)) {
-        result.valid = false;
-        result.errors.push(
-          `[${group.name}] Invalid ${variable.name}: ${variable.errorMessage || "Validation failed"}`,
-        );
-      }
-    }
-  }
+  const isBuildPhase = shouldDeferServerOnlyValidationForBuild();
+  const result = validateEnvGroups(
+    envGroups,
+    process.env,
+    groups,
+    BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS,
+    isBuildPhase,
+  );
 
   if (!result.valid && throwOnError) {
     throw new Error(
@@ -216,55 +162,109 @@ export function validateEnv(
   return result;
 }
 
-function getStringEnv(name: string, fallback = ""): string {
-  return process.env[name] || fallback;
-}
-
-function getOptionalStringEnv(name: string): string | undefined {
-  const value = getStringEnv(name);
-  return value.length > 0 ? value : undefined;
-}
-
-function getBooleanEnv(name: string, fallback = false): boolean {
-  const value = process.env[name];
-  return value === undefined ? fallback : toBool(value);
-}
+const isProdLikeProfile = process.env.NODE_ENV === "production";
 
 function buildEnvConfig() {
+  // Finding 6, CONFIRMED FIXED (not re-introduced here): `primarySignInUrl`
+  // resolves strictly from `NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL` with NO
+  // fallback to `NEXT_PUBLIC_CLERK_SIGN_IN_URL` — the two variables have
+  // different contractual shapes (absolute vs. relative) and borrowing one
+  // for the other is exactly the bug the hardening doc's Finding 6 flags.
+  // If you're tempted to add a `??` fallback to the line below because a
+  // preview environment is missing the absolute var, don't — fix the
+  // environment's config instead (see `scripts/verify-vercel-env.ts`,
+  // which now catches this class of gap in CI before it reaches a
+  // satellite-mode deploy).
+  const primarySignInUrl = getOptionalStringEnv(
+    process.env,
+    "NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL",
+  );
+
+  const clerk = {
+    publishableKey: getStringEnv(
+      process.env,
+      "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+    ),
+    secretKey: getOptionalStringEnv(process.env, "CLERK_SECRET_KEY"),
+    signInUrl: getStringEnv(
+      process.env,
+      "NEXT_PUBLIC_CLERK_SIGN_IN_URL",
+      "/sign-in",
+    ),
+    // Satellite config — see the "clerk" env group above for validation,
+    // and layout.tsx / middleware.ts for how these are consumed.
+    isSatellite: getBooleanEnv(
+      process.env,
+      "NEXT_PUBLIC_CLERK_IS_SATELLITE",
+      false,
+    ),
+    domain: getOptionalStringEnv(process.env, "NEXT_PUBLIC_CLERK_DOMAIN"),
+    primarySignInUrl,
+  };
+
+  // Cross-var invariant check, now delegated to the shared engine instead
+  // of being left entirely to layout.tsx (fail fast) / middleware.ts (fail
+  // open + log) to each re-derive independently. Kept fail-open + log here
+  // (never throws from this module) — layout.tsx is still the fail-fast
+  // enforcement point for this app, this is a second, cheap line of
+  // defense that surfaces the misconfiguration in server logs at boot
+  // regardless of which page happens to render first.
+  const satelliteIssues = validateSatelliteInvariants({
+    isSatellite: clerk.isSatellite,
+    domain: clerk.domain,
+    primarySignInUrl: clerk.primarySignInUrl,
+    appName: "verification-ops",
+  });
+  if (
+    satelliteIssues.length > 0 &&
+    !shouldDeferServerOnlyValidationForBuild()
+  ) {
+    const message = `Invalid Clerk satellite configuration in apps/verification-ops:\n${satelliteIssues
+      .map((i) => `  - ${i}`)
+      .join("\n")}`;
+    if (isProdLikeProfile) {
+      console.error(`[verification-ops env] ${message}`); // bootstrap-only: fail-open + log, layout.tsx enforces fail-fast
+    } else {
+      console.warn(`[verification-ops env] ${message}`); // bootstrap-only: env validation warning
+    }
+  }
+
   return {
     nodeEnv: process.env.NODE_ENV ?? "development",
-    clerk: {
-      publishableKey: getStringEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"),
-      secretKey: getOptionalStringEnv("CLERK_SECRET_KEY"),
-      signInUrl: getStringEnv("NEXT_PUBLIC_CLERK_SIGN_IN_URL", "/sign-in"),
-      // Satellite config — see the "clerk" env group above for validation,
-      // and layout.tsx / middleware.ts for how these are consumed.
-      isSatellite: getBooleanEnv("NEXT_PUBLIC_CLERK_IS_SATELLITE", false),
-      domain: getOptionalStringEnv("NEXT_PUBLIC_CLERK_DOMAIN"),
-      primarySignInUrl: getOptionalStringEnv(
-        "NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL",
-      ),
-    },
+    clerk,
     database: {
-      url: getOptionalStringEnv("DATABASE_URL"),
+      url: getOptionalStringEnv(process.env, "DATABASE_URL"),
     },
     app: {
       url: getStringEnv(
+        process.env,
         "NEXT_PUBLIC_VERIFICATION_OPS_URL",
         "http://localhost:3501",
       ),
     },
-    appUrl: getOptionalStringEnv("NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL")
+    // NOTE ON NAMING: unlike `app.url` (this app's own origin), `appUrl`
+    // here is the PRIMARY app's origin, best-effort derived from
+    // `NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL`'s host. It exists so this
+    // app can pass something into `AllowedEnvUrls.appUrl` when/if its
+    // `redirect-url.ts` equivalent is migrated onto
+    // `@build/security-clerk`'s `getSafeRedirectUrl()` (which checks
+    // `envUrls.appUrl` against the *primary's* origin, not this app's
+    // own). It is NOT this app's own URL — that's `app.url` above. Kept
+    // as-is rather than renamed in this pass to avoid a silent behavior
+    // change for any existing consumer of `envConfig.appUrl`.
+    appUrl: primarySignInUrl
       ? (() => {
           try {
-            return new URL(
-              getStringEnv("NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL"),
-            ).origin;
+            return new URL(primarySignInUrl).origin;
           } catch {
             return undefined;
           }
         })()
       : undefined,
+    // Explicit, permanent: no dev bypass in this app. See header comment.
+    auth: {
+      bypassEnabled: false as const,
+    },
   } as const;
 }
 

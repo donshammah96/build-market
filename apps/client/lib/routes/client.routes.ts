@@ -63,6 +63,7 @@ export const isAuthRoute = (path: string): boolean =>
 export const CLIENT_API_ROUTES = {
   // Auth & users
   clerkWebhook: "/api/clerk-webhook",
+  webhooksClerk: "/api/webhooks/clerk",
   users: "/api/users",
   userDetail: (id: string) => `/api/users/${id}`,
   userProfileStatus: "/api/user/profile",

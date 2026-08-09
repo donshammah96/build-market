@@ -114,6 +114,30 @@ export function isUserStatus(value: unknown): value is UserStatus {
 }
 
 // -------------------------------------------------------------------------
+// BlockedUserStatus (Finding 9 — canonical blocked-status check, replacing
+// hand-rolled `BLOCKED_STATUSES` literals in apps/admin/src/middleware.ts,
+// apps/verification-ops/middleware.ts, and apps/client's auth-callback page)
+// -------------------------------------------------------------------------
+
+export const BLOCKED_USER_STATUSES = [
+  "SUSPENDED",
+  "BANNED",
+  "DEACTIVATED",
+  "ARCHIVED",
+] as const;
+
+export type BlockedUserStatus = (typeof BLOCKED_USER_STATUSES)[number];
+
+export function isBlockedUserStatus(
+  status: unknown,
+): status is BlockedUserStatus {
+  return (
+    typeof status === "string" &&
+    (BLOCKED_USER_STATUSES as readonly string[]).includes(status)
+  );
+}
+
+// -------------------------------------------------------------------------
 // AdminRole
 // -------------------------------------------------------------------------
 

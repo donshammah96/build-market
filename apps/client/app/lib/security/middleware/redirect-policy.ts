@@ -16,9 +16,9 @@ export { getSafeRedirectUrl } from "@/app/lib/security/redirect-url";
  * satellite domain (admin.buildmarket.app, verification.buildmarket.app).
  * Two invariants must hold regardless of which domain called it:
  *
- *   1. The sign-in URL itself must always point at the PRIMARY app
- *      (env.appUrl), never at `req.url`'s origin. Only the primary domain
- *      renders the Clerk <SignIn/> UI; satellites do not.
+ *   1. The sign-in URL itself must always point at the PRIMARY app, never at
+ *      `req.url`'s origin. Only the primary domain renders the Clerk
+ *      <SignIn/> UI; satellites do not.
  *   2. The `redirect_url` value must be an ABSOLUTE URL back to the
  *      originating domain whenever the request did not originate on the
  *      primary domain. A bare pathname (e.g. "/dashboard") is only safe
@@ -26,34 +26,63 @@ export { getSafeRedirectUrl } from "@/app/lib/security/redirect-url";
  *      satellite it would silently resolve against the primary domain
  *      after login and send the user to the wrong app.
  *
+ * IMPORTANT — env.appUrl is NOT the primary's URL on a satellite:
+ * `redirect-url.ts`'s allow-list checks `env.appUrl`, `env.adminAppUrl`, and
+ * `env.verificationAppUrl` as three distinct per-app self-URLs, which
+ * confirms `env.appUrl` is a self-referential "this app's own URL" field on
+ * every app — including satellites. Using it here to build the sign-in URL
+ * (as the previous version of this function did) meant satellites built a
+ * sign-in link pointing at THEMSELVES, not at the primary — since
+ * satellites don't render the Clerk <SignIn/> UI, that's a second,
+ * independent way to end up stuck. The correct primary origin is:
+ *   - `env.appUrl` itself, when this app IS the primary (not a satellite), or
+ *   - the origin of `env.clerk.primarySignInUrl`, when this app IS a satellite
+ *     (see NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL in env.ts).
+ *
  * `pathname` is accepted for same-origin callers that want to pass a
  * pre-computed path (e.g. including query string) rather than deriving it
  * from `req`. Satellite callers should generally omit it and let this
  * function derive the full absolute URL from `req` automatically.
  */
+function resolvePrimaryOrigin(): string {
+  const isSatellite = Boolean(env.clerk?.isSatellite);
+
+  const primarySource = isSatellite ? env.clerk?.primarySignInUrl : env.appUrl;
+
+  if (!primarySource) {
+    // FAIL FAST, NOT SILENT: a missing/misconfigured value here previously
+    // surfaced as a bare `Invalid URL` thrown deep inside `new URL()`, or
+    // worse, silently built a sign-in URL pointing at the wrong origin.
+    // Neither is diagnosable from a "stuck page" bug report — say exactly
+    // what's missing instead. See REDIRECT_LOOP_AUTOPSY_AND_FIX.md, Finding #2.
+    throw new Error(
+      isSatellite
+        ? "[redirectToSignIn] This app is configured as a Clerk satellite " +
+            "(env.clerk.isSatellite=true) but env.clerk.primarySignInUrl is " +
+            "not set. Check NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL."
+        : "[redirectToSignIn] env.appUrl is not configured for this " +
+            "(primary) app. Check APP_URL / NEXT_PUBLIC_APP_URL / " +
+            "CLIENT_APP_URL resolution in lib/infrastructure/env.ts.",
+    );
+  }
+
+  try {
+    return new URL(primarySource).origin;
+  } catch {
+    throw new Error(
+      isSatellite
+        ? "[redirectToSignIn] env.clerk.primarySignInUrl must be an absolute URL. Check NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL."
+        : "[redirectToSignIn] env.appUrl must be an absolute URL. Check APP_URL / NEXT_PUBLIC_APP_URL / CLIENT_APP_URL resolution in lib/infrastructure/env.ts.",
+    );
+  }
+}
+
 export function redirectToSignIn(
   req: NextRequest,
   pathname?: string,
 ): NextResponse {
-  // FAIL FAST, NOT SILENT: `env.appUrl` must be the PRIMARY app's absolute
-  // base URL (e.g. "https://buildmarket.app") on every app that imports this
-  // module — including satellites. If it's missing/misconfigured, `new
-  // URL(path, undefined)` throws a bare "Invalid URL" deep inside
-  // middleware, which is nearly impossible to diagnose from a "stuck page"
-  // bug report. Surface the real cause instead. See
-  // REDIRECT_LOOP_AUTOPSY_AND_FIX.md, Finding #2.
-  if (!env.appUrl) {
-    throw new Error(
-      "[redirectToSignIn] env.appUrl is not configured. This must be the " +
-        "PRIMARY app's absolute URL (e.g. https://buildmarket.app) on every " +
-        "app — including satellites — not that app's own URL. Check " +
-        "APP_URL / NEXT_PUBLIC_APP_URL / CLIENT_APP_URL resolution in " +
-        "lib/infrastructure/env.ts.",
-    );
-  }
-
-  const primaryOrigin = new URL(env.appUrl).origin;
-  const signInUrl = new URL(CLIENT_ROUTES.signIn, env.appUrl);
+  const primaryOrigin = resolvePrimaryOrigin();
+  const signInUrl = new URL(CLIENT_ROUTES.signIn, primaryOrigin);
 
   const requestOrigin = req.nextUrl.origin;
   const isPrimaryOrigin = requestOrigin === primaryOrigin;

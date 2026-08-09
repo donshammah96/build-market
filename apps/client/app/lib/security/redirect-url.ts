@@ -1,4 +1,5 @@
 import { env } from "@/app/lib/infrastructure/env";
+import { getSafeRedirectUrl as getSafeRedirectUrlShared } from "@build/security-clerk";
 
 /**
  * Validates a redirect target URL parameter to prevent open redirect vulnerabilities
@@ -7,82 +8,18 @@ import { env } from "@/app/lib/infrastructure/env";
  *
  * Client-Safe: This module contains NO dependencies on `next/server` (NextRequest/NextResponse)
  * and can be safely imported by client components ("use client") and server components alike.
+ *
+ * Thin wrapper around `@build/security-clerk`'s canonical `getSafeRedirectUrl` (Finding 7 /
+ * Drift 1): the allow-list logic itself now lives in exactly one place, and this app just
+ * supplies its own env-resolved origins. `env.clientAppUrl` is included in the allow-list
+ * check below (already present in this app's copy prior to this change — the autopsy's
+ * Drift 1 gap was in other apps' copies of this file, not this one).
  */
 export function getSafeRedirectUrl(target?: string | null): string | null {
-  if (!target || typeof target !== "string") {
-    return null;
-  }
-
-  const trimmed = target.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  // Relative paths (e.g. /homeowner-dashboard, /profile)
-  if (
-    trimmed.startsWith("/") &&
-    !trimmed.startsWith("//") &&
-    !trimmed.startsWith("/\\") &&
-    !trimmed.startsWith("/:")
-  ) {
-    return trimmed;
-  }
-
-  // Absolute URLs (e.g. https://verification.buildmarket.app/ or http://localhost:3000)
-  try {
-    const parsed = new URL(trimmed);
-
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return null;
-    }
-
-    const hostname = parsed.hostname.toLowerCase();
-
-    // 1. BuildMarket domain and all subdomains (*.buildmarket.app or buildmarket.app)
-    if (
-      hostname === "buildmarket.app" ||
-      hostname.endsWith(".buildmarket.app")
-    ) {
-      return trimmed;
-    }
-
-    // 2. Exact hostname match with env.appUrl, env.adminAppUrl, or env.verificationAppUrl
-    if (env.appUrl) {
-      try {
-        const appHost = new URL(env.appUrl).hostname.toLowerCase();
-        if (hostname === appHost) return trimmed;
-      } catch {
-        // ignore invalid URL
-      }
-    }
-
-    if (env.adminAppUrl) {
-      try {
-        const adminHost = new URL(env.adminAppUrl).hostname.toLowerCase();
-        if (hostname === adminHost) return trimmed;
-      } catch {
-        // ignore invalid URL
-      }
-    }
-
-    if (env.verificationAppUrl) {
-      try {
-        const verificationHost = new URL(
-          env.verificationAppUrl,
-        ).hostname.toLowerCase();
-        if (hostname === verificationHost) return trimmed;
-      } catch {
-        // ignore invalid URL
-      }
-    }
-
-    // 3. Local development loopback
-    if (hostname === "localhost" || hostname === "127.0.0.1") {
-      return trimmed;
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
+  return getSafeRedirectUrlShared(target, {
+    appUrl: env.appUrl,
+    adminAppUrl: env.adminAppUrl,
+    clientAppUrl: env.clientAppUrl,
+    verificationAppUrl: env.verificationAppUrl,
+  });
 }

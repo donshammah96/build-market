@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Changed — env-wrapper.ts, route-auth.ts
+
+- **`env-wrapper.ts`**: unified `DEV_ADMIN_BYPASS` handling onto `@build/env-validation`'s `resolveDevAuthBypass` (canonical `AUTH_DEV_BYPASS` with backward-compatible fallback to the legacy `DEV_ADMIN_BYPASS` this app used exclusively before), replacing the hand-rolled fail-closed-in-prod check. Corrected the stale comment claiming `redirect-url.ts` doesn't check `env.clientAppUrl` — `@build/security-clerk`'s shared `getSafeRedirectUrl()` now checks it as one of its four allow-listed origins, and apps/client's `redirect-url.ts` already passes it in. Wired `NEXT_PUBLIC_CLERK_FRONTEND_API` as an explicit override ahead of the publishable-key decode fallback (§4.3) — flagged that this assumes `env-schema.ts` has (or gains) a matching optional Zod field, since that file wasn't in scope for this change.
+- **`route-auth.ts`**: added a Tier 2 (300s) session-freshness gate to `resolveAdminRouteActor()` via a new `requireFreshSession` parameter, using `isClaimFresh()` from `@build/security-clerk`. Sensitive/destructive route handlers (decision recording, senior approval, unredacted evidence export) should pass `true`; read-only routes default to `false`. Returns `403 { reason: "stale_session" }` on staleness — after the existing DB `isActive`/role check, so a genuinely deactivated/non-admin user still gets a plain "forbidden" rather than a message implying a refresh would fix it. Skipped under the dev bypass path (synthetic actor has no real session claims to check).
+
+### Changed — `apps/admin/src/middleware.ts` deduplication and dead-code removal
+
+- **Duplicate satellite helpers removed**: `isAbsoluteHttpUrl`, `normalizeClerkDomain`, `deriveFallbackPrimarySignInUrl`, and the local `resolvePrimarySignInUrl` are no longer defined in this file — all four now come from `@build/security-clerk` (Finding 7). A local `resolveSatellitePrimarySignInUrl(req)` wrapper threads `env.clerk.primarySignInUrl` into the shared, request-memoized resolver so the dynamic Clerk options resolver and the unauthenticated-request handler branch share one cached result per request (Finding 10).
+- **`BLOCKED_STATUSES` replaced**: the local literal array is gone in favor of `isBlockedUserStatus()` from `@build/enums` (Finding 9).
+- **Finding 8 — dead `authObj.has({ role })` check removed from `hasAllowedRole`**: Build Market does not use Clerk Organizations, so `has({ role })` returned `false` unconditionally for every request and 100% of real authorization decisions were already made by the `publicMetadata`/session-claims fallback beneath it. Removed the branch and documented the reasoning inline. **Flagging for confirmation**: the hardening doc's recommendation was to empirically verify this with a manual test (grant an Organization role to a test user, strip `publicMetadata.role`, confirm access) before deleting — that manual verification hasn't been run here, so please sanity-check against a real Clerk dashboard before this ships, or reintroduce the branch behind a TODO until the manual verification is complete.
+
 ### Security — Workspace dependency vulnerability remediation & governance SLO alignment
 
 - **Dependency Security Patch SLOs & Workspace Overrides (`pnpm-workspace.yaml`, `apps/admin/scripts/check-continuous-governance.mjs`)**:
@@ -13,9 +24,22 @@
 - `pnpm-lock.yaml`
 - `apps/admin/scripts/check-continuous-governance.mjs`
 
-### Fixed — Workspace hygiene and static check alignment
+### Fixed — Workspace hygiene, environment architecture, and governance alignment
 
-- **Codebase hygiene & static check alignment**: aligned admin application surface with workspace-wide lint and dead-code elimination standards across client, admin, and verification-ops boundaries.
+- **Admin Environment Layer ADR-004 Refactor & Security Drift Remediation (`src/lib/infrastructure/`)**:
+  - Split `apps/admin/src/lib/infrastructure/env.ts` into schema validation (`env-schema.ts`) and environment wrapper (`env-wrapper.ts`) following monorepo ADR-004 patterns.
+  - Resolved `env.clerk.*` invariants (`isSatellite`, `primarySignInUrl`, `domain`), `env.appUrl`, `env.clientAppUrl`, `env.adminAppUrl`, and structured logging fallback without `console.warn` drift, eliminating unstructured logging security drift violations.
+  - Updated ESLint config (`eslint.config.mjs`) and security drift checker (`scripts/check-security-drift.mjs`) to recognize `env-schema.ts` and `env-wrapper.ts` as valid infrastructure environment modules.
+- **Satellite Cross-Domain Auth Claims & Supabase Coexistence (`src/middleware.ts`, `src/lib/security/claims.ts`)**: documented support for nested `sessionClaims.metadata` claims structure in `parseSessionMetadata()`, resolving top-level `"role"` JSON key collisions when integrated with Supabase PostgreSQL RLS (`role: "authenticated"`). Reinforced DB-backed `AdminProfile` capability checks per ADR-ADMIN-001.
+- **Codebase hygiene & static check alignment**: aligned admin application surface with workspace-wide lint and governance standards across client, admin, and verification-ops boundaries.
+
+**Files changed:**
+
+- `apps/admin/src/lib/infrastructure/env.ts`
+- `apps/admin/src/lib/infrastructure/env-schema.ts`
+- `apps/admin/src/lib/infrastructure/env-wrapper.ts`
+- `apps/admin/eslint.config.mjs`
+- `apps/admin/scripts/check-security-drift.mjs`
 
 ### Added — Verification UI standalone workspace app migration & admin shadow mode (Phase 8)
 
@@ -186,7 +210,7 @@
 - **TSConfig References:** Added `@build/enums` reference path in `tsconfig.json`.
 - **GDPR Erasure Queue Integration**: Integrated the compliance erasure queue (`erasureQueue`), daily cron batch scheduler (`scheduleGdprErasure`), and queue processing worker (`createGdprErasureWorker`) into the central job orchestrator ([index.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/jobs/index.ts)) with support for manual trigger operations, worker health checks, and graceful shutdown handlers.
 - **Clerk Redirect Configuration**: Configured default `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL` and `NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL` redirect routes pointing to `/` in `.env.development` and `.env.example` to resolve redirection loop bugs on admin.buildmarket.app.
-- **Satellite Primary Sign-In URL Env Var**: Introduced `NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL` to [env.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/infrastructure/env.ts), `.env.example`, and `.env.development`. Holds the absolute primary-domain sign-in URL (`https://buildmarket.app/sign-in`) for `ClerkProvider.signInUrl` when running as a Clerk satellite — distinct from `NEXT_PUBLIC_CLERK_SIGN_IN_URL` (`/sign-in`), which remains the local satellite route used by middleware and internal routing.
+- **Satellite Primary Sign-In URL Env Var**: Introduced `NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL` to [env.ts](file:///c:/Users/User/build-market/apps/admin/src/lib/infrastructure/env.ts), `.env.example`, and `.env.development`. Holds the absolute primary-domain sign-in URL (`https://accounts.buildmarket.app/sign-in`) for `ClerkProvider.signInUrl` when running as a Clerk satellite — distinct from `NEXT_PUBLIC_CLERK_SIGN_IN_URL` (`/sign-in`), which remains the local satellite route used by middleware and internal routing.
 
 ### Changed
 
@@ -228,7 +252,7 @@
 - **Middleware Test Typings:** Updated `middleware.test.ts` to pass a second dummy argument (`{} as any`) to `middleware()` to conform with the `NextFetchEvent` signature constraints inside Clerk/Next.js middleware type definitions, resolving the `Expected 2 arguments, but got 1` compilation error.
 - **Verification Notification Tests:** Mocked the Prisma `user` model on the `@build/db` mock in `notification-service.test.ts` to prevent `TypeError: Cannot read properties of undefined (reading 'findUnique')` when testing notification dispatches that query user profile details.
 - **Admin Sign-In Redirect Loop (RC-1 — Dead Middleware):** `src/proxy.ts` exported a valid `clerkMiddleware` and `config.matcher` but was **never loaded** by Next.js, which only recognises `src/middleware.ts` as the middleware entry point. The entire route-protection layer was silently bypassed, causing Clerk's default unauthenticated-redirect to fire on every request and produce an infinite loop at `/sign-in?redirect_url=https://admin.buildmarket.app/`. Resolved by migrating all logic to [src/middleware.ts](file:///c:/Users/User/build-market/apps/admin/src/middleware.ts) and deleting the dead `proxy.ts`. Also expanded the `isDashboardRoute` matcher to cover all routes in the `(dashboard)` route group (`analytics`, `audit`, `leads`, `properties`, `services`, `stores`) that were previously unguarded.
-- **Admin Sign-In Redirect Loop (RC-2 — Satellite `signInUrl`):** `ClerkProvider` was receiving `signInUrl: "/sign-in"` (relative) while `isSatellite: true`. For a Clerk satellite app, token exchange must occur on the primary domain; a relative URL makes Clerk attempt auth locally on the satellite, which cannot complete the OAuth handshake and collapses into a redirect loop. Fixed by passing the absolute `NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL` (`https://buildmarket.app/sign-in`) as `ClerkProvider.signInUrl`.
+- **Admin Sign-In Redirect Loop (RC-2 — Satellite `signInUrl`):** `ClerkProvider` was receiving `signInUrl: "/sign-in"` (relative) while `isSatellite: true`. For a Clerk satellite app, token exchange must occur on the primary domain; a relative URL makes Clerk attempt auth locally on the satellite, which cannot complete the OAuth handshake and collapses into a redirect loop. Fixed by passing the absolute `NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL` (`https://accounts.buildmarket.app/sign-in`) as `ClerkProvider.signInUrl`.
 - **Admin Sign-In Redirect Loop (RC-3 — `forceRedirectUrl` override):** `<SignIn forceRedirectUrl="/">` unconditionally overrode the `redirect_url` query param appended by the middleware redirect, always discarding deep-link return URLs and sending users to `/`. Middleware would then re-evaluate `/` as unauthenticated on first load, completing the loop cycle. Changed to `fallbackRedirectUrl="/"` to restore correct post-authentication return-URL behaviour.
 - **Admin Sign-In Redirect Loop (RC-4 — Satellite Middleware Redirect):** Updated `middleware.ts` to manually redirect unauthenticated requests directly to the primary domain's sign-in URL when running in Clerk satellite mode (`NEXT_PUBLIC_CLERK_IS_SATELLITE=true`), preventing the default `redirectToSignIn()` from sending users to the local relative `/sign-in` route (which caused unauthorized redirect loops in production). Also explicitly passed the `isSatellite` and `domain` parameters as configuration options to `clerkMiddleware` to resolve middleware initialization errors on Vercel.
 - **Admin Sign-In Redirect Loop (RC-5 — Satellite Page Redirect & Blank Component Fix):** Updated the local `/sign-in` Server Component page to immediately redirect to the primary sign-in URL in satellite mode, resolving and forwarding `redirect_url` parameters (making relative URLs absolute with the admin base URL). This resolves blank page rendering issues caused by mounting Clerk's custom `<SignIn>` component on a satellite domain.
