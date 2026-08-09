@@ -397,15 +397,51 @@ class SystemSettingsService {
         };
         return parsed;
       } catch (error) {
-        // Emit a structured JSON log so Vercel's log pipeline can index this
-        // as a distinct event rather than an unstructured string blob.
-        // Do NOT expose error.message in any API response — logged internally only.
         const prismaCode =
           error instanceof Error &&
           "code" in error &&
           typeof (error as Record<string, unknown>)["code"] === "string"
             ? (error as Record<string, unknown>)["code"]
             : "UNKNOWN";
+
+        // Defensive handling for P2022 (Column missing in DB table due to un-migrated schema)
+        if (prismaCode === "P2022") {
+          try {
+            const rawRows = await prisma.$queryRawUnsafe<
+              Record<string, unknown>[]
+            >(`SELECT * FROM "SystemSettings" WHERE id = 'global' LIMIT 1`);
+            const rawRow = rawRows && rawRows.length > 0 ? rawRows[0] : null;
+            if (rawRow) {
+              console.warn(
+                JSON.stringify({
+                  event: "system_settings_schema_drift",
+                  severity: "WARN",
+                  prismaCode,
+                  message:
+                    "SystemSettings table missing columns (P2022) — loaded raw row with defaults; deploy prisma migration",
+                }),
+              );
+              const parsed = SystemSettingsSchema.parse(rawRow);
+              const publicParsed = PublicSettingsSchema.parse(parsed);
+              const financialParsed = FinancialSettingsSchema.parse(parsed);
+
+              this.cache = {
+                full: parsed,
+                publicParsed,
+                financialParsed,
+                timestamp: Date.now(),
+                fromFallback: false,
+              };
+              return parsed;
+            }
+          } catch {
+            // Fall through to hardcoded defaults if raw query also fails
+          }
+        }
+
+        // Emit a structured JSON log so Vercel's log pipeline can index this
+        // as a distinct event rather than an unstructured string blob.
+        // Do NOT expose error.message in any API response — logged internally only.
         console.error(
           JSON.stringify({
             event: "system_settings_db_failure",

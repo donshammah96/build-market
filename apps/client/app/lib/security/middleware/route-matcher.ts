@@ -46,6 +46,9 @@ export const isSettingsExemptRoute = createRouteMatcher([
   "/api/health(.*)",
   "/api/internal(.*)",
   "/api/metrics(.*)",
+  "/api/webhooks/(.*)",
+  "/api/clerk-webhook",
+  "/api/csp-reports(.*)",
   "/maintenance",
 ]);
 
@@ -53,7 +56,10 @@ const PUBLIC_API_ROUTES = [
   "/api/health(.*)",
   "/api/settings/public(.*)",
   "/api/newsletter/confirm(.*)",
+  "/api/webhooks/clerk",
+  "/api/webhooks/(.*)",
   "/api/clerk-webhook",
+  "/api/csp-reports(.*)",
 ] as const;
 
 const INTERNAL_API_ROUTES = ["/api/internal(.*)", "/api/metrics(.*)"] as const;

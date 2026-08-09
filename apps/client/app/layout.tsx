@@ -94,6 +94,24 @@ export default async function RootLayout({
     );
   }
 
+  // In production this intentionally fails OPEN rather than throwing (a hard
+  // crash on every page for a header-plumbing bug would be worse than a
+  // degraded CSP). But failing open silently means a middleware matcher
+  // regression — a route that stops going through middleware and so never
+  // gets 'x-nonce' set — would be invisible until someone notices scripts or
+  // styles failing to load. Log it loudly so it shows up in server logs
+  // instead of only surfacing as a hard-to-diagnose client-side CSP failure.
+  if (!rawNonce && env.isProd) {
+    console.error(
+      "[layout] Missing 'x-nonce' header in production. Clerk components " +
+        "and any nonce-scoped scripts/styles on this request will fall back " +
+        "to CSP's unsafe-inline path (if a browser still honors it) or fail " +
+        "to load. This usually means middleware's matcher isn't covering " +
+        "this route, or a proxy/edge layer is stripping the header before " +
+        "it reaches this render.",
+    );
+  }
+
   // Fallback to undefined instead of an empty string to prevent invalid CSP attributes
   const nonce = rawNonce || undefined;
 

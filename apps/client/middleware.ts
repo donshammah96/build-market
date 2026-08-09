@@ -61,9 +61,58 @@ const applyDocumentCspHeaders = (
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", cspValue);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
-  response.headers.set("Content-Security-Policy", cspValue);
+  const cspHeaderName = env.cspReportOnly
+    ? "Content-Security-Policy-Report-Only"
+    : "Content-Security-Policy";
+  response.headers.set(cspHeaderName, cspValue);
   return response;
 };
+
+// =============================================================================
+// CSP satellite origins (REQUIRED before deploying the csp-nonce.ts hardening
+// pass — see CSP_HARDENING_AUDIT.md finding #2)
+// =============================================================================
+// buildCspWithNonce() no longer accepts a "https://*.buildmarket.app" wildcard
+// for Clerk satellite FAPI hosts (that wildcard trusted ANY subdomain of
+// buildmarket.app for script/connect, not just Clerk's satellites). It now
+// requires an explicit `clerkSatelliteOrigins` list.
+//
+// This app's OWN Clerk FAPI is already covered via `clerkFrontendApiOrigin`
+// (derived from NEXT_PUBLIC_CLERK_FRONTEND_API below). `clerkSatelliteOrigins`
+// exists for the OTHER Clerk FAPI host(s) this app's browser-side code may
+// need to reach transiently during the cross-domain handshake
+// (`__clerk_handshake` / `__clerk_db_jwt` round trip) described in
+// REDIRECT_LOOP_AUTOPSY_AND_FIX.md — e.g. the primary domain's client JS
+// reaching a satellite's FAPI, or vice versa.
+//
+// Exposes explicit Clerk satellite FAPI origins (validated via env.ts)
+// replacing the former "https://*.buildmarket.app" wildcard — see CSP_HARDENING_AUDIT.md finding #2.
+const clerkSatelliteOrigins = env.clerk.satelliteOrigins
+  .map((value) => toOrigin(value.trim()))
+  .filter((value): value is string => Boolean(value));
+
+if (clerkSatelliteOrigins.length === 0 && env.clerk.isSatellite === false) {
+  // Only warn on the primary domain — satellites typically don't need this
+  // list (their own FAPI is already covered by clerkFrontendApiOrigin).
+  console.warn(
+    "[middleware] NEXT_PUBLIC_CLERK_SATELLITE_ORIGINS is unset. If this app " +
+      "needs to reach a Clerk satellite's FAPI during the cross-domain " +
+      "handshake, CSP will silently block it now that the wildcard has been " +
+      "removed. See CSP_HARDENING_AUDIT.md finding #2.",
+  );
+}
+
+const buildRequestCsp = (nonce: string): string =>
+  buildCspWithNonce({
+    nonce,
+    appOrigin: toOrigin(env.appUrl) ?? "http://localhost:3500",
+    apiOrigin:
+      toOrigin(env.apiUrl) ?? toOrigin(env.appUrl) ?? "http://localhost:3500",
+    clerkFrontendApiOrigin: toOrigin(env.clerk.frontendApi),
+    analyticsOrigin: toOrigin(env.analytics.posthogHost),
+    isDev: env.isDev,
+    clerkSatelliteOrigins,
+  });
 
 const BLOCKED_ACCOUNT_STATUSES = [
   "SUSPENDED",
@@ -121,16 +170,7 @@ const clerkMiddlewareOptions = isSatelliteConfigured
 const middleware = isBypassActive
   ? (req: NextRequest) => {
       const nonce = generateCspNonce();
-      const appOrigin = toOrigin(env.appUrl) ?? "http://localhost:3500";
-      const apiOrigin = toOrigin(env.apiUrl) ?? appOrigin;
-      const cspValue = buildCspWithNonce({
-        nonce,
-        appOrigin,
-        apiOrigin,
-        clerkFrontendApiOrigin: toOrigin(env.clerk.frontendApi),
-        analyticsOrigin: toOrigin(env.analytics.posthogHost),
-        isDev: env.isDev,
-      });
+      const cspValue = buildRequestCsp(nonce);
       logMiddlewareDecision(req, "mw_dev_bypass");
       return applyDocumentCspHeaders(req, nonce, cspValue);
     }
@@ -139,20 +179,7 @@ const middleware = isBypassActive
       const { pathname } = nextReq.nextUrl;
       const baseUrl = nextReq.nextUrl.origin;
       const nonce = generateCspNonce();
-
-      const appOrigin = toOrigin(env.appUrl) ?? "http://localhost:3500";
-
-      // FIX: Fall back to an origin-only value (appOrigin) instead of appending a path
-      const apiOrigin = toOrigin(env.apiUrl) ?? appOrigin;
-
-      const cspValue = buildCspWithNonce({
-        nonce,
-        appOrigin,
-        apiOrigin,
-        clerkFrontendApiOrigin: toOrigin(env.clerk.frontendApi),
-        analyticsOrigin: toOrigin(env.analytics.posthogHost),
-        isDev: env.isDev,
-      });
+      const cspValue = buildRequestCsp(nonce);
 
       // --- DEV AUTH BYPASS ---
       // Allow all routes during local offline development or CI without triggering Clerk checks
@@ -508,8 +535,8 @@ export default middleware;
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and all static files, unless found in search params
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // Skip Next.js internals and static files, unless found in search params (.html files route through middleware for strict CSP/auth)
+    "/((?!_next|[^?]*\\.(?:css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     // Always run for API routes
     "/(api|trpc)(.*)",
   ],

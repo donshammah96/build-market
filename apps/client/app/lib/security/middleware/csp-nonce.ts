@@ -5,6 +5,29 @@ export type CspNonceOptions = {
   clerkFrontendApiOrigin: string | null;
   analyticsOrigin: string | null;
   isDev: boolean;
+  /**
+   * Explicit Clerk satellite FAPI origins, e.g. "https://clerk.admin.buildmarket.app".
+   * Replaces the former "https://*.buildmarket.app" wildcard, which granted script/
+   * connect trust to ANY subdomain of buildmarket.app, not just Clerk's satellite
+   * hosts. Populate with the exact FAPI hosts issued per satellite domain (Clerk
+   * dashboard > Domains). Defaults to [] — fails closed rather than falling back
+   * to a wildcard.
+   */
+  clerkSatelliteOrigins?: string[];
+  /**
+   * Origins Clerk's bot-protection challenge (Cloudflare Turnstile) needs to frame.
+   * Only pass this if Clerk's Attack Protection / bot detection is enabled for this
+   * instance — see https://clerk.com/docs/security/clerk-csp. Typical values:
+   * ["https://challenges.cloudflare.com", "https://*.protect.clerk.com"].
+   * Defaults to null (no frame-src override; falls back to default-src 'self').
+   */
+  clerkChallengeOrigins?: string[] | null;
+  /**
+   * CSP violation report endpoint (legacy `report-uri` directive; broad browser
+   * support). Point this at a route that logs reports somewhere you'll see them.
+   * Defaults to null (no reporting).
+   */
+  reportUri?: string | null;
 };
 
 export function generateCspNonce(): string {
@@ -36,6 +59,9 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     clerkFrontendApiOrigin,
     analyticsOrigin,
     isDev,
+    clerkSatelliteOrigins = [],
+    clerkChallengeOrigins = null,
+    reportUri = null,
   } = opts;
 
   const selfAndFirstParty = ["'self'", appOrigin, apiOrigin];
@@ -49,10 +75,11 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     "https://www.buildmarket.app",
     // Third-party (identity): Clerk frontend API for auth/session operations.
     clerkFrontendApiOrigin,
-    // Third-party (identity): Clerk FAPI for admin satellite domain (clerk.admin.buildmarket.app).
-    // The admin app is a Clerk satellite; its FAPI subdomain differs from the primary.
-    // Wildcard covers any future Clerk subdomain routing on the custom domain.
-    "https://*.buildmarket.app",
+    // Third-party (identity): Clerk FAPI for satellite domains (e.g.
+    // clerk.admin.buildmarket.app). Explicit per-satellite list — see
+    // clerkSatelliteOrigins doc comment. NOT a wildcard: a wildcard here would
+    // trust any subdomain of buildmarket.app, not just Clerk's satellites.
+    ...clerkSatelliteOrigins,
     // Fallback for Clerk CDN when NEXT_PUBLIC_CLERK_FRONTEND_API is unset.
     "https://*.clerk.accounts.dev",
     // Third-party (identity): Clerk telemetry.
@@ -78,9 +105,9 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     // Third-party (identity): Clerk JS assets. Derived from NEXT_PUBLIC_CLERK_FRONTEND_API
     // so the origin tracks env config rather than a hardcoded hostname.
     clerkFrontendApiOrigin,
-    // Third-party (identity): Clerk FAPI for admin satellite domain and any future
-    // Clerk subdomain routing on the custom domain (e.g. clerk.admin.buildmarket.app).
-    "https://*.buildmarket.app",
+    // Third-party (identity): Clerk FAPI for satellite domains. Explicit list, not a
+    // wildcard — see clerkSatelliteOrigins doc comment above.
+    ...clerkSatelliteOrigins,
     // Fallback for Clerk CDN when NEXT_PUBLIC_CLERK_FRONTEND_API is unset.
     "https://*.clerk.accounts.dev",
     // Third-party (CDN): jsdelivr used by some Clerk-adjacent widgets.
@@ -97,10 +124,26 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     // the site's own origin, so 'self' covers them. No additional origin needed.
   ].filter((value): value is string => Boolean(value));
 
+  // 'unsafe-eval' is a Next.js *development-server* requirement, not a Clerk
+  // production requirement — Clerk's own CSP guidance is explicit about this:
+  // https://clerk.com/docs/security/clerk-csp ("script-src 'unsafe-eval' is a
+  // requirement for Next.js to run in development environments"). Shipping it
+  // to production removes a real mitigation (eval/new Function/string-timer
+  // sinks) for no benefit, so it's gated to dev only.
+  const scriptSrcTokens = [
+    `'nonce-${nonce}'`,
+    "'strict-dynamic'",
+    isDev ? "'unsafe-eval'" : null,
+    ...dedup(scriptOrigins),
+  ].filter((value): value is string => Boolean(value));
+
   const styleOrigins = [
     "'self'",
-    // Next.js and several UI libraries inject inline style attributes at runtime.
-    // Until a nonce/hash strategy is in place this directive must remain.
+    `'nonce-${nonce}'`,
+    // Fallback for browsers that predate nonce-source support on style-src.
+    // Browsers that DO support nonces ignore 'unsafe-inline' automatically once
+    // a nonce-source is present (CSP3 backward-compat behavior), so this adds
+    // no risk on modern browsers — same pattern already used for script-src-elem.
     "'unsafe-inline'",
     // Third-party (typography): Google Fonts stylesheet host.
     "https://fonts.googleapis.com",
@@ -130,12 +173,9 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     "https://fonts.gstatic.com",
   ];
 
-  return [
+  const directives = [
     "default-src 'self'",
-    // 'unsafe-eval' is required by Clerk's production JS bundle which uses eval() internally.
-    // Tracked as a known Clerk limitation (see https://clerk.com/docs/security/csp).
-    // Risk accepted; no user-supplied data reaches eval; Clerk SDK code is not injectable.
-    `script-src 'nonce-${nonce}' 'strict-dynamic' 'unsafe-eval' ${dedup(scriptOrigins).join(" ")}`,
+    `script-src ${scriptSrcTokens.join(" ")}`,
     // 'strict-dynamic' delegates trust to scripts loaded by nonce-authorized scripts.
     // Origin allowlists are retained as fallbacks for browsers without strict-dynamic support.
     // 'self' covers Cloudflare-injected /cdn-cgi/ scripts served from the site origin.
@@ -144,8 +184,17 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     // Browsers that support script-src-elem but not strict-dynamic (e.g. older Safari) fall back
     // to 'unsafe-inline', which Clerk needs to initialize its <SignIn>/<SignUp> component scripts.
     // This matches the static CSP layer in next-config-csp.ts and Clerk's own CSP guidance.
-    `script-src-elem 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline' 'self' ${dedup(scriptOrigins).join(" ")}`,
+    `script-src-elem ${dedup([`'nonce-${nonce}'`, "'strict-dynamic'", "'unsafe-inline'", ...scriptOrigins]).join(" ")}`,
+    // style-src: kept as the CSP2 fallback for browsers without style-src-elem/-attr support.
     `style-src ${dedup(styleOrigins).join(" ")}`,
+    // style-src-elem: covers <style> tags (styled-jsx output, CSS-in-JS libs) via nonce.
+    `style-src-elem ${dedup(styleOrigins).join(" ")}`,
+    // style-src-attr: CSP nonces do NOT apply to inline style="" attributes (spec limitation —
+    // nonces are element-scoped, not attribute-scoped). Next.js and several UI libraries still
+    // set style="" at runtime, so 'unsafe-inline' remains required here. This is a known,
+    // tracked gap, not an oversight — closing it needs either auditing/removing those call
+    // sites or adopting 'unsafe-hashes' with per-value hashes (CSP3).
+    "style-src-attr 'unsafe-inline'",
     `img-src ${dedup(imgOrigins).join(" ")}`,
     `font-src ${dedup(fontOrigins).join(" ")}`,
     `connect-src ${dedup(connectOrigins).join(" ")}`,
@@ -154,5 +203,15 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'self'",
-  ].join("; ");
+    // Only set if Clerk bot-protection (Cloudflare Turnstile) is enabled for this
+    // instance — see clerkChallengeOrigins doc comment above.
+    clerkChallengeOrigins && clerkChallengeOrigins.length > 0
+      ? `frame-src 'self' ${dedup(clerkChallengeOrigins).join(" ")}`
+      : null,
+    // Meaningless on http://localhost in dev; standard hardening in production.
+    isDev ? null : "upgrade-insecure-requests",
+    reportUri ? `report-uri ${reportUri}` : null,
+  ].filter((value): value is string => Boolean(value));
+
+  return directives.join("; ");
 }

@@ -28,6 +28,31 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Security & Infrastructure — Strict CSP Implementation Plan & Violation Telemetry Endpoint
+
+- **Close Matcher Gap (`middleware.ts`, `scripts/check-csp-matcher-gap.mjs`)**: removed `html?` from `middleware.ts` negative lookahead matcher so all page routes route through middleware for strict nonce-based CSP and satellite auth checks. Added CI enforcement script `scripts/check-csp-matcher-gap.mjs` verifying no un-allowlisted HTML files bypass middleware.
+- **Public CSP Violation Telemetry Endpoint (`app/api/csp-reports/route.ts`, `app/lib/security/middleware/route-matcher.ts`)**:
+  - Implemented `/api/csp-reports` route handler supporting legacy `report-uri` (`application/csp-report`) and modern Reporting API (`application/reports+json`).
+  - Added request size caps (16KB) and batch limits (20 entries) with 413 Payload Too Large and 405 Method Not Allowed handling.
+  - Registered `/api/csp-reports(.*)` in `isSettingsExemptRoute` and `PUBLIC_API_ROUTES` in `route-matcher.ts` so unauthenticated browser reports process cleanly without triggering 401s or satellite auth handshakes.
+  - Integrated `getClientLogger()` from `@/app/lib/api/resilient-api` to log Tier 1 violations (`logger.info`) and Tier 2 fallback signals (`logger.warn` with `matcherGapSuspected: true`).
+- **Report-Only Mode Gating (`app/lib/infrastructure/env.ts`, `middleware.ts`, `.env.example`)**: added `NEXT_PUBLIC_CSP_REPORT_ONLY` boolean variable to `envGroups` and `env.ts`. Updated `applyDocumentCspHeaders` in `middleware.ts` to support `Content-Security-Policy-Report-Only` for non-blocking telemetry evaluation during pre-enforcement rollout phases.
+- **CSP Hardening Audit & Satellite Origins (`app/lib/security/middleware/csp-nonce.ts`, `next-config-csp.ts`, `app/layout.tsx`, `middleware.ts`)**:
+  - Gated `'unsafe-eval'` behind `isDev` in both `csp-nonce.ts` and `next-config-csp.ts` (eliminates production eval/new Function attack surface).
+  - Replaced wildcard `"https://*.buildmarket.app"` with explicit per-satellite `clerkSatelliteOrigins: string[]` in `script-src` and `connect-src`.
+  - Structured `style-src` / `style-src-elem` (nonce-scoped) / `style-src-attr` (`'unsafe-inline'`) policy split.
+  - Added support for `reportUri`, `clerkChallengeOrigins` (bot-protection Turnstile framing), and production `upgrade-insecure-requests`.
+  - Added production `console.error` warning in `app/layout.tsx` for missing `x-nonce` headers to immediately catch middleware matcher regressions.
+- **Automated Verification (`__tests__/api/csp-reports/route.test.ts`, `__tests__/middleware/csp-nonce.test.ts`, `__tests__/middleware/route-matrix.test.ts`)**: added unit tests for `/api/csp-reports` (204 success, 413 payload cap, 405 method rejection) and expanded Vitest suite (112 tests passed).
+
+### Security & Infrastructure — Staff-Level Clerk Webhook Setup (`/api/webhooks/clerk`)
+
+- **Primary Webhook Endpoint (`app/api/webhooks/clerk/route.ts`)**: exposed primary Clerk webhook endpoint re-exporting POST handler with fail-closed Svix signature verification (`400 Bad Request` for missing headers, `401 Unauthorized` for invalid signatures), timestamp freshness checking (`isWebhookTimestampFresh`), and Redis-backed replay deduplication (`claimClerkWebhookDelivery`).
+- **Satellite Middleware Route Exclusion (`app/lib/security/middleware/route-matcher.ts`, `middleware.ts`)**: added `/api/webhooks/clerk` and `/api/webhooks/(.*)` to `PUBLIC_API_ROUTES` and `isSettingsExemptRoute`. Ensures inbound webhooks short-circuit at Step 1a in `middleware.ts` before Clerk `auth()` checks, session claims resolution, satellite cross-domain handshakes, or maintenance mode redirects execute.
+- **Environment & Fallback Signing Secret Resolution (`app/lib/infrastructure/env.ts`, `.env.example`)**: updated `env.clerk.webhookSecret` to fall back to `CLERK_WEBHOOK_SIGNING_SECRET` if `CLERK_WEBHOOK_SECRET` is used in staging/production env configurations.
+- **Telemetry Failure Alerting (`app/lib/auth/telemetry-metrics.ts`, `app/api/clerk-webhook/route.ts`)**: added `recordWebhookFailure` counter and failure logging metrics to surface signature rejections and processing errors in monitoring.
+- **Automated Verification (`__tests__/api/webhooks/clerk/route.test.ts`, `__tests__/middleware/route-matrix.test.ts`)**: added unit and route matrix tests verifying missing headers (400), invalid signature (401), stale timestamp (401), valid delivery (200), and middleware route classification. (102 tests passed).
+
 ### Security — CSP `script-src-elem` Clerk compatibility fix
 
 - **Middleware CSP (`app/lib/security/middleware/csp-nonce.ts`)**: added `'unsafe-inline'` to the per-request `script-src-elem` directive emitted by `buildCspWithNonce()`.

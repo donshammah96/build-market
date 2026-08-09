@@ -1,23 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const mockFindUnique = vi.hoisted(() => vi.fn());
-
 vi.mock("@build/db", () => ({
   prisma: {
     systemSettings: {
-      findUnique: (...args: unknown[]) => mockFindUnique(...args),
+      findUnique: vi.fn(),
     },
+    $queryRawUnsafe: vi.fn(),
   },
 }));
 
+import { prisma } from "@build/db";
+
+const mockFindUnique = vi.mocked(prisma.systemSettings.findUnique);
+const mockQueryRawUnsafe = vi.mocked(prisma.$queryRawUnsafe);
+
 describe("System Settings Service", () => {
   beforeEach(async () => {
-    vi.resetModules();
-    mockFindUnique.mockReset();
+    vi.clearAllMocks();
+    const { systemSettingsService } = await import("@build/db/system-settings");
+    systemSettingsService.invalidateCache();
   });
 
   it("getPublicSettings returns defaults when no row exists", async () => {
-    mockFindUnique.mockResolvedValue(null);
+    mockFindUnique.mockResolvedValue(null as any);
 
     const { getPublicSettings } = await import("@build/db/system-settings");
     const settings = await getPublicSettings();
@@ -40,7 +45,7 @@ describe("System Settings Service", () => {
       supportEmail: "help@example.com",
       supportPhone: "+254700000000",
       whatsappNumber: "+254700000000",
-    });
+    } as any);
 
     const { getPublicSettings } = await import("@build/db/system-settings");
     const settings = await getPublicSettings();
@@ -55,7 +60,7 @@ describe("System Settings Service", () => {
   });
 
   it("getFinancialSettings returns defaults when no row exists", async () => {
-    mockFindUnique.mockResolvedValue(null);
+    mockFindUnique.mockResolvedValue(null as any);
 
     const { getFinancialSettings } = await import("@build/db/system-settings");
     const settings = await getFinancialSettings();
@@ -73,10 +78,38 @@ describe("System Settings Service", () => {
       minWithdrawalKes: 1000,
       maxWithdrawalKes: 150000,
       currency: "KES",
-    });
+    } as any);
 
     const { computePlatformFee } = await import("@build/db/system-settings");
     const fee = await computePlatformFee(1000);
     expect(fee).toBe(100);
+  });
+
+  it("handles P2022 missing column error by falling back to raw query and defaulting missing fields", async () => {
+    const p2022 = Object.assign(
+      new Error(
+        "The column SystemSettings.enableAutoVerifyEBK does not exist in the current database.",
+      ),
+      { code: "P2022" },
+    );
+    mockFindUnique.mockRejectedValue(p2022);
+    mockQueryRawUnsafe.mockResolvedValue([
+      {
+        maintenanceMode: true,
+        maintenanceMessage: "Scheduled Maintenance",
+        publicSignup: true,
+        allowProfessionalSignup: true,
+        platformCommission: 7.5,
+      },
+    ] as any);
+
+    const { getPublicSettings } = await import("@build/db/system-settings");
+    const settings = await getPublicSettings();
+
+    expect(settings.maintenanceMode).toBe(true);
+    expect(settings.maintenanceMessage).toBe("Scheduled Maintenance");
+    expect(mockQueryRawUnsafe).toHaveBeenCalledWith(
+      `SELECT * FROM "SystemSettings" WHERE id = 'global' LIMIT 1`,
+    );
   });
 });

@@ -135,6 +135,15 @@ const envGroups: EnvGroup[] = [
           '(e.g. "https://buildmarket.app/sign-in"), not a relative path — that\'s ' +
           "what NEXT_PUBLIC_CLERK_SIGN_IN_URL is for.",
       },
+      {
+        name: "NEXT_PUBLIC_CLERK_SATELLITE_ORIGINS",
+        required: false,
+      },
+      {
+        name: "NEXT_PUBLIC_CSP_REPORT_ONLY",
+        required: false,
+        default: "false",
+      },
     ],
   },
   {
@@ -1046,7 +1055,9 @@ function buildEnvConfig() {
     publishableKey: getStringEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"),
     frontendApi: getOptionalStringEnv("NEXT_PUBLIC_CLERK_FRONTEND_API"),
     secretKey: getOptionalStringEnv("CLERK_SECRET_KEY"),
-    webhookSecret: getOptionalStringEnv("CLERK_WEBHOOK_SECRET"),
+    webhookSecret:
+      getOptionalStringEnv("CLERK_WEBHOOK_SECRET") ||
+      getOptionalStringEnv("CLERK_WEBHOOK_SIGNING_SECRET"),
     replayWindowSeconds: getNumberEnv(
       "CLERK_WEBHOOK_REPLAY_WINDOW_SECONDS",
       300,
@@ -1083,6 +1094,12 @@ function buildEnvConfig() {
         ? configured
         : undefined;
     })(),
+    satelliteOrigins: (
+      getOptionalStringEnv("NEXT_PUBLIC_CLERK_SATELLITE_ORIGINS") ?? ""
+    )
+      .split(",")
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0),
   };
 
   const satelliteIssues = validateSatelliteInvariants({
@@ -1113,6 +1130,7 @@ function buildEnvConfig() {
     isDev,
     isProd,
     isTest,
+    cspReportOnly: getBooleanEnv("NEXT_PUBLIC_CSP_REPORT_ONLY", false),
     isCI: getBooleanEnv("CI"),
     isBuildPhase: process.env.NEXT_PHASE === "phase-production-build",
 

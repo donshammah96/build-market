@@ -15,6 +15,10 @@ const webhookReplayRejectCounter = meter.createCounter(
   },
 );
 
+const webhookFailureCounter = meter.createCounter("auth.webhook.failures", {
+  description: "Count of webhook processing failures",
+});
+
 const middlewareFallbackCounter = meter.createCounter(
   "auth.middleware.fallbacks",
   {
@@ -136,6 +140,16 @@ export function recordClerkSyncLag(durationMs: number): void {
 
 export function recordWebhookReplayReject(reason?: string): void {
   metricsStore.recordWebhookReplayReject(reason);
+}
+
+export function recordWebhookFailure(
+  reason?: string,
+  eventType?: string,
+): void {
+  webhookFailureCounter.add(1, {
+    reason: reason ?? "unknown",
+    event_type: eventType ?? "unknown",
+  });
 }
 
 export function recordMiddlewareFallback(
