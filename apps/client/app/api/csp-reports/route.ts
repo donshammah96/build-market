@@ -169,17 +169,41 @@ function logViolation(entry: {
   raw?: string;
 }): void {
   const logger = getClientLogger();
+
+  const sanitizeUrl = (value: unknown): unknown => {
+    if (typeof value !== "string") return value;
+    try {
+      const url = new URL(value);
+      return `${url.origin}${url.pathname}`;
+    } catch {
+      return value.slice(0, 200);
+    }
+  };
+
+  const sanitizeReport = (report: unknown): unknown => {
+    if (!report || typeof report !== "object") return report;
+    const r = report as Record<string, unknown>;
+    const copy: Record<string, unknown> = { ...r };
+    for (const key of [
+      "document-uri",
+      "blocked-uri",
+      "documentURL",
+      "blockedURL",
+      "sourceFile",
+      "url",
+    ]) {
+      if (key in copy) copy[key] = sanitizeUrl(copy[key]);
+    }
+    return copy;
+  };
+
   const payload = {
     event: "csp_violation_report",
     tier: entry.tier,
-    // tier=2 means the static fallback fired — see naming note at top of
-    // file and STRICT_CSP_IMPLEMENTATION_PLAN.md item #4. Surface this as
-    // a distinct, greppable field so alerting can key off it directly.
     matcherGapSuspected: entry.tier === "2",
     format: entry.format,
     malformed: entry.malformed ?? false,
-    report: entry.report,
-    raw: entry.raw,
+    report: sanitizeReport(entry.report),
   };
 
   if (payload.matcherGapSuspected) {
