@@ -28,6 +28,14 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Fixed — Preview Smoke Gate Build Failure & Footer Input Autofill
+
+- **CI Preview Smoke Gate Env Isolation (`.github/workflows/ci.yml`, `apps/client/.env.local`)**:
+  - Removed top-level `BYPASS_AUTH: "true"` from `client-preview-smoke-gate` job environment configuration in [.github/workflows/ci.yml](file:///c:/Users/User/build-market/.github/workflows/ci.yml). Prevents production build phase (`next build`) from attempting to collect page data with auth bypass enabled, which violated fail-closed production security posture enforced by `@build/env-validation`'s `resolveDevAuthBypass`.
+  - Added reproduction test [`apps/client/__tests__/lib/env.smoke-gate-bypass.test.ts`](file:///c:/Users/User/build-market/apps/client/__tests__/lib/env.smoke-gate-bypass.test.ts) asserting that production `NODE_ENV` strictly rejects `BYPASS_AUTH` / `AUTH_DEV_BYPASS`.
+- **Footer Newsletter Form Accessibility (`apps/client/components/layout/Footer.tsx`)**:
+  - Added explicit `autoComplete="email"` to newsletter email input in [`Footer.tsx`](file:///c:/Users/User/build-market/apps/client/components/layout/Footer.tsx#L280) to satisfy browser autofill heuristic requirements and resolve DevTools accessibility warnings.
+
 ### Security & Infrastructure — Strict CSP Implementation Plan, Vercel Preview Compatibility & Route Matcher Hardening
 
 - **Close Matcher Gap & Route Matcher Hardening (`middleware.ts`, `route-matcher.ts`, `scripts/check-csp-matcher-gap.mjs`)**:

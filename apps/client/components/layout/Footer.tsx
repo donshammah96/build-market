@@ -277,6 +277,7 @@ export const Footer = memo(function Footer() {
                   id="footer-newsletter-email"
                   type="email"
                   name="email"
+                  autoComplete="email"
                   placeholder="Enter your email"
                   className="bg-muted/60 border-border focus:border-focus-ring focus:ring-focus-ring transition-all"
                   aria-label="Email address for newsletter"
