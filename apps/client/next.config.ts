@@ -176,16 +176,6 @@ const nextConfig: NextConfig = {
     ];
   },
 
-  // Rewrites for webhook alias routing
-  async rewrites() {
-    return [
-      {
-        source: "/clerk-webhook",
-        destination: "/api/clerk-webhook",
-      },
-    ];
-  },
-
   // Source maps: disabled in production browser bundle.
   // If using Sentry or another error tracker, upload maps at build time instead.
   productionBrowserSourceMaps: false,
