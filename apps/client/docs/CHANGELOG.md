@@ -28,6 +28,13 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Fixed — Preview Smoke Gate SSR Hang & Homepage Clerk SignUp Component Gating
+
+- **Homepage Registration Form SSR Gating (`components/forms/RegisterForm.tsx`, `components/home/Hero.tsx`)**:
+  - Added client-side `mounted` hydration state guard and exported `RegisterFormSkeleton` in [`RegisterForm.tsx`](file:///c:/Users/User/build-market/apps/client/components/forms/RegisterForm.tsx). Prevents `@clerk/nextjs`'s `<SignUp>` component from executing synchronous outbound network calls (to Clerk Accounts backend / JWKS endpoints) during server-side rendering (SSR) of the public root page (`/`).
+  - Switched `Hero.tsx` from static `RegisterForm` import to Next.js `dynamic()` with `ssr: false` and `loading: () => <FormSkeleton />`. Ensures root route SSR returns initial HTML in milliseconds during preview builds (`NODE_ENV=production`), eliminating the 15-second `curl: (28) Operation timed out with 0 bytes received` hang during CI preview smoke gate probe checks.
+  - Added unit and SSR string rendering test suite [`apps/client/__tests__/components/forms/RegisterForm.test.tsx`](file:///c:/Users/User/build-market/apps/client/__tests__/components/forms/RegisterForm.test.tsx) verifying pre-mount skeleton display and safe client-side component mounting.
+
 ### Changed — Onboarding Flow Visual Redesign & Design System Elevation
 
 - **Canvas & Atmosphere (`app/onboarding/_components/OnboardingView.tsx`)**:
