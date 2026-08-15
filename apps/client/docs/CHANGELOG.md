@@ -28,6 +28,70 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Fixed — Preview Smoke Gate SSR Hang, OTel & Queue Guards, Root Layout Dynamic Clerk Decoupling & CI Redis Service Alignment
+
+- **OpenTelemetry Bootstrap Endpoint Guard (`app/lib/infrastructure/otel.ts`, `apps/admin/src/lib/infrastructure/otel.ts`)**:
+  - Gated `initOtel()` to return early when `env.otel.endpoint` (`OTEL_EXPORTER_OTLP_ENDPOINT`) is unset. Previously, `initOtel()` defaulted to `"http://127.0.0.1:4317"` and eagerly started `NodeSDK` with `HttpInstrumentation` and `OTLP-grpc` exporters during server startup. In CI and local preview without an active OTel collector, `HttpInstrumentation` intercepted incoming HTTP requests and hung during trace export against closed TCP/gRPC ports, triggering Node `DEP0169` warnings and blocking request completion.
+- **License Verification Queue Bootstrap Guards (`app/lib/domains/regulator-verification/queue.ts`)**:
+  - Added build-phase and Redis-presence guards to `getLicenseVerificationQueue()`. Safely returns stub/no-op implementations when `REDIS_URL` is unconfigured, during `next build`, or when `DISABLE_BACKGROUND_JOBS=true`, aligning with the existing `upload-processing.queue.ts` resilience pattern.
+- **CI Smoke Gate Infrastructure Parity (`.github/workflows/ci.yml`)**:
+  - Added `redis:7-alpine` service container and `DISABLE_BACKGROUND_JOBS: "true"` to `client-preview-smoke-gate`, matching `admin-preview-smoke-gate`.
+  - Hardened diagnostic signal resolution in `ci.yml` using `fuser`/`pgrep` to ensure `SIGUSR2` reliably triggers Node diagnostic reporting on `next start` process trees during smoke checks.
+- **Root Layout Clerk Dynamic Gating (`app/layout.tsx`)**:
+  - Removed `dynamic` prop from `<ClerkProvider nonce={nonce}>` in [`app/layout.tsx`](file:///c:/Users/User/build-market/apps/client/app/layout.tsx). The `dynamic` flag forced Clerk SDK to attempt synchronous server-side auth verification on every request during SSR. In preview builds (`NODE_ENV=production`) with test placeholder keys or restricted egress, this triggered blocking external JWKS/handshake fetches, stalling root layout HTML delivery.
+- **Homepage Registration Form SSR Gating (`components/forms/RegisterForm.tsx`, `components/home/Hero.tsx`)**:
+  - Added client-side `mounted` hydration state guard and exported `RegisterFormSkeleton` in [`RegisterForm.tsx`](file:///c:/Users/User/build-market/apps/client/components/forms/RegisterForm.tsx). Prevents `@clerk/nextjs`'s `<SignUp>` component from executing synchronous outbound network calls (to Clerk Accounts backend / JWKS endpoints) during server-side rendering (SSR) of the public root page (`/`).
+  - Switched `Hero.tsx` from static `RegisterForm` import to Next.js `dynamic()` with `ssr: false` and `loading: () => <FormSkeleton />`. Ensures root route SSR returns initial HTML in milliseconds during preview builds (`NODE_ENV=production`), eliminating the 15-second `curl: (28) Operation timed out with 0 bytes received` hang during CI preview smoke gate probe checks.
+  - Added unit and SSR string rendering test suite [`apps/client/__tests__/components/forms/RegisterForm.test.tsx`](file:///c:/Users/User/build-market/apps/client/__tests__/components/forms/RegisterForm.test.tsx) verifying pre-mount skeleton display and safe client-side component mounting.
+
+### Changed — Onboarding Flow Visual Redesign & Design System Elevation
+
+- **Canvas & Atmosphere (`app/onboarding/_components/OnboardingView.tsx`)**:
+  - Replaced low-contrast washed background with a dark obsidian canvas (`bg-zinc-950`) accented with subtle emerald ambient glow (`bg-emerald-500/10 blur-[140px]`).
+  - Added a floating glass navigation bar (`backdrop-blur-xl bg-zinc-950/70 border-b border-zinc-800/80`) with brand identity, encrypted status badge, and skip action.
+  - Implemented top gradient progress indicator (`bg-gradient-to-r from-emerald-600 to-emerald-400`).
+- **Tactile Step Nodes & Progress (`app/onboarding/_components/StepIndicator.tsx`, `components/ui/step-progress.tsx`)**:
+  - Upgraded node geometry to `h-9 w-9` tactile targets with active emerald glow (`shadow-[0_0_20px_rgba(16,185,129,0.25)]`).
+  - Fixed checkmark rendering logic to display completion state strictly when `currentStep > stepIndex`.
+- **Role Selection Cards (`app/onboarding/_components/RoleCard.tsx`)**:
+  - Upgraded cards into spacious `min-h-[200px]` selection targets with custom radio indicators, icon badges, and emerald border accents.
+- **Wizard Styling & Forms (`components/forms/professional-wizard/types.ts`, `ProfessionStep.tsx`, `DetailsStep.tsx`, `HomeownerForm.tsx`, `ProfessionalForm.tsx`)**:
+  - Standardized `WIZARD_STYLES` tokens with solid obsidian inputs (`bg-zinc-950/80 border-zinc-800 focus:border-emerald-500`), bold emerald primary CTA buttons, and uppercase form labels.
+  - Modernized `CategoryCard` selection pills, search comboboxes, and regulatory attribution banners.
+
+### Fixed — Onboarding Form Accessibility Contracts, RoleCard Semantics, & Unused Imports
+
+- **HomeownerForm Accessible Submit & Invalid Focus (`components/forms/HomeownerForm.tsx`)**:
+  - Restored primary submit button accessible name `"Get Started"` aligning with accessibility test contracts.
+  - Re-enabled programmatic invalid field focus (`focusFieldById`) and sequential priority resolution (`county` -> `projectType` -> `customProjectType` -> `description`) during invalid form submissions.
+- **RoleCard Active Scaling & Selection Semantics (`app/onboarding/_components/RoleCard.tsx`)**:
+  - Added missing `active:scale-[0.98]` class to interactive role cards.
+  - Aligned selected state helper text fallback to `"Selection confirmed."`.
+- **StepIndicator Import Cleanup (`app/onboarding/_components/StepIndicator.tsx`)**:
+  - Removed unused `CheckCircle2` icon import.
+
+### Fixed — Preview Smoke Gate Boot Hang, Clerk Auth Bypass, & CSP Challenge Gating
+
+- **Root Layout Auth Decoupling (`app/layout.tsx`, `components/providers/CookieConsentProvider.tsx`)**:
+  - Removed synchronous server-side `await getAuth()` in [`app/layout.tsx`](file:///c:/Users/User/build-market/apps/client/app/layout.tsx). Previously, `RootLayout` executed dynamic Clerk identity evaluation on every request (including public landing pages) to derive `isSignedIn` for `<CookieConsentProvider>`. During production builds (`NODE_ENV=production`) without active sessions or in CI containers with placeholder keys, this caused SSR to hang indefinitely awaiting Clerk JWKS/handshake.
+  - Refactored [`CookieConsentProvider.tsx`](file:///c:/Users/User/build-market/apps/client/components/providers/CookieConsentProvider.tsx) to resolve session state directly via `@clerk/nextjs`'s client-side `useAuth()` hook, preserving background consent syncing for authenticated users without blocking root layout SSR.
+- **Clerk Middleware Context Initialization under Dev Auth Bypass (`middleware.ts`)**:
+  - Maintained `clerkMiddleware()` as the outer request wrapper across all execution modes and moved the `AUTH_DEV_BYPASS` short-circuit inside the callback. Ensured Clerk's AsyncLocalStorage request context is properly initialized so downstream Server Components calling `auth()` (e.g. `/sign-in`) do not throw `can't detect usage of clerkMiddleware()`.
+- **Clerk Bot Challenge / Cloudflare Turnstile CSP Allowance (`app/lib/security/middleware/csp-nonce.ts`, `next-config-csp.ts`, `middleware.ts`)**:
+  - Added Cloudflare Turnstile origins (`https://challenges.cloudflare.com`, `https://*.protect.clerk.com`) to `script-src`, `connect-src`, and `frame-src` across both runtime and static CSP generators. Passed `clerkChallengeOrigins` in `buildRequestCsp()`, eliminating iframe framing violations and preventing registration form reset loops.
+- **Homepage Embedded `<SignUp />` Component Routing (`components/forms/RegisterForm.tsx`)**:
+  - Configured embedded `<SignUp />` on the homepage with `routing="hash"`, `signInUrl="/sign-in"`, and `fallbackRedirectUrl="/auth-callback"`, preventing catch-all path probe 404s and hydration mismatches on non-catchall parent routes (`/`).
+- **Join as a Pro Direct Page Navigation (`components/layout/NavBar.tsx`)**:
+  - Converted the desktop "Join as a Pro" action from a modal `<SignUpButton>` wrapper to a direct Next.js `<Link>` pointing to `ROUTES.joinAsPro` (`/professional/sign-up`) with preserved pill button styling.
+- **Professional Sign-up Hydration & Redirect Hardening (`app/professional/sign-up/[[...sign-up]]/page.tsx`)**:
+  - Added client-side `mounted` hydration protection with `<AuthPageSkeleton variant="sign-up" />` and explicit `signInUrl="/sign-in"`, `forceRedirectUrl={ROUTES.professionalOnboarding}`, and `fallbackRedirectUrl={ROUTES.professionalOnboarding}`. Added responsive `sizes` prop to hero image to eliminate Next.js `fill` warnings.
+- **Image Quality Registration & Responsive Sizing (`next.config.ts`, `app/professional/page.tsx`)**:
+  - Registered `qualities: [75, 85]` in `next.config.ts` image options to officially support high-quality photography presets and added `sizes="100vw"` on hero image in `app/professional/page.tsx`.
+- **System Settings Database Fail-Fast Timeout (`packages/db/lib/system-settings.ts`)**:
+  - Added a 3,000ms fail-fast timeout race in `SystemSettingsService.getSettings()` to immediately fall back to pre-parsed defaults when the database is offline/unreachable, preventing 25-second TCP connection stalls on `/api/settings/public`.
+- **CI Preview Smoke Gate Clerk Keys Parity (`.github/workflows/ci.yml`)**:
+  - Replaced unpopulated secret interpolations in `client-preview-smoke-gate` and `admin-preview-smoke-gate` with deterministic test key placeholders (`pk_test_...`, `sk_test_ci_placeholder`, `whsec_ci_placeholder`), aligning with `verification-ops-preview-smoke-gate` and preventing external auth lookup hangs in pull request CI runners.
+
 ### Fixed — Preview Smoke Gate Build Failure & Footer Input Autofill
 
 - **CI Preview Smoke Gate Env Isolation (`.github/workflows/ci.yml`, `apps/client/.env.local`)**:

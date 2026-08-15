@@ -495,6 +495,15 @@ jobs:
       # for ~4-5 minutes before the process ever bound the port. GitHub Actions
       # waits for the configured healthcheck to pass before starting job steps,
       # so no extra wait step is required here.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
       postgres:
         image: postgres:16-alpine
         env:
@@ -509,15 +518,16 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     env:
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
-      CLERK_WEBHOOK_SECRET: ${{ secrets.CLERK_WEBHOOK_SECRET }}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
+      CLERK_SECRET_KEY: sk_test_ci_placeholder
+      CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3500
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3500/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
       ALLOW_MOCK_VIRUS_SCANNER: "true"
+      DISABLE_BACKGROUND_JOBS: "true"
       # Was `https://stub.upstash.io`, then `https://127.0.0.1:6378` (an
       # unbound local port, on the theory that a closed port fails at the
       # kernel level — instant ECONNREFUSED, no DNS, no ambiguity). That
@@ -789,7 +799,7 @@ jobs:
             # Resolving the PID actually bound to the port sidesteps that
             # assumption entirely, regardless of how pnpm/npm/yarn wraps the
             # script underneath.
-            SERVER_PID="$(lsof -t -i :3500 -sTCP:LISTEN 2>/dev/null | head -n1 || true)"
+            SERVER_PID="$(fuser 3500/tcp 2>/dev/null | tr -d ' ' || pgrep -P "$APP_PID" node | head -n1 || true)"
             SERVER_PID="${SERVER_PID:-$APP_PID}"
             kill -USR2 "$SERVER_PID" 2>/dev/null || true
             sleep 2
@@ -888,9 +898,9 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     env:
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
-      CLERK_WEBHOOK_SECRET: ${{ secrets.CLERK_WEBHOOK_SECRET }}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZGV2ZWxvcGluZy1jYXRmaXNoLTguY2xlcmsuYWNjb3VudHMuZGV2JA==
+      CLERK_SECRET_KEY: sk_test_ci_placeholder
+      CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/build_market_ci
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3005
       CLIENT_APP_URL: http://127.0.0.1:3500

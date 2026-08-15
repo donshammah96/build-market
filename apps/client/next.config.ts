@@ -60,6 +60,7 @@ const nextConfig: NextConfig = {
 
   // Optimize images for faster loading
   images: {
+    qualities: [75, 85],
     remotePatterns: [
       { protocol: "https", hostname: "img.clerk.com" },
       { protocol: "https", hostname: "res.cloudinary.com" },

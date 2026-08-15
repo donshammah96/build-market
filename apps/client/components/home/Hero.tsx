@@ -3,11 +3,16 @@
 import { Suspense, useState, type FC, memo } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
-import RegisterForm from "@/components/forms/RegisterForm";
 import { ROUTES } from "@/lib/links";
 import { useShouldAnimate } from "@/lib/hooks/usePerformance";
 import { cn } from "@/lib/utils";
+
+const RegisterForm = dynamic(() => import("@/components/forms/RegisterForm"), {
+  loading: () => <FormSkeleton />,
+  ssr: false,
+});
 
 // =============================================================================
 // Hero Component - Optimized for performance

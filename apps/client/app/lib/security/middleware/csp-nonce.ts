@@ -87,6 +87,8 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     "https://*.clerk.accounts.dev",
     // Third-party (identity): Clerk telemetry.
     "https://clerk-telemetry.com",
+    // Third-party (identity): Clerk bot protection challenge (Cloudflare Turnstile)
+    "https://challenges.cloudflare.com",
     // Third-party (analytics): PostHog ingestion/query endpoint.
     analyticsOrigin,
     // Third-party (analytics): PostHog EU/US ingest endpoints (explicit for CSP).
@@ -118,6 +120,8 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
     ...clerkSatelliteOrigins,
     // Fallback for Clerk CDN when NEXT_PUBLIC_CLERK_FRONTEND_API is unset.
     "https://*.clerk.accounts.dev",
+    // Third-party (identity): Clerk bot protection challenge (Cloudflare Turnstile script)
+    "https://challenges.cloudflare.com",
     // Third-party (CDN): jsdelivr used by some Clerk-adjacent widgets.
     "https://cdn.jsdelivr.net",
     // Third-party (identity avatars): Clerk image CDN — scripts loaded by Clerk widgets.

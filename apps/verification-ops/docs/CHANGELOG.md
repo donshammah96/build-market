@@ -17,6 +17,8 @@ conventions, reverse-chronological.
   - **Architecture note:** The middleware's `"ADMIN"` container role and the DB `AdminRole.SUPER_ADMIN` are intentionally separate concerns: `"ADMIN"` in Clerk metadata is the edge gate (no DB hit), `SUPER_ADMIN` in `AdminProfile` is the fine-grained capability tier. The ROLE_MAP in `lib/auth.ts` correctly maps `SUPER_ADMIN → VERIFICATION_COMPLIANCE_OFFICER`, granting full `canRecordDecisions`, `canSeniorApprove`, `canViewUnredactedEvidence`, and `canExportPackets` capabilities once the session is fresh.
 
 - **Server Component event-handler boundary error — authority filter select (`app/page.tsx`, `app/authority-filter-select.tsx`)** — Next.js threw digest `932092346` on page load: `Error: Event handlers cannot be passed to Client Component props` caused by an `onChange` handler on a `<select>` element inside `app/page.tsx`, which is a Server Component. **Fix:** Extracted the authority filter (`<Filter>` icon + `<form>/<select>` with `onChange`) into a new `"use client"` component at `app/authority-filter-select.tsx`. The Server Component now renders `<AuthorityFilterSelect currentQueue={...} currentAuthority={...} authorities={[...]} />` passing only serializable string/array props across the RSC boundary. Removed the unused `Filter` import from `page.tsx`.
+- **TypeScript Dev Server Types Reference (`next-env.d.ts`)**:
+  - Updated auto-generated Next.js route type reference in `next-env.d.ts` from `./.next/types/routes.d.ts` to `./.next/dev/types/routes.d.ts` to align with monorepo Next.js Turbopack development compilation output.
 
 ### Changed — env.ts, middleware.ts, auth.ts
 

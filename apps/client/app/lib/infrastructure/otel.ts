@@ -13,7 +13,10 @@ export function initOtel(env: ClientEnvConfig) {
   if (typeof window !== "undefined") return;
   if (sdk) return;
 
-  const endpoint = env.otel.endpoint || "http://127.0.0.1:4317";
+  const endpoint = env.otel.endpoint;
+  if (!endpoint) {
+    return;
+  }
   const serviceName = env.otel.serviceName || "build-market-client-dev";
 
   const resourceAttributes: Record<string, string> = {

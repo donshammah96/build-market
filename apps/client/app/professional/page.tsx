@@ -61,6 +61,7 @@ function HeroSection() {
           src="/engineers.png"
           alt="Engineers discussing a project"
           fill
+          sizes="100vw"
           className="object-cover opacity-40"
           priority
         />

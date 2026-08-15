@@ -23,7 +23,11 @@ vi.mock("@build/db", () => ({
 }));
 
 vi.mock("@/app/lib/infrastructure/env", () => ({
-  envConfig: { redis: { url: "redis://localhost:6379" } },
+  envConfig: {
+    redis: { url: "redis://localhost:6379" },
+    jobs: { disableBackgroundJobs: false },
+  },
+  env: { isBuildPhase: false },
 }));
 
 vi.mock("@/app/lib/api/resilient-api", () => ({

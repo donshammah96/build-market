@@ -4,12 +4,32 @@ import { createRedisConnection } from "@build/redis/tcp";
 import { dedupeKeyFor } from "./evidence-store";
 import type { RegulatorVerificationRequest } from "./gateway";
 
+import { env, envConfig } from "@/app/lib/infrastructure/env";
+
 export const LICENSE_VERIFICATION_QUEUE_NAME = "license-verification";
 export const LICENSE_VERIFICATION_MAX_ATTEMPTS = 5;
 
 let queue: Queue<RegulatorVerificationRequest> | null = null;
 
 export function getLicenseVerificationQueue(): Queue<RegulatorVerificationRequest> {
+  // Guard 1: Next.js static build phase or client-side runtime
+  if (env.isBuildPhase || typeof window !== "undefined") {
+    return {
+      add: async () => undefined,
+      getJob: async () => null,
+      close: async () => undefined,
+    } as unknown as Queue<RegulatorVerificationRequest>;
+  }
+
+  // Guard 2: CI / local dev without Redis or when background jobs are disabled
+  if (!envConfig.redis.url || envConfig.jobs.disableBackgroundJobs) {
+    return {
+      add: async () => undefined,
+      getJob: async () => null,
+      close: async () => undefined,
+    } as unknown as Queue<RegulatorVerificationRequest>;
+  }
+
   if (!queue) {
     queue = new Queue(LICENSE_VERIFICATION_QUEUE_NAME, {
       connection: createRedisConnection(),

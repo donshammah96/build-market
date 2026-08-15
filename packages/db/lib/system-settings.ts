@@ -377,10 +377,24 @@ class SystemSettingsService {
 
     // 3. Launch Request
     this.pendingRequest = (async () => {
+      let timeoutHandle: NodeJS.Timeout | undefined;
       try {
-        const row = await prisma.systemSettings.findUnique({
+        const queryPromise = prisma.systemSettings.findUnique({
           where: { id: "global" },
         });
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutHandle = setTimeout(
+            () =>
+              reject(
+                Object.assign(new Error("DB query timed out after 3000ms"), {
+                  code: "ETIMEDOUT",
+                }),
+              ),
+            3000,
+          );
+        });
+
+        const row = await Promise.race([queryPromise, timeoutPromise]);
 
         // Parse once sequentially
         const parsed = SystemSettingsSchema.parse(row ?? {});
@@ -467,6 +481,7 @@ class SystemSettingsService {
         };
         return fallback;
       } finally {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
         this.pendingRequest = null;
       }
     })();
