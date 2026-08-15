@@ -43,6 +43,17 @@ This format is based on Keep a Changelog and uses semantic categories:
   - Standardized `WIZARD_STYLES` tokens with solid obsidian inputs (`bg-zinc-950/80 border-zinc-800 focus:border-emerald-500`), bold emerald primary CTA buttons, and uppercase form labels.
   - Modernized `CategoryCard` selection pills, search comboboxes, and regulatory attribution banners.
 
+### Fixed — Onboarding Form Accessibility Contracts, RoleCard Semantics, & Unused Imports
+
+- **HomeownerForm Accessible Submit & Invalid Focus (`components/forms/HomeownerForm.tsx`)**:
+  - Restored primary submit button accessible name `"Get Started"` aligning with accessibility test contracts.
+  - Re-enabled programmatic invalid field focus (`focusFieldById`) and sequential priority resolution (`county` -> `projectType` -> `customProjectType` -> `description`) during invalid form submissions.
+- **RoleCard Active Scaling & Selection Semantics (`app/onboarding/_components/RoleCard.tsx`)**:
+  - Added missing `active:scale-[0.98]` class to interactive role cards.
+  - Aligned selected state helper text fallback to `"Selection confirmed."`.
+- **StepIndicator Import Cleanup (`app/onboarding/_components/StepIndicator.tsx`)**:
+  - Removed unused `CheckCircle2` icon import.
+
 ### Fixed — Preview Smoke Gate Boot Hang, Clerk Auth Bypass, & CSP Challenge Gating
 
 - **Root Layout Auth Decoupling (`app/layout.tsx`, `components/providers/CookieConsentProvider.tsx`)**:

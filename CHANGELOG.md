@@ -9,6 +9,12 @@
 - **Role Selection Cards (`apps/client/app/onboarding/_components/RoleCard.tsx`)**: Converted buttons into spacious `min-h-[200px]` interactive selection cards with radio indicators and emerald borders.
 - **Wizard Styling & Forms (`apps/client/components/forms/professional-wizard/types.ts`, `ProfessionStep.tsx`, `DetailsStep.tsx`, `HomeownerForm.tsx`, `ProfessionalForm.tsx`)**: Unified input tokens (`WIZARD_STYLES`), category selection cards, comboboxes, and submission feedback cards.
 
+### Fixed — Client Onboarding Accessibility Contracts, RoleCard Semantics, & Unused Imports
+
+- **HomeownerForm Accessible Submit & Focus Resolution (`apps/client/components/forms/HomeownerForm.tsx`)**: Restored primary submit button accessible name `"Get Started"` and sequential invalid field focusing (`county` -> `projectType` -> `customProjectType` -> `description`).
+- **RoleCard Active Scaling & Selection Semantics (`apps/client/app/onboarding/_components/RoleCard.tsx`)**: Added `active:scale-[0.98]` class and selection confirmed helper text semantics.
+- **StepIndicator Import Cleanup (`apps/client/app/onboarding/_components/StepIndicator.tsx`)**: Removed unused `CheckCircle2` import.
+
 ### Fixed — Client Preview Smoke Gate, Clerk Dev Auth Bypass, CSP Turnstile Framing, & DB Fail-Fast Timeout
 
 - **Root Layout SSR Auth Decoupling (`apps/client/app/layout.tsx`, `apps/client/components/providers/CookieConsentProvider.tsx`)**:
@@ -76,9 +82,10 @@
   - **`middleware.ts`**: satellite helpers (`normalizeClerkDomain`, `resolvePrimarySignInUrl`) now imported from `@build/security-clerk` instead of a local duplicate (Finding 7), which also gets this app the request-memoization fix (Finding 10) for free. `BLOCKED_STATUSES` literal replaced with `isBlockedUserStatus()` from `@build/enums` (Finding 9). Role/status parsing helpers (`parseSessionMetadata`, `normalizeAdminAccessRole`) stay local — app-specific, not part of the duplicated satellite-mechanics set.
   - **`lib/auth.ts`**: added a Tier 2 (300s) session-freshness gate to `getVerificationUserContext()` via `isClaimFresh()` from `@build/security-clerk`. `canRecordDecisions`/`canSeniorApprove`/`canViewUnredactedEvidence`/`canExportPackets` are now `role-permits AND session-fresh`; a stale session degrades these to `false` without denying the whole context, so read-only identity fields stay available while destructive actions are blocked pending a client-side session refresh. Added a `sessionFresh` field to `VerificationUserContext` so callers can distinguish "not permitted" from "needs a refresh."
 
-  ### Added — CI/deploy-time guard and hardening test suite
-  - **`scripts/verify-vercel-env.ts`** (new): pre-deploy/CI script asserting `NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL` is set and absolute http(s) whenever `NEXT_PUBLIC_CLERK_IS_SATELLITE=true` in a `production` or `staging` deployment target. Exports a pure `verifySatelliteEnv()` function for direct unit testing; the CLI entrypoint (`main()`) only runs when invoked directly, not on import.
-  - **`tests/satellite-auth-hardening.test.ts`** (new): Vitest suite covering relative-URL rejection, `*.vercel.app`/`*.vercel.sh` fallback-derivation guards, blocked-status-before-role gate ordering (via a documented reference-implementation harness — the real ordering lives inside `clerkMiddleware(...)` closures that aren't independently testable without a Clerk/NextRequest mocking harness, flagged as a follow-up), `WeakMap` memoization of `resolvePrimarySignInUrl` (asserted indirectly via `console.error` call counts), `getSafeRedirectUrl` across relative/absolute/allow-listed/rejected targets, and `isClaimFresh` for valid/expired/missing/future `iat`. Includes a bonus suite for `verify-vercel-env.ts`.
+### Added — CI/deploy-time guard and hardening test suite
+
+- **`scripts/verify-vercel-env.ts`** (new): pre-deploy/CI script asserting `NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL` is set and absolute http(s) whenever `NEXT_PUBLIC_CLERK_IS_SATELLITE=true` in a `production` or `staging` deployment target. Exports a pure `verifySatelliteEnv()` function for direct unit testing; the CLI entrypoint (`main()`) only runs when invoked directly, not on import.
+- **`tests/satellite-auth-hardening.test.ts`** (new): Vitest suite covering relative-URL rejection, `*.vercel.app`/`*.vercel.sh` fallback-derivation guards, blocked-status-before-role gate ordering (via a documented reference-implementation harness — the real ordering lives inside `clerkMiddleware(...)` closures that aren't independently testable without a Clerk/NextRequest mocking harness, flagged as a follow-up), `WeakMap` memoization of `resolvePrimarySignInUrl` (asserted indirectly via `console.error` call counts), `getSafeRedirectUrl` across relative/absolute/allow-listed/rejected targets, and `isClaimFresh` for valid/expired/missing/future `iat`. Includes a bonus suite for `verify-vercel-env.ts`.
 
 ### Added — Shared `@build/env-validation` and `@build/security-clerk` packages (closes Drift 2, Finding 6, Finding 7, Finding 10)
 

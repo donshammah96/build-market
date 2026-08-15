@@ -422,15 +422,43 @@ const HomeownerForm: React.FC<Props> = ({
     }
   };
 
-  const handleInvalidSubmit = (
-    fieldErrors: FieldErrors<HomeownerOnboardingData>,
-  ) => {
-    const errorCount = Object.keys(fieldErrors).length;
-    showToast(
-      "error",
-      `Please fix the ${errorCount} error${errorCount > 1 ? "s" : ""} below before submitting.`,
-    );
-  };
+  const focusFieldById = useCallback((id: string) => {
+    requestAnimationFrame(() => {
+      const element = document.getElementById(id) as HTMLElement | null;
+      element?.focus();
+    });
+  }, []);
+
+  const handleInvalidSubmit = useCallback(
+    (formErrors: FieldErrors<HomeownerOnboardingData>) => {
+      const orderedFields: Array<keyof HomeownerOnboardingData> = [
+        "county",
+        "projectType",
+        "customProjectType",
+        "description",
+      ];
+
+      const firstInvalid = orderedFields.find((field) => {
+        if (field === "customProjectType") {
+          return projectType === "other" && !!formErrors.customProjectType;
+        }
+        return !!formErrors[field];
+      });
+
+      if (firstInvalid) {
+        const fieldId =
+          HOMEOWNER_FIELD_IDS[firstInvalid] ?? HOMEOWNER_FIELD_IDS.projectType;
+        focusFieldById(fieldId);
+      }
+
+      const errorCount = Object.keys(formErrors).length;
+      showToast(
+        "error",
+        `Please fix the ${errorCount} error${errorCount > 1 ? "s" : ""} below before submitting.`,
+      );
+    },
+    [focusFieldById, projectType],
+  );
 
   // Form submission handler
   const onFormSubmit = async (formData: HomeownerOnboardingData) => {
@@ -708,7 +736,7 @@ const HomeownerForm: React.FC<Props> = ({
               </span>
             ) : (
               <span className="flex items-center justify-center gap-2">
-                Complete Project Profile
+                Get Started
                 <ArrowRight className="h-4 w-4" />
               </span>
             )}

@@ -60,11 +60,11 @@ export const FeaturesSection = memo(function FeaturesSection({
 
   return (
     <section
-      className="py-24 bg-gradient-to-b from-muted/60 via-background to-background"
+      className="py-24 bg-linear-to-b from-muted/60 via-background to-background"
       ref={ref as React.RefObject<HTMLElement>}
       aria-labelledby="features-heading"
     >
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 md:px-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-20">
         {/* Section Header */}
         <div
           className={cn(

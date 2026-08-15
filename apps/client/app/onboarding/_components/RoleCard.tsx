@@ -76,6 +76,7 @@ export const RoleCard: React.FC<RoleCardProps> = ({
         "rounded-2xl border p-6 text-left sm:p-7",
         "transition-all duration-300 backdrop-blur-xl",
         "focus-visible:outline-2 focus-visible:outline-emerald-500 focus-visible:outline-offset-2",
+        "active:scale-[0.98]",
         "disabled:cursor-not-allowed disabled:opacity-40",
 
         // State styles
@@ -99,10 +100,10 @@ export const RoleCard: React.FC<RoleCardProps> = ({
       <div
         aria-hidden="true"
         className={cn(
-          "absolute inset-x-0 top-0 h-[2px] rounded-t-2xl transition-opacity duration-300",
+          "absolute inset-x-0 top-0 h-0.5 rounded-t-2xl transition-opacity duration-300",
           isSelected
-            ? "opacity-100 bg-gradient-to-r from-transparent via-emerald-500 to-transparent"
-            : "opacity-0 group-hover:opacity-100 bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent",
+            ? "opacity-100 bg-linear-to-r from-transparent via-emerald-500 to-transparent"
+            : "opacity-0 group-hover:opacity-100 bg-linear-to-r from-transparent via-emerald-500/50 to-transparent",
         )}
       />
 
@@ -177,7 +178,7 @@ export const RoleCard: React.FC<RoleCardProps> = ({
             className="inline-flex items-center gap-1.5 font-semibold text-emerald-400"
           >
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-            Selected & Ready
+            {helperText ?? "Selection confirmed."}
           </span>
         ) : helperText ? (
           <span
