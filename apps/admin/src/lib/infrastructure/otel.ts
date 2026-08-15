@@ -13,7 +13,10 @@ export function initOtel(env: AdminEnvConfig) {
   if (typeof window !== "undefined") return;
   if (sdk) return;
 
-  const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT || "http://127.0.0.1:4317";
+  const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT;
+  if (!endpoint) {
+    return;
+  }
   const serviceName = env.OTEL_SERVICE_NAME || "build-market-local-api";
 
   const resourceAttributes: Record<string, string> = {

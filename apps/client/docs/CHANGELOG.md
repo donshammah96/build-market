@@ -28,8 +28,15 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
-### Fixed — Preview Smoke Gate SSR Hang, Root Layout Dynamic Clerk Decoupling & Homepage Clerk SignUp Component Gating
+### Fixed — Preview Smoke Gate SSR Hang, OTel & Queue Guards, Root Layout Dynamic Clerk Decoupling & CI Redis Service Alignment
 
+- **OpenTelemetry Bootstrap Endpoint Guard (`app/lib/infrastructure/otel.ts`, `apps/admin/src/lib/infrastructure/otel.ts`)**:
+  - Gated `initOtel()` to return early when `env.otel.endpoint` (`OTEL_EXPORTER_OTLP_ENDPOINT`) is unset. Previously, `initOtel()` defaulted to `"http://127.0.0.1:4317"` and eagerly started `NodeSDK` with `HttpInstrumentation` and `OTLP-grpc` exporters during server startup. In CI and local preview without an active OTel collector, `HttpInstrumentation` intercepted incoming HTTP requests and hung during trace export against closed TCP/gRPC ports, triggering Node `DEP0169` warnings and blocking request completion.
+- **License Verification Queue Bootstrap Guards (`app/lib/domains/regulator-verification/queue.ts`)**:
+  - Added build-phase and Redis-presence guards to `getLicenseVerificationQueue()`. Safely returns stub/no-op implementations when `REDIS_URL` is unconfigured, during `next build`, or when `DISABLE_BACKGROUND_JOBS=true`, aligning with the existing `upload-processing.queue.ts` resilience pattern.
+- **CI Smoke Gate Infrastructure Parity (`.github/workflows/ci.yml`)**:
+  - Added `redis:7-alpine` service container and `DISABLE_BACKGROUND_JOBS: "true"` to `client-preview-smoke-gate`, matching `admin-preview-smoke-gate`.
+  - Hardened diagnostic signal resolution in `ci.yml` using `fuser`/`pgrep` to ensure `SIGUSR2` reliably triggers Node diagnostic reporting on `next start` process trees during smoke checks.
 - **Root Layout Clerk Dynamic Gating (`app/layout.tsx`)**:
   - Removed `dynamic` prop from `<ClerkProvider nonce={nonce}>` in [`app/layout.tsx`](file:///c:/Users/User/build-market/apps/client/app/layout.tsx). The `dynamic` flag forced Clerk SDK to attempt synchronous server-side auth verification on every request during SSR. In preview builds (`NODE_ENV=production`) with test placeholder keys or restricted egress, this triggered blocking external JWKS/handshake fetches, stalling root layout HTML delivery.
 - **Homepage Registration Form SSR Gating (`components/forms/RegisterForm.tsx`, `components/home/Hero.tsx`)**:
