@@ -495,15 +495,6 @@ jobs:
       # for ~4-5 minutes before the process ever bound the port. GitHub Actions
       # waits for the configured healthcheck to pass before starting job steps,
       # so no extra wait step is required here.
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd="redis-cli ping"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=10
       postgres:
         image: postgres:16-alpine
         env:
