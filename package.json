@@ -21,7 +21,7 @@
     "check:catalog": "node ./scripts/check-catalog-consistency.mjs",
     "check:workspace-versions": "node ./scripts/check-package-manager-consistency.mjs && node ./scripts/check-catalog-consistency.mjs",
     "test": "turbo run test",
-    "validate": "pnpm run check:workspace-versions && pnpm run format && pnpm run format:check && pnpm run lint && pnpm run check-types && pnpm run test",
+    "validate": "pnpm run check:workspace-versions && pnpm run deps:audit && pnpm run format && pnpm run format:check && pnpm run lint && pnpm run check-types && pnpm run test",
     "ci:local": "pnpm run check:workspace-versions && pnpm run deps:audit && pnpm run format:check && pnpm run lint && pnpm run client:check-env-contract && pnpm run client:check-security-drift && pnpm run client:report-security-drift:strict && pnpm run admin:check-env-contract && pnpm run admin:check-security-drift && pnpm run admin:report-security-drift:strict && pnpm run verification-ops:check-env-contract && pnpm run verification-ops:check-security-drift && pnpm run verification-ops:report-security-drift:strict && pnpm run verification-ops:check-all && pnpm run check-types && pnpm run admin:check-governance && pnpm run admin:check-all && pnpm run test",
     "ci:local:full": "pnpm install --frozen-lockfile && pnpm run ci:local",
     "clean": "turbo run clean && rimraf node_modules",
