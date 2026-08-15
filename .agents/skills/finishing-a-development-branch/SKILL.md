@@ -7,15 +7,47 @@ description: Use when implementation is complete, all tests pass, and you need t
 
 ## Overview
 
-Craft staff-level signed commit → Verify tests & signatures → Detect environment → Present integration options → Execute choice → Clean up worktree.
+Update root & app changelogs → Craft staff-level signed commit → Verify tests & signatures → Detect environment → Present integration options → Execute choice → Clean up worktree.
 
 **Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."
 
 ---
 
+## Step 0: Update Root and App-Specific Changelogs & Documentation
+
+Before crafting the commit and running validation, document all changes across the root repository and any touched applications:
+
+### 1. Root Changelog (`CHANGELOG.md`)
+
+Update `CHANGELOG.md` at the repository root under the `## [Unreleased]` section:
+
+- `### Added`: For new features, domain slices, components, or endpoints.
+- `### Changed`: For modifications to existing behavior, refactors, or architectural upgrades.
+- `### Fixed`: For bug fixes and error handling corrections.
+- `### Security`: For security patches, auth hardening, or audit log implementations.
+
+### 2. Touched / Implemented Apps & Packages Documentation
+
+Update the dedicated documentation for each touched workspace app or package:
+
+- **`apps/client`:**
+  - Update `apps/client/docs/CHANGELOG.md` with slice-level and facade changes.
+- **`apps/admin`:**
+  - Update `apps/admin/docs/CHANGELOG.md` with action, capability, or domain changes.
+  - If milestones or slice completions were achieved, update `apps/admin/docs/PROGRESS-SUMMARY.md`.
+- **`apps/verification-ops`:**
+  - Update `apps/verification-ops/docs/CHANGELOG.md`.
+- **Touched Packages (`packages/<package-name>/`):**
+  - Update `packages/<package-name>/docs/CHANGELOG.md` under `## [Unreleased]` with exported API, schema, or contract changes.
+  - Update `packages/<package-name>/docs/PROGRESS-SUMMARY.md` if module compliance status, tier invariants, or testing coverage changed.
+- **Agent Skills (`.agents/skills/*`):**
+  - Update skill documentation when workflows or guidelines are modified.
+
+---
+
 ## Step 1: Craft Staff-Level Commit Message & Commit (Signed)
 
-Before creating the final commit on the development branch, compose a structured, staff-level commit message that explains **context, architectural rationale, and verification proof**.
+Compose a structured, staff-level commit message that explains **context, architectural rationale, and verification proof**.
 
 ### 1. Staff Commit Message Standards
 
@@ -44,6 +76,7 @@ Before creating the final commit on the development branch, compose a structured
 ### Key Changes
 - [Slice/File 1]: [Summary of changes]
 - [Slice/File 2]: [Summary of changes]
+- [Docs/Changelogs]: Updated root and touched app changelogs
 
 ### Verification
 - pnpm run validate (workspace versions, deps audit, format, lint, check-types, tests)
@@ -64,6 +97,7 @@ git commit -S -m "<type>(<scope>): <short summary>" -m "$(cat <<'EOF'
 
 ### Key Changes
 - [Changes]
+- Updated root and app changelogs
 
 ### Verification
 - pnpm run validate (0 errors, all tests green)
