@@ -81,6 +81,8 @@ export function buildCspValue(sources: CspSources): string {
     ...clerkSatelliteOrigins,
     "https://*.clerk.accounts.dev",
     "https://clerk-telemetry.com",
+    // Third-party (identity): Clerk bot protection challenge (Cloudflare Turnstile)
+    "https://challenges.cloudflare.com",
     analyticsOrigin,
     "https://us.i.posthog.com",
     "https://eu.i.posthog.com",
@@ -98,6 +100,8 @@ export function buildCspValue(sources: CspSources): string {
     clerkFrontendApiOrigin,
     ...clerkSatelliteOrigins,
     "https://*.clerk.accounts.dev",
+    // Third-party (identity): Clerk bot protection challenge (Cloudflare Turnstile script)
+    "https://challenges.cloudflare.com",
     "https://cdn.jsdelivr.net",
     "https://img.clerk.com",
     analyticsOrigin,
@@ -141,7 +145,10 @@ export function buildCspValue(sources: CspSources): string {
     "'self'",
     "https://vercel.live",
     "https://*.vercel.live",
-    ...(clerkChallengeOrigins ?? []),
+    ...(clerkChallengeOrigins ?? [
+      "https://challenges.cloudflare.com",
+      "https://*.protect.clerk.com",
+    ]),
   ];
 
   const directives = [

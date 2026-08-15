@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+### Changed — Client Onboarding Flow Visual Redesign & Design System Elevation
+
+- **Canvas & Atmosphere (`apps/client/app/onboarding/_components/OnboardingView.tsx`)**: Replaced low-contrast layout with an obsidian dark theme (`bg-zinc-950`), ambient emerald glow, floating glass navbar, and smooth step progress indicators.
+- **Tactile Step Nodes & Progress (`apps/client/app/onboarding/_components/StepIndicator.tsx`, `apps/client/components/ui/step-progress.tsx`)**: Upgraded node geometry to `h-9 w-9` tactile targets with active emerald glow and fixed checkmark completion semantics (`currentStep > stepIndex`).
+- **Role Selection Cards (`apps/client/app/onboarding/_components/RoleCard.tsx`)**: Converted buttons into spacious `min-h-[200px]` interactive selection cards with radio indicators and emerald borders.
+- **Wizard Styling & Forms (`apps/client/components/forms/professional-wizard/types.ts`, `ProfessionStep.tsx`, `DetailsStep.tsx`, `HomeownerForm.tsx`, `ProfessionalForm.tsx`)**: Unified input tokens (`WIZARD_STYLES`), category selection cards, comboboxes, and submission feedback cards.
+
+### Fixed — Client Preview Smoke Gate, Clerk Dev Auth Bypass, CSP Turnstile Framing, & DB Fail-Fast Timeout
+
+- **Root Layout SSR Auth Decoupling (`apps/client/app/layout.tsx`, `apps/client/components/providers/CookieConsentProvider.tsx`)**:
+  - Removed synchronous `await getAuth()` SSR call in `apps/client/app/layout.tsx` that ran on every request to derive `isSignedIn` for `<CookieConsentProvider>`. Decoupled consent status check to client-side `useAuth()` hook in `CookieConsentProvider.tsx`, eliminating SSR hangs on public routes in production/CI builds.
+- **Clerk Middleware Context Initialization under Dev Auth Bypass (`apps/client/middleware.ts`)**:
+  - Maintained `clerkMiddleware()` as the outer request wrapper across all execution modes and executed `AUTH_DEV_BYPASS` inside the callback, ensuring Clerk's AsyncLocalStorage context is initialized so Server Components calling `auth()` (e.g. `/sign-in`) do not fail.
+- **Clerk Bot Challenge / Cloudflare Turnstile CSP Gating (`apps/client/app/lib/security/middleware/csp-nonce.ts`, `apps/client/next-config-csp.ts`, `apps/client/middleware.ts`)**:
+  - Added Cloudflare Turnstile origins (`https://challenges.cloudflare.com`, `https://*.protect.clerk.com`) to `script-src`, `connect-src`, and `frame-src` across runtime and static CSP generators, preventing iframe blocking and registration form reset loops.
+- **Homepage Embedded `<SignUp />` Component Routing (`apps/client/components/forms/RegisterForm.tsx`)**:
+  - Configured embedded `<SignUp />` on the homepage with `routing="hash"`, `signInUrl="/sign-in"`, and `fallbackRedirectUrl="/auth-callback"`, eliminating Next.js catch-all path routing mismatches on `/`.
+- **Join as a Pro Direct Page Navigation (`apps/client/components/layout/NavBar.tsx`)**:
+  - Converted the desktop "Join as a Pro" action from a modal `<SignUpButton>` wrapper to a direct Next.js `<Link>` pointing to `ROUTES.joinAsPro` (`/professional/sign-up`) with preserved pill button styling.
+- **Professional Sign-up Hydration & Redirect Hardening (`apps/client/app/professional/sign-up/[[...sign-up]]/page.tsx`)**:
+  - Added client-side `mounted` hydration protection with `<AuthPageSkeleton variant="sign-up" />` and explicit `signInUrl="/sign-in"`, `forceRedirectUrl={ROUTES.professionalOnboarding}`, and `fallbackRedirectUrl={ROUTES.professionalOnboarding}`. Added responsive `sizes` prop to hero image to eliminate Next.js `fill` warnings.
+- **Image Quality Registration & Responsive Sizing (`apps/client/next.config.ts`, `apps/client/app/professional/page.tsx`)**:
+  - Registered `qualities: [75, 85]` in `next.config.ts` image options and added `sizes="100vw"` on hero image in `app/professional/page.tsx`.
+- **System Settings Database Fail-Fast Timeout (`packages/db/lib/system-settings.ts`)**:
+  - Added a 3,000ms fail-fast timeout race in `SystemSettingsService.getSettings()` to immediately fall back to pre-parsed defaults when the database is offline/unreachable, preventing 25-second TCP connection stalls on `/api/settings/public`.
+- **CI Preview Smoke Gate Parity (`.github/workflows/ci.yml`)**:
+  - Replaced unpopulated secret interpolations in `client-preview-smoke-gate` and `admin-preview-smoke-gate` with deterministic test key placeholders (`pk_test_...`, `sk_test_ci_placeholder`, `whsec_ci_placeholder`).
+- **Verification Ops Types Reference (`apps/verification-ops/next-env.d.ts`)**:
+  - Updated auto-generated Next.js route type reference in `next-env.d.ts` from `./.next/types/routes.d.ts` to `./.next/dev/types/routes.d.ts`.
+
 ### Added — apps/client Strict CSP Implementation Plan & Violation Telemetry Endpoint
 
 - **Close Matcher Gap (`apps/client/middleware.ts`, `scripts/check-csp-matcher-gap.mjs`)**: removed `html?` from `middleware.ts` negative lookahead matcher so all page routes route through middleware for strict nonce-based CSP and satellite auth checks. Added CI enforcement script `scripts/check-csp-matcher-gap.mjs` verifying no un-allowlisted HTML files bypass middleware.

@@ -332,14 +332,12 @@ export const Navbar: React.FC<NavbarProps> = memo(function Navbar({
                     Sign In
                   </button>
                 </SignInButton>
-                <SignUpButton mode="modal" forceRedirectUrl={ROUTES.onboarding}>
-                  <button
-                    type="button"
-                    className="rounded-full px-6 h-9 shadow-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium transition-colors"
-                  >
-                    Join as a Pro
-                  </button>
-                </SignUpButton>
+                <Link
+                  href={ROUTES.joinAsPro}
+                  className="rounded-full px-6 h-9 shadow-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium transition-colors inline-flex items-center justify-center"
+                >
+                  Join as a Pro
+                </Link>
               </>
             ) : (
               <>

@@ -106,9 +106,9 @@ export const WIZARD_STEPS: WizardStep[] = [
   {
     id: "profession",
     label: "Profession",
-    description: "Select your profession",
+    description: "Select Profession",
   },
-  { id: "details", label: "Details", description: "Business information" },
+  { id: "details", label: "Details", description: "Business Details" },
   {
     id: "store",
     label: "Store",
@@ -136,14 +136,14 @@ export const WIZARD_STEPS: WizardStep[] = [
   {
     id: "documents",
     label: "Documents",
-    description: "Upload verification docs",
+    description: "Upload Documents",
   },
   {
     id: "consent",
     label: "Consent",
-    description: "Terms & agreements",
+    description: "Terms & Agreements",
   },
-  { id: "review", label: "Review", description: "Confirm and submit" },
+  { id: "review", label: "Review", description: "Confirm & Submit" },
 ];
 
 /**
@@ -266,45 +266,42 @@ export const reviewStepSchema = z
 
 export const WIZARD_STYLES = {
   // Card container
-  card: "bg-[var(--color-onboarding-surface)]/78 backdrop-blur-md border border-[var(--color-onboarding-primary)]/28 rounded-[18px] p-6 md:p-8 shadow-[0_24px_55px_-35px_rgba(13,20,32,0.95)]",
+  card: "rounded-3xl border border-zinc-800 bg-zinc-900/90 p-6 md:p-8 shadow-2xl backdrop-blur-2xl",
 
-  label: [
-    "text-[10.5px] font-bold uppercase tracking-[0.1em]",
-    "font-['Syne'] text-[var(--color-onboarding-ink)]/72",
-  ].join(" "),
+  label: ["text-xs font-semibold uppercase tracking-wider text-zinc-300"].join(
+    " ",
+  ),
 
   input: [
-    "w-full rounded-xl border px-4 py-3.5",
-    "bg-white/8 border-white/16",
-    "text-[var(--color-onboarding-ink)] text-sm placeholder:text-[var(--color-onboarding-ink)]/35",
-    "focus:border-[var(--color-onboarding-primary)]/65 focus:bg-white/10",
-    "focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]/25",
+    "w-full rounded-xl border border-zinc-800 bg-zinc-950/80 px-4 py-3",
+    "text-sm text-white placeholder:text-zinc-500",
+    "focus:border-emerald-500 focus:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20",
     "transition-all duration-200",
   ].join(" "),
 
   primaryButton: [
-    "w-full rounded-xl px-5 py-2.5",
-    "font-['Syne'] text-[11.5px] font-bold tracking-[0.01em]",
-    "bg-[var(--color-onboarding-primary)] text-[oklch(0.08_0.016_222)]",
-    "hover:brightness-110 active:scale-[0.98]",
+    "w-full rounded-xl px-5 py-3",
+    "font-semibold text-sm tracking-wide",
+    "bg-emerald-500 text-zinc-950",
+    "hover:bg-emerald-400 active:scale-[0.98]",
     "transition-all duration-200",
-    "shadow-[0_18px_32px_-20px_var(--color-onboarding-primary)]",
-    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
+    "shadow-[0_4px_20px_rgba(16,185,129,0.25)]",
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500",
     "disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none",
   ].join(" "),
 
   secondaryButton: [
-    "px-3.5 py-2.5 text-[11px] font-semibold tracking-[0.01em] rounded-xl",
-    "text-[var(--color-onboarding-ink)]/72 hover:text-[var(--color-onboarding-ink)]",
-    "border border-white/[0.18] hover:border-[var(--color-onboarding-primary)]/35",
-    "bg-white/4 hover:bg-white/10",
+    "px-4 py-2.5 text-xs font-semibold tracking-wide rounded-xl",
+    "text-zinc-300 hover:text-white",
+    "border border-zinc-700 hover:border-zinc-600",
+    "bg-zinc-800/80 hover:bg-zinc-800",
     "transition-all duration-200",
-    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500",
     "disabled:opacity-40 disabled:cursor-not-allowed",
   ].join(" "),
 
   error: [
     "mt-1.5 flex items-center gap-1.5",
-    "text-xs font-medium text-[var(--color-error)]",
+    "text-xs font-medium text-red-400",
   ].join(" "),
 } as const;

@@ -146,47 +146,48 @@ export default function DetailsStep({
     focusFieldById(firstInvalid);
   };
 
-  // ── Shared icon class inside inputs ──
+  // Shared icon class inside inputs
   const inputIconClass =
-    "absolute left-2.5 top-3 h-3.5 w-3.5 text-white/30 pointer-events-none";
+    "absolute left-3.5 top-3.5 h-4 w-4 text-zinc-500 pointer-events-none";
 
   return (
     <form
       onSubmit={handleSubmit(onSubmit, onInvalid)}
-      className="space-y-7"
+      className="space-y-8"
       noValidate
     >
-      {/* ── Header ── */}
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: "easeOut" }}
-        className="text-center"
+        className="text-center space-y-2"
       >
-        <div className="inline-flex items-center justify-center gap-2 mb-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-onboarding-primary/16 text-(--color-onboarding-primary)">
-            <Building2 className="h-4.5 w-4.5" aria-hidden="true" />
+        <div className="inline-flex items-center justify-center gap-2 mb-2">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <Building2 className="h-6 w-6" aria-hidden="true" />
           </div>
         </div>
-        <h2 className="font-['Syne'] text-[18px] md:text-[22px] font-extrabold leading-[1.2] text-white mb-1.5 tracking-tight">
+        <h2 className="font-['Syne'] text-2xl md:text-3xl font-bold tracking-tight text-white">
           Tell us about your business
         </h2>
-        <p className="text-white/55 text-[12px] max-w-md mx-auto leading-relaxed">
-          This information helps clients find and trust you
+        <p className="text-zinc-400 text-sm max-w-md mx-auto leading-relaxed">
+          This information will be displayed on your verified professional
+          profile.
         </p>
       </motion.div>
 
-      {/* ── Form fields ── */}
+      {/* Form fields */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1, duration: 0.38 }}
-        className="space-y-4"
+        className="space-y-5"
       >
         {/* Company Name */}
         <FormField
           htmlFor="companyName"
-          label="Company / Business Name"
+          label="Company / Practice Name"
           required
           error={errors.companyName?.message}
         >
@@ -195,7 +196,7 @@ export default function DetailsStep({
             <input
               id="companyName"
               type="text"
-              placeholder="Your Firm's Legal Name"
+              placeholder="e.g. Apex Structural Consultants Ltd"
               {...register("companyName")}
               aria-invalid={errors.companyName ? "true" : undefined}
               aria-describedby={
@@ -203,19 +204,19 @@ export default function DetailsStep({
               }
               className={cn(
                 WIZARD_STYLES.input,
-                "pl-8.5",
-                errors.companyName && "border-error/60 bg-error/4",
+                "pl-10",
+                errors.companyName && "border-red-500/60 bg-red-950/10",
               )}
             />
           </div>
         </FormField>
 
         {/* Two-column row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Years of Experience */}
           <FormField
             htmlFor="yearsExperience"
-            label="Years of Experience"
+            label="Years in Practice"
             hint="Optional"
             error={errors.yearsExperience?.message}
           >
@@ -226,13 +227,13 @@ export default function DetailsStep({
                 type="number"
                 min="0"
                 max="100"
-                placeholder="e.g. 5"
+                placeholder="e.g. 8"
                 {...register("yearsExperience", { valueAsNumber: true })}
                 aria-invalid={errors.yearsExperience ? "true" : undefined}
                 aria-describedby={
                   errors.yearsExperience ? "yearsExperience-error" : undefined
                 }
-                className={cn(WIZARD_STYLES.input, "pl-8.5")}
+                className={cn(WIZARD_STYLES.input, "pl-10")}
               />
             </div>
           </FormField>
@@ -240,7 +241,7 @@ export default function DetailsStep({
           {/* Website */}
           <FormField
             htmlFor="website"
-            label="Website"
+            label="Website or Portfolio"
             hint="Optional"
             error={errors.website?.message}
           >
@@ -249,14 +250,14 @@ export default function DetailsStep({
               <input
                 id="website"
                 type="url"
-                placeholder="https://yourfirm.com"
+                placeholder="https://yourfirm.co.ke"
                 {...register("website")}
                 aria-invalid={errors.website ? "true" : undefined}
                 aria-describedby={errors.website ? "website-error" : undefined}
                 className={cn(
                   WIZARD_STYLES.input,
-                  "pl-8.5",
-                  errors.website && "border-error/60 bg-error/4",
+                  "pl-10",
+                  errors.website && "border-red-500/60 bg-red-950/10",
                 )}
               />
             </div>
@@ -266,38 +267,38 @@ export default function DetailsStep({
         {/* Bio */}
         <FormField
           htmlFor="bio"
-          label="Professional Bio"
+          label="Professional Overview / Bio"
           hint="Optional · Max 1000 characters"
           error={errors.bio?.message}
         >
           <div className="relative">
             <FileText
-              className="absolute left-3 top-3.5 h-4.5 w-4.5 text-white/30 pointer-events-none"
+              className="absolute left-3.5 top-3.5 h-4 w-4 text-zinc-500 pointer-events-none"
               aria-hidden="true"
             />
             <textarea
               id="bio"
               rows={4}
-              placeholder="Tell us about your expertise, specialisations, and notable projects..."
+              placeholder="Highlight your key specializations, landmark projects completed in Kenya, and client value proposition..."
               {...register("bio")}
               aria-invalid={errors.bio ? "true" : undefined}
               aria-describedby={errors.bio ? "bio-error" : undefined}
               className={cn(
                 WIZARD_STYLES.input,
-                "pl-8.5 resize-none leading-relaxed min-h-18",
-                errors.bio && "border-error/60 bg-error/4",
+                "pl-10 resize-none leading-relaxed min-h-24",
+                errors.bio && "border-red-500/60 bg-red-950/10",
               )}
             />
           </div>
         </FormField>
       </motion.div>
 
-      {/* ── Navigation ── */}
+      {/* Navigation */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.28 }}
-        className="flex items-center justify-between pt-1"
+        className="flex items-center justify-between pt-4 border-t border-zinc-800"
       >
         <button
           type="button"

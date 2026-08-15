@@ -115,17 +115,6 @@ export default async function RootLayout({
   // Fallback to undefined instead of an empty string to prevent invalid CSP attributes
   const nonce = rawNonce || undefined;
 
-  let isSignedIn = false;
-  const isBypass = env.auth.bypassEnabled && (env.isDev || env.isCI);
-
-  if (isBypass) {
-    isSignedIn = true;
-  } else {
-    const { auth: getAuth } = await import("@clerk/nextjs/server");
-    const authObj = await getAuth();
-    isSignedIn = !!authObj.userId;
-  }
-
   let clerkOrigin = "https://clerk.buildmarket.app";
   if (env.clerk.frontendApi) {
     try {
@@ -224,7 +213,7 @@ export default async function RootLayout({
           <PostHogProvider>
             <QueryProvider>
               <AccessibilityProvider>
-                <CookieConsentProvider isSignedIn={isSignedIn}>
+                <CookieConsentProvider>
                   <RouteFocusManager />
                   <div id="main-content" tabIndex={-1} className="outline-none">
                     {children}
