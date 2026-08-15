@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed — Workspace Agent Configurations & Architecture Directory Hygiene
+
+- **Agent Workspace Separation & Cleanup (`.agent/`, `.agents/`)**:
+  - Clarified architectural directory boundaries: `.agent/` is preserved exclusively as the repository's Tier 1 canonical law repository (`ADMIN-ARCHITECTURE.md`, `API-TO-FRONTEND-ARCHITECTURE.md`, `DOCUMENT-HIERARCHY.md`), while `.agents/` acts as the IDE workspace customization root (`workflows/`, `skills/`, `rules/`).
+  - Removed orphaned empty directory `.agent/workflows/`.
+  - Deleted unreferenced external OpenAI Codex plan template `.agents/PLAN.md` to prevent confusion with native ADR and design standards.
+- **Canonical Copilot Instructions Alignment (`.github/copilot-instructions.md`, `.github/instructions/`)**:
+  - Restored `copilot-instructions.md` to `.github/copilot-instructions.md` root to align with standard GitHub Copilot auto-discovery, `.agent/DOCUMENT-HIERARCHY.md`, and `MAINTENANCE.md`.
+  - Re-synchronized instruction alignment date stamps across all 17 path-scoped `.instructions.md` files via `scripts/sync-instruction-alignment-date.mjs` and verified frontmatter integrity.
+
 ### Changed — Client Onboarding Flow Visual Redesign & Design System Elevation
 
 - **Canvas & Atmosphere (`apps/client/app/onboarding/_components/OnboardingView.tsx`)**: Replaced low-contrast layout with an obsidian dark theme (`bg-zinc-950`), ambient emerald glow, floating glass navbar, and smooth step progress indicators.

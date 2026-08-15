@@ -3,7 +3,7 @@ description: "Use for Postman HTTP-request-level pre-request script generation f
 applyTo: "**/*-pre-r-pm-*"
 ---
 
-Last aligned with canonical on: 2026-06-05.
+Last aligned with canonical on: 2026-08-15.
 
 ## Instructions
 

@@ -5,7 +5,7 @@ applyTo: "apps/client/hooks/**"
 
 # Client Hook Query Rules
 
-Last aligned with canonical on: 2026-06-05.
+Last aligned with canonical on: 2026-08-15.
 
 ## Scope
 

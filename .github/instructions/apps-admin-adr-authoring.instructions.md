@@ -5,7 +5,7 @@ applyTo: "apps/admin/docs/adr/**"
 
 # Admin ADR Authoring Guide
 
-Last aligned with canonical on: 2026-06-05.
+Last aligned with canonical on: 2026-08-15.
 
 ## Scope
 
