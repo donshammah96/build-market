@@ -125,7 +125,7 @@ export default async function RootLayout({
   }
 
   return (
-    <ClerkProvider nonce={nonce} dynamic>
+    <ClerkProvider nonce={nonce}>
       <html lang="en" className={dmSans.variable}>
         <head>
           {/* Preconnect to Clerk FAPI dynamically configured by env */}

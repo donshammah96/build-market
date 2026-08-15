@@ -28,8 +28,10 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
-### Fixed — Preview Smoke Gate SSR Hang & Homepage Clerk SignUp Component Gating
+### Fixed — Preview Smoke Gate SSR Hang, Root Layout Dynamic Clerk Decoupling & Homepage Clerk SignUp Component Gating
 
+- **Root Layout Clerk Dynamic Gating (`app/layout.tsx`)**:
+  - Removed `dynamic` prop from `<ClerkProvider nonce={nonce}>` in [`app/layout.tsx`](file:///c:/Users/User/build-market/apps/client/app/layout.tsx). The `dynamic` flag forced Clerk SDK to attempt synchronous server-side auth verification on every request during SSR. In preview builds (`NODE_ENV=production`) with test placeholder keys or restricted egress, this triggered blocking external JWKS/handshake fetches, stalling root layout HTML delivery.
 - **Homepage Registration Form SSR Gating (`components/forms/RegisterForm.tsx`, `components/home/Hero.tsx`)**:
   - Added client-side `mounted` hydration state guard and exported `RegisterFormSkeleton` in [`RegisterForm.tsx`](file:///c:/Users/User/build-market/apps/client/components/forms/RegisterForm.tsx). Prevents `@clerk/nextjs`'s `<SignUp>` component from executing synchronous outbound network calls (to Clerk Accounts backend / JWKS endpoints) during server-side rendering (SSR) of the public root page (`/`).
   - Switched `Hero.tsx` from static `RegisterForm` import to Next.js `dynamic()` with `ssr: false` and `loading: () => <FormSkeleton />`. Ensures root route SSR returns initial HTML in milliseconds during preview builds (`NODE_ENV=production`), eliminating the 15-second `curl: (28) Operation timed out with 0 bytes received` hang during CI preview smoke gate probe checks.
