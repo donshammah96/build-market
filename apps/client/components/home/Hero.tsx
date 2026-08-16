@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/lib/routes";
 import { useShouldAnimate } from "@/lib/hooks/usePerformance";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 const RegisterForm = dynamic(() => import("@/components/forms/RegisterForm"), {
   loading: () => <FormSkeleton />,

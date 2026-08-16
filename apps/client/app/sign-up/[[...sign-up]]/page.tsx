@@ -8,8 +8,6 @@ import {
   Lock,
   Star,
   Sparkles,
-  Users,
-  CheckCircle2,
 } from "lucide-react";
 import { Suspense } from "react";
 import { AuthPageSkeleton } from "@/components/auth/AuthPageSkeleton";
@@ -113,7 +111,7 @@ export default function ClientSignUpPage() {
             </p>
             <div className="flex items-center gap-3 mt-3.5">
               <div className="h-8 w-8 rounded-full bg-linear-to-br from-emerald-600 to-teal-800 flex items-center justify-center text-white font-bold text-xs shadow-xs">
-                WM
+                AI
               </div>
               <div>
                 <p className="text-xs font-bold text-white">Amanda Ireri</p>

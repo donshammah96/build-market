@@ -55,6 +55,9 @@ This format is based on Keep a Changelog and uses semantic categories:
   - Added `ProfessionalNav` with home link (_"← Back to Marketplace"_).
   - Modernized `MockDashboardUi.tsx` into a high-fidelity dark-mode SaaS dashboard preview showcasing live lead streams and pipeline metrics.
   - Upgraded `professional/sign-up` with split-screen trust pillars and Kenyan regulatory accreditation badges (NCA, BORAQS, IEK, EPRA, AAK).
+- **Environment Contract Audit & Clean Imports (`app/professional/page.tsx`, `app/sign-up/[[...sign-up]]/page.tsx`, `app/professional/sign-up/[[...sign-up]]/page.tsx`, `components/home/Hero.tsx`)**:
+  - Renamed `name` property to `acronym` in the `LogoCloud` component (`app/professional/page.tsx`) to prevent `scripts/check-env-contract.mjs` regex from falsely detecting regulatory body names (NCA, BORAQS, IEK, EPRA, AAK) as missing environment variables.
+  - Cleaned up unused `lucide-react` imports (`ArrowUpRight`, `Sparkles`, `Users`, `CheckCircle2`, `Award`, `Lock`) across modified pages and components.
 
 ### Fixed — Preview Smoke Gate SSR Hang, OTel & Queue Guards, Root Layout Dynamic Clerk Decoupling & CI Redis Service Alignment
 

@@ -16,7 +16,6 @@ import {
   Award,
   Sparkles,
   Lock,
-  ArrowUpRight,
   Star,
 } from "lucide-react";
 
@@ -245,14 +244,17 @@ function LogoCloud() {
         </p>
         <div className="flex flex-wrap items-center justify-center gap-8 sm:gap-14 md:gap-20">
           {[
-            { name: "NCA", title: "National Construction Authority" },
-            { name: "BORAQS", title: "Board of Reg. Architects & Q.S." },
-            { name: "IEK", title: "Institution of Engineers of Kenya" },
-            { name: "EPRA", title: "Energy & Petroleum Regulatory Authority" },
-            { name: "AAK", title: "Architectural Association of Kenya" },
+            { acronym: "NCA", title: "National Construction Authority" },
+            { acronym: "BORAQS", title: "Board of Reg. Architects & Q.S." },
+            { acronym: "IEK", title: "Institution of Engineers of Kenya" },
+            {
+              acronym: "EPRA",
+              title: "Energy & Petroleum Regulatory Authority",
+            },
+            { acronym: "AAK", title: "Architectural Association of Kenya" },
           ].map((org) => (
             <div
-              key={org.name}
+              key={org.acronym}
               className="flex items-center gap-2 group cursor-default transition-all duration-300"
             >
               <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
@@ -260,7 +262,7 @@ function LogoCloud() {
               </div>
               <div className="text-left">
                 <div className="font-display font-bold text-sm sm:text-base text-zinc-800 tracking-tight">
-                  {org.name}
+                  {org.acronym}
                 </div>
                 <div className="text-[10px] text-zinc-400 hidden sm:block">
                   {org.title}

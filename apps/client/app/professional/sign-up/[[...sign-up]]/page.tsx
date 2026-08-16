@@ -9,9 +9,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   ShieldCheck,
-  Award,
   Sparkles,
-  Lock,
   Star,
 } from "lucide-react";
 import { AuthPageSkeleton } from "@/components/auth/AuthPageSkeleton";
