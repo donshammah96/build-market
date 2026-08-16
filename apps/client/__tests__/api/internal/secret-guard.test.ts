@@ -12,7 +12,7 @@ vi.mock("@build/db", () => ({
   },
 }));
 
-vi.mock("@build/db/system-settings", () => ({
+vi.mock("@/app/lib/domains/settings", () => ({
   getPublicSettings: vi.fn().mockResolvedValue({
     maintenanceMode: false,
     maintenanceMessage: null,

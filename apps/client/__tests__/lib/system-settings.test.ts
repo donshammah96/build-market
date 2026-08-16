@@ -14,17 +14,18 @@ import { prisma } from "@build/db";
 const mockFindUnique = vi.mocked(prisma.systemSettings.findUnique);
 const mockQueryRawUnsafe = vi.mocked(prisma.$queryRawUnsafe);
 
-describe("System Settings Service", () => {
+describe("Client System Settings Domain Service", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    const { systemSettingsService } = await import("@build/db/system-settings");
+    const { systemSettingsService } =
+      await import("@/app/lib/domains/settings");
     systemSettingsService.invalidateCache();
   });
 
   it("getPublicSettings returns defaults when no row exists", async () => {
     mockFindUnique.mockResolvedValue(null as any);
 
-    const { getPublicSettings } = await import("@build/db/system-settings");
+    const { getPublicSettings } = await import("@/app/lib/domains/settings");
     const settings = await getPublicSettings();
 
     expect(settings.maintenanceMode).toBe(false);
@@ -47,7 +48,7 @@ describe("System Settings Service", () => {
       whatsappNumber: "+254700000000",
     } as any);
 
-    const { getPublicSettings } = await import("@build/db/system-settings");
+    const { getPublicSettings } = await import("@/app/lib/domains/settings");
     const settings = await getPublicSettings();
 
     expect(settings.maintenanceMode).toBe(true);
@@ -62,7 +63,7 @@ describe("System Settings Service", () => {
   it("getFinancialSettings returns defaults when no row exists", async () => {
     mockFindUnique.mockResolvedValue(null as any);
 
-    const { getFinancialSettings } = await import("@build/db/system-settings");
+    const { getFinancialSettings } = await import("@/app/lib/domains/settings");
     const settings = await getFinancialSettings();
 
     expect(settings.minWithdrawalKes).toBe(1000);
@@ -80,7 +81,7 @@ describe("System Settings Service", () => {
       currency: "KES",
     } as any);
 
-    const { computePlatformFee } = await import("@build/db/system-settings");
+    const { computePlatformFee } = await import("@/app/lib/domains/settings");
     const fee = await computePlatformFee(1000);
     expect(fee).toBe(100);
   });
@@ -103,7 +104,7 @@ describe("System Settings Service", () => {
       },
     ] as any);
 
-    const { getPublicSettings } = await import("@build/db/system-settings");
+    const { getPublicSettings } = await import("@/app/lib/domains/settings");
     const settings = await getPublicSettings();
 
     expect(settings.maintenanceMode).toBe(true);

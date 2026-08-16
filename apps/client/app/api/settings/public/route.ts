@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPublicSettings } from "@build/db/system-settings";
+import { getPublicSettings } from "@/app/lib/domains/settings";
 import {
   checkRateLimit,
   getRateLimitIdentifier,

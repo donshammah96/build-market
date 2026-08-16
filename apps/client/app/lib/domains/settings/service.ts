@@ -1,14 +1,3 @@
-/**
- * System Settings Facade (FULLY DEPRECATED)
- *
- * @deprecated Per ADR-002, ADR-003, and DB-PACKAGE-AUTOPSY Finding 2, domain business logic,
- * constants, validation schemas, and in-memory caches MUST NOT reside in the persistence layer (`@build/db`).
- *
- * - For schemas, types, and defaults: import from `@build/types`.
- * - For client domain services: import from `@/app/lib/domains/settings` (`apps/client`).
- * - For admin domain services: import from `@/lib/domains/settings` (`apps/admin`).
- */
-
 import {
   DEFAULT_VERIFICATION_RULES,
   DEFAULT_PUBLIC_SETTINGS,
@@ -25,10 +14,9 @@ import {
   type FinancialSettings,
   type SystemSettings,
 } from "@build/types";
-import { prisma } from "./prisma.js";
+import { settingsRepository } from "./repository";
 import type { Profession } from "@prisma/client";
 
-/** @deprecated Import from `@build/types` */
 export {
   DEFAULT_VERIFICATION_RULES,
   DEFAULT_PUBLIC_SETTINGS,
@@ -46,111 +34,65 @@ export {
   type SystemSettings,
 };
 
-/** @deprecated Import from `@build/types` */
-export type ProfessionalDocumentType =
-  | "ID_OR_PASSPORT"
-  | "KRA_TAX_COMPLIANCE"
-  | "EDUCATION_CERT"
-  | "PORTFOLIO_DOC"
-  | "NCA_LICENSE"
-  | "NCA_ACCREDITATION"
-  | "EBK_LICENSE"
-  | "BORAQS_LICENSE"
-  | "EPRA_LICENSE"
-  | "VRB_LICENSE"
-  | "ISK_LICENSE"
-  | "INSURANCE_POLICY"
-  | "BUSINESS_REGISTRATION"
-  | "PROFESSIONAL_CERT"
-  | "OTHER";
+export class SystemSettingsService {
+  private static instance: SystemSettingsService;
 
-/** @deprecated Import from `@build/types` */
-export type StoreDocumentType =
-  | "BUSINESS_REGISTRATION"
-  | "KRA_TAX_COMPLIANCE"
-  | "KRA_PIN_CERTIFICATE"
-  | "ID_OR_PASSPORT"
-  | "LEASE_OR_OWNERSHIP"
-  | "TRADING_LICENSE"
-  | "OTHER";
-
-/** @deprecated Import from `@build/types` */
-export type PropertyDocumentType =
-  | "TITLE_DEED"
-  | "OFFICIAL_SEARCH"
-  | "ID_OR_PASSPORT"
-  | "SALE_AGREEMENT"
-  | "LAND_RENT_CLEARANCE"
-  | "LAND_RATES_COMPLIANCE"
-  | "MUTATION_FORM"
-  | "SECTIONAL_PROPERTIES_ACT_DOC"
-  | "OTHER";
-
-/**
- * @deprecated Use domain service from `@/app/lib/domains/settings` (`apps/client`)
- * or `@/lib/domains/settings` (`apps/admin`).
- */
-class DeprecatedSystemSettingsService {
-  private static instance: DeprecatedSystemSettingsService;
+  // Cache all pre-parsed forms to avoid Zod overhead on repeated getter calls
   private cache: {
     full: SystemSettings;
     publicParsed: PublicSettings;
     financialParsed: FinancialSettings;
     timestamp: number;
+    /** True when the entry was populated from hardcoded defaults due to a DB failure. */
     fromFallback: boolean;
   } | null = null;
-  private readonly CACHE_TTL_MS = 60_000;
+
+  private readonly CACHE_TTL_MS = 60_000; // 60 seconds
   private pendingRequest: Promise<SystemSettings> | null = null;
 
   private constructor() {}
 
-  public static getInstance(): DeprecatedSystemSettingsService {
-    if (!DeprecatedSystemSettingsService.instance) {
-      DeprecatedSystemSettingsService.instance =
-        new DeprecatedSystemSettingsService();
+  public static getInstance(): SystemSettingsService {
+    if (!SystemSettingsService.instance) {
+      SystemSettingsService.instance = new SystemSettingsService();
     }
-    return DeprecatedSystemSettingsService.instance;
+    return SystemSettingsService.instance;
   }
 
   public invalidateCache(): void {
     this.cache = null;
   }
 
+  /**
+   * Returns true when the last successful settings fetch fell back to
+   * hardcoded defaults due to a database connectivity failure.
+   */
   public isServingFallback(): boolean {
     return this.cache?.fromFallback ?? false;
   }
 
   public async getSettings(): Promise<SystemSettings> {
+    // 1. Cache Check
     if (this.cache && Date.now() - this.cache.timestamp < this.CACHE_TTL_MS) {
       return this.cache.full;
     }
+
+    // 2. Request Deduplication: Return pending promise if request is in flight
     if (this.pendingRequest) {
       return this.pendingRequest;
     }
 
+    // 3. Launch Request
     this.pendingRequest = (async () => {
-      let timeoutHandle: NodeJS.Timeout | undefined;
       try {
-        const queryPromise = prisma.systemSettings.findUnique({
-          where: { id: "global" },
-        });
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timeoutHandle = setTimeout(
-            () =>
-              reject(
-                Object.assign(new Error("DB query timed out after 3000ms"), {
-                  code: "ETIMEDOUT",
-                }),
-              ),
-            3000,
-          );
-        });
+        const row = await settingsRepository.findGlobalWithTimeout(3000);
 
-        const row = await Promise.race([queryPromise, timeoutPromise]);
+        // Parse once sequentially
         const parsed = SystemSettingsSchema.parse(row ?? {});
         const publicParsed = PublicSettingsSchema.parse(parsed);
         const financialParsed = FinancialSettingsSchema.parse(parsed);
 
+        // Store pre-parsed objects in memory
         this.cache = {
           full: parsed,
           publicParsed,
@@ -159,7 +101,26 @@ class DeprecatedSystemSettingsService {
           fromFallback: false,
         };
         return parsed;
-      } catch {
+      } catch (error) {
+        const prismaCode =
+          error instanceof Error &&
+          "code" in error &&
+          typeof (error as Record<string, unknown>)["code"] === "string"
+            ? (error as Record<string, unknown>)["code"]
+            : "UNKNOWN";
+
+        // Emit a structured JSON log so Vercel's log pipeline can index this
+        // as a distinct event rather than an unstructured string blob.
+        console.error(
+          JSON.stringify({
+            event: "system_settings_db_failure",
+            severity: "CRITICAL",
+            prismaCode,
+            message:
+              "SystemSettings DB fetch failed — serving hardcoded defaults",
+          }),
+        );
+
         const fallback = SystemSettingsSchema.parse({
           ...DEFAULT_PUBLIC_SETTINGS,
           ...DEFAULT_FINANCIAL_SETTINGS,
@@ -176,7 +137,6 @@ class DeprecatedSystemSettingsService {
         };
         return fallback;
       } finally {
-        if (timeoutHandle) clearTimeout(timeoutHandle);
         this.pendingRequest = null;
       }
     })();
@@ -185,49 +145,46 @@ class DeprecatedSystemSettingsService {
   }
 
   public async getPublicSettings(): Promise<PublicSettings> {
-    await this.getSettings();
-    return this.cache!.publicParsed;
+    await this.getSettings(); // Ensures cache is populated
+    return this.cache!.publicParsed; // Zero-parsing fast return
   }
 
   public async getFinancialSettings(): Promise<FinancialSettings> {
-    await this.getSettings();
-    return this.cache!.financialParsed;
+    await this.getSettings(); // Ensures cache is populated
+    return this.cache!.financialParsed; // Zero-parsing fast return
   }
 }
 
-/** @deprecated Import from `@/app/lib/domains/settings` (`apps/client`) */
-export const systemSettingsService =
-  DeprecatedSystemSettingsService.getInstance();
+export const systemSettingsService = SystemSettingsService.getInstance();
 
-/** @deprecated Import from `@/app/lib/domains/settings` (`apps/client`) */
-export async function getSystemSettings() {
+// =============================================================================
+// Helper Wrappers
+// =============================================================================
+
+export async function getSystemSettings(): Promise<SystemSettings> {
   return systemSettingsService.getSettings();
 }
 
-/** @deprecated Import from `@/app/lib/domains/settings` (`apps/client`) */
 export async function getPublicSettings(): Promise<PublicSettings> {
   return systemSettingsService.getPublicSettings();
 }
 
-/** @deprecated Import from `@/app/lib/domains/settings` (`apps/client`) */
 export async function getFinancialSettings(): Promise<FinancialSettings> {
   return systemSettingsService.getFinancialSettings();
 }
 
-/** @deprecated Import from `@/app/lib/domains/settings` (`apps/client`) */
 export function invalidateCache(): void {
   systemSettingsService.invalidateCache();
 }
 
-/** @deprecated Import from `@/app/lib/domains/settings` (`apps/client`) */
 export function isServingFallback(): boolean {
   return systemSettingsService.isServingFallback();
 }
 
-/** @deprecated Import from `@/app/lib/domains/settings` (`apps/client`) */
 export async function isFeatureEnabled(flag: string): Promise<boolean> {
   const settings = await getPublicSettings();
   const flags = settings.featureFlags || {};
+
   const parts = flag.split(".");
   let current: unknown = flags;
 
@@ -245,31 +202,26 @@ export async function isFeatureEnabled(flag: string): Promise<boolean> {
   return current === true;
 }
 
-/** @deprecated Import from `@/app/lib/domains/settings` (`apps/client`) */
 export async function computePlatformFee(amount: number): Promise<number> {
   const { platformCommission } = await getFinancialSettings();
   return Math.round((amount * platformCommission) / 100);
 }
 
-/** @deprecated Import from `@/app/lib/domains/settings` (`apps/client`) */
 export async function getVerificationRules(): Promise<VerificationRules> {
   const settings = await getSystemSettings();
   return settings.verificationRules;
 }
 
-/** @deprecated Import from `@/app/lib/domains/settings` (`apps/client`) */
 export async function getRequiredDocumentsForProfession(
   profession: string,
 ): Promise<string[]> {
   const rules = await getVerificationRules();
   const key = profession as Profession;
-  return (
-    rules.requiredDocuments[key] ??
-    rules.requiredDocuments.OTHER ?? ["ID_OR_PASSPORT", "KRA_TAX_COMPLIANCE"]
-  );
+  const docs = rules.requiredDocuments[key] ??
+    rules.requiredDocuments.OTHER ?? ["ID_OR_PASSPORT", "KRA_TAX_COMPLIANCE"];
+  return docs;
 }
 
-/** @deprecated Import from `@/app/lib/domains/settings` (`apps/client`) */
 export async function getRequiredLicensesForProfession(
   profession: string,
 ): Promise<string[]> {

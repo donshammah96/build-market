@@ -15,8 +15,10 @@
   - Implemented monthly background job (`archive-settled-records`) on queue `maintenance-jobs` running on schedule `0 4 1 * *` with exponential backoff.
   - Automatically queries and offloads settled `MpesaTransaction` records (`COMPLETED`, `FAILED`, `REVERSED`, `CANCELLED`) and closed `RegulatorVerificationCase` records (`APPROVED`, `REJECTED`, `EXPIRED`, `DEAD_LETTERED`) older than 180 days via batched transactions (`ARCHIVAL_BATCH_SIZE = 250`).
   - Integrated OpenTelemetry structured metrics (`jobAttemptCounter`, `jobDurationHistogram`), registered job schema in `src/lib/queues/queue-registry.ts`, and added unit test suite `src/lib/jobs/__tests__/settled-records-archival.test.ts` (100% passing).
-- **System Settings Domain Extraction to `@build/types` (`packages/types/src/settings.ts`, `packages/db/lib/system-settings.ts`)**:
-  - Extracted `DEFAULT_VERIFICATION_RULES`, `DEFAULT_PUBLIC_SETTINGS`, `DEFAULT_FINANCIAL_SETTINGS`, and all Zod validation schemas out of `packages/db` into `@build/types`, establishing a clean backwards-compatible facade in `@build/db` per ADR-002 and ADR-003.
+- **System Settings Domain Realignment & Complete DB Facade Deprecation (`packages/types/src/settings.ts`, `apps/client/app/lib/domains/settings/`, `packages/db/lib/system-settings.ts`)**:
+  - Extracted `DEFAULT_VERIFICATION_RULES`, `DEFAULT_PUBLIC_SETTINGS`, `DEFAULT_FINANCIAL_SETTINGS`, and all Zod validation schemas out of `packages/db` into canonical `@build/types`.
+  - Created client domain service in `apps/client/app/lib/domains/settings/` (`service.ts`, `repository.ts`) to own in-memory caching, request deduplication, and database query fallbacks.
+  - Fully deprecated `packages/db/lib/system-settings.ts` per ADR-002 and ADR-003, migrating all call-sites in `apps/client` (`api/internal/system-settings`, `api/settings/public`, `domains/finance`) and `apps/admin` (`domains/settings/repository.ts`) to domain boundaries.
 - **Lazy Proxy Driver & HMR Pool Caching (`packages/db/lib/prisma.ts`)**:
   - Implemented lazy `Proxy` initialization on `prisma` client, preventing build-time connection crashes when `DATABASE_URL` is unpopulated.
   - Cached `pg.Pool` and `PrismaClient` on `globalThis` to eliminate TCP socket leaks across Next.js Fast Refresh cycles.

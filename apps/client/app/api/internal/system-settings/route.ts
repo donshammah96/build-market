@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getPublicSettings,
   isServingFallback,
-} from "@build/db/system-settings";
+} from "@/app/lib/domains/settings";
 import {
   checkRateLimit,
   getRateLimitIdentifier,

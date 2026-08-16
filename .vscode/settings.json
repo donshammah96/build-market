@@ -125,5 +125,8 @@
     }
   },
   "chat.agent.sandbox.enabled": "on",
-  "chat.agent.sandbox.allowNetwork": true
+  "chat.agent.sandbox.allowNetwork": true,
+  "[powershell]": {
+    "editor.defaultFormatter": "ms-vscode.powershell"
+  }
 }

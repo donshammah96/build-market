@@ -1,5 +1,4 @@
 import { prisma } from "@build/db";
-import { invalidateCache } from "@build/db/system-settings";
 import { revalidatePath } from "next/cache";
 import type { SystemSettings, UpdateSettingsInput } from "./contracts";
 
@@ -76,7 +75,6 @@ export const settingsRepository = {
       create: { id: "global", ...data },
     });
 
-    invalidateCache();
     revalidatePath("/settings");
 
     return {
