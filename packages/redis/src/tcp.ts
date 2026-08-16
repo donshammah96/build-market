@@ -112,10 +112,18 @@ export function getBullMQConnectionOptions(
     skipVersionCheck: true,
     lazyConnect: true,
     retryStrategy(times: number) {
+      if (
+        process.env.DISABLE_BACKGROUND_JOBS === "true" ||
+        process.env.QUEUE_PROVIDER?.toLowerCase() === "memory" ||
+        times > 10
+      ) {
+        return null;
+      }
       const delay = Math.min(times * 500, 30_000);
       console.warn(`[Redis:BullMQ] Reconnect attempt ${times} in ${delay}ms`);
       return delay;
     },
+
     reconnectOnError(err: Error) {
       const retryOn = ["READONLY", "ECONNRESET", "ECONNREFUSED"];
       return retryOn.some((code) => err.message.includes(code));

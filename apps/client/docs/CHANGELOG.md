@@ -28,6 +28,17 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Fixed — Client Preview Smoke Gate Resilience & Middleware Optimization
+
+- **Client Preview Smoke Gate Timeout & Port Probe Alignment (`.github/workflows/ci.yml`)**:
+  - Restored `HTTP_MAX_ATTEMPTS=10` in `client-preview-smoke-gate` (matching `admin-preview-smoke-gate` and `verification-ops-preview-smoke-gate`) to provide adequate probe runway for cold Next.js App Router route module compilation and initial server render.
+- **Middleware System Settings Resolution Caching & IPv4 Host Normalization (`app/lib/security/middleware/system-settings-resolver.ts`)**:
+  - Added short-lived in-memory caching (`10s` TTL for resolved settings, `3s-5s` for fallback/error states) to `resolveSystemSettings`, preventing redundant blocking HTTP subrequests to `/api/internal/system-settings` on every single request.
+  - Added URL host normalization replacing `localhost` with `127.0.0.1` when formulating internal resolution URLs, preventing Node `fetch` IPv6 happy-eyeballs connection stalls (`connect ECONNREFUSED ::1:3500`) when the Next.js server binds to IPv4.
+  - Exported `clearSystemSettingsCache()` for test isolation and ensured tests bypass cross-test cache pollution.
+- **BullMQ TCP Reconnection Backoff Guarding (`packages/redis/src/tcp.ts`)**:
+  - Guarded `retryStrategy` in BullMQ TCP options to terminate reconnection attempts immediately (`return null`) when `DISABLE_BACKGROUND_JOBS="true"` or `QUEUE_PROVIDER="memory"`, and capped offline reconnect attempts to 10. This prevents runaway active libuv TCP socket handle creation during CI preview testing.
+
 ### Changed — Staff-Level UI Redesign (Navbar, Client Sign-Up, Professional Portal & Homepage Discovery) & Canonical Route Migration
 
 - **Main Navigation Redesign & Two-Sided Marketplace Standard (`components/layout/NavBar.tsx`)**:
