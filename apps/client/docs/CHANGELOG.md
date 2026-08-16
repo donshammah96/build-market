@@ -28,8 +28,18 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Added — Dedicated Liveness Endpoint & Dual-Phase CI Smoke Verification
+
+- **Dedicated Lightweight Liveness Route (`app/api/healthz/route.ts`, `__tests__/api/healthz/route.test.ts`)**:
+  - Implemented zero-dependency `/api/healthz` liveness probe returning HTTP 200 `{ status: "ok" }`. Bypasses data layer, Redis, Clerk authentication checks, and SSR rendering trees to provide an authoritative "process is alive and serving HTTP" contract for container orchestrators and CI test runners.
+  - Paired in `.github/workflows/ci.yml` `client-preview-smoke-gate` as Phase 2a (liveness gate) followed by Phase 2b (full homepage root route render gate).
+
 ### Fixed — Client Preview Smoke Gate Resilience & Middleware Optimization
 
+- **Upstash REST Stub Pipeline & Lua Evaluation Handling (`.github/workflows/ci.yml`)**:
+  - Enhanced Python Upstash REST stub in CI workflow smoke gates (`client-preview-smoke-gate`, `admin-preview-smoke-gate`, and `verification-ops-preview-smoke-gate`) to properly recognize and respond to pipeline batches containing Lua script evaluation (`eval`, `evalsha`).
+  - Previously, `@upstash/ratelimit` received flat `[{"result": null}]` responses for sliding window Lua scripts, causing a runtime `TypeError: (intermediate value) is not iterable` destructuring exception and cascading retry loops during cold route evaluation. The stub now accurately returns mock rate-limit tuples `[1, 100, 99, resetTimestamp]`, ensuring instant 0ms unblocking.
+  - Added `QUEUE_PROVIDER: memory` to `verification-ops-preview-smoke-gate` to guarantee all preview smoke gates avoid falling through to unconfigured NATS JetStream retry loops.
 - **Client Preview Smoke Gate Timeout & Port Probe Alignment (`.github/workflows/ci.yml`)**:
   - Restored `HTTP_MAX_ATTEMPTS=10` in `client-preview-smoke-gate` (matching `admin-preview-smoke-gate` and `verification-ops-preview-smoke-gate`) to provide adequate probe runway for cold Next.js App Router route module compilation and initial server render.
 - **Middleware System Settings Resolution Caching & IPv4 Host Normalization (`app/lib/security/middleware/system-settings-resolver.ts`)**:

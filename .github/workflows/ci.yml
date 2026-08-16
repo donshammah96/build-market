@@ -586,25 +586,27 @@ jobs:
               def _respond(self):
                   length = int(self.headers.get("Content-Length", 0) or 0)
                   raw = self.rfile.read(length) if length else b""
-
-                  # Discriminator is the PATH only. The Upstash single-command
-                  # format ("/") is *also* submitted as a flat JSON array
-                  # (e.g. `["GET", "key"]`), so sniffing "is the body a JSON
-                  # array?" misclassifies an ordinary single command as a
-                  # pipeline call and hands the SDK the wrong response shape
-                  # back — which the SDK would treat as a parse failure and
-                  # retry, defeating the entire point of this stub.
                   is_pipeline_path = "pipeline" in self.path or "multi-exec" in self.path
 
-                  if is_pipeline_path:
-                      count = 1
-                      try:
-                          parsed = json.loads(raw) if raw else None
-                          if isinstance(parsed, list):
-                              count = max(len(parsed), 1)
-                      except (json.JSONDecodeError, ValueError):
-                          pass
-                      body = json.dumps([{"result": None} for _ in range(count)]).encode()
+                  try:
+                      parsed = json.loads(raw) if raw else None
+                  except Exception:
+                      parsed = None
+
+                  if is_pipeline_path and isinstance(parsed, list):
+                      results = []
+                      for cmd in parsed:
+                          if isinstance(cmd, list) and len(cmd) > 0 and cmd[0] in ("eval", "evalsha"):
+                              results.append({"result": [1, 100, 99, 1899999999000]})
+                          elif isinstance(cmd, list) and len(cmd) > 0 and cmd[0] in ("exists",):
+                              results.append({"result": 0})
+                          elif isinstance(cmd, list) and len(cmd) > 0 and cmd[0] in ("del",):
+                              results.append({"result": 1})
+                          else:
+                              results.append({"result": None})
+                      body = json.dumps(results).encode()
+                  elif "eval" in self.path or (parsed and isinstance(parsed, list) and len(parsed) > 0 and parsed[0] in ("eval", "evalsha")):
+                      body = json.dumps({"result": [1, 100, 99, 1899999999000]}).encode()
                   else:
                       body = json.dumps({"result": None}).encode()
 
@@ -752,19 +754,43 @@ jobs:
             exit 1
           fi
 
-          # --- Phase 2: port is open — confirm a request actually completes ---
-          # Once the port is open, a request that keeps timing out is not "a
-          # slow boot" anymore — it's a hang, most likely a middleware or
-          # instrumentation call blocking on an external host that never
-          # responds. That's a different failure mode and deserves a fast,
-          # clearly-labeled failure instead of quietly consuming the rest of
-          # a 5-minute budget on a foregone conclusion.
+          # --- Phase 2a: verify process liveness via /api/healthz ---
+          # Checks "is the process alive and serving HTTP" without depending on downstream
+          # integrations (Redis, DB, Clerk, queues) or page render trees.
+          HEALTHZ_STATUS="000"
+          HEALTHZ_MAX_ATTEMPTS=5   # 5 * (10s curl timeout + 2s sleep) = ~60s
+          for i in $(seq 1 "$HEALTHZ_MAX_ATTEMPTS"); do
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "Smoke gate failed: client preview process exited while waiting for /api/healthz."
+              cat /tmp/client-preview-smoke.log || true
+              exit 1
+            fi
+
+            HEALTHZ_STATUS="$(curl --silent --show-error --max-time 10 --output /tmp/client-healthz-body.txt --write-out "%{http_code}" http://127.0.0.1:3500/api/healthz || true)"
+            if [ "$HEALTHZ_STATUS" = "200" ]; then
+              echo "Process liveness confirmed via /api/healthz (HTTP 200 after ~$((i * 2))s)."
+              break
+            fi
+
+            echo "Port is open but /api/healthz not ready yet (attempt $i/$HEALTHZ_MAX_ATTEMPTS) — recent app output:"
+            tail -n 15 /tmp/client-preview-smoke.log || true
+            sleep 2
+          done
+
+          if [ "$HEALTHZ_STATUS" != "200" ]; then
+            echo "Smoke gate failed: /api/healthz returned HTTP $HEALTHZ_STATUS (expected 200)."
+            cat /tmp/client-preview-smoke.log || true
+            exit 1
+          fi
+
+          # --- Phase 2b: verify homepage / root route render ---
+          # Confirms the full page tree renders without runtime SSR errors.
           STATUS="000"
           HTTP_MAX_ATTEMPTS=10   # 10 * (15s curl timeout + 2s sleep) = ~170s
           for i in $(seq 1 "$HTTP_MAX_ATTEMPTS"); do
 
             if ! kill -0 "$APP_PID" 2>/dev/null; then
-              echo "Smoke gate failed: client preview process exited while waiting for a response."
+              echo "Smoke gate failed: client preview process exited while waiting for root route response."
               cat /tmp/client-preview-smoke.log || true
               exit 1
             fi
@@ -774,7 +800,7 @@ jobs:
               break
             fi
 
-            echo "Port is open but no HTTP response yet (attempt $i/$HTTP_MAX_ATTEMPTS) — recent app output:"
+            echo "Port is open and liveness verified, but no root HTTP response yet (attempt $i/$HTTP_MAX_ATTEMPTS) — recent app output:"
             tail -n 15 /tmp/client-preview-smoke.log || true
             sleep 2
           done
@@ -947,25 +973,27 @@ jobs:
               def _respond(self):
                   length = int(self.headers.get("Content-Length", 0) or 0)
                   raw = self.rfile.read(length) if length else b""
-
-                  # Discriminator is the PATH only. The Upstash single-command
-                  # format ("/") is *also* submitted as a flat JSON array
-                  # (e.g. `["GET", "key"]`), so sniffing "is the body a JSON
-                  # array?" misclassifies an ordinary single command as a
-                  # pipeline call and hands the SDK the wrong response shape
-                  # back — which the SDK would treat as a parse failure and
-                  # retry, defeating the entire point of this stub.
                   is_pipeline_path = "pipeline" in self.path or "multi-exec" in self.path
 
-                  if is_pipeline_path:
-                      count = 1
-                      try:
-                          parsed = json.loads(raw) if raw else None
-                          if isinstance(parsed, list):
-                              count = max(len(parsed), 1)
-                      except (json.JSONDecodeError, ValueError):
-                          pass
-                      body = json.dumps([{"result": None} for _ in range(count)]).encode()
+                  try:
+                      parsed = json.loads(raw) if raw else None
+                  except Exception:
+                      parsed = None
+
+                  if is_pipeline_path and isinstance(parsed, list):
+                      results = []
+                      for cmd in parsed:
+                          if isinstance(cmd, list) and len(cmd) > 0 and cmd[0] in ("eval", "evalsha"):
+                              results.append({"result": [1, 100, 99, 1899999999000]})
+                          elif isinstance(cmd, list) and len(cmd) > 0 and cmd[0] in ("exists",):
+                              results.append({"result": 0})
+                          elif isinstance(cmd, list) and len(cmd) > 0 and cmd[0] in ("del",):
+                              results.append({"result": 1})
+                          else:
+                              results.append({"result": None})
+                      body = json.dumps(results).encode()
+                  elif "eval" in self.path or (parsed and isinstance(parsed, list) and len(parsed) > 0 and parsed[0] in ("eval", "evalsha")):
+                      body = json.dumps({"result": [1, 100, 99, 1899999999000]}).encode()
                   else:
                       body = json.dumps({"result": None}).encode()
 
@@ -1141,6 +1169,7 @@ jobs:
       NEXT_PUBLIC_VERIFICATION_OPS_URL: http://127.0.0.1:3501
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
+      QUEUE_PROVIDER: memory
       UPSTASH_REDIS_REST_URL: http://127.0.0.1:8079
       UPSTASH_REDIS_REST_TOKEN: stub_token_for_ci_only
       REDIS_URL: redis://127.0.0.1:6379
@@ -1170,15 +1199,25 @@ jobs:
                   raw = self.rfile.read(length) if length else b""
                   is_pipeline_path = "pipeline" in self.path or "multi-exec" in self.path
 
-                  if is_pipeline_path:
-                      count = 1
-                      try:
-                          parsed = json.loads(raw) if raw else None
-                          if isinstance(parsed, list):
-                              count = max(len(parsed), 1)
-                      except (json.JSONDecodeError, ValueError):
-                          pass
-                      body = json.dumps([{"result": None} for _ in range(count)]).encode()
+                  try:
+                      parsed = json.loads(raw) if raw else None
+                  except Exception:
+                      parsed = None
+
+                  if is_pipeline_path and isinstance(parsed, list):
+                      results = []
+                      for cmd in parsed:
+                          if isinstance(cmd, list) and len(cmd) > 0 and cmd[0] in ("eval", "evalsha"):
+                              results.append({"result": [1, 100, 99, 1899999999000]})
+                          elif isinstance(cmd, list) and len(cmd) > 0 and cmd[0] in ("exists",):
+                              results.append({"result": 0})
+                          elif isinstance(cmd, list) and len(cmd) > 0 and cmd[0] in ("del",):
+                              results.append({"result": 1})
+                          else:
+                              results.append({"result": None})
+                      body = json.dumps(results).encode()
+                  elif "eval" in self.path or (parsed and isinstance(parsed, list) and len(parsed) > 0 and parsed[0] in ("eval", "evalsha")):
+                      body = json.dumps({"result": [1, 100, 99, 1899999999000]}).encode()
                   else:
                       body = json.dumps({"result": None}).encode()
 
