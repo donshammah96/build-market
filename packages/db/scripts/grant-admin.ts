@@ -83,4 +83,3 @@ grantAdminAccess()
   .finally(async () => {
     await disconnectDatabase();
   });
-

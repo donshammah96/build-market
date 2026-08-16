@@ -63,4 +63,3 @@ main()
   .finally(async () => {
     await disconnectDatabase();
   });
-
