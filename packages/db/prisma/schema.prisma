@@ -1103,7 +1103,7 @@ model AdminProfile {
 }
 
 model AdminAuditLog {
-  id      String  @id @default(uuid())
+  id      String  @default(uuid())
   adminId String?
   admin   User?   @relation("AdminActions", fields: [adminId], references: [id], onDelete: SetNull)
 
@@ -1126,10 +1126,11 @@ model AdminAuditLog {
 
   createdAt DateTime @default(now())
 
-  @@index([adminId])
-  @@index([action])
-  @@index([targetType, targetId])
-  @@index([severity])
+  @@id([id, createdAt])
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([severity, createdAt])
 }
 
 // ========================================================
@@ -2929,7 +2930,7 @@ model UserAnalytics {
 }
 
 model AnalyticsEvent {
-  id         String              @id @default(uuid())
+  id         String              @default(uuid())
   ownerId    String
   entityType AnalyticsEntityType
   entityId   String?
@@ -2942,6 +2943,7 @@ model AnalyticsEvent {
   metadata   Json?
   createdAt  DateTime            @default(now())
 
+  @@id([id, createdAt])
   @@index([ownerId, createdAt])
 }
 
@@ -3043,7 +3045,7 @@ model ConsentRecord {
 }
 
 model AuditLog {
-  id String @id @default(uuid())
+  id String @default(uuid())
 
   // Who
   actorId        String? // null = system
@@ -3068,6 +3070,7 @@ model AuditLog {
 
   createdAt DateTime @default(now())
 
+  @@id([id, createdAt])
   @@index([actorId, createdAt])
   @@index([entityType, entityId, createdAt])
   @@index([action, createdAt])
