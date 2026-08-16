@@ -517,6 +517,22 @@ jobs:
       NEXT_PUBLIC_API_URL: http://127.0.0.1:3500/api
       ENCRYPTION_KEY_V1: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       RATE_LIMIT_BACKEND: memory
+      # FIX: was missing here (present in admin-preview-smoke-gate and
+      # admin-nightly-test-all, but not here) — this is the same failure
+      # class as the Upstash retry hang documented below, just on the queue
+      # backend instead of Redis. DISABLE_BACKGROUND_JOBS=true stops worker
+      # *consumers* from starting, but does not stop request-path code from
+      # constructing a queue *producer* client (e.g. an enqueue call on the
+      # root route or in a layout/instrumentation hook). With QUEUE_PROVIDER
+      # unset, that client falls through to attempting a real NATS
+      # JetStream connection — no NATS service container or NATS_URL exists
+      # anywhere in this workflow — and a NATS client's default behavior is
+      # to retry/reconnect indefinitely rather than fail fast, which
+      # produces exactly the "port opens, first request never completes"
+      # hang this job has been chasing. Set to memory so the queue client
+      # short-circuits to an in-process stub instead, matching the other
+      # two smoke gates.
+      QUEUE_PROVIDER: memory
       ALLOW_MOCK_VIRUS_SCANNER: "true"
       DISABLE_BACKGROUND_JOBS: "true"
       # Was `https://stub.upstash.io`, then `https://127.0.0.1:6378` (an
