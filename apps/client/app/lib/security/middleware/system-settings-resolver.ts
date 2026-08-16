@@ -43,11 +43,7 @@ export async function resolveSystemSettings(
   baseUrl: string,
 ): Promise<SystemSettingsResult> {
   const now = Date.now();
-  if (
-    process.env.NODE_ENV !== "test" && // bootstrap:only use cached result for performance
-    cachedResult &&
-    now < cachedResult.expiresAt
-  ) {
+  if (!env.isTest && cachedResult && now < cachedResult.expiresAt) {
     return cachedResult.result;
   }
 
