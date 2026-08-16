@@ -5,9 +5,10 @@ import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import { useShouldAnimate } from "@/lib/hooks/usePerformance";
 import { cn } from "@/lib/utils";
+import { ArrowRight, Sparkles } from "lucide-react";
 
 const RegisterForm = dynamic(() => import("@/components/forms/RegisterForm"), {
   loading: () => <FormSkeleton />,
@@ -83,13 +84,30 @@ export const Hero: FC = memo(function Hero() {
           {/* Left Column: Text Content */}
           <div
             className={cn(
-              "max-w-2xl text-center lg:text-left space-y-8",
+              "max-w-2xl text-center lg:text-left space-y-6 sm:space-y-8",
               shouldAnimate && "motion-safe:animate-fade-in-up",
             )}
           >
+            {/* Pro Network Announcement Badge */}
+            <div className="flex justify-center lg:justify-start">
+              <Link
+                href={ROUTES.professional}
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/15 border border-white/20 text-xs sm:text-sm text-emerald-300 hover:text-emerald-200 transition-all backdrop-blur-md group"
+              >
+                <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="font-medium text-white/90">
+                  Architects & Engineers:
+                </span>
+                <span className="underline font-semibold underline-offset-4 group-hover:translate-x-0.5 transition-transform inline-flex items-center">
+                  Discover BuildMarket Pro{" "}
+                  <ArrowRight className="ml-1 h-3 w-3" />
+                </span>
+              </Link>
+            </div>
+
             <h1
               className={cn(
-                "text-5xl sm:text-6xl md:text-7xl font-bold text-white tracking-tight leading-[1.1]",
+                "font-display text-5xl sm:text-6xl md:text-7xl font-extrabold text-white tracking-tight leading-[1.08]",
                 shouldAnimate && "motion-safe:animate-fade-in-up",
               )}
               style={{ animationDelay: shouldAnimate ? "100ms" : "0ms" }}

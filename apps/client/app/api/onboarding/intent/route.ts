@@ -12,7 +12,7 @@ import {
   PROFESSIONAL_ONBOARDING_INTENT_COOKIE,
   PROFESSIONAL_ONBOARDING_INTENT_TTL_SECONDS,
 } from "@/app/lib/auth/professional-onboarding-intent";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 const SafeReturnToSchema = z
   .string()

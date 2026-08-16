@@ -5,7 +5,7 @@ import type {
   Message,
 } from "@build/types";
 import type { z } from "zod";
-import { API_ROUTES } from "@/lib/links";
+import { API_ROUTES } from "@/lib/routes";
 import {
   ThreadQuerySchema,
   CreateThreadSchema,

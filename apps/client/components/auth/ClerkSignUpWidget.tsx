@@ -1,7 +1,7 @@
 "use client";
 
 import { SignUp } from "@clerk/nextjs";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import { useEffect, useState } from "react";
 import { AuthPageSkeleton } from "./AuthPageSkeleton";
 

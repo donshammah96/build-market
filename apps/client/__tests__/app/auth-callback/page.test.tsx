@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import AuthCallbackPage from "@/app/auth-callback/page";
 import { env } from "@/app/lib/infrastructure/env";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 const mockReplace = vi.hoisted(() => vi.fn());
 const mockSearchParams = vi.hoisted(() => ({

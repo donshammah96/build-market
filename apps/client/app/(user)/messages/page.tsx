@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 export default function MessagesPage() {

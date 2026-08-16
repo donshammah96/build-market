@@ -7,7 +7,7 @@ import { Navbar } from "@/components/layout/NavBar";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import PropertyCard from "@/components/real-estate/PropertyCard";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import { propertiesClient } from "@/lib/facades/properties-client";
 import PropertySearchHero from "./_components/property-search-hero";
 

@@ -4,7 +4,7 @@ import { SignUp } from "@clerk/nextjs";
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -37,7 +37,7 @@ export default function ProfessionalSignUpPage() {
             className="object-cover opacity-20 scale-105"
             priority
           />
-          <div className="absolute inset-0 bg-radial-[circle_at_center,_var(--tw-gradient-stops)] from-emerald-950/30 via-zinc-950/80 to-zinc-950" />
+          <div className="absolute inset-0 bg-radial-[circle_at_center,var(--tw-gradient-stops)] from-emerald-950/30 via-zinc-950/80 to-zinc-950" />
           {/* Grid Pattern for Technical Engineering Feel */}
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808010_1px,transparent_1px),linear-gradient(to_bottom,#80808010_1px,transparent_1px)] bg-size-[28px_28px]" />
         </div>
@@ -94,7 +94,7 @@ export default function ProfessionalSignUpPage() {
           </div>
 
           {/* Mini Testimonial Quote */}
-          <div className="mt-10 pt-6 border-t border-zinc-800/80 bg-zinc-900/40 p-5 rounded-2xl border border-zinc-800/60 backdrop-blur-xs">
+          <div className="mt-10 pt-6 border-t bg-zinc-900/40 p-5 rounded-2xl border border-zinc-800/60 backdrop-blur-xs">
             <div className="flex gap-1 text-amber-400 mb-2">
               {[...Array(5)].map((_, i) => (
                 <Star
@@ -152,7 +152,7 @@ export default function ProfessionalSignUpPage() {
           </div>
 
           {/* Clerk Component Container */}
-          <div className="bg-white p-1 sm:p-2 rounded-2xl shadow-xl shadow-zinc-200/60 border border-zinc-200/80 min-h-[460px] flex items-center justify-center">
+          <div className="bg-white p-1 sm:p-2 rounded-2xl shadow-xl shadow-zinc-200/60 border border-zinc-200/80 min-h-115 flex items-center justify-center">
             {!mounted ? (
               <AuthPageSkeleton variant="sign-up" />
             ) : (

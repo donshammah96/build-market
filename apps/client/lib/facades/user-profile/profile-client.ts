@@ -5,7 +5,7 @@
  * Replaces direct Server Action imports in "use client" components
  * to enforce the strict client/server bundle separation.
  */
-import { API_ROUTES } from "@/lib/links";
+import { API_ROUTES } from "@/lib/routes";
 import { apiFetch } from "@/lib/api-client-utils";
 import type { ProfessionalOnboardingData } from "@build/types";
 import type { ApiResponse } from "@build/types";

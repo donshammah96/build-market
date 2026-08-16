@@ -15,7 +15,7 @@ import {
 } from "@/app/lib/domains/user-profile/clerk-metadata";
 import { err, ok } from "@/app/lib/errors/result";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
-import { dashboardForRole } from "@/lib/links";
+import { dashboardForRole } from "@/lib/routes";
 import type {
   OnboardingIdempotencyContext,
   OnboardingIntent,

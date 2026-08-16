@@ -5,7 +5,7 @@ import type { Review } from "@/app/data/homeData";
 import { reviews as allReviews } from "@/app/data/homeData";
 import { ReviewCard } from "./ReviewCard";
 import Link from "next/link";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import {

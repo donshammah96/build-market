@@ -16,7 +16,9 @@
     "**/dist": true,
     "**/.next": true,
     "**/.turbo": true,
-    "**/build": true,"**/coverage/**": true,
+    "**/build": true,
+    "**/.vercel": true,
+    "**/coverage/**": true,
     "**/.git/**": true,
     "**/*.js.map": true,
     "**/playwright-report/**": true
@@ -26,10 +28,19 @@
     "**/.next/**": true,
     "**/.turbo/**": true,
     "**/dist/**": true,
+    "**/.vercel/**": true,
     "**/coverage/**": true,
     "**/.git/**": true,
     "**/*.js.map": true,
     "**/playwright-report/**": true
+  },
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/.turbo": true,
+    "**/dist": true,
+    "**/.vercel": true,
+    "**/coverage": true
   },
   "chat.tools.terminal.autoApprove": {
     "pnpm": true,

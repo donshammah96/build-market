@@ -1,4 +1,4 @@
-import { API_ROUTES, withQueryParams } from "@/lib/links";
+import { API_ROUTES, withQueryParams } from "@/lib/routes";
 import { apiFetch } from "@/lib/api-client-utils";
 import type { ApiResponse } from "@build/types";
 import type { NotificationQueryInput } from "@/validation/notifications-validation";

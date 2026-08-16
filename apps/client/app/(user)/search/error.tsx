@@ -7,7 +7,7 @@ import { AlertTriangle } from "lucide-react";
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 export default function Error({
   error,

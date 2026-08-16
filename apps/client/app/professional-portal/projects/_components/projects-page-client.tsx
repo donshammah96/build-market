@@ -20,7 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { usePortalProjects } from "@/hooks/useProjects";
 import { useProfileStatus } from "@/hooks/useProfileStatus";
 import { CapabilityRestrictedBanner } from "@/components/shared/CapabilityRestrictedBanner";
-import { getProfessionalProjectUrl } from "@/lib/links";
+import { getProfessionalProjectUrl } from "@/lib/routes";
 
 interface Project {
   id: string;

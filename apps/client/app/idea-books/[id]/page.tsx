@@ -31,7 +31,7 @@ import {
   useDeleteIdeaBookAttachment,
 } from "@/hooks/useIdeaBooks";
 import type { IdeaBookAttachment } from "@/lib/facades/idea-books-client";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 function getAttachmentUrl(att: IdeaBookAttachment): string | null {
   return att.asset?.cdnUrl ?? att.fileUrl ?? att.sourceUrl ?? null;

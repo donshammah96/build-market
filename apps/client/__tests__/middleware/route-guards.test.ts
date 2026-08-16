@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 const mockAuth = vi.fn();
 const mockResolveOnboardingStatus = vi.fn();

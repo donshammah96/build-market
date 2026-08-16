@@ -10,7 +10,7 @@ import {
   ConcurrencyLimiter,
   unwrapApiResponse,
 } from "@/lib/api-client-utils";
-import { API_ROUTES } from "@/lib/links";
+import { API_ROUTES } from "@/lib/routes";
 
 // ─── Pipeline Types ─────────────────────────────────────────────────────────
 

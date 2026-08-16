@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 const parsedProfessionalOnboarding = new URL(
   ROUTES.professionalOnboarding,

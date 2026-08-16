@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ROUTES, dashboardForRole } from "@/lib/links";
+import { ROUTES, dashboardForRole } from "@/lib/routes";
 
 describe("dashboardForRole", () => {
   it("returns the homeowner dashboard for client roles", () => {

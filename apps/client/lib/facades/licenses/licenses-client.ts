@@ -5,7 +5,7 @@
  * Uses fetch-based API access; no server actions.
  */
 import type { ApiResponse } from "@build/types";
-import { API_ROUTES } from "@/lib/links";
+import { API_ROUTES } from "@/lib/routes";
 import { apiFetch } from "@/lib/api-client-utils";
 import { isValidId } from "@/lib/utils/validators";
 import type {

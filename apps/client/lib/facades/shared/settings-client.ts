@@ -4,7 +4,7 @@
  * Client-side fetch for public system settings.
  */
 import { z } from "zod";
-import { API_ROUTES } from "@/lib/links";
+import { API_ROUTES } from "@/lib/routes";
 
 export const PublicSettingsSchema = z.object({
   maintenanceMode: z.boolean().catch(false),

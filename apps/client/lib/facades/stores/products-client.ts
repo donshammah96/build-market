@@ -1,6 +1,6 @@
 import type { ApiResponse } from "@build/types";
 import { apiFetch, ConcurrencyLimiter } from "@/lib/api-client-utils";
-import { API_ROUTES, withQueryParams, type QueryParams } from "@/lib/links";
+import { API_ROUTES, withQueryParams, type QueryParams } from "@/lib/routes";
 import type { SellerTopProduct } from "@/domains/seller-insights";
 
 export type TopProduct = SellerTopProduct;

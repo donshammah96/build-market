@@ -28,6 +28,34 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Changed — Staff-Level UI Redesign (Navbar, Client Sign-Up, Professional Portal & Homepage Discovery) & Canonical Route Migration
+
+- **Main Navigation Redesign & Two-Sided Marketplace Standard (`components/layout/NavBar.tsx`)**:
+  - Re-architected desktop and mobile navigation modeled after two-sided marketplace industry standards (Airbnb, Houzz, Thumbtack).
+  - Removed duplicate/redundant `"For Pros"` link from the consumer discovery menu (`Idea Books`, `Find Professionals`, `Properties`).
+  - Created a role-separated right action cluster featuring a supply-side partner link (`"For Professionals"` &rarr; `ROUTES.professional`), vertical divider (`|`), modal `SignInButton`, and primary `"Get Started"` CTA button routed to `ROUTES.signUp` (`/sign-up`).
+  - Restructured the mobile menu drawer into 3 categorized, accessible sections: _Explore Marketplace_, _For Building Professionals_, and _Account & Settings_.
+- **Client Sign-Up Page Visual & Trust Modernization (`app/sign-up/[[...sign-up]]/page.tsx`)**:
+  - Upgraded split-screen layout with `font-display` (Syne) typography and an emerald gradient headline: _"Build your dream with absolute confidence."_
+  - Added Kenyan architectural background imagery with dark radial emerald gradients and technical micro-grid overlays.
+  - Implemented structured value cards for verified NCA/BORAQS credentials, bank-grade milestone escrow guarantees, and curated architectural Idea Books.
+  - Added a verified homeowner testimonial card (`Amanda Ireri`, Karen, Nairobi) with 5-star review rating.
+  - Streamlined the right registration panel with desktop `"← Back to Marketplace"`, top-right `"Are you a Pro? Join here →"` link, and bottom supply-side recruitment callout card.
+- **Canonical Route Call Site Migration from `@/lib/links` to `@/lib/routes` (`lib/routes`, across 84+ client files)**:
+  - Migrated all route and API route imports across `apps/client` from the legacy re-export barrel `@/lib/links` directly to canonical route definitions in `@/lib/routes`.
+  - Updated all call sites across pages (`app/*`), layout and home UI components (`components/*`), domain facades (`lib/facades/*`), and test suites (`__tests__/*`).
+  - Verified zero remaining active imports from `@/lib/links` across the client codebase.
+- **Homepage & Layout Multi-Touchpoint Professional Discovery Integration (`components/home/*`, `components/professional/*`, `components/layout/*`)**:
+  - **`Hero.tsx`**: Upgraded main headline to `font-display` (Syne) typography and added an interactive pro discovery pill banner (_"Architects & Engineers: Discover BuildMarket Pro →"_).
+  - **`Professionals.tsx`**: Added practitioner recruitment callout banner (_"Are you an Architect, Engineer, or Contractor in Kenya? Explore Pro Network →"_) linking to `ROUTES.professional`.
+  - **`CTA.tsx` & `FeatureSection.tsx`**: Elevated headlines with Syne display typography and linked _"Join as a Pro"_ directly to `ROUTES.professional`.
+  - **`Footer.tsx`**: Added _"For Professionals"_ under Resources.
+- **Professional Public Pages Modernization (`app/professional/page.tsx`, `app/professional/sign-up/[[...sign-up]]/page.tsx`, `components/professional/MockDashboardUi.tsx`)**:
+  - Removed unauthorized direct links to protected `ROUTES.professionalDashboard` from public landing pages, routing unauthenticated pros through `JoinAsProIntentLink`.
+  - Added `ProfessionalNav` with home link (_"← Back to Marketplace"_).
+  - Modernized `MockDashboardUi.tsx` into a high-fidelity dark-mode SaaS dashboard preview showcasing live lead streams and pipeline metrics.
+  - Upgraded `professional/sign-up` with split-screen trust pillars and Kenyan regulatory accreditation badges (NCA, BORAQS, IEK, EPRA, AAK).
+
 ### Fixed — Preview Smoke Gate SSR Hang, OTel & Queue Guards, Root Layout Dynamic Clerk Decoupling & CI Redis Service Alignment
 
 - **OpenTelemetry Bootstrap Endpoint Guard (`app/lib/infrastructure/otel.ts`, `apps/admin/src/lib/infrastructure/otel.ts`)**:

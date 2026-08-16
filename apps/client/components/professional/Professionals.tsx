@@ -5,7 +5,8 @@ import ProfessionalCard from "./ProfessionalCard";
 import { ProfessionalCardData } from "../../types/professional";
 import Link from "next/link";
 import { Button } from "../ui/button";
-import { ArrowRight, ArrowLeft } from "lucide-react";
+import { ArrowRight, ArrowLeft, ShieldCheck } from "lucide-react";
+import { ROUTES } from "@/lib/routes";
 import {
   Carousel,
   CarouselContent,
@@ -182,7 +183,7 @@ export const Professionals = memo(function Professionals({
             </div>
             <h2
               id="professionals-heading"
-              className="text-3xl sm:text-4xl font-bold text-zinc-900 tracking-tight"
+              className="text-3xl sm:text-4xl font-bold text-zinc-900 tracking-tight font-display"
             >
               Featured <span className="text-emerald-600">Professionals</span>
             </h2>
@@ -239,10 +240,40 @@ export const Professionals = memo(function Professionals({
           </CarouselContent>
         </Carousel>
 
-        <div className="mt-8 text-center sm:hidden">
-          <Button variant="outline" className="w-full" asChild>
-            <Link href="/professionals">View All Professionals</Link>
-          </Button>
+        {/* Pro Recruitment Callout Banner */}
+        <div className="mt-12 p-6 sm:p-8 rounded-2xl bg-zinc-950 text-white border border-zinc-800 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="space-y-2 text-center md:text-left max-w-xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-500/30">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              For Licensed Practitioners
+            </div>
+            <h3 className="font-display text-xl sm:text-2xl font-bold text-white tracking-tight">
+              Are you an Architect, Engineer, or Contractor in Kenya?
+            </h3>
+            <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
+              Showcase your project portfolio to vetted clients, protect your
+              milestone earnings with escrow, and win high-budget contracts.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto">
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-semibold rounded-full h-11 px-6 text-sm shadow-md shadow-emerald-950/50 w-full sm:w-auto transition-all"
+              asChild
+            >
+              <Link href={ROUTES.professional}>
+                Explore Pro Network
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+            <Button
+              variant="outline"
+              className="border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-white rounded-full h-11 px-6 text-sm bg-zinc-900/50 backdrop-blur-xs w-full sm:w-auto transition-all"
+              asChild
+            >
+              <Link href={ROUTES.findProfessional}>Browse Directory</Link>
+            </Button>
+          </div>
         </div>
       </div>
     </section>

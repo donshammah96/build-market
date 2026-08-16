@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { motion, useScroll, useTransform } from "framer-motion";
 import {
+  ArrowLeft,
   ArrowRight,
   CheckCircle2,
   BarChart3,
@@ -29,6 +30,7 @@ import { JoinAsProIntentLink } from "./_components/JoinAsProIntentLink";
 export default function ProfessionalLandingPage() {
   return (
     <div className="min-h-screen bg-white text-zinc-900 font-sans selection:bg-emerald-100 selection:text-emerald-900 antialiased">
+      <ProfessionalNav />
       <main>
         <HeroSection />
         <TrustMetricsBanner />
@@ -41,6 +43,59 @@ export default function ProfessionalLandingPage() {
 
       <Footer />
     </div>
+  );
+}
+
+// --- Top Navigation Header with Link to Homepage ---
+function ProfessionalNav() {
+  return (
+    <header className="absolute top-0 left-0 right-0 z-30 border-b border-white/10 bg-zinc-950/60 backdrop-blur-md">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between">
+        {/* Left: Brand & Home Link */}
+        <div className="flex items-center gap-4 sm:gap-6">
+          <Link
+            href="/"
+            className="flex items-center gap-2 group text-white hover:text-emerald-400 transition-colors"
+          >
+            <div className="bg-emerald-600 p-1.5 rounded-lg group-hover:bg-emerald-500 transition-colors shadow-xs">
+              <ShieldCheck className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+            </div>
+            <span className="font-display font-bold text-lg sm:text-xl tracking-tight">
+              Build<span className="text-emerald-400">Market</span>
+              <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 ml-1.5 align-middle">
+                PRO
+              </span>
+            </span>
+          </Link>
+
+          <Link
+            href="/"
+            className="hidden md:inline-flex items-center gap-1.5 text-xs sm:text-sm text-zinc-400 hover:text-zinc-100 transition-colors font-medium border-l border-zinc-800 pl-6"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Marketplace
+          </Link>
+        </div>
+
+        {/* Right: Quick actions */}
+        <div className="flex items-center gap-3 sm:gap-4">
+          <Link
+            href="/"
+            className="md:hidden inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-100 transition-colors font-medium"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Home
+          </Link>
+          <Button
+            size="sm"
+            className="bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-semibold rounded-full h-9 sm:h-10 px-4 sm:px-5 text-xs sm:text-sm shadow-md shadow-emerald-950/50 transition-all"
+            asChild
+          >
+            <JoinAsProIntentLink>Join as a Pro</JoinAsProIntentLink>
+          </Button>
+        </div>
+      </div>
+    </header>
   );
 }
 
@@ -58,7 +113,7 @@ function HeroSection() {
   return (
     <section
       ref={ref}
-      className="relative min-h-[85vh] lg:min-h-[90vh] flex items-center justify-center overflow-hidden bg-zinc-950 text-white pt-20 pb-16"
+      className="relative min-h-[85vh] lg:min-h-[90vh] flex items-center justify-center overflow-hidden bg-zinc-950 text-white pt-28 sm:pt-32 pb-16"
     >
       {/* Parallax Background with Mesh Glow */}
       <motion.div

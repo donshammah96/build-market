@@ -8,7 +8,7 @@
  *     └── API Routes (/api/idea-books)
  *           └── idea-books domain (app/lib/domains/idea-books)
  */
-import { API_ROUTES, withQueryParams } from "@/lib/links";
+import { API_ROUTES, withQueryParams } from "@/lib/routes";
 import { apiFetch } from "@/lib/api-client-utils";
 import type { ApiResponse } from "@build/types";
 import type {

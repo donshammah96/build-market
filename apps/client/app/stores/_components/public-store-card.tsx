@@ -8,7 +8,7 @@ import {
   CardFooter,
   CardHeader,
 } from "@/components/ui/card";
-import { fromEnumKey } from "@/lib/links";
+import { fromEnumKey } from "@/lib/routes";
 import type { StoreListItem } from "@/app/lib/domains/stores/contracts";
 
 interface PublicStoreCardProps {
