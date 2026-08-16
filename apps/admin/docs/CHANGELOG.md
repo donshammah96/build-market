@@ -13,8 +13,9 @@
   - Added unit test suite `src/lib/jobs/__tests__/settled-records-archival.test.ts` (100% passing).
 - **Environment Schema Extension (`src/lib/infrastructure/env-schema.ts`, `.env.development`, `.env.test`, `.env.example`)**:
   - Added optional `SETTLED_ARCHIVAL_CRON` and `SETTLED_ARCHIVAL_BATCH_SIZE` configuration variables to `adminBaseEnvSchema`.
-- **Decoupled Settings Repository from DB System Settings (`src/lib/domains/settings/repository.ts`)**:
-  - Removed deprecated `@build/db/system-settings` import (`invalidateCache`) from `settingsRepository.upsertGlobal()`, relying on direct database persistence and Next.js revalidation (`revalidatePath("/settings")`) per ADR-ADMIN-002.
+- **Decoupled Settings Repository from DB System Settings & Integrated Distributed Redis Invalidation (`src/lib/domains/settings/repository.ts`)**:
+  - Removed deprecated `@build/db/system-settings` import (`invalidateCache`) from `settingsRepository.upsertGlobal()`.
+  - Integrated distributed `@build/redis` cache invalidation (`RedisCache.delete("global")` on namespace `settings:system`) alongside Next.js route revalidation (`revalidatePath("/settings")`) to synchronize settings across distributed nodes immediately upon update.
 
 ### Changed — env-wrapper.ts, route-auth.ts
 

@@ -15,6 +15,7 @@ import {
   type SystemSettings,
 } from "@build/types";
 import { settingsRepository } from "./repository";
+import { RedisCache } from "@build/redis";
 import type { Profession } from "@prisma/client";
 
 export {
@@ -37,7 +38,7 @@ export {
 export class SystemSettingsService {
   private static instance: SystemSettingsService;
 
-  // Cache all pre-parsed forms to avoid Zod overhead on repeated getter calls
+  // L1 In-Memory Cache to minimize Redis round trips within active processes
   private cache: {
     full: SystemSettings;
     publicParsed: PublicSettings;
@@ -47,10 +48,17 @@ export class SystemSettingsService {
     fromFallback: boolean;
   } | null = null;
 
-  private readonly CACHE_TTL_MS = 60_000; // 60 seconds
+  // L2 Distributed Redis Cache for multi-instance synchronization
+  private readonly redisCache: RedisCache<SystemSettings>;
+  private readonly MEMORY_CACHE_TTL_MS = 10_000; // 10 seconds in-memory TTL
+  private readonly REDIS_CACHE_TTL_SECONDS = 300; // 5 minutes distributed TTL
   private pendingRequest: Promise<SystemSettings> | null = null;
 
-  private constructor() {}
+  private constructor() {
+    this.redisCache = new RedisCache<SystemSettings>("settings:system", {
+      ttl: this.REDIS_CACHE_TTL_SECONDS,
+    });
+  }
 
   public static getInstance(): SystemSettingsService {
     if (!SystemSettingsService.instance) {
@@ -59,7 +67,22 @@ export class SystemSettingsService {
     return SystemSettingsService.instance;
   }
 
-  public invalidateCache(): void {
+  /**
+   * Invalidate both L1 in-memory cache and L2 distributed Redis cache.
+   */
+  public async invalidateCache(): Promise<void> {
+    this.cache = null;
+    try {
+      await this.redisCache.delete("global");
+    } catch {
+      // Non-blocking in environments where Redis is not configured
+    }
+  }
+
+  /**
+   * Synchronous cache invalidation for local process memory.
+   */
+  public invalidateLocalMemoryCache(): void {
     this.cache = null;
   }
 
@@ -72,27 +95,50 @@ export class SystemSettingsService {
   }
 
   public async getSettings(): Promise<SystemSettings> {
-    // 1. Cache Check
-    if (this.cache && Date.now() - this.cache.timestamp < this.CACHE_TTL_MS) {
+    // 1. L1 In-Memory Cache Check
+    if (
+      this.cache &&
+      Date.now() - this.cache.timestamp < this.MEMORY_CACHE_TTL_MS
+    ) {
       return this.cache.full;
     }
 
-    // 2. Request Deduplication: Return pending promise if request is in flight
+    // 2. In-flight Request Deduplication
     if (this.pendingRequest) {
       return this.pendingRequest;
     }
 
-    // 3. Launch Request
+    // 3. Launch Request (L2 Redis -> Database -> Safe Fallback)
     this.pendingRequest = (async () => {
       try {
-        const row = await settingsRepository.findGlobalWithTimeout(3000);
+        // Step A: Check L2 Distributed Redis Cache
+        try {
+          const cachedRedis = await this.redisCache.get("global");
+          if (cachedRedis) {
+            const parsed = SystemSettingsSchema.parse(cachedRedis);
+            const publicParsed = PublicSettingsSchema.parse(parsed);
+            const financialParsed = FinancialSettingsSchema.parse(parsed);
 
-        // Parse once sequentially
+            this.cache = {
+              full: parsed,
+              publicParsed,
+              financialParsed,
+              timestamp: Date.now(),
+              fromFallback: false,
+            };
+            return parsed;
+          }
+        } catch {
+          // Redis cache miss or unconfigured; proceed to DB query
+        }
+
+        // Step B: Query Database via persistence repository
+        const row = await settingsRepository.findGlobalWithTimeout(3000);
         const parsed = SystemSettingsSchema.parse(row ?? {});
         const publicParsed = PublicSettingsSchema.parse(parsed);
         const financialParsed = FinancialSettingsSchema.parse(parsed);
 
-        // Store pre-parsed objects in memory
+        // Populate L1 In-Memory Cache
         this.cache = {
           full: parsed,
           publicParsed,
@@ -100,6 +146,18 @@ export class SystemSettingsService {
           timestamp: Date.now(),
           fromFallback: false,
         };
+
+        // Populate L2 Distributed Redis Cache asynchronously (non-blocking)
+        try {
+          await this.redisCache.set(
+            "global",
+            parsed,
+            this.REDIS_CACHE_TTL_SECONDS,
+          );
+        } catch {
+          // Non-blocking if Redis is unreachable
+        }
+
         return parsed;
       } catch (error) {
         const prismaCode =
@@ -109,8 +167,7 @@ export class SystemSettingsService {
             ? (error as Record<string, unknown>)["code"]
             : "UNKNOWN";
 
-        // Emit a structured JSON log so Vercel's log pipeline can index this
-        // as a distinct event rather than an unstructured string blob.
+        // Emit structured critical log for telemetry
         console.error(
           JSON.stringify({
             event: "system_settings_db_failure",
@@ -145,13 +202,13 @@ export class SystemSettingsService {
   }
 
   public async getPublicSettings(): Promise<PublicSettings> {
-    await this.getSettings(); // Ensures cache is populated
-    return this.cache!.publicParsed; // Zero-parsing fast return
+    await this.getSettings();
+    return this.cache!.publicParsed;
   }
 
   public async getFinancialSettings(): Promise<FinancialSettings> {
-    await this.getSettings(); // Ensures cache is populated
-    return this.cache!.financialParsed; // Zero-parsing fast return
+    await this.getSettings();
+    return this.cache!.financialParsed;
   }
 }
 
@@ -173,8 +230,8 @@ export async function getFinancialSettings(): Promise<FinancialSettings> {
   return systemSettingsService.getFinancialSettings();
 }
 
-export function invalidateCache(): void {
-  systemSettingsService.invalidateCache();
+export async function invalidateCache(): Promise<void> {
+  await systemSettingsService.invalidateCache();
 }
 
 export function isServingFallback(): boolean {

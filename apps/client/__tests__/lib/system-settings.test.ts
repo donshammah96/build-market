@@ -1,5 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const mockRedisGet = vi.fn();
+const mockRedisSet = vi.fn();
+const mockRedisDelete = vi.fn();
+
+vi.mock("@build/redis", () => ({
+  RedisCache: vi.fn().mockImplementation(function (this: any) {
+    this.get = mockRedisGet;
+    this.set = mockRedisSet;
+    this.delete = mockRedisDelete;
+    return this;
+  }),
+  redisCache: {
+    get: mockRedisGet,
+    set: mockRedisSet,
+    delete: mockRedisDelete,
+  },
+}));
+
 vi.mock("@build/db", () => ({
   prisma: {
     systemSettings: {
@@ -17,9 +35,13 @@ const mockQueryRawUnsafe = vi.mocked(prisma.$queryRawUnsafe);
 describe("Client System Settings Domain Service", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockRedisGet.mockResolvedValue(null);
+    mockRedisSet.mockResolvedValue(undefined);
+    mockRedisDelete.mockResolvedValue(true);
+
     const { systemSettingsService } =
       await import("@/app/lib/domains/settings");
-    systemSettingsService.invalidateCache();
+    await systemSettingsService.invalidateCache();
   });
 
   it("getPublicSettings returns defaults when no row exists", async () => {
@@ -58,6 +80,40 @@ describe("Client System Settings Domain Service", () => {
     expect(settings.featureFlags).toEqual({ enableMessaging: true });
     expect(settings).not.toHaveProperty("mpesaConsumerKey");
     expect(settings).not.toHaveProperty("mpesaPasskey");
+    expect(mockRedisSet).toHaveBeenCalledWith(
+      "global",
+      expect.objectContaining({ maintenanceMode: true }),
+      300,
+    );
+  });
+
+  it("serves settings directly from Redis cache without hitting DB", async () => {
+    mockRedisGet.mockResolvedValue({
+      maintenanceMode: false,
+      maintenanceMessage: null,
+      allowedIPs: [],
+      publicSignup: true,
+      allowProfessionalSignup: true,
+      featureFlags: { enableFastSearch: true },
+      supportEmail: "support@buildmarket.app",
+      platformCommission: 8,
+      minWithdrawalKes: 500,
+      maxWithdrawalKes: 200000,
+    });
+
+    const { getFinancialSettings } = await import("@/app/lib/domains/settings");
+    const settings = await getFinancialSettings();
+
+    expect(settings.platformCommission).toBe(8);
+    expect(settings.minWithdrawalKes).toBe(500);
+    expect(mockFindUnique).not.toHaveBeenCalled();
+  });
+
+  it("invalidates Redis distributed cache when invalidateCache is called", async () => {
+    const { invalidateCache } = await import("@/app/lib/domains/settings");
+    await invalidateCache();
+
+    expect(mockRedisDelete).toHaveBeenCalledWith("global");
   });
 
   it("getFinancialSettings returns defaults when no row exists", async () => {
