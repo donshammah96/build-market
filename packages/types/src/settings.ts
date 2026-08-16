@@ -273,4 +273,3 @@ export type VerificationRules = z.infer<typeof VerificationRulesSchema>;
 export type PublicSettings = z.infer<typeof PublicSettingsSchema>;
 export type FinancialSettings = z.infer<typeof FinancialSettingsSchema>;
 export type SystemSettings = z.infer<typeof SystemSettingsSchema>;
-
