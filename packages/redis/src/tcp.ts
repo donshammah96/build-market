@@ -125,7 +125,13 @@ export function getBullMQConnectionOptions(
     },
 
     reconnectOnError(err: Error) {
-      const retryOn = ["READONLY", "ECONNRESET", "ECONNREFUSED"];
+      if (
+        process.env.DISABLE_BACKGROUND_JOBS === "true" ||
+        process.env.QUEUE_PROVIDER?.toLowerCase() === "memory"
+      ) {
+        return false;
+      }
+      const retryOn = ["READONLY", "ECONNRESET"];
       return retryOn.some((code) => err.message.includes(code));
     },
     ...overrides,

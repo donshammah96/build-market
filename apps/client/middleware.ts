@@ -158,20 +158,12 @@ const clerkMiddlewareOptions = isSatelliteConfigured
   ? { isSatellite: true as const, domain: satelliteDomain as string }
   : undefined;
 
-const middleware = clerkMiddleware(async (auth, req: Request) => {
-  const nextReq = req as NextRequest;
+const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
+  const nextReq = req;
   const { pathname } = nextReq.nextUrl;
   const baseUrl = nextReq.nextUrl.origin;
   const nonce = generateCspNonce();
   const cspValue = buildRequestCsp(nonce);
-
-  // --- DEV AUTH BYPASS ---
-  // Allow all routes during local offline development or CI without triggering Clerk checks
-  if (env.auth.bypassEnabled && (env.isDev || env.isCI)) {
-    logMiddlewareDecision(nextReq, "mw_dev_bypass");
-    return applyDocumentCspHeaders(nextReq, nonce, cspValue);
-  }
-  // --- END DEV AUTH BYPASS ---
 
   // 0. Maintenance mode and signup blocking (skip for exempt routes)
   if (!isSettingsExemptRoute(nextReq)) {
@@ -505,13 +497,43 @@ const middleware = clerkMiddleware(async (auth, req: Request) => {
   return applyDocumentCspHeaders(nextReq, nonce, cspValue);
 }, clerkMiddlewareOptions);
 
+const middleware = async (
+  req: NextRequest,
+  event?: any,
+): Promise<NextResponse | Response> => {
+  const nonce = generateCspNonce();
+  const cspValue = buildRequestCsp(nonce);
+
+  // --- DEV AUTH BYPASS ---
+  if (env.auth.bypassEnabled && (env.isDev || env.isCI)) {
+    logMiddlewareDecision(req, "mw_dev_bypass");
+    return applyDocumentCspHeaders(req, nonce, cspValue);
+  }
+
+  // --- FAST PATH FOR PUBLIC INFORMATIONAL ROUTES & PUBLIC APIS ---
+  // Pure public informational pages (home, properties, idea-books) and public health/metric APIs
+  // do not require Clerk authentication or signup guards. Serving them directly avoids blocking
+  // on remote Clerk API roundtrips during boot or offline CI. Sign-up routes delegate to clerkHandler
+  // so registration-blocking and maintenance rules execute.
+  if ((isPublicRoute(req) && !isSignUpRoute(req)) || isPublicApiRoute(req)) {
+    logMiddlewareDecision(
+      req,
+      isPublicRoute(req) ? "mw_allow_public" : "mw_allow_public_api",
+    );
+    return applyDocumentCspHeaders(req, nonce, cspValue);
+  }
+
+  // Delegate all authenticated, internal, and protected routes to clerkMiddleware
+  return (clerkHandler as any)(req, event);
+};
+
 export default middleware;
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and static files, unless found in search params (.html files route through middleware for strict CSP/auth)
-    "/((?!_next|[^?]*\\.(?:css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    // Always run for API routes
-    "/(api|trpc)(.*)",
+    // Skip Next.js internals, /api/healthz liveness probe, and static files, unless found in search params (.html files route through middleware for strict CSP/auth)
+    "/((?!_next|api/healthz|[^?]*\\.(?:css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // Run for API routes, excluding /api/healthz liveness probe
+    "/(api(?!/healthz)|trpc)(.*)",
   ],
 };

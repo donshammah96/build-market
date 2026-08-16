@@ -30,6 +30,11 @@ export type PublicSettings = z.infer<typeof PublicSettingsSchema>;
 let settingsPromise: Promise<PublicSettings> | null = null;
 
 async function fetchPublicSettings(): Promise<PublicSettings> {
+  if (typeof window === "undefined") {
+    // SSR guard: do not attempt relative fetch on server, return safe defaults
+    return PublicSettingsSchema.parse({});
+  }
+
   try {
     const res = await fetch(API_ROUTES.settingsPublic, {
       // Use 'next' or 'cache' options if using Next.js 13+

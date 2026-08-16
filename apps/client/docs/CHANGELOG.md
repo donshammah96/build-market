@@ -46,8 +46,13 @@ This format is based on Keep a Changelog and uses semantic categories:
   - Added short-lived in-memory caching (`10s` TTL for resolved settings, `3s-5s` for fallback/error states) to `resolveSystemSettings`, preventing redundant blocking HTTP subrequests to `/api/internal/system-settings` on every single request.
   - Added URL host normalization replacing `localhost` with `127.0.0.1` when formulating internal resolution URLs, preventing Node `fetch` IPv6 happy-eyeballs connection stalls (`connect ECONNREFUSED ::1:3500`) when the Next.js server binds to IPv4.
   - Exported `clearSystemSettingsCache()` for test isolation and ensured tests bypass cross-test cache pollution.
+- **Middleware Route Fast-Path Dispatch & Matcher Optimization (`middleware.ts`)**:
+  - Excluded `/api/healthz` from `config.matcher` so the pure process liveness probe bypasses middleware and Clerk SDK initialization entirely, guaranteeing <1ms response times without dependencies.
+  - Implemented fast-path dispatch in `middleware.ts` for public informational routes (`/`, `/properties`, `/idea-books`, etc.) and public APIs (`/api/settings/public`, `/api/health`), attaching strict CSP headers immediately while delegating protected routes and sign-up flows (`isSignUpRoute`) to `clerkMiddleware`. This eliminates blocking remote Clerk JWKS/handshake network roundtrips on public page cold renders.
+- **Client Facade SSR Safety (`lib/facades/shared/settings-client.ts`)**:
+  - Added `typeof window === "undefined"` guard to `fetchPublicSettings()`, returning safe schema defaults immediately during server-side rendering and eliminating relative URL fetch failures on the server.
 - **BullMQ TCP Reconnection Backoff Guarding (`packages/redis/src/tcp.ts`)**:
-  - Guarded `retryStrategy` in BullMQ TCP options to terminate reconnection attempts immediately (`return null`) when `DISABLE_BACKGROUND_JOBS="true"` or `QUEUE_PROVIDER="memory"`, and capped offline reconnect attempts to 10. This prevents runaway active libuv TCP socket handle creation during CI preview testing.
+  - Guarded both `retryStrategy` and `reconnectOnError` in BullMQ TCP options to terminate reconnection attempts immediately (`return null` / `return false`) when `DISABLE_BACKGROUND_JOBS="true"` or `QUEUE_PROVIDER="memory"`, and removed `ECONNREFUSED` from fast-reconnect loops. This prevents runaway active libuv TCP socket handle creation during CI preview testing.
 
 ### Changed — Staff-Level UI Redesign (Navbar, Client Sign-Up, Professional Portal & Homepage Discovery) & Canonical Route Migration
 
