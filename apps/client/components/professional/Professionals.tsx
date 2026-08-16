@@ -172,7 +172,7 @@ export const Professionals = memo(function Professionals({
       ref={ref as React.RefObject<HTMLElement>}
       aria-labelledby="professionals-heading"
     >
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 md:px-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-20">
         {/* Header with Navigation Controls */}
         <div className="flex flex-col sm:flex-row justify-between items-end mb-10 gap-6">
           <div
