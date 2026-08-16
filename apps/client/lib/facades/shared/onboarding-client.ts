@@ -4,7 +4,7 @@
  * Client-side interface for the onboarding API endpoints.
  * Replaces direct Server Action imports in "use client" hooks.
  */
-import { API_ROUTES } from "@/lib/links";
+import { API_ROUTES } from "@/lib/routes";
 import { apiFetch } from "@/lib/api-client-utils";
 import type { ApiResponse, OnboardingData } from "@build/types";
 

@@ -5,7 +5,7 @@ import {
   redirectToDashboardForRole,
   redirectToUnauthorizedSignIn,
 } from "@/app/lib/security/middleware/redirect-policy";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 const BASE_URL = "http://localhost:3500";
 

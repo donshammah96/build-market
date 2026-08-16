@@ -1,7 +1,7 @@
 "use client";
 
 import { SignIn, useUser } from "@clerk/nextjs";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getSafeRedirectUrl } from "@/app/lib/security/redirect-url";

@@ -244,6 +244,14 @@ export const QUEUE_REGISTRY: Record<string, QueueRegistryEntry> = {
     onCallOwner: "Verification Team",
     maxAttempts: 3,
   },
+  "archive-settled-records": {
+    queueName: "maintenance-jobs",
+    description:
+      "Archives settled Mpesa transactions and verification cases older than 180 days",
+    schema: CronJobDataSchema,
+    onCallOwner: "Data Platform Team",
+    maxAttempts: 3,
+  },
   "process-export": {
     queueName: "gdpr-data-export",
     description: "Executes GDPR user data compilation and zip export",

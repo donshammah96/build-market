@@ -7,7 +7,7 @@
 import type { ApiResponse } from "@build/types";
 import { apiFetch, ConcurrencyLimiter } from "@/lib/api-client-utils";
 import { FINANCE_CLIENT_CONFIG } from "@/config/finance.config";
-import { API_ROUTES, withQueryParams, type QueryParams } from "@/lib/links";
+import { API_ROUTES, withQueryParams, type QueryParams } from "@/lib/routes";
 import type { z } from "zod";
 import { WithdrawSchema } from "@/validation/finance-validation";
 import type { FinanceStats } from "@/domains/finance";

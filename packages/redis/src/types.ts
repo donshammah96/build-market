@@ -38,5 +38,5 @@ export interface CacheEntry<T> {
 
 export type Serializer<T> = {
   serialize: (value: T) => string;
-  deserialize: (raw: string) => T;
+  deserialize: (raw: string | unknown) => T;
 };

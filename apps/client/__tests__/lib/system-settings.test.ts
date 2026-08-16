@@ -1,5 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const mockRedisGet = vi.fn();
+const mockRedisSet = vi.fn();
+const mockRedisDelete = vi.fn();
+
+vi.mock("@build/redis", () => ({
+  RedisCache: vi.fn().mockImplementation(function (this: any) {
+    this.get = mockRedisGet;
+    this.set = mockRedisSet;
+    this.delete = mockRedisDelete;
+    return this;
+  }),
+  redisCache: {
+    get: mockRedisGet,
+    set: mockRedisSet,
+    delete: mockRedisDelete,
+  },
+}));
+
 vi.mock("@build/db", () => ({
   prisma: {
     systemSettings: {
@@ -14,17 +32,22 @@ import { prisma } from "@build/db";
 const mockFindUnique = vi.mocked(prisma.systemSettings.findUnique);
 const mockQueryRawUnsafe = vi.mocked(prisma.$queryRawUnsafe);
 
-describe("System Settings Service", () => {
+describe("Client System Settings Domain Service", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    const { systemSettingsService } = await import("@build/db/system-settings");
-    systemSettingsService.invalidateCache();
+    mockRedisGet.mockResolvedValue(null);
+    mockRedisSet.mockResolvedValue(undefined);
+    mockRedisDelete.mockResolvedValue(true);
+
+    const { systemSettingsService } =
+      await import("@/app/lib/domains/settings");
+    await systemSettingsService.invalidateCache();
   });
 
   it("getPublicSettings returns defaults when no row exists", async () => {
     mockFindUnique.mockResolvedValue(null as any);
 
-    const { getPublicSettings } = await import("@build/db/system-settings");
+    const { getPublicSettings } = await import("@/app/lib/domains/settings");
     const settings = await getPublicSettings();
 
     expect(settings.maintenanceMode).toBe(false);
@@ -47,7 +70,7 @@ describe("System Settings Service", () => {
       whatsappNumber: "+254700000000",
     } as any);
 
-    const { getPublicSettings } = await import("@build/db/system-settings");
+    const { getPublicSettings } = await import("@/app/lib/domains/settings");
     const settings = await getPublicSettings();
 
     expect(settings.maintenanceMode).toBe(true);
@@ -57,12 +80,46 @@ describe("System Settings Service", () => {
     expect(settings.featureFlags).toEqual({ enableMessaging: true });
     expect(settings).not.toHaveProperty("mpesaConsumerKey");
     expect(settings).not.toHaveProperty("mpesaPasskey");
+    expect(mockRedisSet).toHaveBeenCalledWith(
+      "global",
+      expect.objectContaining({ maintenanceMode: true }),
+      300,
+    );
+  });
+
+  it("serves settings directly from Redis cache without hitting DB", async () => {
+    mockRedisGet.mockResolvedValue({
+      maintenanceMode: false,
+      maintenanceMessage: null,
+      allowedIPs: [],
+      publicSignup: true,
+      allowProfessionalSignup: true,
+      featureFlags: { enableFastSearch: true },
+      supportEmail: "support@buildmarket.app",
+      platformCommission: 8,
+      minWithdrawalKes: 500,
+      maxWithdrawalKes: 200000,
+    });
+
+    const { getFinancialSettings } = await import("@/app/lib/domains/settings");
+    const settings = await getFinancialSettings();
+
+    expect(settings.platformCommission).toBe(8);
+    expect(settings.minWithdrawalKes).toBe(500);
+    expect(mockFindUnique).not.toHaveBeenCalled();
+  });
+
+  it("invalidates Redis distributed cache when invalidateCache is called", async () => {
+    const { invalidateCache } = await import("@/app/lib/domains/settings");
+    await invalidateCache();
+
+    expect(mockRedisDelete).toHaveBeenCalledWith("global");
   });
 
   it("getFinancialSettings returns defaults when no row exists", async () => {
     mockFindUnique.mockResolvedValue(null as any);
 
-    const { getFinancialSettings } = await import("@build/db/system-settings");
+    const { getFinancialSettings } = await import("@/app/lib/domains/settings");
     const settings = await getFinancialSettings();
 
     expect(settings.minWithdrawalKes).toBe(1000);
@@ -80,7 +137,7 @@ describe("System Settings Service", () => {
       currency: "KES",
     } as any);
 
-    const { computePlatformFee } = await import("@build/db/system-settings");
+    const { computePlatformFee } = await import("@/app/lib/domains/settings");
     const fee = await computePlatformFee(1000);
     expect(fee).toBe(100);
   });
@@ -103,7 +160,7 @@ describe("System Settings Service", () => {
       },
     ] as any);
 
-    const { getPublicSettings } = await import("@build/db/system-settings");
+    const { getPublicSettings } = await import("@/app/lib/domains/settings");
     const settings = await getPublicSettings();
 
     expect(settings.maintenanceMode).toBe(true);

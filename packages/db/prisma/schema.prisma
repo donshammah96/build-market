@@ -476,6 +476,7 @@ enum TransactionStatus {
   REVERSED
   REFUNDED
   CANCELLED
+  COMPLETED
 }
 
 enum EscrowStatus {
@@ -1103,7 +1104,7 @@ model AdminProfile {
 }
 
 model AdminAuditLog {
-  id      String  @id @default(uuid())
+  id      String  @default(uuid())
   adminId String?
   admin   User?   @relation("AdminActions", fields: [adminId], references: [id], onDelete: SetNull)
 
@@ -1126,10 +1127,11 @@ model AdminAuditLog {
 
   createdAt DateTime @default(now())
 
-  @@index([adminId])
-  @@index([action])
-  @@index([targetType, targetId])
-  @@index([severity])
+  @@id([id, createdAt])
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([severity, createdAt])
 }
 
 // ========================================================
@@ -2929,7 +2931,7 @@ model UserAnalytics {
 }
 
 model AnalyticsEvent {
-  id         String              @id @default(uuid())
+  id         String              @default(uuid())
   ownerId    String
   entityType AnalyticsEntityType
   entityId   String?
@@ -2942,6 +2944,7 @@ model AnalyticsEvent {
   metadata   Json?
   createdAt  DateTime            @default(now())
 
+  @@id([id, createdAt])
   @@index([ownerId, createdAt])
 }
 
@@ -2996,6 +2999,55 @@ model MpesaTransaction {
   @@index([nextRetryAt]) // Retry job queue
 }
 
+// Cold storage archive for settled M-Pesa transactions (>180 days)
+model MpesaTransactionArchive {
+  id String @default(uuid())
+
+  // Request tracking (idempotency snapshot)
+  merchantRequestId String?
+  checkoutRequestId String?
+  idempotencyKey    String
+
+  // Context
+  userId          String
+  projectId       String?
+  escrowId        String?
+  transactionType MpesaTransactionType
+
+  // Financials
+  amount      Decimal @db.Decimal(10, 2)
+  phoneNumber String
+
+  // Status flow
+  status             TransactionStatus
+  resultCode         String?
+  resultDesc         String?
+  mpesaReceiptNumber String?
+  transactionDate    DateTime?
+
+  // Callback tracking
+  callbackReceivedAt DateTime?
+  callbackPayload    Json?
+
+  // Reversal handling
+  reversalTransactionId String?
+  isReversed            Boolean @default(false)
+
+  // Retries
+  retryCount  Int       @default(0)
+  nextRetryAt DateTime?
+
+  createdAt  DateTime
+  updatedAt  DateTime
+  archivedAt DateTime @default(now())
+
+  @@id([id, archivedAt])
+  @@index([userId, status, archivedAt])
+  @@index([checkoutRequestId, archivedAt])
+  @@index([mpesaReceiptNumber, archivedAt])
+  @@index([archivedAt])
+}
+
 // M-Pesa B2C (Business to Customer) - Payouts to professionals
 model MpesaB2C {
   id String @id @default(uuid())
@@ -3043,7 +3095,7 @@ model ConsentRecord {
 }
 
 model AuditLog {
-  id String @id @default(uuid())
+  id String @default(uuid())
 
   // Who
   actorId        String? // null = system
@@ -3068,6 +3120,7 @@ model AuditLog {
 
   createdAt DateTime @default(now())
 
+  @@id([id, createdAt])
   @@index([actorId, createdAt])
   @@index([entityType, entityId, createdAt])
   @@index([action, createdAt])
@@ -3249,6 +3302,10 @@ enum RegulatorVerificationCaseStatus {
   MANUALLY_VERIFIED // operator decision recorded via RegulatorVerificationDecision
   MANUALLY_REJECTED
   DEAD_LETTER // attempt budget exhausted, requires manual intervention to requeue
+  EXPIRED
+  APPROVED
+  REJECTED
+  PENDING
 }
 
 enum RegulatorVerificationDecisionOutcome {
@@ -3303,6 +3360,48 @@ model RegulatorVerificationCase {
   @@index([authority, licenseNumber]) // duplicate/history lookup for operators
   @@index([professionalId])
   @@index([status, deadLetteredAt])
+}
+
+// Cold storage archive for closed regulator verification cases (>180 days)
+model RegulatorVerificationCaseArchive {
+  id             String               @default(uuid())
+  professionalId String
+  licenseId      String?
+
+  authority     LicenseAuthority
+  licenseNumber String
+
+  dedupeKey String
+
+  status RegulatorVerificationCaseStatus
+
+  attempts         Int      @default(0)
+  maxAttempts      Int      @default(5)
+  nextAttemptAt    DateTime
+  deadLetteredAt   DateTime?
+  deadLetterReason String?
+
+  confidence                 Float?
+  confidenceReasons          Json?   @db.JsonB
+  confidenceAlgorithmVersion String?
+  confidenceBreakdown        Json?   @db.JsonB
+  evidence                   Json?   @db.JsonB
+  retryable                  Boolean @default(false)
+  retryAfterSeconds          Int?
+  manualFallbackReason       String?
+
+  correlationId String?
+  requestedAt   DateTime
+  completedAt   DateTime?
+
+  createdAt  DateTime
+  updatedAt  DateTime
+  archivedAt DateTime @default(now())
+
+  @@id([id, archivedAt])
+  @@index([authority, licenseNumber, archivedAt])
+  @@index([professionalId, archivedAt])
+  @@index([archivedAt])
 }
 
 // Immutable manual decision trail. Never updated in place - a correction is a

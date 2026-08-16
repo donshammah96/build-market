@@ -5,7 +5,7 @@ const mockCreate = vi.hoisted(() => vi.fn());
 const mockAggregate = vi.hoisted(() => vi.fn());
 const mockEnforceClientMutationPolicy = vi.hoisted(() => vi.fn());
 
-vi.mock("@build/db/system-settings", () => ({
+vi.mock("@/app/lib/domains/settings", () => ({
   getFinancialSettings: (...args: unknown[]) =>
     mockGetFinancialSettings(...args),
 }));

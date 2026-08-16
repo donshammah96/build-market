@@ -221,11 +221,14 @@ export const Footer = memo(function Footer() {
               Resources
             </h3>
             <ul className="space-y-3">
+              <FooterLink href={ROUTES.professional}>
+                For Professionals
+              </FooterLink>
               <FooterLink href={ROUTES.joinAsPro}>Join as a Pro</FooterLink>
-              <FooterLink href={ROUTES.ideaBooks}>Idea Books</FooterLink>
               <FooterLink href={ROUTES.findProfessional}>
                 Find Professionals
               </FooterLink>
+              <FooterLink href={ROUTES.ideaBooks}>Idea Books</FooterLink>
               <FooterLink href={ROUTES.home}>Help Center</FooterLink>
             </ul>
           </nav>

@@ -28,7 +28,7 @@ import { useProfileStatus } from "@/hooks/useProfileStatus";
 import { useClientDashboard } from "@/hooks/useClientDashboard";
 import { useNotifications } from "@/hooks/useNotifications";
 import { cn } from "@/lib/utils";
-import { ROUTES, getProjectUrl, getIdeaBookUrl } from "@/lib/links";
+import { ROUTES, getProjectUrl, getIdeaBookUrl } from "@/lib/routes";
 import { DashboardSkeleton } from "./_components/dashboard-skeleton";
 import { EmptyState } from "./_components/empty-state";
 import { QuickLink } from "./_components/quick-link";

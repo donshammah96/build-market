@@ -26,7 +26,7 @@ import {
 } from "@/app/lib/validation/onboarding";
 import { COUNTY_LABELS } from "@/types/store";
 import { useOnboardingAnalytics } from "@/lib/analytics/OnboardingAnalyticsContext";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 export const SECURITY_PERSISTENCE_ALLOWLIST = [
   "county",

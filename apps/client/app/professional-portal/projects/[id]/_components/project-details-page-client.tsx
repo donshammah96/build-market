@@ -15,7 +15,7 @@ import {
   usePortalProject,
   useUpdatePortalProject,
 } from "@/hooks/useProjects";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 import { ClientDate } from "./client-date";
 import { ClientNumber } from "./client-number";

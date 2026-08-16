@@ -1,5 +1,5 @@
 import { prisma } from "@build/db";
-import { getFinancialSettings } from "@build/db/system-settings";
+import { getFinancialSettings } from "@/app/lib/domains/settings";
 import { ok, err } from "@/app/lib/errors/result";
 import { toFinanceDto } from "./mappers";
 import { normalizeRole } from "@/app/lib/security/roles";

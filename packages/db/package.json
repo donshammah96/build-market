@@ -31,6 +31,7 @@
   "author": "Don Shammah",
   "license": "ISC",
   "dependencies": {
+    "@build/types": "workspace:*",
     "@prisma/adapter-pg": "^7.6.0",
     "@prisma/client": "catalog:",
     "pg": "^8.18.0",

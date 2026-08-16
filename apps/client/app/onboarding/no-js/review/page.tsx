@@ -10,7 +10,7 @@ import {
   clearOnboardingNoJsSession,
   readOnboardingNoJsSession,
 } from "@/app/lib/infrastructure/onboarding-nojs-session";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 type NoJsReviewPageProps = {
   searchParams?: Promise<{

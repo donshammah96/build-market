@@ -1,4 +1,4 @@
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 export interface Review {
   id: string;

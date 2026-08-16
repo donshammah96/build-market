@@ -31,7 +31,7 @@ import {
   resolveClientType,
   type ClientTypeComplianceRouting,
 } from "./client-type-compliance";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import {
   professionalReadinessService,
   type ProfessionalCapabilities,

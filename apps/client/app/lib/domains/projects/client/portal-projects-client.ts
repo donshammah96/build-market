@@ -1,6 +1,6 @@
 import type { ApiResponse } from "@build/types";
 import { isValidId } from "@/lib/utils/validators";
-import { API_ROUTES } from "@/lib/links";
+import { API_ROUTES } from "@/lib/routes";
 import { apiFetch } from "@/app/lib/domains/projects/client/http-client";
 import type { ConcurrencyLimiter } from "@/app/lib/domains/projects/client/concurrency-limiter";
 import type {

@@ -18,7 +18,7 @@ vi.mock("@build/db", () => ({
   prisma: prismaMock,
 }));
 
-vi.mock("@build/db/system-settings", () => ({
+vi.mock("@/app/lib/domains/settings", () => ({
   getFinancialSettings: getFinancialSettingsMock,
 }));
 

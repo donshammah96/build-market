@@ -3,7 +3,7 @@
 import { memo, useMemo } from "react";
 import { features as allFeatures, type Feature } from "../../app/data/homeData";
 import FeatureCard from "./FeatureCard";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import {
   useIntersectionObserver,
   useShouldAnimate,
@@ -74,7 +74,7 @@ export const FeaturesSection = memo(function FeaturesSection({
         >
           <h2
             id="features-heading"
-            className="text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mb-4 tracking-tight"
+            className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mb-4 tracking-tight"
           >
             Everything you need to{" "}
             <span className="text-primary">build better.</span>

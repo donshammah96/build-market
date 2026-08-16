@@ -9,7 +9,7 @@
  *           └── Domain Layer (app/lib/domains/leads/service.ts)
  *                 └── Prisma (Lead)
  */
-import { API_ROUTES } from "@/lib/links";
+import { API_ROUTES } from "@/lib/routes";
 import { apiFetch } from "@/lib/api-client-utils";
 import type { ApiResponse } from "@build/types";
 import type { z } from "zod";

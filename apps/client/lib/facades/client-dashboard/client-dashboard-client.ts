@@ -7,7 +7,7 @@
  *     └── API Routes (/api/client/dashboard)
  *           └── client-dashboard domain (app/lib/domains/client-dashboard)
  */
-import { API_ROUTES } from "@/lib/links";
+import { API_ROUTES } from "@/lib/routes";
 import { apiFetch } from "@/lib/api-client-utils";
 import type { ApiResponse } from "@build/types";
 

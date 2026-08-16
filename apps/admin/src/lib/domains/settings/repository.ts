@@ -1,5 +1,5 @@
 import { prisma } from "@build/db";
-import { invalidateCache } from "@build/db/system-settings";
+import { RedisCache } from "@build/redis";
 import { revalidatePath } from "next/cache";
 import type { SystemSettings, UpdateSettingsInput } from "./contracts";
 
@@ -76,7 +76,14 @@ export const settingsRepository = {
       create: { id: "global", ...data },
     });
 
-    invalidateCache();
+    // Distributed cache invalidation across client and admin nodes
+    try {
+      const redisCache = new RedisCache<SystemSettings>("settings:system");
+      await redisCache.delete("global");
+    } catch {
+      // Non-blocking in environments where Redis is not configured
+    }
+
     revalidatePath("/settings");
 
     return {

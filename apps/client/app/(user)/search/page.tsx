@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSearchProfessionals } from "@/hooks/useSearchProfessionals";
-import { getProfessionalUrl } from "@/lib/links";
+import { getProfessionalUrl } from "@/lib/routes";
 import type { SearchProfessionalResultDto } from "@/app/lib/domains/search/contracts";
 
 export default function SearchPage() {

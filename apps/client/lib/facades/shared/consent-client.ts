@@ -1,6 +1,6 @@
 import type { ApiResponse } from "@build/types";
 import { apiFetch } from "@/lib/api-client-utils";
-import { API_ROUTES } from "@/lib/links";
+import { API_ROUTES } from "@/lib/routes";
 
 export type ConsentTypeValue =
   "ANALYTICS_COOKIES" | "MARKETING_EMAIL" | "MARKETING_SMS";

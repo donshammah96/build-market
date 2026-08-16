@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 type JoinAsProIntentLinkProps = {
   children: ReactNode;

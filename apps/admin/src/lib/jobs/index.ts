@@ -40,6 +40,11 @@ import {
   createGdprErasureWorker,
   erasureQueue,
 } from "./gdpr-erasure";
+import {
+  scheduleSettledRecordsArchival,
+  createSettledRecordsArchivalWorker,
+  settledRecordsArchivalQueue,
+} from "./settled-records-archival";
 import { Worker, Queue } from "bullmq";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 
@@ -83,6 +88,7 @@ export async function initializeAllSchedulers(): Promise<void> {
       scheduleAssetCleanup(),
       scheduleLicenseExpiry(),
       scheduleGdprErasure(),
+      scheduleSettledRecordsArchival(),
     ]);
 
     logger.info("All jobs scheduled");
@@ -95,6 +101,7 @@ export async function initializeAllSchedulers(): Promise<void> {
       createAssetCleanupWorker(),
       createLicenseExpiryWorker(),
       createGdprErasureWorker(),
+      createSettledRecordsArchivalWorker(),
     ];
 
     logger.info("All workers created");
@@ -144,6 +151,7 @@ export async function shutdownAllSchedulers(): Promise<void> {
       assetCleanupQueue.close(),
       licenseExpiryQueue.close(),
       erasureQueue.close(),
+      settledRecordsArchivalQueue.close(),
     ]);
 
     workers = [];
@@ -173,6 +181,7 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
     { name: "Asset Cleanup", queue: assetCleanupQueue },
     { name: "License Expiry", queue: licenseExpiryQueue },
     { name: "GDPR Erasure", queue: erasureQueue },
+    { name: "Settled Records Archival", queue: settledRecordsArchivalQueue },
   ];
 
   for (const { name, queue } of queues) {
@@ -218,7 +227,8 @@ export async function triggerJob(
     | "anonymization-batch"
     | "asset-cleanup"
     | "license-expiry"
-    | "gdpr-erasure",
+    | "gdpr-erasure"
+    | "settled-records-archival",
 ): Promise<{ success: boolean; jobId?: string; error?: string }> {
   const correlationId = CorrelationIdManager.generate();
   CorrelationIdManager.set(correlationId);
@@ -254,6 +264,10 @@ export async function triggerJob(
       case "gdpr-erasure":
         queue = erasureQueue;
         jobName = "process-pending-erasures";
+        break;
+      case "settled-records-archival":
+        queue = settledRecordsArchivalQueue;
+        jobName = "archive-settled-records";
         break;
       default:
         return { success: false, error: `Unknown job type: ${jobType}` };
@@ -317,6 +331,7 @@ export async function healthCheck(): Promise<{
     "asset-cleanup",
     "license-expiry",
     "gdpr-erasure",
+    "settled-records-archival",
   ] as const;
   for (let i = 0; i < workers.length; i++) {
     const worker = workers[i];
@@ -351,4 +366,5 @@ export {
   scheduleAssetCleanup,
   scheduleLicenseExpiry,
   scheduleGdprErasure,
+  scheduleSettledRecordsArchival,
 };

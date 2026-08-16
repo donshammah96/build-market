@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useUser, useClerk } from "@clerk/nextjs";
-import { ROUTES, dashboardForRole } from "@/lib/links";
+import { ROUTES, dashboardForRole } from "@/lib/routes";
 import { env } from "@/app/lib/infrastructure/env";
 import { isBlockedUserStatus } from "@build/enums";
 import { isClaimFresh } from "@build/security-clerk";

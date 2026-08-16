@@ -8,7 +8,7 @@ import {
   OnboardingAnalyticsProvider,
   NullAnalytics,
 } from "@/lib/analytics/OnboardingAnalyticsContext";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 const mockReplace = vi.hoisted(() => vi.fn());
 const mockPush = vi.hoisted(() => vi.fn());

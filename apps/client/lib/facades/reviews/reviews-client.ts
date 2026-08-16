@@ -3,7 +3,7 @@
  *
  * Client-side facade for the public reviews API.
  */
-import { API_ROUTES } from "@/lib/links";
+import { API_ROUTES } from "@/lib/routes";
 import { apiFetch } from "@/lib/api-client-utils";
 import type { ApiResponse } from "@build/types";
 

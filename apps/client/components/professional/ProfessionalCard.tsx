@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 import { ImageWithFallback } from "@/app/lib/media/ImageWithFallback";
-import { getProfessionalUrl } from "@/lib/links";
+import { getProfessionalUrl } from "@/lib/routes";
 import { ProfessionalCardData } from "@/types/professional";
 import { getProfessionLabel } from "@/lib/constants/professionalCategories";
 import { cn } from "@/lib/utils";

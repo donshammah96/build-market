@@ -62,7 +62,7 @@ vi.mock("@/app/lib/api/resilient-api", () => ({
 // ---------------------------------------------------------------------------
 import { prisma } from "@build/db";
 import { GET } from "@/app/api/internal/system-settings/route";
-import { systemSettingsService } from "@build/db/system-settings";
+import { systemSettingsService } from "@/app/lib/domains/settings";
 import { checkRateLimit } from "@/app/lib/api/rate-limit";
 import { ensureValidInternalSecret } from "@/app/lib/security/internal-secret";
 

@@ -1,6 +1,6 @@
 import { professionals as allProfessionals } from "../../app/data/homeData";
 import Link from "next/link";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import Image from "next/image";
 import { FC } from "react";
 

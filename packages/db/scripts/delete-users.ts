@@ -1,6 +1,5 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import "../prisma/load-env";
+import { prisma, disconnectDatabase, UserRole } from "../lib/prisma";
 
 async function deleteAllUsers() {
   try {
@@ -8,10 +7,10 @@ async function deleteAllUsers() {
 
     // Count before deletion
     const clientsBefore = await prisma.user.count({
-      where: { role: "client" },
+      where: { role: UserRole.CLIENT },
     });
     const professionalsBefore = await prisma.user.count({
-      where: { role: "professional" },
+      where: { role: UserRole.PROFESSIONAL },
     });
 
     console.log(
@@ -26,21 +25,23 @@ async function deleteAllUsers() {
     // Delete clients
     console.log("Deleting clients...");
     const deletedClients = await prisma.user.deleteMany({
-      where: { role: "client" },
+      where: { role: UserRole.CLIENT },
     });
     console.log(`✅ Deleted ${deletedClients.count} clients\n`);
 
     // Delete professionals
     console.log("Deleting professionals...");
     const deletedProfessionals = await prisma.user.deleteMany({
-      where: { role: "professional" },
+      where: { role: UserRole.PROFESSIONAL },
     });
     console.log(`✅ Deleted ${deletedProfessionals.count} professionals\n`);
 
     // Verify
-    const clientsAfter = await prisma.user.count({ where: { role: "client" } });
+    const clientsAfter = await prisma.user.count({
+      where: { role: UserRole.CLIENT },
+    });
     const professionalsAfter = await prisma.user.count({
-      where: { role: "professional" },
+      where: { role: UserRole.PROFESSIONAL },
     });
 
     console.log("Verification:");
@@ -56,7 +57,7 @@ async function deleteAllUsers() {
     console.error("❌ Error:", error);
     throw error;
   } finally {
-    await prisma.$disconnect();
+    await disconnectDatabase();
   }
 }
 

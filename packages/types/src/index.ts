@@ -11,6 +11,7 @@ export * from "./project.js";
 export * from "./review.js";
 export * from "./search.js";
 export * from "./documents.js";
+export * from "./settings.js";
 // Export Store but not Product from store.ts since Product is already exported from product.ts
 export type { Store } from "./store.js";
 export { StoreSchema, ProductSchema } from "./store.js";

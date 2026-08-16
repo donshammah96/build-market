@@ -4,7 +4,7 @@ import {
   skipProfessionalOnboarding,
   submitOnboarding,
 } from "@/app/actions/onboarding";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 vi.mock("server-only", () => ({}));
 

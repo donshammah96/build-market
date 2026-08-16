@@ -29,7 +29,7 @@
     "next.config.ts",
     ".next/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "docs", ".next"],
+  "exclude": ["node_modules", "docs", ".next", ".next/**/*"],
   "references": [
     { "path": "../../packages/resilience" },
     { "path": "../../packages/db" },
