@@ -1,6 +1,10 @@
 /**
  * System Settings Service
  *
+ * @deprecated Per ADR-002 and ADR-003, business domain services and in-memory caches
+ * should not reside inside `@build/db`. This module is retained for backward compatibility.
+ * Prefer domain-specific service layers in `apps/client` or `apps/admin` backed by `@build/redis`.
+ *
  * Provides cached access to SystemSettings from the database.
  * Uses Zod for runtime validation and type inference.
  * Implements a Singleton pattern for efficient caching.

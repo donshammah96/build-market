@@ -1,6 +1,5 @@
-import { PrismaClient, ConsentType } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import "../prisma/load-env";
+import { prisma, disconnectDatabase, ConsentType } from "../lib/prisma";
 
 async function main() {
   console.log("Starting GDPR Consent Backfill...");
@@ -62,5 +61,6 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await disconnectDatabase();
   });
+

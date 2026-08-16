@@ -1,5 +1,11 @@
-import "./prisma/load-env";
-import { prisma } from "./lib/prisma";
+import "../prisma/load-env";
+import {
+  prisma,
+  disconnectDatabase,
+  UserRole,
+  UserStatus,
+  AdminRole,
+} from "../lib/prisma";
 
 async function grantAdminAccess() {
   const clerkId = process.env.GRANT_ADMIN_CLERK_ID || process.argv[2];
@@ -30,8 +36,8 @@ async function grantAdminAccess() {
       data: {
         clerkId,
         email,
-        role: "ADMIN",
-        status: "ACTIVE",
+        role: UserRole.ADMIN,
+        status: UserStatus.ACTIVE,
       },
     });
     console.log(`✅ Created User record: ${user.id}`);
@@ -50,11 +56,11 @@ async function grantAdminAccess() {
     where: { userId: user.id },
     create: {
       userId: user.id,
-      role: "SUPER_ADMIN",
+      role: AdminRole.SUPER_ADMIN,
       isActive: true,
     },
     update: {
-      role: "SUPER_ADMIN",
+      role: AdminRole.SUPER_ADMIN,
       isActive: true,
     },
   });
@@ -75,5 +81,6 @@ grantAdminAccess()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await disconnectDatabase();
   });
+
