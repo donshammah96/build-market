@@ -18,6 +18,7 @@
 - **System Settings Domain Realignment, Distributed `@build/redis` Caching, & Complete DB Facade Deprecation (`packages/types/src/settings.ts`, `apps/client/app/lib/domains/settings/`, `packages/db/lib/system-settings.ts`, `apps/admin/src/lib/domains/settings/repository.ts`)**:
   - Extracted `DEFAULT_VERIFICATION_RULES`, `DEFAULT_PUBLIC_SETTINGS`, `DEFAULT_FINANCIAL_SETTINGS`, and all Zod validation schemas out of `packages/db` into canonical `@build/types`.
   - Implemented multi-layer caching architecture in `apps/client/app/lib/domains/settings/service.ts`: L1 in-memory LRU cache (10s TTL) for fast intra-process hits, L2 distributed `@build/redis` cache (300s TTL) on namespace `settings:system` for cross-node consistency, with automatic fail-safe fallback to PostgreSQL and hardcoded defaults.
+  - Hardened `@build/redis` deserialization (`packages/redis/src/cache.ts`) to handle both auto-parsed JavaScript objects and raw JSON strings without throwing syntax errors.
   - Wired distributed Redis cache invalidation in `apps/admin/src/lib/domains/settings/repository.ts` (`settingsRepository.upsertGlobal()`), ensuring settings updates immediately invalidate cache across all client and admin worker instances.
   - Fully deprecated `packages/db/lib/system-settings.ts` per ADR-002 and ADR-003, migrating all call-sites in `apps/client` (`api/internal/system-settings`, `api/settings/public`, `domains/finance`) and `apps/admin` (`domains/settings/repository.ts`) to domain boundaries.
 - **Lazy Proxy Driver & HMR Pool Caching (`packages/db/lib/prisma.ts`)**:
