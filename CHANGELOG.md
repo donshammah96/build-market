@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Added — Database Package Hardening, PostgreSQL Log Range Partitioning, & Settled Records Archival Worker
+
+- **PostgreSQL Declarative Monthly Range Partitioning (`packages/db/prisma/migrations/20260816050000_partition_high_velocity_logs/migration.sql`)**:
+  - Implemented zero-downtime table swap DDL converting append-only tables (`AdminAuditLog`, `AuditLog`, `AnalyticsEvent`) to PostgreSQL declarative range-partitioned tables partitioned by `RANGE (createdAt)`.
+  - Updated Prisma schema models to composite primary keys `@@id([id, createdAt])` and created partition-local bounded query indexes.
+  - Pre-created monthly partitions for `y2026m08`, `y2026m09`, `y2026m10`, and fallback `_default` partitions.
+- **Cold Storage Archive Tables & Idempotency Protection (`packages/db/prisma/schema.prisma`, `packages/db/prisma/migrations/20260816060000_create_settled_records_archive/migration.sql`)**:
+  - Created range-partitioned cold storage models `MpesaTransactionArchive` and `RegulatorVerificationCaseArchive` (`@@id([id, archivedAt])`) to store settled records older than 180 days.
+  - Preserved active tables `MpesaTransaction` and `RegulatorVerificationCase` as unpartitioned to enforce global B-Tree `UNIQUE` constraints (`checkoutRequestId`, `merchantRequestId`, `idempotencyKey`, `dedupeKey`).
+- **Monthly Settled Records Archival Worker (`apps/admin/src/lib/jobs/settled-records-archival.ts`, `apps/admin/src/lib/jobs/index.ts`)**:
+  - Implemented monthly background job (`archive-settled-records`) on queue `maintenance-jobs` running on schedule `0 4 1 * *` with exponential backoff.
+  - Automatically queries and offloads settled `MpesaTransaction` records (`COMPLETED`, `FAILED`, `REVERSED`, `CANCELLED`) and closed `RegulatorVerificationCase` records (`APPROVED`, `REJECTED`, `EXPIRED`, `DEAD_LETTERED`) older than 180 days via batched transactions (`ARCHIVAL_BATCH_SIZE = 250`).
+  - Integrated OpenTelemetry structured metrics (`jobAttemptCounter`, `jobDurationHistogram`), registered job schema in `src/lib/queues/queue-registry.ts`, and added unit test suite `src/lib/jobs/__tests__/settled-records-archival.test.ts` (100% passing).
+- **System Settings Domain Extraction to `@build/types` (`packages/types/src/settings.ts`, `packages/db/lib/system-settings.ts`)**:
+  - Extracted `DEFAULT_VERIFICATION_RULES`, `DEFAULT_PUBLIC_SETTINGS`, `DEFAULT_FINANCIAL_SETTINGS`, and all Zod validation schemas out of `packages/db` into `@build/types`, establishing a clean backwards-compatible facade in `@build/db` per ADR-002 and ADR-003.
+- **Lazy Proxy Driver & HMR Pool Caching (`packages/db/lib/prisma.ts`)**:
+  - Implemented lazy `Proxy` initialization on `prisma` client, preventing build-time connection crashes when `DATABASE_URL` is unpopulated.
+  - Cached `pg.Pool` and `PrismaClient` on `globalThis` to eliminate TCP socket leaks across Next.js Fast Refresh cycles.
+  - Exported `disconnectDatabase()` for graceful pool draining during test teardown.
+- **Administrative Script Modernization & Cleanup (`packages/db/scripts/`)**:
+  - Standardized default PostgreSQL port `5432` and clean user `buildmarket_user` in PowerShell setup scripts, typed Prisma enums in administrative scripts, and removed redundant `packages/db/prisma/prisma.config.ts` and orphan `packages/db/migrations/` directory.
+
 ### Changed — Workspace Agent Configurations & Architecture Directory Hygiene
 
 - **Agent Workspace Separation & Cleanup (`.agent/`, `.agents/`)**:

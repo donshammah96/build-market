@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added — Monthly Settled Records Archival Background Worker & Queue Integration
+
+- **Settled Records Archival Worker (`src/lib/jobs/settled-records-archival.ts`, `src/lib/jobs/index.ts`)**:
+  - Implemented monthly background job (`archive-settled-records`) on queue `maintenance-jobs` running on schedule `0 4 1 * *` (4 AM on the 1st of every month) with exponential backoff.
+  - Automatically queries and moves settled `MpesaTransaction` records (`COMPLETED`, `FAILED`, `REVERSED`, `CANCELLED`) older than 180 days to `MpesaTransactionArchive`.
+  - Automatically queries and moves closed `RegulatorVerificationCase` records (`APPROVED`, `REJECTED`, `EXPIRED`, `DEAD_LETTERED`) older than 180 days to `RegulatorVerificationCaseArchive`.
+  - Implemented batched transaction migrations (`ARCHIVAL_BATCH_SIZE = 250`) with transactional insert-and-delete to eliminate index bloat while preserving global database idempotency.
+  - Integrated OpenTelemetry structured metrics (`jobAttemptCounter`, `jobDurationHistogram`) and registered job schema in `src/lib/queues/queue-registry.ts`.
+  - Added unit test suite `src/lib/jobs/__tests__/settled-records-archival.test.ts` (100% passing).
+- **Environment Schema Extension (`src/lib/infrastructure/env-schema.ts`, `.env.development`, `.env.test`, `.env.example`)**:
+  - Added optional `SETTLED_ARCHIVAL_CRON` and `SETTLED_ARCHIVAL_BATCH_SIZE` configuration variables to `adminBaseEnvSchema`.
+
 ### Changed — env-wrapper.ts, route-auth.ts
 
 - **`env-wrapper.ts`**: unified `DEV_ADMIN_BYPASS` handling onto `@build/env-validation`'s `resolveDevAuthBypass` (canonical `AUTH_DEV_BYPASS` with backward-compatible fallback to the legacy `DEV_ADMIN_BYPASS` this app used exclusively before), replacing the hand-rolled fail-closed-in-prod check. Corrected the stale comment claiming `redirect-url.ts` doesn't check `env.clientAppUrl` — `@build/security-clerk`'s shared `getSafeRedirectUrl()` now checks it as one of its four allow-listed origins, and apps/client's `redirect-url.ts` already passes it in. Wired `NEXT_PUBLIC_CLERK_FRONTEND_API` as an explicit override ahead of the publishable-key decode fallback (§4.3) — flagged that this assumes `env-schema.ts` has (or gains) a matching optional Zod field, since that file wasn't in scope for this change.
