@@ -11,6 +11,9 @@
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AdminAuditLog') THEN
+        IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_schema = 'public' AND table_name = 'AdminAuditLog' AND constraint_name = 'AdminAuditLog_pkey') THEN
+            ALTER TABLE "AdminAuditLog" RENAME CONSTRAINT "AdminAuditLog_pkey" TO "AdminAuditLog_old_pkey";
+        END IF;
         ALTER TABLE "AdminAuditLog" RENAME TO "AdminAuditLog_old";
     END IF;
 END $$;
@@ -49,7 +52,16 @@ CREATE TABLE "AdminAuditLog_default" PARTITION OF "AdminAuditLog" DEFAULT;
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AdminAuditLog_old') THEN
-        INSERT INTO "AdminAuditLog" SELECT * FROM "AdminAuditLog_old";
+        INSERT INTO "AdminAuditLog" (
+            "id", "adminId", "adminName", "adminEmail", "adminRole",
+            "action", "severity", "status", "targetId", "targetType",
+            "details", "reason", "ipAddress", "userAgent", "requestId", "createdAt"
+        )
+        SELECT
+            "id", "adminId", "adminName", "adminEmail", "adminRole",
+            "action", "severity", "status", "targetId", "targetType",
+            "details", "reason", "ipAddress", "userAgent", "requestId", "createdAt"
+        FROM "AdminAuditLog_old";
         DROP TABLE "AdminAuditLog_old";
     END IF;
 END $$;
@@ -66,6 +78,9 @@ CREATE INDEX "AdminAuditLog_severity_createdAt_idx" ON "AdminAuditLog" ("severit
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AuditLog') THEN
+        IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_schema = 'public' AND table_name = 'AuditLog' AND constraint_name = 'AuditLog_pkey') THEN
+            ALTER TABLE "AuditLog" RENAME CONSTRAINT "AuditLog_pkey" TO "AuditLog_old_pkey";
+        END IF;
         ALTER TABLE "AuditLog" RENAME TO "AuditLog_old";
     END IF;
 END $$;
@@ -102,7 +117,14 @@ CREATE TABLE "AuditLog_default" PARTITION OF "AuditLog" DEFAULT;
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AuditLog_old') THEN
-        INSERT INTO "AuditLog" SELECT * FROM "AuditLog_old";
+        INSERT INTO "AuditLog" (
+            "id", "actorId", "actorType", "actorEmail", "actorFirstName", "actorLastName",
+            "action", "entityType", "entityId", "changes", "metadata", "legalBasis", "consentId", "createdAt"
+        )
+        SELECT
+            "id", "actorId", "actorType", "actorEmail", "actorFirstName", "actorLastName",
+            "action", "entityType", "entityId", "changes", "metadata", "legalBasis", "consentId", "createdAt"
+        FROM "AuditLog_old";
         DROP TABLE "AuditLog_old";
     END IF;
 END $$;
@@ -119,6 +141,9 @@ CREATE INDEX "AuditLog_legalBasis_createdAt_idx" ON "AuditLog" ("legalBasis", "c
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AnalyticsEvent') THEN
+        IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_schema = 'public' AND table_name = 'AnalyticsEvent' AND constraint_name = 'AnalyticsEvent_pkey') THEN
+            ALTER TABLE "AnalyticsEvent" RENAME CONSTRAINT "AnalyticsEvent_pkey" TO "AnalyticsEvent_old_pkey";
+        END IF;
         ALTER TABLE "AnalyticsEvent" RENAME TO "AnalyticsEvent_old";
     END IF;
 END $$;
@@ -153,7 +178,14 @@ CREATE TABLE "AnalyticsEvent_default" PARTITION OF "AnalyticsEvent" DEFAULT;
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AnalyticsEvent_old') THEN
-        INSERT INTO "AnalyticsEvent" SELECT * FROM "AnalyticsEvent_old";
+        INSERT INTO "AnalyticsEvent" (
+            "id", "ownerId", "entityType", "entityId", "eventType",
+            "viewerId", "sessionId", "ipAddress", "userAgent", "source", "metadata", "createdAt"
+        )
+        SELECT
+            "id", "ownerId", "entityType", "entityId", "eventType",
+            "viewerId", "sessionId", "ipAddress", "userAgent", "source", "metadata", "createdAt"
+        FROM "AnalyticsEvent_old";
         DROP TABLE "AnalyticsEvent_old";
     END IF;
 END $$;
