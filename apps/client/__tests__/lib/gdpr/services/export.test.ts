@@ -7,44 +7,49 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
-  mockPrismaSuccess,
   generateMockExport,
   generateTestDate,
   generateTestUUID,
-  mockBullMQQueueSuccess,
 } from "@/__tests__/mocks";
 
-describe("ExportService", { timeout: 30000 }, () => {
-  let ExportService: any;
-  let mockPrisma: ReturnType<typeof mockPrismaSuccess>;
-  let addExportJobMock: ReturnType<typeof vi.fn>;
-  let exportQueueMock: any;
+const { mockPrisma, addExportJobMock, exportQueueMock } = vi.hoisted(() => ({
+  mockPrisma: {
+    dataExport: {
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
+  },
+  addExportJobMock: vi.fn(),
+  exportQueueMock: {
+    add: vi.fn(),
+    getJob: vi.fn(),
+    close: vi.fn(),
+  },
+}));
 
-  beforeEach(async () => {
-    vi.resetModules();
-    mockPrisma = mockPrismaSuccess();
-    addExportJobMock = vi.fn();
-    exportQueueMock = mockBullMQQueueSuccess();
+vi.mock("@build/db", () => ({
+  prisma: mockPrisma,
+}));
 
-    vi.doMock("@build/db", () => ({
-      prisma: mockPrisma,
-    }));
+vi.mock("@build/queue-server", () => ({
+  addExportJob: addExportJobMock,
+  exportQueue: exportQueueMock,
+  getExportQueue: () => exportQueueMock,
+}));
 
-    // Mock both @build/queue-server and @/app/jobs/export-queue to ensure all BullMQ calls are intercepted
-    vi.doMock("@build/queue-server", () => ({
-      addExportJob: addExportJobMock,
-      exportQueue: exportQueueMock,
-      getExportQueue: () => exportQueueMock,
-    }));
-    vi.doMock("@/app/jobs/export-queue", () => ({
-      addExportJob: addExportJobMock,
-      exportQueue: exportQueueMock,
-      getExportQueue: () => exportQueueMock,
-    }));
+vi.mock("@/app/jobs/export-queue", () => ({
+  addExportJob: addExportJobMock,
+  exportQueue: exportQueueMock,
+  getExportQueue: () => exportQueueMock,
+}));
 
-    const serviceModule =
-      await import("@/app/lib/gdpr/services/export.service");
-    ExportService = serviceModule.ExportService;
+import { ExportService } from "@/app/lib/gdpr/services/export.service";
+
+describe("ExportService", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
   describe("requestExport", () => {

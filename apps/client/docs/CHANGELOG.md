@@ -37,6 +37,10 @@ This format is based on Keep a Changelog and uses semantic categories:
 - **CI Smoke Gate Infrastructure Parity (`.github/workflows/ci.yml`)**:
   - Added `redis:7-alpine` service container and `DISABLE_BACKGROUND_JOBS: "true"` to `client-preview-smoke-gate`, matching `admin-preview-smoke-gate`.
   - Hardened diagnostic signal resolution in `ci.yml` using `fuser`/`pgrep` to ensure `SIGUSR2` reliably triggers Node diagnostic reporting on `next start` process trees during smoke checks.
+- **CI Smoke Gate Webhook Relay Decoupling (`.github/workflows/ci.yml`)**:
+  - Removed rogue `smee-client` webhook relay (`https://buildmarket.live/ci -> http://127.0.0.1:3500/api/clerk-webhook`) running in `client-preview-smoke-gate`. The background relay flooded port 3500 with over 10,000 active TCP connections upon server port binding, saturating the Node.js event loop and causing the 15-second `curl` root-route probe to time out with 0 bytes received.
+- **GDPR Export Service Test Hoisted Mock Optimization (`__tests__/lib/gdpr/services/export.test.ts`)**:
+  - Replaced dynamic `vi.resetModules()` and per-test `vi.doMock` inside `beforeEach` with static `vi.hoisted()` and top-level `vi.mock()` definitions. Prevents repeated full module graph re-evaluation in test worker loops, reducing suite execution time from 7,600ms to 44ms and eliminating Vitest 10,000ms hook timeout failures during full parallel monorepo test runs.
 - **Root Layout Clerk Dynamic Gating (`app/layout.tsx`)**:
   - Removed `dynamic` prop from `<ClerkProvider nonce={nonce}>` in [`app/layout.tsx`](file:///c:/Users/User/build-market/apps/client/app/layout.tsx). The `dynamic` flag forced Clerk SDK to attempt synchronous server-side auth verification on every request during SSR. In preview builds (`NODE_ENV=production`) with test placeholder keys or restricted egress, this triggered blocking external JWKS/handshake fetches, stalling root layout HTML delivery.
 - **Homepage Registration Form SSR Gating (`components/forms/RegisterForm.tsx`, `components/home/Hero.tsx`)**:

@@ -680,12 +680,6 @@ jobs:
         # step in the future is automatically included here without a CI change.
         run: pnpm --filter="client..." run build
 
-      - name: Start Clerk Webhook Relay (smee-client)
-        run: |
-          nohup npx --yes smee-client -u https://buildmarket.live/ci -t http://127.0.0.1:3500/api/clerk-webhook > /tmp/clerk-webhook-relay.log 2>&1 &
-          echo $! > /tmp/clerk-webhook-relay.pid
-          echo "Clerk Webhook Relay started (https://buildmarket.live/ci -> http://127.0.0.1:3500/api/clerk-webhook)"
-
       - name: Smoke check root route (fail on 5xx)
         run: |
           set -uo pipefail
@@ -704,7 +698,6 @@ jobs:
           cleanup() {
             kill "$APP_PID" >/dev/null 2>&1 || true
             [ -f /tmp/upstash-rest-stub.pid ] && kill "$(cat /tmp/upstash-rest-stub.pid)" >/dev/null 2>&1 || true
-            [ -f /tmp/clerk-webhook-relay.pid ] && kill "$(cat /tmp/clerk-webhook-relay.pid)" >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
 
