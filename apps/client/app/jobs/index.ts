@@ -16,11 +16,7 @@
  */
 
 import { envConfig } from "@/app/lib/infrastructure/env";
-import {
-  scheduleExportCleanup,
-  createCleanupWorker,
-  getCleanupQueue,
-} from "./export-cleanup";
+import { scheduleExportCleanup, getCleanupQueue } from "./export-cleanup";
 import {
   type ExportJobData,
   getExportQueue,
@@ -28,30 +24,25 @@ import {
 } from "./export-queue";
 import {
   scheduleDataRetentionEnforcement,
-  createDataRetentionWorker,
   getRetentionQueue,
 } from "./data-retention";
 import {
   scheduleAnonymizationBatch,
-  createAnonymizationBatchWorker,
   getAnonymizationQueue,
 } from "./anonymization-batch";
-import {
-  scheduleAssetCleanup,
-  createAssetCleanupWorker,
-  getAssetCleanupQueue,
-} from "./asset-cleanup";
+import { scheduleAssetCleanup, getAssetCleanupQueue } from "./asset-cleanup";
 import {
   scheduleOnboardingUploadCleanup,
-  createOnboardingUploadCleanupWorker,
   getOnboardingUploadCleanupQueue,
 } from "./onboarding-upload-cleanup";
 import {
   scheduleNewsletterSweep,
-  createNewsletterSweepWorker,
   getNewsletterSweepQueue,
 } from "./newsletter-sweep";
 import { Worker } from "bullmq";
+import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
+
+const logger = new StructuredLogger("job-orchestrator");
 
 // Track all workers for graceful shutdown
 let workers: Worker[] = [];
@@ -79,7 +70,7 @@ export async function initializeAllSchedulers(): Promise<void> {
   // Guard 1: BullMQ requires a Redis TCP endpoint. Skip entirely when
   // REDIS_URL is not configured (local dev without Redis, CI smoke gate).
   if (!envConfig.redis.url) {
-    console.info(
+    logger.info(
       "[JobOrchestrator] REDIS_URL not set — background job queues disabled.",
     );
     return;
@@ -88,18 +79,18 @@ export async function initializeAllSchedulers(): Promise<void> {
   // Guard 2: Belt-and-suspenders for CI environments that set
   // DISABLE_BACKGROUND_JOBS=true explicitly.
   if (envConfig.isCI && envConfig.jobs.disableBackgroundJobs) {
-    console.info(
+    logger.info(
       "[JobOrchestrator] DISABLE_BACKGROUND_JOBS=true — skipping queue initialisation in CI.",
     );
     return;
   }
 
   if (isInitialized) {
-    console.log("[JobOrchestrator] Already initialized, skipping");
+    logger.info("[JobOrchestrator] Already initialized, skipping");
     return;
   }
 
-  console.log("[JobOrchestrator] Initializing all GDPR schedulers...");
+  logger.info("[JobOrchestrator] Initializing all GDPR schedulers...");
 
   try {
     // 1. Schedule all jobs
@@ -112,30 +103,26 @@ export async function initializeAllSchedulers(): Promise<void> {
       scheduleNewsletterSweep(),
     ]);
 
-    console.log("[JobOrchestrator] All jobs scheduled");
+    logger.info("[JobOrchestrator] All jobs scheduled");
 
-    // 2. Create workers — order must match the workerNames tuple in
-    //    healthCheck() and getSchedulerStatus() so index-based lookups remain
-    //    correct.
-    workers = [
-      createCleanupWorker(),
-      createDataRetentionWorker(),
-      createAnonymizationBatchWorker(),
-      createAssetCleanupWorker(),
-      createOnboardingUploadCleanupWorker(),
-      createNewsletterSweepWorker(),
-    ];
-
-    console.log("[JobOrchestrator] All workers created");
+    // 2. Worker consumers: Consumer loops run in standalone `apps/workers` daemon.
+    // In Next.js web instances, consumer creation is omitted to prevent socket leaks under serverless.
+    workers = [];
+    logger.info(
+      "[JobOrchestrator] Schedulers registered; consumer execution handled by apps/workers daemon",
+    );
 
     isInitialized = true;
     startedAt = new Date();
 
-    console.log(
+    logger.info(
       "[JobOrchestrator] GDPR job orchestrator initialized successfully",
     );
   } catch (error) {
-    console.error("[JobOrchestrator] Failed to initialize schedulers:", error);
+    logger.error(
+      "[JobOrchestrator] Failed to initialize schedulers:",
+      error instanceof Error ? error : new Error(String(error)),
+    );
     throw error;
   }
 }
@@ -145,11 +132,11 @@ export async function initializeAllSchedulers(): Promise<void> {
  */
 export async function shutdownAllSchedulers(): Promise<void> {
   if (!isInitialized) {
-    console.log("[JobOrchestrator] Not initialized, nothing to shutdown");
+    logger.info("[JobOrchestrator] Not initialized, nothing to shutdown");
     return;
   }
 
-  console.log("[JobOrchestrator] Shutting down all GDPR schedulers...");
+  logger.info("[JobOrchestrator] Shutting down all GDPR schedulers...");
 
   try {
     // Close all workers
@@ -158,7 +145,10 @@ export async function shutdownAllSchedulers(): Promise<void> {
         try {
           await worker.close();
         } catch (error) {
-          console.error("[JobOrchestrator] Error closing worker:", error);
+          logger.error(
+            "[JobOrchestrator] Error closing worker:",
+            error instanceof Error ? error : new Error(String(error)),
+          );
         }
       }),
     );
@@ -178,9 +168,12 @@ export async function shutdownAllSchedulers(): Promise<void> {
     isInitialized = false;
     startedAt = undefined;
 
-    console.log("[JobOrchestrator] All schedulers shut down");
+    logger.info("[JobOrchestrator] All schedulers shut down");
   } catch (error) {
-    console.error("[JobOrchestrator] Error during shutdown:", error);
+    logger.error(
+      "[JobOrchestrator] Error during shutdown:",
+      error instanceof Error ? error : new Error(String(error)),
+    );
     throw error;
   }
 }
@@ -245,6 +238,9 @@ export async function triggerJob(
     | "onboarding-upload-cleanup"
     | "newsletter-sweep",
 ): Promise<{ success: boolean; jobId?: string; error?: string }> {
+  const correlationId = CorrelationIdManager.generate();
+  CorrelationIdManager.set(correlationId);
+
   try {
     let queue;
     let jobName;
@@ -287,13 +283,22 @@ export async function triggerJob(
       },
     );
 
-    console.log(
+    logger.info(
       `[JobOrchestrator] Manually triggered ${jobType} job: ${job.id}`,
+      {
+        correlationId,
+        jobType,
+        jobId: job.id,
+      },
     );
 
     return { success: true, jobId: job.id };
   } catch (error) {
-    console.error(`[JobOrchestrator] Failed to trigger ${jobType}:`, error);
+    logger.error(
+      `[JobOrchestrator] Failed to trigger ${jobType}:`,
+      error instanceof Error ? error : new Error(String(error)),
+      { correlationId, jobType },
+    );
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

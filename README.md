@@ -216,18 +216,31 @@ pnpm run db:generate
 pnpm run db:seed
 ```
 
+### Local Infrastructure (Docker Compose)
+
+Start local PostgreSQL, Redis (noeviction), and NATS JetStream services:
+
+```bash
+# Start all local infrastructure containers in background
+pnpm run docker:up
+
+# Stop all local infrastructure containers
+pnpm run docker:down
+```
+
 ### Starting Services
 
 Start the development runtime using Turbo filtering:
 
 ```bash
-# Start all apps and watchers across the monorepo
+# Start all apps, workers, and watchers across the monorepo
 pnpm run dev
 
 # Start specific applications
 pnpm run dev:client            # Client app on http://localhost:3500
 pnpm run dev:admin             # Admin portal on http://localhost:3005
 pnpm run dev:verification-ops  # Verification Ops on http://localhost:3501
+pnpm run dev:workers           # Background worker daemon on http://localhost:8080
 
 # Start both frontends simultaneously (Client + Admin)
 pnpm run dev:frontend
@@ -235,11 +248,12 @@ pnpm run dev:frontend
 
 ### Local Endpoints Map
 
-| Surface                | URL                     | Authentication Boundary                                |
-| :--------------------- | :---------------------- | :----------------------------------------------------- |
-| **Marketplace Client** | `http://localhost:3500` | Clerk User Session (`withAuth`, `DomainActor`)         |
-| **Admin Portal**       | `http://localhost:3005` | Clerk + DB `AdminProfile` (`safeAction`, `AdminActor`) |
-| **Verification Ops**   | `http://localhost:3501` | Clerk Verification Admin Role                          |
+| Surface                 | URL                             | Authentication Boundary                                |
+| :---------------------- | :------------------------------ | :----------------------------------------------------- |
+| **Marketplace Client**  | `http://localhost:3500`         | Clerk User Session (`withAuth`, `DomainActor`)         |
+| **Admin Portal**        | `http://localhost:3005`         | Clerk + DB `AdminProfile` (`safeAction`, `AdminActor`) |
+| **Verification Ops**    | `http://localhost:3501`         | Clerk Verification Admin Role                          |
+| **Worker Health Probe** | `http://localhost:8080/healthz` | Unauthenticated HTTP Health / Liveness Probe           |
 
 ---
 

@@ -1,0 +1,29 @@
+{
+  "extends": "@build/typescript-config/base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "noEmit": false,
+    "composite": true,
+    "incremental": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"],
+  "references": [
+    { "path": "../../packages/db" },
+    { "path": "../../packages/redis" },
+    { "path": "../../packages/nats" },
+    { "path": "../../packages/queue-server" },
+    { "path": "../../packages/resilience" },
+    { "path": "../../packages/env-validation" }
+  ]
+}

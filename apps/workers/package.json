@@ -1,0 +1,48 @@
+{
+  "name": "workers",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone BullMQ & NATS background worker daemon for BuildMarket",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "catalog:",
+    "@aws-sdk/lib-storage": "catalog:",
+    "@aws-sdk/s3-request-presigner": "catalog:",
+    "@build/db": "workspace:*",
+    "@build/env-validation": "workspace:*",
+    "@build/mail-server": "workspace:*",
+    "@build/nats": "workspace:*",
+    "@build/queue-server": "workspace:*",
+    "@build/redis": "workspace:*",
+    "@build/resilience": "workspace:*",
+    "@build/types": "workspace:*",
+    "archiver": "catalog:",
+    "bullmq": "catalog:",
+    "ioredis": "catalog:",
+    "nats": "catalog:",
+    "pino": "catalog:",
+    "resend": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@build/eslint-config": "workspace:*",
+    "@build/typescript-config": "workspace:*",
+    "@types/archiver": "catalog:",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -8,11 +8,8 @@ Prereqs
 Start infrastructure (Docker)
 
 ```bash
-# Start Redis
-docker run --rm --name build-market-redis -p 6379:6379 redis:7-alpine redis-server --maxmemory-policy noeviction
-
-# Start NATS with JetStream
-docker run --rm -p 4222:4222 -p 8222:8222 nats:latest -js
+# Start all local development infrastructure (PostgreSQL, Redis with noeviction, NATS with JetStream)
+docker compose up -d
 ```
 
 Install workspace deps (repo root)

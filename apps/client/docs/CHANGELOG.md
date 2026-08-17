@@ -33,6 +33,9 @@ This format is based on Keep a Changelog and uses semantic categories:
 - **Dedicated Lightweight Liveness Route (`app/api/healthz/route.ts`, `__tests__/api/healthz/route.test.ts`)**:
   - Implemented zero-dependency `/api/healthz` liveness probe returning HTTP 200 `{ status: "ok" }`. Bypasses data layer, Redis, Clerk authentication checks, and SSR rendering trees to provide an authoritative "process is alive and serving HTTP" contract for container orchestrators and CI test runners.
   - Paired in `.github/workflows/ci.yml` `client-preview-smoke-gate` as Phase 2a (liveness gate) followed by Phase 2b (full homepage root route render gate).
+- **Decoupled Background Worker Consumers from Next.js Runtime (`app/jobs/index.ts`)**:
+  - Cleansed inline worker consumer loops (`new Worker(...)`) from Next.js serverless execution paths to eliminate lingering TCP socket overhead and prevent uncoordinated consumer polling across serverless instances.
+  - Schedulers remain active for registering repeatable jobs into Redis; job consumption is handled exclusively by the standalone `apps/workers` daemon.
 
 ### Fixed — Client Preview Smoke Gate Resilience & Middleware Optimization
 
