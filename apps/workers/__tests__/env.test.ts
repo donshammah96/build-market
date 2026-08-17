@@ -17,7 +17,7 @@ describe("Worker Environment Validation (apps/workers/src/env.ts)", () => {
     process.env.DATABASE_URL =
       "postgresql://postgres:postgres@localhost:5432/buildmarket";
     process.env.REDIS_URL = "redis://localhost:6379";
-    delete process.env.NODE_ENV;
+    Reflect.deleteProperty(process.env, "NODE_ENV");
 
     const env = validateWorkerEnv();
 
@@ -34,7 +34,7 @@ describe("Worker Environment Validation (apps/workers/src/env.ts)", () => {
 
   it("should fail-closed and call process.exit(1) when DATABASE_URL is missing", () => {
     process.env.REDIS_URL = "redis://localhost:6379";
-    delete process.env.DATABASE_URL;
+    Reflect.deleteProperty(process.env, "DATABASE_URL");
 
     const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
       throw new Error("process.exit called");
