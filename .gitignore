@@ -109,3 +109,5 @@ vitest-*.json
 vitest-*.txt
 cypress/screenshots/
 .env*
+!**/.env.example
+!**/.env.test
