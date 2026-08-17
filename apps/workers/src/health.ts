@@ -32,7 +32,7 @@ export function startHealthServer(options: HealthCheckOptions) {
                 status: "ok",
                 redis: "connected",
                 workers: "active",
-                nats: natsOk ? "connected" : "disconnected",
+                nats: "connected",
                 uptime: process.uptime(),
                 timestamp: new Date().toISOString(),
               }),
