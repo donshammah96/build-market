@@ -72,7 +72,7 @@
     "@radix-ui/react-tooltip": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-table": "^8.21.3",
-    "archiver": "^7.0.0",
+    "archiver": "catalog:",
     "bullmq": "catalog:",
     "ioredis": "catalog:",
     "class-variance-authority": "catalog:",

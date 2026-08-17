@@ -39,7 +39,12 @@ All notable changes to the `workers` application will be documented in this file
     - `gdpr-erasure`: Processes scheduled user deactivations.
     - `archive-settled-records`: Archives settled transactions older than 180 days to archive tables in atomic transactions.
   - Implemented `processNotificationRetryJob` (`notification.processor.ts`) delivering in-app notifications and updating failed notification records.
+  - Implemented `processDataExportJob` (`export.processor.ts`) processing `gdpr-data-export` jobs: streaming user profile/projects/orders data into ZIP archives (`archiver`), uploading to S3/R2 storage with presigned URLs, updating database records, and sending completion emails.
+  - Implemented `processIncidentJob` (`incident.processor.ts`) processing `security-incidents` jobs: executing emergency protocols, notifying ODPC regulatory contacts, fan-out user notifications, and DPO escalation alerts.
+  - Implemented `processComplianceNotificationJob` (`compliance-notification.processor.ts`) processing `compliance-notifications` jobs: executing chunked batch user delivery via email/SMS with rate limiting and database audit logging.
+- **Architectural Decision Records Alignment (`apps/client/docs/adr/ADR-010-...`, `apps/admin/docs/adr/ADR-ADMIN-016-...`)**:
+  - Authored client ADR-010 and admin ADR-ADMIN-016 formalizing the queue producer vs daemon consumer runtime boundary, forbidding inline `new Worker(...)` instantiations in Next.js web runtimes.
 - **Unit Test Suite & Tooling (`apps/workers/vitest.config.ts`, `apps/workers/eslint.config.mjs`, `apps/workers/__tests__/`)**:
   - Configured Vitest test runner with Node environment and v8 coverage reporters.
   - Implemented ESLint configuration extending `@build/eslint-config/base` with strict `no-restricted-syntax` preventing direct `process.env` access outside `src/env.ts`.
-  - Added unit test suites verifying fail-closed environment validation (`__tests__/env.test.ts`), multi-component HTTP `/healthz` probe states (`__tests__/health.test.ts`), and database-backed job processors (`__tests__/processors.test.ts`).
+  - Added unit test suites verifying fail-closed environment validation (`__tests__/env.test.ts`), multi-component HTTP `/healthz` probe states (`__tests__/health.test.ts`), and database-backed job processors (`__tests__/processors.test.ts`) (100% passing across 19 tests).

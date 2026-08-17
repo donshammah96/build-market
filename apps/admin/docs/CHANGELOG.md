@@ -16,9 +16,10 @@
 - **Decoupled Settings Repository from DB System Settings & Integrated Distributed Redis Invalidation (`src/lib/domains/settings/repository.ts`)**:
   - Removed deprecated `@build/db/system-settings` import (`invalidateCache`) from `settingsRepository.upsertGlobal()`.
   - Integrated distributed `@build/redis` cache invalidation (`RedisCache.delete("global")` on namespace `settings:system`) alongside Next.js route revalidation (`revalidatePath("/settings")`) to synchronize settings across distributed nodes immediately upon update.
-- **Decoupled Background Worker Consumers from Next.js Runtime (`src/lib/jobs/index.ts`, `src/lib/domains/verification/internal/notification-retry.worker.ts`)**:
-  - Cleansed inline worker consumer instantiations (`new Worker(...)`) from Next.js serverless request lifecycles.
-  - Refactored `notification-retry.worker.ts` into a callable factory `createNotificationRetryWorker()`, delegating long-running queue consumption to the standalone `apps/workers` daemon.
+- **Decoupled Background Worker Consumers from Next.js Runtime & ADR-ADMIN-016 Alignment (`src/lib/workers/`, `src/lib/jobs/index.ts`, `docs/adr/ADR-ADMIN-016-admin-background-worker-isolation-and-daemon-migration.md`)**:
+  - Cleansed inline worker consumer instantiations (`new Worker(...)`) from Next.js serverless request lifecycles across `src/lib/workers/export/worker.ts`, `src/lib/workers/compliance/incident.worker.ts`, and `src/lib/workers/compliance/notification.worker.ts`.
+  - Migrated GDPR data export, security incident emergency protocols, and compliance notification batch processing to the standalone `apps/workers` daemon.
+  - Authored `ADR-ADMIN-016: Admin Background Worker Isolation and Daemon Migration` formalizing the runtime boundary where `apps/admin` acts strictly as a queue producer via `@build/queue-server`.
   - Retained producer queue scheduling and job enqueueing in Next.js web instances.
 
 ### Changed — env-wrapper.ts, route-auth.ts

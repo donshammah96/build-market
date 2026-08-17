@@ -2,11 +2,17 @@ import { validateWorkerEnv } from "./env.js";
 import { startHealthServer } from "./health.js";
 import { processMaintenanceJob } from "./processors/maintenance.processor.js";
 import { processNotificationRetryJob } from "./processors/notification.processor.js";
+import { processDataExportJob } from "./processors/export.processor.js";
+import { processIncidentJob } from "./processors/incident.processor.js";
+import { processComplianceNotificationJob } from "./processors/compliance-notification.processor.js";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import {
   getBullMQConnectionOptions,
   type MaintenanceJobData,
   type NotificationRetryJobData,
+  type ExportJobData,
+  type IncidentJobData,
+  type UserNotificationJobData,
 } from "@build/queue-server";
 import { createConsumer, type JetStreamConsumer } from "@build/nats";
 import { Worker, type Job } from "bullmq";
@@ -121,7 +127,96 @@ function initializeBullMqWorkers() {
     });
   });
 
-  activeWorkers.push(maintenanceWorker, notificationWorker);
+  // GDPR Data Export Worker
+  const exportWorker = new Worker<ExportJobData>(
+    "gdpr-data-export",
+    async (job: Job<ExportJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processDataExportJob(job);
+        },
+      );
+    },
+    {
+      connection: redisConnectionOptions,
+      concurrency: 2,
+    },
+  );
+
+  exportWorker.on("failed", (job, err) => {
+    logger.error(`[Worker:export] Job failed: ${job?.name}`, err, {
+      jobId: job?.id,
+      exportId: job?.data?.exportId,
+    });
+  });
+
+  exportWorker.on("completed", (job) => {
+    logger.info(`[Worker:export] Job completed: ${job.name}`, {
+      jobId: job.id,
+      exportId: job.data.exportId,
+    });
+  });
+
+  // Security Incident Worker
+  const incidentWorker = new Worker<IncidentJobData>(
+    "security-incidents",
+    async (job: Job<IncidentJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processIncidentJob(job);
+        },
+      );
+    },
+    {
+      connection: redisConnectionOptions,
+      concurrency: 2,
+      limiter: {
+        max: 10,
+        duration: 60000,
+      },
+    },
+  );
+
+  incidentWorker.on("failed", (job, err) => {
+    logger.error(`[Worker:incident] Job failed: ${job?.name}`, err, {
+      jobId: job?.id,
+      incidentId: job?.data?.incidentId,
+    });
+  });
+
+  // Compliance User Notification Batch Worker
+  const complianceNotificationWorker = new Worker<UserNotificationJobData>(
+    "compliance-notifications",
+    async (job: Job<UserNotificationJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processComplianceNotificationJob(job);
+        },
+      );
+    },
+    {
+      connection: redisConnectionOptions,
+      concurrency: 2,
+    },
+  );
+
+  complianceNotificationWorker.on("failed", (job, err) => {
+    logger.error(`[Worker:compliance-notifications] Job failed`, err, {
+      jobId: job?.id,
+      incidentId: job?.data?.incidentId,
+    });
+  });
+
+  activeWorkers.push(
+    maintenanceWorker,
+    notificationWorker,
+    exportWorker,
+    incidentWorker,
+    complianceNotificationWorker,
+  );
 }
 
 // 4. Initialize NATS JetStream Durable Consumer (P1)

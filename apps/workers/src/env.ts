@@ -50,6 +50,28 @@ const workerEnvSchema = z.object({
   LOG_LEVEL: z
     .enum(["trace", "debug", "info", "warn", "error", "fatal"])
     .default("info"),
+
+  // Storage / S3 / R2 Configuration for Export Processor
+  S3_DISABLED: booleanString,
+  R2_EXPORT_BUCKET: z.string().min(1).optional(),
+  S3_EXPORT_BUCKET: z.string().min(1).optional(),
+  EXPORTS_BUCKET_NAME: z.string().min(1).optional(),
+  R2_ACCESS_KEY_ID: z.string().min(1).optional(),
+  AWS_ACCESS_KEY_ID: z.string().min(1).optional(),
+  S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+  R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  R2_ENDPOINT: z.string().url().optional(),
+  S3_URL: z.string().url().optional(),
+  R2_REGION: z.string().min(1).optional(),
+  AWS_REGION: z.string().min(1).optional(),
+  S3_REGION: z.string().min(1).optional(),
+
+  // Notification / Compliance Mailer Configuration
+  RESEND_API_KEY: z.string().min(1).optional(),
+  ODPC_EMAIL: z.string().email().optional(),
+  DPO_EMAIL: z.string().email().optional(),
 });
 
 // NATS_URL is optional on the raw schema (see comment above) but is always

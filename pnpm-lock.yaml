@@ -204,6 +204,9 @@ catalogs:
     '@vitejs/plugin-react':
       specifier: ^5.2.0
       version: 5.2.0
+    archiver:
+      specifier: ^7.0.0
+      version: 7.0.1
     autoprefixer:
       specifier: 10.4.20
       version: 10.4.20
@@ -573,7 +576,7 @@ importers:
         specifier: ^8.21.3
         version: 8.21.3(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       archiver:
-        specifier: ^7.0.0
+        specifier: 'catalog:'
         version: 7.0.1
       bullmq:
         specifier: 'catalog:'
@@ -1163,12 +1166,24 @@ importers:
 
   apps/workers:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: 'catalog:'
+        version: 3.1033.0
+      '@aws-sdk/lib-storage':
+        specifier: 'catalog:'
+        version: 3.1033.0(@aws-sdk/client-s3@3.1033.0)
+      '@aws-sdk/s3-request-presigner':
+        specifier: 'catalog:'
+        version: 3.1033.0
       '@build/db':
         specifier: workspace:*
         version: link:../../packages/db
       '@build/env-validation':
         specifier: workspace:*
         version: link:../../packages/env-validation
+      '@build/mail-server':
+        specifier: workspace:*
+        version: link:../../packages/mail-server
       '@build/nats':
         specifier: workspace:*
         version: link:../../packages/nats
@@ -1181,6 +1196,12 @@ importers:
       '@build/resilience':
         specifier: workspace:*
         version: link:../../packages/resilience
+      '@build/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      archiver:
+        specifier: 'catalog:'
+        version: 7.0.1
       bullmq:
         specifier: 'catalog:'
         version: 5.78.1
@@ -1193,6 +1214,9 @@ importers:
       pino:
         specifier: 'catalog:'
         version: 9.14.0
+      resend:
+        specifier: 'catalog:'
+        version: 6.12.4
       zod:
         specifier: 'catalog:'
         version: 4.4.3
@@ -1203,6 +1227,9 @@ importers:
       '@build/typescript-config':
         specifier: workspace:*
         version: link:../../packages/typescript-config
+      '@types/archiver':
+        specifier: 'catalog:'
+        version: 7.0.0
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2

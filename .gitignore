@@ -86,9 +86,13 @@ docs
 !apps/admin/docs/**
 !apps/client/docs/
 apps/client/docs/*
+!apps/client/docs/adr/
+!apps/client/docs/adr/**
+!apps/client/docs/CHANGELOG.md
 !apps/client/docs/STORAGE-INTEGRATION-GUIDE.md
 !apps/workers/docs/
 !apps/workers/docs/**
+apps/workers/exports/
 .agent
 .idea/
 apps/client/public/uploads/
