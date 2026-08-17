@@ -2,7 +2,18 @@
 
 ## [Unreleased]
 
-### Added — Database Package Hardening, PostgreSQL Log Range Partitioning, & Settled Records Archival Worker
+### Added — BullMQ Background Worker Containerization & Local Development Infrastructure
+
+- **Local Development Infrastructure Stack (`docker-compose.yml`, `scripts/README.md`, `package.json`)**:
+  - Implemented root `docker-compose.yml` providing standardized local infrastructure services: PostgreSQL 16 Alpine (`5432:5432` with `pg_isready` probe), Redis 7 Alpine (`6379:6379` with `--maxmemory-policy noeviction` and healthcheck), and NATS JetStream (`4222:4222`, `8222:8222` with `-js -m 8222` and HTTP healthcheck) on bridge network `build-market-net`.
+  - Added root developer scripts `pnpm docker:up`, `pnpm docker:down`, and updated `scripts/README.md` to eliminate environment drift across developer machines.
+- **Standalone Background Worker Daemon Application (`apps/workers/`)**:
+  - Initialized dedicated Node.js 24 ESM workspace application `apps/workers` to decouple BullMQ and NATS consumers from Next.js serverless runtimes.
+  - **Fail-Closed Environment Validation (`apps/workers/src/env.ts`)**: Added strict boot schema validating `DATABASE_URL`, `REDIS_URL`, `NATS_URL`, and pool constraints (`DB_POOL_MAX`), exiting immediately on boot if variables are missing.
+  - **Daemon Lifecycle Orchestration (`apps/workers/src/index.ts`)**: Centralized processing for `maintenance-jobs` and `notification-retries` queues with Pino structured logging, `CorrelationIdManager` context per job, static NATS durable consumer group (`notification-retry-worker-group`), and `SIGTERM`/`SIGINT` graceful shutdown traps with a 30s drain timeout.
+  - **Healthcheck Endpoint (`apps/workers/src/health.ts`)**: Built lightweight `/healthz` HTTP server on `PORT 8080` for orchestrator liveness and readiness verification.
+  - **Multi-Stage OCI Containerization (`apps/workers/Dockerfile`)**: Multi-stage build with Turborepo 2.x positional prune syntax (`turbo prune workers --docker`), non-root execution (`USER node`), zero build secrets, and native container `HEALTHCHECK`.
+  - **Workspace Toolchain Integration (`package.json`, `pnpm-workspace.yaml`, `apps/workers/tsconfig.json`)**: Added `build:workers`, `dev:workers`, `workers:check-types`, and `docker:build:workers` scripts.
 
 - **PostgreSQL Declarative Monthly Range Partitioning (`packages/db/prisma/migrations/20260816050000_partition_high_velocity_logs/migration.sql`)**:
   - Implemented zero-downtime table swap DDL converting append-only tables (`AdminAuditLog`, `AuditLog`, `AnalyticsEvent`) to PostgreSQL declarative range-partitioned tables partitioned by `RANGE (createdAt)`.
