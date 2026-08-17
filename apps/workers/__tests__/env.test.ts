@@ -18,6 +18,7 @@ describe("Worker Environment Validation (apps/workers/src/env.ts)", () => {
       "postgresql://postgres:postgres@localhost:5432/buildmarket";
     process.env.REDIS_URL = "redis://localhost:6379";
     Reflect.deleteProperty(process.env, "NODE_ENV");
+    Reflect.deleteProperty(process.env, "NATS_URL");
 
     const env = validateWorkerEnv();
 
@@ -32,9 +33,32 @@ describe("Worker Environment Validation (apps/workers/src/env.ts)", () => {
     expect(env.LOG_LEVEL).toBe("info");
   });
 
-  it("should fail-closed and call process.exit(1) when DATABASE_URL is missing", () => {
+  it("should fail-closed and call process.exit(1) when DATABASE_URL is missing or has invalid scheme", () => {
     process.env.REDIS_URL = "redis://localhost:6379";
-    Reflect.deleteProperty(process.env, "DATABASE_URL");
+    process.env.DATABASE_URL = "invalid-db-url";
+
+    const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit called");
+    }) as unknown as () => never);
+
+    const mockConsoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    expect(() => validateWorkerEnv()).toThrow("process.exit called");
+    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(mockConsoleError).toHaveBeenCalled();
+
+    mockExit.mockRestore();
+    mockConsoleError.mockRestore();
+  });
+
+  it("should fail-closed in production when NATS_URL is unset", () => {
+    Object.assign(process.env, { NODE_ENV: "production" });
+    process.env.DATABASE_URL =
+      "postgresql://postgres:postgres@localhost:5432/buildmarket";
+    process.env.REDIS_URL = "redis://localhost:6379";
+    Reflect.deleteProperty(process.env, "NATS_URL");
 
     const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
       throw new Error("process.exit called");

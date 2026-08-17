@@ -35,8 +35,30 @@ const healthRedisClient = new Redis(env.REDIS_URL, {
 });
 
 let isShuttingDown = false;
+let isNatsConnected = false;
 const activeWorkers: Worker[] = [];
 let natsConsumer: JetStreamConsumer | null = null;
+
+// Global crash handlers. Without these, a rejection that BullMQ/ioredis/nats
+// don't catch cleanly can leave the daemon running but wedged, with no log
+// trail and no restart — worse than crashing, since the orchestrator has no
+// signal that anything is wrong. Log everything we can, then let the process
+// exit non-zero so Render/Fly restarts it into a known-good state.
+process.on("uncaughtException", (err) => {
+  logger.error(
+    "[Fatal] Uncaught exception — terminating for orchestrator restart",
+    err,
+  );
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  logger.error(
+    "[Fatal] Unhandled promise rejection — terminating for orchestrator restart",
+    reason instanceof Error ? reason : new Error(String(reason)),
+  );
+  process.exit(1);
+});
 
 // 3. Initialize BullMQ Workers
 function initializeBullMqWorkers() {
@@ -119,10 +141,12 @@ async function initializeNatsConsumer() {
     );
 
     await natsConsumer.connect();
+    isNatsConnected = true;
     logger.info(
       "[NATS] Connected and subscribed with durable consumer: notification-retry-worker-group",
     );
   } catch (err) {
+    isNatsConnected = false;
     logger.error(
       "[NATS] Failed to initialize JetStream consumer",
       err instanceof Error ? err : new Error(String(err)),
@@ -147,6 +171,16 @@ const healthServer = startHealthServer({
       return false;
     }
   },
+  checkWorkers: () => {
+    if (env.DISABLE_BACKGROUND_JOBS) return true;
+    return (
+      activeWorkers.length > 0 && activeWorkers.every((w) => w.isRunning())
+    );
+  },
+  checkNats: () => {
+    if (env.DISABLE_BACKGROUND_JOBS || !env.NATS_URL) return true;
+    return isNatsConnected;
+  },
   isShuttingDown: () => isShuttingDown,
 });
 
@@ -164,21 +198,28 @@ async function gracefulShutdown(signal: string) {
   }, 30000);
 
   try {
-    // 1. Close health server
-    healthServer.close();
+    // Note: isShuttingDown is already true at this point (set above), so the
+    // health server keeps responding — now with 503 "shutting_down" — for the
+    // full duration of the drain below. It's closed last, once there's
+    // nothing left for an orchestrator to usefully probe. Closing it first
+    // (as before) meant the 503 path was never actually observable: the
+    // endpoint just went dark the instant SIGTERM arrived.
 
-    // 2. Stop NATS consumer
+    // 1. Stop NATS consumer
     if (natsConsumer) {
       await natsConsumer.disconnect();
       logger.info("[NATS] JetStream consumer disconnected.");
     }
 
-    // 3. Close BullMQ workers (drain active jobs)
+    // 2. Close BullMQ workers (drain active jobs)
     await Promise.all(activeWorkers.map((w) => w.close()));
     logger.info("[BullMQ] All workers closed gracefully.");
 
-    // 4. Disconnect Redis
+    // 3. Disconnect Redis
     await healthRedisClient.quit();
+
+    // 4. Close health server last
+    healthServer.close();
 
     clearTimeout(shutdownTimeout);
     logger.info("Graceful shutdown complete.");

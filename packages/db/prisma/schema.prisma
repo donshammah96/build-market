@@ -1,6 +1,13 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions", "fullTextSearchPostgres", "tracing"] // Enable FTS and tracing
+  // "native" covers local dev (macOS / glibc Linux / Windows). 
+  // "linux-musl-openssl-3.0.x" is the Alpine musl target used by apps/workers' Dockerfile (node:24-alpine).
+  // `prisma generate` runs inside the alpine builder stage and packages this engine for musl libc with libssl.so.3.
+  //
+  // To inspect the Alpine libssl version:
+  //   docker run --rm node:24-alpine sh -c "ls -la /usr/lib/libssl.so.*"
+  binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {

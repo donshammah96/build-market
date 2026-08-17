@@ -10,34 +10,46 @@ COPY . .
 RUN turbo prune workers --docker
 
 # ==============================================================================
-# Build Stage 2: Dependency Installer & Builder
+# Build Stage 2: Dependency Installer, Builder & Prod Prune
 # ==============================================================================
 FROM node:24-alpine AS builder
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Enable pnpm via corepack
-RUN corepack enable && corepack prepare pnpm@11.1.2 --activate
+# Install pinned pnpm, turbo, and prisma CLI tools
+RUN npm install -g pnpm@11.1.2 turbo@^2.10.10 prisma@^7.8.0
 
 # Copy pruned lockfile and manifests
 COPY --from=pruner /app/out/json/ .
 COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=pruner /app/out/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
-RUN pnpm install --frozen-lockfile
+# Configure pnpm network resilience
+RUN pnpm config set fetch-retries 5 && \
+    pnpm config set fetch-retry-maxtimeout 180000 && \
+    pnpm config set fetch-timeout 300000
 
-# Copy pruned source code
+# Install workspace dependencies without premature lifecycle scripts
+RUN pnpm install --frozen-lockfile --ignore-scripts
+
+# Copy scripts and pruned source code
+COPY scripts/ /app/scripts/
 COPY --from=pruner /app/out/full/ .
 
-# Generate Prisma Client & Build Worker
-RUN pnpm --filter @build/db run postinstall
-RUN pnpm --filter workers run build
+# Generate Prisma Client & Build Worker Daemon with all workspace dependencies
+RUN prisma generate --schema=packages/db/prisma/schema.prisma
+RUN turbo run build --filter=workers...
+
+# Deploy isolated workers package with production dependencies only
+RUN pnpm --filter workers --prod --legacy --ignore-scripts deploy /prod/workers
+# Ensure generated Prisma client is copied into deployed directory
+RUN cp -r node_modules/.prisma /prod/workers/node_modules/.prisma 2>/dev/null || true
 
 # ==============================================================================
-# Build Stage 3: Minimal Production Runner
+# Build Stage 3: Minimal Hardened Production Runner
 # ==============================================================================
 FROM node:24-alpine AS runner
-RUN apk add --no-cache libc6-compat wget
+RUN apk add --no-cache libc6-compat wget dumb-init
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -46,12 +58,12 @@ ENV HEALTH_PORT=8080
 # Run as non-root user for security isolation
 USER node
 
-# Copy built artifacts and necessary node_modules
-COPY --chown=node:node --from=builder /app ./
+# Copy ONLY the deployed worker directory (no monorepo root, devDependencies, or other apps)
+COPY --chown=node:node --from=builder /prod/workers ./
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -q --spider http://localhost:8080/healthz || exit 1
 
-ENTRYPOINT ["node", "apps/workers/dist/index.js"]
+ENTRYPOINT ["dumb-init", "--", "node", "dist/index.js"]

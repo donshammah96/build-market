@@ -54,6 +54,36 @@ services:
     networks:
       - build-market-net
 
+  workers:
+    build:
+      context: .
+      dockerfile: apps/workers/Dockerfile
+    container_name: build-market-workers
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/buildmarket?schema=public
+      REDIS_URL: redis://redis:6379
+      NATS_URL: nats://nats:4222
+      NODE_ENV: development
+      HEALTH_PORT: "8080"
+    ports:
+      - "18080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - build-market-net
+    profiles: ["all", "workers"]
+
 volumes:
   postgres_data:
   redis_data:
