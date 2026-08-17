@@ -4,7 +4,7 @@
 FROM node:24-alpine AS pruner
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
-RUN npm install -g turbo@^2.10.5
+RUN npm install -g turbo@^2.10.10
 COPY . .
 # Note: Turborepo 2.x uses positional argument syntax: turbo prune <target> --docker
 RUN turbo prune workers --docker
