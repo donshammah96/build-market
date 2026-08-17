@@ -1,7 +1,13 @@
 import { validateWorkerEnv } from "./env.js";
 import { startHealthServer } from "./health.js";
+import { processMaintenanceJob } from "./processors/maintenance.processor.js";
+import { processNotificationRetryJob } from "./processors/notification.processor.js";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
-import { getBullMQConnectionOptions } from "@build/queue-server";
+import {
+  getBullMQConnectionOptions,
+  type MaintenanceJobData,
+  type NotificationRetryJobData,
+} from "@build/queue-server";
 import { createConsumer, type JetStreamConsumer } from "@build/nats";
 import { Worker, type Job } from "bullmq";
 import { Redis } from "ioredis";
@@ -39,42 +45,13 @@ function initializeBullMqWorkers() {
   }
 
   // Maintenance & GDPR Queues Worker
-  const maintenanceWorker = new Worker(
+  const maintenanceWorker = new Worker<MaintenanceJobData>(
     "maintenance-jobs",
-    async (job: Job) => {
+    async (job: Job<MaintenanceJobData>) => {
       return CorrelationIdManager.run(
         job.id || CorrelationIdManager.generate(),
         async () => {
-          logger.info(
-            `[Worker:maintenance] Processing job ${job.name} (id: ${job.id})`,
-            {
-              jobId: job.id,
-              jobName: job.name,
-              attempt: job.attemptsMade + 1,
-            },
-          );
-
-          switch (job.name) {
-            case "cleanup-expired-exports":
-            case "data-retention-enforcement":
-            case "anonymization-batch":
-            case "asset-cleanup":
-            case "newsletter-sweep":
-              // Process job handler
-              return {
-                processed: true,
-                name: job.name,
-                timestamp: new Date().toISOString(),
-              };
-            default:
-              logger.warn(
-                `[Worker:maintenance] Unhandled job name: ${job.name}`,
-                {
-                  jobId: job.id,
-                },
-              );
-              return { skipped: true, reason: "unknown_job_name" };
-          }
+          return processMaintenanceJob(job);
         },
       );
     },
@@ -100,17 +77,13 @@ function initializeBullMqWorkers() {
   });
 
   // Notification Retry Worker
-  const notificationWorker = new Worker(
+  const notificationWorker = new Worker<NotificationRetryJobData>(
     "notification-retries",
-    async (job: Job) => {
+    async (job: Job<NotificationRetryJobData>) => {
       return CorrelationIdManager.run(
         job.id || CorrelationIdManager.generate(),
         async () => {
-          logger.info(`[Worker:notifications] Processing retry job ${job.id}`, {
-            jobId: job.id,
-            attemptsMade: job.attemptsMade + 1,
-          });
-          return { sent: true, jobId: job.id };
+          return processNotificationRetryJob(job);
         },
       );
     },

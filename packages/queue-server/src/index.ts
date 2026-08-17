@@ -9,3 +9,5 @@ export type {
 } from "@build/redis/tcp";
 export * from "./compliance.queue.js";
 export * from "./export.queue.js";
+export * from "./maintenance.queue.js";
+export * from "./notification.queue.js";

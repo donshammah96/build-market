@@ -24,3 +24,9 @@ All notable changes to the `workers` application will be documented in this file
   - Zero build-time secrets; all credentials injected via runtime environment variables.
 - **NATS JetStream Durable Consumer Integration (`apps/workers/src/index.ts`)**:
   - Bound retry subscriber to static durable consumer name `notification-retry-worker-group` on NATS JetStream stream, preventing orphan consumer accumulation across container redeployments.
+- **Modular Job Processors (`apps/workers/src/processors/`)**:
+  - Extracted `processMaintenanceJob` (`maintenance.processor.ts`) and `processNotificationRetryJob` (`notification.processor.ts`) into modular processors executing inside `CorrelationIdManager` context.
+- **Unit Test Suite & Tooling (`apps/workers/vitest.config.ts`, `apps/workers/eslint.config.mjs`, `apps/workers/__tests__/`)**:
+  - Configured Vitest test runner with Node environment and v8 coverage reporters.
+  - Implemented ESLint configuration extending `@build/eslint-config/base` with strict `no-restricted-syntax` preventing direct `process.env` access outside `src/env.ts`.
+  - Added unit test suites verifying fail-closed environment validation (`__tests__/env.test.ts`), HTTP `/healthz` liveness/readiness probe states (`__tests__/health.test.ts`), and background job processing (`__tests__/processors.test.ts`).

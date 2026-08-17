@@ -16,6 +16,10 @@
 - **Decoupled Settings Repository from DB System Settings & Integrated Distributed Redis Invalidation (`src/lib/domains/settings/repository.ts`)**:
   - Removed deprecated `@build/db/system-settings` import (`invalidateCache`) from `settingsRepository.upsertGlobal()`.
   - Integrated distributed `@build/redis` cache invalidation (`RedisCache.delete("global")` on namespace `settings:system`) alongside Next.js route revalidation (`revalidatePath("/settings")`) to synchronize settings across distributed nodes immediately upon update.
+- **Decoupled Background Worker Consumers from Next.js Runtime (`src/lib/jobs/index.ts`, `src/lib/domains/verification/internal/notification-retry.worker.ts`)**:
+  - Cleansed inline worker consumer instantiations (`new Worker(...)`) from Next.js serverless request lifecycles.
+  - Refactored `notification-retry.worker.ts` into a callable factory `createNotificationRetryWorker()`, delegating long-running queue consumption to the standalone `apps/workers` daemon.
+  - Retained producer queue scheduling and job enqueueing in Next.js web instances.
 
 ### Changed — env-wrapper.ts, route-auth.ts
 

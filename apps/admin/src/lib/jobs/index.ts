@@ -14,35 +14,20 @@
  *   await shutdownAllSchedulers();
  */
 
-import { scheduleExportCleanup, createCleanupWorker } from "./export-cleanup";
+import { scheduleExportCleanup } from "./export-cleanup";
 import {
   scheduleDataRetentionEnforcement,
-  createDataRetentionWorker,
   retentionQueue,
 } from "./data-retention";
 import {
   scheduleAnonymizationBatch,
-  createAnonymizationBatchWorker,
   anonymizationQueue,
 } from "./anonymization-batch";
-import {
-  scheduleAssetCleanup,
-  createAssetCleanupWorker,
-  assetCleanupQueue,
-} from "./asset-cleanup";
-import {
-  scheduleLicenseExpiry,
-  createLicenseExpiryWorker,
-  licenseExpiryQueue,
-} from "./license-expiry";
-import {
-  scheduleGdprErasure,
-  createGdprErasureWorker,
-  erasureQueue,
-} from "./gdpr-erasure";
+import { scheduleAssetCleanup, assetCleanupQueue } from "./asset-cleanup";
+import { scheduleLicenseExpiry, licenseExpiryQueue } from "./license-expiry";
+import { scheduleGdprErasure, erasureQueue } from "./gdpr-erasure";
 import {
   scheduleSettledRecordsArchival,
-  createSettledRecordsArchivalWorker,
   settledRecordsArchivalQueue,
 } from "./settled-records-archival";
 import { Worker, Queue } from "bullmq";
@@ -93,18 +78,12 @@ export async function initializeAllSchedulers(): Promise<void> {
 
     logger.info("All jobs scheduled");
 
-    // 2. Create workers
-    workers = [
-      createCleanupWorker(),
-      createDataRetentionWorker(),
-      createAnonymizationBatchWorker(),
-      createAssetCleanupWorker(),
-      createLicenseExpiryWorker(),
-      createGdprErasureWorker(),
-      createSettledRecordsArchivalWorker(),
-    ];
-
-    logger.info("All workers created");
+    // 2. Worker consumers: Consumer loops run in standalone `apps/workers` daemon.
+    // In Next.js web instances, consumer creation is omitted to prevent socket leaks under serverless.
+    workers = [];
+    logger.info(
+      "Schedulers registered; consumer execution handled by apps/workers daemon",
+    );
 
     isInitialized = true;
 

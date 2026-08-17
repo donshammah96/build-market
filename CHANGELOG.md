@@ -14,6 +14,12 @@
   - **Healthcheck Endpoint (`apps/workers/src/health.ts`)**: Built lightweight `/healthz` HTTP server on `PORT 8080` for orchestrator liveness and readiness verification.
   - **Multi-Stage OCI Containerization (`apps/workers/Dockerfile`)**: Multi-stage build with Turborepo 2.x positional prune syntax (`turbo prune workers --docker`), non-root execution (`USER node`), zero build secrets, and native container `HEALTHCHECK`.
   - **Workspace Toolchain Integration (`package.json`, `pnpm-workspace.yaml`, `apps/workers/tsconfig.json`)**: Added `build:workers`, `dev:workers`, `workers:check-types`, and `docker:build:workers` scripts.
+- **Queue Contracts & Producer Factories in `@build/queue-server` (`packages/queue-server/src/`)**:
+  - Exported canonical queue contracts and producer factories (`getMaintenanceQueue`, `addMaintenanceJob`, `getNotificationRetryQueue`, `addNotificationRetryJob`, `exportQueue`, `addExportJob`, `incidentQueue`, `userNotificationQueue`, `auditQueue`).
+  - Decoupled queue producer definitions from worker consumer loops across all applications.
+- **Next.js Web Runtime Producer Cleansing (`apps/client/app/jobs/index.ts`, `apps/admin/src/lib/jobs/index.ts`, `apps/admin/src/lib/domains/verification/internal/notification-retry.worker.ts`)**:
+  - Cleansed inline worker consumer instantiations (`new Worker(...)`) from Next.js serverless request lifecycles.
+  - Retained queue scheduling and job enqueueing in Next.js while delegating long-running consumer processing strictly to the standalone `apps/workers` daemon.
 
 - **PostgreSQL Declarative Monthly Range Partitioning (`packages/db/prisma/migrations/20260816050000_partition_high_velocity_logs/migration.sql`)**:
   - Implemented zero-downtime table swap DDL converting append-only tables (`AdminAuditLog`, `AuditLog`, `AnalyticsEvent`) to PostgreSQL declarative range-partitioned tables partitioned by `RANGE (createdAt)`.
