@@ -1,4 +1,4 @@
-﻿# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # Dependencies
 node_modules
@@ -87,6 +87,8 @@ docs
 !apps/client/docs/
 apps/client/docs/*
 !apps/client/docs/STORAGE-INTEGRATION-GUIDE.md
+!apps/workers/docs/
+!apps/workers/docs/**
 .agent
 .idea/
 apps/client/public/uploads/
