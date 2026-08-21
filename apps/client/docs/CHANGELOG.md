@@ -28,6 +28,12 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Added — Cloudflare OpenNext R2 Incremental Cache Persistence
+
+- **R2 Incremental Cache Bindings (`wrangler.toml`, `open-next.config.ts`)**:
+  - Bound `NEXT_INC_CACHE_R2_BUCKET` to `buildmarket-inc-cache-staging` and `buildmarket-inc-cache-production` in `wrangler.toml`.
+  - Enables distributed Next.js ISR and incremental page caching persistence across Cloudflare edge regions via R2 storage.
+
 ### Added — Shared `@build/media` Package Extraction & Image Processing Consolidation
 
 - **Shared Media Package Adoption & Duplicate Elimination (`package.json`, `app/lib/domains/uploads/inline-processor.ts`, `__tests__/lib/media/image-processing.test.ts`)**:

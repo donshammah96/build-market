@@ -74,10 +74,26 @@ wrangler secret put DD_API_KEY --name build-market-client-staging
 # Set Clerk Secret Key
 wrangler secret put CLERK_SECRET_KEY --name build-market-client-production
 wrangler secret put CLERK_SECRET_KEY --name build-market-client-staging
-
-# Set Clerk Publishable Key
 wrangler secret put CLERK_PUBLISHABLE_KEY --name build-market-client-production
 wrangler secret put CLERK_PUBLISHABLE_KEY --name build-market-client-staging
+```
+
+### Provisioning Required R2 Storage Buckets
+
+Before initial deployment, ensure the following R2 buckets are created in Cloudflare:
+
+```powershell
+# Document and scan buckets
+wrangler r2 bucket create buildmarket-staged
+wrangler r2 bucket create buildmarket-staged-staging
+wrangler r2 bucket create buildmarket-verified-private
+wrangler r2 bucket create buildmarket-verified-private-staging
+wrangler r2 bucket create buildmarket-quarantine
+wrangler r2 bucket create buildmarket-quarantine-staging
+
+# OpenNext Next.js ISR / Incremental Cache buckets (NEXT_INC_CACHE_R2_BUCKET)
+wrangler r2 bucket create buildmarket-inc-cache-production
+wrangler r2 bucket create buildmarket-inc-cache-staging
 ```
 
 ---

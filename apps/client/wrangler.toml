@@ -48,6 +48,10 @@ bucket_name = "buildmarket-staged-staging"
 binding = "VERIFIED_PRIVATE_BUCKET"
 bucket_name = "buildmarket-verified-private-staging"
 
+[[env.staging.r2_buckets]]
+binding = "NEXT_INC_CACHE_R2_BUCKET"
+bucket_name = "buildmarket-inc-cache-staging"
+
 [[env.staging.queues.producers]]
 queue = "upload-scan-queue-staging"
 binding = "UPLOAD_SCAN_QUEUE"
@@ -73,6 +77,10 @@ bucket_name = "buildmarket-staged"
 [[env.production.r2_buckets]]
 binding = "VERIFIED_PRIVATE_BUCKET"
 bucket_name = "buildmarket-verified-private"
+
+[[env.production.r2_buckets]]
+binding = "NEXT_INC_CACHE_R2_BUCKET"
+bucket_name = "buildmarket-inc-cache-production"
 
 [[env.production.queues.producers]]
 queue = "upload-scan-queue-production"
