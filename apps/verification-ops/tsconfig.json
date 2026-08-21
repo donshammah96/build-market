@@ -44,6 +44,7 @@
     { "path": "../../packages/verification-domain" },
     { "path": "../../packages/security-clerk" },
     { "path": "../../packages/env-validation" },
-    { "path": "../../packages/clerk-test-harness" }
+    { "path": "../../packages/clerk-test-harness" },
+    { "path": "../../packages/telemetry" }
   ]
 }

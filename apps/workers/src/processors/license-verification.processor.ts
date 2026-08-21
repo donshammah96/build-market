@@ -17,8 +17,7 @@ export interface LicenseVerificationJobResult {
 export async function processLicenseVerificationJob(
   job: Job<LicenseVerificationJobData>,
 ): Promise<LicenseVerificationJobResult> {
-  const { professionalId, licenseId, authority, licenseNumber, submittedName } =
-    job.data;
+  const { professionalId, licenseId, authority, licenseNumber } = job.data;
   const correlationId =
     job.data.correlationId || CorrelationIdManager.generate();
   CorrelationIdManager.set(correlationId);

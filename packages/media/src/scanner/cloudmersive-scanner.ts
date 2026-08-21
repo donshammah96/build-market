@@ -84,6 +84,14 @@ function structuralThreat(
   return null;
 }
 
+function trimTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === "/") {
+    end--;
+  }
+  return url.slice(0, end);
+}
+
 export class CloudmersiveVirusScanner implements VirusScanner {
   private readonly apiKey: string;
   private readonly baseUrl: string;
@@ -95,9 +103,8 @@ export class CloudmersiveVirusScanner implements VirusScanner {
       throw new Error("CloudmersiveVirusScanner requires a non-empty apiKey.");
     }
     this.apiKey = config.apiKey;
-    this.baseUrl = (config.baseUrl ?? "https://api.cloudmersive.com").replace(
-      /\/+$/,
-      "",
+    this.baseUrl = trimTrailingSlashes(
+      config.baseUrl ?? "https://api.cloudmersive.com",
     );
     this.timeoutMs = config.timeoutMs ?? 20_000;
     this.maxRetries = config.maxRetries ?? 2;

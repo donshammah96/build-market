@@ -6,15 +6,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
 
-function patchFile(filePath, searchStr, replaceStr) {
-  if (!fs.existsSync(filePath)) return false;
-  const content = fs.readFileSync(filePath, "utf8");
-  if (content.includes(replaceStr)) return true;
-  if (!content.includes(searchStr)) return false;
-  fs.writeFileSync(filePath, content.replace(searchStr, replaceStr));
-  return true;
-}
-
 try {
   // 1. Find all bundle-server.js in node_modules
   const findFiles = (dir, pattern, results = []) => {

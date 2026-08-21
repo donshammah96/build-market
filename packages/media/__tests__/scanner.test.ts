@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import {
+  CloudmersiveVirusScanner,
   MockVirusScanner,
   getVirusScanner,
   setVirusScannerForTests,
@@ -69,5 +70,33 @@ describe("@build/media VirusScanner", () => {
   it("allows MockVirusScanner when allowMock is true", () => {
     const scanner = getVirusScanner({ isProd: true, allowMock: true });
     expect(scanner).toBeInstanceOf(MockVirusScanner);
+  });
+
+  describe("CloudmersiveVirusScanner", () => {
+    it("throws if apiKey is missing", () => {
+      expect(() => new CloudmersiveVirusScanner({ apiKey: "" })).toThrow(
+        /requires a non-empty apiKey/,
+      );
+    });
+
+    it("trims trailing slashes linearly from baseUrl", () => {
+      const scanner = new CloudmersiveVirusScanner({
+        apiKey: "test-key",
+        baseUrl: "https://custom-api.cloudmersive.com///",
+      });
+      // Verify baseUrl is trimmed without trailing slashes
+      expect((scanner as unknown as { baseUrl: string }).baseUrl).toBe(
+        "https://custom-api.cloudmersive.com",
+      );
+    });
+
+    it("defaults baseUrl to api.cloudmersive.com when not provided", () => {
+      const scanner = new CloudmersiveVirusScanner({
+        apiKey: "test-key",
+      });
+      expect((scanner as unknown as { baseUrl: string }).baseUrl).toBe(
+        "https://api.cloudmersive.com",
+      );
+    });
   });
 });
