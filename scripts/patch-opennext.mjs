@@ -69,6 +69,13 @@ try {
         fs.writeFileSync(file, content);
         console.log(`[patch-opennext] Successfully patched ${file}`);
       }
+
+      if (content.includes("minifyWhitespace: projectOpts.minify && !debug")) {
+        content = content.replace("minifyWhitespace: projectOpts.minify && !debug", "minifyWhitespace: !debug");
+        content = content.replace("minifySyntax: projectOpts.minify && !debug", "minifySyntax: !debug");
+        fs.writeFileSync(file, content);
+        console.log(`[patch-opennext] Enforced production minification in ${file}`);
+      }
     }
   }
 

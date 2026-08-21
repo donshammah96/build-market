@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Changed — Cloudflare Deployment Pipeline, Monorepo Prerequisites, & Workflow Management
+
+- **GitHub Actions Workflow & Build-Time Environment (`.github/workflows/deploy.yml.disabled`, `package.json`, `docs/CLOUDFLARE_WORKERS_RUNBOOK.md`)**:
+  - Added monorepo package build prerequisites (`pnpm run db:generate` and `pnpm exec turbo run build --filter=./packages/*`) before OpenNext bundling to prevent 97 Turbopack "Module not found" errors on `@build/*` workspace exports.
+  - Added `"build:packages"` script to root `package.json` for deterministic local and CI monorepo package builds.
+  - Injected `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `NEXT_PUBLIC_APP_URL`, and `NEXT_PUBLIC_API_URL` into the deploy job environment to satisfy Next.js static page collection requirements.
+  - Removed redundant `[build]` command block from `apps/client/wrangler.toml` to prevent unparameterized secondary rebuilds during `wrangler deploy`.
+  - Renamed `.github/workflows/deploy.yml` to `.github/workflows/deploy.yml.disabled` to keep all pipeline configuration versioned in git while disabling automated CI runs until upgrading to the Cloudflare Workers Paid tier.
+- **OpenNext Bundling & R2 Incremental Cache (`scripts/patch-opennext.mjs`, `apps/client/wrangler.toml`, `apps/client/open-next.config.ts`)**:
+  - Enhanced `scripts/patch-opennext.mjs` with scoped directory search and stub plugins for `sharp`, `*.node` binaries, `pg-cloudflare`, and automated production esbuild minification.
+  - Bound `NEXT_INC_CACHE_R2_BUCKET` to `buildmarket-inc-cache-staging` and `buildmarket-inc-cache-production` in `wrangler.toml` to support cross-region Next.js ISR and incremental page cache persistence.
+
 ### Added — Shared `@build/media` Package, Worker Image Processing Pipeline, & Security Scanner
 
 - **Shared Media Package (`packages/media`, `@build/media`)**:
