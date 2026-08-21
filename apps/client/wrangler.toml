@@ -3,15 +3,9 @@ main = ".open-next/worker.js"
 compatibility_date = "2026-04-18"
 compatibility_flags = ["nodejs_compat"]
 
-# Shared across all environments unless a [env.X.build] override is
-# needed later. If your actual deploy path is CI-driven (GitHub Actions
-# running `pnpm build` then `wrangler deploy --env X`) rather than
-# Cloudflare's dashboard Git integration, this [build] block does
-# nothing and can be removed — confirm which deploy path is real before
-# keeping it, since an unused config block that LOOKS load-bearing is
-# its own source of confusion.
-[build]
-command = "pnpm run build:cloudflare-worker"
+# OpenNext outputs the built worker entry point to .open-next/worker.js
+# and static assets to .open-next/assets. Building is orchestrated explicitly
+# via CI (deploy.yml) or local scripts (`pnpm run build:cloudflare-worker`).
 
 
 [assets]
