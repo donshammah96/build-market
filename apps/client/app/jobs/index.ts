@@ -7,6 +7,7 @@
  * - Anonymization batch processing (processes pending anonymizations)
  * - Asset cleanup (deletes orphaned assets after grace period)
  * - Onboarding upload cleanup (marks expired staged uploads as EXPIRED)
+ * - Newsletter sweep (reconciles stuck newsletter signups)
  *
  * Usage:
  * import { initializeAllSchedulers, shutdownAllSchedulers } from '@/app/jobs';
@@ -39,13 +40,10 @@ import {
   scheduleNewsletterSweep,
   getNewsletterSweepQueue,
 } from "./newsletter-sweep";
-import { Worker } from "bullmq";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 
 const logger = new StructuredLogger("job-orchestrator");
 
-// Track all workers for graceful shutdown
-let workers: Worker[] = [];
 let isInitialized = false;
 let startedAt: Date | undefined;
 
@@ -64,7 +62,7 @@ export interface GDPRJobOrchestrator {
 }
 
 /**
- * Initialize all GDPR schedulers and workers
+ * Initialize all GDPR schedulers
  */
 export async function initializeAllSchedulers(): Promise<void> {
   // Guard 1: BullMQ requires a Redis TCP endpoint. Skip entirely when
@@ -103,13 +101,8 @@ export async function initializeAllSchedulers(): Promise<void> {
       scheduleNewsletterSweep(),
     ]);
 
-    logger.info("[JobOrchestrator] All jobs scheduled");
-
-    // 2. Worker consumers: Consumer loops run in standalone `apps/workers` daemon.
-    // In Next.js web instances, consumer creation is omitted to prevent socket leaks under serverless.
-    workers = [];
     logger.info(
-      "[JobOrchestrator] Schedulers registered; consumer execution handled by apps/workers daemon",
+      "[JobOrchestrator] All schedulers registered; consumer execution handled by standalone apps/workers daemon",
     );
 
     isInitialized = true;
@@ -128,7 +121,7 @@ export async function initializeAllSchedulers(): Promise<void> {
 }
 
 /**
- * Gracefully shutdown all schedulers and workers
+ * Gracefully shutdown all schedulers
  */
 export async function shutdownAllSchedulers(): Promise<void> {
   if (!isInitialized) {
@@ -139,20 +132,6 @@ export async function shutdownAllSchedulers(): Promise<void> {
   logger.info("[JobOrchestrator] Shutting down all GDPR schedulers...");
 
   try {
-    // Close all workers
-    await Promise.all(
-      workers.map(async (worker) => {
-        try {
-          await worker.close();
-        } catch (error) {
-          logger.error(
-            "[JobOrchestrator] Error closing worker:",
-            error instanceof Error ? error : new Error(String(error)),
-          );
-        }
-      }),
-    );
-
     // Close all queues
     await Promise.all([
       getCleanupQueue().close(),
@@ -164,7 +143,6 @@ export async function shutdownAllSchedulers(): Promise<void> {
       getNewsletterSweepQueue().close(),
     ]);
 
-    workers = [];
     isInitialized = false;
     startedAt = undefined;
 
@@ -207,7 +185,7 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
 
       schedulers.push({
         name,
-        isRunning: workers.some((w) => w.isRunning()),
+        isRunning: isInitialized,
         nextRun: job?.next ? new Date(job.next) : undefined,
       });
     } catch (error) {
@@ -308,10 +286,6 @@ export async function triggerJob(
 
 /**
  * Health check for all schedulers.
- *
- * Worker names must match the order in which workers are created in
- * initializeAllSchedulers(). If you add or reorder workers there, update
- * this tuple accordingly.
  */
 export async function healthCheck(): Promise<{
   healthy: boolean;
@@ -319,7 +293,6 @@ export async function healthCheck(): Promise<{
 }> {
   const details: Record<string, { healthy: boolean; message: string }> = {};
 
-  // Check if initialized
   if (!isInitialized) {
     return {
       healthy: false,
@@ -329,44 +302,23 @@ export async function healthCheck(): Promise<{
     };
   }
 
-  // Worker names must stay in sync with the workers[] creation order.
-  const workerNames = [
-    "export-cleanup",
-    "data-retention",
-    "anonymization",
-    "asset-cleanup",
-    "onboarding-upload-cleanup",
-    "newsletter-sweep",
-  ] as const;
+  const queueEntries = [
+    { name: "export-cleanup", queue: getCleanupQueue() },
+    { name: "data-retention", queue: getRetentionQueue() },
+    { name: "anonymization", queue: getAnonymizationQueue() },
+    { name: "asset-cleanup", queue: getAssetCleanupQueue() },
+    {
+      name: "onboarding-upload-cleanup",
+      queue: getOnboardingUploadCleanupQueue(),
+    },
+    { name: "newsletter-sweep", queue: getNewsletterSweepQueue() },
+  ];
 
-  for (let i = 0; i < workerNames.length; i++) {
-    const name = workerNames[i];
-    const worker = workers[i];
-
-    if (!name) {
-      continue;
-    }
-
-    if (!worker) {
-      details[name] = {
-        healthy: false,
-        message: "Worker not found",
-      };
-      continue;
-    }
-
-    try {
-      const running = worker.isRunning();
-      details[name] = {
-        healthy: running,
-        message: running ? "Worker running" : "Worker stopped",
-      };
-    } catch (error) {
-      details[name] = {
-        healthy: false,
-        message: error instanceof Error ? error.message : "Unknown error",
-      };
-    }
+  for (const { name } of queueEntries) {
+    details[name] = {
+      healthy: isInitialized,
+      message: isInitialized ? "Scheduler registered" : "Scheduler stopped",
+    };
   }
 
   const healthy = Object.values(details).every((d) => d.healthy);

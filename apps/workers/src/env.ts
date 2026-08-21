@@ -5,6 +5,13 @@ const booleanString = z
   .optional()
   .transform((value) => value === "true" || value === "1");
 
+const defaultTrueBooleanString = z
+  .enum(["true", "false", "1", "0"])
+  .optional()
+  .transform((value) =>
+    value === undefined ? true : value === "true" || value === "1",
+  );
+
 const workerEnvSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -68,10 +75,30 @@ const workerEnvSchema = z.object({
   AWS_REGION: z.string().min(1).optional(),
   S3_REGION: z.string().min(1).optional(),
 
+  // Media / Security / Virus Scanner Configuration
+  CLOUDMERSIVE_API_KEY: z.string().min(1).optional(),
+  CLOUDMERSIVE_BASE_URL: z.string().url().optional(),
+  ALLOW_MOCK_VIRUS_SCANNER: booleanString,
+  WORKER_IMAGE_PROCESSING_ENABLED: defaultTrueBooleanString,
+
   // Notification / Compliance Mailer Configuration
   RESEND_API_KEY: z.string().min(1).optional(),
   ODPC_EMAIL: z.string().email().optional(),
   DPO_EMAIL: z.string().email().optional(),
+
+  // OpenTelemetry / Datadog Collector Configuration
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().min(1).optional(),
+  OTEL_EXPORTER_OTLP_HEADERS: z.string().min(1).optional(),
+  OTEL_SERVICE_NAME: z.string().min(1).default("build-market-workers"),
+  OTEL_RESOURCE_ATTRIBUTES: z.string().optional(),
+  DD_API_KEY: z.string().min(1).optional(),
+  DD_SITE: z.string().min(1).default("us5.datadoghq.com"),
+  DD_SITE_HOST: z.string().min(1).default("us5.datadoghq.com"),
+  DD_ENV: z.string().min(1).optional(),
+  DD_SERVICE: z.string().min(1).optional(),
+  DD_VERSION: z.string().min(1).optional(),
+  DD_AGENT_HOST: z.string().min(1).optional(),
+  DD_TRACE_ENABLED: booleanString,
 });
 
 // NATS_URL is optional on the raw schema (see comment above) but is always

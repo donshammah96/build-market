@@ -62,7 +62,14 @@ function parseExpectedRole(value: string | null): ClaimRefreshRole | undefined {
   return undefined;
 }
 
+export const dynamic = "force-dynamic";
+
 export function AuthCallbackPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isLoaded, isSignedIn, user } = useUser();
@@ -74,11 +81,13 @@ export function AuthCallbackPage() {
   const [message, setMessage] = useState("Verifying your session...");
   const retryCount = useRef(0);
 
-  const transitionSource = searchParams.get("transition");
-  const expectedRole = parseExpectedRole(searchParams.get("expectedRole"));
+  const transitionSource = searchParams?.get("transition") ?? null;
+  const expectedRole = parseExpectedRole(
+    searchParams?.get("expectedRole") ?? null,
+  );
   const isOnboardingTransition =
     transitionSource === "onboarding" && Boolean(expectedRole);
-  const rawRedirectUrl = searchParams.get("redirect_url");
+  const rawRedirectUrl = searchParams?.get("redirect_url") ?? null;
   const safeRedirectUrl = getSafeRedirectUrl(rawRedirectUrl);
 
   /**
@@ -225,7 +234,7 @@ export function AuthCallbackPage() {
   ]);
 
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!mounted || !isLoaded) return;
 
     if (!isSignedIn || !user) {
       router.replace(ROUTES.signIn);
@@ -236,7 +245,7 @@ export function AuthCallbackPage() {
     setStatus("checking");
     setMessage("Verifying your session...");
     void checkAndRedirect();
-  }, [checkAndRedirect, isLoaded, isSignedIn, router, user]);
+  }, [checkAndRedirect, isLoaded, isSignedIn, mounted, router, user]);
 
   // Handle error state with retry option
   const handleRetry = () => {
@@ -250,6 +259,24 @@ export function AuthCallbackPage() {
   const handleSignOut = async () => {
     await signOut({ redirectUrl: "/" });
   };
+
+  if (!mounted) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-linear-to-br from-zinc-50 to-zinc-100">
+        <div className="text-center max-w-md mx-auto px-4">
+          <div className="relative mb-6">
+            <div className="w-16 h-16 mx-auto border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+          <h2 className="text-xl font-semibold text-zinc-800 mb-2">
+            Loading your session...
+          </h2>
+          <p className="text-zinc-500 text-sm mb-6">
+            Verifying your session...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-linear-to-br from-zinc-50 to-zinc-100">

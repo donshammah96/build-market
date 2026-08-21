@@ -28,14 +28,31 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Added — Shared `@build/media` Package Extraction & Image Processing Consolidation
+
+- **Shared Media Package Adoption & Duplicate Elimination (`package.json`, `app/lib/domains/uploads/inline-processor.ts`, `__tests__/lib/media/image-processing.test.ts`)**:
+  - Extracted core image optimization, thumbnailing, blurhash generation, and format validation into the monorepo-level `@build/media` package (`packages/media`).
+  - Completely removed redundant local `app/lib/media/image-processing.ts` from `apps/client` to prevent drift and duplicate implementation surfaces.
+  - Re-routed local non-production fallback `inline-processor.ts` to import `processImage` directly from `@build/media`.
+  - Added `"@build/media": "workspace:*"` dependency to `apps/client/package.json`.
+  - Updated unit test suite (`__tests__/lib/media/image-processing.test.ts`) asserting full parity with `@build/media`.
+
 ### Added — Dedicated Liveness Endpoint & Dual-Phase CI Smoke Verification
 
+- **Staff-Level Worker Decoupling & Boundary Enforcement (`app/workers/`, `app/jobs/`, `packages/queue-server`)**:
+  - Completely removed legacy embedded worker modules (`app/workers/compliance/`, `app/workers/export/`, `app/workers/license-verification/`, `app/workers/newsletter/`, `app/workers/uploads/`) from `apps/client`.
+  - Moved shared queue contracts (`newsletter.queue.ts`, `upload-processing.queue.ts`, `license-verification.queue.ts`) into `@build/queue-server`, ensuring `apps/client` only retains producer role.
+  - Extracted `app/lib/domains/uploads/inline-processor.ts` for local non-worker execution and decoupled `app/api/uploads/route.ts`.
+  - Cleansed `app/jobs/export-cleanup.ts` of inline worker instantiation, maintaining pure cron scheduler registration.
+  - Updated `eslint.config.js` with `no-restricted-imports` forbidding worker modules or consumer loops inside `apps/client`.
+  - Removed `app/workers` exception bypasses from `check-no-direct-env.mjs`, `report-security-drift.mjs`, and `security-lint-checks.mjs`.
 - **Dedicated Lightweight Liveness Route (`app/api/healthz/route.ts`, `__tests__/api/healthz/route.test.ts`)**:
   - Implemented zero-dependency `/api/healthz` liveness probe returning HTTP 200 `{ status: "ok" }`. Bypasses data layer, Redis, Clerk authentication checks, and SSR rendering trees to provide an authoritative "process is alive and serving HTTP" contract for container orchestrators and CI test runners.
   - Paired in `.github/workflows/ci.yml` `client-preview-smoke-gate` as Phase 2a (liveness gate) followed by Phase 2b (full homepage root route render gate).
-- **Decoupled Background Worker Consumers from Next.js Runtime (`app/jobs/index.ts`)**:
-  - Cleansed inline worker consumer loops (`new Worker(...)`) from Next.js serverless execution paths to eliminate lingering TCP socket overhead and prevent uncoordinated consumer polling across serverless instances.
-  - Schedulers remain active for registering repeatable jobs into Redis; job consumption is handled exclusively by the standalone `apps/workers` daemon.
+- **Decoupled Background Worker Consumers from Next.js Runtime (`app/jobs/`)**:
+  - Cleansed inline worker consumer loops and worker instantiations (`new Worker(...)`) across all files in `apps/client/app/jobs/` (`anonymization-batch.ts`, `asset-cleanup.ts`, `data-retention.ts`, `export-cleanup.ts`, `newsletter-sweep.ts`, `onboarding-upload-cleanup.ts`, `index.ts`).
+  - Next.js serverless execution paths are now 100% pure scheduler/queue producers registering repeatable jobs to Redis, completely eliminating socket leaks, `process.once` signal traps, and uncoordinated consumer polling across serverless instances.
+  - Job consumption and execution are handled exclusively by the standalone `apps/workers` daemon.
 
 ### Fixed — Client Preview Smoke Gate Resilience & Middleware Optimization
 
@@ -48,7 +65,24 @@ This format is based on Keep a Changelog and uses semantic categories:
 - **Middleware System Settings Resolution Caching & IPv4 Host Normalization (`app/lib/security/middleware/system-settings-resolver.ts`)**:
   - Added short-lived in-memory caching (`10s` TTL for resolved settings, `3s-5s` for fallback/error states) to `resolveSystemSettings`, preventing redundant blocking HTTP subrequests to `/api/internal/system-settings` on every single request.
   - Added URL host normalization replacing `localhost` with `127.0.0.1` when formulating internal resolution URLs, preventing Node `fetch` IPv6 happy-eyeballs connection stalls (`connect ECONNREFUSED ::1:3500`) when the Next.js server binds to IPv4.
-  - Exported `clearSystemSettingsCache()` for test isolation and ensured tests bypass cross-test cache pollution.
+- **OpenNext Cloudflare Workers Build & Native C++ Binary Decoupling (`next.config.ts`, `package.json`, `scripts/patch-opennext.mjs`, `wrangler.toml`, `.gitignore`)**:
+  - Resolved esbuild packaging failures (`No loader is configured for ".node" files` and dynamic `require("../src/build/Release/sharp-*-*.node")`) in `@opennextjs/cloudflare` by decoupling native C++ dependencies from the Cloudflare Workers V8 isolate runtime.
+  - Configured `images: { unoptimized: true }` and removed `serverExternalPackages: ["sharp"]` from `next.config.ts` to prevent Next.js standalone file tracing from copying native C++ addons into the OpenNext build workspace.
+  - Removed `sharp` from `apps/client/package.json` (image processing is executed asynchronously by the containerized `apps/workers` daemon, with `inline-processor.ts` fallback).
+  - Created automated postinstall hook `scripts/patch-opennext.mjs` (chained in root `package.json` `postinstall`) to ensure OpenNext bundles stub any optional native Sharp references (`stub-sharp-plugin`) and configure `.node: "empty"` for esbuild.
+  - Updated `wrangler.toml` custom build command to `pnpm --filter client run build:cloudflare-worker` for reliable root-level Wrangler invocations.
+  - Added `/.open-next/` and `/.worker-next/` to `.gitignore`.
+  - Verified end-to-end deployment for both staging (`build-market-client-staging.donshammah1.workers.dev`) and production (`build-market-client-production.donshammah1.workers.dev`), as well as the R2 malware scan queue worker (`r2-scan-worker-production`).
+
+### Added — Datadog Direct Ingestion Telemetry & Cloudflare Observability
+
+- **OpenTelemetry & Datadog Telemetry Integration (`instrumentation.ts`, `app/lib/infrastructure/otel.ts`, `app/lib/infrastructure/env.ts`)**:
+  - Migrated OpenTelemetry setup to `@build/telemetry` and `@vercel/otel` inside `instrumentation.ts` `register()` hook, exporting traces directly to Datadog's OTLP intake endpoint (`https://otlp-intake.us5.datadoghq.com/v1/traces`).
+  - Added Datadog APM environment configuration (`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `DD_API_KEY`, `DD_SITE_HOST`, `DD_SERVICE`, `DD_ENV`) to `env.ts` and `.env.example`.
+  - Replaced legacy raw gRPC NodeSDK in `app/lib/infrastructure/otel.ts` with a thin adapter delegating to `@build/telemetry`.
+- **Cloudflare Workers Observability (`wrangler.toml`, `workers/wrangler.toml`)**:
+  - Enabled native Cloudflare Workers `[observability]` with 100% head sampling, persistent invocation logs (`[observability.logs]`), and distributed trace capture (`[observability.traces]`).
+
 - **Middleware Route Fast-Path Dispatch & Matcher Optimization (`middleware.ts`)**:
   - Excluded `/api/healthz` from `config.matcher` so the pure process liveness probe bypasses middleware and Clerk SDK initialization entirely, guaranteeing <1ms response times without dependencies.
   - Implemented fast-path dispatch in `middleware.ts` for public informational routes (`/`, `/properties`, `/idea-books`, etc.) and public APIs (`/api/settings/public`, `/api/health`), attaching strict CSP headers immediately while delegating protected routes and sign-up flows (`isSignUpRoute`) to `clerkMiddleware`. This eliminates blocking remote Clerk JWKS/handshake network roundtrips on public page cold renders.

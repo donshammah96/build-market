@@ -12,6 +12,7 @@
     "skipLibCheck": true,
     "strict": true,
     "esModuleInterop": true,
+    "types": ["node"],
     "paths": {
       "@/*": ["./src/*"]
     }
@@ -24,6 +25,7 @@
     { "path": "../../packages/nats" },
     { "path": "../../packages/queue-server" },
     { "path": "../../packages/resilience" },
-    { "path": "../../packages/env-validation" }
+    { "path": "../../packages/env-validation" },
+    { "path": "../../packages/media" }
   ]
 }

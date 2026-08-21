@@ -2,9 +2,12 @@ export async function register() {
   if (
     process.env.NEXT_RUNTIME === "nodejs" // bootstrap-only: Next.js instrumentation hook, envConfig not yet available
   ) {
-    const { initOtel } = await import("./app/lib/infrastructure/otel");
+    const { initTracing } = await import("@build/telemetry");
     const { envConfig } = await import("./app/lib/infrastructure/env");
-    initOtel(envConfig);
+    initTracing({
+      serviceName: envConfig.otel.serviceName || "buildmarket-client",
+      isProd: envConfig.isProd,
+    });
 
     const { initializeProductionVirusScanner } =
       await import("./app/lib/domains/uploads/virus-scanner");

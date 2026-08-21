@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - workers/*
 
 # `pnpm add` will prefer a version already in the catalog when one exists,
 # but still allows adding a dependency outside the catalog (e.g. a package
@@ -10,6 +11,9 @@ catalogMode: strict
 
 allowBuilds:
   "@clerk/shared": true
+  "@datadog/native-appsec": true
+  "@datadog/native-iast-taint-tracking": true
+  "@datadog/native-metrics": true
   "@prisma/client": true
   "@prisma/engines": true
   bcrypt: true
@@ -189,11 +193,14 @@ catalog:
   "@opentelemetry/sdk-trace-base": ^0.219.0
   "@opentelemetry/core": 2.8.0
   "@prisma/instrumentation": ^7.8.0
+  "@vercel/otel": ^2.1.3
+  "wrangler": "^4.90.1"
   "@dnd-kit/core": ^6.3.1
   "@dnd-kit/modifiers": ^9.0.0
   "@dnd-kit/sortable": ^10.0.0
   "@dnd-kit/utilities": ^3.2.2
   "@heroicons/react": ^2.2.0
+  "dd-trace": ^5.50.0
 
 overrides:
   "@typescript-eslint/typescript-estree>typescript": "npm:@typescript/typescript6@^6.0.2"
@@ -242,6 +249,7 @@ overrides:
   protobufjs: ">=8.6.6"
   sharp: ">=0.35.0"
   "@opentelemetry/propagator-jaeger": ">=2.9.0"
+  deepmerge-ts: ">=8.0.0"
   # NOTE: the previous "admin>next": "16.2.6" entry has been removed. pnpm's
   # `pkgA>pkgB` override selector only matches pkgB when it is a dependency of
   # an installed *npm package* named pkgA — "admin" is a workspace project

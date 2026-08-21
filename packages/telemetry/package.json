@@ -1,0 +1,39 @@
+{
+    "name": "@build/telemetry",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "default": "./dist/index.js"
+        }
+    },
+    "dependencies": {
+        "@vercel/otel": "catalog:",
+        "@opentelemetry/api": "catalog:",
+        "@prisma/instrumentation": "catalog:",
+        "@opentelemetry/instrumentation": "catalog:"
+    },
+    "devDependencies": {
+        "@build/eslint-config": "workspace:*",
+        "@build/typescript-config": "workspace:*",
+        "@types/node": "catalog:",
+        "eslint": "catalog:",
+        "tsx": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "catalog:"
+    },
+    "scripts": {
+        "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true }); try { require('fs').unlinkSync('tsconfig.tsbuildinfo'); } catch(e) {}\"",
+        "prebuild": "pnpm run clean",
+        "build": "tsc --build",
+        "prepack": "pnpm run build",
+        "lint": "eslint . --max-warnings 0",
+        "check-types": "tsc --noEmit",
+        "test": "vitest run --passWithNoTests"
+    }
+}

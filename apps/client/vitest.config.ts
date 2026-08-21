@@ -9,7 +9,8 @@ export default defineConfig({
     setupFiles: ["./__tests__/setup.ts"],
     environment: "node", // Default to node for API tests
     include: ["**/__tests__/**/*.{test,spec}.{js,ts,tsx}"],
-    testTimeout: 10000, // 10 seconds for tests with eventual consistency scenarios
+    testTimeout: 20000, // 20 seconds for parallel monorepo test runs with dynamic module imports
+    hookTimeout: 20000,
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

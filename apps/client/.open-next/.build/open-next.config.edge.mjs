@@ -1,22 +1,11 @@
 var __defProp = Object.defineProperty;
-var __defNormalProp = (obj, key, value) =>
-  key in obj
-    ? __defProp(obj, key, {
-        enumerable: true,
-        configurable: true,
-        writable: true,
-        value,
-      })
-    : (obj[key] = value);
-var __publicField = (obj, key, value) =>
-  __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-// ../../node_modules/.pnpm/@opennextjs+cloudflare@1.19_6f9322b3193928bbc5450c3a41fd2dca/node_modules/@opennextjs/cloudflare/dist/api/cloudflare-context.js
+// ../../node_modules/.pnpm/@opennextjs+cloudflare@1.19_aa0dcab0a8efc358d75a6c2727cb8794/node_modules/@opennextjs/cloudflare/dist/api/cloudflare-context.js
 var cloudflareContextSymbol = Symbol.for("__cloudflare-context__");
 function getCloudflareContext(options = { async: false }) {
-  return options.async
-    ? getCloudflareContextAsync()
-    : getCloudflareContextSync();
+  return options.async ? getCloudflareContextAsync() : getCloudflareContextSync();
 }
 function getCloudflareContextFromGlobalScope() {
   const global = globalThis;
@@ -71,12 +60,12 @@ async function getCloudflareContextFromWrangler(options) {
     // because we invoke wrangler with `CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV`=`"false"`.
     // Initializing `envFiles` with an empty list is the equivalent for this API call.
     envFiles: [],
-    environment,
+    environment
   });
   return {
     env,
     cf,
-    ctx,
+    ctx
   };
 }
 var initOpenNextCloudflareForDevErrorMsg = `
@@ -97,15 +86,12 @@ You should update your Next.js config file as shown below:
 
 `;
 
-// ../../node_modules/.pnpm/@opennextjs+cloudflare@1.19_6f9322b3193928bbc5450c3a41fd2dca/node_modules/@opennextjs/cloudflare/dist/api/overrides/asset-resolver/index.js
+// ../../node_modules/.pnpm/@opennextjs+cloudflare@1.19_aa0dcab0a8efc358d75a6c2727cb8794/node_modules/@opennextjs/cloudflare/dist/api/overrides/asset-resolver/index.js
 var resolver = {
   name: "cloudflare-asset-resolver",
   async maybeGetAssetResult(event) {
     const { ASSETS } = getCloudflareContext().env;
-    if (
-      !ASSETS ||
-      !isUserWorkerFirst(globalThis.__ASSETS_RUN_WORKER_FIRST__, event.rawPath)
-    ) {
+    if (!ASSETS || !isUserWorkerFirst(globalThis.__ASSETS_RUN_WORKER_FIRST__, event.rawPath)) {
       return void 0;
     }
     const { method, headers } = event;
@@ -115,7 +101,7 @@ var resolver = {
     const url = new URL(event.rawPath, "https://assets.local");
     const response = await ASSETS.fetch(url, {
       headers,
-      method,
+      method
     });
     if (response.status === 404) {
       await response.body?.cancel();
@@ -127,9 +113,9 @@ var resolver = {
       headers: Object.fromEntries(response.headers.entries()),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       body: getResponseBody(method, response),
-      isBase64Encoded: false,
+      isBase64Encoded: false
     };
-  },
+  }
 };
 function getResponseBody(method, response) {
   if (method === "HEAD") {
@@ -150,9 +136,7 @@ function isUserWorkerFirst(runWorkerFirst, pathname) {
     } else if (hasPositiveMatch) {
       continue;
     }
-    const match = new RegExp(
-      `^${rule.replace(/([[\]().*+?^$|{}\\])/g, "\\$1").replace("\\*", ".*")}$`,
-    ).test(pathname);
+    const match = new RegExp(`^${rule.replace(/([[\]().*+?^$|{}\\])/g, "\\$1").replace("\\*", ".*")}$`).test(pathname);
     if (match) {
       if (isPositiveRule) {
         hasPositiveMatch = true;
@@ -165,16 +149,9 @@ function isUserWorkerFirst(runWorkerFirst, pathname) {
 }
 var asset_resolver_default = resolver;
 
-// ../../node_modules/.pnpm/@opennextjs+cloudflare@1.19_6f9322b3193928bbc5450c3a41fd2dca/node_modules/@opennextjs/cloudflare/dist/api/config.js
+// ../../node_modules/.pnpm/@opennextjs+cloudflare@1.19_aa0dcab0a8efc358d75a6c2727cb8794/node_modules/@opennextjs/cloudflare/dist/api/config.js
 function defineCloudflareConfig(config = {}) {
-  const {
-    incrementalCache,
-    tagCache,
-    queue,
-    cachePurge,
-    enableCacheInterception = false,
-    routePreloadingBehavior = "none",
-  } = config;
+  const { incrementalCache, tagCache, queue, cachePurge, enableCacheInterception = false, routePreloadingBehavior = "none" } = config;
   return {
     default: {
       override: {
@@ -184,17 +161,17 @@ function defineCloudflareConfig(config = {}) {
         incrementalCache: resolveIncrementalCache(incrementalCache),
         tagCache: resolveTagCache(tagCache),
         queue: resolveQueue(queue),
-        cdnInvalidation: resolveCdnInvalidation(cachePurge),
+        cdnInvalidation: resolveCdnInvalidation(cachePurge)
       },
-      routePreloadingBehavior,
+      routePreloadingBehavior
     },
     // node:crypto is used to compute cache keys
     edgeExternals: ["node:crypto"],
     cloudflare: {
-      useWorkerdCondition: true,
+      useWorkerdCondition: true
     },
     dangerous: {
-      enableCacheInterception,
+      enableCacheInterception
     },
     middleware: {
       external: true,
@@ -204,10 +181,10 @@ function defineCloudflareConfig(config = {}) {
         proxyExternalRequest: "fetch",
         incrementalCache: resolveIncrementalCache(incrementalCache),
         tagCache: resolveTagCache(tagCache),
-        queue: resolveQueue(queue),
+        queue: resolveQueue(queue)
       },
-      assetResolver: () => asset_resolver_default,
-    },
+      assetResolver: () => asset_resolver_default
+    }
   };
 }
 function resolveIncrementalCache(value = "dummy") {
@@ -235,7 +212,7 @@ function resolveCdnInvalidation(value = "dummy") {
   return typeof value === "function" ? value : () => value;
 }
 
-// ../../node_modules/.pnpm/@opennextjs+aws@3.10.1_next_1f9f772f798a31a3a905a4357d63f02e/node_modules/@opennextjs/aws/dist/utils/error.js
+// ../../node_modules/.pnpm/@opennextjs+aws@4.0.2_next@_fd18d7764e15a93a397bc2f6a7eafa20/node_modules/@opennextjs/aws/dist/utils/error.js
 var IgnorableError = class extends Error {
   constructor(message) {
     super(message);
@@ -253,7 +230,7 @@ function isOpenNextError(e) {
   }
 }
 
-// ../../node_modules/.pnpm/@opennextjs+aws@3.10.1_next_1f9f772f798a31a3a905a4357d63f02e/node_modules/@opennextjs/aws/dist/adapters/logger.js
+// ../../node_modules/.pnpm/@opennextjs+aws@4.0.2_next@_fd18d7764e15a93a397bc2f6a7eafa20/node_modules/@opennextjs/aws/dist/adapters/logger.js
 function debug(...args) {
   if (globalThis.openNextDebug) {
     console.log(...args);
@@ -266,17 +243,10 @@ var DOWNPLAYED_ERROR_LOGS = [
   {
     clientName: "S3Client",
     commandName: "GetObjectCommand",
-    errorName: "NoSuchKey",
-  },
+    errorName: "NoSuchKey"
+  }
 ];
-var isDownplayedErrorLog = (errorLog) =>
-  DOWNPLAYED_ERROR_LOGS.some(
-    (downplayedInput) =>
-      downplayedInput.clientName === errorLog?.clientName &&
-      downplayedInput.commandName === errorLog?.commandName &&
-      (downplayedInput.errorName === errorLog?.error?.name ||
-        downplayedInput.errorName === errorLog?.error?.Code),
-  );
+var isDownplayedErrorLog = (errorLog) => DOWNPLAYED_ERROR_LOGS.some((downplayedInput) => downplayedInput.clientName === errorLog?.clientName && downplayedInput.commandName === errorLog?.commandName && (downplayedInput.errorName === errorLog?.error?.name || downplayedInput.errorName === errorLog?.error?.Code));
 function error(...args) {
   if (args.some((arg) => isDownplayedErrorLog(arg))) {
     return debug(...args);
@@ -287,18 +257,10 @@ function error(...args) {
       return;
     }
     if (error2.logLevel === 0) {
-      return console.log(
-        ...args.map((arg) =>
-          isOpenNextError(arg) ? `${arg.name}: ${arg.message}` : arg,
-        ),
-      );
+      return console.log(...args.map((arg) => isOpenNextError(arg) ? `${arg.name}: ${arg.message}` : arg));
     }
     if (error2.logLevel === 1) {
-      return warn(
-        ...args.map((arg) =>
-          isOpenNextError(arg) ? `${arg.name}: ${arg.message}` : arg,
-        ),
-      );
+      return warn(...args.map((arg) => isOpenNextError(arg) ? `${arg.name}: ${arg.message}` : arg));
     }
     return console.error(...args);
   }
@@ -318,7 +280,7 @@ function getOpenNextErrorLogLevel() {
   }
 }
 
-// ../../node_modules/.pnpm/@opennextjs+cloudflare@1.19_6f9322b3193928bbc5450c3a41fd2dca/node_modules/@opennextjs/cloudflare/dist/api/overrides/internal.js
+// ../../node_modules/.pnpm/@opennextjs+cloudflare@1.19_aa0dcab0a8efc358d75a6c2727cb8794/node_modules/@opennextjs/cloudflare/dist/api/overrides/internal.js
 import { createHash } from "node:crypto";
 var debugCache = (name, ...args) => {
   if (process.env.NEXT_PRIVATE_DEBUG_CACHE) {
@@ -328,16 +290,12 @@ var debugCache = (name, ...args) => {
 var FALLBACK_BUILD_ID = "no-build-id";
 var DEFAULT_PREFIX = "incremental-cache";
 function computeCacheKey(key, options) {
-  const {
-    cacheType = "cache",
-    prefix = DEFAULT_PREFIX,
-    buildId = FALLBACK_BUILD_ID,
-  } = options;
+  const { cacheType = "cache", prefix = DEFAULT_PREFIX, buildId = FALLBACK_BUILD_ID } = options;
   const hash = createHash("sha256").update(key).digest("hex");
   return `${prefix}/${buildId}/${hash}.${cacheType}`.replace(/\/+/g, "/");
 }
 
-// ../../node_modules/.pnpm/@opennextjs+cloudflare@1.19_6f9322b3193928bbc5450c3a41fd2dca/node_modules/@opennextjs/cloudflare/dist/api/overrides/incremental-cache/r2-incremental-cache.js
+// ../../node_modules/.pnpm/@opennextjs+cloudflare@1.19_aa0dcab0a8efc358d75a6c2727cb8794/node_modules/@opennextjs/cloudflare/dist/api/overrides/incremental-cache/r2-incremental-cache.js
 var NAME = "cf-r2-incremental-cache";
 var BINDING_NAME = "NEXT_INC_CACHE_R2_BUCKET";
 var PREFIX_ENV_NAME = "NEXT_INC_CACHE_R2_PREFIX";
@@ -347,14 +305,16 @@ var R2IncrementalCache = class {
   }
   async get(key, cacheType) {
     const r2 = getCloudflareContext().env[BINDING_NAME];
-    if (!r2) throw new IgnorableError("No R2 bucket");
+    if (!r2)
+      throw new IgnorableError("No R2 bucket");
     debugCache("R2IncrementalCache", `get ${key}`);
     try {
       const r2Object = await r2.get(this.getR2Key(key, cacheType));
-      if (!r2Object) return null;
+      if (!r2Object)
+        return null;
       return {
         value: await r2Object.json(),
-        lastModified: r2Object.uploaded.getTime(),
+        lastModified: r2Object.uploaded.getTime()
       };
     } catch (e) {
       error("Failed to get from cache", e);
@@ -363,7 +323,8 @@ var R2IncrementalCache = class {
   }
   async set(key, value, cacheType) {
     const r2 = getCloudflareContext().env[BINDING_NAME];
-    if (!r2) throw new IgnorableError("No R2 bucket");
+    if (!r2)
+      throw new IgnorableError("No R2 bucket");
     debugCache("R2IncrementalCache", `set ${key}`);
     try {
       await r2.put(this.getR2Key(key, cacheType), JSON.stringify(value));
@@ -373,7 +334,8 @@ var R2IncrementalCache = class {
   }
   async delete(key) {
     const r2 = getCloudflareContext().env[BINDING_NAME];
-    if (!r2) throw new IgnorableError("No R2 bucket");
+    if (!r2)
+      throw new IgnorableError("No R2 bucket");
     debugCache("R2IncrementalCache", `delete ${key}`);
     try {
       await r2.delete(this.getR2Key(key));
@@ -384,8 +346,8 @@ var R2IncrementalCache = class {
   getR2Key(key, cacheType) {
     return computeCacheKey(key, {
       prefix: getCloudflareContext().env[PREFIX_ENV_NAME],
-      buildId: process.env.NEXT_BUILD_ID,
-      cacheType,
+      buildId: process.env.OPEN_NEXT_BUILD_ID,
+      cacheType
     });
   }
 };
@@ -395,6 +357,8 @@ var r2_incremental_cache_default = new R2IncrementalCache();
 var open_next_config_default = defineCloudflareConfig({
   // For best results consider enabling R2 caching
   // See https://opennext.js.org/cloudflare/caching for more details
-  incrementalCache: r2_incremental_cache_default,
+  incrementalCache: r2_incremental_cache_default
 });
-export { open_next_config_default as default };
+export {
+  open_next_config_default as default
+};

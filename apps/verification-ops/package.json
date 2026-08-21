@@ -30,13 +30,15 @@
     "@build/env-validation": "workspace:*",
     "@build/security-clerk": "workspace:*",
     "@build/clerk-test-harness": "workspace:*",
+    "@build/telemetry": "workspace:*",
     "@clerk/nextjs": "catalog:",
     "lucide-react": "catalog:",
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "zod": "catalog:",
-    "tailwind-merge": "catalog:"
+    "tailwind-merge": "catalog:",
+    "@vercel/otel": "catalog:"
   },
   "devDependencies": {
     "@build/eslint-config": "workspace:*",

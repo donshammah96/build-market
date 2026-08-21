@@ -13,8 +13,10 @@
 # testing
 /coverage
 
-# next.js
+# next.js / cloudflare opennext
 /.next/
+/.open-next/
+/.worker-next/
 /out/
 
 # production

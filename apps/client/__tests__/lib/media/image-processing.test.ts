@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
 import { decode } from "blurhash";
-import { processImage } from "@/app/lib/media/image-processing";
+import { processImage } from "@build/media";
 
 async function createSampleImageBuffer(): Promise<Buffer> {
   return sharp({

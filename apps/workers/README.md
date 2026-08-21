@@ -171,7 +171,6 @@ The worker daemon is **not deployed to Vercel** — see [Vercel vs. Render](#ver
 ## Known Limitations
 
 - **Stub processors.** `maintenance.processor.ts` and `notification.processor.ts` log and return success without performing real work. GDPR erasure, retention enforcement, anonymization, asset cleanup, license-expiry checks, archival, and notification delivery are all **not yet implemented** — this daemon currently only proves the queue plumbing works end-to-end.
-- **No Datadog/APM wiring.** `dd-trace` is not yet integrated; only structured `pino`-based logging via `@build/resilience` exists today.
 - **No idempotency guarantees in processors yet.** BullMQ is at-least-once delivery — once real logic is ported in, processors handling non-idempotent operations (GDPR erasure, financial archival in particular) need explicit job deduplication or optimistic locking before they can safely run in production.
 - **Health check is Redis-only.** Doesn't reflect BullMQ worker run-state or NATS consumer connectivity.
 

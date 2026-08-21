@@ -13,23 +13,32 @@ compatibility_flags = ["nodejs_compat"]
 [build]
 command = "pnpm run build:cloudflare-worker"
 
+
 [assets]
 directory = ".open-next/assets"
 binding = "ASSETS"
 
 [observability]
 enabled = true
+head_sampling_rate = 1
 
-# No top-level [[r2_buckets]] block on purpose: a bare `wrangler deploy`
-# with no --env should fail loudly (missing binding) rather than quietly
-# deploying something bound to nothing, or worse, to production by
-# accident. Every real deploy must specify --env staging or
-# --env production explicitly. Enforce this in CI, don't rely on people
-# remembering the flag.
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = true
+persist = true
+head_sampling_rate = 1
 
 # --- Staging Environment ---
 [env.staging]
 name = "build-market-client-staging"
+
+[[env.staging.tail_consumers]]
+service = "dd-tail-forwarder-staging"
 
 [[env.staging.r2_buckets]]
 binding = "STAGED_BUCKET"
@@ -53,6 +62,9 @@ binding = "UPLOAD_SCAN_QUEUE"
 # --- Production Environment ---
 [env.production]
 name = "build-market-client-production"
+
+[[env.production.tail_consumers]]
+service = "dd-tail-forwarder-production"
 
 [[env.production.r2_buckets]]
 binding = "STAGED_BUCKET"

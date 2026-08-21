@@ -12,7 +12,6 @@ const SCAN_PATHS = [
   "app/lib/infrastructure/storage.ts",
   "app/lib/infrastructure/webhook-replay.ts",
   "app/jobs",
-  "app/workers",
   "middleware.ts",
 ];
 const DIRECT_ENV_PATTERN = /process\.env(?:\.|\[)/g;

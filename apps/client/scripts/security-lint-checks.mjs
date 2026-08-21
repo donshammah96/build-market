@@ -380,9 +380,8 @@ export function collectWorkerImportDrift() {
   for (const filePath of collectFiles(scanPaths)) {
     const relativePath = relativeToApp(filePath);
 
-    // Skip paths that are permitted to import worker modules (workers/jobs/tests)
+    // Skip paths that are permitted to import job schedulers/tests
     if (
-      relativePath.startsWith("app/workers/") ||
       relativePath.startsWith("app/jobs/") ||
       relativePath.includes("/__tests__/") ||
       relativePath.endsWith(".test.ts") ||

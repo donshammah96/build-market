@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added — Datadog Direct Ingestion Telemetry & Shared `@build/telemetry` Integration
+
+- **OpenTelemetry & Datadog Telemetry Integration (`src/instrumentation.ts`, `src/lib/infrastructure/otel.ts`, `src/lib/infrastructure/env-schema.ts`)**:
+  - Migrated OpenTelemetry setup to `@build/telemetry` and `@vercel/otel` inside `src/instrumentation.ts` `register()` hook, exporting traces directly to Datadog's OTLP intake endpoint (`https://otlp-intake.us5.datadoghq.com/v1/traces`).
+  - Added Datadog APM environment configuration (`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `DD_API_KEY`, `DD_SITE_HOST`, `DD_SERVICE`, `DD_ENV`) to `adminBaseEnvSchema` and `.env.example`.
+  - Replaced legacy raw gRPC NodeSDK in `src/lib/infrastructure/otel.ts` with a thin adapter delegating to `@build/telemetry`.
+
 ### Added — Monthly Settled Records Archival Background Worker & Queue Integration
 
 - **Settled Records Archival Worker (`src/lib/jobs/settled-records-archival.ts`, `src/lib/jobs/index.ts`)**:
