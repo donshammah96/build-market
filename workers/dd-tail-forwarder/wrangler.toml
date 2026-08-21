@@ -1,0 +1,26 @@
+name = "dd-tail-forwarder"
+main = "src/index.ts"
+compatibility_date = "2026-04-18"
+
+[vars]
+SERVICE_NAME = "buildmarket-cf-workers"
+ENVIRONMENT = "staging"
+DD_SITE_HOST = "us5.datadoghq.com"
+
+# --- Staging Environment ---
+[env.staging]
+name = "dd-tail-forwarder-staging"
+
+[env.staging.vars]
+SERVICE_NAME = "buildmarket-cf-workers"
+ENVIRONMENT = "staging"
+DD_SITE_HOST = "us5.datadoghq.com"
+
+# --- Production Environment ---
+[env.production]
+name = "dd-tail-forwarder-production"
+
+[env.production.vars]
+SERVICE_NAME = "buildmarket-cf-workers"
+ENVIRONMENT = "production"
+DD_SITE_HOST = "us5.datadoghq.com"

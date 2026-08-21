@@ -9,6 +9,12 @@ conventions, reverse-chronological.
 
 ## [Unreleased]
 
+### Added — Datadog Direct Ingestion Telemetry & Shared `@build/telemetry` Integration
+
+- **OpenTelemetry & Datadog Telemetry Integration (`instrumentation.ts`, `package.json`, `tsconfig.json`)**:
+  - Integrated `@build/telemetry` inside `instrumentation.ts` `register()` hook, exporting traces directly to Datadog's OTLP intake endpoint with dynamic environment tagging (`production` vs `staging`).
+  - Added `@build/telemetry` dependency in `package.json` and wired project reference in `tsconfig.json`.
+
 ### Fixed
 
 - **SUPER_ADMIN access denied on sign-in (`middleware.ts`, `lib/auth.ts`, `packages/db/grant-admin.ts`)** — Production user `donshammah1@gmail.com` (`clerkId: user_3FKfonUuBhDFq41AfYXQ0yPHPdw`) was blocked at both auth gates on `verification.buildmarket.app`:

@@ -35,6 +35,8 @@ coverage
 
 # Build Outputs
 .next/
+.open-next/
+.worker-next/
 out/
 build
 dist
@@ -81,13 +83,16 @@ SETUP_DATABASE.md
 setup-database.ps1
 create-pr.ps1
 create-pr.sh
-docs
+docs/*
+!docs/CLOUDFLARE_WORKERS_RUNBOOK.md
 !apps/admin/docs/
 !apps/admin/docs/**
 !apps/client/docs/
 apps/client/docs/*
 !apps/client/docs/adr/
 !apps/client/docs/adr/**
+!apps/client/docs/operations/
+!apps/client/docs/operations/**
 !apps/client/docs/CHANGELOG.md
 !apps/client/docs/STORAGE-INTEGRATION-GUIDE.md
 !apps/workers/docs/

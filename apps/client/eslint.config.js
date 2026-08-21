@@ -138,7 +138,6 @@ const config = [
       "lib/**/*.{ts,tsx}",
     ],
     ignores: [
-      "app/workers/**",
       "app/jobs/**",
       "**/__tests__/**",
       "**/*.test.{ts,tsx}",
@@ -150,9 +149,9 @@ const config = [
         {
           patterns: [
             {
-              group: ["**/*.worker", "**/esp-sync"],
+              group: ["**/*.worker", "**/workers/**"],
               message:
-                "Worker modules and esp-sync.ts open a Redis connection/polling loop on import. They must only be imported by the dedicated worker entrypoint under app/workers — see NEWSLETTER_WORKER_WIRING.md.",
+                "Background workers and consumer loops must not reside in or be imported by apps/client. All workers are decoupled into the standalone apps/workers daemon.",
             },
           ],
         },

@@ -48,7 +48,6 @@ const SERVER_SCAN_PATHS = [
   "app/actions",
   "app/lib",
   "app/jobs",
-  "app/workers",
   "middleware.ts",
 ];
 

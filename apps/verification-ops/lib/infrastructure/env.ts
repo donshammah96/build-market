@@ -122,6 +122,22 @@ const envGroups: EnvGroup[] = [
       },
     ],
   },
+  {
+    name: "telemetry",
+    description: "OpenTelemetry and Datadog APM / Logs Configuration",
+    variables: [
+      { name: "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", required: false },
+      { name: "OTEL_EXPORTER_OTLP_HEADERS", required: false },
+      { name: "DD_API_KEY", required: false },
+      { name: "DD_SITE_HOST", required: false, default: "us5.datadoghq.com" },
+      {
+        name: "DD_SERVICE",
+        required: false,
+        default: "buildmarket-verification-ops",
+      },
+      { name: "DD_ENV", required: false },
+    ],
+  },
   // NOT included yet, intentionally: NATS_URL / regulator credentials.
   // This app has no write path or event-publishing today (see Phase 8
   // migration plan — writes are still behind a feature flag that doesn't

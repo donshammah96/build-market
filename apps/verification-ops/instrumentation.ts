@@ -6,8 +6,15 @@
  */
 
 export async function register() {
-  if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { validateEnv } = await import("./lib/infrastructure/env");
+  if (
+    process.env.NEXT_RUNTIME === "nodejs" // bootstrap-only: Next.js instrumentation hook, validateEnv not yet available
+  ) {
+    const { validateEnv, envConfig } = await import("./lib/infrastructure/env");
     validateEnv();
+    const { initTracing } = await import("@build/telemetry");
+    initTracing({
+      serviceName: "buildmarket-verification-ops",
+      isProd: envConfig.nodeEnv === "production",
+    });
   }
 }

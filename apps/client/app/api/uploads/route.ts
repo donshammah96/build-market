@@ -33,7 +33,6 @@ import {
   enqueueImageUploadProcessingJob,
   type ImageUploadProcessingJobData,
 } from "@/app/lib/queues/upload-processing.queue";
-import { processImageUploadJob } from "@/app/workers/uploads/processor";
 import { z } from "zod";
 
 const executor = getResilientExecutor();
@@ -347,8 +346,12 @@ export const POST = withAuth(
 
               if (inlineProcessingEnabled) {
                 processingMode = "inline";
-                void processImageUploadJob(imageJobData).catch(
-                  async (jobError) => {
+                void (async () => {
+                  try {
+                    const { processImageUploadInline } =
+                      await import("@/app/lib/domains/uploads/inline-processor");
+                    await processImageUploadInline(imageJobData);
+                  } catch (jobError) {
                     const message =
                       jobError instanceof Error
                         ? jobError.message
@@ -369,8 +372,8 @@ export const POST = withAuth(
                         outcome: "failed",
                       },
                     );
-                  },
-                );
+                  }
+                })();
               } else {
                 try {
                   await enqueueImageUploadProcessingJob(imageJobData);

@@ -14,10 +14,12 @@
     { "path": "packages/security-clerk" },
     { "path": "packages/verification-domain" },
     { "path": "packages/env-validation" },
-    { "path": "packages/types" },
     { "path": "packages/ui" },
+    { "path": "packages/telemetry" },
+    { "path": "packages/media" },
     { "path": "apps/admin" },
     { "path": "apps/client" },
-    { "path": "apps/verification-ops" }
+    { "path": "apps/verification-ops" },
+    { "path": "apps/workers" }
   ]
 }

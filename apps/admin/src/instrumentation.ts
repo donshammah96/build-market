@@ -2,8 +2,11 @@ export async function register() {
   if (
     process.env.NEXT_RUNTIME === "nodejs" // bootstrap-only: Next.js instrumentation hook, adminEnvConfig not yet available
   ) {
-    const { initOtel } = await import("./lib/infrastructure/otel");
+    const { initTracing } = await import("@build/telemetry");
     const { adminEnvConfig } = await import("./lib/infrastructure/env");
-    initOtel(adminEnvConfig);
+    initTracing({
+      serviceName: adminEnvConfig.OTEL_SERVICE_NAME || "buildmarket-admin",
+      isProd: adminEnvConfig.NODE_ENV === "production",
+    });
   }
 }

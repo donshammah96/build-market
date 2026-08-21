@@ -1,10 +1,28 @@
+/* eslint-disable no-restricted-syntax -- bootstrap-only: Datadog APM initialization requires early bootstrap before module imports */
+import tracer from "dd-trace";
+tracer.init({
+  service: "buildmarket-workers",
+  env: process.env.DD_ENV,
+  logInjection: true,
+  site: process.env.DD_SITE, // e.g. "us5.datadoghq.com" — same site as everywhere else
+  // DD_API_KEY is picked up automatically from the environment
+});
+/* eslint-enable no-restricted-syntax */
+
 import { validateWorkerEnv } from "./env.js";
+import { initOtel, shutdownOtel } from "./otel.js";
 import { startHealthServer } from "./health.js";
 import { processMaintenanceJob } from "./processors/maintenance.processor.js";
 import { processNotificationRetryJob } from "./processors/notification.processor.js";
 import { processDataExportJob } from "./processors/export.processor.js";
 import { processIncidentJob } from "./processors/incident.processor.js";
 import { processComplianceNotificationJob } from "./processors/compliance-notification.processor.js";
+import {
+  processConfirmationEmailJob,
+  processEspSyncJob,
+} from "./processors/newsletter.processor.js";
+import { processImageUploadJob } from "./processors/upload.processor.js";
+import { processLicenseVerificationJob } from "./processors/license-verification.processor.js";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import {
   getBullMQConnectionOptions,
@@ -13,13 +31,24 @@ import {
   type ExportJobData,
   type IncidentJobData,
   type UserNotificationJobData,
+  type NewsletterConfirmationEmailJobData,
+  type NewsletterEspSyncJobData,
+  type ImageUploadProcessingJobData,
+  type LicenseVerificationJobData,
 } from "@build/queue-server";
-import { createConsumer, type JetStreamConsumer } from "@build/nats";
+import {
+  createConsumer,
+  type JetStreamConsumer,
+  type MessagePayload,
+} from "@build/nats";
 import { Worker, type Job } from "bullmq";
 import { Redis } from "ioredis";
 
 // 1. Fail-closed boot validation (P0: Must run before any socket initialization)
 const env = validateWorkerEnv();
+
+// 2. OpenTelemetry / Datadog APM instrumentation initialization
+initOtel(env);
 
 const logger = new StructuredLogger("workers-daemon");
 logger.info("Starting BuildMarket background worker daemon...", {
@@ -44,12 +73,9 @@ let isShuttingDown = false;
 let isNatsConnected = false;
 const activeWorkers: Worker[] = [];
 let natsConsumer: JetStreamConsumer | null = null;
+let licenseNatsConsumer: JetStreamConsumer | null = null;
 
-// Global crash handlers. Without these, a rejection that BullMQ/ioredis/nats
-// don't catch cleanly can leave the daemon running but wedged, with no log
-// trail and no restart — worse than crashing, since the orchestrator has no
-// signal that anything is wrong. Log everything we can, then let the process
-// exit non-zero so Render/Fly restarts it into a known-good state.
+// Global crash handlers.
 process.on("uncaughtException", (err) => {
   logger.error(
     "[Fatal] Uncaught exception — terminating for orchestrator restart",
@@ -151,13 +177,6 @@ function initializeBullMqWorkers() {
     });
   });
 
-  exportWorker.on("completed", (job) => {
-    logger.info(`[Worker:export] Job completed: ${job.name}`, {
-      jobId: job.id,
-      exportId: job.data.exportId,
-    });
-  });
-
   // Security Incident Worker
   const incidentWorker = new Worker<IncidentJobData>(
     "security-incidents",
@@ -210,23 +229,127 @@ function initializeBullMqWorkers() {
     });
   });
 
+  // Newsletter Confirmation Email Worker
+  const newsletterEmailWorker = new Worker<NewsletterConfirmationEmailJobData>(
+    "newsletter-confirmation-email",
+    async (job: Job<NewsletterConfirmationEmailJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processConfirmationEmailJob(job);
+        },
+      );
+    },
+    {
+      connection: redisConnectionOptions,
+      concurrency: 5,
+    },
+  );
+
+  newsletterEmailWorker.on("failed", (job, err) => {
+    logger.error("[Worker:newsletter-confirmation-email] Job failed", err, {
+      jobId: job?.id,
+      subscriberId: job?.data?.subscriberId,
+    });
+  });
+
+  // Newsletter ESP Sync Worker
+  const newsletterEspSyncWorker = new Worker<NewsletterEspSyncJobData>(
+    "newsletter-esp-sync",
+    async (job: Job<NewsletterEspSyncJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processEspSyncJob(job);
+        },
+      );
+    },
+    {
+      connection: redisConnectionOptions,
+      concurrency: 5,
+    },
+  );
+
+  newsletterEspSyncWorker.on("failed", (job, err) => {
+    logger.error("[Worker:newsletter-esp-sync] Job failed", err, {
+      jobId: job?.id,
+      subscriberId: job?.data?.subscriberId,
+    });
+  });
+
+  // Upload Processing Worker
+  const uploadProcessingWorker = new Worker<ImageUploadProcessingJobData>(
+    "uploads-image-processing",
+    async (job: Job<ImageUploadProcessingJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processImageUploadJob(job);
+        },
+      );
+    },
+    {
+      connection: redisConnectionOptions,
+      concurrency: 2,
+      limiter: {
+        max: 20,
+        duration: 60000,
+      },
+    },
+  );
+
+  uploadProcessingWorker.on("failed", (job, err) => {
+    logger.error("[Worker:uploads-image-processing] Job failed", err, {
+      jobId: job?.id,
+      uploadId: job?.data?.uploadId,
+    });
+  });
+
+  // License Verification Worker
+  const licenseVerificationWorker = new Worker<LicenseVerificationJobData>(
+    "license-verification",
+    async (job: Job<LicenseVerificationJobData>) => {
+      return CorrelationIdManager.run(
+        job.id || CorrelationIdManager.generate(),
+        async () => {
+          return processLicenseVerificationJob(job);
+        },
+      );
+    },
+    {
+      connection: redisConnectionOptions,
+      concurrency: 5,
+    },
+  );
+
+  licenseVerificationWorker.on("failed", (job, err) => {
+    logger.error("[Worker:license-verification] Job failed", err, {
+      jobId: job?.id,
+      professionalId: job?.data?.professionalId,
+    });
+  });
+
   activeWorkers.push(
     maintenanceWorker,
     notificationWorker,
     exportWorker,
     incidentWorker,
     complianceNotificationWorker,
+    newsletterEmailWorker,
+    newsletterEspSyncWorker,
+    uploadProcessingWorker,
+    licenseVerificationWorker,
   );
 }
 
-// 4. Initialize NATS JetStream Durable Consumer (P1)
+// 4. Initialize NATS JetStream Durable Consumers
 async function initializeNatsConsumer() {
   if (env.DISABLE_BACKGROUND_JOBS || !env.NATS_URL) {
     return;
   }
 
   try {
-    // Durable consumer group matching contract
+    // 1. Notification retry consumer group
     natsConsumer = createConsumer(
       "workers-daemon",
       "notification-retry-worker-group",
@@ -240,10 +363,39 @@ async function initializeNatsConsumer() {
     logger.info(
       "[NATS] Connected and subscribed with durable consumer: notification-retry-worker-group",
     );
+
+    // 2. License verification consumer group
+    licenseNatsConsumer = createConsumer(
+      "workers-license-daemon",
+      "license-auto-verify-group",
+      {
+        servers: env.NATS_URL,
+      },
+    );
+    await licenseNatsConsumer.connect();
+    await licenseNatsConsumer.subscribe([
+      {
+        subject: "license.auto_verify_requested",
+        consumerOptions: {
+          durableName: "workers-license-auto-verify-worker",
+        },
+        handler: async (msg: MessagePayload) => {
+          const event = msg.data as LicenseVerificationJobData;
+          msg.working();
+          await processLicenseVerificationJob({
+            id: `nats-${Date.now()}`,
+            data: event,
+          } as Job<LicenseVerificationJobData>);
+        },
+      },
+    ]);
+    logger.info(
+      "[NATS] Connected and subscribed with durable consumer: license-auto-verify-group",
+    );
   } catch (err) {
     isNatsConnected = false;
     logger.error(
-      "[NATS] Failed to initialize JetStream consumer",
+      "[NATS] Failed to initialize JetStream consumers",
       err instanceof Error ? err : new Error(String(err)),
     );
   }
@@ -286,24 +438,20 @@ async function gracefulShutdown(signal: string) {
 
   logger.info(`Received ${signal}. Initiating graceful shutdown...`);
 
-  // Allow up to 30 seconds for active jobs to complete
   const shutdownTimeout = setTimeout(() => {
     logger.error("Graceful shutdown timeout exceeded (30s). Forcing exit.");
     process.exit(1);
   }, 30000);
 
   try {
-    // Note: isShuttingDown is already true at this point (set above), so the
-    // health server keeps responding — now with 503 "shutting_down" — for the
-    // full duration of the drain below. It's closed last, once there's
-    // nothing left for an orchestrator to usefully probe. Closing it first
-    // (as before) meant the 503 path was never actually observable: the
-    // endpoint just went dark the instant SIGTERM arrived.
-
-    // 1. Stop NATS consumer
+    // 1. Stop NATS consumers
     if (natsConsumer) {
       await natsConsumer.disconnect();
-      logger.info("[NATS] JetStream consumer disconnected.");
+      logger.info("[NATS] JetStream retry consumer disconnected.");
+    }
+    if (licenseNatsConsumer) {
+      await licenseNatsConsumer.disconnect();
+      logger.info("[NATS] JetStream license consumer disconnected.");
     }
 
     // 2. Close BullMQ workers (drain active jobs)
@@ -315,6 +463,9 @@ async function gracefulShutdown(signal: string) {
 
     // 4. Close health server last
     healthServer.close();
+
+    // 5. Flush and terminate OpenTelemetry
+    await shutdownOtel();
 
     clearTimeout(shutdownTimeout);
     logger.info("Graceful shutdown complete.");

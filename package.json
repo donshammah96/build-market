@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "postinstall": "node scripts/patch-typescript.mjs",
+    "postinstall": "node scripts/patch-typescript.mjs && node scripts/patch-opennext.mjs",
     "build:client": "turbo run build --filter=client",
     "build:admin": "turbo run build --filter=admin",
     "build:verification-ops": "turbo run build --filter=verification-ops",

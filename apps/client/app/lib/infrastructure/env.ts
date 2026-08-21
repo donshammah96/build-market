@@ -639,10 +639,18 @@ const envGroups: EnvGroup[] = [
   },
   {
     name: "otel",
-    description: "OpenTelemetry Tracing",
+    description: "OpenTelemetry Tracing and Datadog APM",
     variables: [
       {
         name: "OTEL_EXPORTER_OTLP_ENDPOINT",
+        required: false,
+      },
+      {
+        name: "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+        required: false,
+      },
+      {
+        name: "OTEL_EXPORTER_OTLP_HEADERS",
         required: false,
       },
       {
@@ -651,6 +659,23 @@ const envGroups: EnvGroup[] = [
       },
       {
         name: "OTEL_RESOURCE_ATTRIBUTES",
+        required: false,
+      },
+      {
+        name: "DD_API_KEY",
+        required: false,
+      },
+      {
+        name: "DD_SITE_HOST",
+        required: false,
+        default: "us5.datadoghq.com",
+      },
+      {
+        name: "DD_SERVICE",
+        required: false,
+      },
+      {
+        name: "DD_ENV",
         required: false,
       },
     ],
@@ -1476,14 +1501,21 @@ function buildEnvConfig() {
       verboseLogging: isDev,
     },
 
-    // OpenTelemetry Tracing & Metrics
+    // OpenTelemetry Tracing & Metrics (Datadog APM compatible)
     otel: {
       endpoint: getOptionalStringEnv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+      tracesEndpoint: getOptionalStringEnv(
+        "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+      ),
+      headers: getOptionalStringEnv("OTEL_EXPORTER_OTLP_HEADERS"),
       serviceName: getStringEnv(
         "OTEL_SERVICE_NAME",
-        `build-market-client-${nodeEnv}`,
+        getStringEnv("DD_SERVICE", `build-market-client-${nodeEnv}`),
       ),
       resourceAttributes: getOptionalStringEnv("OTEL_RESOURCE_ATTRIBUTES"),
+      apiKey: getOptionalStringEnv("DD_API_KEY"),
+      siteHost: getStringEnv("DD_SITE_HOST", "us5.datadoghq.com"),
+      ddEnv: getStringEnv("DD_ENV", isProd ? "production" : "staging"),
     },
 
     // Regulator Verification API Credentials (ADR-004 boundary compliant)

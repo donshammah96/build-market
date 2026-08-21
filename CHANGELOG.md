@@ -2,6 +2,64 @@
 
 ## [Unreleased]
 
+### Added — Shared `@build/media` Package, Worker Image Processing Pipeline, & Security Scanner
+
+- **Shared Media Package (`packages/media`, `@build/media`)**:
+  - Extracted shared media package providing unified `processImage()`, `createSafeSharp()`, `generateBlurHash()`, `isValidImage()`, `getImageDimensions()`, and `createAvatar()`.
+  - Hardened with decompression-bomb protection (`limitInputPixels: 268_402_689`, `failOn: "error"`), format allowlists (`jpeg`, `png`, `webp`, `avif`, `heif`, `heic`, `gif`), and single-pass buffer encoding.
+  - Implemented generic `VirusScanner` interfaces with `MockVirusScanner`, `CloudmersiveVirusScanner`, and startup registration registry.
+- **Client App Consolidation (`apps/client`)**:
+  - Removed duplicate local `app/lib/media/image-processing.ts` and consolidated `inline-processor.ts` onto `@build/media`.
+- **Worker Image Processing & Fail-Closed Scanning (`apps/workers`)**:
+  - Wired fail-closed malware & virus scanning into `processImageUploadJob` prior to any S3/R2 storage write or `Asset` row persistence.
+  - Optimized primary images, generated thumbnails, blurhash, and dimensions, and persisted them to `Asset` records with deterministic upsert.
+  - Added emergency rollback lever `WORKER_IMAGE_PROCESSING_ENABLED` and offline backfill script `src/scripts/backfill-image-assets.ts`.
+
+### Added — Datadog Direct Ingestion Telemetry, Shared `@build/telemetry` Package, & Cloudflare Observability
+
+- **Unified `@build/telemetry` Package (`packages/telemetry/`)**:
+  - Implemented centralized, agentless telemetry package for Next.js web applications and background daemons without requiring Vercel Pro/Enterprise log drains or a sidecar agent.
+  - **OTLP APM Tracing (`packages/telemetry/src/tracing.ts`)**: Built `initTracing()` wrapping `@vercel/otel` and `@prisma/instrumentation` with automatic environment resolution (`deployment.environment: isProd ? "production" : "staging"`).
+  - **Structured Datadog Logging & PII Redaction (`packages/telemetry/src/logger.ts`)**: Built `createLogger()` with dual-write output (local console for platform viewers and async fire-and-forget HTTP POST to `https://http-intake.logs.<siteHost>/api/v2/logs`), automatic OpenTelemetry active trace correlation (`dd.trace_id`, `dd.span_id`), PII sanitization (redacting `password`, `token`, `secret`, `apiKey`, `clerkId`, `nationalId`, `kraPin`, `phone`, `email`), and default site host `us5.datadoghq.com`.
+  - Added unit test suite in `packages/telemetry/src/__tests__/logger.test.ts` (100% passing) verifying redaction, HTTP formatting, and local development fallback.
+- **Next.js Applications Telemetry Lifecycle (`apps/client/`, `apps/admin/`, `apps/verification-ops/`)**:
+  - Wired `@build/telemetry` and `@vercel/otel` into `register()` lifecycle hooks inside `process.env.NEXT_RUNTIME === "nodejs"`:
+    - `apps/client/instrumentation.ts` (`serviceName: "buildmarket-client"`)
+    - `apps/admin/src/instrumentation.ts` (`serviceName: "buildmarket-admin"`)
+    - `apps/verification-ops/instrumentation.ts` (`serviceName: "buildmarket-verification-ops"`)
+  - Decommissioned legacy raw gRPC NodeSDK files (`apps/client/app/lib/infrastructure/otel.ts` and `apps/admin/src/lib/infrastructure/otel.ts`), converting them into thin adapters delegating directly to `@build/telemetry`.
+- **Standalone Background Workers OTLP APM (`apps/workers/src/otel.ts`, `apps/workers/src/env.ts`, `apps/workers/src/index.ts`)**:
+  - Configured OpenTelemetry `NodeSDK` with `OTLPTraceExporter` and `OTLPMetricExporter` targeting Datadog OTLP Intake (`https://otlp-intake.us5.datadoghq.com/v1/traces`), supporting `OTEL_EXPORTER_OTLP_HEADERS` / `DD_API_KEY` authentication, resource attributes, and Prisma query instrumentation.
+  - Wired `initOtel(env)` to initialize immediately upon daemon boot before BullMQ queues and NATS consumers start, and hooked `shutdownOtel()` into the graceful shutdown drain sequence.
+  - Expanded worker daemon to process `newsletter-confirmation-email`, `newsletter-esp-sync`, `uploads-image-processing`, `license-verification`, and durable NATS JetStream `license.auto_verify_requested` subscriptions.
+- **Workspace & Environment Contract Synchronization (`turbo.json`, `pnpm-workspace.yaml`, `.env.example`)**:
+  - Added `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `DD_API_KEY`, `DD_SITE_HOST`, `DD_SERVICE`, `DD_ENV`, and `wrangler` catalog entry to `pnpm-workspace.yaml` and `turbo.json`.
+  - Updated `.env.example` and `.env.test` templates across `apps/client`, `apps/admin`, `apps/verification-ops`, and `apps/workers`.
+  - Verified all environment variable contract gates (`check-env-contract.mjs`) pass cleanly with 0 missing keys.
+- **Cloudflare Workers Observability & Log Tail Forwarder (`workers/dd-tail-forwarder/`, `apps/client/wrangler.toml`, `apps/client/workers/wrangler.toml`, `.github/workflows/deploy.yml`)**:
+  - Implemented standalone Cloudflare Tail Worker `dd-tail-forwarder` (`workers/dd-tail-forwarder/src/index.ts`) listening on `tail()` events from worker invocations, formatting trace logs and runtime exceptions, and forwarding them asynchronously via HTTP POST to Datadog Logs intake (`https://http-intake.logs.<DD_SITE_HOST>/api/v2/logs`).
+  - Attached `[[tail_consumers]]` bindings targeting `dd-tail-forwarder` to `apps/client/wrangler.toml` and `apps/client/workers/wrangler.toml`.
+  - Added dedicated Vitest test suite (`workers/dd-tail-forwarder/__tests__/tail-forwarder.test.ts`) with 100% passing test assertions and added deployment step in `.github/workflows/deploy.yml`.
+  - Enabled native Cloudflare Workers `[observability]` with 100% head sampling, persistent invocation logs (`[observability.logs]`), and distributed trace capture (`[observability.traces]`).
+
+### Fixed — Cloudflare Deployment Pipeline, OpenNext Build Isolation, & GitHub Actions
+
+- **OpenNext Cloudflare Workers Build & Native C++ Binary Decoupling (`next.config.ts`, `apps/client/package.json`, `scripts/patch-opennext.mjs`, `package.json`)**:
+  - Resolved esbuild packaging failures (`No loader is configured for ".node" files` and dynamic `require("../src/build/Release/sharp-*-*.node")`) in `@opennextjs/cloudflare` by decoupling native C++ dependencies from the Cloudflare Workers V8 isolate runtime.
+  - Set `images: { unoptimized: true }` and removed `serverExternalPackages: ["sharp"]` from `apps/client/next.config.ts` to prevent Next.js standalone file tracing from copying native C++ addons into the OpenNext build workspace.
+  - Removed `sharp` from `apps/client/package.json` (image processing is executed asynchronously by the containerized `apps/workers` daemon, with `inline-processor.ts` fallback).
+  - Created automated postinstall hook `scripts/patch-opennext.mjs` (chained in root `package.json` `postinstall`) to ensure OpenNext bundles stub any optional native Sharp references (`stub-sharp-plugin`) and configure `.node: "empty"` for esbuild.
+  - Updated `apps/client/wrangler.toml` custom build command to `pnpm --filter client run build:cloudflare-worker` for reliable root-level Wrangler invocations.
+  - Added `/.open-next/` and `/.worker-next/` to `apps/client/.gitignore`.
+  - Successfully verified end-to-end deployment for both staging (`build-market-client-staging.donshammah1.workers.dev`) and production (`build-market-client-production.donshammah1.workers.dev`), as well as the R2 malware scan queue worker (`r2-scan-worker-production`).
+- **GitHub Actions Workflow Schema & Step Execution (`.github/workflows/deploy.yml`)**:
+  - Resolved schema validation error (`A sequence was not expected`) by wrapping the top-level step list with a valid workflow mapping (`name`, `on` trigger for `push` to `main` and `workflow_dispatch`, permissions, concurrency, and `jobs.deploy`).
+  - Added runner setup prerequisites (`actions/checkout`, `pnpm/action-setup`, `actions/setup-node` with pnpm cache, and `pnpm install --frozen-lockfile`) to ensure dependencies and workspace packages are available during build.
+  - Resolved `Invalid action input 'preExec'` on `cloudflare/wrangler-action@v3` by extracting `pnpm run build:cloudflare-worker` into a dedicated `Build OpenNext Client App` step prior to the Wrangler deployment step.
+- **Background Worker Daemon Container Prisma Generation (`apps/workers/Dockerfile`)**:
+  - Resolved container boot failure (`SyntaxError: The requested module '@prisma/client' does not provide an export named 'PrismaClient'`) on orchestrators (Render/Docker) by executing `prisma generate` directly inside the deployed `/prod/workers` isolated production output directory during the builder stage.
+  - Ensured `@prisma/client` within pnpm's production virtual store generates Alpine musl runtime binaries (`linux-musl-openssl-3.0.x`) and valid ESM exports before copying into the final runner stage.
+
 ### Added — BullMQ Background Worker Containerization & Local Development Infrastructure
 
 - **Local Development Infrastructure Stack (`docker-compose.yml`, `scripts/README.md`, `package.json`)**:
@@ -18,11 +76,13 @@
 - **Architectural Decision Records (ADR-010 in `apps/client`, ADR-ADMIN-016 in `apps/admin`)**:
   - Formalized the queue producer vs background daemon consumer boundary, prohibiting inline `new Worker(...)` instantiations in Next.js web application contexts.
 - **Queue Contracts & Producer Factories in `@build/queue-server` (`packages/queue-server/src/`)**:
-  - Exported canonical queue contracts and producer factories (`getMaintenanceQueue`, `addMaintenanceJob`, `getNotificationRetryQueue`, `addNotificationRetryJob`, `exportQueue`, `addExportJob`, `incidentQueue`, `userNotificationQueue`, `auditQueue`).
+  - Exported canonical queue contracts and producer factories (`getMaintenanceQueue`, `addMaintenanceJob`, `getNotificationRetryQueue`, `addNotificationRetryJob`, `exportQueue`, `addExportJob`, `incidentQueue`, `userNotificationQueue`, `auditQueue`, `getNewsletterEspSyncQueue`, `getNewsletterEmailQueue`, `getUploadProcessingQueue`, `getLicenseVerificationQueue`).
   - Decoupled queue producer definitions from worker consumer loops across all applications.
-- **Next.js Web Runtime Producer Cleansing (`apps/client/app/jobs/index.ts`, `apps/admin/src/lib/jobs/index.ts`, `apps/admin/src/lib/workers/`)**:
-  - Cleansed inline worker consumer instantiations (`new Worker(...)`) from Next.js serverless request lifecycles.
-  - Retained queue scheduling and job enqueueing in Next.js while delegating long-running consumer processing strictly to the standalone `apps/workers` daemon.
+- **Client Application Worker Cleansing & Isolation (`apps/client/app/workers/`, `apps/client/app/jobs/`, `apps/client/eslint.config.js`)**:
+  - Completely deleted legacy embedded worker directory `apps/client/app/workers/` (`compliance`, `export`, `license-verification`, `newsletter`, `uploads`).
+  - Cleaned `apps/client/app/jobs/export-cleanup.ts` to be pure cron scheduler without worker instantiation.
+  - Extracted `apps/client/app/lib/domains/uploads/inline-processor.ts` for non-worker local development execution.
+  - Enforced ESLint rule `no-restricted-imports` forbidding worker modules or consumer loops inside `apps/client`, and removed worker bypasses from security drift scripts.
 
 - **PostgreSQL Declarative Monthly Range Partitioning (`packages/db/prisma/migrations/20260816050000_partition_high_velocity_logs/migration.sql`)**:
   - Implemented zero-downtime table swap DDL converting append-only tables (`AdminAuditLog`, `AuditLog`, `AnalyticsEvent`) to PostgreSQL declarative range-partitioned tables partitioned by `RANGE (createdAt)`.

@@ -43,6 +43,8 @@
     { "path": "../../packages/queue-server" },
     { "path": "../../packages/ui" },
     { "path": "../../packages/security-clerk" },
-    { "path": "../../packages/env-validation" }
+    { "path": "../../packages/env-validation" },
+    { "path": "../../packages/telemetry" },
+    { "path": "../../packages/media" }
   ]
 }
