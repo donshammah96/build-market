@@ -35,6 +35,8 @@ coverage
 
 # Build Outputs
 .next/
+.open-next/
+.worker-next/
 out/
 build
 dist
