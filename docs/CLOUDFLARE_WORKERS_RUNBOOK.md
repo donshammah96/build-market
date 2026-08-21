@@ -126,11 +126,15 @@ Continuous deployment is automated via `.github/workflows/deploy.yml` on every p
    - `pnpm/action-setup@v4`
    - `actions/setup-node@v4` with Node 24 and pnpm caching.
    - `pnpm install --frozen-lockfile` (triggers postinstall patch script).
-2. **Deploy Cloudflare Scan Worker**:
+   - `pnpm run db:generate`
+   - `pnpm exec turbo run build --filter=./packages/*`
+2. **Deploy Datadog Tail Forwarder Worker**:
+   - Executes `wrangler deploy --env production` in `workers/dd-tail-forwarder`.
+3. **Deploy Cloudflare Scan Worker**:
    - Executes `wrangler deploy --env production` in `apps/client/workers`.
-3. **Build OpenNext Client App**:
+4. **Build OpenNext Client App**:
    - Executes `pnpm run build:cloudflare-worker` in `apps/client`.
-4. **Deploy OpenNext Client App**:
+5. **Deploy OpenNext Client App**:
    - Executes `cloudflare/wrangler-action@v3` with `wrangler deploy --env production`.
 
 ### Required GitHub Actions Repository Secrets

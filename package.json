@@ -8,6 +8,7 @@
     "build:admin": "turbo run build --filter=admin",
     "build:verification-ops": "turbo run build --filter=verification-ops",
     "build:workers": "turbo run build --filter=workers",
+    "build:packages": "pnpm run db:generate && turbo run build --filter=./packages/*",
     "dev": "turbo run dev",
     "dev:client": "turbo run dev --filter=client",
     "dev:admin": "turbo run dev --filter=admin",

@@ -33,6 +33,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma Client
+        run: pnpm run db:generate
+
+      - name: Build Workspace Packages
+        run: pnpm exec turbo run build --filter=./packages/*
+
       - name: Deploy Datadog Tail Forwarder Worker
         uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
         with:
