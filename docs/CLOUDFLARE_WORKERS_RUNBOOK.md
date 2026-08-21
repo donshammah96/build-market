@@ -137,12 +137,18 @@ Continuous deployment is automated via `.github/workflows/deploy.yml` on every p
 5. **Deploy OpenNext Client App**:
    - Executes `cloudflare/wrangler-action@v3` with `wrangler deploy --env production`.
 
-### Required GitHub Actions Repository Secrets
+### Required GitHub Actions Repository Secrets & Variables
 
-Configure the following secrets in **GitHub Repository Settings -> Secrets and variables -> Actions**:
+Configure the following secrets in **GitHub Repository Settings -> Secrets and variables -> Actions -> Secrets**:
 
 - `CLOUDFLARE_API_TOKEN`: Cloudflare API Token with `Account.Workers Scripts:Edit`, `Account.Workers KV Storage:Edit`, `Account.Workers R2 Storage:Edit`, and `Account.Workers Queues:Edit` permissions.
 - `CLOUDFLARE_ACCOUNT_ID`: Cloudflare 32-character account identifier.
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`: Clerk Publishable Key (`pk_live_...` or `pk_test_...`) required at build time for client component bundle compilation.
+
+Optional Repository Variables (**Actions -> Variables**):
+
+- `NEXT_PUBLIC_APP_URL`: Base application origin (defaults to `https://buildmarket.live`).
+- `NEXT_PUBLIC_API_URL`: API origin (defaults to `https://buildmarket.live/api`).
 
 ---
 

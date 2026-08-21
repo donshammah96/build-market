@@ -31,10 +31,12 @@ This document is the operational and architectural entrypoint for staff engineer
    - [Client Application (`apps/client`)](#client-application-appsclient)
    - [Admin Portal (`apps/admin`)](#admin-portal-appsadmin)
    - [Verification Operations (`apps/verification-ops`)](#verification-operations-appsverification-ops)
+   - [Background Workers & Edge Decoupling (`apps/workers`)](#background-workers--edge-decoupling-appsworkers)
    - [Event Messaging Architecture (NATS JetStream)](#event-messaging-architecture-nats-jetstream)
 7. [Environment & Secret Management](#7-environment--secret-management)
 8. [Deployment & Release Engineering](#8-deployment--release-engineering)
    - [Build Pipelines](#build-pipelines)
+   - [Cloudflare Workers & OpenNext Deployment](#cloudflare-workers--opennext-deployment)
    - [Zero-Downtime Migration Policy](#zero-downtime-migration-policy)
    - [Feature Flags & Rollback Controls](#feature-flags--rollback-controls)
 9. [Incident Response & Operational Runbooks](#9-incident-response--operational-runbooks)
@@ -54,7 +56,8 @@ build-market/
 ├── apps/
 │   ├── client/              # Primary marketplace web app (Homeowners, Pros, Vendors) [Port 3500]
 │   ├── admin/               # Internal administration portal with capability-based RBAC [Port 3005]
-│   └── verification-ops/    # Regulatory verification operations console [Port 3501]
+│   ├── verification-ops/    # Regulatory verification operations console [Port 3501]
+│   └── workers/             # Standalone BullMQ & NATS background worker daemon [Port 8080 healthz]
 ├── packages/
 │   ├── auth-server/         # Server-side auth utilities & session validation
 │   ├── clerk-test-harness/  # Deterministic test harness & mock helpers for Clerk
@@ -63,12 +66,14 @@ build-market/
 │   ├── env-validation/      # Unified environment schema parsing and validation logic
 │   ├── eslint-config/       # Monorepo-wide ESLint configurations
 │   ├── mail-server/         # Email delivery abstraction (Resend / SMTP)
+│   ├── media/               # Shared media processing, Sharp optimization & blurhash encoding
 │   ├── messaging-server/    # Real-time WebSocket / chat server integrations
 │   ├── nats/                # NATS JetStream event publishing, consuming & stream management
 │   ├── queue-server/        # BullMQ background job queues, workers, and processor factories
 │   ├── redis/               # Upstash & ioredis caching, rate limiting, and eviction policies
 │   ├── resilience/          # Circuit breaker, retry mechanisms & resilient execution wrapper
 │   ├── security-clerk/      # Clerk security integrations & session assertion helpers
+│   ├── telemetry/           # OpenTelemetry instrumentation, Prisma tracing & Datadog APM
 │   ├── types/               # Monorepo shared TypeScript interfaces, DTOs & Zod schemas
 │   ├── typescript-config/   # Base tsconfig presets across all workspaces
 │   ├── ui/                  # Shared Radix UI component library and design tokens
@@ -79,11 +84,12 @@ build-market/
 
 ### Applications (`apps/*`)
 
-| Application                 | Port   | Runtime / Framework                                 | Operational Ownership & Target Audience                                                                                                                                             |
-| :-------------------------- | :----- | :-------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`apps/client`**           | `3500` | Next.js 16 (Turbopack / OpenNext Cloudflare Worker) | Consumer-facing portal for homeowners, contractors, architects, vendors, and suppliers. Manages onboarding, catalog, project coordination, secure payments, messaging, and reviews. |
-| **`apps/admin`**            | `3005` | Next.js 16 (`src/` layout)                          | Internal platform operators, trust & safety, finance teams, and system administrators. Employs `safeAction` mutation flows and capability-based authorization.                      |
-| **`apps/verification-ops`** | `3501` | Next.js 16                                          | Regulatory compliance operators verifying credentials with Kenya statutory boards (EBK, BORAQS, NCA, EARB, VRB, ISK, EPRA).                                                         |
+| Application                 | Port             | Runtime / Framework                                 | Operational Ownership & Target Audience                                                                                                                                             |
+| :-------------------------- | :--------------- | :-------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`apps/client`**           | `3500`           | Next.js 16 (Turbopack / OpenNext Cloudflare Worker) | Consumer-facing portal for homeowners, contractors, architects, vendors, and suppliers. Manages onboarding, catalog, project coordination, secure payments, messaging, and reviews. |
+| **`apps/admin`**            | `3005`           | Next.js 16 (`src/` layout)                          | Internal platform operators, trust & safety, finance teams, and system administrators. Employs `safeAction` mutation flows and capability-based authorization.                      |
+| **`apps/verification-ops`** | `3501`           | Next.js 16                                          | Regulatory compliance operators verifying credentials with Kenya statutory boards (EBK, BORAQS, NCA, EARB, VRB, ISK, EPRA).                                                         |
+| **`apps/workers`**          | `8080` (healthz) | Node.js 24 / Docker Daemon                          | Standalone background processing daemon. Consumes BullMQ queues and NATS JetStream events for Sharp image optimization, blurhash generation, batch reporting, and mail delivery.    |
 
 ### Shared Packages (`packages/*`)
 
@@ -96,6 +102,8 @@ All internal libraries are packaged under the `@build/*` namespace:
 - **`@build/nats`**: High-throughput JetStream messaging producer/consumer framework for cross-service events.
 - **`@build/redis`**: Redis connection pooling, rate limiters, and memory eviction enforcement.
 - **`@build/queue-server`**: BullMQ async workers for background heavy processing (document watermarking, report exports, OCR processing).
+- **`@build/media`**: Image processing pipelines, Sharp wrappers, blurhash generation, and metadata sanitization.
+- **`@build/telemetry`**: Unified OpenTelemetry bootstrap, Prisma tracing hooks, and Datadog APM instrumentation.
 - **`@build/verification-domain`**: Regulatory verification state machines and external statutory API clients.
 - **`@build/ui`**: Radix UI-based accessible component library styled with Tailwind CSS.
 - **`@build/env-validation`**: Zero-dependency environment variable schema parsers.
@@ -107,9 +115,10 @@ All internal libraries are packaged under the `@build/*` namespace:
 - **Frontend & App Frameworks:** Next.js `16.2.11` (App Router), React `^19.1.0`, Tailwind CSS `^4.0`, Framer Motion
 - **State & Data Fetching:** TanStack React Query `^5.90`, Zustand
 - **Persistence & Caching:** PostgreSQL (via Prisma `^7.6`), Redis (Upstash / ioredis `5.11`)
-- **Messaging & Event Streaming:** NATS JetStream `^2.19`, BullMQ `^5.76`
+- **Messaging & Background Workers:** NATS JetStream `^2.19`, BullMQ `^5.76`, Sharp `^0.33`, Blurhash
 - **Identity & Auth:** Clerk (`@clerk/nextjs` `^7.3`, `@clerk/backend` `^3.4`)
-- **Telemetry & Observability:** OpenTelemetry (OTLP gRPC), Pino structured logging, PostHog
+- **Telemetry & Observability:** Datadog APM / dd-trace, OpenTelemetry (OTLP gRPC), Pino structured logging, PostHog
+- **Edge & Cloud Deployment:** OpenNext (`@opennextjs/cloudflare`), Cloudflare Workers, Cloudflare R2, Cloudflare Queues, Docker
 
 ---
 
@@ -165,6 +174,8 @@ When documents disagree, resolve top-to-bottom:
 
 - **Client Architecture Guide:** [`.agent/API-TO-FRONTEND-ARCHITECTURE.md`](.agent/API-TO-FRONTEND-ARCHITECTURE.md)
 - **Admin Architecture Guide:** [`.agent/ADMIN-ARCHITECTURE.md`](.agent/ADMIN-ARCHITECTURE.md)
+- **Cloudflare Workers & OpenNext Runbook:** [`docs/CLOUDFLARE_WORKERS_RUNBOOK.md`](docs/CLOUDFLARE_WORKERS_RUNBOOK.md)
+- **Auth & Satellite Domain Architecture:** [`docs/AUTH_ONBOARDING_AUTOPSY_AND_ROADMAP.md`](docs/AUTH_ONBOARDING_AUTOPSY_AND_ROADMAP.md)
 - **Repo-Wide Instructions:** [`.github/copilot-instructions.md`](.github/copilot-instructions.md)
 - **Admin Defect Registry:** [`apps/admin/docs/DEFECTS.md`](apps/admin/docs/DEFECTS.md)
 - **Admin Feature Flag & Rollback Contracts:** [`apps/admin/docs/ROLLBACK-CONTRACTS.md`](apps/admin/docs/ROLLBACK-CONTRACTS.md)
@@ -244,6 +255,12 @@ pnpm run dev:workers           # Background worker daemon on http://localhost:80
 
 # Start both frontends simultaneously (Client + Admin)
 pnpm run dev:frontend
+
+# Build workspace packages and generate Prisma Client
+pnpm run build:packages
+
+# Build standalone worker Docker container
+pnpm run docker:build:workers
 ```
 
 ### Local Endpoints Map
@@ -350,6 +367,12 @@ pnpm run redis:enforce-policy   # Verify maxmemory eviction policies
 1. Handles regulatory ingestion, document verification queues, and external registrar synchronization (EBK, BORAQS, NCA).
 2. Maintains strict isolation from customer-facing client logic to protect regulatory compliance integrity.
 
+### Background Workers & Edge Decoupling (`apps/workers`)
+
+1. **V8 WebAssembly/JS Isolate Boundary:** Cloudflare Workers (`apps/client` on OpenNext) execute in `workerd` isolates where native C++ Node addons (`.node` files such as Sharp or native canvas) cannot run.
+2. **Asynchronous Offloading:** CPU-heavy tasks—including Sharp image resizing, EXIF sanitization, blurhash generation, PDF document watermarking, and batch report exports—are enqueued via BullMQ (`@build/queue-server`), NATS JetStream (`@build/nats`), or Cloudflare Queues (`upload-scan-queue`) and processed in containerized Node.js runtime daemons (`apps/workers`).
+3. **Fallback & Staged Ingestion:** Fast, non-native file ingestion happens at the edge into staging buckets (`buildmarket-staged`), after which decoupled scan/transcode workers validate and promote assets to verified storage (`buildmarket-verified-private`).
+
 ### Event Messaging Architecture (NATS JetStream)
 
 Cross-service and asynchronous workflows prefer NATS JetStream eventing (`@build/nats`) over direct point-to-point HTTP coupling.
@@ -394,11 +417,21 @@ pnpm run build
 pnpm run build:client
 pnpm run build:admin
 pnpm run build:verification-ops
+pnpm run build:workers
+pnpm run build:packages
 
 # Cloudflare Worker deployment for client
 pnpm run client:build:cloudflare-worker
 pnpm run client:deploy:cloudflare-worker
 ```
+
+### Cloudflare Workers & OpenNext Deployment
+
+The client web application runs on Cloudflare Workers via OpenNext (`@opennextjs/cloudflare`) paired with Cloudflare R2 and Cloudflare Queues.
+
+- **Staging URL:** `https://build-market-client-staging.donshammah1.workers.dev`
+- **Production URL:** `https://build-market-client-production.donshammah1.workers.dev`
+- **Deployment Operations & Runbook:** Full deployment instructions, asset budget verification (`node scripts/check-worker-asset-budget.mjs`), secret configuration (`wrangler secret put`), and instant rollback procedures (`wrangler rollback <VERSION_ID>`) are detailed in [`docs/CLOUDFLARE_WORKERS_RUNBOOK.md`](docs/CLOUDFLARE_WORKERS_RUNBOOK.md).
 
 ### Zero-Downtime Migration Policy
 

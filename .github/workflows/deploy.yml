@@ -57,6 +57,10 @@ jobs:
 
       - name: Build OpenNext Client App
         working-directory: apps/client
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || secrets.CLERK_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL || secrets.NEXT_PUBLIC_APP_URL || 'https://buildmarket.live' }}
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || secrets.NEXT_PUBLIC_API_URL || 'https://buildmarket.live/api' }}
         run: pnpm run build:cloudflare-worker
 
       - name: Deploy OpenNext Client App
