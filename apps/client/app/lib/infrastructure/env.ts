@@ -681,6 +681,16 @@ const envGroups: EnvGroup[] = [
     ],
   },
   {
+    name: "stagingAuth",
+    description: "Staging Environment HTTP Basic Auth & Protection",
+    variables: [
+      { name: "STAGING_AUTH_USER", required: false, default: "buildmarket" },
+      { name: "STAGING_AUTH_PASSWORD", required: false },
+      { name: "STAGING_AUTH_SECRET", required: false },
+      { name: "STAGING_AUTH_ENABLED", required: false },
+    ],
+  },
+  {
     name: "regulators",
     description: "Regulator Verification API Credentials",
     variables: [
@@ -1555,6 +1565,20 @@ function buildEnvConfig() {
         apiKey: getOptionalStringEnv("REGULATOR_EPRA_API_KEY"),
         signingSecret: getOptionalStringEnv("REGULATOR_EPRA_SIGNING_SECRET"),
       },
+    },
+
+    // Staging Environment HTTP Basic Auth & Protection (DD_ENV === "staging")
+    stagingAuth: {
+      isEnabled:
+        (getOptionalStringEnv("DD_ENV") === "staging" ||
+          getBooleanEnv("STAGING_AUTH_ENABLED", false)) &&
+        Boolean(
+          getOptionalStringEnv("STAGING_AUTH_PASSWORD") ||
+          getOptionalStringEnv("STAGING_AUTH_SECRET"),
+        ),
+      user: getStringEnv("STAGING_AUTH_USER", "buildmarket"),
+      password: getOptionalStringEnv("STAGING_AUTH_PASSWORD"),
+      secret: getOptionalStringEnv("STAGING_AUTH_SECRET"),
     },
   } as const;
 }

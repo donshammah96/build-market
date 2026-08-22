@@ -71,13 +71,17 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
 
   const connectOrigins = [
     ...selfAndFirstParty,
-    // Canonical www subdomain: Next.js RSC prefetch fetch() calls resolve against the
+    // Canonical www subdomain and staging origins: Next.js RSC prefetch fetch() calls resolve against the
     // page's href origin. If NEXT_PUBLIC_APP_URL is the Vercel deployment URL rather
-    // than www.buildmarket.app, appOrigin won't cover these requests. Explicit entry
+    // than www.buildmarket.app or staging.buildmarket.app, appOrigin won't cover these requests. Explicit entry
     // ensures connect-src allows them regardless of env var configuration.
     "https://www.buildmarket.app",
+    "https://staging.buildmarket.app",
     // Third-party (identity): Clerk frontend API for auth/session operations.
     clerkFrontendApiOrigin,
+    "https://clerk.staging.buildmarket.app",
+    // Third-party (identity): Clerk backend API.
+    "https://api.clerk.com",
     // Third-party (identity): Clerk FAPI for satellite domains (e.g.
     // clerk.admin.buildmarket.app). Explicit per-satellite list — see
     // clerkSatelliteOrigins doc comment. NOT a wildcard: a wildcard here would
@@ -105,16 +109,18 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
 
   const scriptOrigins = [
     ...selfAndFirstParty,
-    // Canonical production origins: Cloudflare injects /cdn-cgi/ scripts (email-decode,
+    // Canonical production and staging origins: Cloudflare injects /cdn-cgi/ scripts (email-decode,
     // challenge platform, Insights) from whichever origin the request arrives on — the
-    // apex buildmarket.app or www.buildmarket.app. 'self' only covers the serving origin,
+    // apex buildmarket.app, www.buildmarket.app, or staging.buildmarket.app. 'self' only covers the serving origin,
     // so both must be listed explicitly. Also guards against NEXT_PUBLIC_APP_URL being
     // set to the Vercel deployment URL instead of the canonical production domain.
     "https://buildmarket.app",
     "https://www.buildmarket.app",
+    "https://staging.buildmarket.app",
     // Third-party (identity): Clerk JS assets. Derived from NEXT_PUBLIC_CLERK_FRONTEND_API
     // so the origin tracks env config rather than a hardcoded hostname.
     clerkFrontendApiOrigin,
+    "https://clerk.staging.buildmarket.app",
     // Third-party (identity): Clerk FAPI for satellite domains. Explicit list, not a
     // wildcard — see clerkSatelliteOrigins doc comment above.
     ...clerkSatelliteOrigins,
@@ -180,6 +186,8 @@ export function buildCspWithNonce(opts: CspNonceOptions): string {
 
   const frameOrigins = [
     "'self'",
+    "https://staging.buildmarket.app",
+    "https://clerk.staging.buildmarket.app",
     "https://vercel.live",
     "https://*.vercel.live",
     ...(clerkChallengeOrigins ?? []),

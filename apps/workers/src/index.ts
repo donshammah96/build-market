@@ -1,3 +1,4 @@
+import "./bootstrap.js";
 /* eslint-disable no-restricted-syntax -- bootstrap-only: Datadog APM initialization requires early bootstrap before module imports */
 import tracer from "dd-trace";
 tracer.init({

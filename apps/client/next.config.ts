@@ -49,6 +49,9 @@ const nextConfig: NextConfig = {
     "@build/queue-server",
     "@build/env-validation",
     "@build/security-clerk",
+    "@build/media",
+    "@build/telemetry",
+    "@build/lead-qualification",
   ],
 
   // Turbopack configuration (used in dev mode with --turbopack flag)

@@ -15,6 +15,7 @@ const nextConfig: NextConfig = {
     "@build/enums",
     "@build/env-validation",
     "@build/security-clerk",
+    "@build/telemetry",
   ],
   // Don't advertise the framework on a compliance-sensitive internal tool.
   poweredByHeader: false,

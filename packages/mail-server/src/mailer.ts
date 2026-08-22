@@ -1,6 +1,19 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendClient: Resend | null = null;
+
+function getResendClient(): Resend {
+  if (!resendClient) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      throw new Error(
+        "Missing API key. Pass it via RESEND_API_KEY environment variable.",
+      );
+    }
+    resendClient = new Resend(apiKey);
+  }
+  return resendClient;
+}
 
 export interface EmailAttachment {
   filename: string;
@@ -27,6 +40,7 @@ export async function sendEmail({
   cc,
   bcc,
 }: SendEmailOptions) {
+  const resend = getResendClient();
   await resend.emails.send({
     from: "no-reply/buildmarket.com",
     to,

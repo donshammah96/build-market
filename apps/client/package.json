@@ -61,6 +61,7 @@
     "@build/auth-server": "workspace:*",
     "@build/db": "workspace:*",
     "@build/enums": "workspace:*",
+    "@build/lead-qualification": "workspace:*",
     "@build/mail-server": "workspace:*",
     "@build/media": "workspace:*",
     "@build/messaging-server": "workspace:*",

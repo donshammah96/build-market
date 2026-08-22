@@ -14,6 +14,7 @@ import {
   Search,
   LayoutTemplate,
   ShoppingBag,
+  Building2,
 } from "lucide-react";
 
 import { ClientNavbar } from "@/components/layout/ClientNavbar";
@@ -386,6 +387,13 @@ export default function UserDashboardPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-1">
+                <QuickLink
+                  icon={<Building2 className="h-4 w-4" />}
+                  label="Project Intakes (AI Scored)"
+                  href="/leads"
+                  count="AI"
+                  badgeColor="bg-emerald-100 text-emerald-800"
+                />
                 <QuickLink
                   icon={<LayoutTemplate className="h-4 w-4" />}
                   label="Browse Professionals"

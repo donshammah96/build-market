@@ -35,6 +35,7 @@ import {
 } from "@/app/lib/security/middleware/csp-nonce";
 import { PROFESSIONAL_ROUTES } from "@/lib/routes";
 import { recordMiddlewareFallback } from "@/app/lib/auth/telemetry-metrics";
+import { handleStagingProtection } from "@/app/lib/security/middleware/staging-auth";
 
 // =============================================================================
 // Middleware
@@ -501,6 +502,13 @@ const middleware = async (
   req: NextRequest,
   event?: any,
 ): Promise<NextResponse | Response> => {
+  // --- STAGING ENVIRONMENT PERIMETER PROTECTION ---
+  const stagingBlock = handleStagingProtection(req);
+  if (stagingBlock) {
+    logMiddlewareDecision(req, "mw_deny_staging_unauthenticated");
+    return stagingBlock;
+  }
+
   const nonce = generateCspNonce();
   const cspValue = buildRequestCsp(nonce);
 

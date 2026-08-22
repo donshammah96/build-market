@@ -2,14 +2,12 @@ name: CI
 
 on:
   push:
-    # integration/admin-overhaul is a long-lived integration branch for the
-    # admin-overhaul effort; it gets the same post-merge gates as main/develop
     # (see client/admin-changelog-guard and client/admin-preview-smoke-gate
     # below) so regressions are caught even if they land via a fast-forward
     # merge or a merge commit that skipped an up-to-date PR check.
-    branches: [main, develop, integration/admin-overhaul]
+    branches: [main, staging]
   pull_request:
-    branches: [main, develop, integration/admin-overhaul]
+    branches: [main, staging]
   schedule:
     # Nightly run of the flake-focused admin:test:all suite (see
     # admin-nightly-test-all below). 03:00 UTC is outside typical business
@@ -108,7 +106,7 @@ jobs:
   client-changelog-guard:
     name: Client Changelog Guard
     runs-on: ubuntu-latest
-    # Runs on PRs (pre-merge) AND on push to main/develop/integration/admin-overhaul
+    # Runs on PRs (pre-merge) AND on push to main/staging
     # (post-merge) — see the `on.push.branches` list above for which branches
     # that covers. A merge commit or fast-forward push that slipped past PR
     # review still gets checked here.
@@ -184,7 +182,7 @@ jobs:
   admin-changelog-guard:
     name: Admin Changelog Guard
     runs-on: ubuntu-latest
-    # Runs on PRs (pre-merge) AND on push to main/develop/integration/admin-overhaul
+    # Runs on PRs (pre-merge) AND on push to main/staging
     # (post-merge) — mirrors client-changelog-guard.
     if: github.event_name == 'pull_request' || github.event_name == 'push'
     # Mirrors client-changelog-guard exactly. Before this job existed, admin
@@ -465,7 +463,7 @@ jobs:
     # minutes. On a passing PR the net wall-clock cost is ~5 extra minutes;
     # on a failing PR we save the full build cost every time.
     needs: [validate]
-    # Runs on PRs (pre-merge) AND on push to main/develop/integration/admin-overhaul
+    # Runs on PRs (pre-merge) AND on push to main/staging
     # (post-merge). Checkout below already resolves to the right commit for
     # either event type without any extra `ref:` handling.
     if: github.event_name == 'pull_request' || github.event_name == 'push'
@@ -889,7 +887,7 @@ jobs:
     # turbo, but never actually boots the server, so none of that is exposed
     # without a real smoke test.
     needs: [validate]
-    # Runs on PRs (pre-merge) AND on push to main/develop/integration/admin-overhaul
+    # Runs on PRs (pre-merge) AND on push to main/staging
     # (post-merge) — mirrors client-preview-smoke-gate.
     if: github.event_name == 'pull_request' || github.event_name == 'push'
     timeout-minutes: 25
@@ -1509,6 +1507,53 @@ jobs:
         run: |
           [ -f /tmp/upstash-rest-stub.pid ] && kill "$(cat /tmp/upstash-rest-stub.pid)" >/dev/null 2>&1 || true
 
+  deploy-staging-migrations:
+    name: Deploy Staging Migrations
+    runs-on: ubuntu-latest
+    # Push-to-staging only — not pull_request, not push to main. This is
+    # deliberately NOT Supabase's native GitHub-integration migration runner
+    # (which expects supabase/migrations, a Supabase CLI-format directory we
+    # don't have — we use Prisma everywhere, including staging). Keeping one
+    # migration tool for local/staging/production avoids the drift risk of
+    # two parallel migration systems disagreeing about staging's schema.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    # Only run once the main validate job (build/typecheck/test) has passed —
+    # no reason to apply migrations against staging for a push that's
+    # already broken on its own terms.
+    needs: validate
+    permissions:
+      contents: read
+    # Install + a single `prisma migrate deploy` run; bounds the blast
+    # radius of a hung runner instead of the 360-minute platform default.
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Same script the CI postgres-backed jobs use against the ephemeral CI
+      # database (see "Apply database migrations" above) — reused here
+      # against the real, persistent staging Supabase project instead of a
+      # throwaway container. STAGING_DATABASE_URL is a repo Actions secret,
+      # separate from the Vercel-side DATABASE_URL env var scoped to the
+      # staging branch (Vercel and GitHub Actions don't share env/secrets
+      # stores, so this has to be configured independently in both places).
+      - name: Apply Prisma migrations to staging
+        run: pnpm run db:migrate:deploy
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
@@ -1528,15 +1573,17 @@ jobs:
       - admin-preview-smoke-gate
       - verification-ops-preview-smoke-gate
       - admin-nightly-test-all
+      - deploy-staging-migrations
     timeout-minutes: 5
     steps:
       - name: Check status of all required jobs
         run: |
           # `needs.*.result` is one of: success, failure, cancelled, skipped.
           # The changelog guards and both smoke gates now run on pull_request
-          # AND on push to main/develop/integration/admin-overhaul (see their
+          # AND on push to main/staging (see their
           # `if:` conditions above); admin-nightly-test-all only runs on
-          # `schedule` / `workflow_dispatch`. Every one of those jobs reports
+          # `schedule` / `workflow_dispatch`; deploy-staging-migrations only
+          # runs on `push` to `staging`. Every one of those jobs reports
           # "skipped" rather than "success" on event types it doesn't run
           # for — that's an expected, non-failing outcome here, not a real gap.
           results='${{ toJSON(needs) }}'

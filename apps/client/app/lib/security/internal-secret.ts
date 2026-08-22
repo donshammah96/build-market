@@ -5,7 +5,7 @@ import { env } from "@/app/lib/infrastructure/env";
  * Edge-compatible constant-time string comparison to prevent timing attacks.
  * Does not import Node.js 'crypto' module so it runs safely in Edge runtime (middleware).
  */
-function timingSafeEqualStrings(a: string, b: string): boolean {
+export function timingSafeEqualStrings(a: string, b: string): boolean {
   if (a.length !== b.length) {
     return false;
   }

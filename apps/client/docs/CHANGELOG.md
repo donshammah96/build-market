@@ -28,6 +28,52 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Added — Staging Environment Perimeter & HTTP Basic Auth Protection
+
+- **Staging Anti-Crawling & Perimeter Protection (`app/lib/security/middleware/staging-auth.ts`, `middleware.ts`, `app/lib/infrastructure/env.ts`)**:
+  - Implemented application-level staging perimeter gate (`handleStagingProtection`) executing at the root of `middleware.ts`, gated strictly on `env.stagingAuth.isEnabled` (`DD_ENV === "staging"` with credentials present).
+  - Configured HTTP Basic Auth challenge (`401 Unauthorized` with `WWW-Authenticate: Basic realm="BuildMarket Staging"`) alongside bypass token support via `x-staging-secret` header or `bm_staging_auth` cookie.
+  - Implemented edge-safe constant-time string comparison (`timingSafeEqualStrings`) to protect against timing side-channel attacks without importing `node:crypto`.
+  - Added granular path exemptions for health checks (`/api/healthz`), third-party webhooks (`/api/webhooks/*` e.g., Clerk, Stripe, Resend), and internal service requests with valid `x-internal-secret`.
+  - Reaffirmed Clerk as the **canonical runtime identity and authentication provider** on staging (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_FRONTEND_API=https://clerk.staging.buildmarket.app`), maintaining full ADR-001 architectural adherence once perimeter access is established.
+  - Added comprehensive unit test coverage in `__tests__/middleware/staging-auth.test.ts` (12 tests covering exemptions, invalid credentials, secret headers, and cookie bypass).
+
+### Added — Staging & Clerk Staging CSP Allow-list Origins
+
+- **Content Security Policy Staging Allow-list (`app/lib/security/middleware/csp-nonce.ts`, `next-config-csp.ts`)**:
+  - Added `https://staging.buildmarket.app`, `https://clerk.staging.buildmarket.app`, and `https://api.clerk.com` to `connect-src`.
+  - Added `https://staging.buildmarket.app` and `https://clerk.staging.buildmarket.app` to `script-src` and `script-src-elem`.
+  - Added `https://staging.buildmarket.app` and `https://clerk.staging.buildmarket.app` to `frame-src`.
+  - Added unit test assertions in `__tests__/middleware/csp-nonce.test.ts` verifying all staging origins are allowed across CSP directives.
+
+### Added — Pre-Qualified Marketplace Leads Qualification Engine, Homeowner Intake Workflow, & Professional Portal UI
+
+- **Client Domain Slice & Thin REST Route Adapters (`app/lib/domains/marketplace-leads/`, `app/api/leads/qualification/`)**:
+  - Implemented domain slice in `app/lib/domains/marketplace-leads/` (`contracts.ts`, `repository.ts`, `service.ts`) with strict `Result<T, DomainError>` returns and zero inline Prisma calls in route handlers per ADR-002.
+  - Standardized `app/api/leads/qualification/shared.ts` module with `toMarketplaceLeadActor`, `logMarketplaceLeadRouteOutcome`, `domainErrorCodeToHttpStatus`, and request body size limits.
+  - Refactored all marketplace lead REST endpoints into thin HTTP route adapters:
+    - `GET | POST /api/leads/qualification`: Protected with `withAuth`, `IdempotencyService`, and rate limiting.
+    - `GET | PATCH /api/leads/qualification/[id]`: Status retrieval and progressive profiling with idempotency protection.
+    - `POST /api/leads/qualification/[id]/documents`: Verification document attachment and virus scan trigger.
+    - `POST /api/leads/qualification/[id]/submit`: Scored lead submission and automated routing.
+    - `GET /api/leads/qualification/routing`: Masked inbox for professionals wrapped with `withRole([PROFESSIONAL, ADMIN])`.
+    - `POST /api/leads/qualification/routing/[id]/accept`: Professional acceptance with atomic PII disclosure, `contactDisclosedAt` stamp, and CRM pipeline bridge.
+    - `POST /api/leads/qualification/routing/[id]/decline`: Professional decline processing.
+- **Homeowner Marketplace Leads Workflow (`app/(user)/leads/`)**:
+  - **Multi-Step Intake Wizard (`/leads/new`)**: 6-step progressive questionnaire (Scope, Land, Architecture, Budget, Documents, AI Review) with real-time live scoring calculation preview and document scan tracker.
+  - **Leads Dashboard (`/leads`)**: Overview of active intakes, readiness status badges, metric summary cards, and quick actions.
+  - **Lead Detail View (`/leads/[id]`)**: Full qualification scorecard breakdown (Land 40%, Architecture 25%, Budget 35%), verification indicators, and matched professionals tracker.
+  - **User Dashboard Integration (`/homeowner-dashboard`)**: Quick link navigation to project intakes.
+- **Professional Portal Leads UI Enhancement (`app/professional-portal/leads/`)**:
+  - **Unified Dual-Tab Layout (`/professional-portal/leads`)**: Seamless tabbed switching between "Marketplace Opportunities (AI Scored)" and "My CRM Pipeline".
+  - **Marketplace Opportunities**: AI confidence badges (`HIGH`, `MEDIUM`, `LOW`), match score percentage, project requirements, and privacy-preserving masked contact previews (`+254 7XX XXX XXX • h***@gmail.com`).
+  - **One-Click Acceptance Modal**: Explains disclosure terms, unlocks client phone/email, and atomically creates an active CRM lead.
+  - **KPI Summary Row**: Real-time stats for Marketplace Matches, Active CRM Leads, Pipeline Value, and Won Deals.
+- **Client Facades & TanStack Query Hooks (`lib/facades/marketplace-leads/`)**:
+  - Created `marketplaceLeadsClient` and `useMarketplaceLeads` hooks (`useClientMarketplaceLeads`, `useCreateMarketplaceLead`, `useUpdateMarketplaceQualification`, `useAttachMarketplaceLeadDocument`, `useSubmitMarketplaceLead`, `useProfessionalMarketplaceLeads`, `useAcceptMarketplaceLead`, `useDeclineMarketplaceLead`).
+- **ESLint Unused Variable Restrictions (`eslint.config.js`)**:
+  - Configured `@typescript-eslint/no-unused-vars` and `no-unused-vars: "off"` with `^_` ignore patterns, rest siblings, and destructured array ignores.
+
 ### Added — Cloudflare OpenNext R2 Incremental Cache Persistence
 
 - **R2 Incremental Cache Bindings (`wrangler.toml`, `open-next.config.ts`)**:

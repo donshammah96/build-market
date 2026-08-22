@@ -2,6 +2,46 @@
 
 ## [Unreleased]
 
+### Added — Pre-Qualified Marketplace Leads Qualification Engine, Homeowner Workflow, & Professional Portal UI
+
+- **Pure Deterministic Scoring Engine (`packages/lead-qualification`, `@build/lead-qualification`)**:
+  - Implemented `@build/lead-qualification` scoring engine (`scoreLeadV3`) with zero DB/framework dependencies.
+  - Weighted factor model: Land Ownership (0.40), Architectural Stage (0.25), and Budget Readiness (0.35).
+  - Localized Kenyan construction benchmark rules for title deeds (freehold/leasehold), allotment letters, family land succession, county-approved structural drawings, and bank pre-approved construction mortgages.
+  - Comprehensive unit test suite (`packages/lead-qualification/__tests__/score.test.ts`) with 100% passing test assertions.
+- **Database Models & Relations (`packages/db/prisma/schema.prisma`)**:
+  - Added enums: `MarketplaceLandOwnershipStatus`, `MarketplaceArchitecturalStage`, `MarketplaceBudgetReadiness`, `MarketplaceLeadStatus`, and `MarketplaceLeadDocumentType`.
+  - Added models: `MarketplaceLead`, `MarketplaceLeadQualification`, `MarketplaceLeadDocument`, and `MarketplaceLeadRoutingEvent` (with `contactDisclosedAt: DateTime?`).
+  - Linked relations to `User.marketplaceLeads` and `ProfessionalProfile.marketplaceRoutingEvents`.
+- **Client Domain Slice & Thin REST Route Adapters (`apps/client`)**:
+  - Implemented domain slice in `apps/client/app/lib/domains/marketplace-leads/` (`contracts.ts`, `repository.ts`, `service.ts`) returning type-safe `Result<T, DomainError>` envelopes.
+  - Created standardized route shared module `apps/client/app/api/leads/qualification/shared.ts` with `toMarketplaceLeadActor`, `logMarketplaceLeadRouteOutcome`, `domainErrorCodeToHttpStatus`, and payload size limits.
+  - Refactored all marketplace lead REST endpoints into thin HTTP adapters adhering to ADR-002:
+    - `GET | POST /api/leads/qualification`: Homeowner lead listing and draft intake creation with `withAuth`, `IdempotencyService`, and rate limiting.
+    - `GET | PATCH /api/leads/qualification/[id]`: Status retrieval and progressive profiling with idempotency protection.
+    - `POST /api/leads/qualification/[id]/documents`: Verification document attachment and virus scan trigger.
+    - `POST /api/leads/qualification/[id]/submit`: Deterministic scoring submission and automated routing transition.
+    - `GET /api/leads/qualification/routing`: Professional inbox route masked with `withRole([PROFESSIONAL, ADMIN])`.
+    - `POST /api/leads/qualification/routing/[id]/accept`: Professional acceptance with atomic PII disclosure, `contactDisclosedAt` stamp, and CRM pipeline bridge.
+    - `POST /api/leads/qualification/routing/[id]/decline`: Professional decline processing.
+- **Homeowner Marketplace Leads Workflow (`apps/client/app/(user)/leads/`)**:
+  - **Multi-Step Intake Wizard (`/leads/new`)**: 6-step progressive questionnaire (Scope, Land, Architecture, Budget, Documents, AI Review) with real-time live scoring calculation preview and document scan tracker.
+  - **Leads Dashboard (`/leads`)**: Overview of active intakes, readiness status badges, metric summary cards, and quick actions.
+  - **Lead Detail View (`/leads/[id]`)**: Full qualification scorecard breakdown (Land 40%, Architecture 25%, Budget 35%), verification indicators, and matched professionals tracker.
+  - **User Dashboard Integration (`/homeowner-dashboard`)**: Quick link navigation to project intakes.
+- **Professional Portal Leads UI Enhancement (`apps/client/app/professional-portal/leads/`)**:
+  - **Unified Dual-Tab Layout (`/professional-portal/leads`)**: Seamless tabbed switching between "Marketplace Opportunities (AI Scored)" and "My CRM Pipeline".
+  - **Marketplace Opportunities**: AI confidence badges (`HIGH`, `MEDIUM`, `LOW`), match score percentage, project requirements, and privacy-preserving masked contact previews (`+254 7XX XXX XXX • h***@gmail.com`).
+  - **One-Click Acceptance Modal**: Explains disclosure terms, unlocks client phone/email, and atomically creates an active CRM lead.
+  - **KPI Summary Row**: Real-time stats for Marketplace Matches, Active CRM Leads, Pipeline Value, and Won Deals.
+- **Client Facades & TanStack Query Hooks (`apps/client/lib/facades/marketplace-leads/`)**:
+  - Created `marketplaceLeadsClient` and `useMarketplaceLeads` hooks (`useClientMarketplaceLeads`, `useCreateMarketplaceLead`, `useUpdateMarketplaceQualification`, `useAttachMarketplaceLeadDocument`, `useSubmitMarketplaceLead`, `useProfessionalMarketplaceLeads`, `useAcceptMarketplaceLead`, `useDeclineMarketplaceLead`).
+- **Verification Ops Review Queue & Next.js Transpilation (`apps/verification-ops/`)**:
+  - Implemented `getMarketplaceLeadsReviewQueue()` and `recordMarketplaceLeadReviewDecision()` in `lib/marketplace-leads-queue.ts` for manual ops triage of flagged or document-attached leads.
+  - Added `@build/telemetry` to `transpilePackages` in `next.config.ts`.
+- **ESLint Unused Variable Restrictions (`apps/verification-ops/eslint.config.js`, `apps/client/eslint.config.js`)**:
+  - Replaced `@typescript-eslint/no-unused-vars: "off"` with strict `@typescript-eslint/no-unused-vars` and `no-unused-vars: "off"` rules supporting `^_` ignore patterns, rest siblings, and destructured array ignores across both apps.
+
 ### Changed — Cloudflare Deployment Pipeline, Monorepo Prerequisites, & Workflow Management
 
 - **GitHub Actions Workflow & Build-Time Environment (`.github/workflows/deploy.yml.disabled`, `package.json`, `docs/CLOUDFLARE_WORKERS_RUNBOOK.md`)**:

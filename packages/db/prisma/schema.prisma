@@ -432,6 +432,51 @@ enum CalendarEventType {
   INSPECTION_INTERNAL
 }
 
+enum MarketplaceLandOwnershipStatus {
+  OWNED_TITLED
+  OWNED_ALLOTMENT_LETTER
+  FAMILY_LAND
+  LEASED
+  PURCHASING_IN_PROGRESS
+  NONE
+}
+
+enum MarketplaceArchitecturalStage {
+  NO_PLANS
+  CONCEPT_ONLY
+  APPROVED_DRAWINGS
+  COUNTY_APPROVED
+  UNDER_CONSTRUCTION
+}
+
+enum MarketplaceBudgetReadiness {
+  UNVERIFIED_ESTIMATE
+  SELF_DECLARED_WITH_RANGE
+  PROOF_OF_FUNDS
+  FINANCING_APPROVED
+  FINANCING_PENDING
+}
+
+enum MarketplaceLeadStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  NEEDS_INFO
+  QUALIFIED
+  DISQUALIFIED
+  ROUTED
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+enum MarketplaceLeadDocumentType {
+  TITLE_DEED
+  ALLOTMENT_LETTER
+  PROOF_OF_FUNDS
+  APPROVED_DRAWINGS
+  COUNTY_APPROVAL
+}
+
 enum CalendarEventStatus {
   SCHEDULED
   CONFIRMED
@@ -1069,6 +1114,7 @@ model User {
   uploadedIdeaBookAttachments IdeaBookAttachment[]
   uploadedPropertyAttachments PropertyAttachment[]
   leads                       Lead[]
+  marketplaceLeads            MarketplaceLead[]      @relation("ClientMarketplaceLeads")
   newsletterSubscribers       NewsletterSubscriber[]
 
   @@index([clerkId])
@@ -1270,8 +1316,9 @@ model ProfessionalProfile {
   orders          Order[]                   @relation("ProfessionalOrders")
   reviews         Review[]                  @relation("ProfessionalReviews")
   calendarEvents  CalendarEvent[]
-  leads           Lead[]
-  transactions    ProfessionalTransaction[]
+  leads                     Lead[]
+  marketplaceRoutingEvents  MarketplaceLeadRoutingEvent[] @relation("ProfessionalMarketplaceRouting")
+  transactions              ProfessionalTransaction[]
   quotes          Quote[]
   properties      Property[]                @relation("AgentProperties")
   offeredServices ProfessionalService[]
@@ -2579,6 +2626,84 @@ model Lead {
   @@index([county])
   @@index([professionalId, status, priority]) // CRM pipeline view
   @@index([status, createdAt]) // Lead aging reports
+}
+
+// ========================================================
+// 10B. MARKETPLACE PRE-QUALIFIED LEADS
+// ========================================================
+
+model MarketplaceLead {
+  id            String                @id @default(cuid())
+  clientId      String
+  client        User                  @relation("ClientMarketplaceLeads", fields: [clientId], references: [id], onDelete: Cascade)
+  status        MarketplaceLeadStatus @default(DRAFT)
+  projectCounty String
+  projectType   String
+  title         String?
+  description   String?               @db.Text
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  qualification MarketplaceLeadQualification?
+  documents     MarketplaceLeadDocument[]
+  routingEvents MarketplaceLeadRoutingEvent[]
+
+  @@index([clientId])
+  @@index([status, projectCounty])
+  @@index([createdAt])
+}
+
+model MarketplaceLeadQualification {
+  id                  String                          @id @default(cuid())
+  leadId              String                          @unique
+  lead                MarketplaceLead                 @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  landOwnershipStatus MarketplaceLandOwnershipStatus?
+  architecturalStage  MarketplaceArchitecturalStage?
+  budgetReadiness     MarketplaceBudgetReadiness?
+  budgetRangeMin      Int?
+  budgetRangeMax      Int?
+
+  confidenceScore     Float?
+  confidenceLabel     String?                         // "high" | "medium" | "low"
+  scoringRuleVersion  String?                         // e.g. "leads-v3"
+  breakdownJson       Json?                           @db.JsonB
+  scoredAt            DateTime?
+  reviewedBy          String?                         // staff userId, if manually reviewed
+  reviewNotes         String?
+
+  updatedAt           DateTime                        @updatedAt
+}
+
+model MarketplaceLeadDocument {
+  id         String                      @id @default(cuid())
+  leadId     String
+  lead       MarketplaceLead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type       MarketplaceLeadDocumentType
+  fileKey    String
+  scanStatus String                      @default("pending") // pending | clean | infected | failed
+  scannedAt  DateTime?
+  createdAt  DateTime                    @default(now())
+
+  @@index([leadId])
+  @@index([scanStatus])
+}
+
+model MarketplaceLeadRoutingEvent {
+  id                 String              @id @default(cuid())
+  leadId             String
+  lead               MarketplaceLead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  professionalId     String
+  professional       ProfessionalProfile @relation("ProfessionalMarketplaceRouting", fields: [professionalId], references: [userId], onDelete: Cascade)
+  matchScore         Float
+  confidenceLabel    String              // "high" | "medium" | "low"
+  routedAt           DateTime            @default(now())
+  outcome            String?             // accepted | declined | expired | won | lost
+  outcomeAt          DateTime?
+  contactDisclosedAt DateTime?
+
+  @@index([professionalId, routedAt])
+  @@index([leadId])
 }
 
 model CalendarEvent {

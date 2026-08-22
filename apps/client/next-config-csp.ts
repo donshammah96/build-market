@@ -77,7 +77,10 @@ export function buildCspValue(sources: CspSources): string {
   const connectOrigins = [
     ...selfAndFirstParty,
     "https://www.buildmarket.app",
+    "https://staging.buildmarket.app",
     clerkFrontendApiOrigin,
+    "https://clerk.staging.buildmarket.app",
+    "https://api.clerk.com",
     ...clerkSatelliteOrigins,
     "https://*.clerk.accounts.dev",
     "https://clerk-telemetry.com",
@@ -97,7 +100,9 @@ export function buildCspValue(sources: CspSources): string {
     ...selfAndFirstParty,
     "https://buildmarket.app",
     "https://www.buildmarket.app",
+    "https://staging.buildmarket.app",
     clerkFrontendApiOrigin,
+    "https://clerk.staging.buildmarket.app",
     ...clerkSatelliteOrigins,
     "https://*.clerk.accounts.dev",
     // Third-party (identity): Clerk bot protection challenge (Cloudflare Turnstile script)
@@ -143,6 +148,8 @@ export function buildCspValue(sources: CspSources): string {
 
   const frameOrigins = [
     "'self'",
+    "https://staging.buildmarket.app",
+    "https://clerk.staging.buildmarket.app",
     "https://vercel.live",
     "https://*.vercel.live",
     ...(clerkChallengeOrigins ?? [

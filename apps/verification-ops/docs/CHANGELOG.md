@@ -9,6 +9,17 @@ conventions, reverse-chronological.
 
 ## [Unreleased]
 
+### Added — Marketplace Leads Review Queue & Transpile Packages Configuration
+
+- **Marketplace Leads Review Queue (`lib/marketplace-leads-queue.ts`)**:
+  - Implemented `getMarketplaceLeadsReviewQueue()` and `recordMarketplaceLeadReviewDecision()` for manual verification ops triage and confidence overrides on marketplace leads.
+  - Formatted document scan summary tallies (`cleanDocumentCount`, `pendingDocumentCount`, `infectedDocumentCount`).
+  - Encapsulated Prisma imports via `import { prisma, type MarketplaceLeadStatus } from "@build/db"` to align with monorepo packaging boundaries.
+- **Next.js Transpile Packages (`next.config.ts`)**:
+  - Added `@build/telemetry` to `transpilePackages` in `next.config.ts` ensuring clean bundle resolution on Vercel and local build steps.
+- **ESLint Unused Variable Restrictions (`eslint.config.js`)**:
+  - Replaced `@typescript-eslint/no-unused-vars: "off"` with strict `@typescript-eslint/no-unused-vars` and `no-unused-vars: "off"` supporting `^_` ignore patterns, rest siblings, and destructured array ignores.
+
 ### Added — Datadog Direct Ingestion Telemetry & Shared `@build/telemetry` Integration
 
 - **OpenTelemetry & Datadog Telemetry Integration (`instrumentation.ts`, `package.json`, `tsconfig.json`)**:
