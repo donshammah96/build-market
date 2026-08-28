@@ -1,11 +1,11 @@
 import { scoreLeadV3 } from "@build/lead-qualification";
 import { err, ok } from "@/app/lib/errors/result";
-import { marketplaceLeadsRepository } from "./repository.js";
+import { marketplaceLeadsRepository } from "./repository";
 import {
   toClientLeadStatusDto,
   toDisclosedMarketplaceLeadDto,
   toMaskedMarketplaceLeadDto,
-} from "./mappers.js";
+} from "./mappers";
 import type {
   AttachMarketplaceLeadDocumentInput,
   ClientLeadStatusDTO,
@@ -14,7 +14,7 @@ import type {
   MarketplaceLeadResult,
   MaskedMarketplaceLeadDTO,
   UpdateMarketplaceLeadQualificationInput,
-} from "./contracts.js";
+} from "./contracts";
 
 export const marketplaceLeadsService = {
   async createDraftLead(

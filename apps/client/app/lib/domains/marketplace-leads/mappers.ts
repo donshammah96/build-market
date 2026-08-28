@@ -10,7 +10,7 @@ import type {
   ClientLeadStatusDTO,
   DisclosedMarketplaceLeadDTO,
   MaskedMarketplaceLeadDTO,
-} from "./contracts.js";
+} from "./contracts";
 
 function toIsoString(value: Date | string | null | undefined): string {
   if (!value) return "";

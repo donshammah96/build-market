@@ -2,7 +2,7 @@ import { prisma, Prisma, type MarketplaceLeadDocumentType } from "@build/db";
 import type {
   CreateMarketplaceLeadInput,
   UpdateMarketplaceLeadQualificationInput,
-} from "./contracts.js";
+} from "./contracts";
 
 export const marketplaceLeadsRepository = {
   createLead(clientId: string, data: CreateMarketplaceLeadInput) {

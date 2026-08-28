@@ -28,6 +28,18 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Fixed — Module Resolution, Monorepo Build Architecture, & Turborepo Environment Tracking
+
+- **Lead Qualification Package Packaging & Project References (`packages/lead-qualification`, `tsconfig.json`)**:
+  - Aligned `@build/lead-qualification` (`package.json`) to export compiled distribution artifacts (`./dist/index.js`, `./dist/index.d.ts`) alongside standard `clean`, `prebuild`, `check-types`, and `prepack` scripts matching monorepo package conventions.
+  - Registered `packages/lead-qualification` in the root `tsconfig.json` project references to support incremental composite TypeScript builds (`tsc --build`).
+- **Marketplace Leads Domain Module Resolution & Boundary Alignment (`apps/client/app/lib/domains/marketplace-leads/`)**:
+  - Removed `.js` file extensions on relative imports in `index.ts`, `service.ts`, `repository.ts`, and `mappers.ts`, resolving Turbopack / Next.js module resolution failures during client application builds.
+  - Aligned `index.ts` with Rule A10 by removing internal `mappers` re-exports from the public domain index surface.
+- **Turborepo Global Environment Tracking & Prisma Schema Cleanup (`turbo.json`, `packages/db/prisma/schema.prisma`)**:
+  - Added 11 missing Vercel environment variables (`ESP_LIST_ID`, `ALLOW_MOCK_VIRUS_SCANNER`, `FEATURE_PORTAL_QUOTES_V2`, `FEATURE_PORTAL_DASHBOARD_V2`, `CLERK_PUBLIC_JWKS_KEY`, `ENABLE_CSP_UNSAFE_EVAL`, `CLOUDMERSIVE_BASE_URL`, `WORKER_IMAGE_PROCESSING_ENABLED`, `STAGING_AUTH_PASSWORD`, `STAGING_AUTH_SECRET`, `STAGING_AUTH_USER`) to `globalEnv` in `turbo.json` to eliminate Vercel Turborepo environment tracking warnings.
+  - Removed deprecated `"tracing"` preview feature from `generator client` in `packages/db/prisma/schema.prisma`.
+
 ### Added — Staging Environment Perimeter & HTTP Basic Auth Protection
 
 - **Staging Anti-Crawling & Perimeter Protection (`app/lib/security/middleware/staging-auth.ts`, `middleware.ts`, `app/lib/infrastructure/env.ts`)**:
