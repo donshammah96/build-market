@@ -45,6 +45,7 @@
     { "path": "../../packages/security-clerk" },
     { "path": "../../packages/env-validation" },
     { "path": "../../packages/telemetry" },
-    { "path": "../../packages/media" }
+    { "path": "../../packages/media" },
+    { "path": "../../packages/lead-qualification" }
   ]
 }

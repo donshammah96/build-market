@@ -77,6 +77,13 @@ export default defineConfig({
       // Catch-all must be last
       { find: "@", replacement: path.resolve(__dirname, "./") },
       {
+        find: "@build/lead-qualification",
+        replacement: path.resolve(
+          __dirname,
+          "../../packages/lead-qualification/src/index.ts",
+        ),
+      },
+      {
         find: "@build/resilience",
         replacement: path.resolve(
           __dirname,

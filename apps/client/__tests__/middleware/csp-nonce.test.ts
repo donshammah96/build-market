@@ -179,11 +179,11 @@ describe("csp nonce helpers", () => {
       expect(csp).toContain("report-uri /api/csp-report");
     });
 
-    it("includes frame-src with default Vercel Live origins", () => {
+    it("includes frame-src with default staging and Vercel Live origins", () => {
       const csp = buildCspWithNonce(baseOptions);
 
       expect(csp).toContain(
-        "frame-src 'self' https://vercel.live https://*.vercel.live",
+        "frame-src 'self' https://staging.buildmarket.app https://clerk.staging.buildmarket.app https://vercel.live https://*.vercel.live",
       );
     });
 
@@ -194,8 +194,29 @@ describe("csp nonce helpers", () => {
       });
 
       expect(csp).toContain(
-        "frame-src 'self' https://vercel.live https://*.vercel.live https://challenges.cloudflare.com",
+        "frame-src 'self' https://staging.buildmarket.app https://clerk.staging.buildmarket.app https://vercel.live https://*.vercel.live https://challenges.cloudflare.com",
       );
+    });
+  });
+
+  describe("staging environment origins", () => {
+    it("includes staging and Clerk staging origins in connect-src, script-src, and frame-src", () => {
+      const csp = buildCspWithNonce(baseOptions);
+      const connectSrc = csp
+        .split("; ")
+        .find((v) => v.startsWith("connect-src"));
+      const scriptSrc = csp
+        .split("; ")
+        .find((v) => v.startsWith("script-src "));
+      const frameSrc = csp.split("; ").find((v) => v.startsWith("frame-src"));
+
+      expect(connectSrc).toContain("https://staging.buildmarket.app");
+      expect(connectSrc).toContain("https://clerk.staging.buildmarket.app");
+      expect(connectSrc).toContain("https://api.clerk.com");
+      expect(scriptSrc).toContain("https://staging.buildmarket.app");
+      expect(scriptSrc).toContain("https://clerk.staging.buildmarket.app");
+      expect(frameSrc).toContain("https://staging.buildmarket.app");
+      expect(frameSrc).toContain("https://clerk.staging.buildmarket.app");
     });
   });
 
