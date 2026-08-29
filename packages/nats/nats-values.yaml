@@ -1,4 +1,59 @@
-# nats-values.yaml (lightweight resource settings for AKS)
+# nats-values.yaml (Production Multi-Node Cluster Configuration for AKS)
+# Configured for High-Availability JetStream and Secure Cross-Network Client Access (e.g. Render Workers)
+
+config:
+  # Multi-node HA Cluster Configuration
+  cluster:
+    enabled: true
+    replicas: 3
+    name: buildmarket-nats
+    # Cluster communication is strictly internal to the AKS pod/service network
+    listen: 0.0.0.0:6222
+
+  # Durable JetStream Engine
+  jetstream:
+    enabled: true
+    fileStore:
+      pvc:
+        size: 10Gi
+        storageClassName: managed-csi
+    memoryStore:
+      maxSize: 1Gi
+
+  # Token Authentication for Client Connections
+  # Injected via kubernetes secret or environment variable
+  auth:
+    enabled: true
+    token: "$NATS_AUTH_TOKEN"
+
+  # TLS Encryption for Client Connections (Required for Cross-Network / WAN traffic)
+  # When exposing NATS to Render workers or external services, TLS is mandatory.
+  # tls:
+  #   secretName: nats-server-tls
+  #   ca: "ca.crt"
+  #   cert: "tls.crt"
+  #   key: "tls.key"
+
+# Client Service Definition (Azure Load Balancer for Cross-Network Traffic)
+# Exposes ONLY client port 4222 to external workers (Render) over TLS.
+# Intra-cluster route port 6222 remains private and is NEVER exposed externally.
+service:
+  type: LoadBalancer
+  port: 4222
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-tcp-idle-timeout: "30"
+
+# Resource Allocation for NATS Server Nodes
+nats:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1024Mi
+
+# Prometheus Metric Exporter for Datadog / Prometheus Scraping
 promExporter:
   enabled: true
   port: 7777
@@ -12,6 +67,7 @@ promExporter:
       cpu: 100m
       memory: 128Mi
 
+# Config Reloader
 reloader:
   resources:
     requests:
@@ -21,15 +77,7 @@ reloader:
       cpu: 50m
       memory: 64Mi
 
-nats:
-  resources:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
-
+# Interactive NATS Box CLI Utility Pod
 natsBox:
   enabled: true
   resources:

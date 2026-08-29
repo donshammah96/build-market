@@ -4,6 +4,16 @@ All notable changes to the `workers` application will be documented in this file
 
 ## [Unreleased]
 
+### Added — Cross-Network NATS JetStream HA Clustering & Render Worker Auth
+
+- **AKS Multi-Node Cluster Configuration (`packages/nats/nats-values.yaml`)**:
+  - Configured 3-node HA NATS cluster (`replicas: 3`, `name: buildmarket-nats`) with isolated intra-cluster routing on port `6222` and persistent storage (10Gi `managed-csi` PVC) for JetStream durability.
+  - Configured Azure LoadBalancer service exposing client port `4222` with TCP idle timeout annotations and token-based client authentication.
+  - Updated deployment runbook (`packages/nats/docs/deploy-monitoring-runbook.md`) covering cluster deployment, TLS/token secrets, and Render worker connectivity.
+- **Worker Environment & Consumer Auth Wiring (`apps/workers/src/env.ts`, `apps/workers/src/index.ts`, `apps/workers/.env.example`)**:
+  - Added `NATS_TOKEN` validation to `workerEnvSchema` and updated `validateWorkerEnv()` test suite.
+  - Wired `token: env.NATS_TOKEN` into `createConsumer()` for both `notification-retry-worker-group` and `license-auto-verify-group` JetStream consumer groups.
+
 ### Added — Image Upload Processing Pipeline, Fail-Closed Virus Scanning & Shared `@build/media`
 
 - **Shared Media Package (`packages/media`, exported as `@build/media`)**:

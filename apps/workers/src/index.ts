@@ -356,6 +356,7 @@ async function initializeNatsConsumer() {
       "notification-retry-worker-group",
       {
         servers: env.NATS_URL,
+        ...(env.NATS_TOKEN ? { token: env.NATS_TOKEN } : {}),
       },
     );
 
@@ -371,6 +372,7 @@ async function initializeNatsConsumer() {
       "license-auto-verify-group",
       {
         servers: env.NATS_URL,
+        ...(env.NATS_TOKEN ? { token: env.NATS_TOKEN } : {}),
       },
     );
     await licenseNatsConsumer.connect();

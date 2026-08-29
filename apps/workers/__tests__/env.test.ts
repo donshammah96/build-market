@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import process from "node:process";
 import { validateWorkerEnv } from "../src/env";
 
 describe("Worker Environment Validation (apps/workers/src/env.ts)", () => {
@@ -89,5 +90,18 @@ describe("Worker Environment Validation (apps/workers/src/env.ts)", () => {
     expect(env.DB_POOL_MAX).toBe(10);
     expect(env.HEALTH_PORT).toBe(9090);
     expect(env.DISABLE_BACKGROUND_JOBS).toBe(true);
+  });
+
+  it("should accept valid remote TLS / WebSocket NATS URLs and optional NATS_TOKEN", () => {
+    process.env.DATABASE_URL =
+      "postgresql://postgres:postgres@localhost:5432/buildmarket";
+    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.NATS_URL = "wss://nats.onrender.com";
+    process.env.NATS_TOKEN = "secret-auth-token-1234";
+
+    const env = validateWorkerEnv();
+
+    expect(env.NATS_URL).toBe("wss://nats.onrender.com");
+    expect(env.NATS_TOKEN).toBe("secret-auth-token-1234");
   });
 });
