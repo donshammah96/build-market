@@ -20,6 +20,7 @@
 | Module / Export       | Status      | Tests      | Invariants Maintained                                |
 | --------------------- | ----------- | ---------- | ---------------------------------------------------- |
 | Core Exports          | `compliant` | `verified` | Clean exports via `package.json` subpath/main maps   |
+| WebSocket Transport   | `compliant` | `verified` | Seamless `nats.ws` integration for cloud proxies     |
 | Types & Contracts     | `compliant` | `verified` | Strict TypeScript no-implicit-any & strictNullChecks |
 | Security & Governance | `compliant` | `verified` | Audit compliance & zero security drift               |
 

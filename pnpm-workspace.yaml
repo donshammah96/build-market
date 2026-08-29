@@ -169,6 +169,7 @@ catalog:
   vaul: ^1.1.2
   zustand: ^5.0.7
   "nats": "^2.19.0"
+  "nats.ws": "^1.30.3"
   "@upstash/ratelimit": "^2.0.8"
   "pino": "^9.2.0"
 
