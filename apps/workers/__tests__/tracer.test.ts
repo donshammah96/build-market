@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import process from "node:process";
 import type { WorkerEnv } from "../src/env";
 
 // Mock dd-trace before importing initTracer

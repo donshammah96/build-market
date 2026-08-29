@@ -16,8 +16,8 @@ FROM node:24-alpine AS builder
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install pinned pnpm, turbo, and prisma CLI tools
-RUN npm install -g pnpm@11.1.2 turbo@^2.10.10 prisma@^7.8.0
+# Install pinned pnpm, turbo, and prisma CLI tools (exact version match for @prisma/client)
+RUN npm install -g pnpm@11.1.2 turbo@^2.10.10 prisma@7.10.0
 
 # Copy pruned lockfile and manifests
 COPY --from=pruner /app/out/json/ .
@@ -43,9 +43,10 @@ RUN turbo run build --filter=workers...
 # Deploy isolated workers package with production dependencies only
 RUN pnpm --filter workers --prod --legacy --ignore-scripts deploy /prod/workers
 
-# Generate Prisma Client directly inside the deployed production directory
+# Copy schema and generate Prisma Client into the deployed production virtual store
+RUN cp -r /app/packages/db/prisma /prod/workers/prisma
 WORKDIR /prod/workers
-RUN prisma generate --schema=/app/packages/db/prisma/schema.prisma
+RUN prisma generate --schema=./prisma/schema.prisma && rm -rf ./prisma
 
 # ==============================================================================
 # Build Stage 3: Minimal Hardened Production Runner

@@ -24,7 +24,8 @@
   },
   "dependencies": {
     "@opentelemetry/api": "catalog:",
-    "nats": "catalog:"
+    "nats": "catalog:",
+    "nats.ws": "catalog:"
   },
   "devDependencies": {
     "@build/eslint-config": "workspace:*",

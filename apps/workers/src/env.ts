@@ -39,10 +39,11 @@ const workerEnvSchema = z.object({
   NATS_URL: z
     .string()
     .regex(
-      /^(nats|tls):\/\//,
-      "NATS_URL must be a valid NATS connection string starting with nats:// or tls://",
+      /^(nats|tls|ws|wss):\/\//,
+      "NATS_URL must be a valid NATS connection string starting with nats://, tls://, ws://, or wss://",
     )
     .optional(),
+  NATS_TOKEN: z.string().min(1).optional(),
   DB_POOL_MAX: z
     .string()
     .optional()

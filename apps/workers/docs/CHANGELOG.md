@@ -4,6 +4,22 @@ All notable changes to the `workers` application will be documented in this file
 
 ## [Unreleased]
 
+### Added — Cross-Network NATS JetStream HA Clustering & Render Worker Auth
+
+- **AKS Multi-Node Cluster Configuration (`packages/nats/nats-values.yaml`)**:
+  - Configured 3-node HA NATS cluster (`replicas: 3`, `name: buildmarket-nats`) with isolated intra-cluster routing on port `6222` and persistent storage (10Gi `managed-csi` PVC) for JetStream durability.
+  - Configured Azure LoadBalancer service exposing client port `4222` with TCP idle timeout annotations and token-based client authentication.
+  - Updated deployment runbook (`packages/nats/docs/deploy-monitoring-runbook.md`) covering cluster deployment, TLS/token secrets, and Render worker connectivity.
+- **Render Private Network & Standalone NATS (`packages/nats/nats-server.conf`, `packages/nats/Dockerfile`)**:
+  - Configured standalone NATS JetStream container with client TCP port `4222` for high-throughput, low-latency inter-service communication across Render's internal private network.
+  - Configured HTTP monitoring port `8222` (`/healthz`, `/varz`) for Render Web Service health checks.
+  - Enabled token authentication with secret key authorization.
+- **Worker Environment & Consumer Auth Wiring (`apps/workers/src/env.ts`, `apps/workers/src/index.ts`, `apps/workers/.env.example`)**:
+  - Added `NATS_TOKEN` validation to `workerEnvSchema` and updated `validateWorkerEnv()` test suite to support `nats://`, `tls://`, `ws://`, and `wss://` URI schemes.
+  - Wired `token: env.NATS_TOKEN` into `createConsumer()` for both `notification-retry-worker-group` and `license-auto-verify-group` JetStream consumer groups.
+- **Pinned Build Container Tooling (`apps/workers/Dockerfile`)**:
+  - Pinned global `prisma@7.10.0` CLI in the builder stage to match the lockfile `@prisma/client@7.10.0` runtime version, preventing client generation drift warnings.
+
 ### Added — Image Upload Processing Pipeline, Fail-Closed Virus Scanning & Shared `@build/media`
 
 - **Shared Media Package (`packages/media`, exported as `@build/media`)**:
@@ -38,7 +54,7 @@ All notable changes to the `workers` application will be documented in this file
 
 - **Isolated Production Prisma Client Generation (`apps/workers/Dockerfile`)**:
   - Fixed runtime `SyntaxError: The requested module '@prisma/client' does not provide an export named 'PrismaClient'` during container execution on cloud orchestrators (Render/Docker).
-  - Executed `prisma generate` directly inside the deployed `/prod/workers` production artifact directory (`WORKDIR /prod/workers`) during the Docker build stage, ensuring `@prisma/client` within pnpm's production virtual store has the compiled `linux-musl-openssl-3.0.x` Alpine engine and valid ESM exports.
+  - Executed `prisma generate` directly inside `/prod/workers` with the schema staged locally (`./prisma/schema.prisma`), forcing Prisma to resolve the target `node_modules/@prisma/client` within pnpm's deployed production virtual store rather than traversing to `/app/packages/db`, ensuring the production image contains the compiled `linux-musl-openssl-3.0.x` Alpine engine and valid ESM exports.
 
 ### Added — OpenTelemetry Datadog APM Pipeline & Processor Extensions
 

@@ -4,6 +4,7 @@ import {
   JetStreamClient,
   JetStreamManager,
 } from "nats";
+import { connect as connectWs } from "nats.ws";
 import {
   setConnectionStatus,
   recordReconnect,
@@ -157,11 +158,28 @@ export async function createNatsClient(
   });
 
   try {
+    // Detect WebSocket vs TCP connections (e.g. Render Public Web Service URLs)
+    const normalizedServers = (
+      Array.isArray(mergedConfig.servers)
+        ? mergedConfig.servers
+        : [mergedConfig.servers]
+    ).map((server) => {
+      if (server.startsWith("https://")) {
+        return server.replace(/^https:\/\//, "wss://");
+      }
+      if (server.startsWith("http://")) {
+        return server.replace(/^http:\/\//, "ws://");
+      }
+      return server;
+    });
+
+    const isWebSocket = normalizedServers.some(
+      (s) => s.startsWith("ws://") || s.startsWith("wss://"),
+    );
+
     // Build connection options
     const connectionOptions: Parameters<typeof connect>[0] = {
-      servers: Array.isArray(mergedConfig.servers)
-        ? mergedConfig.servers
-        : [mergedConfig.servers],
+      servers: normalizedServers,
     };
 
     if (mergedConfig.name !== undefined) {
@@ -192,8 +210,12 @@ export async function createNatsClient(
       log("info", "Using user/password authentication");
     }
 
-    // Connect to NATS
-    const nc: NatsConnection = await connect(connectionOptions);
+    // Connect to NATS (WebSocket transport for ws/wss/https URLs, native TCP for nats/tls)
+    const nc: NatsConnection = isWebSocket
+      ? ((await connectWs(
+          connectionOptions as unknown as Parameters<typeof connectWs>[0],
+        )) as unknown as NatsConnection)
+      : await connect(connectionOptions);
 
     connectionMetrics.connectedAt = new Date();
     setConnectionStatus(true);

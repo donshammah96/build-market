@@ -82,7 +82,10 @@ catalog:
 
   # --- Data / validation (client + admin + db) ---
   zod: ^4.3.6
-  "@prisma/client": ^7.6.0
+  "@prisma/client": ^7.10.0
+  "@prisma/adapter-pg": ^7.10.0
+  "@prisma/config": ^7.10.0
+  prisma: ^7.10.0
   date-fns: ^4.1.0
 
   # --- Forms (client + admin) ---
@@ -169,6 +172,7 @@ catalog:
   vaul: ^1.1.2
   zustand: ^5.0.7
   "nats": "^2.19.0"
+  "nats.ws": "^1.30.3"
   "@upstash/ratelimit": "^2.0.8"
   "pino": "^9.2.0"
 
@@ -192,7 +196,7 @@ catalog:
   "@opentelemetry/semantic-conventions": ^1.41.1
   "@opentelemetry/sdk-trace-base": ^0.219.0
   "@opentelemetry/core": 2.8.0
-  "@prisma/instrumentation": ^7.8.0
+  "@prisma/instrumentation": ^7.10.0
   "@vercel/otel": ^2.1.3
   "wrangler": "^4.90.1"
   "@dnd-kit/core": ^6.3.1

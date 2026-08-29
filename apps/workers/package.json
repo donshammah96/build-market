@@ -35,6 +35,7 @@
     "@opentelemetry/resources": "catalog:",
     "@opentelemetry/sdk-metrics": "catalog:",
     "@opentelemetry/sdk-node": "catalog:",
+    "@prisma/client": "catalog:",
     "@prisma/instrumentation": "catalog:",
     "archiver": "catalog:",
     "bullmq": "catalog:",
