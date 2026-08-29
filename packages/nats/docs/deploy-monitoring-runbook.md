@@ -101,17 +101,38 @@ kubectl exec -it -n synadia-deploy deployment/nats-box -- nats stream list
 
 ---
 
-## 6. Configuring Render Workers for Remote Connectivity
+---
 
-In the Render dashboard for `apps/workers`:
+## 6. Deployment on Render (Free Tier vs Production)
 
-1. Set `NATS_URL`: `tls://<YOUR-AKS-STATIC-IP-OR-DOMAIN>:4222`
-2. Set `NATS_TOKEN`: Matches the token stored in `nats-auth-secret`
-3. Verify connection in worker logs:
-   ```
-   [NATS] Connected and subscribed with durable consumer: notification-retry-worker-group
-   [NATS] Connected and subscribed with durable consumer: license-auto-verify-group
-   ```
+### A. Render Free Tier Web Service (Current Setup)
+
+On Render's Free Tier, private services, internal DNS hostnames, and persistent disks are unavailable. The service runs as a **Web Service** reachable via its public HTTPS/WSS URL:
+
+1. **Deploy NATS on Render:**
+   - Service Type: **Web Service**
+   - Dockerfile Path: `packages/nats/Dockerfile`
+   - Health Check Path: `/healthz` (or `/varz`)
+2. **Environment Variables on NATS Service:**
+   - Set `NATS_TOKEN` to your secret token .
+3. **Configure Worker Service (`apps/workers` on Render):**
+   - Set `NATS_URL=https://<your-service-name>.onrender.com` (e.g. `https://nats-2-10-alpine-1.onrender.com`).
+   - Set `NATS_TOKEN=<your-secret-token>`.
+   - The `@build/nats` client uses `nats.ws` to connect securely over WebSocket through Render's TLS reverse proxy.
+
+### B. Render Paid Tier / Multi-Node Cluster Roadmap
+
+When upgrading to Render paid tiers:
+
+1. Switch NATS to a **Private Service** with a mounted persistent disk at `/data`.
+2. Use internal hostname: `NATS_URL=nats://nats-<hash>:4222`.
+3. For HA clustering: Deploy 3 private services (`nats-1`, `nats-2`, `nats-3`) with `cluster` blocks pointing to each other for RAFT quorum.
+
+For zero-downtime JetStream RAFT quorum:
+
+1. Create 3 private services: `nats-1`, `nats-2`, `nats-3` (each with its own mounted `/data` disk).
+2. Configure `cluster` block in each `nats-server.conf` pointing to the other two nodes via their internal hostnames (`routes: ["nats-route://nats-2-<hash>:6222", "nats-route://nats-3-<hash>:6222"]`).
+3. Point workers to all 3 servers: `NATS_URL=nats://nats-1-<hash>:4222,nats://nats-2-<hash>:4222,nats://nats-3-<hash>:4222`.
 
 ---
 
