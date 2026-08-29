@@ -38,7 +38,7 @@ All notable changes to the `workers` application will be documented in this file
 
 - **Isolated Production Prisma Client Generation (`apps/workers/Dockerfile`)**:
   - Fixed runtime `SyntaxError: The requested module '@prisma/client' does not provide an export named 'PrismaClient'` during container execution on cloud orchestrators (Render/Docker).
-  - Executed `prisma generate` directly inside the deployed `/prod/workers` production artifact directory (`WORKDIR /prod/workers`) during the Docker build stage, ensuring `@prisma/client` within pnpm's production virtual store has the compiled `linux-musl-openssl-3.0.x` Alpine engine and valid ESM exports.
+  - Executed `prisma generate` directly inside `/prod/workers` with the schema staged locally (`./prisma/schema.prisma`), forcing Prisma to resolve the target `node_modules/@prisma/client` within pnpm's deployed production virtual store rather than traversing to `/app/packages/db`, ensuring the production image contains the compiled `linux-musl-openssl-3.0.x` Alpine engine and valid ESM exports.
 
 ### Added — OpenTelemetry Datadog APM Pipeline & Processor Extensions
 

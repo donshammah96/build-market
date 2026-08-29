@@ -43,9 +43,10 @@ RUN turbo run build --filter=workers...
 # Deploy isolated workers package with production dependencies only
 RUN pnpm --filter workers --prod --legacy --ignore-scripts deploy /prod/workers
 
-# Generate Prisma Client directly inside the deployed production directory
+# Copy schema and generate Prisma Client into the deployed production virtual store
+RUN cp -r /app/packages/db/prisma /prod/workers/prisma
 WORKDIR /prod/workers
-RUN prisma generate --schema=/app/packages/db/prisma/schema.prisma
+RUN prisma generate --schema=./prisma/schema.prisma && rm -rf ./prisma
 
 # ==============================================================================
 # Build Stage 3: Minimal Hardened Production Runner

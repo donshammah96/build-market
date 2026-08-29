@@ -1254,6 +1254,9 @@ importers:
       '@opentelemetry/sdk-node':
         specifier: 'catalog:'
         version: 0.219.0(@opentelemetry/api@1.9.1)
+      '@prisma/client':
+        specifier: 'catalog:'
+        version: 7.8.0(prisma@7.8.0(@types/react-dom@19.1.1(@types/react@19.1.0))(@types/react@19.1.0)(magicast@0.5.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@7.0.2))(typescript@7.0.2)
       '@prisma/instrumentation':
         specifier: 'catalog:'
         version: 7.8.0(@opentelemetry/api@1.9.1)
