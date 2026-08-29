@@ -17,6 +17,8 @@ All notable changes to the `workers` application will be documented in this file
 - **Worker Environment & Consumer Auth Wiring (`apps/workers/src/env.ts`, `apps/workers/src/index.ts`, `apps/workers/.env.example`)**:
   - Added `NATS_TOKEN` validation to `workerEnvSchema` and updated `validateWorkerEnv()` test suite to support `nats://`, `tls://`, `ws://`, and `wss://` URI schemes.
   - Wired `token: env.NATS_TOKEN` into `createConsumer()` for both `notification-retry-worker-group` and `license-auto-verify-group` JetStream consumer groups.
+- **Pinned Build Container Tooling (`apps/workers/Dockerfile`)**:
+  - Pinned global `prisma@7.10.0` CLI in the builder stage to match the lockfile `@prisma/client@7.10.0` runtime version, preventing client generation drift warnings.
 
 ### Added — Image Upload Processing Pipeline, Fail-Closed Virus Scanning & Shared `@build/media`
 
