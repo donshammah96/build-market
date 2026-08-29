@@ -10,8 +10,12 @@ All notable changes to the `workers` application will be documented in this file
   - Configured 3-node HA NATS cluster (`replicas: 3`, `name: buildmarket-nats`) with isolated intra-cluster routing on port `6222` and persistent storage (10Gi `managed-csi` PVC) for JetStream durability.
   - Configured Azure LoadBalancer service exposing client port `4222` with TCP idle timeout annotations and token-based client authentication.
   - Updated deployment runbook (`packages/nats/docs/deploy-monitoring-runbook.md`) covering cluster deployment, TLS/token secrets, and Render worker connectivity.
+- **Render Private Network & Standalone NATS (`packages/nats/nats-server.conf`, `packages/nats/Dockerfile`)**:
+  - Configured standalone NATS JetStream container with client TCP port `4222` for high-throughput, low-latency inter-service communication across Render's internal private network.
+  - Configured HTTP monitoring port `8222` (`/healthz`, `/varz`) for Render Web Service health checks.
+  - Enabled token authentication with secret key authorization.
 - **Worker Environment & Consumer Auth Wiring (`apps/workers/src/env.ts`, `apps/workers/src/index.ts`, `apps/workers/.env.example`)**:
-  - Added `NATS_TOKEN` validation to `workerEnvSchema` and updated `validateWorkerEnv()` test suite.
+  - Added `NATS_TOKEN` validation to `workerEnvSchema` and updated `validateWorkerEnv()` test suite to support `nats://`, `tls://`, `ws://`, and `wss://` URI schemes.
   - Wired `token: env.NATS_TOKEN` into `createConsumer()` for both `notification-retry-worker-group` and `license-auto-verify-group` JetStream consumer groups.
 
 ### Added — Image Upload Processing Pipeline, Fail-Closed Virus Scanning & Shared `@build/media`
