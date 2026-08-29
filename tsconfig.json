@@ -11,7 +11,16 @@
     { "path": "packages/mail-server" },
     { "path": "packages/messaging-server" },
     { "path": "packages/queue-server" },
+    { "path": "packages/security-clerk" },
+    { "path": "packages/verification-domain" },
+    { "path": "packages/env-validation" },
     { "path": "packages/ui" },
-    { "path": "apps/admin" }
+    { "path": "packages/telemetry" },
+    { "path": "packages/media" },
+    { "path": "packages/lead-qualification" },
+    { "path": "apps/admin" },
+    { "path": "apps/client" },
+    { "path": "apps/verification-ops" },
+    { "path": "apps/workers" }
   ]
 }

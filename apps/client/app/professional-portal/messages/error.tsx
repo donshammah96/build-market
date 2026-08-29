@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle } from "lucide-react";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 export default function ProfessionalMessagesError({
   error,

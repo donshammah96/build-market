@@ -2,29 +2,37 @@
   "name": "@build/queue-server",
   "version": "1.0.0",
   "description": "Server-side queue primitives and job contracts",
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
       "default": "./dist/index.js"
     }
   },
   "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true }); try { require('fs').unlinkSync('tsconfig.tsbuildinfo'); } catch(e) {}\"",
+    "prebuild": "pnpm run clean",
     "lint": "echo \"No lint configured\" && exit 0",
     "check-types": "tsc --noEmit",
     "build": "tsc",
-    "clean": "rm -rf dist",
+    "prepack": "pnpm run build",
     "test": "echo \"No tests configured\" && exit 0"
   },
   "dependencies": {
-    "@prisma/client": "^7.6.0",
-    "bullmq": "^5.76.1",
-    "ioredis": "^5.9.1"
+    "@build/db": "workspace:*",
+    "@build/redis": "workspace:*",
+    "@prisma/client": "catalog:",
+    "bullmq": "catalog:",
+    "ioredis": "catalog:"
   },
   "devDependencies": {
+    "@build/eslint-config": "workspace:*",
     "@build/typescript-config": "workspace:*",
-    "@types/node": "^24.8.1",
-    "typescript": "^5.9.3"
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:"
   }
 }

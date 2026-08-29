@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@build/db";
+import { toReviewDto } from "./mappers";
 import type { ReviewsQueryInput } from "./contracts";
 
 const DEFAULT_LIMIT = 24;
@@ -85,7 +86,7 @@ export const reviewsRepository = {
       id: r.id,
       rating: r.rating,
       comment: r.comment,
-      createdAt: r.createdAt.toISOString(),
+      createdAt: toReviewDto(r.createdAt) as unknown as string,
       type: r.type,
       reviewer: {
         firstName: r.reviewer.firstName ?? "",

@@ -13,11 +13,10 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { FundEscrowSchema } from "@/app/lib/validation/projects-validation";
 import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
 import { projectsService } from "@/app/lib/domains/projects/service";
-
-const logger = getClientLogger();
 
 type FundParams = { id: string; escrowId: string };
 
@@ -77,12 +76,6 @@ export const POST = withAuth<FundParams>(
       dbUserId,
       "FUND",
     );
-    if (!idempotencyCheck) {
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (idempotencyCheck.status === "completed") {
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
     }
@@ -104,7 +97,7 @@ export const POST = withAuth<FundParams>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Processing escrow funding", {
+    getClientLogger().info("Processing escrow funding", {
       correlationId,
       projectId,
       escrowId,
@@ -156,7 +149,7 @@ export const POST = withAuth<FundParams>(
     }
 
     const payload = result.data.data;
-    await IdempotencyService.complete(idempotencyKey, payload);
+    await safeIdempotencyComplete(idempotencyKey, payload);
     return apiSuccess(payload, HttpStatus.OK);
   },
   {

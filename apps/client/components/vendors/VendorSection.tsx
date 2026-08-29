@@ -3,7 +3,7 @@
 import { memo, useMemo, useState } from "react";
 import VendorCard from "../vendors/VendorCard";
 import Link from "next/link";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import { Button } from "../ui/button";
 import { VendorCardData, County } from "../../types/vendor";
 import {

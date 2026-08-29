@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { Prisma, StoreDocumentType } from "@prisma/client";
+import type { StoreDocumentType } from "@prisma/client";
+import type { DomainError, Result } from "@/app/lib/errors/result";
 import type {
   BatchCreateStoresSchema,
   CreateStoreSchema,
@@ -12,8 +13,6 @@ import {
   StoreQuerySchema as StoreQuerySchemaValue,
   UpdateStoreSchema as UpdateStoreSchemaValue,
   createStoreDocumentSchema,
-  storeListSelect,
-  storeDetailSelect,
 } from "@/app/lib/validation/stores-validation";
 
 export {
@@ -23,28 +22,6 @@ export {
   UpdateStoreSchemaValue as UpdateStoreSchema,
   createStoreDocumentSchema,
 };
-
-export type StoreListItem = Prisma.StoreGetPayload<{
-  select: typeof storeListSelect;
-}>;
-
-export type StoreDetail = Prisma.StoreGetPayload<{
-  select: typeof storeDetailSelect;
-}>;
-
-export type StoreDocumentItem = Prisma.StoreDocumentGetPayload<{
-  include: {
-    asset: {
-      select: {
-        id: true;
-        cdnUrl: true;
-        originalName: true;
-        mimeType: true;
-        size: true;
-      };
-    };
-  };
-}>;
 
 export type CreateStoreInput = z.infer<typeof CreateStoreSchema>;
 export type UpdateStoreInput = z.infer<typeof UpdateStoreSchema>;
@@ -66,15 +43,115 @@ export type StoreDomainErrorCode =
   | "unauthorized"
   | "internal";
 
-export type DomainResult<T> =
-  | { ok: true; data: T }
-  | {
-      ok: false;
-      error: StoreDomainErrorCode;
-      message?: string;
-      status?: number;
-      currentVersion?: number;
-    };
+export type StoreDomainError = DomainError<StoreDomainErrorCode> & {
+  currentVersion?: number;
+};
+export type StoreResult<T> = Result<T, StoreDomainError>;
+
+export type StoreAssetDto = {
+  id: string;
+  cdnUrl: string | null;
+  thumbnailUrl?: string | null;
+  blurHash?: string | null;
+  width?: number | null;
+  height?: number | null;
+  originalName?: string | null;
+  mimeType?: string | null;
+  size?: number | null;
+};
+
+export type StoreImageDto = {
+  id: string;
+  category: string;
+  caption: string | null;
+  isMain: boolean;
+  sortOrder: number;
+  asset: StoreAssetDto | null;
+};
+
+export type StoreProfessionalDto = {
+  userId: string;
+  companyName: string | null;
+  profession?: string | null;
+  website?: string | null;
+  user: {
+    firstName: string | null;
+    lastName: string | null;
+    avatar: string | null;
+    email?: string | null;
+    phone?: string | null;
+    status?: string | null;
+  } | null;
+};
+
+export type StoreListItem = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  logoUrl: string | null;
+  address: string | null;
+  city: string | null;
+  county: string | null;
+  zipCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  categories: string[];
+  storeType: string;
+  verified: boolean;
+  verificationStatus: string | null;
+  featured: boolean;
+  rating: number | null;
+  reviewCount: number;
+  isOpen: boolean | null;
+  deliveryRadiusKm: number | null;
+  images: StoreImageDto[];
+  createdAt: string;
+  updatedAt: string;
+  professional: StoreProfessionalDto | null;
+  _count: {
+    products: number;
+    reviews: number;
+    orders: number;
+  };
+};
+
+export type StoreDetail = StoreListItem & {
+  bannerUrl: string | null;
+  contactPhone: string | null;
+  whatsappNumber: string | null;
+  email: string | null;
+  website: string | null;
+  mpesaTillNumber: string | null;
+  acceptsCard: boolean;
+  acceptsCash: boolean;
+  neighborhood: string | null;
+  baseDeliveryFee: number | null;
+  minOrderValue: number | null;
+  operatingHours: unknown;
+  businessRegNo: string | null;
+  kraPin: string | null;
+  verificationNotes: string | null;
+  verifiedAt: string | null;
+  rejectionReason: string | null;
+  deletedAt: string | null;
+  version?: number;
+};
+
+export type StoreDocumentItem = {
+  id: string;
+  storeId: string;
+  assetId: string | null;
+  uploadedById: string;
+  type: StoreDocumentType;
+  notes: string | null;
+  status: string;
+  rejectionReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  asset: StoreAssetDto | null;
+};
 
 export type StoreListResult = {
   stores: StoreListItem[];
@@ -100,8 +177,8 @@ export type MyStoreWithStats = {
   isOpen: boolean | null;
   featured: boolean;
   version: number;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
   totalProducts: number;
   totalOrders: number;
   totalReviews: number;
@@ -110,7 +187,7 @@ export type MyStoreWithStats = {
   recentProducts: {
     id: string;
     name: string;
-    price: Prisma.Decimal | null;
+    price: number | null;
   }[];
   views: number;
 };
@@ -166,7 +243,7 @@ export type StoreDeleteResultEnvelope = {
 
 export type ConsentRecordInput = {
   userId: string;
-  metadata: Prisma.InputJsonValue;
+  metadata: unknown;
   ipAddress?: string;
   userAgent?: string;
 };

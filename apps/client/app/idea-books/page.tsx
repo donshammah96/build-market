@@ -21,8 +21,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIdeaBooks, useCreateIdeaBook } from "@/hooks/useIdeaBooks";
-import type { IdeaBookListItem } from "@/lib/idea-books-client";
-import { getIdeaBookUrl } from "@/lib/links";
+import type { IdeaBookListItem } from "@/lib/facades/idea-books-client";
+import { getIdeaBookUrl } from "@/lib/routes";
 
 export default function IdeaBooksPage() {
   const [searchQuery, setSearchQuery] = useState("");

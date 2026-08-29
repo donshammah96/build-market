@@ -14,6 +14,7 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { UpdateDocumentSchema } from "@/app/lib/validation/documents-validation";
 import { DOCUMENT_CONFIG } from "@/app/lib/config/document.config";
 import { ComplianceService } from "@/app/lib/gdpr/services/compliance.service";
@@ -23,7 +24,6 @@ import { normalizeRole } from "@/app/lib/security/roles";
 // ADR-006 classification: Class B - verification document detail fields and status transitions cross this boundary.
 // Reviewed: 2026-04-09 by @copilot
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/professional-portal/documents/[id]";
 
 const SENSITIVE_CATEGORIES = [
@@ -62,7 +62,7 @@ function createDocumentByIdOutcomeLogger(
     httpStatus: number,
     details: DocumentByIdOutcomeLogFields = {},
   ) => {
-    logger.info("Professional document by-id adapter outcome", {
+    getClientLogger().info("Professional document by-id adapter outcome", {
       correlationId,
       operationName,
       httpMethod: req.method,
@@ -96,7 +96,7 @@ export const GET = withAuth<{ id: string }>(
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
     if (actorRole !== "PROFESSIONAL" && actorRole !== "ADMIN") {
-      logger.warn("Unauthorized access to professional document", {
+      getClientLogger().warn("Unauthorized access to professional document", {
         correlationId,
         operationName: "get_professional_document_detail",
         httpMethod: req.method,
@@ -155,7 +155,7 @@ export const GET = withAuth<{ id: string }>(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch document", result.error, {
+      getClientLogger().error("Failed to fetch document", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -201,7 +201,7 @@ export const GET = withAuth<{ id: string }>(
         id,
         { action: "VIEW", category: document.category },
       ).catch((err) =>
-        logger.error("Failed to log document access", err, {
+        getClientLogger().error("Failed to log document access", err, {
           correlationId,
           operationName,
           httpMethod: req.method,
@@ -233,15 +233,18 @@ export const PATCH = withAuth<{ id: string }>(
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
     if (actorRole !== "PROFESSIONAL" && actorRole !== "ADMIN") {
-      logger.warn("Unauthorized update attempt on professional document", {
-        correlationId,
-        operationName: "update_professional_document",
-        httpMethod: req.method,
-        routePattern: ROUTE_PATTERN,
-        outcome: "forbidden",
-        httpStatus: HttpStatus.FORBIDDEN,
-        durationMs: Date.now() - requestStartedAt,
-      });
+      getClientLogger().warn(
+        "Unauthorized update attempt on professional document",
+        {
+          correlationId,
+          operationName: "update_professional_document",
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          outcome: "forbidden",
+          httpStatus: HttpStatus.FORBIDDEN,
+          durationMs: Date.now() - requestStartedAt,
+        },
+      );
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
     const operationName = "update_professional_document";
@@ -299,15 +302,6 @@ export const PATCH = withAuth<{ id: string }>(
       dbUserId,
       "PATCH",
     );
-    if (!idempotencyCheck) {
-      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
-        documentId: id,
-      });
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (idempotencyCheck.status === "completed") {
       logOutcome("succeeded", HttpStatus.OK, {
         documentId: id,
@@ -364,7 +358,7 @@ export const PATCH = withAuth<{ id: string }>(
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error("Failed to update document", result.error, {
+      getClientLogger().error("Failed to update document", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -417,10 +411,10 @@ export const PATCH = withAuth<{ id: string }>(
     }
 
     try {
-      await IdempotencyService.complete(idempotencyKey, data.data);
+      await safeIdempotencyComplete(idempotencyKey, data.data);
     } catch (error) {
       await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
-      logger.error(
+      getClientLogger().error(
         "Failed to complete document idempotency replay",
         normalizeCaughtError(error),
         {
@@ -457,15 +451,18 @@ export const DELETE = withAuth<{ id: string }>(
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
     if (actorRole !== "PROFESSIONAL" && actorRole !== "ADMIN") {
-      logger.warn("Unauthorized delete attempt on professional document", {
-        correlationId,
-        operationName: "delete_professional_document",
-        httpMethod: req.method,
-        routePattern: ROUTE_PATTERN,
-        outcome: "forbidden",
-        httpStatus: HttpStatus.FORBIDDEN,
-        durationMs: Date.now() - requestStartedAt,
-      });
+      getClientLogger().warn(
+        "Unauthorized delete attempt on professional document",
+        {
+          correlationId,
+          operationName: "delete_professional_document",
+          httpMethod: req.method,
+          routePattern: ROUTE_PATTERN,
+          outcome: "forbidden",
+          httpStatus: HttpStatus.FORBIDDEN,
+          durationMs: Date.now() - requestStartedAt,
+        },
+      );
       return apiError("Forbidden", HttpStatus.FORBIDDEN);
     }
     const operationName = "delete_professional_document";
@@ -546,7 +543,7 @@ export const DELETE = withAuth<{ id: string }>(
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error("Failed to delete document", result.error, {
+      getClientLogger().error("Failed to delete document", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -590,7 +587,7 @@ export const DELETE = withAuth<{ id: string }>(
       id,
       { category: data.data.category, action: "DELETE" },
     ).catch((err) =>
-      logger.error("Failed to log deletion", err, {
+      getClientLogger().error("Failed to log deletion", err, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -603,10 +600,10 @@ export const DELETE = withAuth<{ id: string }>(
     );
 
     try {
-      await IdempotencyService.complete(idempotencyKey, data.data);
+      await safeIdempotencyComplete(idempotencyKey, data.data);
     } catch (error) {
       await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
-      logger.error(
+      getClientLogger().error(
         "Failed to complete document idempotency replay",
         normalizeCaughtError(error),
         {

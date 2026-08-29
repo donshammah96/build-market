@@ -24,7 +24,6 @@ import {
 } from "@/app/lib/api/request-utils";
 import { normalizeRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
 type MessageParams = { id: string };
 
 function toMessagingActor(context: {
@@ -130,7 +129,7 @@ export const PATCH = withAuth<MessageParams>(
     );
 
     if (!result.success) {
-      logger.error("Failed to update message", result.error, {
+      getClientLogger().error("Failed to update message", result.error, {
         correlationId,
         messageId,
       });
@@ -195,7 +194,7 @@ export const DELETE = withAuth<MessageParams>(
     );
 
     if (!result.success) {
-      logger.error("Failed to delete message", result.error, {
+      getClientLogger().error("Failed to delete message", result.error, {
         correlationId,
         messageId,
       });

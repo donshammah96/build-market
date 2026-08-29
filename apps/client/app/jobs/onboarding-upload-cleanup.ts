@@ -1,16 +1,14 @@
 /**
  * Onboarding Upload Cleanup Scheduler
  *
- * Cleans up expired staged OnboardingUpload records: deletes storage blobs
- * and marks records as EXPIRED. Staged uploads that were never materialized
- * during onboarding completion expire after their TTL.
+ * Cleans up expired staged OnboardingUpload and DirectUpload records:
+ * Schedules daily cleanup jobs on Redis.
  *
  * Runs daily at 3 AM by default (configurable via ONBOARDING_UPLOAD_CLEANUP_CRON).
  */
 
-import { Queue, Worker, Job } from "bullmq";
+import { Queue } from "bullmq";
 import { createRedisConnection } from "@build/queue-server";
-import { uploadService } from "@/app/lib/domains/uploads";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import { env } from "@/app/lib/infrastructure/env";
 
@@ -21,7 +19,7 @@ const CLEANUP_MAX_RETRIES = 3;
 
 let onboardingUploadCleanupQueue: Queue | null = null;
 
-function getOnboardingUploadCleanupQueue(): Queue {
+export function getOnboardingUploadCleanupQueue(): Queue {
   if (!onboardingUploadCleanupQueue) {
     onboardingUploadCleanupQueue = new Queue("maintenance-onboarding-uploads", {
       connection: createRedisConnection(),
@@ -63,123 +61,3 @@ export async function scheduleOnboardingUploadCleanup() {
     throw error;
   }
 }
-
-export function createOnboardingUploadCleanupWorker() {
-  const worker = new Worker(
-    "maintenance-onboarding-uploads",
-    async (job: Job) => {
-      if (job.name !== "cleanup-expired-staged-uploads") {
-        logger.warn("Received unexpected job type", {
-          jobName: job.name,
-          jobId: job.id,
-        });
-        return;
-      }
-
-      const correlationId = CorrelationIdManager.generate();
-      CorrelationIdManager.set(correlationId);
-
-      const startTime = Date.now();
-
-      logger.info("Starting onboarding upload cleanup job", {
-        correlationId,
-        jobId: job.id,
-      });
-
-      try {
-        const result = await uploadService.cleanupExpiredStagedUploads();
-
-        const durationMs = Date.now() - startTime;
-
-        logger.info("Onboarding upload cleanup job completed", {
-          correlationId,
-          jobId: job.id,
-          cleanupResult: result,
-          durationMs,
-        });
-
-        return {
-          count: result.count,
-          deletedFromStorage: result.deletedFromStorage,
-          failedDeletions: result.failedDeletions.length,
-          durationMs,
-        };
-      } catch (error) {
-        logger.error(
-          "Onboarding upload cleanup job failed",
-          error instanceof Error ? error : new Error(String(error)),
-          {
-            correlationId,
-            jobId: job.id,
-          },
-        );
-
-        throw error;
-      }
-    },
-    {
-      connection: createRedisConnection(),
-      concurrency: 1,
-      limiter: {
-        max: 1,
-        duration: 60000,
-      },
-    },
-  );
-
-  // process.once (not process.on) — see export-cleanup.ts for full rationale.
-  const shutdown = async (signal: string) => {
-    logger.info("Received shutdown signal, closing worker gracefully", {
-      signal,
-    });
-
-    try {
-      await worker.close();
-      logger.info("Worker closed successfully");
-    } catch (error) {
-      logger.error(
-        "Error during worker shutdown",
-        error instanceof Error ? error : new Error(String(error)),
-      );
-    }
-  };
-
-  process.once("SIGTERM", () => shutdown("SIGTERM"));
-  process.once("SIGINT", () => shutdown("SIGINT"));
-
-  worker.on("completed", (job, result) => {
-    logger.info("Cleanup job completed", {
-      jobId: job.id,
-      result,
-    });
-  });
-
-  worker.on("failed", (job, error) => {
-    logger.error(
-      "Cleanup job failed",
-      error instanceof Error ? error : new Error(String(error)),
-      {
-        jobId: job?.id,
-        attemptsMade: job?.attemptsMade,
-        attemptsRemaining: job
-          ? CLEANUP_MAX_RETRIES - (job.attemptsMade || 0)
-          : 0,
-      },
-    );
-  });
-
-  worker.on("error", (error) => {
-    logger.error(
-      "Worker error occurred",
-      error instanceof Error ? error : new Error(String(error)),
-    );
-  });
-
-  return worker;
-}
-
-// Export the getter so callers at the orchestrator boundary receive the live
-// queue instance. Exporting the module-scope `let` variable directly would
-// always yield null because the variable is only populated on first call to
-// getOnboardingUploadCleanupQueue().
-export { getOnboardingUploadCleanupQueue };

@@ -3,7 +3,7 @@
 import { memo, useMemo } from "react";
 import { features as allFeatures, type Feature } from "../../app/data/homeData";
 import FeatureCard from "./FeatureCard";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import {
   useIntersectionObserver,
   useShouldAnimate,
@@ -60,11 +60,11 @@ export const FeaturesSection = memo(function FeaturesSection({
 
   return (
     <section
-      className="py-24 bg-gradient-to-b from-muted/60 via-background to-background"
+      className="py-24 bg-linear-to-b from-muted/60 via-background to-background"
       ref={ref as React.RefObject<HTMLElement>}
       aria-labelledby="features-heading"
     >
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 md:px-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-20">
         {/* Section Header */}
         <div
           className={cn(
@@ -74,7 +74,7 @@ export const FeaturesSection = memo(function FeaturesSection({
         >
           <h2
             id="features-heading"
-            className="text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mb-4 tracking-tight"
+            className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mb-4 tracking-tight"
           >
             Everything you need to{" "}
             <span className="text-primary">build better.</span>

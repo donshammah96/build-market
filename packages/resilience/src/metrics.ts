@@ -2,8 +2,8 @@
  * Comprehensive metrics and observability utilities
  */
 
-import { MetricData } from "./types";
-import { Logger } from "./logger";
+import { MetricData } from "./types.js";
+import { Logger } from "./logger.js";
 
 export type MetricType = "counter" | "gauge" | "histogram" | "summary";
 

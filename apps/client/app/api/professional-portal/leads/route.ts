@@ -3,6 +3,7 @@ import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   LeadQuerySchema,
   CreateLeadSchema,
@@ -21,8 +22,6 @@ import {
   initializeCorrelationId,
   getClientLogger,
 } from "@/app/lib/api/resilient-api";
-
-const logger = getClientLogger();
 
 export const GET = withAuth(
   async (req: NextRequest, { dbUserId, userRole }) => {
@@ -66,7 +65,7 @@ export const GET = withAuth(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch leads", result.error, {
+      getClientLogger().error("Failed to fetch leads", result.error, {
         correlationId,
         actorRole: normalizeRole(String(userRole)),
       });
@@ -138,12 +137,6 @@ export const POST = withAuth(
       dbUserId,
       "POST",
     );
-    if (!idempotencyCheck) {
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (idempotencyCheck.status === "completed") {
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
     }
@@ -168,7 +161,7 @@ export const POST = withAuth(
       );
     }
 
-    logger.info("Creating lead", {
+    getClientLogger().info("Creating lead", {
       correlationId,
       actorRole: normalizeRole(String(userRole)),
       title: leadData.title,
@@ -205,7 +198,7 @@ export const POST = withAuth(
       );
     }
 
-    await IdempotencyService.complete(idempotencyKey, serviceResult.data);
+    await safeIdempotencyComplete(idempotencyKey, serviceResult.data);
     return apiSuccess(serviceResult.data, HttpStatus.CREATED);
   },
 );

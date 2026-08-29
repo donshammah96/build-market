@@ -13,6 +13,7 @@ import {
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   CertificateQuerySchema,
   CreateCertificateSchema,
@@ -27,7 +28,6 @@ import { normalizeRole } from "@/app/lib/security/roles";
 // ADR-006 classification: Class B - certificate verification metadata and identifiers cross this boundary.
 // Reviewed: 2026-04-09 by @copilot
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/professional-portal/certificates";
 
 type CertificatesAdapterOutcome =
@@ -58,7 +58,7 @@ function createCertificatesOutcomeLogger(
     httpStatus: number,
     details: CertificatesOutcomeLogFields = {},
   ) => {
-    logger.info("Professional certificates adapter outcome", {
+    getClientLogger().info("Professional certificates adapter outcome", {
       correlationId,
       operationName,
       httpMethod: req.method,
@@ -115,7 +115,7 @@ export const GET = withAuth(
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
     if (actorRole !== "PROFESSIONAL" && actorRole !== "ADMIN") {
-      logger.warn("Unauthorized access to certificates endpoint", {
+      getClientLogger().warn("Unauthorized access to certificates endpoint", {
         correlationId,
         operationName: "get_certificates",
         httpMethod: req.method,
@@ -178,7 +178,7 @@ export const GET = withAuth(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch certificates", result.error, {
+      getClientLogger().error("Failed to fetch certificates", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -219,7 +219,7 @@ export const POST = withAuth(
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
     if (actorRole !== "PROFESSIONAL" && actorRole !== "ADMIN") {
-      logger.warn("Unauthorized access to certificates endpoint", {
+      getClientLogger().warn("Unauthorized access to certificates endpoint", {
         correlationId,
         operationName: "create_certificate",
         httpMethod: req.method,
@@ -280,13 +280,6 @@ export const POST = withAuth(
       dbUserId,
       "POST",
     );
-    if (!idempotencyCheck) {
-      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR);
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (idempotencyCheck.status === "completed") {
       logOutcome("succeeded", HttpStatus.OK, { idempotency: "replay" });
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
@@ -332,7 +325,7 @@ export const POST = withAuth(
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error("Failed to create certificate", result.error, {
+      getClientLogger().error("Failed to create certificate", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -382,7 +375,7 @@ export const POST = withAuth(
       data.data.id,
       { category: certData.category, action: "CREATE_CERTIFICATE" },
     ).catch((err) =>
-      logger.error("Failed to create audit log", err, {
+      getClientLogger().error("Failed to create audit log", err, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -395,10 +388,10 @@ export const POST = withAuth(
     );
 
     try {
-      await IdempotencyService.complete(idempotencyKey, data.data);
+      await safeIdempotencyComplete(idempotencyKey, data.data);
     } catch (error) {
       await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
-      logger.error(
+      getClientLogger().error(
         "Failed to complete certificate idempotency replay",
         normalizeCaughtError(error),
         {

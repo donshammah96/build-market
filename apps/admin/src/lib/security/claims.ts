@@ -1,6 +1,10 @@
 export type SessionMetadata = {
   role?: string;
   isOnboarded?: boolean;
+  /** Mirrors the `status` field synced to Clerk `publicMetadata` by admin
+   * suspend/unsuspend actions. Allows middleware to gate access without a
+   * database call. */
+  status?: string;
 };
 
 type SessionClaimsLike = {
@@ -29,9 +33,15 @@ export function parseSessionMetadata(
       ? metadataRecord.isOnboarded
       : undefined;
 
+  const statusValue =
+    typeof metadataRecord.status === "string"
+      ? metadataRecord.status
+      : undefined;
+
   return {
-    role: roleValue,
-    isOnboarded: onboardedValue,
+    ...(roleValue !== undefined ? { role: roleValue } : {}),
+    ...(onboardedValue !== undefined ? { isOnboarded: onboardedValue } : {}),
+    ...(statusValue !== undefined ? { status: statusValue } : {}),
   };
 }
 

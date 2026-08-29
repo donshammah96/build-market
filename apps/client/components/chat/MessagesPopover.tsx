@@ -15,7 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { messagingClient } from "@/lib/messaging-client";
+import { messagingClient } from "@/lib/facades/messaging-client";
 import { useUser } from "@clerk/nextjs";
 import type { Conversation } from "@build/types";
 import { useProfileStatus } from "@/hooks/useProfileStatus";
@@ -35,8 +35,7 @@ export function MessagesPopover() {
       if (result.success && result.data) {
         // API returns { threads, pagination } — normalize to array
         const data = result.data as
-          | Conversation[]
-          | { threads?: Conversation[]; pagination?: unknown };
+          Conversation[] | { threads?: Conversation[]; pagination?: unknown };
         return Array.isArray(data) ? data : (data?.threads ?? []);
       }
       throw new Error("Failed to fetch conversations");

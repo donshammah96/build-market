@@ -1,0 +1,66 @@
+# .github/workflows/csp-matcher-gap.yml
+#
+# Enforces STRICT_CSP_IMPLEMENTATION_PLAN.md item #1: the static fallback
+# CSP (next-config-csp.ts) must stay provably unreachable for real traffic.
+# Fails the build if middleware.ts's matcher excludes .html routes without
+# an explicit, reviewed allowlist, or if an un-allowlisted .html file is
+# added to public/.
+#
+# Runs on every PR touching the relevant paths, plus main, so a matcher
+# regression (or a stray .html file) is caught before merge rather than
+# discovered via a CSP violation report in production.
+
+name: CSP Matcher Gap Check
+
+on:
+  pull_request:
+    paths:
+      - "middleware.ts"
+      - "apps/**/middleware.ts"
+      - "public/**"
+      - "apps/**/public/**"
+      - "csp-html-allowlist.json"
+      - "apps/**/csp-html-allowlist.json"
+      - "scripts/check-csp-matcher-gap.mjs"
+      - ".github/workflows/csp-matcher-gap.yml"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: csp-matcher-gap-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Verify no un-allowlisted routes bypass CSP middleware
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        # One entry per app that has its own middleware.ts + public/ dir.
+        # Add entries as new satellite apps (verification-ops, etc.) land.
+        app:
+          - { name: client, path: apps/client }
+          - { name: admin, path: apps/admin }
+          - { name: verification-ops, path: apps/verification-ops }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 20
+
+      - name: Run matcher gap check for ${{ matrix.app.name }}
+        working-directory: ${{ matrix.app.path }}
+        env:
+          MIDDLEWARE_PATH: ${{ github.workspace }}/${{ matrix.app.path }}/middleware.ts
+          PUBLIC_DIR: ${{ github.workspace }}/${{ matrix.app.path }}/public
+          ALLOWLIST_PATH: ${{ github.workspace }}/${{ matrix.app.path }}/csp-html-allowlist.json
+        run: node ${{ github.workspace }}/scripts/check-csp-matcher-gap.mjs

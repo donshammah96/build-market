@@ -36,15 +36,25 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useWithdraw, financeKeys } from "@/hooks/useWithdraw";
-import { financeClient, type FinanceTransaction } from "@/lib/finance-client";
-import { WithdrawSchema } from "@/lib/validation/finance-validation";
+import { useProfileStatus } from "@/hooks/useProfileStatus";
+import { CapabilityRestrictedBanner } from "@/components/shared/CapabilityRestrictedBanner";
+import {
+  financeClient,
+  type FinanceTransaction,
+} from "@/lib/facades/finance-client";
+import { WithdrawSchema } from "@/app/lib/validation/finance-validation";
 import { FinanceCard } from "./_components/finance-card";
 import { TransactionRow } from "./_components/transaction-row";
 
 type WithdrawFormValues = z.infer<typeof WithdrawSchema>;
 
 export default function FinancePage() {
+  const { profile } = useProfileStatus();
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
+
+  const isUnverified =
+    profile &&
+    (profile as unknown as { verified?: boolean }).verified === false;
 
   // Fetch Stats
   const { data: stats, isLoading: isLoadingStats } = useQuery({
@@ -108,6 +118,16 @@ export default function FinancePage() {
 
   return (
     <div className="space-y-8 max-w-[1600px] mx-auto">
+      {isUnverified && (
+        <CapabilityRestrictedBanner
+          featureName="Financial Withdrawals"
+          verificationStatus={
+            (profile as unknown as { verificationStatus?: string })
+              .verificationStatus
+          }
+        />
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between gap-4 items-end border-b border-zinc-100 pb-6">
         <div>

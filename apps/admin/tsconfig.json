@@ -1,4 +1,5 @@
 {
+  "//": "Force TypeScript cache reload after adding queue-registry.ts",
   "extends": "@build/typescript-config/nextjs.json",
   "compilerOptions": {
     "target": "ES2017",
@@ -7,6 +8,8 @@
     "composite": true,
     "skipLibCheck": true,
     "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
@@ -21,21 +24,30 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@/lib/*": ["./src/lib/*"],
+      "@/actions/*": ["./src/actions/*"],
+      "@/_core/*": ["./src/actions/admin/_core/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"],
+  "exclude": ["node_modules", "docs"],
   "references": [
     { "path": "../../packages/resilience" },
     { "path": "../../packages/db" },
     { "path": "../../packages/types" },
+    { "path": "../../packages/enums" },
     { "path": "../../packages/redis" },
     { "path": "../../packages/nats" },
     { "path": "../../packages/auth-server" },
     { "path": "../../packages/mail-server" },
     { "path": "../../packages/messaging-server" },
     { "path": "../../packages/queue-server" },
-    { "path": "../../packages/ui" }
+    { "path": "../../packages/ui" },
+    { "path": "../../packages/verification-domain" },
+    { "path": "../../packages/security-clerk" },
+    { "path": "../../packages/env-validation" },
+    { "path": "../../packages/clerk-test-harness" },
+    { "path": "../../packages/telemetry" }
   ]
 }

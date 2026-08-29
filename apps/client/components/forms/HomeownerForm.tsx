@@ -23,10 +23,10 @@ import {
   homeownerOnboardingSchema,
   type HomeownerOnboardingData,
   type County,
-} from "@/lib/schemas/onboarding";
+} from "@/app/lib/validation/onboarding";
 import { COUNTY_LABELS } from "@/types/store";
 import { useOnboardingAnalytics } from "@/lib/analytics/OnboardingAnalyticsContext";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 export const SECURITY_PERSISTENCE_ALLOWLIST = [
   "county",
@@ -173,9 +173,10 @@ const Toast: React.FC<ToastState> = ({ type, message }) => {
   const baseClasses =
     "px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-3 animate-in slide-in-from-top-2 duration-300 backdrop-blur-md";
   const typeClasses: Record<ToastType, string> = {
-    success: "bg-success/20 text-success border border-success/30 shadow-lg",
-    error: "bg-error/20 text-error border border-error/30 shadow-lg",
-    info: "bg-white/10 text-white border border-white/20 shadow-lg",
+    success:
+      "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-lg",
+    error: "bg-red-500/20 text-red-400 border border-red-500/30 shadow-lg",
+    info: "bg-zinc-800 text-zinc-200 border border-zinc-700 shadow-lg",
   };
 
   return (
@@ -221,28 +222,26 @@ const FormField: React.FC<{
     : children;
 
   return (
-    <div className="group space-y-3">
+    <div className="group space-y-2">
       <label
         htmlFor={id}
-        className="flex items-center gap-2.5 text-sm font-medium"
+        className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-300"
       >
         {icon && (
           <span
             className={cn(
               "transition-colors",
-              error
-                ? "text-(--color-error)"
-                : "text-(--color-onboarding-primary) group-focus-within:opacity-90",
+              error ? "text-red-400" : "text-emerald-400",
             )}
           >
             {icon}
           </span>
         )}
-        <span className="text-onboarding-ink/68 group-focus-within:text-(--color-onboarding-ink) transition-colors">
+        <span className="text-zinc-300 group-focus-within:text-white transition-colors">
           {label}
         </span>
         {required && (
-          <span className="text-xs text-onboarding-ink/55 font-normal">
+          <span className="text-[11px] text-zinc-500 font-normal lowercase">
             (required)
           </span>
         )}
@@ -252,16 +251,16 @@ const FormField: React.FC<{
         <div aria-live="polite" aria-atomic="true">
           <p
             id={errorId}
-            className="text-xs text-(--color-error) flex items-center gap-1"
+            className="text-xs text-red-400 flex items-center gap-1.5 font-medium"
           >
-            <AlertCircle className="h-3 w-3" />
+            <AlertCircle className="h-3.5 w-3.5" />
             {error}
           </p>
         </div>
       )}
       {hint && !error && (
-        <p className="text-xs text-onboarding-ink/58 pl-0.5 flex items-center gap-1.5">
-          <Sparkles className="h-3 w-3 text-onboarding-primary/60" />
+        <p className="text-xs text-zinc-500 pl-0.5 flex items-center gap-1.5">
+          <Sparkles className="h-3 w-3 text-emerald-400/60" />
           {hint}
         </p>
       )}
@@ -274,29 +273,20 @@ const SuccessCard: React.FC<{
   onGoDashboard: () => void;
   isNavigating?: boolean;
 }> = ({ onEdit, onGoDashboard, isNavigating }) => (
-  <div className="relative overflow-hidden">
-    {/* Background glow */}
-    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-      <div className="w-64 h-64 bg-onboarding-primary/20 rounded-full blur-3xl" />
-    </div>
-
-    <div className="relative bg-linear-to-b from-white/10 to-white/5 backdrop-blur-xl border border-white/20 p-10 max-w-md mx-auto text-center rounded-2xl shadow-2xl">
-      {/* Success icon with animation */}
+  <div className="relative overflow-hidden py-4">
+    <div className="relative bg-zinc-900/90 border border-zinc-800 p-8 sm:p-10 max-w-md mx-auto text-center rounded-3xl shadow-2xl backdrop-blur-2xl">
       <div className="mb-6 relative">
-        <div className="absolute inset-0 flex items-center justify-center animate-ping">
-          <div className="w-16 h-16 bg-success/20 rounded-full" />
-        </div>
-        <div className="relative w-16 h-16 mx-auto bg-(--color-success) rounded-full flex items-center justify-center shadow-lg">
-          <CheckCircle2 className="w-8 h-8 text-white" />
+        <div className="w-16 h-16 mx-auto bg-emerald-500/20 rounded-2xl flex items-center justify-center border border-emerald-500/30 text-emerald-400 shadow-[0_0_24px_rgba(16,185,129,0.25)]">
+          <CheckCircle2 className="w-8 h-8" />
         </div>
       </div>
 
-      <h3 className="text-2xl font-bold text-white mb-3">
+      <h3 className="text-2xl font-bold text-white mb-2 font-['Syne']">
         You&apos;re all set!
       </h3>
-      <p className="text-onboarding-ink/62 mb-8 leading-relaxed">
-        We&apos;ve received your project details. Our team will match you with
-        vetted professionals who specialize in your needs.
+      <p className="text-zinc-400 text-sm mb-8 leading-relaxed">
+        We&apos;ve received your project details. We will match you with vetted
+        professionals specializing in your project type.
       </p>
 
       <div className="flex flex-col gap-3">
@@ -304,11 +294,9 @@ const SuccessCard: React.FC<{
           onClick={onGoDashboard}
           disabled={isNavigating}
           className={cn(
-            "w-full py-3 px-6 rounded-xl font-semibold text-sm",
-            "bg-(--color-onboarding-primary)",
-            "text-[oklch(0.08_0.016_222)] shadow-lg",
-            "hover:opacity-90",
-            "transition-all duration-200 active:scale-[0.98]",
+            "w-full py-3.5 px-6 rounded-xl font-semibold text-sm",
+            "bg-emerald-500 text-zinc-950 shadow-[0_4px_20px_rgba(16,185,129,0.25)]",
+            "hover:bg-emerald-400 transition-all duration-200 active:scale-[0.98]",
             "flex items-center justify-center gap-2",
             "disabled:opacity-50 disabled:cursor-not-allowed",
           )}
@@ -320,7 +308,7 @@ const SuccessCard: React.FC<{
         <button
           onClick={onEdit}
           disabled={isNavigating}
-          className="text-sm text-onboarding-ink/62 hover:text-(--color-onboarding-ink) transition-colors py-2 disabled:opacity-50"
+          className="text-sm text-zinc-400 hover:text-white transition-colors py-2 disabled:opacity-50"
         >
           ← Edit details
         </button>
@@ -330,41 +318,20 @@ const SuccessCard: React.FC<{
 );
 
 const FormHeader: React.FC = () => (
-  <div className="text-center mb-10 relative">
-    {/* Decorative glow */}
-    <div className="absolute inset-0 -top-8 flex items-center justify-center pointer-events-none">
-      <div className="w-40 h-40 bg-onboarding-primary/12 rounded-full blur-3xl" />
-    </div>
-
-    {/* Icon with decorative lines */}
-    <div className="relative inline-flex items-center justify-center gap-4 mb-5">
-      <div className="h-px w-12 bg-linear-to-r from-transparent via-onboarding-primary/50 to-(--color-onboarding-primary)" />
-      <div className="relative">
-        <div className="absolute inset-0 animate-pulse">
-          <Home className="h-9 w-9 text-onboarding-primary/30" />
-        </div>
-        <Home className="h-9 w-9 text-(--color-onboarding-primary)" />
+  <div className="text-center mb-8 space-y-2">
+    <div className="inline-flex items-center justify-center gap-2 mb-2">
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+        <Home className="h-6 w-6" aria-hidden="true" />
       </div>
-      <div className="h-px w-12 bg-linear-to-l from-transparent via-onboarding-primary/50 to-(--color-onboarding-primary)" />
     </div>
 
-    {/* Heading with gradient */}
-    <h2 className="text-3xl md:text-4xl font-bold mb-3">
-      <span className="bg-linear-to-r from-white via-muted-foreground to-muted-foreground bg-clip-text text-transparent">
-        Tell us about your
-      </span>
-      <br />
-      <span className="text-(--color-onboarding-primary)">dream project</span>
+    <h2 className="text-2xl md:text-3xl font-bold text-white font-['Syne'] tracking-tight">
+      Tell us about your project
     </h2>
 
-    {/* Subtitle */}
-    <p className="text-onboarding-ink/62 text-sm max-w-xs mx-auto leading-relaxed">
-      Share your vision and we&apos;ll connect you with the
-      <span className="text-(--color-onboarding-primary) font-medium">
-        {" "}
-        perfect professionals
-      </span>
-      .
+    <p className="text-zinc-400 text-sm max-w-sm mx-auto leading-relaxed">
+      Share your project requirements so we can connect you with the right
+      professionals.
     </p>
   </div>
 );
@@ -448,16 +415,12 @@ const HomeownerForm: React.FC<Props> = ({
     window.location.href = ROUTES.userDashboard;
   }, []);
 
-  // Auto-dismiss toast
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 6000);
-    return () => clearTimeout(timer);
-  }, [toast]);
-
-  const showToast = useCallback((type: ToastType, message: string) => {
+  const showToast = (type: ToastType, message: string) => {
     setToast({ type, message });
-  }, []);
+    if (type !== "info") {
+      setTimeout(() => setToast(null), 5000);
+    }
+  };
 
   const focusFieldById = useCallback((id: string) => {
     requestAnimationFrame(() => {
@@ -482,11 +445,17 @@ const HomeownerForm: React.FC<Props> = ({
         return !!formErrors[field];
       });
 
-      if (!firstInvalid) return;
+      if (firstInvalid) {
+        const fieldId =
+          HOMEOWNER_FIELD_IDS[firstInvalid] ?? HOMEOWNER_FIELD_IDS.projectType;
+        focusFieldById(fieldId);
+      }
 
-      const fieldId =
-        HOMEOWNER_FIELD_IDS[firstInvalid] ?? HOMEOWNER_FIELD_IDS.projectType;
-      focusFieldById(fieldId);
+      const errorCount = Object.keys(formErrors).length;
+      showToast(
+        "error",
+        `Please fix the ${errorCount} error${errorCount > 1 ? "s" : ""} below before submitting.`,
+      );
     },
     [focusFieldById, projectType],
   );
@@ -538,18 +507,17 @@ const HomeownerForm: React.FC<Props> = ({
 
   // Common input styles
   const inputStyles = cn(
-    "w-full px-4 py-3.5 rounded-xl text-white text-sm",
-    "bg-white/6 backdrop-blur-sm",
-    "border border-white/16 hover:border-onboarding-primary/32",
-    "focus:outline-none focus:border-onboarding-primary/55 focus:ring-2 focus:ring-focus-ring/25",
-    "placeholder:text-onboarding-ink/35",
+    "w-full px-4 py-3 rounded-xl text-white text-sm",
+    "bg-zinc-950/80 border border-zinc-800",
+    "focus:outline-none focus:border-emerald-500 focus:bg-zinc-900 focus:ring-2 focus:ring-emerald-500/20",
+    "placeholder:text-zinc-500",
     "transition-all duration-200",
   );
 
   return (
     <form
       onSubmit={rhfHandleSubmit(onFormSubmit, handleInvalidSubmit)}
-      className="max-w-md mx-auto"
+      className="max-w-xl mx-auto"
       noValidate
     >
       {/* Toast notification */}
@@ -592,12 +560,12 @@ const HomeownerForm: React.FC<Props> = ({
                 emptyMessage="No matching county found."
                 className={cn(
                   "w-full rounded-xl",
-                  "bg-white/6 border",
+                  "bg-zinc-950/80 border",
                   errors.county
-                    ? "border-error/50"
-                    : "border-white/16 hover:border-onboarding-primary/32",
-                  "text-white hover:bg-white/10",
-                  "focus:border-onboarding-primary/55 focus:ring-2 focus:ring-focus-ring/25",
+                    ? "border-red-500/60"
+                    : "border-zinc-800 hover:border-zinc-700",
+                  "text-white hover:bg-zinc-900",
+                  "focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20",
                 )}
               />
             )}
@@ -627,17 +595,17 @@ const HomeownerForm: React.FC<Props> = ({
                     ? `${HOMEOWNER_FIELD_IDS.projectType}-error`
                     : undefined
                 }
-                placeholder="What are you building?"
+                placeholder="What are you building or renovating?"
                 searchPlaceholder="Search project types..."
                 emptyMessage="No matching project type found."
                 className={cn(
                   "w-full rounded-xl",
-                  "bg-white/6 border",
+                  "bg-zinc-950/80 border",
                   errors.projectType
-                    ? "border-error/50"
-                    : "border-white/16 hover:border-onboarding-primary/32",
-                  "text-white hover:bg-white/10",
-                  "focus:border-onboarding-primary/55 focus:ring-2 focus:ring-focus-ring/25",
+                    ? "border-red-500/60"
+                    : "border-zinc-800 hover:border-zinc-700",
+                  "text-white hover:bg-zinc-900",
+                  "focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20",
                 )}
               />
             )}
@@ -646,15 +614,14 @@ const HomeownerForm: React.FC<Props> = ({
             <div className="mt-3 animate-in fade-in slide-in-from-top-2 duration-300">
               <label
                 htmlFor={HOMEOWNER_FIELD_IDS.customProjectType}
-                className="mb-2 block text-xs text-onboarding-ink/58"
+                className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-400"
               >
-                Project Type Details{" "}
-                <span className="text-(--color-error)">*</span>
+                Project Type Details <span className="text-red-400">*</span>
               </label>
               <input
                 id={HOMEOWNER_FIELD_IDS.customProjectType}
                 type="text"
-                placeholder="Describe your project type..."
+                placeholder="Describe your specific project type..."
                 {...register("customProjectType")}
                 aria-invalid={errors.customProjectType ? "true" : undefined}
                 aria-describedby={
@@ -664,14 +631,14 @@ const HomeownerForm: React.FC<Props> = ({
                 }
                 className={cn(
                   inputStyles,
-                  errors.customProjectType && "border-error/50",
+                  errors.customProjectType && "border-red-500/60",
                 )}
               />
               {errors.customProjectType && (
                 <div aria-live="polite" aria-atomic="true">
                   <p
                     id={`${HOMEOWNER_FIELD_IDS.customProjectType}-error`}
-                    className="mt-1 text-xs text-(--color-error) flex items-center gap-1"
+                    className="mt-1 text-xs text-red-400 flex items-center gap-1 font-medium"
                   >
                     <AlertCircle className="h-3 w-3" />
                     {errors.customProjectType.message}
@@ -684,7 +651,7 @@ const HomeownerForm: React.FC<Props> = ({
 
         {/* Project Location */}
         <FormField
-          label="Project Location"
+          label="Project Specific Location / Area"
           icon={<MapPin className="h-4 w-4" />}
           id={HOMEOWNER_FIELD_IDS.projectLocation}
         >
@@ -697,12 +664,12 @@ const HomeownerForm: React.FC<Props> = ({
                 options={LOCATION_OPTIONS}
                 value={field.value || ""}
                 onChange={field.onChange}
-                placeholder="Where is your project located?"
+                placeholder="Where is your project located? (e.g. Karen, Westlands)"
                 searchPlaceholder="Search locations..."
                 className={cn(
                   "w-full rounded-xl",
-                  "bg-white/6 border border-white/16 hover:border-onboarding-primary/32",
-                  "text-white hover:bg-white/10",
+                  "bg-zinc-950/80 border border-zinc-800 hover:border-zinc-700",
+                  "text-white hover:bg-zinc-900",
                 )}
               />
             )}
@@ -711,15 +678,15 @@ const HomeownerForm: React.FC<Props> = ({
 
         {/* Estimated Budget */}
         <FormField
-          label="Estimated Budget (KES)"
+          label="Estimated Budget Range (KES)"
           icon={<Wallet className="h-4 w-4" />}
-          hint="Helps us match you with appropriate professionals"
+          hint="Helps us match you with professionals tailored to your budget scale"
           id={HOMEOWNER_FIELD_IDS.estimatedBudget}
         >
           <input
             id={HOMEOWNER_FIELD_IDS.estimatedBudget}
             type="text"
-            placeholder="e.g. 5,000,000 - 15,000,000"
+            placeholder="e.g. KES 5,000,000 - 15,000,000"
             {...register("estimatedBudget")}
             className={inputStyles}
           />
@@ -727,7 +694,7 @@ const HomeownerForm: React.FC<Props> = ({
 
         {/* Project Description */}
         <FormField
-          label="Project Description"
+          label="Project Description & Vision"
           icon={<FileText className="h-4 w-4" />}
           error={errors.description?.message}
           id={HOMEOWNER_FIELD_IDS.description}
@@ -742,87 +709,52 @@ const HomeownerForm: React.FC<Props> = ({
             }
             className={cn(
               inputStyles,
-              "min-h-35 resize-none leading-relaxed",
-              errors.description && "border-error/50",
+              "min-h-32 resize-none leading-relaxed",
+              errors.description && "border-red-500/60",
             )}
-            placeholder="Describe your vision, timeline, requirements, and any specific details that would help professionals understand your needs..."
+            placeholder="Describe your vision, estimated timeline, materials preference, and any specific details that will help professionals prepare accurate quotes..."
             {...register("description")}
           />
         </FormField>
 
         {/* Submit Button */}
-        <div className="pt-6 space-y-4">
+        <div className="pt-6 space-y-4 border-t border-zinc-800/80">
           <button
             type="submit"
             disabled={isSubmitting}
             className={cn(
-              "w-full py-4 px-6 rounded-xl font-semibold text-base",
-              "bg-(--color-onboarding-primary)",
-              "text-[oklch(0.08_0.016_222)] shadow-lg",
-              "hover:opacity-90",
-              "transition-all duration-300 active:scale-[0.98]",
-              "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100",
-              "disabled:shadow-none",
+              "w-full py-3.5 px-6 rounded-xl font-semibold text-sm",
+              "bg-emerald-500 text-zinc-950 shadow-[0_4px_20px_rgba(16,185,129,0.25)]",
+              "hover:bg-emerald-400 transition-all duration-200 active:scale-[0.98]",
+              "disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none",
             )}
           >
             {isSubmitting ? (
               <span className="flex items-center justify-center gap-2">
-                <Loader2 className="h-5 w-5 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
                 Creating your profile...
               </span>
             ) : (
               <span className="flex items-center justify-center gap-2">
                 Get Started
-                <ArrowRight className="h-5 w-5" />
+                <ArrowRight className="h-4 w-4" />
               </span>
             )}
           </button>
 
           {/* Skip option for homeowners */}
           {onSkip && (
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-white/10" />
-              </div>
-              <div className="relative flex justify-center text-xs">
-                <span className="bg-background px-4 text-onboarding-ink/55">
-                  or
-                </span>
-              </div>
-            </div>
-          )}
-
-          {onSkip && (
-            <div className="text-center space-y-2">
+            <div className="text-center pt-2">
               <button
                 type="button"
                 onClick={onSkip}
                 disabled={isSubmitting}
-                className={cn(
-                  "text-sm font-medium transition-all duration-200",
-                  "text-onboarding-ink/58 hover:text-(--color-onboarding-primary)",
-                  "disabled:opacity-50",
-                )}
+                className="text-xs font-medium text-zinc-400 hover:text-emerald-400 transition-colors disabled:opacity-50"
               >
-                Skip for now →
+                Skip for now — complete details later
               </button>
-              <p className="text-[11px] text-onboarding-ink/55">
-                Complete your profile anytime from the dashboard
-              </p>
             </div>
           )}
-
-          <button
-            type="button"
-            onClick={onBack}
-            className={cn(
-              "w-full py-3 text-center text-sm",
-              "text-onboarding-ink/60 hover:text-(--color-onboarding-ink)",
-              "transition-colors duration-200",
-            )}
-          >
-            ← Back to role selection
-          </button>
         </div>
       </div>
     </form>

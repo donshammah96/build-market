@@ -69,10 +69,13 @@ export const documentsRepository = {
   > {
     const asset = await prisma.asset.findUnique({
       where: { id: data.assetId },
-      select: { id: true, uploaderId: true },
+      select: { id: true, uploaderId: true, visibility: true },
     });
     if (!asset) return { error: "asset_not_found" };
-    if (asset.uploaderId !== professionalId && asset.uploaderId !== "system") {
+    if (
+      (asset.uploaderId !== professionalId && asset.uploaderId !== "system") ||
+      (asset.uploaderId !== "system" && asset.visibility !== "PRIVATE")
+    ) {
       return { error: "asset_forbidden" };
     }
 
@@ -134,10 +137,7 @@ export const documentsRepository = {
     | { data: DocumentUpdateResult }
     | {
         error:
-          | "not_found"
-          | "forbidden"
-          | "asset_not_found"
-          | "asset_forbidden";
+          "not_found" | "forbidden" | "asset_not_found" | "asset_forbidden";
       }
   > {
     const existing = await prisma.professionalDocument.findUnique({
@@ -152,12 +152,13 @@ export const documentsRepository = {
     if (updateData.assetId && updateData.assetId !== existing.assetId) {
       const asset = await prisma.asset.findUnique({
         where: { id: updateData.assetId },
-        select: { id: true, uploaderId: true },
+        select: { id: true, uploaderId: true, visibility: true },
       });
       if (!asset) return { error: "asset_not_found" };
       if (
-        asset.uploaderId !== professionalId &&
-        asset.uploaderId !== "system"
+        (asset.uploaderId !== professionalId &&
+          asset.uploaderId !== "system") ||
+        (asset.uploaderId !== "system" && asset.visibility !== "PRIVATE")
       ) {
         return { error: "asset_forbidden" };
       }

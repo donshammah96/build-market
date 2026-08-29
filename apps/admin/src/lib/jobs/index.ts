@@ -14,23 +14,26 @@
  *   await shutdownAllSchedulers();
  */
 
-import { scheduleExportCleanup, createCleanupWorker } from "./export-cleanup";
+import { scheduleExportCleanup } from "./export-cleanup";
 import {
   scheduleDataRetentionEnforcement,
-  createDataRetentionWorker,
   retentionQueue,
 } from "./data-retention";
 import {
   scheduleAnonymizationBatch,
-  createAnonymizationBatchWorker,
   anonymizationQueue,
 } from "./anonymization-batch";
+import { scheduleAssetCleanup, assetCleanupQueue } from "./asset-cleanup";
+import { scheduleLicenseExpiry, licenseExpiryQueue } from "./license-expiry";
+import { scheduleGdprErasure, erasureQueue } from "./gdpr-erasure";
 import {
-  scheduleAssetCleanup,
-  createAssetCleanupWorker,
-  assetCleanupQueue,
-} from "./asset-cleanup";
-import { Worker } from "bullmq";
+  scheduleSettledRecordsArchival,
+  settledRecordsArchivalQueue,
+} from "./settled-records-archival";
+import { Worker, Queue } from "bullmq";
+import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
+
+const logger = new StructuredLogger("job-orchestrator");
 
 // Track all workers for graceful shutdown
 let workers: Worker[] = [];
@@ -39,15 +42,15 @@ let isInitialized = false;
 export interface SchedulerStatus {
   name: string;
   isRunning: boolean;
-  lastRun?: Date;
-  nextRun?: Date;
-  lastError?: string;
+  lastRun?: Date | undefined;
+  nextRun?: Date | undefined;
+  lastError?: string | undefined;
 }
 
 export interface GDPRJobOrchestrator {
   isInitialized: boolean;
   schedulers: SchedulerStatus[];
-  startedAt?: Date;
+  startedAt?: Date | undefined;
 }
 
 /**
@@ -55,11 +58,11 @@ export interface GDPRJobOrchestrator {
  */
 export async function initializeAllSchedulers(): Promise<void> {
   if (isInitialized) {
-    console.log("[JobOrchestrator] Already initialized, skipping");
+    logger.info("Already initialized, skipping");
     return;
   }
 
-  console.log("[JobOrchestrator] Initializing all GDPR schedulers...");
+  logger.info("Initializing all GDPR schedulers");
 
   try {
     // 1. Schedule all jobs
@@ -68,27 +71,28 @@ export async function initializeAllSchedulers(): Promise<void> {
       scheduleDataRetentionEnforcement(),
       scheduleAnonymizationBatch(),
       scheduleAssetCleanup(),
+      scheduleLicenseExpiry(),
+      scheduleGdprErasure(),
+      scheduleSettledRecordsArchival(),
     ]);
 
-    console.log("[JobOrchestrator] All jobs scheduled");
+    logger.info("All jobs scheduled");
 
-    // 2. Create workers
-    workers = [
-      createCleanupWorker(),
-      createDataRetentionWorker(),
-      createAnonymizationBatchWorker(),
-      createAssetCleanupWorker(),
-    ];
-
-    console.log("[JobOrchestrator] All workers created");
+    // 2. Worker consumers: Consumer loops run in standalone `apps/workers` daemon.
+    // In Next.js web instances, consumer creation is omitted to prevent socket leaks under serverless.
+    workers = [];
+    logger.info(
+      "Schedulers registered; consumer execution handled by apps/workers daemon",
+    );
 
     isInitialized = true;
 
-    console.log(
-      "[JobOrchestrator] GDPR job orchestrator initialized successfully",
-    );
+    logger.info("GDPR job orchestrator initialized successfully");
   } catch (error) {
-    console.error("[JobOrchestrator] Failed to initialize schedulers:", error);
+    logger.error(
+      "Failed to initialize schedulers",
+      error instanceof Error ? error : new Error(String(error)),
+    );
     throw error;
   }
 }
@@ -98,11 +102,11 @@ export async function initializeAllSchedulers(): Promise<void> {
  */
 export async function shutdownAllSchedulers(): Promise<void> {
   if (!isInitialized) {
-    console.log("[JobOrchestrator] Not initialized, nothing to shutdown");
+    logger.info("Not initialized, nothing to shutdown");
     return;
   }
 
-  console.log("[JobOrchestrator] Shutting down all GDPR schedulers...");
+  logger.info("Shutting down all GDPR schedulers");
 
   try {
     // Close all workers
@@ -111,7 +115,10 @@ export async function shutdownAllSchedulers(): Promise<void> {
         try {
           await worker.close();
         } catch (error) {
-          console.error("[JobOrchestrator] Error closing worker:", error);
+          logger.error(
+            "Error closing worker",
+            error instanceof Error ? error : new Error(String(error)),
+          );
         }
       }),
     );
@@ -121,14 +128,20 @@ export async function shutdownAllSchedulers(): Promise<void> {
       retentionQueue.close(),
       anonymizationQueue.close(),
       assetCleanupQueue.close(),
+      licenseExpiryQueue.close(),
+      erasureQueue.close(),
+      settledRecordsArchivalQueue.close(),
     ]);
 
     workers = [];
     isInitialized = false;
 
-    console.log("[JobOrchestrator] All schedulers shut down");
+    logger.info("All schedulers shut down");
   } catch (error) {
-    console.error("[JobOrchestrator] Error during shutdown:", error);
+    logger.error(
+      "Error during shutdown",
+      error instanceof Error ? error : new Error(String(error)),
+    );
     throw error;
   }
 }
@@ -141,10 +154,13 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
 
   // Get job info from each queue
   const queues = [
-    { name: "Export Cleanup", queue: null as any }, // cleanupQueue is not exported
+    { name: "Export Cleanup", queue: null as Queue | null }, // cleanupQueue is not exported
     { name: "Data Retention", queue: retentionQueue },
     { name: "Anonymization Batch", queue: anonymizationQueue },
     { name: "Asset Cleanup", queue: assetCleanupQueue },
+    { name: "License Expiry", queue: licenseExpiryQueue },
+    { name: "GDPR Erasure", queue: erasureQueue },
+    { name: "Settled Records Archival", queue: settledRecordsArchivalQueue },
   ];
 
   for (const { name, queue } of queues) {
@@ -176,7 +192,7 @@ export async function getSchedulerStatus(): Promise<GDPRJobOrchestrator> {
   return {
     isInitialized,
     schedulers,
-    startedAt: isInitialized ? new Date() : undefined,
+    ...(isInitialized ? { startedAt: new Date() } : {}),
   };
 }
 
@@ -188,8 +204,14 @@ export async function triggerJob(
     | "export-cleanup"
     | "data-retention"
     | "anonymization-batch"
-    | "asset-cleanup",
+    | "asset-cleanup"
+    | "license-expiry"
+    | "gdpr-erasure"
+    | "settled-records-archival",
 ): Promise<{ success: boolean; jobId?: string; error?: string }> {
+  const correlationId = CorrelationIdManager.generate();
+  CorrelationIdManager.set(correlationId);
+
   try {
     let queue;
     let jobName;
@@ -214,6 +236,18 @@ export async function triggerJob(
           success: false,
           error: "Export cleanup manual trigger not available",
         };
+      case "license-expiry":
+        queue = licenseExpiryQueue;
+        jobName = "expire-pending-licenses";
+        break;
+      case "gdpr-erasure":
+        queue = erasureQueue;
+        jobName = "process-pending-erasures";
+        break;
+      case "settled-records-archival":
+        queue = settledRecordsArchivalQueue;
+        jobName = "archive-settled-records";
+        break;
       default:
         return { success: false, error: `Unknown job type: ${jobType}` };
     }
@@ -227,13 +261,21 @@ export async function triggerJob(
       },
     );
 
-    console.log(
-      `[JobOrchestrator] Manually triggered ${jobType} job: ${job.id}`,
-    );
+    logger.info("Manually triggered job", {
+      correlationId,
+      jobType,
+      jobId: job.id,
+    });
 
-    return { success: true, jobId: job.id };
+    return job.id
+      ? { success: true, jobId: String(job.id) }
+      : { success: true };
   } catch (error) {
-    console.error(`[JobOrchestrator] Failed to trigger ${jobType}:`, error);
+    logger.error(
+      "Failed to trigger job",
+      error instanceof Error ? error : new Error(String(error)),
+      { correlationId, jobType },
+    );
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -266,6 +308,9 @@ export async function healthCheck(): Promise<{
     "data-retention",
     "anonymization",
     "asset-cleanup",
+    "license-expiry",
+    "gdpr-erasure",
+    "settled-records-archival",
   ] as const;
   for (let i = 0; i < workers.length; i++) {
     const worker = workers[i];
@@ -298,4 +343,7 @@ export {
   scheduleDataRetentionEnforcement,
   scheduleAnonymizationBatch,
   scheduleAssetCleanup,
+  scheduleLicenseExpiry,
+  scheduleGdprErasure,
+  scheduleSettledRecordsArchival,
 };

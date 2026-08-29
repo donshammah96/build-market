@@ -24,7 +24,6 @@ import {
   parseAndValidateProfileCompleteBody,
 } from "./shared";
 
-const logger = getClientLogger();
 const executor = getResilientExecutor();
 
 /**
@@ -43,6 +42,7 @@ const executor = getResilientExecutor();
  */
 export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
   const correlationId = initializeCorrelationId(req);
+  const logger = getClientLogger();
 
   try {
     logger.info("Profile complete request received - routing by role", {
@@ -173,7 +173,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     return apiSuccess(domainResult.data);
   } catch (err) {
-    logger.error(
+    getClientLogger().error(
       "Profile complete routing error",
       err instanceof Error ? err : new Error(String(err)),
       {

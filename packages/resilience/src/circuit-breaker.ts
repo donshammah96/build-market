@@ -2,13 +2,8 @@
  * Circuit Breaker pattern to protect struggling services from cascading failures
  */
 
-import {
-  CircuitBreakerConfig,
-  CircuitState,
-  CircuitBreakerState,
-} from "./types";
-import { Logger } from "./logger";
-import { getDefaultCircuitBreakerConfig } from "./config";
+import { CircuitBreakerConfig, CircuitBreakerState } from "./types.js";
+import { Logger } from "./logger.js";
 
 export class CircuitBreakerOpenError extends Error {
   constructor(

@@ -27,8 +27,7 @@ export type ActionResponse<T = unknown> = {
 
 function toActionResponse<T>(
   result:
-    | { success: true; data: T }
-    | { success: false; error: { message: string } },
+    { success: true; data: T } | { success: false; error: { message: string } },
 ): ActionResponse<T> {
   if (result.success) {
     return { success: true, data: result.data };

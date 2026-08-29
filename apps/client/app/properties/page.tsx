@@ -7,8 +7,8 @@ import { Navbar } from "@/components/layout/NavBar";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import PropertyCard from "@/components/real-estate/PropertyCard";
-import { ROUTES } from "@/lib/links";
-import { propertiesClient } from "@/lib/properties-client";
+import { ROUTES } from "@/lib/routes";
+import { propertiesClient } from "@/lib/facades/properties-client";
 import PropertySearchHero from "./_components/property-search-hero";
 
 export const metadata: Metadata = {

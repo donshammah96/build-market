@@ -14,8 +14,18 @@ import { getRedisClient } from "./client.js";
 import type { CacheOptions, Serializer } from "./types.js";
 
 const jsonSerializer: Serializer<unknown> = {
-  serialize: (value) => JSON.stringify(value),
-  deserialize: (raw) => JSON.parse(raw),
+  serialize: (value) =>
+    typeof value === "string" ? value : JSON.stringify(value),
+  deserialize: (raw: string | unknown) => {
+    if (typeof raw !== "string") {
+      return raw;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return raw;
+    }
+  },
 };
 
 /**
@@ -41,8 +51,8 @@ export class RedisCache<T = unknown> {
 
   async get(key: string): Promise<T | null> {
     const redis = getRedisClient();
-    const raw = await redis.get<string>(this.buildKey(key));
-    if (!raw) return null;
+    const raw = await redis.get<unknown>(this.buildKey(key));
+    if (raw === null || raw === undefined) return null;
 
     try {
       return this.serializer.deserialize(raw);
@@ -139,14 +149,22 @@ export class RedisCache<T = unknown> {
  */
 export const redisCache = {
   async get<T>(key: string): Promise<T | null> {
-    const raw = await getRedisClient().get<string>(key);
-    if (!raw) return null;
-    return JSON.parse(raw) as T;
+    const raw = await getRedisClient().get<unknown>(key);
+    if (raw === null || raw === undefined) return null;
+    if (typeof raw === "string") {
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return raw as unknown as T;
+      }
+    }
+    return raw as T;
   },
 
   async set<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {
     const redis = getRedisClient();
-    const serialized = JSON.stringify(value);
+    const serialized =
+      typeof value === "string" ? value : JSON.stringify(value);
     if (ttlSeconds) {
       await redis.setex(key, ttlSeconds, serialized);
     } else {

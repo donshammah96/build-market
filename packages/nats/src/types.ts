@@ -5,25 +5,32 @@ import type { NatsConnection, JetStreamClient, JetStreamManager } from "nats";
  */
 export interface NatsConfig {
   /** NATS server URLs (e.g., ["localhost:4222"]) */
-  servers: string | string[];
+  servers?: string | string[] | undefined;
   /** Client name for identification */
-  name?: string;
+  name?: string | undefined;
   /** Authentication token */
-  token?: string;
+  token?: string | undefined;
   /** Username for authentication */
-  user?: string;
+  user?: string | undefined;
   /** Password for authentication */
-  pass?: string;
+  pass?: string | undefined;
   /** Connection timeout in milliseconds */
-  timeout?: number;
+  timeout?: number | undefined;
   /** Reconnect automatically on disconnect */
-  reconnect?: boolean;
+  reconnect?: boolean | undefined;
   /** Maximum reconnection attempts */
-  maxReconnectAttempts?: number;
+  maxReconnectAttempts?: number | undefined;
   /** Wait time between reconnection attempts (ms) */
-  reconnectTimeWait?: number;
+  reconnectTimeWait?: number | undefined;
   /** Enable TLS */
-  tls?: boolean;
+  tls?: boolean | undefined;
+}
+
+/**
+ * Resolved NATS connection configuration with defaults applied
+ */
+export interface ResolvedNatsConfig extends NatsConfig {
+  servers: string | string[];
 }
 
 /**
@@ -62,11 +69,7 @@ export interface ConsumerOptions {
   filterSubject?: string;
   /** Delivery policy for new consumers */
   deliverPolicy?:
-    | "all"
-    | "last"
-    | "new"
-    | "by_start_sequence"
-    | "by_start_time";
+    "all" | "last" | "new" | "by_start_sequence" | "by_start_time";
   /** Acknowledgment policy */
   ackPolicy?: "explicit" | "none" | "all";
   /** Max number of delivery attempts */
@@ -119,7 +122,12 @@ export interface MessagePayload<T = unknown> {
  * Publisher options
  */
 export interface PublishOptions {
-  /** Message ID for deduplication */
+  /**
+   * Message ID for deduplication.
+   * Crucial for the JetStream idempotency contract (duplicate window verification).
+   * Messages published with the same msgId within the stream's duplicateWindow
+   * will be discarded as duplicates by NATS, guaranteeing once-only ingestion.
+   */
   msgId?: string;
   /** Expected last message ID */
   expect?: {
@@ -189,7 +197,7 @@ export const StreamPresets = {
     subjects: ["verification.>"],
     retention: "limits" as const,
     storage: "file" as const,
-    maxAge: 7 * 24 * 60 * 60 * 1000000000, // 7 days in nanoseconds
+    maxAge: 7 * 24 * 60 * 60 * 1_000_000_000, // 7 days in nanoseconds
     replicas: 1,
   },
   /** User events stream */
@@ -198,7 +206,7 @@ export const StreamPresets = {
     subjects: ["user.>"],
     retention: "limits" as const,
     storage: "file" as const,
-    maxAge: 30 * 24 * 60 * 60 * 1000000000, // 30 days
+    maxAge: 30 * 24 * 60 * 60 * 1_000_000_000, // 30 days
     replicas: 1,
   },
   /** Order events stream */
@@ -207,7 +215,7 @@ export const StreamPresets = {
     subjects: ["order.>"],
     retention: "limits" as const,
     storage: "file" as const,
-    maxAge: 90 * 24 * 60 * 60 * 1000000000, // 90 days
+    maxAge: 90 * 24 * 60 * 60 * 1_000_000_000, // 90 days
     replicas: 1,
   },
   /** Project events stream */
@@ -216,7 +224,7 @@ export const StreamPresets = {
     subjects: ["project.>"],
     retention: "limits" as const,
     storage: "file" as const,
-    maxAge: 90 * 24 * 60 * 60 * 1000000000, // 90 days
+    maxAge: 90 * 24 * 60 * 60 * 1_000_000_000, // 90 days
     replicas: 1,
   },
   /** Notification events stream (work queue - delete after processing) */
@@ -225,7 +233,17 @@ export const StreamPresets = {
     subjects: ["notification.>"],
     retention: "workqueue" as const,
     storage: "file" as const,
-    maxAge: 24 * 60 * 60 * 1000000000, // 24 hours
+    maxAge: 24 * 60 * 60 * 1_000_000_000, // 24 hours
+    replicas: 1,
+  },
+  /** License events stream */
+  LICENSES: {
+    name: "LICENSES",
+    subjects: ["license.>"],
+    retention: "limits" as const,
+    storage: "file" as const,
+    maxAge: 30 * 24 * 60 * 60 * 1_000_000_000, // 30 days in nanoseconds
+    duplicateWindow: 120_000_000_000, // 2-minute dedup window
     replicas: 1,
   },
 } as const;
@@ -246,6 +264,32 @@ export interface VerificationEvent {
   metadata?: Record<string, unknown>;
 }
 
+export interface LicenseVerificationEvent {
+  licenseId: string;
+  professionalId: string;
+  authority: string; // LicenseAuthority enum value
+  licenseNumber: string;
+  previousStatus: string; // VerificationStatus
+  newStatus: string; // VerificationStatus
+  action:
+    | "submitted"
+    | "auto_verify_requested"
+    | "auto_verified"
+    | "auto_verify_failed"
+    | "verified"
+    | "rejected"
+    | "needs_correction"
+    | "resubmitted"
+    | "expired"
+    | "expiring_soon";
+  adminId?: string; // present on admin-initiated transitions
+  verificationMethod?: "MANUAL" | "API_NCA" | "API_EBK" | "SYSTEM";
+  correlationId: string;
+  timestamp: string; // ISO 8601
+  validUntil?: string; // ISO 8601, for expiry scheduling
+  metadata?: Record<string, unknown>;
+}
+
 export interface UserEvent {
   userId: string;
   action: "created" | "updated" | "deleted" | "verified" | "suspended";
@@ -256,12 +300,7 @@ export interface UserEvent {
 export interface OrderEvent {
   orderId: string;
   action:
-    | "created"
-    | "updated"
-    | "paid"
-    | "shipped"
-    | "delivered"
-    | "cancelled";
+    "created" | "updated" | "paid" | "shipped" | "delivered" | "cancelled";
   userId: string;
   amount?: number;
   metadata?: Record<string, unknown>;
@@ -279,12 +318,7 @@ export interface NotificationEvent {
   userId: string;
   type: "email" | "push" | "in_app";
   category:
-    | "order"
-    | "message"
-    | "project"
-    | "review"
-    | "system"
-    | "verification";
+    "order" | "message" | "project" | "review" | "system" | "verification";
   title: string;
   content: string;
   data?: Record<string, unknown>;

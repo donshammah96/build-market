@@ -1,4 +1,5 @@
 import { nextJsConfig } from "@build/eslint-config/next-js";
+import importPlugin from "eslint-plugin-import";
 
 /** @type {import("eslint").Linter.Config} */
 const config = [
@@ -14,11 +15,28 @@ const config = [
   },
   ...nextJsConfig,
   {
+    plugins: {
+      import: importPlugin,
+    },
     rules: {
       "react/prop-types": "off",
       "turbo/no-undeclared-env-vars": "off",
       "@typescript-eslint/no-explicit-any": "off",
-      "@typescript-eslint/no-unused-vars": "off",
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          args: "all",
+          argsIgnorePattern: "^_",
+          vars: "all",
+          varsIgnorePattern: "^_",
+          caughtErrors: "all",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
+      "import/no-cycle": ["error", { maxDepth: 3 }],
     },
   },
   {
@@ -27,8 +45,10 @@ const config = [
       "components/**/*.{ts,tsx}",
       "hooks/**/*.{ts,tsx}",
       "lib/**/*.{ts,tsx}",
+      "middleware.ts",
     ],
     ignores: [
+      "app/lib/infrastructure/env.ts",
       "**/__tests__/**/*.{ts,tsx}",
       "**/*.test.{ts,tsx}",
       "**/*.spec.{ts,tsx}",
@@ -84,19 +104,21 @@ const config = [
           message:
             "Do not use boolean CSRF exemption flags. Use a typed CsrfExemption object.",
         },
+        {
+          selector:
+            "MemberExpression[object.type='MemberExpression'][object.object.name='process'][object.property.name='env']",
+          message:
+            "Use the typed env module instead of direct process.env access. See app/lib/infrastructure/env.ts.",
+        },
+        {
+          selector: "Literal[value=/^Access-Control-Allow-/]",
+          message: "Set CORS headers only through app/lib/api/cors.ts helpers.",
+        },
       ],
     },
   },
   {
-    files: [
-      "app/lib/api/api-middleware.ts",
-      "app/lib/api/cors.ts",
-      "app/lib/infrastructure/storage.ts",
-      "app/lib/infrastructure/webhook-replay.ts",
-      "app/jobs/**/*.ts",
-      "app/workers/**/*.ts",
-      "middleware.ts",
-    ],
+    files: ["app/lib/api/cors.ts"],
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -104,7 +126,19 @@ const config = [
           selector:
             "MemberExpression[object.type='MemberExpression'][object.object.name='process'][object.property.name='env']",
           message:
-            "Use the typed env module instead of direct process.env in guarded runtime files.",
+            "Use the typed env module instead of direct process.env access. See app/lib/infrastructure/env.ts.",
+        },
+      ],
+    },
+  },
+  {
+    files: ["app/api/**/*.{ts,tsx}", "app/actions/**/*.{ts,tsx}"],
+    ignores: ["app/api/health/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: ["@build/db"],
         },
       ],
     },
@@ -115,20 +149,54 @@ const config = [
       "components/**/*.{ts,tsx}",
       "hooks/**/*.{ts,tsx}",
       "lib/**/*.{ts,tsx}",
-      "middleware.ts",
     ],
     ignores: [
-      "app/lib/api/cors.ts",
-      "**/__tests__/**/*.{ts,tsx}",
+      "app/jobs/**",
+      "**/__tests__/**",
       "**/*.test.{ts,tsx}",
       "**/*.spec.{ts,tsx}",
     ],
     rules: {
-      "no-restricted-syntax": [
+      "no-restricted-imports": [
         "error",
         {
-          selector: "Literal[value=/^Access-Control-Allow-/]",
-          message: "Set CORS headers only through app/lib/api/cors.ts helpers.",
+          patterns: [
+            {
+              group: ["**/*.worker", "**/workers/**"],
+              message:
+                "Background workers and consumer loops must not reside in or be imported by apps/client. All workers are decoupled into the standalone apps/workers daemon.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["app/lib/domains/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/app/lib/api/api-response",
+              importNames: ["HttpStatus"],
+              message:
+                "Domain services must not import HttpStatus. Map domain errors to HTTP in adapters.",
+            },
+            {
+              name: "next/server",
+              importNames: ["NextResponse"],
+              message:
+                "Domain services must not import NextResponse. Adapter layers own HTTP responses.",
+            },
+            {
+              name: "@/app/lib/api/resilient-api",
+              importNames: ["getClientLogger"],
+              message:
+                "Domain services must not import getClientLogger. Logging belongs in adapters.",
+            },
+          ],
         },
       ],
     },

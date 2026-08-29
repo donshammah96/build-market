@@ -14,8 +14,6 @@ import {
 import { isValidId } from "@/app/lib/api/api-guards";
 import { projectsService } from "@/app/lib/domains/projects/service";
 
-const logger = getClientLogger();
-
 type ProjectDocumentParams = { id: string; documentId: string };
 
 /**
@@ -108,7 +106,7 @@ export const DELETE = withAuth<ProjectDocumentParams>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Deleting project document by resource path", {
+    getClientLogger().info("Deleting project document by resource path", {
       correlationId,
       projectId,
       documentId,

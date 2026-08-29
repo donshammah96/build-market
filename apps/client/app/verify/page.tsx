@@ -3,7 +3,7 @@
 import { useEffect, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useUser } from "@clerk/nextjs";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 /**
  * Email Verification Page

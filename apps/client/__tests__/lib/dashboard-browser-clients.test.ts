@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { dashboardMetricsClient } from "@/lib/dashboard-metrics-client";
-import { inventoryClient } from "@/lib/inventory-client";
-import { leadsClient } from "@/lib/leads-client";
-import { ordersClient } from "@/lib/orders-client";
-import { pipelineClient } from "@/lib/pipeline-client";
-import { portfolioClient } from "@/lib/portfolio-client";
-import { productsClient } from "@/lib/products-client";
+import { dashboardMetricsClient } from "@/lib/facades/dashboard-metrics-client";
+import { inventoryClient } from "@/lib/facades/inventory-client";
+import { leadsClient } from "@/lib/facades/leads-client";
+import { ordersClient } from "@/lib/facades/orders-client";
+import { pipelineClient } from "@/lib/facades/pipeline-client";
+import { portfolioClient } from "@/lib/facades/portfolio-client";
+import { productsClient } from "@/lib/facades/products-client";
 
 function expectSuccess<T>(result: {
   success: boolean;

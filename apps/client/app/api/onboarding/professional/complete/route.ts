@@ -5,8 +5,8 @@
  * KEY CHANGES FROM ORIGINAL:
  *
  * 1. CLERK UPDATE ORDERING FIX (critical)
- *    Original: domain logic → IdempotencyService.complete() → Clerk update
- *    Fixed:    domain logic → Clerk update → IdempotencyService.complete()
+ *    Original: domain logic → safeIdempotencyComplete() → Clerk update
+ *    Fixed:    domain logic → Clerk update → safeIdempotencyComplete()
  *
  *    If Clerk update ran after complete() and failed silently, any retry
  *    returned the cached "completed" response without re-attempting the Clerk
@@ -29,10 +29,8 @@ import {
 } from "@prisma/client";
 import { z } from "zod";
 import { withAuth } from "@/app/lib/api/api-middleware";
-import { HttpStatus } from "@/app/lib/api/api-response";
+import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
-  apiError,
-  apiSuccess,
   getClientLogger,
   getResilientExecutor,
   initializeCorrelationId,
@@ -46,6 +44,7 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { userProfileOnboardingService } from "@/app/lib/domains/user-profile";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   requireRole,
   RoleNormalizationError,
@@ -55,20 +54,14 @@ import {
   CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
   finalizeClerkOnboardingTransition,
 } from "@/app/lib/domains/user-profile/clerk-metadata";
+import {
+  logOnboardingRouteOutcome,
+  now,
+  onboardingDomainErrorToClientMessage,
+  domainErrorCodeToStatus,
+} from "@/app/api/onboarding/shared";
 
-const logger = getClientLogger();
-const MAX_BODY_SIZE = 2 * 1024 * 1024;
-const ROUTE_PATTERN = "/api/onboarding/professional/complete";
 const OPERATION_NAME = "complete-professional-onboarding";
-
-function mapOutcomeFromStatus(status: number): string {
-  if (status === HttpStatus.BAD_REQUEST) return "bad_request";
-  if (status === HttpStatus.UNAUTHORIZED) return "unauthorized";
-  if (status === HttpStatus.FORBIDDEN) return "forbidden";
-  if (status === HttpStatus.CONFLICT) return "conflict";
-  if (status === HttpStatus.TOO_MANY_REQUESTS) return "rate_limited";
-  return "failed";
-}
 
 const OnboardingCompleteSchema = z.object({
   profession: z.nativeEnum(Profession),
@@ -134,27 +127,9 @@ const OnboardingCompleteSchema = z.object({
 
 export const PATCH = withAuth(
   async (req: NextRequest, { dbUserId, clerkId, userRole }) => {
-    const startedAt = Date.now();
+    const startedAt = now();
     const correlationId = initializeCorrelationId(req);
     let actorRole: "unknown" | AppRole = "unknown";
-
-    const logOutcome = (
-      outcome: string,
-      httpStatus: number,
-      additionalContext?: Record<string, unknown>,
-    ) => {
-      logger.info("Onboarding adapter outcome", {
-        correlationId,
-        operationName: OPERATION_NAME,
-        httpMethod: req.method,
-        routePattern: ROUTE_PATTERN,
-        actorRole,
-        outcome,
-        httpStatus,
-        durationMs: Date.now() - startedAt,
-        ...(additionalContext ? { additionalContext } : {}),
-      });
-    };
 
     let normalizedRole: AppRole;
     try {
@@ -162,10 +137,21 @@ export const PATCH = withAuth(
       actorRole = normalizedRole;
     } catch (error) {
       if (error instanceof RoleNormalizationError) {
-        logOutcome("forbidden", HttpStatus.FORBIDDEN, {
-          reason: "role_normalization_failed",
+        logOnboardingRouteOutcome({
+          correlationId,
+          operationName: OPERATION_NAME,
+          actorRole: String(actorRole),
+          outcome: "domain_error",
+          httpStatus: HttpStatus.FORBIDDEN,
+          durationMs: now() - startedAt,
+          domainError: "forbidden",
         });
-        return apiError("Forbidden", HttpStatus.FORBIDDEN);
+        return apiError(
+          "Forbidden",
+          HttpStatus.FORBIDDEN,
+          undefined,
+          correlationId,
+        );
       }
       throw error;
     }
@@ -176,17 +162,31 @@ export const PATCH = withAuth(
       RateLimits.WRITE.window,
     );
     if (!rateLimitResult.success) {
-      logOutcome("rate_limited", HttpStatus.TOO_MANY_REQUESTS);
+      logOnboardingRouteOutcome({
+        correlationId,
+        operationName: OPERATION_NAME,
+        actorRole: String(actorRole),
+        outcome: "rate_limited",
+        httpStatus: HttpStatus.TOO_MANY_REQUESTS,
+        durationMs: now() - startedAt,
+      });
       return apiError(
-        `Rate limit exceeded. Try again in ${Math.ceil((rateLimitResult.reset - Date.now()) / 1000)} seconds`,
+        "Too many requests. Please try again later.",
         HttpStatus.TOO_MANY_REQUESTS,
+        undefined,
+        correlationId,
       );
     }
 
-    const sizeError = checkBodySize(req, MAX_BODY_SIZE);
+    const sizeError = checkBodySize(req, 2 * 1024 * 1024);
     if (sizeError) {
-      logOutcome("bad_request", 413, {
-        reason: "body_too_large",
+      logOnboardingRouteOutcome({
+        correlationId,
+        operationName: OPERATION_NAME,
+        actorRole: String(actorRole),
+        outcome: "validation_error",
+        httpStatus: 413,
+        durationMs: now() - startedAt,
       });
       return sizeError;
     }
@@ -195,10 +195,20 @@ export const PATCH = withAuth(
     try {
       body = await req.json();
     } catch {
-      logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
-        reason: "invalid_json",
+      logOnboardingRouteOutcome({
+        correlationId,
+        operationName: OPERATION_NAME,
+        actorRole: String(actorRole),
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
       });
-      return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+      return apiError(
+        "Invalid JSON body",
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        correlationId,
+      );
     }
 
     const { ipAddress, userAgent } = getRequestMetadata(req);
@@ -209,19 +219,24 @@ export const PATCH = withAuth(
         issue.path.join("."),
       );
 
-      logger.warn("Onboarding completion validation failed", {
+      getClientLogger().warn("Onboarding completion validation failed", {
         actorRole,
         correlationId,
         errors: validationErrorFields,
       });
-      logOutcome("bad_request", HttpStatus.BAD_REQUEST, {
-        reason: "validation_failed",
-        errors: validationErrorFields,
+      logOnboardingRouteOutcome({
+        correlationId,
+        operationName: OPERATION_NAME,
+        actorRole: String(actorRole),
+        outcome: "validation_error",
+        httpStatus: HttpStatus.BAD_REQUEST,
+        durationMs: now() - startedAt,
       });
       return apiError(
         "Validation failed",
         HttpStatus.BAD_REQUEST,
         validationErrorFields,
+        correlationId,
       );
     }
 
@@ -240,28 +255,35 @@ export const PATCH = withAuth(
       dbUserId,
       "PATCH",
     );
-    if (!idempotencyCheck) {
-      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR, {
-        reason: "idempotency_check_failed",
+    if (idempotencyCheck.status === "completed") {
+      logOnboardingRouteOutcome({
+        correlationId,
+        operationName: OPERATION_NAME,
+        actorRole: String(actorRole),
+        outcome: "success",
+        httpStatus: HttpStatus.OK,
+        durationMs: now() - startedAt,
       });
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
+      return apiSuccess(
+        idempotencyCheck.response,
+        HttpStatus.OK,
+        correlationId,
       );
     }
-    if (idempotencyCheck.status === "completed") {
-      logOutcome("succeeded", HttpStatus.OK, {
-        source: "idempotency_cache",
-      });
-      return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
-    }
     if (idempotencyCheck.status === "pending") {
-      logOutcome("conflict", HttpStatus.CONFLICT, {
-        reason: "idempotency_pending",
+      logOnboardingRouteOutcome({
+        correlationId,
+        operationName: OPERATION_NAME,
+        actorRole: String(actorRole),
+        outcome: "domain_error",
+        httpStatus: HttpStatus.CONFLICT,
+        durationMs: now() - startedAt,
+        domainError: "conflict",
       });
       return apiError(
         "Request is being processed. Please wait.",
         HttpStatus.CONFLICT,
+        correlationId,
       );
     }
 
@@ -283,7 +305,7 @@ export const PATCH = withAuth(
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error(
+      getClientLogger().error(
         "Onboarding adapter outcome",
         result.error instanceof Error
           ? result.error
@@ -291,39 +313,45 @@ export const PATCH = withAuth(
         {
           correlationId,
           operationName: OPERATION_NAME,
-          httpMethod: req.method,
-          routePattern: ROUTE_PATTERN,
           actorRole,
           outcome: "failed",
           httpStatus: HttpStatus.INTERNAL_SERVER_ERROR,
-          durationMs: Date.now() - startedAt,
-          additionalContext: {
-            reason: "executor_failure",
-          },
+          durationMs: now() - startedAt,
         },
       );
       return apiError(
         "Failed to complete onboarding",
         HttpStatus.INTERNAL_SERVER_ERROR,
+        correlationId,
       );
     }
 
     if (!result.data.ok) {
       await IdempotencyService.fail(idempotencyKey);
-      const status = result.data.status || HttpStatus.INTERNAL_SERVER_ERROR;
-      logOutcome(mapOutcomeFromStatus(status), status, {
-        reason: "domain_error",
+      const status = domainErrorCodeToStatus(
+        result.data.error ?? "internal_error",
+      );
+      logOnboardingRouteOutcome({
+        correlationId,
+        operationName: OPERATION_NAME,
+        actorRole: String(actorRole),
+        outcome: "domain_error",
+        httpStatus: status,
+        durationMs: now() - startedAt,
         domainError: result.data.error,
       });
       return apiError(
-        result.data.message || "Failed to complete onboarding",
+        onboardingDomainErrorToClientMessage(
+          result.data.error ?? "internal_error",
+        ),
         status,
+        correlationId,
       );
     }
 
     const responseData = result.data.data;
 
-    // ORDERING INVARIANT: Clerk update BEFORE IdempotencyService.complete().
+    // ORDERING INVARIANT: Clerk update BEFORE safeIdempotencyComplete().
     // If Clerk ran after and failed, any retry returns cached success and
     // permanently skips the Clerk update.
     try {
@@ -339,22 +367,43 @@ export const PATCH = withAuth(
         onFailure: () => IdempotencyService.fail(idempotencyKey),
       });
     } catch {
-      logOutcome("failed", HttpStatus.SERVICE_UNAVAILABLE, {
-        reason: "clerk_metadata_sync_failed",
+      logOnboardingRouteOutcome({
+        correlationId,
+        operationName: OPERATION_NAME,
+        actorRole: String(actorRole),
+        outcome: "internal_error",
+        httpStatus: HttpStatus.SERVICE_UNAVAILABLE,
+        durationMs: now() - startedAt,
+        domainError: "clerk_metadata_sync_failed",
       });
       return apiError(
         CLERK_ONBOARDING_FINALIZATION_RETRY_MESSAGE,
         HttpStatus.SERVICE_UNAVAILABLE,
+        undefined,
+        correlationId,
       );
     }
 
-    await IdempotencyService.complete(idempotencyKey, responseData);
-
-    logOutcome("succeeded", HttpStatus.OK, {
-      profession: data.profession,
-      hasStore: Array.isArray(data.stores) && data.stores.length > 0,
+    await safeIdempotencyComplete(idempotencyKey, responseData, {
+      correlationId,
+      operationName: OPERATION_NAME,
+      httpMethod: "PATCH",
+      routePattern: "/api/onboarding/professional/complete",
+      actorRole: String(actorRole),
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+      resourceType: "onboarding",
     });
 
-    return apiSuccess(responseData);
+    logOnboardingRouteOutcome({
+      correlationId,
+      operationName: OPERATION_NAME,
+      actorRole: String(actorRole),
+      outcome: "success",
+      httpStatus: HttpStatus.OK,
+      durationMs: now() - startedAt,
+    });
+
+    return apiSuccess(responseData, HttpStatus.OK, correlationId);
   },
 );

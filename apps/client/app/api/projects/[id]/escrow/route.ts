@@ -14,8 +14,6 @@ import {
 import { isValidId } from "@/app/lib/api/api-guards";
 import { projectsService } from "@/app/lib/domains/projects/service";
 
-const logger = getClientLogger();
-
 type ProjectParams = { id: string };
 
 /**
@@ -53,10 +51,14 @@ export const GET = withAuth<ProjectParams>(
     );
 
     if (!result.success) {
-      logger.error("Failed to fetch escrow transactions", result.error, {
-        correlationId,
-        projectId,
-      });
+      getClientLogger().error(
+        "Failed to fetch escrow transactions",
+        result.error,
+        {
+          correlationId,
+          projectId,
+        },
+      );
       return apiError(
         "Failed to fetch escrow transactions",
         HttpStatus.INTERNAL_SERVER_ERROR,

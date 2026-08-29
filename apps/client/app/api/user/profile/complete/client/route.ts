@@ -13,7 +13,6 @@ import { completeClientProfile } from "@/app/lib/domains/user-profile";
 import { ClientProfileCompleteSchema } from "@/app/lib/domains/user-profile/profile-complete-contracts";
 import { checkProfileCompleteRateLimit } from "../shared";
 
-const logger = getClientLogger();
 const executor = getResilientExecutor();
 
 /**
@@ -45,7 +44,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     const body = parseResult.data;
 
-    logger.info("Client profile complete request received", {
+    getClientLogger().info("Client profile complete request received", {
       correlationId,
       operationName: "update_client_profile_complete",
       fieldsReceived: Object.keys(body),
@@ -53,7 +52,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     const validationResult = ClientProfileCompleteSchema.safeParse(body);
     if (!validationResult.success) {
-      logger.warn("Client profile validation failed", {
+      getClientLogger().warn("Client profile validation failed", {
         correlationId,
         operationName: "update_client_profile_complete",
         errors: validationResult.error.issues,
@@ -83,7 +82,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
     );
 
     if (!result.success) {
-      logger.error(
+      getClientLogger().error(
         "Client profile update failed",
         result.error || new Error("Unknown error"),
         {
@@ -115,7 +114,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     const responseData = domainResult.data;
 
-    logger.info("Client profile updated successfully", {
+    getClientLogger().info("Client profile updated successfully", {
       correlationId,
       operationName: "update_client_profile_complete",
       isComplete: responseData.completion.isComplete,
@@ -124,7 +123,7 @@ export const PATCH = withAuth(async (req: NextRequest, { dbUserId }) => {
 
     return apiSuccess(responseData);
   } catch (err) {
-    logger.error(
+    getClientLogger().error(
       "Client profile complete error",
       err instanceof Error ? err : new Error(String(err)),
       {

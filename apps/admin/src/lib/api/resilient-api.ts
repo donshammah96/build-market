@@ -46,22 +46,24 @@ export function apiSuccess<T>(
 export function apiError(
   message: string,
   status: number = 500,
-  details?: any,
+  details?: unknown,
 ): NextResponse {
   const correlationId = CorrelationIdManager.get();
 
-  logger.error(message, undefined, {
-    correlationId,
+  const logContext: Record<string, unknown> = {
     statusCode: status,
-    details,
-  });
+  };
+  if (correlationId) logContext.correlationId = correlationId;
+  if (details !== undefined) logContext.details = details;
+
+  logger.error(message, undefined, logContext);
 
   return NextResponse.json(
     {
       success: false,
       error: message,
       timestamp: new Date().toISOString(),
-      ...(details && { details }),
+      ...(details !== undefined ? { details } : {}),
       ...(correlationId && { correlationId }),
     },
     {

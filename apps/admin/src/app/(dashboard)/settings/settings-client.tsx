@@ -28,16 +28,10 @@ import { Separator } from "@/components/ui/separator";
 import { updateSystemSettings, clearSystemCache } from "@/actions/admin";
 import { SystemSettingsInput } from "@/actions/admin";
 
+import type { SystemSettings } from "@/lib/domains/settings/contracts";
+
 type SettingsProps = {
-  initialSettings: {
-    maintenanceMode: boolean;
-    publicSignup: boolean;
-    enableAutoVerifyNCA: boolean;
-    platformCommission: number;
-    supportEmail: string;
-    adminEmailAlerts: boolean;
-    securityMFA: boolean;
-  };
+  initialSettings: SystemSettings;
 };
 
 export default function SettingsClient({ initialSettings }: SettingsProps) {
@@ -95,7 +89,7 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
         <Button
           onClick={handleSave}
           disabled={!hasChanges || isPending}
-          className="bg-zinc-900 hover:bg-zinc-800 text-white min-w-[140px]"
+          className="bg-zinc-900 hover:bg-zinc-800 text-white min-w-35"
         >
           {isPending ? (
             "Saving..."
@@ -134,7 +128,9 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
                 </div>
                 <Switch
                   checked={settings.maintenanceMode}
-                  onCheckedChange={(c) => handleChange("maintenanceMode", c)}
+                  onCheckedChange={(c: boolean) =>
+                    handleChange("maintenanceMode", c)
+                  }
                   className="data-[state=checked]:bg-amber-500"
                 />
               </div>
@@ -148,7 +144,9 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
                 </div>
                 <Switch
                   checked={settings.publicSignup}
-                  onCheckedChange={(c) => handleChange("publicSignup", c)}
+                  onCheckedChange={(c: boolean) =>
+                    handleChange("publicSignup", c)
+                  }
                   className="data-[state=checked]:bg-emerald-600"
                 />
               </div>
@@ -190,14 +188,116 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
                 <div className="space-y-0.5">
                   <Label className="text-base">Auto-Verify NCA Licenses</Label>
                   <p className="text-sm text-zinc-500">
-                    Automatically mark professionals as verified if NCA API
-                    returns valid.
+                    Automatically verify contractors if NCA lookup returns
+                    valid.
                   </p>
                 </div>
                 <Switch
                   checked={settings.enableAutoVerifyNCA}
-                  onCheckedChange={(c) =>
+                  onCheckedChange={(c: boolean) =>
                     handleChange("enableAutoVerifyNCA", c)
+                  }
+                  className="data-[state=checked]:bg-emerald-600"
+                />
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base">Auto-Verify EPRA Licenses</Label>
+                  <p className="text-sm text-zinc-500">
+                    Automatically verify electricians & solar technicians if
+                    EPRA lookup returns valid.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.enableAutoVerifyEPRA}
+                  onCheckedChange={(c: boolean) =>
+                    handleChange("enableAutoVerifyEPRA", c)
+                  }
+                  className="data-[state=checked]:bg-emerald-600"
+                />
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base">
+                    Auto-Verify BORAQS Licenses
+                  </Label>
+                  <p className="text-sm text-zinc-500">
+                    Automatically verify architects & quantity surveyors if
+                    BORAQS lookup returns valid.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.enableAutoVerifyBORAQS}
+                  onCheckedChange={(c: boolean) =>
+                    handleChange("enableAutoVerifyBORAQS", c)
+                  }
+                  className="data-[state=checked]:bg-emerald-600"
+                />
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base">Auto-Verify EBK Licenses</Label>
+                  <p className="text-sm text-zinc-500">
+                    Automatically verify engineers if EBK lookup returns valid.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.enableAutoVerifyEBK}
+                  onCheckedChange={(c: boolean) =>
+                    handleChange("enableAutoVerifyEBK", c)
+                  }
+                  className="data-[state=checked]:bg-emerald-600"
+                />
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base">Auto-Verify EARB Licenses</Label>
+                  <p className="text-sm text-zinc-500">
+                    Automatically verify estate agents if EARB lookup returns
+                    valid.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.enableAutoVerifyEARB}
+                  onCheckedChange={(c: boolean) =>
+                    handleChange("enableAutoVerifyEARB", c)
+                  }
+                  className="data-[state=checked]:bg-emerald-600"
+                />
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base">Auto-Verify VRB Licenses</Label>
+                  <p className="text-sm text-zinc-500">
+                    Automatically verify valuers if VRB lookup returns valid.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.enableAutoVerifyVRB}
+                  onCheckedChange={(c: boolean) =>
+                    handleChange("enableAutoVerifyVRB", c)
+                  }
+                  className="data-[state=checked]:bg-emerald-600"
+                />
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base">Auto-Verify ISK Licenses</Label>
+                  <p className="text-sm text-zinc-500">
+                    Automatically verify land surveyors if ISK lookup returns
+                    valid.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.enableAutoVerifyISK}
+                  onCheckedChange={(c: boolean) =>
+                    handleChange("enableAutoVerifyISK", c)
                   }
                   className="data-[state=checked]:bg-emerald-600"
                 />
@@ -253,7 +353,9 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
                 <Label className="flex-1">Email Alerts Enabled</Label>
                 <Switch
                   checked={settings.adminEmailAlerts}
-                  onCheckedChange={(c) => handleChange("adminEmailAlerts", c)}
+                  onCheckedChange={(c: boolean) =>
+                    handleChange("adminEmailAlerts", c)
+                  }
                   className="data-[state=checked]:bg-emerald-600"
                 />
               </div>
@@ -283,7 +385,9 @@ export default function SettingsClient({ initialSettings }: SettingsProps) {
                 </div>
                 <Switch
                   checked={settings.securityMFA}
-                  onCheckedChange={(c) => handleChange("securityMFA", c)}
+                  onCheckedChange={(c: boolean) =>
+                    handleChange("securityMFA", c)
+                  }
                   disabled
                   className="data-[state=checked]:bg-emerald-600"
                 />
@@ -335,7 +439,7 @@ function TabTrigger({ value, icon: Icon, label }: TabTriggerProps) {
   return (
     <TabsTrigger
       value={value}
-      className="flex-1 min-w-[120px] gap-2 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm"
+      className="flex-1 min-w-30 gap-2 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm"
     >
       <Icon className="h-4 w-4" />
       {label}

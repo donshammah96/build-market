@@ -1,9 +1,11 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma, UserRole, UserStatus, AdminRole } from "@build/db";
+import { prisma, UserStatus } from "@build/db";
+import { UserRole, AdminRole } from "@build/enums";
 import { apiError, HttpStatus } from "./api-response";
 import { initializeCorrelationId, getClientLogger } from "./resilient-api";
 import { withTimeout, CorrelationIdManager } from "@build/resilience";
+import { omitUndefined } from "@/lib/utils";
 
 /**
  * Blocked user statuses. Defined as string constants for forward-compatibility
@@ -42,7 +44,7 @@ export interface AuthContext {
   userEmail: string;
   userRole: UserRole;
   /** Granular admin role — only populated when userRole is ADMIN */
-  adminRole?: AdminRole;
+  adminRole?: AdminRole | undefined;
 }
 
 /**
@@ -101,7 +103,6 @@ export function withAuth<T = unknown>(handler: AuthenticatedHandler<T>) {
 
       if (!user) {
         logger.warn("User not found in database", {
-          clerkId,
           correlationId,
         });
         return apiError("User account not found", HttpStatus.NOT_FOUND);
@@ -112,7 +113,6 @@ export function withAuth<T = unknown>(handler: AuthenticatedHandler<T>) {
       if (userStatus && userStatus !== "ACTIVE") {
         const statusError = BLOCKED_STATUSES[userStatus];
         logger.warn("Non-active user attempted access", {
-          userId: user.id,
           status: userStatus,
           correlationId,
         });
@@ -132,7 +132,6 @@ export function withAuth<T = unknown>(handler: AuthenticatedHandler<T>) {
 
         if (adminProfile && !adminProfile.isActive) {
           logger.warn("Inactive admin attempted access", {
-            userId: user.id,
             correlationId,
           });
           return apiError(
@@ -149,11 +148,10 @@ export function withAuth<T = unknown>(handler: AuthenticatedHandler<T>) {
         dbUserId: user.id,
         userEmail: user.email,
         userRole: user.role,
-        adminRole,
+        ...(adminRole ? { adminRole } : {}),
       };
 
       logger.debug("Request authenticated", {
-        userId: user.id,
         role: user.role,
         ...(adminRole && { adminRole }),
         correlationId,
@@ -171,7 +169,7 @@ export function withAuth<T = unknown>(handler: AuthenticatedHandler<T>) {
       logger.error(
         "Authentication middleware error",
         error instanceof Error ? error : new Error(String(error)),
-        { correlationId },
+        omitUndefined({ correlationId }),
       );
       return apiError("Authentication failed", HttpStatus.UNAUTHORIZED);
     }
@@ -192,23 +190,25 @@ export function withRole(allowedRoles: UserRole[]) {
       const logger = getClientLogger();
 
       if (!allowedRoles.includes(context.userRole)) {
-        logger.warn("Access denied - insufficient permissions", {
-          userId: context.dbUserId,
+        const logContext: Record<string, unknown> = {
           userRole: context.userRole,
           requiredRoles: allowedRoles,
-          correlationId,
-        });
+        };
+        if (correlationId) logContext.correlationId = correlationId;
+
+        logger.warn("Access denied - insufficient permissions", logContext);
         return apiError(
           "Forbidden. Insufficient permissions.",
           HttpStatus.FORBIDDEN,
         );
       }
 
-      logger.debug("Role check passed", {
-        userId: context.dbUserId,
+      const passContext: Record<string, unknown> = {
         userRole: context.userRole,
-        correlationId,
-      });
+      };
+      if (correlationId) passContext.correlationId = correlationId;
+
+      logger.debug("Role check passed", passContext);
 
       return handler(req, context, params);
     });
@@ -235,12 +235,13 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
 
       // Must be an ADMIN user
       if (context.userRole !== UserRole.ADMIN) {
-        logger.warn("Non-admin attempted admin-role-gated action", {
-          userId: context.dbUserId,
+        const logContext: Record<string, unknown> = {
           userRole: context.userRole,
           requiredAdminRoles: allowedAdminRoles,
-          correlationId,
-        });
+        };
+        if (correlationId) logContext.correlationId = correlationId;
+
+        logger.warn("Non-admin attempted admin-role-gated action", logContext);
         return apiError(
           "Forbidden. Admin access required.",
           HttpStatus.FORBIDDEN,
@@ -249,10 +250,10 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
 
       // Must have an AdminProfile with a role
       if (!context.adminRole) {
-        logger.warn("Admin user missing AdminProfile", {
-          userId: context.dbUserId,
-          correlationId,
-        });
+        const logContext: Record<string, unknown> = {};
+        if (correlationId) logContext.correlationId = correlationId;
+
+        logger.warn("Admin user missing AdminProfile", logContext);
         return apiError(
           "Admin profile not configured. Contact a system administrator.",
           HttpStatus.FORBIDDEN,
@@ -265,23 +266,25 @@ export function withAdminRole(allowedAdminRoles: AdminRole[]) {
         allowedAdminRoles.includes(context.adminRole);
 
       if (!hasAccess) {
-        logger.warn("Admin role insufficient", {
-          userId: context.dbUserId,
+        const logContext: Record<string, unknown> = {
           adminRole: context.adminRole,
           requiredAdminRoles: allowedAdminRoles,
-          correlationId,
-        });
+        };
+        if (correlationId) logContext.correlationId = correlationId;
+
+        logger.warn("Admin role insufficient", logContext);
         return apiError(
           "Forbidden. You do not have the required admin permissions.",
           HttpStatus.FORBIDDEN,
         );
       }
 
-      logger.debug("Admin role check passed", {
-        userId: context.dbUserId,
+      const logContext: Record<string, unknown> = {
         adminRole: context.adminRole,
-        correlationId,
-      });
+      };
+      if (correlationId) logContext.correlationId = correlationId;
+
+      logger.debug("Admin role check passed", logContext);
 
       return handler(req, context, params);
     });

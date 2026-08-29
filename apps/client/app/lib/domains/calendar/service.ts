@@ -1,6 +1,7 @@
 import { err, ok, type Result } from "@/app/lib/errors/result";
 import { normalizeRole } from "@/app/lib/security/roles";
 import { calendarRepository } from "@/app/lib/domains/calendar/repository";
+import { toCalendarDto } from "@/app/lib/domains/calendar/mappers";
 import type {
   CalendarEventClientDetail,
   CalendarEventClientSummary,
@@ -59,8 +60,8 @@ function mapCalendarSummary(
     title: event.title,
     type: event.type,
     status: event.status,
-    startDate: event.startDate.toISOString(),
-    endDate: event.endDate.toISOString(),
+    startDate: toCalendarDto(event.startDate) as unknown as string,
+    endDate: toCalendarDto(event.endDate) as unknown as string,
     isAllDay: event.isAllDay,
     timeZone: event.timeZone,
     recurrenceRule: event.recurrenceRule ?? null,
@@ -68,8 +69,8 @@ function mapCalendarSummary(
     meetingUrl: event.meetingUrl ?? null,
     reminders: Array.isArray(event.reminders) ? event.reminders : [],
     color: event.color ?? null,
-    createdAt: event.createdAt.toISOString(),
-    updatedAt: event.updatedAt.toISOString(),
+    createdAt: toCalendarDto(event.createdAt) as unknown as string,
+    updatedAt: toCalendarDto(event.updatedAt) as unknown as string,
     client: event.client
       ? {
           id: event.client.id,

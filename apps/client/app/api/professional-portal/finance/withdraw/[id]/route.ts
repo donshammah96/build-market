@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@build/db";
 import { withAuth } from "@/app/lib/api/api-middleware";
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import {
@@ -14,19 +13,18 @@ import {
   getActorRateLimitIdentifier,
 } from "@/app/lib/api/rate-limit";
 import { isValidId } from "@/app/lib/api/api-guards";
-import {
-  transactionDetailSelect,
-  serializeTransactionDecimals,
-} from "@/app/lib/validation/finance-validation";
-
-const logger = getClientLogger();
+import { financeService } from "@/app/lib/domains/finance";
 
 /**
  * GET /api/professional-portal/finance/withdraw/[id]
  * Get a specific withdrawal request by ID.
  */
 export const GET = withAuth<{ id: string }>(
-  async (req: NextRequest, { dbUserId }, params): Promise<NextResponse> => {
+  async (
+    req: NextRequest,
+    { dbUserId, userRole },
+    params,
+  ): Promise<NextResponse> => {
     initializeCorrelationId(req);
     const { id } = params!;
 
@@ -47,19 +45,19 @@ export const GET = withAuth<{ id: string }>(
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      async () => {
-        const withdrawal = await prisma.professionalTransaction.findUnique({
-          where: { id, professionalId: dbUserId, type: "WITHDRAWAL" },
-          select: transactionDetailSelect,
-        });
-
-        return withdrawal;
-      },
+      () =>
+        financeService.getWithdrawal(
+          {
+            userId: dbUserId,
+            role: userRole,
+          },
+          id,
+        ),
       { operationName: "get_withdrawal" },
     );
 
-    if (!result.success) {
-      logger.error("Failed to fetch withdrawal", result.error, {
+    if (!result.success || !result.data) {
+      getClientLogger().error("Failed to fetch withdrawal", result.error, {
         withdrawalId: id,
       });
       return apiError(
@@ -68,11 +66,17 @@ export const GET = withAuth<{ id: string }>(
       );
     }
 
-    if (!result.data) {
-      return apiError("Withdrawal not found", HttpStatus.NOT_FOUND);
+    if (!result.data.ok) {
+      if (result.data.error === "not_found") {
+        return apiError("Withdrawal not found", HttpStatus.NOT_FOUND);
+      }
+      return apiError(
+        "Failed to fetch withdrawal",
+        result.data.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
-    return apiSuccess(serializeTransactionDecimals(result.data), HttpStatus.OK);
+    return apiSuccess(result.data.data, HttpStatus.OK);
   },
 );
 
@@ -107,7 +111,7 @@ export const DELETE = withAuth<{ id: string }>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Cancelling withdrawal request", {
+    getClientLogger().info("Cancelling withdrawal request", {
       correlationId,
       withdrawalId: id,
       actorRole: userRole,
@@ -115,27 +119,14 @@ export const DELETE = withAuth<{ id: string }>(
 
     const resilientExecutor = getResilientExecutor();
     const result = await resilientExecutor.execute(
-      async () => {
-        const existing = await prisma.professionalTransaction.findUnique({
-          where: { id, professionalId: dbUserId, type: "WITHDRAWAL" },
-          select: { id: true, status: true },
-        });
-
-        if (!existing) return { error: "not_found" as const };
-
-        // Only allow cancellation of PENDING withdrawals
-        if (existing.status !== "PENDING") {
-          return { error: "not_cancellable" as const, status: existing.status };
-        }
-
-        const cancelled = await prisma.professionalTransaction.update({
-          where: { id },
-          data: { status: "CANCELLED" },
-          select: transactionDetailSelect,
-        });
-
-        return { data: cancelled };
-      },
+      () =>
+        financeService.cancelWithdrawal(
+          {
+            userId: dbUserId,
+            role: userRole,
+          },
+          id,
+        ),
       { operationName: "cancel_withdrawal" },
     );
 
@@ -146,20 +137,26 @@ export const DELETE = withAuth<{ id: string }>(
       );
     }
 
-    if (result.data.error === "not_found") {
-      return apiError("Withdrawal not found", HttpStatus.NOT_FOUND);
-    }
-    if (result.data.error === "not_cancellable") {
+    if (!result.data.ok) {
+      if (result.data.error === "not_found") {
+        return apiError("Withdrawal not found", HttpStatus.NOT_FOUND);
+      }
+      if (result.data.error === "not_deletable") {
+        return apiError(
+          "Only PENDING withdrawals can be cancelled",
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       return apiError(
-        `Only PENDING withdrawals can be cancelled. Current status: ${result.data.status}`,
-        HttpStatus.BAD_REQUEST,
+        "Failed to cancel withdrawal",
+        result.data.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
 
     return apiSuccess(
       {
         message: "Withdrawal cancelled successfully",
-        withdrawal: serializeTransactionDecimals(result.data.data!),
+        withdrawal: result.data.data,
       },
       HttpStatus.OK,
     );

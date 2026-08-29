@@ -7,7 +7,8 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { consentClient } from "@/lib/consent-client";
+import { useAuth } from "@clerk/nextjs";
+import { consentClient } from "@/lib/facades/consent-client";
 
 export const SECURITY_PERSISTENCE_ALLOWLIST = [
   "cookie-consent-preferences",
@@ -117,7 +118,7 @@ function toApiPayload(consent: CookieConsent) {
 
 export function CookieConsentProvider({
   children,
-  isSignedIn = false,
+  isSignedIn: propIsSignedIn,
 }: {
   children: React.ReactNode;
   isSignedIn?: boolean;
@@ -125,6 +126,8 @@ export function CookieConsentProvider({
   const [consent, setConsent] = useState<CookieConsent>(DEFAULT_CONSENT);
   const [hasConsented, setHasConsented] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const { isSignedIn: clerkIsSignedIn } = useAuth();
+  const isSignedIn = propIsSignedIn ?? Boolean(clerkIsSignedIn);
 
   // Hydrate from localStorage on mount
   useEffect(() => {

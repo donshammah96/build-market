@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { getProfessionalUrl, getStoreUrl } from "@/lib/links";
+import { getProfessionalUrl, getStoreUrl } from "@/lib/routes";
 import type { ReviewListItemDto } from "@/app/lib/domains/reviews/contracts";
 
 export function ReviewListCard({

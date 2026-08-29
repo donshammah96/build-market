@@ -14,6 +14,7 @@ import {
   collectMutationPassthroughDrift,
   collectOpaqueLogContextDrift,
   collectUnsafeApiErrorDrift,
+  collectWorkerImportDrift,
 } from "./security-lint-checks.mjs";
 import {
   CRITICAL_TRANSITION_STEP_SEQUENCE_RULES,
@@ -21,6 +22,7 @@ import {
   HIGH_VALUE_ROUTE_GUARD_RULES,
   HIGH_VALUE_SERVER_ACTION_GUARD_RULES,
 } from "./high-risk-registry.mjs";
+import { collectPhase0Drift } from "./drift-checks-phase0.mjs";
 
 const REPORT_OUTPUT = path.join(
   process.cwd(),
@@ -46,7 +48,6 @@ const SERVER_SCAN_PATHS = [
   "app/actions",
   "app/lib",
   "app/jobs",
-  "app/workers",
   "middleware.ts",
 ];
 
@@ -1531,6 +1532,7 @@ function collectEmptyAuthOptionRationaleDrift() {
 }
 
 const logSafetyDrift = collectLogDrift();
+const phase0 = await collectPhase0Drift(process.cwd());
 
 const report = {
   generatedAt: new Date().toISOString(),
@@ -1554,6 +1556,17 @@ const report = {
     mutationPassthrough: 0,
     unsafeApiError: 0,
     getJsonInGetHandler: 0,
+    resultDiscriminantDrift: 0,
+    inlineLoggerAtModuleLevel: 0,
+    missingSharedTs: 0,
+    idempotencyKeyBodySpread: 0,
+    inlineDateNow: 0,
+    mapperInfraImport: 0,
+    safeIdempotencyCompleteDrift: 0,
+    mapperNormalizationDrift: 0,
+    operationsBuilderDrift: 0,
+    indexExportDrift: 0,
+    workerImport: 0,
   },
   findings: {
     envBoundary: collectEnvDrift(),
@@ -1576,6 +1589,17 @@ const report = {
     mutationPassthrough: collectMutationPassthroughDrift(),
     unsafeApiError: collectUnsafeApiErrorDrift(),
     getJsonInGetHandler: collectGetJsonInGetHandlerDrift(),
+    resultDiscriminantDrift: phase0.resultDiscriminantDrift,
+    inlineLoggerAtModuleLevel: phase0.inlineLoggerAtModuleLevel,
+    missingSharedTs: phase0.missingSharedTs,
+    idempotencyKeyBodySpread: phase0.idempotencyKeyBodySpread,
+    inlineDateNow: phase0.inlineDateNow,
+    mapperInfraImport: phase0.mapperInfraImport,
+    safeIdempotencyCompleteDrift: phase0.safeIdempotencyCompleteDrift,
+    mapperNormalizationDrift: phase0.mapperNormalizationDrift,
+    operationsBuilderDrift: phase0.operationsBuilderDrift,
+    indexExportDrift: phase0.indexExportDrift,
+    workerImport: collectWorkerImportDrift(),
   },
 };
 
@@ -1610,6 +1634,23 @@ report.summary.criticalTransitionStepSequencing =
 report.summary.mutationPassthrough = report.findings.mutationPassthrough.length;
 report.summary.unsafeApiError = report.findings.unsafeApiError.length;
 report.summary.getJsonInGetHandler = report.findings.getJsonInGetHandler.length;
+report.summary.resultDiscriminantDrift =
+  report.findings.resultDiscriminantDrift.length;
+report.summary.inlineLoggerAtModuleLevel =
+  report.findings.inlineLoggerAtModuleLevel.length;
+report.summary.missingSharedTs = report.findings.missingSharedTs.length;
+report.summary.idempotencyKeyBodySpread =
+  report.findings.idempotencyKeyBodySpread.length;
+report.summary.inlineDateNow = report.findings.inlineDateNow.length;
+report.summary.mapperInfraImport = report.findings.mapperInfraImport.length;
+report.summary.safeIdempotencyCompleteDrift =
+  report.findings.safeIdempotencyCompleteDrift.length;
+report.summary.mapperNormalizationDrift =
+  report.findings.mapperNormalizationDrift.length;
+report.summary.operationsBuilderDrift =
+  report.findings.operationsBuilderDrift.length;
+report.summary.indexExportDrift = report.findings.indexExportDrift.length;
+report.summary.workerImport = report.findings.workerImport.length;
 
 fs.writeFileSync(REPORT_OUTPUT, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 
@@ -1669,6 +1710,39 @@ console.log(
 console.log(
   `[security/drift-report] getJsonInGetHandler: ${report.summary.getJsonInGetHandler}`,
 );
+console.log(
+  `[security/drift-report] resultDiscriminantDrift: ${report.summary.resultDiscriminantDrift}`,
+);
+console.log(
+  `[security/drift-report] inlineLoggerAtModuleLevel: ${report.summary.inlineLoggerAtModuleLevel}`,
+);
+console.log(
+  `[security/drift-report] missingSharedTs: ${report.summary.missingSharedTs}`,
+);
+console.log(
+  `[security/drift-report] idempotencyKeyBodySpread: ${report.summary.idempotencyKeyBodySpread}`,
+);
+console.log(
+  `[security/drift-report] inlineDateNow: ${report.summary.inlineDateNow}`,
+);
+console.log(
+  `[security/drift-report] mapperInfraImport: ${report.summary.mapperInfraImport}`,
+);
+console.log(
+  `[security/drift-report] safeIdempotencyCompleteDrift: ${report.summary.safeIdempotencyCompleteDrift}`,
+);
+console.log(
+  `[security/drift-report] mapperNormalizationDrift: ${report.summary.mapperNormalizationDrift}`,
+);
+console.log(
+  `[security/drift-report] operationsBuilderDrift: ${report.summary.operationsBuilderDrift}`,
+);
+console.log(
+  `[security/drift-report] indexExportDrift: ${report.summary.indexExportDrift}`,
+);
+console.log(
+  `[security/drift-report] workerImport: ${report.summary.workerImport}`,
+);
 console.log(`[security/drift-report] output: ${relativeToApp(REPORT_OUTPUT)}`);
 
 const hasFindings =
@@ -1690,7 +1764,18 @@ const hasFindings =
   report.summary.criticalTransitionStepSequencing > 0 ||
   report.summary.mutationPassthrough > 0 ||
   report.summary.unsafeApiError > 0 ||
-  report.summary.getJsonInGetHandler > 0;
+  report.summary.getJsonInGetHandler > 0 ||
+  report.summary.resultDiscriminantDrift > 0 ||
+  report.summary.inlineLoggerAtModuleLevel > 0 ||
+  report.summary.missingSharedTs > 0 ||
+  report.summary.idempotencyKeyBodySpread > 0 ||
+  report.summary.inlineDateNow > 0 ||
+  report.summary.mapperInfraImport > 0 ||
+  report.summary.safeIdempotencyCompleteDrift > 0 ||
+  report.summary.mapperNormalizationDrift > 0 ||
+  report.summary.operationsBuilderDrift > 0 ||
+  report.summary.indexExportDrift > 0 ||
+  report.summary.workerImport > 0;
 
 if (FAIL_ON_ANY && hasFindings) {
   process.exit(1);

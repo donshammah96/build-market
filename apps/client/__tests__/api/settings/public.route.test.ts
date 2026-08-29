@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 
 const mockGetPublicSettings = vi.hoisted(() => vi.fn());
 
-vi.mock("@build/db/system-settings", () => ({
+vi.mock("@/app/lib/domains/settings", () => ({
   getPublicSettings: (...args: unknown[]) => mockGetPublicSettings(...args),
 }));
 

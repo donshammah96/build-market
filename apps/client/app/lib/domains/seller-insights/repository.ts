@@ -3,6 +3,7 @@
  * Persistence-only reads for inventory alerts, orders, and top products.
  */
 import { prisma } from "@build/db";
+import { toSellerInsightDto } from "./mappers";
 import type { OrdersQueryInput } from "@/app/lib/validation/orders-validation";
 
 const MAX_ALERTS = 20;
@@ -158,8 +159,8 @@ export const sellerInsightsRepository = {
       store: order.store
         ? { id: order.store.id, name: order.store.name }
         : null,
-      createdAt: order.createdAt.toISOString(),
-      updatedAt: order.updatedAt.toISOString(),
+      createdAt: toSellerInsightDto(order.createdAt) as unknown as string,
+      updatedAt: toSellerInsightDto(order.updatedAt) as unknown as string,
     }));
 
     return {

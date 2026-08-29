@@ -2,8 +2,8 @@
  * Timeout utilities with configurable strategies based on operation criticality
  */
 
-import { OperationCriticality, TimeoutConfig } from "./types";
-import { getDefaultTimeouts } from "./config";
+import { OperationCriticality, TimeoutConfig } from "./types.js";
+import { getDefaultTimeouts } from "./config.js";
 
 export class TimeoutError extends Error {
   constructor(

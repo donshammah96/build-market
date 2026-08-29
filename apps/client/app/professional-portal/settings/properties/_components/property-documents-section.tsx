@@ -2,7 +2,7 @@
 
 import { Label } from "@/components/ui/label";
 import { DocumentUploader } from "@/components/admin/verification/DocumentUploader";
-import type { PropertyDocumentDto } from "@/lib/properties-client";
+import type { PropertyDocumentDto } from "@/lib/facades/properties-client";
 
 const DOC_TYPES = ["TITLE_DEED", "OFFICIAL_SEARCH", "MANDATE_LETTER"] as const;
 
@@ -37,11 +37,11 @@ export function PropertyDocumentsSection({
                 documents={typeDocuments}
                 documentType={docType}
                 documentTypeLabel={docType.replace(/_/g, " ")}
-                onUpload={async (fileUrl) => {
-                  await onUpload(docType, fileUrl);
+                onUpload={async (assetId) => {
+                  await onUpload(docType, assetId);
                 }}
-                onReplace={async (documentId, fileUrl) => {
-                  await onReplace(documentId, fileUrl, docType);
+                onReplace={async (documentId, assetId) => {
+                  await onReplace(documentId, assetId, docType);
                 }}
                 onDelete={async (documentId) => {
                   await onDelete(documentId);

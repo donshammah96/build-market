@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo, useMemo } from "react";
+import React, { memo, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   MapPin,
@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import { AccessibilitySettingsPanel } from "@/components/accessibility";
 
 // Memoized footer link component
@@ -59,6 +59,19 @@ const SocialIcon = memo(function SocialIcon({
   );
 });
 
+type SubscribeStatus = "idle" | "loading" | "success" | "error";
+
+// Distinct success copy per backend status, rather than one generic
+// "You're in" message — "already_subscribed" and "resubscribe_pending"
+// are not failures, but they're also not the same event as a brand-new
+// signup, and telling a returning subscriber "check your inbox to
+// confirm" when they're already confirmed reads as broken, not helpful.
+const SUCCESS_COPY = {
+  pending_confirmation: "You're in — check your inbox to confirm.",
+  resubscribe_pending: "Almost there — check your inbox to confirm.",
+  already_subscribed: "You're already subscribed — nothing to do here.",
+} as const;
+
 export const Footer = memo(function Footer() {
   // Memoize current year to prevent recalculation
   const currentYear = useMemo(() => new Date().getFullYear(), []);
@@ -79,6 +92,66 @@ export const Footer = memo(function Footer() {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  const [subscribeStatus, setSubscribeStatus] =
+    useState<SubscribeStatus>("idle");
+  const [subscribeMessage, setSubscribeMessage] = useState<string>("");
+
+  async function handleNewsletterSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (subscribeStatus === "loading" || subscribeStatus === "success") return;
+
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    const email = (formData.get("email") as string | null) ?? "";
+    const company = (formData.get("company") as string | null) ?? "";
+
+    // Honeypot check: if filled, silently treat as success without calling API
+    if (company.trim().length > 0) {
+      setSubscribeStatus("success");
+      setSubscribeMessage(SUCCESS_COPY.pending_confirmation);
+      return;
+    }
+
+    setSubscribeStatus("loading");
+
+    try {
+      const res = await fetch("/api/newsletter/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, company }),
+      });
+
+      // Previously: `if (!res.ok) throw new Error("subscribe_failed")`
+      // followed by a single generic "Something went wrong" message for
+      // every failure — a rate-limited user, a suppressed address, and
+      // an actual outage all looked identical, and a *successful* call
+      // always showed the same "check your inbox" copy even for someone
+      // who was already subscribed. Both the error and success paths now
+      // read the server's actual message so the form can be a source of
+      // truth rather than a rubber stamp.
+      const body = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setSubscribeStatus("error");
+        setSubscribeMessage(
+          body?.message ?? "Something went wrong — try again in a moment.",
+        );
+        return;
+      }
+
+      setSubscribeStatus("success");
+      const status = body?.status;
+      const msg =
+        typeof status === "string" && status in SUCCESS_COPY
+          ? SUCCESS_COPY[status as keyof typeof SUCCESS_COPY]
+          : SUCCESS_COPY.pending_confirmation;
+      setSubscribeMessage(msg);
+    } catch {
+      setSubscribeStatus("error");
+      setSubscribeMessage("Something went wrong — try again in a moment.");
+    }
+  }
 
   return (
     <footer className="w-full bg-background border-t border-border pt-16 pb-8">
@@ -148,11 +221,14 @@ export const Footer = memo(function Footer() {
               Resources
             </h3>
             <ul className="space-y-3">
+              <FooterLink href={ROUTES.professional}>
+                For Professionals
+              </FooterLink>
               <FooterLink href={ROUTES.joinAsPro}>Join as a Pro</FooterLink>
-              <FooterLink href={ROUTES.ideaBooks}>Idea Books</FooterLink>
               <FooterLink href={ROUTES.findProfessional}>
                 Find Professionals
               </FooterLink>
+              <FooterLink href={ROUTES.ideaBooks}>Idea Books</FooterLink>
               <FooterLink href={ROUTES.home}>Help Center</FooterLink>
             </ul>
           </nav>
@@ -166,44 +242,103 @@ export const Footer = memo(function Footer() {
               Get the latest design trends and market insights delivered to your
               inbox.
             </p>
+            {/* Newsletter signup */}
             <form
-              className="flex gap-2 max-w-md"
-              onSubmit={(e) => {
-                e.preventDefault();
-                // Handle newsletter signup
-              }}
+              className="flex flex-col gap-3 max-w-md"
+              onSubmit={handleNewsletterSubmit}
             >
-              <Input
-                type="email"
-                placeholder="Enter your email"
-                className="bg-muted/60 border-border focus:border-focus-ring focus:ring-focus-ring transition-all"
-                aria-label="Email address for newsletter"
-                required
-              />
-              <Button
-                type="submit"
-                className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm shrink-0"
-                aria-label="Subscribe to newsletter"
+              {/*
+               * Honeypot — visually off-screen so real users never see it.
+               * We use absolute positioning rather than display:none because
+               * some bots skip display:none fields; off-screen fools them while
+               * remaining accessible-hidden via aria-hidden + tabIndex=-1.
+               */}
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  left: "-9999px",
+                  width: "1px",
+                  height: "1px",
+                  overflow: "hidden",
+                }}
               >
-                <ArrowRight size={18} />
-              </Button>
+                <label htmlFor="footer-newsletter-company">
+                  Company (leave blank)
+                </label>
+                <input
+                  id="footer-newsletter-company"
+                  name="company"
+                  type="text"
+                  tabIndex={-1}
+                  autoComplete="off"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <Input
+                  id="footer-newsletter-email"
+                  type="email"
+                  name="email"
+                  autoComplete="email"
+                  placeholder="Enter your email"
+                  className="bg-muted/60 border-border focus:border-focus-ring focus:ring-focus-ring transition-all"
+                  aria-label="Email address for newsletter"
+                  required
+                  disabled={
+                    subscribeStatus === "loading" ||
+                    subscribeStatus === "success"
+                  }
+                />
+                <Button
+                  type="submit"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm shrink-0"
+                  aria-label={
+                    subscribeStatus === "loading"
+                      ? "Subscribing…"
+                      : "Subscribe to newsletter"
+                  }
+                  disabled={
+                    subscribeStatus === "loading" ||
+                    subscribeStatus === "success"
+                  }
+                >
+                  <ArrowRight size={18} />
+                </Button>
+              </div>
+
+              {/* Status message — announced to screen readers via aria-live */}
+              <div
+                aria-live="polite"
+                aria-atomic="true"
+                className="min-h-5 text-xs"
+              >
+                {subscribeStatus === "success" && (
+                  <span className="text-primary font-medium">
+                    {subscribeMessage}
+                  </span>
+                )}
+                {subscribeStatus === "error" && (
+                  <span className="text-destructive">{subscribeMessage}</span>
+                )}
+              </div>
             </form>
 
             {/* Contact Info */}
             <div className="pt-6 mt-6 border-t border-border space-y-3">
               <a
-                href="mailto:hello@buildmarket.co.ke"
+                href="mailto:mail@buildmarket.app"
                 className="flex items-center gap-3 text-sm text-muted-foreground hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
               >
                 <Mail size={16} className="text-primary" aria-hidden="true" />
-                <span>hello@buildmarket.co.ke</span>
+                <span>mail@buildmarket.app</span>
               </a>
               <a
-                href="tel:+254791938881"
+                href="tel:+254798798770"
                 className="flex items-center gap-3 text-sm text-muted-foreground hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 rounded-sm"
               >
                 <Phone size={16} className="text-primary" aria-hidden="true" />
-                <span>+254 791 938 881</span>
+                <span>+254 798 798 770</span>
               </a>
             </div>
           </div>

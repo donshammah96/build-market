@@ -17,8 +17,6 @@ import { CreateProjectDocumentSchema } from "@/app/lib/validation/projects-valid
 import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
 import { projectsService } from "@/app/lib/domains/projects/service";
 
-const logger = getClientLogger();
-
 type ProjectParams = { id: string };
 
 /**
@@ -125,7 +123,7 @@ export const POST = withAuth<ProjectParams>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Creating project document", {
+    getClientLogger().info("Creating project document", {
       correlationId,
       projectId,
       type,

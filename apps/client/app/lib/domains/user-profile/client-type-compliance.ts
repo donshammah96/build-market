@@ -3,24 +3,19 @@ import { ClientType, type Prisma } from "@prisma/client";
 const VALID_CLIENT_TYPES = new Set<ClientType>(Object.values(ClientType));
 
 export type GovernmentEntityComplianceRequirement =
-  | "companyName"
-  | "companyRegistration"
-  | "kraPin";
+  "companyName" | "companyRegistration" | "kraPin";
 
 export type ClientTypeOnboardingBranch =
-  | "standard_client"
-  | "government_entity";
+  "standard_client" | "government_entity";
 
 export type ClientTypeComplianceRouting = {
   clientType: ClientType;
   onboardingBranch: ClientTypeOnboardingBranch;
   requiresDedicatedProcurementCheck: boolean;
   projectCreationPolicy:
-    | "standard_client_policy"
-    | "government_entity_procurement_check";
+    "standard_client_policy" | "government_entity_procurement_check";
   paymentInitiationPolicy:
-    | "standard_client_policy"
-    | "government_entity_procurement_check";
+    "standard_client_policy" | "government_entity_procurement_check";
   status: "ready" | "pending_information";
   missingRequirements: GovernmentEntityComplianceRequirement[];
 };

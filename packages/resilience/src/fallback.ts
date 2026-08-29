@@ -2,7 +2,7 @@
  * Fallback mechanisms for graceful degradation
  */
 
-import { Logger } from "./logger";
+import { Logger } from "./logger.js";
 
 export interface FallbackOptions<T> {
   fallbackValue?: T;

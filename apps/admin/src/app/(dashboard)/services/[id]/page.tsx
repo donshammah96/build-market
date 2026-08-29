@@ -1,8 +1,7 @@
-// @ts-nocheck
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getServiceCategoryDetails } from "@/actions/admin";
-import { getAdminPermissions } from "@/actions/admin/shared";
+import { getAdminPermissions } from "@/actions/admin/_core/permissions";
 import {
   Card,
   CardContent,

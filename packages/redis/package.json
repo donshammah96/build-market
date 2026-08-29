@@ -3,30 +3,46 @@
   "version": "1.0.0",
   "description": "Redis client and caching utilities for the monorepo",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./tcp": {
+      "types": "./dist/tcp.d.ts",
+      "import": "./dist/tcp.js",
+      "default": "./dist/tcp.js"
     }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "lint": "echo \"No lint configured\" && exit 0",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true }); try { require('fs').unlinkSync('tsconfig.tsbuildinfo'); } catch(e) {}\"",
+    "prebuild": "pnpm run clean",
+    "build": "tsc --build",
+    "prepack": "pnpm run build",
+    "lint": "eslint . --max-warnings 0",
     "healthcheck": "node --env-file=../.env --import tsx ./src/healthcheck.ts",
     "enforce-maxmemory-policy": "node --env-file=../.env --import tsx ./src/enforce-maxmemory-policy.ts",
     "check-types": "tsc --noEmit",
-    "test": "echo \"No tests configured\" && exit 0"
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@upstash/ratelimit": "^2.0.8",
-    "@upstash/redis": "^1.36.2",
-    "ioredis": "^5.4.1"
+    "@upstash/ratelimit": "catalog:",
+    "@upstash/redis": "catalog:",
+    "ioredis": "catalog:"
   },
   "devDependencies": {
+    "@build/eslint-config": "workspace:*",
     "@build/typescript-config": "workspace:*",
-    "@types/node": "^22.0.0",
-    "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

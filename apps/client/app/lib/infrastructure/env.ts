@@ -27,23 +27,39 @@
  *     - NEXT_PUBLIC_API_URL   → configEnv.apiUrl
  *     - NEXT_PUBLIC_CLERK_FRONTEND_API → configEnv.clerkFrontendApi (optional)
  *     - NEXT_PUBLIC_POSTHOG_HOST       → configEnv.analyticsPosthogHost
+ *
+ * @build/env-validation (Drift 2):
+ *   The EnvVar/EnvGroup *types* and the getStringEnv/getOptionalStringEnv/
+ *   getBooleanEnv/isAbsoluteHttpUrl *primitives* below are now sourced from
+ *   the shared `@build/env-validation` package instead of being a local
+ *   copy — the same canonical engine apps/admin and apps/verification-ops
+ *   use. This app's ~30 `envGroups` declarations and its Redis/storage
+ *   readiness extensions stay local (they're this app's own contract, not
+ *   shared behavior). See `validateEnv()` below for how the shared
+ *   `validateEnvGroups()` core is composed with those app-specific checks.
+ *
+ *   NOTE ON A BEHAVIOR CHANGE: the shared package's `getBooleanEnv` accepts
+ *   "true" / "1" / "yes" (case-insensitive) as truthy, where this file's
+ *   previous local copy accepted only the exact string "true". This widens
+ *   truthy-parsing for every boolean env var in this file (S3_DISABLED,
+ *   ENABLE_GDPR_FEATURES, REDIS_TLS, etc.) — flagged here because it's a
+ *   real behavior change, not just a refactor, even though it brings this
+ *   app in line with how apps/admin/apps/verification-ops already parse
+ *   booleans.
  */
 
 import { assertUploadProcessingModeInvariant } from "./upload-processing-mode";
-
-type EnvVar = {
-  name: string;
-  required: boolean;
-  default?: string;
-  validate?: (value: string) => boolean;
-  errorMessage?: string;
-};
-
-type EnvGroup = {
-  name: string;
-  description: string;
-  variables: EnvVar[];
-};
+import {
+  type EnvGroup,
+  type ValidationResult,
+  getBooleanEnv as getBooleanEnvFromObj,
+  getOptionalStringEnv as getOptionalStringEnvFromObj,
+  getStringEnv as getStringEnvFromObj,
+  isAbsoluteHttpUrl,
+  resolveDevAuthBypass,
+  validateEnvGroups,
+  validateSatelliteInvariants,
+} from "@build/env-validation";
 
 /**
  * Canonical role set per ADR-007.
@@ -88,6 +104,58 @@ const envGroups: EnvGroup[] = [
       {
         name: "NEXT_PUBLIC_CLERK_FRONTEND_API",
         required: false,
+      },
+      // --- Satellite configuration ---------------------------------------
+      // apps/client is the PRIMARY app (not expected to run as a Clerk
+      // satellite), but these were previously undeclared here entirely —
+      // meaning validateEnv() silently never checked them, and the values
+      // actually consumed in buildEnvConfig()'s `clerk` block below were
+      // read from the WRONG env var names (see Finding 6 fix there). They
+      // are declared now for the same reason apps/admin and
+      // apps/verification-ops declare them: if this app is ever pointed at
+      // a non-default Clerk domain configuration, the individual-var
+      // validation (in particular, "must be absolute" for
+      // primarySignInUrl) actually fires instead of silently no-op'ing on
+      // an undeclared variable.
+      {
+        name: "NEXT_PUBLIC_CLERK_IS_SATELLITE",
+        required: false,
+        default: "false",
+      },
+      {
+        name: "NEXT_PUBLIC_CLERK_DOMAIN",
+        required: false,
+      },
+      {
+        name: "NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL",
+        required: false,
+        validate: isAbsoluteHttpUrl,
+        errorMessage:
+          "NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL must be an absolute http(s) URL " +
+          '(e.g. "https://buildmarket.app/sign-in"), not a relative path — that\'s ' +
+          "what NEXT_PUBLIC_CLERK_SIGN_IN_URL is for.",
+      },
+      {
+        name: "NEXT_PUBLIC_CLERK_SATELLITE_ORIGINS",
+        required: false,
+      },
+      {
+        name: "NEXT_PUBLIC_CSP_REPORT_ONLY",
+        required: false,
+        default: "false",
+      },
+      {
+        name: "VERCEL_ENV",
+        required: false,
+      },
+      {
+        name: "NEXT_PUBLIC_VERCEL_ENV",
+        required: false,
+      },
+      {
+        name: "ENABLE_CSP_UNSAFE_EVAL",
+        required: false,
+        default: "false",
       },
     ],
   },
@@ -172,8 +240,12 @@ const envGroups: EnvGroup[] = [
       { name: "NEXT_PUBLIC_APP_URL", required: true },
       { name: "NEXT_PUBLIC_API_URL", required: true },
       { name: "NEXT_PUBLIC_SEARCH_SERVICE_URL", required: false },
+      { name: "NEXT_PUBLIC_ADMIN_APP_URL", required: false },
+      { name: "NEXT_PUBLIC_VERIFICATION_APP_URL", required: false },
+      { name: "NEXT_PUBLIC_VERIFICATION_OPS_URL", required: false },
     ],
   },
+
   {
     name: "csrf",
     description: "Trusted same-origin mutation policy",
@@ -199,9 +271,12 @@ const envGroups: EnvGroup[] = [
       {
         name: "UPSTASH_REDIS_REST_URL",
         required: true,
-        validate: (v) => v.startsWith("https://"),
+        validate: (v) =>
+          v.startsWith("https://") ||
+          v.startsWith("http://127.0.0.1") ||
+          v.startsWith("http://localhost"),
         errorMessage:
-          "Must be a valid HTTPS Upstash REST URL (e.g. https://<db>.upstash.io)",
+          "Must be a valid HTTPS Upstash REST URL (e.g. https://<db>.upstash.io) or local HTTP mock URL (e.g. http://127.0.0.1:8079)",
       },
       {
         name: "UPSTASH_REDIS_REST_TOKEN",
@@ -235,15 +310,59 @@ const envGroups: EnvGroup[] = [
     description: "Upload and storage configuration",
     variables: [
       { name: "S3_DISABLED", required: false, default: "true" },
+      // Canonical R2 credentials/config
+      { name: "R2_ENDPOINT", required: false },
+      { name: "R2_ACCESS_KEY_ID", required: false },
+      { name: "R2_SECRET_ACCESS_KEY", required: false },
+      { name: "R2_REGION", required: false, default: "auto" },
+      { name: "R2_ASSET_BUCKET", required: false },
+      { name: "R2_PRIVATE_BUCKET", required: false },
+      { name: "R2_PUBLIC_BASE_URL", required: false },
+      // Legacy aliases kept for one release
       { name: "AWS_ACCESS_KEY_ID", required: false },
       { name: "AWS_SECRET_ACCESS_KEY", required: false },
       { name: "AWS_REGION", required: false, default: "af-south-1" },
+      { name: "S3_ACCESS_KEY_ID", required: false },
+      { name: "S3_SECRET_ACCESS_KEY", required: false },
+      { name: "S3_REGION", required: false, default: "af-south-1" },
+      { name: "S3_URL", required: false },
+      { name: "S3_EU_URL", required: false },
       { name: "S3_ASSET_BUCKET", required: false },
+      { name: "S3_PRIVATE_BUCKET", required: false },
       { name: "STORAGE_PROVIDER", required: false, default: "local" },
       { name: "UPLOAD_DIR", required: false, default: "./public/uploads" },
       { name: "STORAGE_BUCKET", required: false },
-      { name: "STORAGE_REGION", required: false, default: "af-south-1" },
+      { name: "STORAGE_REGION", required: false, default: "eu" },
       { name: "CDN_URL", required: false, default: "/uploads" },
+      {
+        name: "R2_BUCKET_STAGED",
+        required: false,
+        default: "buildmarket-staged",
+      },
+      {
+        name: "R2_BUCKET_VERIFIED_PRIVATE",
+        required: false,
+        default: "buildmarket-verified-private",
+      },
+      {
+        name: "R2_BUCKET_QUARANTINE",
+        required: false,
+        default: "buildmarket-quarantine",
+      },
+      {
+        name: "R2_SCAN_CALLBACK_URL",
+        required: false,
+        default: "/api/internal/uploads/scan-callback",
+      },
+      {
+        name: "APP_CALLBACK_URL",
+        required: false,
+        default: "/api/internal/uploads/scan-callback",
+      },
+      {
+        name: "CLOUDMERSIVE_API_KEY",
+        required: false,
+      },
     ],
   },
   {
@@ -257,6 +376,13 @@ const envGroups: EnvGroup[] = [
       { name: "NOTIFICATION_SERVICE_URL", required: false },
       { name: "HCAPTCHA_SECRET_KEY", required: false },
       { name: "INTERNAL_API_SECRET", required: false },
+      {
+        name: "SCAN_CALLBACK_HMAC_SECRET",
+        required: true,
+        validate: (v) => v.length >= 32,
+        errorMessage:
+          "Must be at least 32 characters long for secure webhook HMAC validation (generate with: openssl rand -hex 32)",
+      },
     ],
   },
   {
@@ -286,6 +412,38 @@ const envGroups: EnvGroup[] = [
       { name: "RESEND_API_KEY", required: false },
       { name: "SMTP_HOST", required: false },
       { name: "SMTP_FROM", required: false },
+    ],
+  },
+  {
+    name: "newsletter",
+    description: "Newsletter / Email Service Provider (ESP) for footer signup",
+    variables: [
+      {
+        name: "ESP_PROVIDER",
+        required: false,
+        default: "stub",
+      },
+      {
+        name: "ESP_API_KEY",
+        required: false,
+      },
+      {
+        name: "ESP_LIST_ID",
+        required: false,
+      },
+      {
+        name: "RESEND_SEGMENT_ID",
+        required: false,
+      },
+      {
+        name: "RESEND_WEBHOOK_SECRET",
+        required: false,
+      },
+      {
+        name: "WORKER_HEALTH_PORT",
+        required: false,
+        default: "8080",
+      },
     ],
   },
   {
@@ -360,7 +518,7 @@ const envGroups: EnvGroup[] = [
       {
         name: "DPO_EMAIL",
         required: false,
-        default: "security@buildmarket.co.ke",
+        default: "security@buildmarket.app",
       },
       { name: "ENCRYPTION_MIGRATION_MODE", required: false, default: "false" },
       { name: "LEGACY_FORMAT_DEADLINE", required: false },
@@ -368,9 +526,37 @@ const envGroups: EnvGroup[] = [
     ],
   },
   {
+    name: "features",
+    description: "Feature Flags and Strangler-Fig Rollouts",
+    variables: [
+      {
+        name: "ENABLE_NOTIFICATION_SERVICE",
+        required: false,
+        default: "false",
+      },
+      { name: "ENABLE_GDPR_FEATURES", required: false, default: "true" },
+      { name: "ENABLE_ENCRYPTION", required: false, default: "true" },
+      { name: "ENABLE_AUDIT_LOGGING", required: false, default: "true" },
+      {
+        name: "ALLOW_MOCK_VIRUS_SCANNER",
+        required: false,
+        default: "false",
+      },
+      { name: "FEATURE_PORTAL_DASHBOARD_V2", required: false, default: "true" },
+      { name: "FEATURE_PORTAL_LEADS_V2", required: false, default: "true" },
+      { name: "FEATURE_PORTAL_FINANCE_V2", required: false, default: "true" },
+      { name: "FEATURE_PORTAL_PROJECTS_V2", required: false, default: "true" },
+      { name: "FEATURE_PORTAL_QUOTES_V2", required: false, default: "true" },
+      { name: "FEATURE_PORTAL_STORES_V2", required: false, default: "true" },
+      { name: "FEATURE_PORTAL_CALENDAR_V2", required: false, default: "true" },
+      { name: "FEATURE_PORTAL_PORTFOLIO_V2", required: false, default: "true" },
+    ],
+  },
+  {
     name: "s3exports",
     description: "S3 Export Buckets",
     variables: [
+      { name: "R2_EXPORT_BUCKET", required: false },
       { name: "S3_EXPORT_BUCKET", required: false },
       { name: "EXPORTS_BUCKET_NAME", required: false },
       { name: "EXPORT_LOCAL_DIR", required: false, default: "./temp-exports" },
@@ -401,6 +587,9 @@ const envGroups: EnvGroup[] = [
     name: "localDev",
     description: "Local-only developer auth bypass settings",
     variables: [
+      // Canonical flag (Drift 4) — BYPASS_AUTH is now the legacy fallback,
+      // resolved together via @build/env-validation's resolveDevAuthBypass.
+      { name: "AUTH_DEV_BYPASS", required: false, default: "false" },
       { name: "BYPASS_AUTH", required: false, default: "false" },
       { name: "DEV_CLERK_ID", required: false, default: "user_local_dev" },
       {
@@ -448,17 +637,91 @@ const envGroups: EnvGroup[] = [
       },
     ],
   },
+  {
+    name: "otel",
+    description: "OpenTelemetry Tracing and Datadog APM",
+    variables: [
+      {
+        name: "OTEL_EXPORTER_OTLP_ENDPOINT",
+        required: false,
+      },
+      {
+        name: "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+        required: false,
+      },
+      {
+        name: "OTEL_EXPORTER_OTLP_HEADERS",
+        required: false,
+      },
+      {
+        name: "OTEL_SERVICE_NAME",
+        required: false,
+      },
+      {
+        name: "OTEL_RESOURCE_ATTRIBUTES",
+        required: false,
+      },
+      {
+        name: "DD_API_KEY",
+        required: false,
+      },
+      {
+        name: "DD_SITE_HOST",
+        required: false,
+        default: "us5.datadoghq.com",
+      },
+      {
+        name: "DD_SERVICE",
+        required: false,
+      },
+      {
+        name: "DD_ENV",
+        required: false,
+      },
+    ],
+  },
+  {
+    name: "stagingAuth",
+    description: "Staging Environment HTTP Basic Auth & Protection",
+    variables: [
+      { name: "STAGING_AUTH_USER", required: false, default: "buildmarket" },
+      { name: "STAGING_AUTH_PASSWORD", required: false },
+      { name: "STAGING_AUTH_SECRET", required: false },
+      { name: "STAGING_AUTH_ENABLED", required: false },
+    ],
+  },
+  {
+    name: "regulators",
+    description: "Regulator Verification API Credentials",
+    variables: [
+      { name: "REGULATOR_EBK_BASE_URL", required: false },
+      { name: "REGULATOR_EBK_API_KEY", required: false },
+      { name: "REGULATOR_EBK_SIGNING_SECRET", required: false },
+      { name: "REGULATOR_BORAQS_BASE_URL", required: false },
+      { name: "REGULATOR_BORAQS_API_KEY", required: false },
+      { name: "REGULATOR_BORAQS_SIGNING_SECRET", required: false },
+      { name: "REGULATOR_NCA_BASE_URL", required: false },
+      { name: "REGULATOR_NCA_API_KEY", required: false },
+      { name: "REGULATOR_NCA_SIGNING_SECRET", required: false },
+      { name: "REGULATOR_EARB_BASE_URL", required: false },
+      { name: "REGULATOR_EARB_API_KEY", required: false },
+      { name: "REGULATOR_EARB_SIGNING_SECRET", required: false },
+      { name: "REGULATOR_VRB_BASE_URL", required: false },
+      { name: "REGULATOR_VRB_API_KEY", required: false },
+      { name: "REGULATOR_VRB_SIGNING_SECRET", required: false },
+      { name: "REGULATOR_ISK_BASE_URL", required: false },
+      { name: "REGULATOR_ISK_API_KEY", required: false },
+      { name: "REGULATOR_ISK_SIGNING_SECRET", required: false },
+      { name: "REGULATOR_EPRA_BASE_URL", required: false },
+      { name: "REGULATOR_EPRA_API_KEY", required: false },
+      { name: "REGULATOR_EPRA_SIGNING_SECRET", required: false },
+    ],
+  },
 ];
 
 // ============================================
 // Validation Functions
 // ============================================
-
-type ValidationResult = {
-  valid: boolean;
-  errors: string[];
-  warnings: string[];
-};
 
 /**
  * Server-only required variables that are deferred during Next.js production build
@@ -477,6 +740,7 @@ const BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS = new Set<string>([
   // It is never read at Next.js runtime, so it is deferred like DATABASE_URL.
   "DIRECT_URL",
   "ENCRYPTION_KEY_V1",
+  "SCAN_CALLBACK_HMAC_SECRET",
   // Upstash credentials are runtime-injected by Vercel; not available at build time.
   "UPSTASH_REDIS_REST_URL",
   "UPSTASH_REDIS_REST_TOKEN",
@@ -504,67 +768,36 @@ export function validateEnv(
   groups: string[] | "all" = "all",
   throwOnError = true,
 ): ValidationResult {
-  const result: ValidationResult = {
-    valid: true,
-    errors: [],
-    warnings: [],
-  };
-
   const groupsToValidate =
     groups === "all"
       ? envGroups
       : envGroups.filter((g) => groups.includes(g.name));
-  const deferServerOnlyRequiredErrors =
-    shouldDeferServerOnlyValidationForBuild();
 
-  for (const group of groupsToValidate) {
-    for (const variable of group.variables) {
-      const value = process.env[variable.name];
-
-      // Check required variables
-      if (variable.required && !value) {
-        if (
-          deferServerOnlyRequiredErrors &&
-          BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS.has(variable.name)
-        ) {
-          result.warnings.push(
-            `[${group.name}] Deferring required server env until runtime: ${variable.name}`,
-          );
-          continue;
-        }
-
-        result.valid = false;
-        result.errors.push(
-          `[${group.name}] Missing required: ${variable.name}`,
-        );
-        continue;
-      }
-
-      // Skip validation for missing optional variables
-      if (!value) {
-        if (variable.default) {
-          result.warnings.push(
-            `[${group.name}] Using default for ${variable.name}: ${variable.default}`,
-          );
-        }
-        continue;
-      }
-
-      // Run custom validation
-      if (variable.validate && !variable.validate(value)) {
-        result.valid = false;
-        result.errors.push(
-          `[${group.name}] Invalid ${variable.name}: ${variable.errorMessage || "Validation failed"}`,
-        );
-      }
-    }
-  }
+  // Core per-variable validation (required/default/custom validate) now
+  // delegated to @build/env-validation's validateEnvGroups — same engine
+  // apps/admin and apps/verification-ops use. The app-specific extensions
+  // below (Redis rate-limit readiness, remote storage readiness) still run
+  // as a second pass over the same `result`, exactly as before.
+  const result = validateEnvGroups(
+    envGroups,
+    process.env,
+    groups,
+    BUILD_DEFERRED_SERVER_ONLY_REQUIRED_VARS,
+    shouldDeferServerOnlyValidationForBuild(),
+  );
 
   const validatesRedisGroup = groupsToValidate.some(
     (group) => group.name === "redis",
   );
   if (validatesRedisGroup) {
     validateRedisRateLimitReadiness(result);
+  }
+
+  const validatesStorageGroup = groupsToValidate.some(
+    (group) => group.name === "storage" || group.name === "s3exports",
+  );
+  if (validatesStorageGroup) {
+    validateStorageRemoteReadiness(result);
   }
 
   // Log results
@@ -590,9 +823,15 @@ export function validateEnv(
 // ============================================
 // Helper Functions (boundary-safe)
 // ============================================
+//
+// getStringEnv/getOptionalStringEnv/getBooleanEnv are now thin
+// process.env-bound wrappers over @build/env-validation's shared
+// primitives (Drift 2) rather than a local re-implementation. Every
+// existing call site in this file (`getStringEnv("X", "default")`, etc.)
+// is unchanged — only the underlying implementation moved.
 
 function getStringEnv(name: string, fallback = ""): string {
-  return process.env[name] || fallback;
+  return getStringEnvFromObj(process.env, name, fallback);
 }
 
 /**
@@ -600,13 +839,11 @@ function getStringEnv(name: string, fallback = ""): string {
  * Use this for credentials that must be absent (not empty) when not configured.
  */
 function getOptionalStringEnv(name: string): string | undefined {
-  const value = getStringEnv(name);
-  return value.length > 0 ? value : undefined;
+  return getOptionalStringEnvFromObj(process.env, name);
 }
 
 function getBooleanEnv(name: string, fallback = false): boolean {
-  const value = process.env[name];
-  return value === undefined ? fallback : value === "true";
+  return getBooleanEnvFromObj(process.env, name, fallback);
 }
 
 function getNumberEnv(name: string, fallback: number): number {
@@ -675,10 +912,14 @@ function validateRedisRateLimitReadiness(result: ValidationResult): void {
       "[redis] UPSTASH_REDIS_REST_URL is required for rate limiting in production. " +
         "Set it to your Upstash REST endpoint (https://<db>.upstash.io).",
     );
-  } else if (!upstashUrl.startsWith("https://")) {
+  } else if (
+    !upstashUrl.startsWith("https://") &&
+    !upstashUrl.startsWith("http://127.0.0.1") &&
+    !upstashUrl.startsWith("http://localhost")
+  ) {
     result.valid = false;
     result.errors.push(
-      "[redis] UPSTASH_REDIS_REST_URL must start with https://. " +
+      "[redis] UPSTASH_REDIS_REST_URL must start with https:// (or http://127.0.0.1 / http://localhost for local/CI mocks). " +
         `Received: ${upstashUrl.slice(0, 40)}`,
     );
   }
@@ -703,6 +944,95 @@ function parseOriginList(raw?: string): string[] {
     .filter(Boolean);
 }
 
+// isAbsoluteHttpUrl now imported from @build/env-validation (Drift 2) —
+// the local copy previously here was a byte-for-byte duplicate.
+
+/**
+ * Enforces a fail-closed production posture for remote storage when the S3-compatible
+ * provider path is enabled (AWS S3 or Cloudflare R2 via AWS SDK).
+ */
+function validateStorageRemoteReadiness(result: ValidationResult): void {
+  const nodeEnv = getStringEnv("NODE_ENV", "development");
+  const isProd = nodeEnv === "production";
+  const storageProvider = getStringEnv("STORAGE_PROVIDER", "local");
+  const s3Disabled = getBooleanEnv("S3_DISABLED", true);
+  const remoteStorageEnabled = storageProvider === "s3" || !s3Disabled;
+
+  if (!isProd || !remoteStorageEnabled) {
+    return;
+  }
+
+  if (shouldDeferServerOnlyValidationForBuild()) {
+    result.warnings.push(
+      "[storage] Deferring remote storage credential checks until runtime.",
+    );
+    return;
+  }
+
+  const endpoint =
+    getOptionalStringEnv("R2_ENDPOINT") ?? getOptionalStringEnv("S3_URL");
+  const accessKeyId =
+    getOptionalStringEnv("R2_ACCESS_KEY_ID") ??
+    getOptionalStringEnv("AWS_ACCESS_KEY_ID") ??
+    getOptionalStringEnv("S3_ACCESS_KEY_ID");
+  const secretAccessKey =
+    getOptionalStringEnv("R2_SECRET_ACCESS_KEY") ??
+    getOptionalStringEnv("AWS_SECRET_ACCESS_KEY") ??
+    getOptionalStringEnv("S3_SECRET_ACCESS_KEY");
+  const assetBucket =
+    getOptionalStringEnv("R2_ASSET_BUCKET") ??
+    getOptionalStringEnv("STORAGE_BUCKET") ??
+    getOptionalStringEnv("S3_ASSET_BUCKET");
+  const privateBucket =
+    getOptionalStringEnv("R2_PRIVATE_BUCKET") ??
+    getOptionalStringEnv("S3_PRIVATE_BUCKET");
+  const publicBaseUrl =
+    getOptionalStringEnv("R2_PUBLIC_BASE_URL") ??
+    getOptionalStringEnv("CDN_URL");
+
+  if (!endpoint || !isAbsoluteHttpUrl(endpoint)) {
+    result.valid = false;
+    result.errors.push(
+      "[storage] R2_ENDPOINT (or S3_URL alias) must be an absolute HTTP(S) URL when remote storage is enabled in production.",
+    );
+  }
+
+  if (!accessKeyId) {
+    result.valid = false;
+    result.errors.push(
+      "[storage] R2_ACCESS_KEY_ID (or AWS_ACCESS_KEY_ID/S3_ACCESS_KEY_ID alias) is required when remote storage is enabled in production.",
+    );
+  }
+
+  if (!secretAccessKey) {
+    result.valid = false;
+    result.errors.push(
+      "[storage] R2_SECRET_ACCESS_KEY (or AWS_SECRET_ACCESS_KEY/S3_SECRET_ACCESS_KEY alias) is required when remote storage is enabled in production.",
+    );
+  }
+
+  if (!assetBucket) {
+    result.valid = false;
+    result.errors.push(
+      "[storage] R2_ASSET_BUCKET (or STORAGE_BUCKET/S3_ASSET_BUCKET alias) is required when remote storage is enabled in production.",
+    );
+  }
+
+  if (!privateBucket) {
+    result.valid = false;
+    result.errors.push(
+      "[storage] R2_PRIVATE_BUCKET (or S3_PRIVATE_BUCKET alias) is required for private document uploads when remote storage is enabled in production.",
+    );
+  }
+
+  if (!publicBaseUrl || !isAbsoluteHttpUrl(publicBaseUrl)) {
+    result.valid = false;
+    result.errors.push(
+      "[storage] R2_PUBLIC_BASE_URL (or CDN_URL alias) must be an absolute HTTP(S) URL when remote storage is enabled in production.",
+    );
+  }
+}
+
 // ============================================
 // Config Builder
 // ============================================
@@ -718,6 +1048,40 @@ function buildEnvConfig() {
     isDev || isTest,
   );
 
+  const resolvedStorageAccessKeyId =
+    getOptionalStringEnv("R2_ACCESS_KEY_ID") ??
+    getOptionalStringEnv("AWS_ACCESS_KEY_ID") ??
+    getOptionalStringEnv("S3_ACCESS_KEY_ID");
+  const resolvedStorageSecretAccessKey =
+    getOptionalStringEnv("R2_SECRET_ACCESS_KEY") ??
+    getOptionalStringEnv("AWS_SECRET_ACCESS_KEY") ??
+    getOptionalStringEnv("S3_SECRET_ACCESS_KEY");
+  const resolvedStorageEndpoint =
+    getOptionalStringEnv("R2_ENDPOINT") ?? getOptionalStringEnv("S3_URL");
+  const resolvedStorageAssetBucket =
+    getOptionalStringEnv("R2_ASSET_BUCKET") ??
+    getOptionalStringEnv("STORAGE_BUCKET") ??
+    getOptionalStringEnv("S3_ASSET_BUCKET");
+  const resolvedStoragePrivateBucket =
+    getOptionalStringEnv("R2_PRIVATE_BUCKET") ??
+    getOptionalStringEnv("S3_PRIVATE_BUCKET");
+  const resolvedStoragePublicBaseUrl = getStringEnv(
+    "R2_PUBLIC_BASE_URL",
+    getStringEnv("CDN_URL", "/uploads"),
+  );
+  const resolvedStorageRegion = getStringEnv(
+    "R2_REGION",
+    getStringEnv(
+      "STORAGE_REGION",
+      getStringEnv("AWS_REGION", getStringEnv("S3_REGION", "auto")),
+    ),
+  );
+  const resolvedExportBucket =
+    getOptionalStringEnv("R2_EXPORT_BUCKET") ??
+    getOptionalStringEnv("S3_EXPORT_BUCKET") ??
+    getOptionalStringEnv("EXPORTS_BUCKET_NAME") ??
+    "buildmarket-exports";
+
   // Middleware and other edge entry points must not fail import-time on
   // node-only startup invariants. Node runtimes still enforce this strictly.
   if (!edgeRuntime) {
@@ -727,23 +1091,142 @@ function buildEnvConfig() {
     });
   }
 
+  // Clerk — pulled out to a local const (rather than inline in the return
+  // object below) so validateSatelliteInvariants() can run against it
+  // before buildEnvConfig() returns, matching the pattern in apps/admin's
+  // env-wrapper.ts. apps/client is the PRIMARY app and isSatellite should
+  // be false in every real deployment, but the check runs unconditionally
+  // (it's a no-op when isSatellite is false) so a future misconfiguration
+  // doesn't rely on someone remembering to add this check when satellite
+  // mode is first turned on here.
+  const clerk = {
+    publishableKey: getStringEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"),
+    frontendApi: getOptionalStringEnv("NEXT_PUBLIC_CLERK_FRONTEND_API"),
+    secretKey: getOptionalStringEnv("CLERK_SECRET_KEY"),
+    webhookSecret:
+      getOptionalStringEnv("CLERK_WEBHOOK_SECRET") ||
+      getOptionalStringEnv("CLERK_WEBHOOK_SIGNING_SECRET"),
+    replayWindowSeconds: getNumberEnv(
+      "CLERK_WEBHOOK_REPLAY_WINDOW_SECONDS",
+      300,
+    ),
+    processingTtlSeconds: getNumberEnv(
+      "CLERK_WEBHOOK_PROCESSING_TTL_SECONDS",
+      120,
+    ),
+    processedTtlSeconds: getNumberEnv(
+      "CLERK_WEBHOOK_PROCESSED_TTL_SECONDS",
+      86400,
+    ),
+    // FIX (most severe finding in this pass): these three previously read
+    // from the WRONG env var names entirely — "CLERK_IS_SATELLITE" and
+    // "CLERK_DOMAIN" (no NEXT_PUBLIC_ prefix, so never actually set by any
+    // deploy) and, worse, primarySignInUrl was reading
+    // NEXT_PUBLIC_CLERK_SIGN_IN_URL — the *relative* sign-in path
+    // variable, not NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL at all. That's
+    // not "borrowing a fallback" (Finding 6's usual shape elsewhere in
+    // this codebase) — it was the ONLY source, guaranteed to fail
+    // isAbsoluteHttpUrl() in any consumer, on every request, in every
+    // environment. Since apps/client's own envGroups declaration above
+    // never declared these three vars either, validateEnv() also never
+    // caught it. Fixed on both ends: declared above, and read from the
+    // correct NEXT_PUBLIC_-prefixed names below with primarySignInUrl
+    // resolving strictly (no relative-path fallback of any kind).
+    isSatellite: getBooleanEnv("NEXT_PUBLIC_CLERK_IS_SATELLITE", false),
+    domain: getOptionalStringEnv("NEXT_PUBLIC_CLERK_DOMAIN"),
+    primarySignInUrl: (() => {
+      const configured = getOptionalStringEnv(
+        "NEXT_PUBLIC_CLERK_PRIMARY_SIGN_IN_URL",
+      );
+      return configured && isAbsoluteHttpUrl(configured)
+        ? configured
+        : undefined;
+    })(),
+    satelliteOrigins: (
+      getOptionalStringEnv("NEXT_PUBLIC_CLERK_SATELLITE_ORIGINS") ?? ""
+    )
+      .split(",")
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0),
+  };
+
+  const satelliteIssues = validateSatelliteInvariants({
+    isSatellite: clerk.isSatellite,
+    domain: clerk.domain,
+    primarySignInUrl: clerk.primarySignInUrl,
+    appName: "client",
+  });
+  if (
+    satelliteIssues.length > 0 &&
+    !shouldDeferServerOnlyValidationForBuild()
+  ) {
+    const message = `Invalid Clerk satellite configuration in apps/client:\n${satelliteIssues
+      .map((i) => `  - ${i}`)
+      .join("\n")}`;
+    if (isProd) {
+      // Fail CLOSED at boot in production — same posture as apps/admin's
+      // env-wrapper.ts for this exact misconfiguration class.
+      throw new Error(message);
+    } else {
+      console.warn(`[apps/client env] ${message}`); // bootstrap-only: env validation warning
+    }
+  }
+
+  const vercelEnv =
+    getOptionalStringEnv("VERCEL_ENV") ||
+    getOptionalStringEnv("NEXT_PUBLIC_VERCEL_ENV");
+  const isVercelPreview = vercelEnv === "preview";
+  const allowCspUnsafeEval =
+    isDev || isVercelPreview || getBooleanEnv("ENABLE_CSP_UNSAFE_EVAL", false);
+
   return {
     // Environment
     nodeEnv,
     isDev,
     isProd,
     isTest,
+    isVercelPreview,
+    allowCspUnsafeEval,
+    cspReportOnly: getBooleanEnv("NEXT_PUBLIC_CSP_REPORT_ONLY", false),
     isCI: getBooleanEnv("CI"),
     isBuildPhase: process.env.NEXT_PHASE === "phase-production-build",
 
     // URLs
     appUrl: getStringEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3500"),
     apiUrl: getStringEnv("NEXT_PUBLIC_API_URL", "http://localhost:3500/api"),
+    // BUG FIX (uncovered while wiring this app onto @build/security-clerk's
+    // getSafeRedirectUrl elsewhere): apps/client/app/lib/security/redirect-url.ts
+    // reads `env.clientAppUrl`, but this field never existed here — it
+    // would have been `undefined` at runtime (and a TS compile error under
+    // strict unknown-property checks). apps/client IS the primary/client
+    // app, so this is a self-alias to `appUrl`, mirroring the same
+    // `adminAppUrl: appUrl` self-alias pattern used in apps/admin's
+    // env-wrapper.ts.
+    clientAppUrl: getStringEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3500"),
+    adminAppUrl: getStringEnv(
+      "NEXT_PUBLIC_ADMIN_APP_URL",
+      isProd ? "https://admin.buildmarket.app" : "http://localhost:3005",
+    ),
+    verificationAppUrl: getStringEnv(
+      "NEXT_PUBLIC_VERIFICATION_APP_URL",
+      getStringEnv(
+        "NEXT_PUBLIC_VERIFICATION_OPS_URL",
+        isProd
+          ? "https://verification.buildmarket.app"
+          : "http://localhost:3501",
+      ),
+    ),
     appVersion: getStringEnv("npm_package_version", "0.1.0"),
 
-    // Local-only auth bypass
+    // Local-only auth bypass — canonical AUTH_DEV_BYPASS with legacy
+    // BYPASS_AUTH fallback (Drift 4), fail-closed in prod via
+    // @build/env-validation's resolveDevAuthBypass (throws if somehow
+    // true in a production NODE_ENV, same as apps/admin/apps/client's
+    // other bypass-adjacent guards).
     auth: {
-      bypassEnabled: getBooleanEnv("BYPASS_AUTH"),
+      secret: getStringEnv("AUTH_SECRET"),
+      bypassEnabled: resolveDevAuthBypass(process.env, isProd, "client")
+        .bypassEnabled,
       devActor: {
         clerkId: getStringEnv(
           "DEV_CLERK_ID",
@@ -794,25 +1277,9 @@ function buildEnvConfig() {
       ),
     },
 
-    // Clerk
-    clerk: {
-      publishableKey: getStringEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"),
-      frontendApi: getOptionalStringEnv("NEXT_PUBLIC_CLERK_FRONTEND_API"),
-      secretKey: getOptionalStringEnv("CLERK_SECRET_KEY"),
-      webhookSecret: getOptionalStringEnv("CLERK_WEBHOOK_SECRET"),
-      replayWindowSeconds: getNumberEnv(
-        "CLERK_WEBHOOK_REPLAY_WINDOW_SECONDS",
-        300,
-      ),
-      processingTtlSeconds: getNumberEnv(
-        "CLERK_WEBHOOK_PROCESSING_TTL_SECONDS",
-        120,
-      ),
-      processedTtlSeconds: getNumberEnv(
-        "CLERK_WEBHOOK_PROCESSED_TTL_SECONDS",
-        86400,
-      ),
-    },
+    // Clerk (computed above buildEnvConfig()'s return so
+    // validateSatelliteInvariants() can run against it first)
+    clerk,
 
     // Database
     databaseUrl: getOptionalStringEnv("DATABASE_URL"),
@@ -861,18 +1328,46 @@ function buildEnvConfig() {
     // with getOptionalStringEnv to stay within the ADR-004 boundary.
     storage: {
       provider: getStringEnv("STORAGE_PROVIDER", "local") as
-        | "local"
-        | "s3"
-        | "gcs",
+        "local" | "s3" | "gcs",
       localPath: getStringEnv("UPLOAD_DIR", "./public/uploads"),
-      bucket: getOptionalStringEnv("STORAGE_BUCKET"),
-      region: getStringEnv("STORAGE_REGION", "af-south-1"),
-      cdnUrl: getStringEnv("CDN_URL", "/uploads"),
+      bucket: resolvedStorageAssetBucket,
+      privateBucket: resolvedStoragePrivateBucket,
+      stagedBucket: getStringEnv("R2_BUCKET_STAGED", "buildmarket-staged"),
+      verifiedPrivateBucket: getStringEnv(
+        "R2_BUCKET_VERIFIED_PRIVATE",
+        "buildmarket-verified-private",
+      ),
+      quarantineBucket: getStringEnv(
+        "R2_BUCKET_QUARANTINE",
+        "buildmarket-quarantine",
+      ),
+      r2ScanCallbackUrl: getStringEnv(
+        "R2_SCAN_CALLBACK_URL",
+        getStringEnv(
+          "APP_CALLBACK_URL",
+          "http://localhost:3500/api/internal/uploads/scan-callback",
+        ),
+      ),
+      appCallbackUrl: getStringEnv(
+        "APP_CALLBACK_URL",
+        getStringEnv(
+          "R2_SCAN_CALLBACK_URL",
+          "http://localhost:3500/api/internal/uploads/scan-callback",
+        ),
+      ),
+      cloudmersiveApiKey: getOptionalStringEnv("CLOUDMERSIVE_API_KEY"),
+      cloudmersiveBaseUrl:
+        getOptionalStringEnv("CLOUDMERSIVE_BASE_URL") ??
+        "https://api.cloudmersive.com",
+      region: resolvedStorageRegion,
+      endpoint: resolvedStorageEndpoint,
+      cdnUrl: resolvedStoragePublicBaseUrl,
+      publicBaseUrl: resolvedStoragePublicBaseUrl,
       s3Disabled: getBooleanEnv("S3_DISABLED", true),
-      assetBucket: getStringEnv("S3_ASSET_BUCKET", "buildmarket-assets"),
-      awsRegion: getStringEnv("AWS_REGION", "af-south-1"),
-      accessKeyId: getOptionalStringEnv("AWS_ACCESS_KEY_ID"),
-      secretAccessKey: getOptionalStringEnv("AWS_SECRET_ACCESS_KEY"),
+      assetBucket: resolvedStorageAssetBucket ?? "buildmarket-assets",
+      awsRegion: resolvedStorageRegion,
+      accessKeyId: resolvedStorageAccessKeyId,
+      secretAccessKey: resolvedStorageSecretAccessKey,
     },
 
     // Services — FIX: messagingPublic now reads the correct variable name
@@ -892,6 +1387,7 @@ function buildEnvConfig() {
       ),
       hcaptchaSecretKey: getOptionalStringEnv("HCAPTCHA_SECRET_KEY"),
       internalApiSecret: getOptionalStringEnv("INTERNAL_API_SECRET"),
+      scanCallbackHmacSecret: getOptionalStringEnv("SCAN_CALLBACK_HMAC_SECRET"),
     },
 
     // Feature Flags
@@ -899,7 +1395,16 @@ function buildEnvConfig() {
       notifications: getBooleanEnv("ENABLE_NOTIFICATION_SERVICE"),
       gdpr: getBooleanEnv("ENABLE_GDPR_FEATURES"),
       encryption: getBooleanEnv("ENABLE_ENCRYPTION"),
+      allowMockScanner: getBooleanEnv("ALLOW_MOCK_VIRUS_SCANNER"),
       auditLogging: getBooleanEnv("ENABLE_AUDIT_LOGGING"),
+      portalDashboardV2: getBooleanEnv("FEATURE_PORTAL_DASHBOARD_V2", true),
+      portalLeadsV2: getBooleanEnv("FEATURE_PORTAL_LEADS_V2", true),
+      portalFinanceV2: getBooleanEnv("FEATURE_PORTAL_FINANCE_V2", true),
+      portalProjectsV2: getBooleanEnv("FEATURE_PORTAL_PROJECTS_V2", true),
+      portalQuotesV2: getBooleanEnv("FEATURE_PORTAL_QUOTES_V2", true),
+      portalStoresV2: getBooleanEnv("FEATURE_PORTAL_STORES_V2", true),
+      portalCalendarV2: getBooleanEnv("FEATURE_PORTAL_CALENDAR_V2", true),
+      portalPortfolioV2: getBooleanEnv("FEATURE_PORTAL_PORTFOLIO_V2", true),
     },
 
     analytics: {
@@ -916,6 +1421,21 @@ function buildEnvConfig() {
       geminiApiKey: getOptionalStringEnv("NEXT_PUBLIC_GEMINI_API_KEY"),
     },
 
+    newsletter: {
+      provider: getStringEnv("ESP_PROVIDER", "stub") as
+        "resend" | "mailchimp" | "stub",
+      apiKey:
+        getOptionalStringEnv("ESP_API_KEY") ||
+        getOptionalStringEnv("RESEND_API_KEY"),
+      listId:
+        getOptionalStringEnv("ESP_LIST_ID") ||
+        getOptionalStringEnv("RESEND_SEGMENT_ID"),
+      resendApiKey: getOptionalStringEnv("RESEND_API_KEY"),
+      resendSegmentId: getOptionalStringEnv("RESEND_SEGMENT_ID"),
+      resendWebhookSecret: getOptionalStringEnv("RESEND_WEBHOOK_SECRET"),
+      workerHealthPort: getNumberEnv("WORKER_HEALTH_PORT", 8080),
+    },
+
     // GDPR
     gdpr: {
       exportExpiryHours: getNumberEnv("EXPORT_EXPIRY_HOURS", 48),
@@ -927,13 +1447,12 @@ function buildEnvConfig() {
     // S3 exports — FIX: replaced direct process.env access with helpers
     s3: {
       disabled: getBooleanEnv("S3_DISABLED", true),
-      region: getStringEnv("AWS_REGION", "af-south-1"),
-      exportBucket:
-        getStringEnv("S3_EXPORT_BUCKET") ||
-        getStringEnv("EXPORTS_BUCKET_NAME", "buildmarket-exports"),
+      region: resolvedStorageRegion,
+      endpoint: resolvedStorageEndpoint,
+      exportBucket: resolvedExportBucket,
       localDir: getStringEnv("EXPORT_LOCAL_DIR", "./temp-exports"),
-      accessKeyId: getOptionalStringEnv("AWS_ACCESS_KEY_ID"),
-      secretAccessKey: getOptionalStringEnv("AWS_SECRET_ACCESS_KEY"),
+      accessKeyId: resolvedStorageAccessKeyId,
+      secretAccessKey: resolvedStorageSecretAccessKey,
     },
 
     // Encryption
@@ -991,6 +1510,76 @@ function buildEnvConfig() {
       timeout: getNumberEnv("NATS_TIMEOUT", isProd ? 10000 : 5000),
       verboseLogging: isDev,
     },
+
+    // OpenTelemetry Tracing & Metrics (Datadog APM compatible)
+    otel: {
+      endpoint: getOptionalStringEnv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+      tracesEndpoint: getOptionalStringEnv(
+        "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+      ),
+      headers: getOptionalStringEnv("OTEL_EXPORTER_OTLP_HEADERS"),
+      serviceName: getStringEnv(
+        "OTEL_SERVICE_NAME",
+        getStringEnv("DD_SERVICE", `build-market-client-${nodeEnv}`),
+      ),
+      resourceAttributes: getOptionalStringEnv("OTEL_RESOURCE_ATTRIBUTES"),
+      apiKey: getOptionalStringEnv("DD_API_KEY"),
+      siteHost: getStringEnv("DD_SITE_HOST", "us5.datadoghq.com"),
+      ddEnv: getStringEnv("DD_ENV", isProd ? "production" : "staging"),
+    },
+
+    // Regulator Verification API Credentials (ADR-004 boundary compliant)
+    regulators: {
+      EBK: {
+        baseUrl: getOptionalStringEnv("REGULATOR_EBK_BASE_URL"),
+        apiKey: getOptionalStringEnv("REGULATOR_EBK_API_KEY"),
+        signingSecret: getOptionalStringEnv("REGULATOR_EBK_SIGNING_SECRET"),
+      },
+      BORAQS: {
+        baseUrl: getOptionalStringEnv("REGULATOR_BORAQS_BASE_URL"),
+        apiKey: getOptionalStringEnv("REGULATOR_BORAQS_API_KEY"),
+        signingSecret: getOptionalStringEnv("REGULATOR_BORAQS_SIGNING_SECRET"),
+      },
+      NCA: {
+        baseUrl: getOptionalStringEnv("REGULATOR_NCA_BASE_URL"),
+        apiKey: getOptionalStringEnv("REGULATOR_NCA_API_KEY"),
+        signingSecret: getOptionalStringEnv("REGULATOR_NCA_SIGNING_SECRET"),
+      },
+      EARB: {
+        baseUrl: getOptionalStringEnv("REGULATOR_EARB_BASE_URL"),
+        apiKey: getOptionalStringEnv("REGULATOR_EARB_API_KEY"),
+        signingSecret: getOptionalStringEnv("REGULATOR_EARB_SIGNING_SECRET"),
+      },
+      VRB: {
+        baseUrl: getOptionalStringEnv("REGULATOR_VRB_BASE_URL"),
+        apiKey: getOptionalStringEnv("REGULATOR_VRB_API_KEY"),
+        signingSecret: getOptionalStringEnv("REGULATOR_VRB_SIGNING_SECRET"),
+      },
+      ISK: {
+        baseUrl: getOptionalStringEnv("REGULATOR_ISK_BASE_URL"),
+        apiKey: getOptionalStringEnv("REGULATOR_ISK_API_KEY"),
+        signingSecret: getOptionalStringEnv("REGULATOR_ISK_SIGNING_SECRET"),
+      },
+      EPRA: {
+        baseUrl: getOptionalStringEnv("REGULATOR_EPRA_BASE_URL"),
+        apiKey: getOptionalStringEnv("REGULATOR_EPRA_API_KEY"),
+        signingSecret: getOptionalStringEnv("REGULATOR_EPRA_SIGNING_SECRET"),
+      },
+    },
+
+    // Staging Environment HTTP Basic Auth & Protection (DD_ENV === "staging")
+    stagingAuth: {
+      isEnabled:
+        (getOptionalStringEnv("DD_ENV") === "staging" ||
+          getBooleanEnv("STAGING_AUTH_ENABLED", false)) &&
+        Boolean(
+          getOptionalStringEnv("STAGING_AUTH_PASSWORD") ||
+          getOptionalStringEnv("STAGING_AUTH_SECRET"),
+        ),
+      user: getStringEnv("STAGING_AUTH_USER", "buildmarket"),
+      password: getOptionalStringEnv("STAGING_AUTH_PASSWORD"),
+      secret: getOptionalStringEnv("STAGING_AUTH_SECRET"),
+    },
   } as const;
 }
 
@@ -1004,6 +1593,7 @@ function buildEnvConfig() {
  * Import this instead of reading process.env directly (ADR-004).
  */
 export const envConfig = buildEnvConfig();
+export type ClientEnvConfig = typeof envConfig;
 
 // ============================================
 // Auto-validate on import (server runtime only)
@@ -1015,6 +1605,9 @@ if (
   !isEdgeRuntime()
 ) {
   const startupGroups = ["clerk", "database", "supabase", "urls", "encryption"];
+  const remoteStorageEnabled =
+    getStringEnv("STORAGE_PROVIDER", "local") === "s3" ||
+    !getBooleanEnv("S3_DISABLED", true);
 
   // Always validate Upstash credentials in production — the REST client and
   // rate limiter require them regardless of RATE_LIMIT_BACKEND setting.
@@ -1028,6 +1621,10 @@ if (
     )
   ) {
     startupGroups.push("redis");
+  }
+
+  if (process.env.NODE_ENV === "production" || remoteStorageEnabled) {
+    startupGroups.push("storage", "s3exports");
   }
 
   validateEnv(startupGroups);

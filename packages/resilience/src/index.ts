@@ -12,7 +12,7 @@
  */
 
 // Core types
-export * from "./types";
+export * from "./types.js";
 
 // Timeout utilities
 export {
@@ -21,7 +21,7 @@ export {
   withTimeout,
   getTimeout,
   withCriticalityTimeout,
-} from "./timeout";
+} from "./timeout.js";
 
 // Retry utilities
 export {
@@ -29,7 +29,7 @@ export {
   DEFAULT_RETRY_CONFIG,
   withRetry,
   createRetryWrapper,
-} from "./retry";
+} from "./retry.js";
 
 // Circuit breaker
 export {
@@ -37,26 +37,30 @@ export {
   DEFAULT_CIRCUIT_BREAKER_CONFIG,
   CircuitBreaker,
   CircuitBreakerRegistry,
-} from "./circuit-breaker";
+} from "./circuit-breaker.js";
 
 // Caching
-export { DEFAULT_CACHE_CONFIG, ResilientCache, CacheRegistry } from "./cache";
+export {
+  DEFAULT_CACHE_CONFIG,
+  ResilientCache,
+  CacheRegistry,
+} from "./cache.js";
 
 // Fallback mechanisms
 export {
   withFallback,
   createFallbackWrapper,
   withGracefulDegradation,
-} from "./fallback";
+} from "./fallback.js";
 
 // Metrics and observability
 export {
   MetricsCollector,
   getGlobalMetricsCollector,
   setGlobalMetricsCollector,
-} from "./metrics";
+} from "./metrics.js";
 
-export type { Metric, MetricType } from "./metrics";
+export type { Metric, MetricType } from "./metrics.js";
 
 // Logging
 export {
@@ -65,7 +69,7 @@ export {
   createLogger,
   getGlobalLogger,
   setGlobalLogger,
-} from "./logger";
+} from "./logger.js";
 
 // Configuration
 export {
@@ -77,13 +81,13 @@ export {
   getDefaultRetryConfig,
   getDefaultCircuitBreakerConfig,
   getDefaultCacheConfig,
-} from "./config";
+} from "./config.js";
 
-export type { ResilienceEnvConfig } from "./config";
+export type { ResilienceEnvConfig } from "./config.js";
 
 // High-level executor
 export {
   ResilientExecutor,
   getGlobalExecutor,
   setGlobalExecutor,
-} from "./executor";
+} from "./executor.js";

@@ -13,11 +13,10 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { isValidId, checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { ApproveMilestoneSchema } from "@/app/lib/validation/projects-validation";
 import { PROJECT_CONFIG } from "@/app/lib/config/project.config";
 import { projectsService } from "@/app/lib/domains/projects/service";
-
-const logger = getClientLogger();
 
 type ApproveParams = { id: string; milestoneId: string };
 
@@ -74,12 +73,6 @@ export const POST = withAuth<ApproveParams>(
       dbUserId,
       "APPROVE",
     );
-    if (!idempotencyCheck) {
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (idempotencyCheck.status === "completed") {
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
     }
@@ -98,7 +91,7 @@ export const POST = withAuth<ApproveParams>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Processing milestone approval", {
+    getClientLogger().info("Processing milestone approval", {
       correlationId,
       projectId,
       milestoneId,
@@ -155,7 +148,7 @@ export const POST = withAuth<ApproveParams>(
     }
 
     const payload = result.data.data;
-    await IdempotencyService.complete(idempotencyKey, payload);
+    await safeIdempotencyComplete(idempotencyKey, payload);
     return apiSuccess(payload, HttpStatus.OK);
   },
 );

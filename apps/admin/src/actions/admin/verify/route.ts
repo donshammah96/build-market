@@ -1,54 +1,40 @@
 /**
  * POST /api/admin/verify
- * Unified verification endpoint for professionals, stores, and properties
- * Requires admin role
+ * Unified verification endpoint for professionals, stores, and properties.
  */
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { AuthContext, withAdminRole } from "@/lib/api/api-middleware";
-import { apiError, HttpStatus } from "@/lib/api/api-response";
-import {
-  initializeCorrelationId,
-  executeResilient,
-  getClientLogger,
-} from "@/lib/api/resilient-api";
+import { AdminRole } from "@build/enums";
+import { type AuthContext, withAdminRole } from "@/lib/api/api-middleware";
+import { HttpStatus } from "@/lib/api/api-response";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/api/rate-limit";
-import { verifyProfessional } from "@/lib/services/verification/professional-verification.service";
-import { verifyStore } from "@/lib/services/verification/store-verification.service";
-import { verifyProperty } from "@/lib/services/verification/property-verification.service";
-import { notifyVerificationResult } from "@/lib/services/verification/notification.service";
-import { VerificationRequest } from "@/lib/services/verification/types";
-import { AdminRole } from "@build/db";
+import {
+  apiError,
+  apiSuccess,
+  getClientLogger,
+  initializeCorrelationId,
+} from "@/lib/api/resilient-api";
+import { verificationService } from "@/lib/domains/verification";
 
 const logger = getClientLogger();
+const VerifyEntitySchema = z
+  .object({
+    entityType: z.enum(["professional", "store", "property"]),
+    entityId: z.string().uuid("Invalid entity ID format"),
+    action: z.enum(["VERIFY", "REJECT", "REQUEST_CORRECTION"]),
+    notes: z.string().optional(),
+    reason: z.string().optional(),
+  })
+  .strict();
 
-// Validation schema
-const verificationSchema = z.object({
-  entityType: z.enum(["professional", "store", "property"]),
-  entityId: z.string().uuid("Invalid entity ID format"),
-  action: z.enum(["VERIFY", "REJECT", "REQUEST_CORRECTION"]),
-  notes: z.string().optional(),
-  reason: z.string().optional(),
-});
-
-/**
- * POST handler for unified verification
- */
-export const POST = withAdminRole([AdminRole.SUPER_ADMIN])(async (
-  req: NextRequest,
-  context: AuthContext,
-) => {
-  const { dbUserId } = context;
+export const POST = withAdminRole([
+  AdminRole.SUPER_ADMIN,
+  AdminRole.CONTENT_MODERATOR,
+])(async (req: NextRequest, context: AuthContext) => {
   const correlationId = initializeCorrelationId(req);
-
-  // Rate limiting - stricter for admin actions
   const identifier = getRateLimitIdentifier(req);
-  const { success } = await checkRateLimit(
-    identifier,
-    20, // 20 verifications per minute
-    60 * 1000, // 1 minute window
-  );
+  const { success } = await checkRateLimit(identifier, 20, 60 * 1000);
 
   if (!success) {
     return apiError(
@@ -57,100 +43,90 @@ export const POST = withAdminRole([AdminRole.SUPER_ADMIN])(async (
     );
   }
 
+  const body = await req.json().catch(() => null);
+  const parsed = VerifyEntitySchema.safeParse(body);
+
+  if (!parsed.success) {
+    return apiError(
+      parsed.error.issues[0]?.message ?? "Invalid verification payload",
+      HttpStatus.BAD_REQUEST,
+      parsed.error.flatten(),
+    );
+  }
+
   logger.info("Admin verification request received", {
     correlationId,
-    adminId: dbUserId,
+    adminId: context.dbUserId,
+    entityType: parsed.data.entityType,
+    entityId: parsed.data.entityId,
+    action: parsed.data.action,
   });
 
-  return executeResilient(
-    async () => {
-      // Parse and validate request body
-      const body = await req.json();
-      const validated = verificationSchema.parse(body);
+  try {
+    if (!context.adminRole) {
+      return apiError(
+        "Unauthorized: Admin role missing",
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
 
-      // Get IP and User Agent for audit
-      const ipAddress =
-        req.headers.get("x-forwarded-for") ||
-        req.headers.get("x-real-ip") ||
-        "unknown";
-      const userAgent = req.headers.get("user-agent") || "unknown";
-
-      const verificationRequest: VerificationRequest = {
-        ...validated,
-        adminId: dbUserId,
-        ipAddress,
-        userAgent,
-      };
-
-      // Route to appropriate verification service
-      let result;
-      let recipientUserId: string;
-
-      switch (validated.entityType) {
-        case "professional":
-          result = await verifyProfessional(verificationRequest);
-          recipientUserId = validated.entityId; // Professional userId
-          break;
-
-        case "store": {
-          result = await verifyStore(verificationRequest);
-          // Get store owner's userId
-          const store = await import("@build/db").then((m) =>
-            m.prisma.store.findUnique({
-              where: { id: validated.entityId },
-              select: { professionalId: true },
-            }),
-          );
-          recipientUserId = store!.professionalId;
-          break;
-        }
-
-        case "property": {
-          result = await verifyProperty(verificationRequest);
-          // Get property agent's userId
-          const property = await import("@build/db").then((m) =>
-            m.prisma.property.findUnique({
-              where: { id: validated.entityId },
-              select: { agentId: true },
-            }),
-          );
-          recipientUserId = property!.agentId;
-          break;
-        }
-
-        default:
-          throw new Error("Invalid entity type");
-      }
-
-      // Send notification to the professional/store owner/agent
-      await notifyVerificationResult(result, recipientUserId);
-
-      logger.info("Verification completed successfully", {
-        correlationId,
-        adminId: dbUserId,
-        entityType: validated.entityType,
-        entityId: validated.entityId,
-        action: validated.action,
-        newStatus: result.newStatus,
-      });
-
-      return {
-        success: true,
-        data: result,
-        message: result.message,
-      };
-    },
-    {
-      operationName: "admin_verify_entity",
-      criticality: "critical",
-      timeout: 15000, // 15 seconds
-      retry: {
-        maxAttempts: 2,
-        initialDelayMs: 1000,
-        maxDelayMs: 5000,
-        backoffMultiplier: 2,
-        jitterFactor: 0.1,
+    // Audit log is created downstream in verificationService.verifyEntity.
+    const result = await verificationService.verifyEntity(
+      {
+        clerkId: context.clerkId,
+        dbUserId: context.dbUserId,
+        adminRole: context.adminRole,
       },
-    },
-  );
+      parsed.data,
+      {
+        ...(req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip")
+          ? {
+              ipAddress:
+                req.headers.get("x-forwarded-for") ??
+                req.headers.get("x-real-ip") ??
+                undefined,
+            }
+          : {}),
+        ...(req.headers.get("user-agent")
+          ? { userAgent: req.headers.get("user-agent") ?? undefined }
+          : {}),
+      },
+    );
+
+    if (!result.ok) {
+      return apiError(result.message, HttpStatus.BAD_REQUEST);
+    }
+
+    logger.info("Verification completed successfully", {
+      correlationId,
+      adminId: context.dbUserId,
+      entityType: parsed.data.entityType,
+      entityId: parsed.data.entityId,
+      action: parsed.data.action,
+      newStatus: result.data.newStatus,
+    });
+
+    return apiSuccess({
+      success: true,
+      data: result.data,
+      message: result.data.message,
+    });
+  } catch (error) {
+    logger.error(
+      "Verification failed",
+      error instanceof Error ? error : new Error(String(error)),
+      {
+        correlationId,
+        adminId: context.dbUserId,
+        entityType: parsed.data.entityType,
+        entityId: parsed.data.entityId,
+        action: parsed.data.action,
+      },
+    );
+
+    return apiError(
+      error instanceof Error ? error.message : "Verification failed",
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
 });

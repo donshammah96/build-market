@@ -1,16 +1,17 @@
 # Build Market — Copilot Instructions
 
-> **Agent guideline:** For the detailed API-to-frontend blueprint, migration playbook, and architecture change log, see [`.agent/API-TO-FRONTEND-ARCHITECTURE.md`](../.agent/API-TO-FRONTEND-ARCHITECTURE.md).
+> **Agent guideline:** For the detailed API-to-frontend blueprint, migration playbook, and architecture change log, see [`.agent/API-TO-FRONTEND-ARCHITECTURE.md`](../../.agent/API-TO-FRONTEND-ARCHITECTURE.md).
 >
-> For the document hierarchy and conflict-resolution algorithm, see [`.agent/DOCUMENT-HIERARCHY.md`](../.agent/DOCUMENT-HIERARCHY.md).
+> For the document hierarchy and conflict-resolution algorithm, see [`.agent/DOCUMENT-HIERARCHY.md`](../../.agent/DOCUMENT-HIERARCHY.md).
 
 ## Instruction Discovery And Precedence
 
 Use the instruction surfaces in this order:
 
-1. `.github/copilot-instructions.md` — repo-wide defaults and hard rules.
+1. `.github/instructions/copilot-instructions.md` — repo-wide defaults and hard rules.
 2. `.agent/API-TO-FRONTEND-ARCHITECTURE.md` — when work touches `apps/client` routes, actions, domain services, client facades, hooks, or migration planning. **This is the implementational canon for `apps/client`. Do not duplicate its content here.**
-3. Slice-local docs such as `app/lib/domains/README.md` or route-family READMEs for implementation detail inside a single vertical.
+3. `.agent/ADMIN-ARCHITECTURE.md` — when work touches `apps/admin` actions, domain services, or admin-specific patterns. **This is the implementational canon for `apps/admin`. Do not apply `apps/client` route patterns there.**
+4. Slice-local docs such as `app/lib/domains/README.md` or route-family READMEs for implementation detail inside a single vertical.
 
 Conflict rules:
 
@@ -36,12 +37,13 @@ Deconstructed instruction map:
 - `apps-client-api-adapters.instructions.md` for `apps/client/app/api/**`
 - `apps-client-server-actions.instructions.md` for `apps/client/app/actions/**`
 - `apps-client-domain-layer.instructions.md` for `apps/client/app/lib/domains/**`
-- `apps-client-browser-facades.instructions.md` for `apps/client/lib/*-client.ts`
-- `apps-client-hooks-react-query.instructions.md` for `apps/client/hooks/**`
+- `apps-client-browser-facades.instructions.md` for `apps/client/lib/facades/**/*-client.ts` — canonical colocated facades (ADR-002 Phase 5); flat `lib/*-client.ts` stubs are `@deprecated`
+- `apps-client-hooks-react-query.instructions.md` for `apps/client/lib/facades/**` — domain hooks are colocated with facades here; `apps/client/hooks/**` is now reserved for cross-domain and UI-only hooks
 - `apps-client-env-boundary.instructions.md` for `apps/client/**`
 - `apps-client-testing-risk.instructions.md` for `apps/client/__tests__/**`
 - `apps-client-adr-authoring.instructions.md` for `apps/client/docs/adr/**`
-- `apps-admin-action-boundaries.instructions.md` for `apps/admin/src/actions/admin/**`
+- `apps-admin-action-boundaries.instructions.md` for `apps/admin/src/actions/admin/**` — governs `safeAction` wrapper, `AdminActor` forwarding, `.safeParse()` validation, domain service delegation, and declarative audit log requirements
+- `apps-admin-adr-authoring.instructions.md` for `apps/admin/docs/adr/**` — governs admin ADR structure, verification commands, rollout sequence, and data-migration notes
 
 Governance:
 
@@ -51,7 +53,7 @@ Governance:
 
 ## Architecture Overview
 
-Turborepo monorepo for a Kenya-focused construction marketplace connecting homeowners, professionals, vendors, and suppliers. The main frontends are `apps/client` on port `3500` and `apps/admin` on port `3005`. Package manager: `pnpm 10.20`.
+Turborepo monorepo for a Kenya-focused construction marketplace connecting homeowners, professionals, vendors, and suppliers. The main frontends are `apps/client` on port `3500` and `apps/admin` on port `3005`. Package manager: `pnpm 11.1.2`.
 
 Shared packages imported as `@build/<name>`:
 
@@ -72,6 +74,10 @@ pnpm run db:migrate:deploy
 pnpm run client:test:all
 pnpm run client:tsc-noemit
 pnpm run admin:check-types
+pnpm run admin:check-env-contract
+pnpm run admin:report-security-drift
+pnpm run admin:report-security-drift:strict
+pnpm run admin:test:all
 ```
 
 ## Canonical Client-App Architecture
@@ -83,13 +89,15 @@ For `apps/client`, the canonical server-side business layer is `app/lib/domains/
 Primary dependency flow:
 
 ```text
-UI / hook
-  -> lib/<domain>-client.ts
+browser consumer / hook
+  -> lib/facades/<domain>/<name>-client.ts   ← canonical (ADR-002 Phase 5)
   -> app/api/<domain>/**
   -> app/lib/domains/<domain>/service.ts
   -> app/lib/domains/<domain>/repository.ts
   -> @build/db
 ```
+
+> **Note:** Flat `lib/<domain>-client.ts` files are `@deprecated` backward-compat re-export stubs. New facades must be created under `lib/facades/<domain>/` and imported via `@/facades/<domain>/<name>-client`.
 
 Server-side form or mutation workflows:
 
@@ -106,10 +114,26 @@ Hard rules:
 2. `app/lib/domains/*` is the canonical home for business logic.
 3. Repositories are persistence-only.
 4. Hooks and client components must not import server actions or domain services directly.
-5. Browser facades under `lib/*-client.ts` must use HTTP, not direct server imports.
-6. Authorization-sensitive domain methods should accept full actor context, not bare user IDs.
+5. Browser facades under `lib/facades/<domain>/` must use HTTP, not direct server imports.
+6. Authorization-sensitive domain methods must accept typed actor context (`MarketplaceActor`, `AdminActor`, or `DomainActor` from `app/lib/domains/shared/contracts.ts`), not bare user IDs.
 7. New business logic should not be added to `lib/services/*` unless the slice is explicitly still in migration.
-8. Domain services must not import other domain services or repositories directly; cross-domain reads go through the owning domain `index.ts`, and multi-domain writes are lifted into a shared orchestration surface.
+8. Domain services must not import other domain services or repositories directly; cross-domain reads go through the owning domain `index.ts`, multi-domain writes are lifted into a shared orchestration surface, and cross-domain repositories live in `app/lib/domains/shared/repositories/`.
+
+### TypeScript Path Aliases (enforced via `tsconfig.json`)
+
+| Alias                     | Resolves to                | Guards                                      |
+| ------------------------- | -------------------------- | ------------------------------------------- |
+| `@/domains/*`             | `app/lib/domains/*`        | Domain boundary                             |
+| `@/facades/*`             | `lib/facades/*`            | Client boundary (colocated facades + hooks) |
+| `@/routes`                | `lib/routes` barrel        | No inline URL strings                       |
+| `@/infra/*`               | `app/lib/infrastructure/*` | Infrastructure boundary                     |
+| `@/security/*`            | `app/lib/security/*`       | Auth/authz policy                           |
+| `@/config/*`              | `app/lib/config/*`         | Domain constants                            |
+| `@/validation/*`          | `app/lib/validation/*`     | Zod schemas                                 |
+| `@/ui/*`                  | `components/*`             | Presentation                                |
+| `@/app/lib/errors/result` | `app/lib/errors/result`    | No local `Result` redefinitions             |
+
+New aliases require a corresponding `no-restricted-imports` rule reviewed in the same PR.
 
 For full route handler structure, mock patterns, domain examples, and browser facade contracts, see Section 4 of `API-TO-FRONTEND-ARCHITECTURE.md`.
 
@@ -118,6 +142,10 @@ For full route handler structure, mock patterns, domain examples, and browser fa
 `app/lib/domains/**` owns business policy, actor-aware authorization, orchestration, canonical DTO shaping, and structured `Result<T, DomainError>` outcomes.
 
 `app/lib/domains/**/repository.ts` owns Prisma reads and writes only. Repositories must not own role checks, response envelopes, action or route semantics, or user-facing error strings.
+
+**`Result<T, E>` import rule:** Import `Result`, `DomainError`, `ok()`, and `err()` from `@/app/lib/errors/result`. Local redefinitions (`DomainResult<T>`, `ServiceResult<T>`, or any custom `{ success: boolean }` shape) are boundary violations. The canonical discriminant is `ok` — not `success`.
+
+**Shared repositories:** When a repository is consumed by more than one domain service, move it to `app/lib/domains/shared/repositories/<name>.repository.ts` and document it with `// Shared repository: consumed by [domain-a], [domain-b]`.
 
 Use `app/lib/domains/README.md` as the current service-versus-repository reference.
 
@@ -139,7 +167,9 @@ Do not import server actions into hooks or `lib/*-client.ts`.
 
 ## Browser Client Facades and Hooks
 
-Browser-facing facades under `lib/*-client.ts` must use `fetch` or `apiFetch` against `/api/...`, parse normalized `ApiResponse<T>` envelopes, and define explicit DTOs at the network boundary.
+Browser-facing facades live at `lib/facades/<domain>/<name>-client.ts` (canonical, ADR-002 Phase 5). They must use `fetch` or `apiFetch` against `/api/...`, parse normalized `ApiResponse<T>` envelopes, and define explicit DTOs at the network boundary. Flat `lib/*-client.ts` files are `@deprecated` backward-compat stubs — do not create new ones.
+
+Domain hooks are colocated with their facade at `lib/facades/<domain>/use<Name>.ts`. Import from `@/facades/<domain>/use<Name>`. The `hooks/` root is reserved for cross-domain, infrastructure, and purely UI hooks (e.g., `use-toast.ts`, `usePerformance.ts`). Do not add domain-specific hooks there.
 
 Hooks must use React Query, centralize `unwrapApiResponse()` error handling, own query keys and invalidation behavior, preserve caller-provided mutation callbacks after internal invalidation, and follow TanStack Query v5 signatures exactly.
 
@@ -155,11 +185,11 @@ Common auth helpers: `withAuth(handler)` for authenticated API routes; `withRole
 
 Fail-open auth fallbacks are prohibited. Adapters must not continue execution as anonymous or best-effort authenticated when Clerk resolution fails.
 
-Actor context shape: pass `{ userId, clerkId, role }`, where `clerkId` may be absent in service-to-service calls without a Clerk session.
+Actor context shape: use typed actor types from `app/lib/domains/shared/contracts.ts` — `MarketplaceActor`, `AdminActor`, or `DomainActor`. Passing a bare `{ userId, clerkId, role }` object literal is not sufficient for authorization-sensitive operations. `clerkId` may be absent in service-to-service calls without a Clerk session; domain contracts must explicitly declare whether it is required or optional.
 
 For admin-capability-gated operations, adapters must construct and pass an admin actor with non-null `adminRole` resolved from the DB user record (not from Clerk claims), following ADR-007.
 
-Role-mutation operations must synchronize Clerk `publicMetadata.role` before finalizing successful responses so active sessions do not retain stale privilege claims (see ADR-001 and ADR-007).
+Role-mutation operations must synchronize Clerk `publicMetadata.role` before finalizing successful responses so active sessions do not retain stale privilege claims (see ADR-001 and ADR-007). If the Clerk metadata update fails, treat the entire mutation as failed, keep the operation idempotently retryable, and return a retryable `503` — never emit a successful privilege-changing response with a stale session.
 
 Session cookies from Clerk (or future session providers) must be verified to include `HttpOnly`, `Secure` (in production), and at least `SameSite=Lax`. `SameSite=None` requires explicit cross-origin embedding justification.
 
@@ -167,7 +197,7 @@ Sensitive mutations must enforce recent-auth or freshness assertions in the adap
 
 ## Validation, Idempotency, and Concurrency
 
-Use shared helpers: `app/lib/api-guards.ts`, `app/lib/services/idempotency.service.ts`, `app/lib/services/*-operations.service.ts` for optimistic-lock flows, and `app/lib/config/<domain>.config.ts` for shared constants.
+Use shared helpers: `app/lib/api-guards.ts`; `app/lib/services/idempotency.service.ts` for replay policy registration; `app/lib/services/idempotency-helpers.ts` for `safeIdempotencyComplete()` — the canonical completion wrapper (use this in route and action handlers instead of writing inline try-catch); `app/lib/services/*-operations.service.ts` for optimistic-lock flows; and `app/lib/config/<domain>.config.ts` for shared constants.
 
 Idempotent replay storage is a governed persistence boundary:
 
@@ -230,11 +260,22 @@ Route test patterns, mock structure, risk matrix expectations, and critical-jour
 
 Preferred verification commands:
 
-- `pnpm run client:tsc-noemit`
-- targeted `pnpm run client:test:<suite>` commands
+**`apps/client` and Global:**
+
+- `pnpm run format:check` and `pnpm run lint` for formatting and linting
+- `pnpm run client:check-env-contract` and `pnpm run client:report-security-drift:strict` for boundary/security checks
+- `pnpm run client:tsc-noemit` or `pnpm run check-types` for type checking
+- `pnpm run test` for unit tests, or targeted `pnpm run client:test:<suite>` commands
 - `pnpm -C apps/client exec vitest run __tests__/contracts __tests__/policy` for fast boundary and policy checks
 - `pnpm run cypress:run --spec "cypress/e2e/critical-journeys/**"` when protected-route or authz behavior is touched
-- `pnpm run admin:check-types` when touching `apps/admin`
+
+**`apps/admin`:**
+
+- `pnpm run admin:check-types` for type checking
+- `pnpm run admin:lint` for linting
+- `pnpm run admin:check-env-contract` for env boundary checks
+- `pnpm run admin:report-security-drift:strict` for security drift checks
+- `pnpm run admin:test:all` for all admin tests
 
 Critical-journey E2E tests are a blocking CI surface for high-severity auth and routing regressions. Mandatory journeys include unauthenticated redirect, onboarded professional access, non-professional denial, incomplete onboarding redirect, thread read authz, and thread send authz.
 
@@ -242,7 +283,7 @@ Critical-journey E2E tests are a blocking CI surface for high-severity auth and 
 
 - Use React Query for browser-side fetching and mutations
 - Treat `apiSuccess()` responses as wrapped envelopes and unwrap deliberately
-- Use `lib/links.ts` route constants and URL helpers instead of ad hoc path strings
+- Use `lib/routes/*.routes.ts` route constants and URL helpers instead of ad hoc path strings
 - Keep browser code free of server-only imports
 
 ## UI And Presentation Standards
@@ -271,18 +312,68 @@ Core components: `JetStreamProducer`, `JetStreamConsumer`, `StreamManager`, `cre
 
 ## Admin App (`apps/admin`)
 
-`apps/admin` differs materially from `apps/client`:
+> **Canonical architecture guide:** `.agent/ADMIN-ARCHITECTURE.md` — read this before touching `apps/admin` code.
+> **Admin ADR precedent:** `apps/admin/docs/adr/ADR-ADMIN-001` through `ADR-ADMIN-009`
+> **Current overhaul state:** `apps/admin/docs/PROGRESS-SUMMARY.md` (Phases 0–12 complete; post-Phase-12 autopsy defects/cleanup queued)
 
-- It uses `src/` layout.
-- It primarily uses server actions under `src/actions/admin/`.
-- It does not follow the same resilience, Redis, and NATS patterns as `apps/client`.
-- It uses `safeAction` and `assertAdmin()` instead of the client app's route-first adapter model.
+`apps/admin` differs materially from `apps/client`. It is a Next.js app with a `src/` layout that uses server actions as its primary interaction model, not the browser-facade + API-route pattern of the client app.
 
-When working in `apps/admin`: preserve the existing action structure, keep role enforcement aligned with `admin` and `verification_admin`, and do not blindly transplant `apps/client` route guidance into admin code.
+### Admin Action Model
+
+All authenticated admin mutations must use `safeAction`. The wrapper:
+
+1. Resolves Clerk identity server-side and requires an active database `AdminProfile`.
+2. Authorizes using `AdminRole` and explicit `AdminCapability` policy maps — not raw role-string comparisons.
+3. Enforces session freshness: Tier 1 operations (role changes, deletion, data export, financial mutations) require `maxAgeSeconds: 180`; Tier 2 (verification overrides, account transitions) require `maxAgeSeconds: 300`.
+4. Applies actor-scoped rate limits.
+5. Optionally attaches declarative `auditLog` metadata for classified high-risk operations.
+
+```typescript
+// Canonical AdminActor shape (ADR-ADMIN-001)
+type AdminActor = {
+  clerkId: string;
+  dbUserId: string;
+  adminRole: AdminRole; // resolved from DB AdminProfile, not Clerk claims
+};
+```
+
+### Admin Layer Responsibilities (ADR-ADMIN-002)
+
+- **`src/actions/admin/`** — adapter layer: input validation (`.safeParse()` mandatory, `.parse()` prohibited), actor resolution, capability checks, domain calls, cache revalidation, audit log attachment.
+- **`src/lib/domains/<slice>/service.ts`** — business logic: `AdminCapability` enforcement, `Result<T, AdminDomainError>` outcomes. Must not contain Prisma queries or HTTP semantics.
+- **`src/lib/domains/<slice>/repository.ts`** — persistence only: Prisma reads and writes. No authorization, no response envelopes, no user-facing error strings.
+- Import direction is `actions → services/domains → repositories`. Nothing imports from the action layer.
+
+### Admin Audit Log (ADR-ADMIN-008)
+
+Audit entries are required for: role changes, user suspension/deletion, data export, manual payment operations, verification overrides, and content moderation actions. Use declarative `auditLog` in `safeAction` options rather than manual audit calls.
+
+### Admin Env Boundary (ADR-ADMIN-006)
+
+All runtime `process.env` reads must go through `adminEnvConfig` from `src/lib/infrastructure/env.ts`. Direct `process.env` is a tracked critical drift finding. Bootstrap exceptions (`next.config.ts`, `instrumentation.ts`) must carry `// bootstrap-only: <reason>` comments.
+
+### Admin Feature Flags (ADR-ADMIN-009)
+
+New admin behavior ships behind `AdminFeatureFlag` values. Old routes remain functional until a documented retirement step. Rollback is performed by disabling the flag. Do not ship new admin behavior without a flag gate during the active overhaul.
+
+### Admin Hard Rules
+
+1. Direct Prisma in `src/actions/admin/**` is a critical defect — migrate to domain repository.
+2. `.parse()` in action files is prohibited — use `.safeParse()` and return a typed error.
+3. Raw `AdminRole` string comparisons are prohibited — use `AdminCapability` maps.
+4. `adminRole` must be resolved from the database `AdminProfile`, not from Clerk session claims.
+5. High-risk operations must have declarative `auditLog` in `safeAction`.
+6. Direct `process.env` reads in non-bootstrap files are a security drift finding.
+7. Do not apply `apps/client` resilience, Redis, or NATS patterns in `apps/admin` — the admin app does not use them.
+8. Use `safeAction` for mutations and `resolveAdminRouteActor()` for route handlers. Never use legacy `assertAdmin` or `assertVerificationAdmin` helpers (tracked as ADM-012).
+9. Never use `safeVerificationAction`; use `safeAction` instead (tracked as ADM-011).
+10. Never use `logAdminAction`; use the declarative `safeAction` `auditLog` option instead (tracked as ADM-013).
 
 ## Staff Engineer Mandate
 
 When making architectural or design decisions:
+
+**For `apps/client`:**
 
 - Prioritize consistency with accepted ADRs and migrated slices over local convenience.
 - Move business logic toward `app/lib/domains/<slice>/` rather than adding adapter-local orchestration.
@@ -292,9 +383,23 @@ When making architectural or design decisions:
 - Prefer structured result mapping over exception-string parsing.
 - Preserve observability contracts: structured adapter logging, PII exclusions, and stable `operationName` semantics.
 
+**For `apps/admin`:**
+
+- Use `safeAction` for all authenticated admin mutations — never call domain services from unwrapped actions.
+- Enforce authorization through `AdminCapability` maps, not raw `AdminRole` string comparisons.
+- Write declarative `auditLog` in `safeAction` for all high-risk operations (role changes, deletion, data export, verification overrides, manual payment operations).
+- Keep action files as thin adapters — business logic belongs in domain services.
+- Use `adminEnvConfig` for all env access — reject new `process.env` reads outside the boundary.
+- Gate new admin behavior behind `AdminFeatureFlag` values during the active overhaul.
+- Run `pnpm run admin:report-security-drift` after touching admin action or domain files to confirm drift count does not increase.
+
 Current reference slices for canonical client-app patterns: projects, properties, portfolio, messaging, CRM, user-profile.
 
-Current migration priority queue: professionals, calendar, idea books, notifications, seller dashboard read models (`inventory`, `orders`, `products`), reviews.
+Current reference slices for canonical admin patterns: `src/actions/admin/users.ts`, `src/actions/admin/verification.ts`, `src/lib/domains/users/`, `src/lib/domains/verification/`.
+
+Current client migration priority queue: professionals, calendar, idea books, notifications, seller dashboard read models (`inventory`, `orders`, `products`), reviews.
+
+Current admin overhaul priority: Phase 5 remaining action slices (audit/GDPR, finance, content, stores/properties/projects, leads/services/professionals).
 
 ## Project-Specific Conventions
 
@@ -306,7 +411,7 @@ Kenya context matters: counties, M-Pesa, NCA, EBK, BORAQS, and KRA semantics sho
 
 - `apps/admin` uses `src/`; `apps/client` does not.
 - Do not define inline service classes inside route files.
-- Use `lib/links.ts` for route URL constants and helpers where the repo already provides them.
+- Use `lib/routes/<domain>.routes.ts` domain files or the `@/routes` barrel import for route URL constants and helpers. `lib/links.ts` is a backward-compat re-export stub only (ADR-002 Phase 5) — do not add new entries there.
 
 ### Canonical Env Access Boundary
 
@@ -318,10 +423,11 @@ Rules:
 
 1. **New code** imports env config from `app/lib/infrastructure/env.ts` only. Direct `process.env.*` reads in routes, services, or UI code are architectural debt.
 2. The canonical module validates env values at startup (Zod or equivalent) and exposes typed accessors. Callers receive typed values, not raw strings.
-3. **Bootstrap-only exceptions** (e.g., `next.config.ts`, `instrumentation.ts`, top-level infra that runs before the module system is ready) may read `process.env` directly. Annotate them:
+3. **Bootstrap-only exceptions** (`next.config.ts`, `instrumentation.ts`, `sentry.*.config.ts`, and edge-runtime `proxy.ts` before module initialization) may read `process.env` directly. Each exception must carry:
    ```ts
-   // env-bootstrap-exception: <reason> — see ADR-002
+   // bootstrap-only: module graph not initialized at this callsite
    ```
+   Bootstrap exceptions must also be listed as a comment block in `app/lib/infrastructure/env.ts` so the full env inventory is auditable from one place (see ADR-004).
 4. **Refactor strategy:**
    - New code: import from canonical module, never `process.env` directly.
    - Existing direct reads: migrate in batches during regular slice work. Tag unmigrated reads with `// env-migration-pending` so they are grep-able.
@@ -359,3 +465,20 @@ Key requirements:
 - Cookie-authenticated unsafe methods must enforce trusted-origin checks (and CSRF tokens where required).
 - Sensitive responses must default to non-cacheable headers.
 - Webhook and callback endpoints must verify signatures and enforce replay protection before business processing.
+
+## Documentation Lifecycle (ADR-009)
+
+Three document categories govern how documentation is treated (see `apps/client/docs/adr/ADR-009-documentation-lifecycle.md`):
+
+| Category                            | Location                              | Status header                                | Lifespan                                                         |
+| ----------------------------------- | ------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------- |
+| **Living**                          | `docs/adr/`, `app/lib/`               | Updated continuously                         | Permanent — never deleted, only superseded                       |
+| **Progress / implementation plans** | `docs/progress/`                      | `In Progress` / `Complete` / `Superseded`    | Archived to `docs/archive/` within one sprint of completion      |
+| **Ephemeral working notes**         | `docs/scratch/` (if committed at all) | `Status: EPHEMERAL` or `Expires: YYYY-MM-DD` | Deleted at end of work window; never reference from code or ADRs |
+
+Enforcement rules:
+
+- A PR that changes architecture without updating the relevant ADR is blocked at review.
+- Completed progress docs must be moved to `docs/archive/` — not left in `docs/progress/` as stale snapshots.
+- Ephemeral notes must never be referenced from code, ADRs, or living documents.
+- Completions must be summarized in `apps/client/docs/CHANGELOG.md` for any changes that touches apps/client, and `apps/admin/docs/CHANGELOG.md` for any changes that touches apps/admin.

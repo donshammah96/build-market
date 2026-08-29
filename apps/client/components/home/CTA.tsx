@@ -2,7 +2,7 @@
 
 import { memo, type FC } from "react";
 import Link from "next/link";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 import { Button } from "../ui/button";
 import { ArrowRight, Hammer } from "lucide-react";
 import {
@@ -18,7 +18,7 @@ export const CTA: FC = memo(function CTA() {
   return (
     <section
       ref={ref as React.RefObject<HTMLElement>}
-      className="py-20 px-4 sm:px-6 md:px-20 bg-gradient-to-br from-foreground via-foreground to-primary overflow-hidden relative"
+      className="py-20 px-4 sm:px-6 md:px-20 bg-linear-to-br from-foreground via-foreground to-primary overflow-hidden relative"
       aria-labelledby="cta-heading"
     >
       {/* Abstract Background shapes - GPU optimized with will-change */}
@@ -31,7 +31,7 @@ export const CTA: FC = memo(function CTA() {
         aria-hidden="true"
       />
 
-      <div className="max-w-[1280px] mx-auto relative z-10 flex flex-col md:flex-row justify-between items-center gap-10">
+      <div className="max-w-7x1 mx-auto relative z-10 flex flex-col md:flex-row justify-between items-center gap-10">
         {/* Text Content */}
         <div
           className={cn(
@@ -46,13 +46,13 @@ export const CTA: FC = memo(function CTA() {
 
           <h2
             id="cta-heading"
-            className="text-4xl sm:text-5xl md:text-6xl font-bold text-white tracking-tight mb-6"
+            className="font-display text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight mb-6"
           >
             Let&apos;s get your project{" "}
             <span className="text-primary-foreground">off the ground.</span>
           </h2>
 
-          <p className="text-white/75 text-lg md:text-xl max-w-lg mx-auto md:mx-0">
+          <p className="text-white/80 text-lg md:text-xl max-w-lg mx-auto md:mx-0 font-light leading-relaxed">
             Join thousands of Kenyan homeowners and top-rated professionals
             building better, together.
           </p>
@@ -70,10 +70,10 @@ export const CTA: FC = memo(function CTA() {
         >
           <Button
             size="lg"
-            className="bg-background text-foreground text-lg h-14 px-8 motion-safe:hover:scale-[1.02] active:scale-95"
+            className="bg-background text-foreground hover:bg-background/90 text-base sm:text-lg h-14 px-8 font-semibold rounded-full shadow-xl motion-safe:hover:scale-[1.02] active:scale-95"
             asChild
           >
-            <Link href={ROUTES.joinAsPro}>
+            <Link href={ROUTES.professional}>
               Join as a Pro
               <ArrowRight className="ml-2 w-5 h-5" aria-hidden="true" />
             </Link>
@@ -82,10 +82,10 @@ export const CTA: FC = memo(function CTA() {
           <Button
             variant="secondary"
             size="lg"
-            className="text-lg h-14 px-8 bg-white/15 border border-white/30 text-white hover:bg-white/20 motion-safe:hover:scale-[1.02] active:scale-95"
+            className="text-base sm:text-lg h-14 px-8 rounded-full bg-white/15 border border-white/30 text-white hover:bg-white/20 motion-safe:hover:scale-[1.02] active:scale-95 backdrop-blur-xs"
             asChild
           >
-            <Link href={ROUTES.signIn}>Log In</Link>
+            <Link href={ROUTES.findProfessional}>Find Professionals</Link>
           </Button>
         </div>
       </div>

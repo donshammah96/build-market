@@ -3,7 +3,7 @@ description: "Use for Postman folder-level post-response test script generation 
 applyTo: "**/*-post-f-pm-*"
 ---
 
-Last aligned with canonical on: 2026-04-04.
+Last aligned with canonical on: 2026-08-15.
 
 ## Instructions
 

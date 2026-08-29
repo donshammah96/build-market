@@ -52,10 +52,7 @@ export type IdempotencyCheckResult<T = unknown> = {
 };
 
 export type IdempotencyReplayDataClass =
-  | "Class A"
-  | "Class B"
-  | "Class C"
-  | "Class D";
+  "Class A" | "Class B" | "Class C" | "Class D";
 
 export type IdempotencyReplayScope =
   | "calendar_event"
@@ -315,17 +312,25 @@ export class IdempotencyService {
    * /param scope - Logical scope (e.g. "store")
    * /param userId - The user performing the operation
    * /param operation - HTTP method or operation name
-   * /param entityId - Optional entity ID to link (e.g. storeId)
-   * /param ttlHours - Key TTL in hours (defaults to STORE_CONFIG value)
+   * /param options - Optional configuration
+   * /param options.entityConnect - Prisma relation connect payload (e.g. { store: { connect: { id } } })
+   * /param options.ttlHours - Key TTL in hours (defaults to STORE_CONFIG value)
    */
   static async checkOrCreate<T = unknown>(
     key: string,
     scope: string,
     userId: string,
     operation: string,
-    entityId?: string,
-    ttlHours: number = STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS,
-  ): Promise<IdempotencyCheckResult<T> | null> {
+    options?: {
+      actorClerkId?: string;
+      appUserId?: string;
+      entityConnect?: Record<string, { connect: { id: string } }>;
+      ttlHours?: number;
+    },
+  ): Promise<IdempotencyCheckResult<T>> {
+    const ttlHours =
+      options?.ttlHours ?? STORE_CONFIG.IDEMPOTENCY_KEY_TTL_HOURS;
+    const entityConnect = options?.entityConnect;
     const { scope: resolvedScope } = getReplayPolicy(scope);
     let existing = await prisma.idempotencyKey.findUnique({
       where: { key },
@@ -366,20 +371,26 @@ export class IdempotencyService {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + ttlHours);
 
+    const actorClerkId =
+      options?.actorClerkId ??
+      (userId.startsWith("clerk_") || userId.startsWith("user_")
+        ? userId
+        : undefined);
+    const appUserId =
+      options?.appUserId ??
+      (!userId.startsWith("clerk_") && !userId.startsWith("user_")
+        ? userId
+        : undefined);
+
     await prisma.idempotencyKey.create({
       data: {
         key,
         userId,
+        actorClerkId,
+        appUserId,
         scope: resolvedScope,
         operation,
-        ...(entityId &&
-          resolvedScope === "store" && {
-            store: { connect: { id: entityId } },
-          }),
-        ...(entityId &&
-          resolvedScope === "property" && {
-            property: { connect: { id: entityId } },
-          }),
+        ...(entityConnect ?? {}),
         status: IdempotencyStatus.PENDING,
         expiresAt,
       },

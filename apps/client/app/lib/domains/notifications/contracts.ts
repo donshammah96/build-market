@@ -27,9 +27,7 @@ export type NotificationsActor = {
 };
 
 export type NotificationsDomainErrorCode =
-  | "not_found"
-  | "forbidden"
-  | "no_update";
+  "not_found" | "forbidden" | "no_update";
 
 export type NotificationListItemDto = {
   id: string;

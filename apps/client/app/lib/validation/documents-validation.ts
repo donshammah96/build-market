@@ -69,7 +69,7 @@ export const professionalDocumentListSelect = {
   asset: {
     select: {
       id: true,
-      cdnUrl: true,
+      visibility: true,
       originalName: true,
       mimeType: true,
       size: true,
@@ -136,7 +136,7 @@ export const professionalLicenseListSelect = {
   asset: {
     select: {
       id: true,
-      cdnUrl: true,
+      visibility: true,
       originalName: true,
       mimeType: true,
       size: true,

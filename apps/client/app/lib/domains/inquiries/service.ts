@@ -1,7 +1,10 @@
 import { err, ok } from "@/app/lib/errors/result";
 import { normalizeRole } from "@/app/lib/security/roles";
 import { inquiriesRepository } from "@/app/lib/domains/inquiries/repository";
-import { toInquiryDetailDto } from "@/app/lib/domains/inquiries/mappers";
+import {
+  toInquiryDetailDto,
+  toInquiryDto,
+} from "@/app/lib/domains/inquiries/mappers";
 import type {
   InquiryActor,
   InquiryDeleteResult,
@@ -50,8 +53,8 @@ function mapInquiryListItem(
     clientEmail: inquiry.email || null,
     message: inquiry.message,
     status: inquiry.status,
-    createdAt: inquiry.createdAt.toISOString(),
-    updatedAt: inquiry.updatedAt.toISOString(),
+    createdAt: toInquiryDto(inquiry.createdAt) as unknown as string,
+    updatedAt: toInquiryDto(inquiry.updatedAt) as unknown as string,
   };
 }
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { inquiriesClient } from "@/lib/inquiries-client";
+import { inquiriesClient } from "@/lib/facades/inquiries-client";
 
 function expectSuccess<T>(result: {
   success: boolean;

@@ -1,34 +1,47 @@
-import { Pool } from "pg";
+import { Pool, PoolConfig } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 export * from "@prisma/client";
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
-// Use the pooled DATABASE_URL at runtime.
-// DIRECT_URL is consumed only by `prisma migrate deploy` — never at runtime.
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  throw new Error(
-    "[db] DATABASE_URL is not set. " +
-      "Set it to the Supabase Supavisor session-mode pooler URL.",
-  );
+interface GlobalDatabaseContext {
+  prisma?: PrismaClient;
+  pool?: Pool;
 }
 
-const pool = new Pool({
-  connectionString,
-  // Serverless: one connection per invocation is optimal.
-  // Supabase Supavisor manages the actual Postgres connection pool.
-  max: 1,
-});
-const adapter = new PrismaPg(pool);
+const globalForPrisma = globalThis as unknown as GlobalDatabaseContext;
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
+function createDatabaseClient(): { prisma: PrismaClient; pool: Pool } {
+  // Use the pooled DATABASE_URL at runtime.
+  // DIRECT_URL is consumed only by `prisma migrate deploy` — never at runtime.
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error(
+      "[@build/db] DATABASE_URL is not set. " +
+        "Set it to the Supabase Supavisor session-mode pooler URL.",
+    );
+  }
+
+  // Serverless environments (Vercel / Lambda): 1 connection per invocation is optimal.
+  // Persistent servers (apps/admin, BullMQ queue workers): pool size defaults to 10 or DB_POOL_MAX.
+  const isServerless = Boolean(
+    process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME,
+  );
+  const maxConnections = isServerless
+    ? 1
+    : parseInt(process.env.DB_POOL_MAX || "10", 10);
+
+  const poolConfig: PoolConfig = {
+    connectionString,
+    max: maxConnections,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
+  };
+
+  const pool = new Pool(poolConfig);
+  const adapter = new PrismaPg(pool);
+
+  const client = new PrismaClient({
     adapter,
     log:
       process.env.NODE_ENV === "development"
@@ -36,4 +49,44 @@ export const prisma =
         : ["error"],
   });
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+  return { prisma: client, pool };
+}
+
+function getDatabaseClient(): PrismaClient {
+  if (globalForPrisma.prisma) {
+    return globalForPrisma.prisma;
+  }
+
+  const { prisma: client, pool } = createDatabaseClient();
+  globalForPrisma.prisma = client;
+  globalForPrisma.pool = pool;
+
+  return client;
+}
+
+/**
+ * Lazy Prisma client singleton proxy.
+ * Prevents connection instantiation during module import or build-time evaluation,
+ * and preserves connection pools across dev HMR reloads.
+ */
+export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, prop: keyof PrismaClient) {
+    const client = getDatabaseClient();
+    const value = client[prop];
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+});
+
+/**
+ * Explicitly disconnect Prisma client and drain the underlying connection pool.
+ */
+export async function disconnectDatabase(): Promise<void> {
+  if (globalForPrisma.prisma) {
+    await globalForPrisma.prisma.$disconnect();
+    globalForPrisma.prisma = undefined;
+  }
+  if (globalForPrisma.pool) {
+    await globalForPrisma.pool.end();
+    globalForPrisma.pool = undefined;
+  }
+}

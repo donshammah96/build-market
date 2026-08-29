@@ -2,25 +2,36 @@
   "name": "@build/enums",
   "version": "0.0.1",
   "description": "Shared enum constants for the build-market monorepo. Zero runtime dependencies — safe for both browser and server.",
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "scripts": {
-    "lint": "echo \"No lint configured\" && exit 0",
-    "check-types": "tsc --noEmit",
-    "build": "tsc",
-    "test": "echo \"No tests configured\" && exit 0",
-    "clean": "rm -rf dist"
-  },
-  "devDependencies": {
-    "@build/typescript-config": "workspace:*",
-    "@types/node": "^24.8.1"
+  "compilerOptions": {
+    "outDir": "./dist",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
   },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "default": "./dist/index.js",
-      "require": "./dist/index.js"
+      "default": "./dist/index.js"
     }
+  },
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true }); try { require('fs').unlinkSync('tsconfig.tsbuildinfo'); } catch(e) {}\"",
+    "prebuild": "pnpm run clean",
+    "lint": "echo \"No lint configured\" && exit 0",
+    "check-types": "tsc --noEmit",
+    "build": "tsc",
+    "prepack": "pnpm run build",
+    "test": "echo \"No tests configured\" && exit 0"
+  },
+  "devDependencies": {
+    "@build/eslint-config": "workspace:*",
+    "@build/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "zod": "catalog:"
   }
 }

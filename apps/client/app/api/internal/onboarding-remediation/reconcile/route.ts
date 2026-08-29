@@ -15,8 +15,6 @@ import {
 import { ensureValidInternalSecret } from "@/app/lib/security/internal-secret";
 import { isAdminRole } from "@/app/lib/security/roles";
 
-const logger = getClientLogger();
-
 const ROUTE_PATTERN = "/api/internal/onboarding-remediation/reconcile";
 const OPERATION_NAME = "reconcile_onboarding_state";
 const INTERNAL_RATE_LIMIT = {
@@ -103,7 +101,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     httpStatus: number,
     actorAdminRole?: string,
   ) => {
-    logger.info("Internal onboarding remediation outcome", {
+    getClientLogger().info("Internal onboarding remediation outcome", {
       correlationId,
       operationName: OPERATION_NAME,
       httpMethod: req.method,

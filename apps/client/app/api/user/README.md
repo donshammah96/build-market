@@ -31,7 +31,7 @@ These routes implement the core GDPR user rights:
 
 All routes follow these architectural patterns:
 
-```
+```text
 ┌─────────────────┐
 │  withAuth()     │  ← Authentication middleware
 └────────┬────────┘
@@ -282,9 +282,7 @@ curl https://buildmarket.com/api/user/profile \
       "role": "CLIENT",
       "isProfileComplete": true
     },
-    "profile": {
-      /* Client/Professional profile */
-    },
+    "profile": {/* Client/Professional profile */},
     "completion": {
       "percentage": 85,
       "missingRequired": [],
@@ -365,7 +363,7 @@ All endpoints require authentication via the `withAuth()` middleware.
 
 ### Required Headers
 
-```
+```text
 Authorization: Bearer <clerk_jwt_token>
 Content-Type: application/json
 ```
@@ -424,9 +422,7 @@ export const ratelimit = new Ratelimit({
   "success": false,
   "error": "Error message",
   "code": "ERROR_CODE",
-  "details": {
-    /* Optional additional info */
-  }
+  "details": {/* Optional additional info */}
 }
 ```
 

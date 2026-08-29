@@ -13,9 +13,8 @@ import {
 } from "@/app/lib/api/rate-limit";
 import { isValidId } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { projectsService } from "@/app/lib/domains/projects/service";
-
-const logger = getClientLogger();
 
 type ReleaseParams = { id: string; escrowId: string };
 
@@ -50,12 +49,6 @@ export const POST = withAuth<ReleaseParams>(
       dbUserId,
       "RELEASE",
     );
-    if (!idempotencyCheck) {
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (idempotencyCheck.status === "completed") {
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
     }
@@ -77,7 +70,7 @@ export const POST = withAuth<ReleaseParams>(
       return apiError("Too many requests", HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    logger.info("Processing escrow release", {
+    getClientLogger().info("Processing escrow release", {
       correlationId,
       projectId,
       escrowId,
@@ -136,7 +129,7 @@ export const POST = withAuth<ReleaseParams>(
     }
 
     const payload = result.data.data;
-    await IdempotencyService.complete(idempotencyKey, payload);
+    await safeIdempotencyComplete(idempotencyKey, payload);
     return apiSuccess(payload, HttpStatus.OK);
   },
   {

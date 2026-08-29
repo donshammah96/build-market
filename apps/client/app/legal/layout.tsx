@@ -12,7 +12,7 @@ export default function LegalLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white">
+    <div className="min-h-screen bg-linear-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white">
       {/* Subtle animated background grain */}
       <div
         className="fixed inset-0 opacity-[0.03] pointer-events-none"
@@ -26,7 +26,7 @@ export default function LegalLayout({
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link
             href="/"
-            className="text-lg font-bold bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent hover:from-emerald-300 hover:to-emerald-200 transition-all"
+            className="text-lg font-bold bg-linear-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent hover:from-emerald-300 hover:to-emerald-200 transition-all"
           >
             Build Market
           </Link>
@@ -67,10 +67,10 @@ export default function LegalLayout({
           <p className="mt-1">
             Questions? Reach us at{" "}
             <a
-              href="mailto:legal@buildmarket.co.ke"
+              href="mailto:legal@buildmarket.app"
               className="text-emerald-400 hover:underline"
             >
-              legal@buildmarket.co.ke
+              legal@buildmarket.app
             </a>
           </p>
         </div>

@@ -25,20 +25,52 @@ vi.mock("@/hooks/useProfileStatus", () => ({
   useProfileStatus: mockUseProfileStatus,
 }));
 
-vi.mock("@/lib/stores-client", () => ({
+// Also mock the canonical facade path (colocated after Phase 5 migration)
+vi.mock("@/lib/facades/user-profile/useProfileStatus", () => ({
+  useProfileStatus: mockUseProfileStatus,
+}));
+
+vi.mock("@/lib/facades/stores-client", () => ({
   storesClient: mockStoresClient,
 }));
 
-vi.mock("@/lib/properties-client", async () => {
-  const actual = await vi.importActual("@/lib/properties-client");
+// Canonical colocated path (Phase 5 migration)
+vi.mock("@/lib/facades/stores/stores-client", () => ({
+  storesClient: mockStoresClient,
+}));
+
+vi.mock("@/lib/facades/properties-client", async () => {
+  const actual = await vi.importActual("@/lib/facades/properties-client");
   return {
     ...actual,
     propertiesClient: mockPropertiesClient,
   };
 });
 
-vi.mock("@/lib/projects-client", async () => {
-  const actual = await vi.importActual("@/lib/projects-client");
+// Canonical colocated path (Phase 5 migration)
+vi.mock("@/lib/facades/properties/properties-client", async () => {
+  const actual = await vi.importActual(
+    "@/lib/facades/properties/properties-client",
+  );
+  return {
+    ...actual,
+    propertiesClient: mockPropertiesClient,
+  };
+});
+
+vi.mock("@/lib/facades/projects-client", async () => {
+  const actual = await vi.importActual("@/lib/facades/projects-client");
+  return {
+    ...actual,
+    projectsClient: mockProjectsClient,
+  };
+});
+
+// Canonical colocated path (Phase 5 migration)
+vi.mock("@/lib/facades/projects/projects-client", async () => {
+  const actual = await vi.importActual(
+    "@/lib/facades/projects/projects-client",
+  );
   return {
     ...actual,
     projectsClient: mockProjectsClient,

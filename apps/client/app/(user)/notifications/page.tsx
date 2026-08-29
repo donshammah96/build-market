@@ -24,15 +24,10 @@ import {
   useNotifications,
   useMarkNotificationRead,
 } from "@/hooks/useNotifications";
-import type { NotificationListItem } from "@/lib/notifications-client";
+import type { NotificationListItem } from "@/lib/facades/notifications-client";
 
 type NotificationTypeKey =
-  | "order"
-  | "message"
-  | "project"
-  | "system"
-  | "alert"
-  | "default";
+  "order" | "message" | "project" | "system" | "alert" | "default";
 
 function mapApiTypeToKey(type: string): NotificationTypeKey {
   const map: Record<string, NotificationTypeKey> = {

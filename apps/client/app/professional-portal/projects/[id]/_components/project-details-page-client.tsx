@@ -15,7 +15,7 @@ import {
   usePortalProject,
   useUpdatePortalProject,
 } from "@/hooks/useProjects";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 import { ClientDate } from "./client-date";
 import { ClientNumber } from "./client-number";
@@ -163,8 +163,7 @@ export default function ProjectDetailsPageClient() {
   }
 
   const client = projectItem.client as
-    | Record<string, string | null | undefined>
-    | undefined;
+    Record<string, string | null | undefined> | undefined;
 
   return (
     <div className="mx-auto max-w-4xl space-y-8 pb-10">

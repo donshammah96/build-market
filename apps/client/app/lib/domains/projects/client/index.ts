@@ -1,4 +1,4 @@
-import { PROJECTS_CLIENT_CONFIG } from "@/lib/config/project.config";
+import { PROJECTS_CLIENT_CONFIG } from "@/app/lib/config/project.config";
 import { ConcurrencyLimiter } from "@/app/lib/domains/projects/client/concurrency-limiter";
 import { GenericProjectsClient } from "@/app/lib/domains/projects/client/generic-projects-client";
 import { PortalProjectsClient } from "@/app/lib/domains/projects/client/portal-projects-client";

@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import PropertyCard from "@/components/real-estate/PropertyCard";
-import { propertiesClient } from "@/lib/properties-client";
+import { propertiesClient } from "@/lib/facades/properties-client";
 import PropertyGallery from "./_components/property-gallery";
 
 export const revalidate = 60;

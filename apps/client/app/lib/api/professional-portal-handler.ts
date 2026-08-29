@@ -30,11 +30,7 @@ const RATE_LIMIT_CONFIG = {
 } as const;
 
 type ProfessionalPortalAdapterOutcome =
-  | "started"
-  | "succeeded"
-  | "failed"
-  | "rate_limited"
-  | "bad_request";
+  "started" | "succeeded" | "failed" | "rate_limited" | "bad_request";
 
 function getRoutePattern(req: NextRequest): string {
   try {

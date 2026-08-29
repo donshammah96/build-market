@@ -13,8 +13,6 @@ import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import { reviewsService } from "@/app/lib/domains/reviews";
 import { z } from "zod";
 
-const logger = getClientLogger();
-
 const QuerySchema = z.object({
   type: z.enum(["PROFESSIONAL", "STORE"]).optional(),
   search: z.string().max(200).optional(),
@@ -77,7 +75,7 @@ export async function GET(request: NextRequest) {
   );
 
   if (!execResult.success || !execResult.data) {
-    logger.error("Failed to fetch reviews", execResult.error);
+    getClientLogger().error("Failed to fetch reviews", execResult.error);
     return apiError("Failed to load reviews", HttpStatus.INTERNAL_SERVER_ERROR);
   }
 

@@ -13,6 +13,7 @@ import {
 import { getRequestMetadata } from "@/app/lib/api/request-utils";
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import {
   DocumentQuerySchema,
   CreateDocumentSchema,
@@ -27,7 +28,6 @@ import { normalizeRole } from "@/app/lib/security/roles";
 // ADR-006 classification: Class B - verification document categories and metadata cross this adapter boundary.
 // Reviewed: 2026-04-09 by @copilot
 
-const logger = getClientLogger();
 const ROUTE_PATTERN = "/api/professional-portal/documents";
 
 const SENSITIVE_CATEGORIES = [
@@ -65,7 +65,7 @@ function createDocumentsOutcomeLogger(
     httpStatus: number,
     details: DocumentsOutcomeLogFields = {},
   ) => {
-    logger.info("Professional documents adapter outcome", {
+    getClientLogger().info("Professional documents adapter outcome", {
       correlationId,
       operationName,
       httpMethod: req.method,
@@ -120,7 +120,7 @@ export const GET = withAuth(
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
     if (actorRole !== "PROFESSIONAL" && actorRole !== "ADMIN") {
-      logger.warn("Unauthorized access to documents endpoint", {
+      getClientLogger().warn("Unauthorized access to documents endpoint", {
         correlationId,
         operationName: "get_professional_documents",
         httpMethod: req.method,
@@ -181,7 +181,7 @@ export const GET = withAuth(
     );
 
     if (!result.success || !result.data) {
-      logger.error("Failed to fetch documents", result.error, {
+      getClientLogger().error("Failed to fetch documents", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -230,7 +230,7 @@ export const POST = withAuth(
     const correlationId = initializeCorrelationId(req);
     const actorRole = normalizeRole(String(userRole));
     if (actorRole !== "PROFESSIONAL" && actorRole !== "ADMIN") {
-      logger.warn("Unauthorized access to documents endpoint", {
+      getClientLogger().warn("Unauthorized access to documents endpoint", {
         correlationId,
         operationName: "create_professional_document",
         httpMethod: req.method,
@@ -291,13 +291,6 @@ export const POST = withAuth(
       dbUserId,
       "POST",
     );
-    if (!idempotencyCheck) {
-      logOutcome("failed", HttpStatus.INTERNAL_SERVER_ERROR);
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
     if (idempotencyCheck.status === "completed") {
       logOutcome("succeeded", HttpStatus.OK, { idempotency: "replay" });
       return apiSuccess(idempotencyCheck.response, HttpStatus.OK);
@@ -343,7 +336,7 @@ export const POST = withAuth(
 
     if (!result.success || !result.data) {
       await IdempotencyService.fail(idempotencyKey);
-      logger.error("Failed to create document", result.error, {
+      getClientLogger().error("Failed to create document", result.error, {
         correlationId,
         operationName,
         httpMethod: req.method,
@@ -398,7 +391,7 @@ export const POST = withAuth(
         data.data.id,
         { category: docData.category, action: "CREATE" },
       ).catch((err) =>
-        logger.error("Failed to create audit log", err, {
+        getClientLogger().error("Failed to create audit log", err, {
           correlationId,
           operationName,
           httpMethod: req.method,
@@ -412,10 +405,10 @@ export const POST = withAuth(
     }
 
     try {
-      await IdempotencyService.complete(idempotencyKey, data.data);
+      await safeIdempotencyComplete(idempotencyKey, data.data);
     } catch (error) {
       await IdempotencyService.fail(idempotencyKey).catch(() => undefined);
-      logger.error(
+      getClientLogger().error(
         "Failed to complete document idempotency replay",
         normalizeCaughtError(error),
         {

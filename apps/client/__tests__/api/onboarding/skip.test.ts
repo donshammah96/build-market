@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { POST } from "@/app/api/onboarding/skip/route";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 vi.mock("server-only", () => ({}));
 

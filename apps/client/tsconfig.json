@@ -8,9 +8,17 @@
         "name": "next"
       }
     ],
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@/domains/*": ["./app/lib/domains/*"],
+      "@/infra/*": ["./app/lib/infrastructure/*"],
+      "@/security/*": ["./app/lib/security/*"],
+      "@/config/*": ["./app/lib/config/*"],
+      "@/validation/*": ["./app/lib/validation/*"],
+      "@/ui/*": ["./components/*"],
+      "@/facades/*": ["./lib/facades/*"],
+      "@/routes": ["./lib/routes/index"],
+      "@/api/*": ["./app/lib/api/*"]
     }
   },
   "include": [
@@ -21,5 +29,23 @@
     "next.config.ts",
     ".next/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "docs"]
+  "exclude": ["node_modules", "docs", ".next", ".next/**/*"],
+  "references": [
+    { "path": "../../packages/resilience" },
+    { "path": "../../packages/db" },
+    { "path": "../../packages/types" },
+    { "path": "../../packages/enums" },
+    { "path": "../../packages/redis" },
+    { "path": "../../packages/nats" },
+    { "path": "../../packages/auth-server" },
+    { "path": "../../packages/mail-server" },
+    { "path": "../../packages/messaging-server" },
+    { "path": "../../packages/queue-server" },
+    { "path": "../../packages/ui" },
+    { "path": "../../packages/security-clerk" },
+    { "path": "../../packages/env-validation" },
+    { "path": "../../packages/telemetry" },
+    { "path": "../../packages/media" },
+    { "path": "../../packages/lead-qualification" }
+  ]
 }

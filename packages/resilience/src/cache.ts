@@ -3,10 +3,9 @@
  */
 
 import { LRUCache } from "lru-cache";
-import { CacheConfig } from "./types";
-import { Logger } from "./logger";
+import { CacheConfig } from "./types.js";
+import { Logger } from "./logger.js";
 import { RedisCache } from "@build/redis";
-import { getDefaultCacheConfig } from "./config";
 
 export interface CacheEntry<T> {
   value: T;

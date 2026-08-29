@@ -26,9 +26,12 @@ Mirror map:
 
 Current mirrored phase sequence:
 
-1. R8 - Notifications and Seller-Insights full compliance audit
-2. R9 - IDOR policy matrix completion
-3. R10 - Observability annotation sweep
+1. Client Architecture Refactor Phase 1 - Idempotency fail-safe
+2. Client Architecture Refactor Phase 2A - Canonical result contracts
+3. Client Architecture Refactor Phase 2B - Stores DTO boundary
+4. Client Architecture Refactor Phase 3 - Shared route adapters
+5. Client Architecture Refactor Phase 4 - Mapper coverage
+6. Client Architecture Refactor Phase 5-8 - Structural cleanup
 
 Update rule: any change to mirrored governance state must update this file and
 `apps/client/docs/CHANGELOG.md` in the same commit.
@@ -37,29 +40,42 @@ Update rule: any change to mirrored governance state must update this file and
 
 ## Active Phase
 
-**Phase:** Phase 2 Acceptance Criterion 2 - Operational Evidence Closeout  
-**Status:** In progress  
+**Phase:** Architecture Compliance Phase 0 Remediation
+**Status:** Completed
 **Entry criteria:**
 
-- Strict drift baseline: ✅ all categories 0 (confirmed 2026-04-14)
-- Typecheck baseline: ✅ clean (confirmed 2026-04-14)
-- R8 adapter verification: ✅ notifications + seller-insights suites passed (11/11 tests)
-- R9 policy verification: ✅ full policy suite passed (55/55 tests)
-- Phase 2 Acceptance Criterion 2 monitoring evidence: pending
+- Phase 0 security drift checks integrated into the CI/CD pipeline: completed
+- `inlineDateNow` violations fixed: completed
+- `safeIdempotencyCompleteDrift` violations fixed: completed
+- `indexExportDrift` violation fixed: completed
+- `mapperNormalizationDrift` violations fixed: completed
+- `missingSharedTs` violations fixed: completed
+- `inlineLoggerAtModuleLevel` violations fixed: completed
 
-**Remaining steps:**
+**Milestone Completed (2026-08-01):** Professional Onboarding Funnel Tracking & Admin Operator UI Implementation (`docs/operations/professional-onboarding-observability-runbook.md`)
 
-1. Capture Phase 2 Criterion 2 monitoring evidence from staging and production
-   NDJSON log exports.
+- Wired client-side funnel tracking events (`landingCtaClicked`, `onboardingStarted`, `wizardStepCompleted`, `uploadSucceeded`, `uploadFailed`, `submitSucceeded`, `submitFailed`, `pendingVerificationViewed`) across `OnboardingView`, `ProfessionalForm`, and `DocumentsStep` via `useProfessionalFunnelTracking()`.
+- Implemented the admin manual verification operator UI at `apps/admin/src/app/(dashboard)/verifications/regulator/page.tsx` with `RegulatorVerificationQueue` and `RegulatorVerificationDetailDialog`.
+- Created server actions (`listRegulatorVerificationCases`, `getRegulatorVerificationCaseDetail`, `recordRegulatorManualDecision`) adhering to ADR-ADMIN-001/002/008, featuring role-based evidence redaction, duplicate license warning banners, and two-approver policy enforcement for high-risk decisions.
 
-**Blocked by:** Phase 2 Criterion 2 monitoring evidence (external; does not
-block ongoing docs/inventory follow-through work)
+**Milestone Completed (2026-08-01):** Regulator API Contract Confirmation & Observability Alignment (`docs/operations/regulator-contract-confirmation.md`)
+
+- Implemented per-authority Zod response contracts (`contract.ts`), path builders (`path.ts`), and redacted fixtures (`exact_match`, `not_found`, `suspended`, `malformed`) for all 7 statutory authorities (`NCA`, `EPRA`, `BORAQS`, `EBK`, `EARB`, `VRB`, `ISK`).
+- Replaced placeholder response mappers with strict Zod parsing that raises `MALFORMED_RESPONSE` error events (`retryable: false`, paging on-call) instead of silently degrading to low-confidence manual review.
+- Threaded version string (`CONTRACT_VERSION`) into `RegulatorAdapterResult` and `RegulatorEvidenceSnapshot`.
+- Added static CI check (`scripts/check-regulator-contract-drift.mjs`) chained into security/drift checks, enforcing that no statutory authority flag can reach production without a complete contract module, fixtures, and passing contract test suite (`<authority>.contract.test.ts`).
+
+**Verification:**
+
+- `pnpm -C apps/client run check-security-drift` -> pass (includes `check-regulator-contract-drift`)
+- `pnpm -C apps/client run check-types` -> pass (tsc --noEmit, exit 0)
+- Regulator verification Vitest suite -> 15 files passed
 
 ---
 
 ## Slice Status Registry
 
-Status codes: ✅ compliant - ❌ known defect - ⚠️ unaudited/in-progress - N/A
+Status codes: âœ… compliant - âŒ known defect - âš ï¸ unaudited/in-progress - N/A
 
 > This table reflects actual state as of 2026-04-14, reconciled against the
 > full CHANGELOG history. It supersedes the stale table in the generated
@@ -68,27 +84,27 @@ Status codes: ✅ compliant - ❌ known defect - ⚠️ unaudited/in-progress - 
 
 | Slice                               | Tier | Domain | Adapters | Actions | Tests | Observability | Overall |
 | ----------------------------------- | ---- | ------ | -------- | ------- | ----- | ------------- | ------- |
-| **finance**                         | T1   | ✅     | ✅       | ✅      | ✅    | ✅            | ✅      |
-| **user-rights**                     | T1   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
-| **professional-verification**       | T2   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
-| **onboarding**                      | T2   | ✅     | N/A      | ✅      | ✅    | ✅            | ✅      |
-| **messaging**                       | T2   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
-| **properties**                      | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
-| **projects**                        | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
-| **professionals**                   | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
-| **portfolio**                       | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
-| **user-profile**                    | T3   | ✅     | ✅       | ✅      | ✅    | ✅            | ✅      |
-| **crm** (leads/inquiries/pipeline)  | T3   | ✅     | ✅       | ✅      | ✅    | ✅            | ✅      |
-| **idea-books**                      | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
-| **documents/licenses/certificates** | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
-| **reviews / search**                | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
-| **client-dashboard**                | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
-| **calendar**                        | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
-| **notifications**                   | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
-| **seller-insights**                 | T3   | ✅     | ✅       | N/A     | ✅    | ✅            | ✅      |
+| **finance**                         | T1   | âœ…    | âœ…      | âœ…     | âœ…   | âœ…           | âœ…     |
+| **user-rights**                     | T1   | âœ…    | âœ…      | N/A     | âœ…   | âœ…           | âœ…     |
+| **professional-verification**       | T2   | âœ…    | âœ…      | N/A     | âœ…   | âœ…           | âœ…     |
+| **onboarding**                      | T2   | âœ…    | N/A      | âœ…     | âœ…   | âœ…           | âœ…     |
+| **messaging**                       | T2   | âœ…    | âœ…      | N/A     | âœ…   | âœ…           | âœ…     |
+| **properties**                      | T3   | âœ…    | âœ…      | N/A     | âœ…   | âœ…           | âœ…     |
+| **projects**                        | T3   | âœ…    | âœ…      | N/A     | âœ…   | âœ…           | âœ…     |
+| **professionals**                   | T3   | âœ…    | âœ…      | N/A     | âœ…   | âœ…           | âœ…     |
+| **portfolio**                       | T3   | âœ…    | âœ…      | N/A     | âœ…   | âœ…           | âœ…     |
+| **user-profile**                    | T3   | âœ…    | âœ…      | âœ…     | âœ…   | âœ…           | âœ…     |
+| **crm** (leads/inquiries/pipeline)  | T3   | âœ…    | âœ…      | âœ…     | âœ…   | âœ…           | âœ…     |
+| **idea-books**                      | T3   | âœ…    | âœ…      | N/A     | âœ…   | âœ…           | âœ…     |
+| **documents/licenses/certificates** | T3   | âœ…    | âœ…      | N/A     | âœ…   | âœ…           | âœ…     |
+| **reviews / search**                | T3   | âœ…    | âœ…      | N/A     | âœ…   | âœ…           | âœ…     |
+| **client-dashboard**                | T3   | âœ…    | âœ…      | N/A     | âœ…   | âœ…           | âœ…     |
+| **calendar**                        | T3   | âœ…    | âœ…      | N/A     | âœ…   | âœ…           | âœ…     |
+| **notifications**                   | T3   | âœ…    | âœ…      | N/A     | âœ…   | âœ…           | âœ…     |
+| **seller-insights**                 | T3   | âœ…    | âœ…      | N/A     | âœ…   | âœ…           | âœ…     |
 
 **No slices remain unmigrated.** All previously-queued slices are on the
-canonical domain path. ⚠️ means migrated but not yet fully audited.
+canonical domain path. âš ï¸ means migrated but not yet fully audited.
 
 ---
 
@@ -126,25 +142,26 @@ templates themselves. Update this section and CHANGELOG.md when removal is execu
 
 **Files to clean up at removal:**
 
-- `apps/client/app/lib/infrastructure/env.ts` — remove the five fields from `envGroups.redis.variables` and from `buildEnvConfig().redis`.
-- `apps/client/.env.example` — remove the deprecated block entirely.
-- `apps/client/.env.test` — remove the deprecated block entirely.
+- `apps/client/app/lib/infrastructure/env.ts` â€” remove the five fields from `envGroups.redis.variables` and from `buildEnvConfig().redis`.
+- `apps/client/.env.example` â€” remove the deprecated block entirely.
+- `apps/client/.env.test` â€” remove the deprecated block entirely.
 - Any other `.env.*` templates that still carry these vars.
 
 ---
 
 ## Completed Phases (last 10)
 
-1. `Dashboard Path Standardization` (2026-04-22): Renamed the homeowner dashboard to `/homeowner-dashboard`, centralized role-aware dashboard routing in `dashboardForRole()`, added a legacy `/dashboard` redirect shim, fixed mobile Clerk auth redirect parity, and realigned Clerk fallback env vars to `/auth-callback`.
-2. `Upstash Migration Follow-Through` (2026-04-21): Completed deferred items 2–6 from the @build/redis Upstash migration: rate-limit.ts resolver updated to Upstash credential presence; env.validation test suite updated for Upstash credential checks; .env.example and .env.test modernized; BullMQ consumers migrated to `createRedisConnection()`; deprecation queue registered.
-3. `R10 Residual Sweep` (2026-04-14): Completed ADR-005 operation-name inventory annotations for finance, professional-verification, messaging, professionals, portfolio, idea-books, reviews/search, and calendar.
-4. `R10` (2026-04-14): User-rights and client-dashboard operation-name normalization plus contract inventory updates.
-5. `R9` (2026-04-14): Policy matrix completion for notifications, seller-insights, user-rights, professionals, calendar, and idea-books.
-6. `R8` (2026-04-14): Notifications and seller-insights adapter hardening (actor throttling, CSRF, safe mapping, structured logs).
-7. `Docs hardening` (2026-04-11): Section 14 plus addenda; instruction files updated; ADR-001 amended.
-8. `Non-Autopsy 8` (2026-04-13): Phase 2 Criterion 2 operational handoff checklist.
-9. `Non-Autopsy 7` (2026-04-13): Projects mutation monitoring evidence tooling.
-10. `Non-Autopsy 6` (2026-04-13): Generic projects flag retirement plus client GA cutover.
+1. `Storage Direct Upload and Private Asset Hardening` (2026-05-03): Added private document direct-upload APIs, `DirectUpload` tracking, private asset visibility, secure download URL generation, abandoned direct-upload cleanup, and canonical storage integration docs. Direct image uploads remain on the existing multipart plus worker path.
+
+2. `Dashboard Path Standardization` (2026-04-22): Renamed the homeowner dashboard to `/homeowner-dashboard`, centralized role-aware dashboard routing in `dashboardForRole()`, added a legacy `/dashboard` redirect shim, fixed mobile Clerk auth redirect parity, and realigned Clerk fallback env vars to `/auth-callback`.
+3. `Upstash Migration Follow-Through` (2026-04-21): Completed deferred items 2-6 from the @build/redis Upstash migration: rate-limit.ts resolver updated to Upstash credential presence; env.validation test suite updated for Upstash credential checks; .env.example and .env.test modernized; BullMQ consumers migrated to `createRedisConnection()`; deprecation queue registered.
+4. `R10 Residual Sweep` (2026-04-14): Completed ADR-005 operation-name inventory annotations for finance, professional-verification, messaging, professionals, portfolio, idea-books, reviews/search, and calendar.
+5. `R10` (2026-04-14): User-rights and client-dashboard operation-name normalization plus contract inventory updates.
+6. `R9` (2026-04-14): Policy matrix completion for notifications, seller-insights, user-rights, professionals, calendar, and idea-books.
+7. `R8` (2026-04-14): Notifications and seller-insights adapter hardening (actor throttling, CSRF, safe mapping, structured logs).
+8. `Docs hardening` (2026-04-11): Section 14 plus addenda; instruction files updated; ADR-001 amended.
+9. `Non-Autopsy 8` (2026-04-13): Phase 2 Criterion 2 operational handoff checklist.
+10. `Non-Autopsy 7` (2026-04-13): Projects mutation monitoring evidence tooling.
 
 ---
 
@@ -182,9 +199,49 @@ pnpm -C apps/client run report:projects-mutation-health -- --input <file.ndjson>
 
 ## Progress Summary
 
-Last updated: 2026-04-30
+Last updated: 2026-05-07
 
 ## Snapshot
+
+### [CHECKPOINT] Join-as-Pro Phases 7 & 9 - Regulator Automation and Observability
+
+- Date: 2026-08-01
+- Outcome summary: Added the first production-facing regulator verification abstraction and phase 9 observability contract for the professional onboarding funnel. Regulator checks now have normalized statuses, confidence reasons, evidence snapshots, retry metadata, unsupported-authority fallback behavior, and replay-safe dedupe job IDs. The license auto-verification worker now calls this gateway before deciding whether to auto-verify or route to manual fallback. The professional funnel now has a PII-sanitized event namespace and an operations runbook for dashboards, alerts, and incident remediation.
+- Actual files changed: `apps/client/app/lib/domains/regulator-verification/gateway.ts`, `apps/client/app/lib/domains/regulator-verification/index.ts`, `apps/client/app/workers/license-auto-verify.consumer.ts`, `apps/client/app/lib/analytics/professional-funnel-events.ts`, `apps/client/__tests__/lib/domains/regulator-verification/gateway.test.ts`, `apps/client/__tests__/lib/analytics/professional-funnel-events.test.ts`, `apps/client/docs/operations/professional-onboarding-observability-runbook.md`, `apps/client/docs/CHANGELOG.md`, `apps/client/docs/PROGRESS-SUMMARY.md`, and root `CHANGELOG.md`.
+- Verification: Focused Vitest coverage passed for regulator verification gateway and professional funnel analytics. Focused ESLint passed for the new/modified implementation and test files. A broad `pnpm -C apps/client exec tsc --noEmit --pretty false` was attempted and remains blocked by pre-existing workspace type-resolution issues unrelated to this checkpoint, including unresolved `@build/db` / `@build/types` declarations and existing strictness errors.
+
+#### Implementation follow-ups and gaps
+
+1. Replace the bootstrap/mock regulator adapter behavior with real per-authority adapters for EBK, BORAQS, NCA, EARB, VRB, ISK, EPRA, and any additional profession-specific authority represented in the product taxonomy. Each adapter must own its timeout budget, credential configuration, request signing, response mapping, and regulator-specific error taxonomy.
+2. Persist regulator evidence snapshots, confidence reasons, and manual-fallback classifications to a durable verification-case model instead of relying only on worker logs and existing license status updates. This should include evidence retention policy enforcement and redaction rules for operator views.
+3. Add a durable verification job queue that is explicitly enqueued from `professional.onboarding_submitted`, deduped by authority + license number + professional ID, retried with backoff, and moved to a dead-letter queue after the configured attempt budget.
+4. Add feature flags and circuit breakers per authority and profession so operations can disable a failing regulator integration without disabling the full professional onboarding funnel.
+5. Build the dedicated manual verification operator workflow that displays submitted data, normalized regulator evidence, confidence reasons, duplicates/history, and recommended actions with required reason codes, high-risk four-eyes approval, and immutable audit logs.
+6. Wire `professional_funnel.*` events into the production analytics sink at each funnel boundary: landing CTA click, sign-up start/completion, onboarding start, wizard step completion, upload success/failure, submit success/failure, pending verification viewed, and verification transition.
+7. Back the runbook alert thresholds with real dashboard definitions in the production observability stack, including onboarding submit error rate, upload failure rate, Clerk metadata sync failures, idempotency conflicts, median completion time, verification backlog/SLA breaches, and regulator automation health by authority.
+8. Add integration/E2E coverage for worker enqueue + dedupe + retry semantics, regulator outage fallback, low-confidence manual-review routing, auto-verified capability unlock, and operator review behavior in the migrated verification operations surface.
+
+### [CHECKPOINT] Architecture Compliance Phase 0 Remediation - Completed
+
+- Date: 2026-05-12
+- Outcome summary: Closed the remaining Phase 0 architectural drift categories by moving route logger access to invocation scope, routing remaining Date DTO normalization through domain mappers, aligning onboarding skip timing with shared `now()`, adding shared helper modules for real multi-handler route families, and calibrating `missingSharedTs` for structural or ancestor-covered directories.
+- Actual files changed: `apps/client/scripts/drift-checks-phase0.mjs`, `apps/client/app/api/**/route.ts`, `apps/client/app/api/{idea-books,leads,messaging,notifications,professionals,uploads,user}/shared.ts`, affected domain `service.ts`/`repository.ts`/`mappers.ts` files, `apps/client/docs/CHANGELOG.md`, and `apps/client/docs/PROGRESS-SUMMARY.md`.
+- Verification: `pnpm -C apps/client run report-security-drift:strict` passed with all categories 0; `pnpm -C apps/client exec tsc --noEmit --pretty false` passed; targeted API suite passed 14 files / 93 tests; targeted domain/facade suite passed 12 files / 49 tests.
+
+### [CHECKPOINT] Client Architecture Lint Gates (Phase 0B) - Completed
+
+- Date: 2026-05-07
+- Outcome summary: Added lint gates for adapter Prisma imports, domain HTTP/logging imports, env-boundary `process.env` access, and import cycle detection; follow-through moved service categories, internal user-status, public professional profile, and finance withdrawal adapters onto domain services and removed Prisma reads from projects/password reset actions.
+- Actual files changed: `apps/client/eslint.config.js`, `apps/client/app/api/services/route.ts`, `apps/client/app/api/internal/user-status/route.ts`, `apps/client/app/api/professional-portal/profile/[id]/route.ts`, `apps/client/app/api/professional-portal/finance/withdraw/[id]/route.ts`, `apps/client/app/actions/projects.ts`, `apps/client/app/actions/passwordReset.ts`, `apps/client/app/lib/domains/professional-settings/service.ts`, `apps/client/app/lib/domains/professional-settings/index.ts`, `apps/client/app/lib/domains/professionals/service.ts`, `apps/client/app/lib/repositories/professional.repository.ts`, `apps/client/app/lib/domains/finance/service.ts`, `apps/client/app/lib/domains/user-profile/service.ts`, `apps/client/app/lib/domains/projects/repository.ts`, `apps/client/app/lib/domains/projects/service.ts`.
+- Verification: Not run (lint gates only).
+
+### [CHECKPOINT] Storage Direct Upload and Private Asset Hardening - Completed
+
+- Date: 2026-05-03
+- Outcome summary: Added document-first private direct uploads for Class B assets, server-owned `DirectUpload` confirmation state, private bucket storage support, nullable `Asset.cdnUrl`, secure owner/admin download URL generation, and abandoned direct-upload cleanup. Credential and property document upload clients now persist `assetId`; private document/license/certificate DTOs no longer expose private `cdnUrl`.
+- Scope note: direct image uploads remain on the existing multipart upload plus worker-processing path.
+- Actual files changed: Prisma schema/migration, storage/env infrastructure, upload domain repository/service, upload API routes, upload client, credential/property document UI, Class B DTO selects/contracts/mappers, cleanup scheduler, upload/storage tests, env templates, Turbo env metadata, and storage docs.
+- Verification: `pnpm -C packages/db exec prisma generate`, targeted upload/storage Vitest suite, `pnpm run client:tsc-noemit`, `pnpm run client:check-env-contract`, and `pnpm run client:report-security-drift:strict` passed during implementation.
 
 ### [CHECKPOINT] CSP Nonce Strategy Implementation - Completed (Phase 1)
 
@@ -200,42 +257,42 @@ Last updated: 2026-04-30
 - Actual files changed: `apps/client/next-config-csp.ts`.
 - Verification: Deploy and verify resolution of 17 `script-src-elem`, 4 `font-src`, and 6 `connect-src` console errors.
 
-### [CHECKPOINT] Dashboard Path Standardization — /dashboard → /homeowner-dashboard
+### [CHECKPOINT] Dashboard Path Standardization â€” /dashboard â†’ /homeowner-dashboard
 
 - Date: 2026-04-22
 - Outcome summary: Renamed the ambiguous homeowner route from `/dashboard` to `/homeowner-dashboard`, centralized role-aware dashboard routing in `dashboardForRole()`, added a legacy `/dashboard` redirect shim, fixed the mobile Clerk auth buttons to use explicit `forceRedirectUrl` props, and realigned Clerk fallback env vars to `/auth-callback`.
 - Actual files changed:
-  - `apps/client/lib/links.ts` — `ROUTES.userDashboard` now points at `/homeowner-dashboard`; added `dashboardForRole(role)` as the single role→dashboard resolver.
-  - `apps/client/app/(user)/homeowner-dashboard/**` — copied the homeowner dashboard route tree to the new URL path.
-  - `apps/client/app/(user)/dashboard/page.tsx` — legacy redirect shim to `ROUTES.userDashboard`.
-  - `apps/client/app/lib/security/middleware/redirect-policy.ts`; `apps/client/middleware.ts`; `apps/client/app/lib/security/middleware/route-matcher.ts` — middleware now resolves homeowner redirects through the centralized helper and protects `/homeowner-dashboard(.*)`.
-  - `apps/client/app/lib/domains/shared/onboarding-orchestration/service.ts`; `apps/client/app/lib/domains/user-profile/onboarding.ts`; `apps/client/app/onboarding/_hooks/useOnboarding.ts`; `apps/client/app/auth-callback/page.tsx`; `apps/client/app/onboarding-preview/onboarding-preview-client.tsx` — onboarding and auth flows now resolve the homeowner dashboard through centralized constants/helpers.
-  - `apps/client/components/layout/NavBar.tsx`; `apps/client/components/home/Onboarding.tsx`; `apps/client/components/forms/HomeownerForm.tsx` — user-facing UI redirects now target the renamed route; mobile Clerk modals now force `/auth-callback` or `/onboarding`.
-  - `apps/client/.env`; `.env.development`; `.env.example`; `.env.test`; `.env.vercel`; `.env.vercel.example` — sign-in fallback env vars now point to `/auth-callback` and are documented as safety nets.
-  - `apps/client/__tests__/middleware/route-guards.test.ts`; `apps/client/__tests__/lib/middleware-decision-log.test.ts`; `apps/client/__tests__/lib/domains/onboarding-orchestration.contract.test.ts`; `apps/client/__tests__/hooks/useOnboarding.test.tsx`; `apps/client/__tests__/api/onboarding/skip.test.ts`; `apps/client/__tests__/actions/onboarding-tier3-guards.test.ts` — updated redirect expectations.
-  - `apps/client/__tests__/lib/dashboard-for-role.test.ts`; `apps/client/__tests__/lib/redirect-policy.test.ts` — new helper/policy coverage.
+  - `apps/client/lib/links.ts` â€” `ROUTES.userDashboard` now points at `/homeowner-dashboard`; added `dashboardForRole(role)` as the single roleâ†’dashboard resolver.
+  - `apps/client/app/(user)/homeowner-dashboard/**` â€” copied the homeowner dashboard route tree to the new URL path.
+  - `apps/client/app/(user)/dashboard/page.tsx` â€” legacy redirect shim to `ROUTES.userDashboard`.
+  - `apps/client/app/lib/security/middleware/redirect-policy.ts`; `apps/client/middleware.ts`; `apps/client/app/lib/security/middleware/route-matcher.ts` â€” middleware now resolves homeowner redirects through the centralized helper and protects `/homeowner-dashboard(.*)`.
+  - `apps/client/app/lib/domains/shared/onboarding-orchestration/service.ts`; `apps/client/app/lib/domains/user-profile/onboarding.ts`; `apps/client/app/onboarding/_hooks/useOnboarding.ts`; `apps/client/app/auth-callback/page.tsx`; `apps/client/app/onboarding-preview/onboarding-preview-client.tsx` â€” onboarding and auth flows now resolve the homeowner dashboard through centralized constants/helpers.
+  - `apps/client/components/layout/NavBar.tsx`; `apps/client/components/home/Onboarding.tsx`; `apps/client/components/forms/HomeownerForm.tsx` â€” user-facing UI redirects now target the renamed route; mobile Clerk modals now force `/auth-callback` or `/onboarding`.
+  - `apps/client/.env`; `.env.development`; `.env.example`; `.env.test`; `.env.vercel`; `.env.vercel.example` â€” sign-in fallback env vars now point to `/auth-callback` and are documented as safety nets.
+  - `apps/client/__tests__/middleware/route-guards.test.ts`; `apps/client/__tests__/lib/middleware-decision-log.test.ts`; `apps/client/__tests__/lib/domains/onboarding-orchestration.contract.test.ts`; `apps/client/__tests__/hooks/useOnboarding.test.tsx`; `apps/client/__tests__/api/onboarding/skip.test.ts`; `apps/client/__tests__/actions/onboarding-tier3-guards.test.ts` â€” updated redirect expectations.
+  - `apps/client/__tests__/lib/dashboard-for-role.test.ts`; `apps/client/__tests__/lib/redirect-policy.test.ts` â€” new helper/policy coverage.
 - Verification commands run and results:
-  1. `pnpm -C apps/client exec vitest run __tests__/middleware/route-guards.test.ts __tests__/api/onboarding/skip.test.ts __tests__/actions/onboarding-tier3-guards.test.ts __tests__/hooks/useOnboarding.test.tsx __tests__/lib/dashboard-for-role.test.ts __tests__/lib/redirect-policy.test.ts __tests__/lib/middleware-decision-log.test.ts __tests__/lib/domains/onboarding-orchestration.contract.test.ts --pool=threads --maxWorkers=1` — passed (`8` files, `49` tests).
-  2. `pnpm run client:tsc-noemit` — passed with zero diagnostics.
-  3. `pnpm run client:report-security-drift:strict` — passed; all reported categories remained `0`.
+  1. `pnpm -C apps/client exec vitest run __tests__/middleware/route-guards.test.ts __tests__/api/onboarding/skip.test.ts __tests__/actions/onboarding-tier3-guards.test.ts __tests__/hooks/useOnboarding.test.tsx __tests__/lib/dashboard-for-role.test.ts __tests__/lib/redirect-policy.test.ts __tests__/lib/middleware-decision-log.test.ts __tests__/lib/domains/onboarding-orchestration.contract.test.ts --pool=threads --maxWorkers=1` â€” passed (`8` files, `49` tests).
+  2. `pnpm run client:tsc-noemit` â€” passed with zero diagnostics.
+  3. `pnpm run client:report-security-drift:strict` â€” passed; all reported categories remained `0`.
 - Deprecation queue additions: `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL`; `NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL`.
 
-### [CHECKPOINT] @build/redis Upstash Migration Follow-Through — Deferred Items 2-6 Completed
+### [CHECKPOINT] @build/redis Upstash Migration Follow-Through â€” Deferred Items 2-6 Completed
 
 - Date: 2026-04-21
 - Outcome summary: Completed all five remaining deferred items from the @build/redis Upstash migration checkpoint. The rate-limit backend resolver, env validation test suite, env templates, BullMQ consumers, and documentation are now fully aligned with the Upstash REST transport. Five legacy env vars are formally queued for removal after consumer migration is confirmed.
 - Actual files changed:
-  - `apps/client/app/lib/api/rate-limit.ts` — replaced `REDIS_ENABLED` / `envConfig.redis.enabled` gating in `resolveRateLimitBackend()` with Upstash credential presence checks (`upstashRestUrl` + `upstashRestToken`); removed misleading error message referencing `REDIS_ENABLED=true`.
-  - `apps/client/__tests__/lib/env.validation.test.ts` — rewrote env readiness test suite: replaced legacy `REDIS_HOST`/`REDIS_PORT`/`REDIS_ENABLED` assertion paths with Upstash credential checks; added distinct test cases for missing URL, missing token, invalid URL scheme, both-present-passes, non-required-backend, and build-phase deferral.
-  - `apps/client/.env.example` — restructured Redis section: Upstash REST credentials promoted to primary required entries with Upstash dashboard link; `REDIS_URL` documented as BullMQ-only TCP endpoint; `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_FAMILY`, `REDIS_PASSWORD` marked `@deprecated` with removal-target notes and a pointer to the deprecation queue in PROGRESS-SUMMARY.md.
-  - `apps/client/.env.test` — replaced legacy Redis block with Upstash stub credentials (non-functional) and in-process `RATE_LIMIT_BACKEND=memory`; deprecated legacy vars retained with removal-target comments.
-  - `packages/queue-server/src/export.queue.ts` — migrated `redisConnection` singleton import to `createRedisConnection()` per-Queue; removed `as any` cast.
-  - `packages/queue-server/src/compliance.queue.ts` — migrated all three Queue instantiations (`incidentQueue`, `userNotificationQueue`, `auditQueue`) from `redisConnection` singleton to `createRedisConnection()` per-Queue; removed `as any` casts.
-  - `apps/client/docs/PROGRESS-SUMMARY.md` — added Deprecation Queue section tracking the five legacy vars; updated Completed Phases list.
+  - `apps/client/app/lib/api/rate-limit.ts` â€” replaced `REDIS_ENABLED` / `envConfig.redis.enabled` gating in `resolveRateLimitBackend()` with Upstash credential presence checks (`upstashRestUrl` + `upstashRestToken`); removed misleading error message referencing `REDIS_ENABLED=true`.
+  - `apps/client/__tests__/lib/env.validation.test.ts` â€” rewrote env readiness test suite: replaced legacy `REDIS_HOST`/`REDIS_PORT`/`REDIS_ENABLED` assertion paths with Upstash credential checks; added distinct test cases for missing URL, missing token, invalid URL scheme, both-present-passes, non-required-backend, and build-phase deferral.
+  - `apps/client/.env.example` â€” restructured Redis section: Upstash REST credentials promoted to primary required entries with Upstash dashboard link; `REDIS_URL` documented as BullMQ-only TCP endpoint; `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_FAMILY`, `REDIS_PASSWORD` marked `@deprecated` with removal-target notes and a pointer to the deprecation queue in PROGRESS-SUMMARY.md.
+  - `apps/client/.env.test` â€” replaced legacy Redis block with Upstash stub credentials (non-functional) and in-process `RATE_LIMIT_BACKEND=memory`; deprecated legacy vars retained with removal-target comments.
+  - `packages/queue-server/src/export.queue.ts` â€” migrated `redisConnection` singleton import to `createRedisConnection()` per-Queue; removed `as any` cast.
+  - `packages/queue-server/src/compliance.queue.ts` â€” migrated all three Queue instantiations (`incidentQueue`, `userNotificationQueue`, `auditQueue`) from `redisConnection` singleton to `createRedisConnection()` per-Queue; removed `as any` casts.
+  - `apps/client/docs/PROGRESS-SUMMARY.md` â€” added Deprecation Queue section tracking the five legacy vars; updated Completed Phases list.
 - Verification commands required before merge:
-  1. `pnpm run client:tsc-noemit` — must pass with no diagnostics.
-  2. `pnpm run client:report-security-drift:strict` — all categories must be `0`.
-  3. `pnpm -C apps/client exec vitest run __tests__/lib/env.validation.test.ts --maxWorkers=1` — all test cases must be green.
+  1. `pnpm run client:tsc-noemit` â€” must pass with no diagnostics.
+  2. `pnpm run client:report-security-drift:strict` â€” all categories must be `0`.
+  3. `pnpm -C apps/client exec vitest run __tests__/lib/env.validation.test.ts --maxWorkers=1` â€” all test cases must be green.
 - Deprecation queue status: `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_FAMILY`, `REDIS_PASSWORD` formally registered. Removal blocked on confirming zero production consumers remain after BullMQ consumer migration is validated.
 
 ### [RUN] Onboarding Convergence Phase 6 - Baseline Validation Gates Executed (Telemetry Pending)
@@ -369,7 +426,7 @@ Last updated: 2026-04-30
 ### [CHECKPOINT] Section 14 R10 Residual Observability Inventory Sweep - Completed
 
 - Date: 2026-04-14
-- Outcome summary: Closed residual R10 observability inventory debt by annotating ADR-005 operationName inventories across all previously observability-⚠️ slices in domain contracts.
+- Outcome summary: Closed residual R10 observability inventory debt by annotating ADR-005 operationName inventories across all previously observability-âš ï¸ slices in domain contracts.
 - Actual files changed: `apps/client/app/lib/domains/finance/contracts.ts`; `apps/client/app/lib/domains/documents/contracts.ts`; `apps/client/app/lib/domains/licenses/contracts.ts`; `apps/client/app/lib/domains/certificates/contracts.ts`; `apps/client/app/lib/domains/messaging/contracts.ts`; `apps/client/app/lib/domains/professionals/contracts.ts`; `apps/client/app/lib/domains/portfolio/contracts.ts`; `apps/client/app/lib/domains/idea-books/contracts.ts`; `apps/client/app/lib/domains/reviews/contracts.ts`; `apps/client/app/lib/domains/search/contracts.ts`; `apps/client/app/lib/domains/calendar/contracts.ts`; `apps/client/docs/PROGRESS-SUMMARY.md`; `apps/client/docs/CHANGELOG.md`.
 - Verification commands run and results:
   1. Task `report-security-drift-strict-medium3` passed (all reported drift categories `0`).
@@ -1032,7 +1089,7 @@ Last updated: 2026-04-30
 | Certificates     | `app/lib/domains/certificates/`     | `app/api/professional-portal/certificates/**`                    | Domain + route tests          |
 | Client Dashboard | `app/lib/domains/client-dashboard/` | `app/api/client/dashboard/route.ts`                              | Domain + route tests          |
 
-**Upload refinement:** `isLocalUpload` → `lib/utils/upload.ts`; `uploadFiles`, `UploadError`, `validateFiles`, `FILE_LIMITS` → `lib/upload-client.ts`. Consumers: `PropertyForm`, `StoreForm`, `DocumentUploader`, `useImageUploader`.
+**Upload refinement:** `isLocalUpload` â†’ `lib/utils/upload.ts`; `uploadFiles`, `UploadError`, `validateFiles`, `FILE_LIMITS` â†’ `lib/upload-client.ts`. Consumers: `PropertyForm`, `StoreForm`, `DocumentUploader`, `useImageUploader`.
 
 ## Pending Refinement
 
@@ -1062,7 +1119,7 @@ ADR-007 admin-path migration checklist (staff-level):
 | Licenses                  | `licenses.service.test.ts`         | `licenses.route.test.ts`                 | Complete                                         |
 | Certificates              | `certificates.service.test.ts`     | `certificates.route.test.ts`             | Complete                                         |
 | Client Dashboard          | `client-dashboard.service.test.ts` | `dashboard.route.test.ts`                | Complete                                         |
-| Upload (browser)          | —                                  | —                                        | `useImageUploader.test.ts` (mock hoisting fixed) |
+| Upload (browser)          | â€”                                | â€”                                      | `useImageUploader.test.ts` (mock hoisting fixed) |
 | Onboarding Upload Cleanup | `uploads/service.test.ts`          | `jobs/onboarding-upload-cleanup.test.ts` | Complete                                         |
 
 **Recommendation:** Add focused domain and/or route adapter tests for Reviews, Search, Documents, Licenses, Certificates, and Client Dashboard before removing `lib/services` compatibility layer.
@@ -1136,7 +1193,7 @@ ADR-007 admin-path migration checklist (staff-level):
 - Refined search slice: added `app/lib/domains/search/mappers.ts`; updated repository to use `select` and mapper; added `GET /api/search/professionals?q=...`; added `lib/search-client.ts`, `hooks/useSearchProfessionals.ts`, search page at `app/(user)/search` with debounced input and results; staff audit in `docs/AUDIT-REVIEWS-SEARCH.md`.
 - Refined client-dashboard slice: added route-level `loading.tsx` and `error.tsx` for `app/(user)/dashboard`; extracted `DashboardSkeleton`, `EmptyState`, `QuickLink` into `_components/`; staff audit in `docs/AUDIT-CLIENT-DASHBOARD.md`.
 - Refined credentials slices (documents, certificates, licenses): replaced Prisma-derived DTOs with explicit domain-owned DTOs and mappers; extracted `DocumentsTab`, `CertificatesTab`, `LicensesTab` into route-local components; updated `docs/AUDIT-CREDENTIALS-UI.md` refinement checklist.
-- Migrated Reviews, Search, Documents, Licenses, Certificates, and Client Dashboard from `lib/services` to canonical domains; refined upload slice (`isLocalUpload` → `lib/utils/upload.ts`, `uploadFiles` → `lib/upload-client.ts`); removed dead `lib/services/inventory.ts`, `orders.ts`, `products.ts`.
+- Migrated Reviews, Search, Documents, Licenses, Certificates, and Client Dashboard from `lib/services` to canonical domains; refined upload slice (`isLocalUpload` â†’ `lib/utils/upload.ts`, `uploadFiles` â†’ `lib/upload-client.ts`); removed dead `lib/services/inventory.ts`, `orders.ts`, `products.ts`.
 - Refined the messaging slice: added `app/(user)/messages/loading.tsx`; added `app/professional-portal/messages/loading.tsx`, `error.tsx`, `[id]/loading.tsx`, and `[id]/error.tsx`; updated `lib/messaging-client.ts` comment to reference domain.
 - Refined the notifications slice: added `app/(user)/notifications/loading.tsx` and `error.tsx` with layout-aligned skeletons and error surfaces; updated `lib/notifications-client.ts` comment to reference domain instead of legacy service.
 - Refined the seller-insights domain: added `app/lib/domains/seller-insights/repository.ts` with inventory, orders, and products persistence logic moved from `lib/services/*`; updated `app/lib/domains/seller-insights/service.ts` to use the repository instead of legacy service imports; updated `lib/inventory-client.ts`, `lib/orders-client.ts`, and `lib/products-client.ts` to use domain contracts (`SellerInventoryAlert`, `SellerInventoryAlertsResult`, `SellerOrderListResult`, `SellerTopProduct`); updated `hooks/useDashboardData.ts` and `InventoryAlertsWidget` to import from the seller-insights domain.
@@ -1289,7 +1346,7 @@ Reviews, Search, Documents, Licenses, Certificates, and Client Dashboard are now
 3. **Idea Books Deep Follow-Through** - medium impact post-cutover hardening.
    Why: the route family is now domain-backed and adapter-tested, but deep follow-through remains for browser-facade contract alignment and any residual repository-shape cleanup.
    Action plan: keep `app/lib/domains/idea-books/` as the canonical seam, complete browser-client contract normalization, and add any remaining domain-focused collaborator/privacy rule tests.
-4. ~~**lib/services removal**~~ — Completed: removed orphaned `reviews.ts`, `search.ts`, `documents.ts`, `licenses.ts`, `certificates.ts`, `client-dashboard.ts`, `upload.ts` from `lib/services/`.
+4. ~~**lib/services removal**~~ â€” Completed: removed orphaned `reviews.ts`, `search.ts`, `documents.ts`, `licenses.ts`, `certificates.ts`, `client-dashboard.ts`, `upload.ts` from `lib/services/`.
 
 ### Carry-Forward Rules For Every Remaining Slice
 

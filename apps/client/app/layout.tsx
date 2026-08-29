@@ -94,19 +94,64 @@ export default async function RootLayout({
     );
   }
 
+  // In production this intentionally fails OPEN rather than throwing (a hard
+  // crash on every page for a header-plumbing bug would be worse than a
+  // degraded CSP). But failing open silently means a middleware matcher
+  // regression — a route that stops going through middleware and so never
+  // gets 'x-nonce' set — would be invisible until someone notices scripts or
+  // styles failing to load. Log it loudly so it shows up in server logs
+  // instead of only surfacing as a hard-to-diagnose client-side CSP failure.
+  if (!rawNonce && env.isProd) {
+    console.error(
+      "[layout] Missing 'x-nonce' header in production. Clerk components " +
+        "and any nonce-scoped scripts/styles on this request will fall back " +
+        "to CSP's unsafe-inline path (if a browser still honors it) or fail " +
+        "to load. This usually means middleware's matcher isn't covering " +
+        "this route, or a proxy/edge layer is stripping the header before " +
+        "it reaches this render.",
+    );
+  }
+
   // Fallback to undefined instead of an empty string to prevent invalid CSP attributes
   const nonce = rawNonce || undefined;
 
-  const { auth } = await import("@clerk/nextjs/server");
-  const { userId } = await auth();
-  const isSignedIn = !!userId;
+  let clerkOrigin = "https://clerk.buildmarket.app";
+  if (env.clerk.frontendApi) {
+    try {
+      clerkOrigin = new URL(env.clerk.frontendApi).origin;
+    } catch {
+      // safe fallback
+    }
+  }
 
   return (
-    <ClerkProvider nonce={nonce} dynamic>
+    <ClerkProvider nonce={nonce}>
       <html lang="en" className={dmSans.variable}>
         <head>
-          {/* Preconnect to critical third-party origins */}
-          <link rel="preconnect" href="https://clerk.com" />
+          {/* Preconnect to Clerk FAPI dynamically configured by env */}
+          {clerkOrigin && (
+            <>
+              <link
+                rel="preconnect"
+                href={clerkOrigin}
+                crossOrigin="anonymous"
+              />
+              <link rel="dns-prefetch" href={clerkOrigin} />
+            </>
+          )}
+          {/* Safety fallbacks for standard Clerk subdomains & telemetry */}
+          <link
+            rel="preconnect"
+            href="https://clerk.buildmarket.app"
+            crossOrigin="anonymous"
+          />
+          <link rel="dns-prefetch" href="https://clerk.buildmarket.app" />
+          <link
+            rel="preconnect"
+            href="https://clerk-telemetry.com"
+            crossOrigin="anonymous"
+          />
+          <link rel="dns-prefetch" href="https://clerk-telemetry.com" />
           <link rel="preconnect" href="https://images.unsplash.com" />
           <link rel="dns-prefetch" href="https://res.cloudinary.com" />
         </head>
@@ -168,7 +213,7 @@ export default async function RootLayout({
           <PostHogProvider>
             <QueryProvider>
               <AccessibilityProvider>
-                <CookieConsentProvider isSignedIn={isSignedIn}>
+                <CookieConsentProvider>
                   <RouteFocusManager />
                   <div id="main-content" tabIndex={-1} className="outline-none">
                     {children}

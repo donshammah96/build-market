@@ -1,18 +1,23 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "@/app/lib/infrastructure/env";
 import { resolveOnboardingStatus } from "@/app/lib/security/middleware/onboarding-resolver";
-import { resolveSystemSettings } from "@/app/lib/security/middleware/system-settings-resolver";
+import {
+  clearSystemSettingsCache,
+  resolveSystemSettings,
+} from "@/app/lib/security/middleware/system-settings-resolver";
 
 let mockLoggerInfo: ReturnType<typeof vi.spyOn>;
 let mockLoggerWarn: ReturnType<typeof vi.spyOn>;
 
 describe("middleware resolvers", () => {
   beforeEach(() => {
+    clearSystemSettingsCache();
     mockLoggerInfo = vi.spyOn(console, "info").mockImplementation(() => {});
     mockLoggerWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   afterEach(() => {
+    clearSystemSettingsCache();
     vi.clearAllMocks();
     vi.restoreAllMocks();
   });

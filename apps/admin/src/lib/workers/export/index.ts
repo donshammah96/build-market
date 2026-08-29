@@ -1,8 +1,6 @@
 /**
  * Export Workers Module
  *
- * Exports the BullMQ worker instance for processing GDPR data export jobs.
+ * Per ADR-ADMIN-016, consumer loops run inside the standalone `apps/workers` daemon.
  */
-
-export { exportWorker } from "./worker";
 export { ExportProcessor } from "./processor";

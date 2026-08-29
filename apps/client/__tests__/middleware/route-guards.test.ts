@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
-import { ROUTES } from "@/lib/links";
+import { ROUTES } from "@/lib/routes";
 
 const mockAuth = vi.fn();
 const mockResolveOnboardingStatus = vi.fn();
@@ -64,6 +64,13 @@ vi.mock("@/app/lib/security/middleware/redirect-policy", () => ({
     NextResponse.redirect(new URL("/?registration=closed", req.url)),
   redirectToProfessionalSignupClosed: (req: NextRequest) =>
     NextResponse.redirect(new URL("/sign-up?pro=closed", req.url)),
+  redirectToUnauthorizedSignIn: (req: NextRequest, reason: string) =>
+    NextResponse.redirect(
+      new URL(
+        `/unauthorized-sign-in?reason=${encodeURIComponent(reason)}`,
+        req.url,
+      ),
+    ),
 }));
 
 import middleware from "@/middleware";
@@ -401,5 +408,138 @@ describe("middleware route guards", () => {
     assertResponse(res);
     expectDocumentCspHeaders(res);
     expect(res.status).toBe(200);
+  });
+});
+
+// =============================================================================
+// Blocked-user status gate (step 1a in middleware)
+// =============================================================================
+
+describe("middleware blocked-user status gate", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.BYPASS_AUTH = "false";
+    mockResolveSystemSettings.mockResolvedValue({
+      state: "resolved",
+      settings: {
+        maintenanceMode: false,
+        maintenanceMessage: null,
+        publicSignup: true,
+        allowProfessionalSignup: true,
+        allowedIPs: [],
+      },
+      source: "internal_api",
+      reason: "internal_api_resolved",
+      cacheStrategy: "shared_service_or_metadata",
+    });
+  });
+
+  it.each(["SUSPENDED", "BANNED", "DEACTIVATED", "ARCHIVED"])(
+    "redirects authenticated user with status=%s to /unauthorized-sign-in with the reason param",
+    async (status) => {
+      mockAuth.mockResolvedValue({
+        userId: "user_blocked",
+        sessionClaims: {
+          metadata: { status, role: "CLIENT", isOnboarded: true },
+        },
+      });
+
+      const req = new NextRequest(
+        `http://localhost:3500${ROUTES.userDashboard}`,
+      );
+      const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
+      assertResponse(res);
+
+      expect(res.status).toBe(307);
+      const location = new URL(res.headers.get("location")!);
+      expect(location.pathname).toBe("/unauthorized-sign-in");
+      expect(location.searchParams.get("reason")).toBe(status);
+    },
+  );
+
+  it("short-circuits before the onboarding resolver for blocked users", async () => {
+    mockAuth.mockResolvedValue({
+      userId: "user_suspended",
+      sessionClaims: {
+        metadata: { status: "SUSPENDED", role: "CLIENT", isOnboarded: true },
+      },
+    });
+
+    const req = new NextRequest(`http://localhost:3500${ROUTES.userDashboard}`);
+    await middleware(req, {} as Parameters<typeof middleware>[1]);
+
+    // The gate fires before any onboarding resolver call.
+    expect(mockResolveOnboardingStatus).not.toHaveBeenCalled();
+  });
+
+  it("allows ACTIVE users through the status gate", async () => {
+    mockAuth.mockResolvedValue({
+      userId: "user_active",
+      sessionClaims: {
+        metadata: { status: "ACTIVE", role: "CLIENT", isOnboarded: true },
+      },
+    });
+    mockResolveOnboardingStatus.mockResolvedValueOnce({
+      state: "resolved",
+      isOnboarded: true,
+      role: "CLIENT",
+      source: "metadata",
+      confidence: "high",
+      reason: "metadata_present",
+    });
+
+    const req = new NextRequest(`http://localhost:3500${ROUTES.userDashboard}`);
+    const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
+    assertResponse(res);
+
+    const location = res.headers.get("location");
+    if (location) {
+      expect(location).not.toContain("/unauthorized-sign-in");
+    } else {
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("allows users with no status claim (backwards compatibility with legacy tokens)", async () => {
+    mockAuth.mockResolvedValue({
+      userId: "user_legacy",
+      sessionClaims: { metadata: { role: "CLIENT", isOnboarded: true } },
+    });
+    mockResolveOnboardingStatus.mockResolvedValueOnce({
+      state: "resolved",
+      isOnboarded: true,
+      role: "CLIENT",
+      source: "metadata",
+      confidence: "high",
+      reason: "metadata_present",
+    });
+
+    const req = new NextRequest(`http://localhost:3500${ROUTES.userDashboard}`);
+    const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
+    assertResponse(res);
+
+    const location = res.headers.get("location");
+    if (location) {
+      expect(location).not.toContain("/unauthorized-sign-in");
+    } else {
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("/unauthorized-sign-in is accessible without authentication (public route, no redirect loop)", async () => {
+    // The page must be reachable even when the user is unauthenticated so that
+    // signOut() can be called on mount without triggering another redirect.
+    mockAuth.mockResolvedValue({ userId: null, sessionClaims: null });
+
+    const req = new NextRequest(
+      "http://localhost:3500/unauthorized-sign-in?reason=SUSPENDED",
+    );
+    const res = await middleware(req, {} as Parameters<typeof middleware>[1]);
+    assertResponse(res);
+
+    // Public route: CSP headers applied, no redirect away.
+    expectDocumentCspHeaders(res);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("location")).toBeNull();
   });
 });

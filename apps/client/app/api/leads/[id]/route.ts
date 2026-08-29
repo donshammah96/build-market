@@ -13,8 +13,6 @@ import {
 import { isValidId } from "@/app/lib/api/api-guards";
 import { leadsService } from "@/app/lib/domains/leads";
 
-const logger = getClientLogger();
-
 /**
  * GET /api/leads/[id]
  * Public endpoint — no authentication required.
@@ -51,7 +49,7 @@ export async function GET(
   );
 
   if (!result.success || !result.data) {
-    logger.error("Failed to fetch lead status", result.error, {
+    getClientLogger().error("Failed to fetch lead status", result.error, {
       correlationId,
       leadId: id,
     });

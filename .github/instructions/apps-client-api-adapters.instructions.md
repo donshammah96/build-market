@@ -5,7 +5,7 @@ applyTo: "apps/client/app/api/**"
 
 # Client API Adapter Boundary
 
-Last aligned with canonical on: 2026-04-11.
+Last aligned with canonical on: 2026-08-15.
 Previous alignment: 2026-03-30.
 Change rationale: Autopsy report 2026-04-11 identified four adapter-layer
 patterns that escaped both code review and drift enforcement: variable-rebound

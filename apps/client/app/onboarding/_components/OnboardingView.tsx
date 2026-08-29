@@ -36,6 +36,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialogue";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
+import { useProfessionalFunnelTracking } from "@/app/lib/analytics/use-professional-funnel-tracking";
+import { PROFESSIONAL_FUNNEL_EVENTS } from "@/app/lib/analytics/professional-funnel-events";
 import { RoleCard } from "./RoleCard";
 import { StepIndicator } from "./StepIndicator";
 import type { OnboardingData } from "@build/types";
@@ -76,6 +78,7 @@ export type OnboardingViewProps = {
   handleCancelOnboarding: () => Promise<void>;
   handleSkip: (role: OnboardingRole) => Promise<void>;
   handleSubmit: (data: OnboardingData) => Promise<void>;
+  roleLocked?: boolean;
 };
 
 export function OnboardingView({
@@ -89,9 +92,24 @@ export function OnboardingView({
   handleCancelOnboarding,
   handleSkip,
   handleSubmit,
+  roleLocked = false,
 }: OnboardingViewProps) {
   const prefersReducedMotion = useReducedMotion();
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const trackFunnel = useProfessionalFunnelTracking();
+
+  const onSelectRole = (selectedRole: OnboardingRole) => {
+    if (selectedRole === "professional") {
+      trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.landingCtaClicked, {
+        source: "onboarding_role_card",
+        role: "professional",
+      });
+      trackFunnel(PROFESSIONAL_FUNNEL_EVENTS.onboardingStarted, {
+        role: "professional",
+      });
+    }
+    handleRoleSelect(selectedRole);
+  };
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
@@ -118,45 +136,47 @@ export function OnboardingView({
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background px-4 py-8 md:px-6 md:py-10">
-      <div className="absolute inset-0 z-0">
-        <div className="absolute inset-0 bg-[linear-gradient(130deg,var(--color-onboarding-surface)_0%,color-mix(in_oklab,var(--color-onboarding-primary)_20%,transparent)_38%,transparent_100%)]" />
-        <div className="absolute top-32 right-28 h-112 w-md rounded-full bg-onboarding-glow/30 blur-3xl" />
-        <div className="absolute bottom-40 left-32 h-104 w-104 rounded-full bg-onboarding-primary/18 blur-3xl" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#4b5f7f14_1px,transparent_1px),linear-gradient(to_bottom,#4b5f7f14_1px,transparent_1px)] bg-size-[24px_24px]" />
+    <div className="relative min-h-screen overflow-hidden bg-zinc-950 text-white px-4 py-8 md:px-6 md:py-12">
+      {/* Background ambient lighting */}
+      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        <div className="absolute -top-40 right-1/4 h-125 w-[125%] rounded-full bg-emerald-500/10 blur-[140px]" />
+        <div className="absolute top-1/3 -left-40 h-125 w-[125%] rounded-full bg-emerald-600/8 blur-[160px]" />
+        <div className="absolute -bottom-40 right-10 h-125 w-[125%] rounded-full bg-blue-600/5 blur-[160px]" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-size[32px_32px]" />
       </div>
 
-      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-6">
+      <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-8">
+        {/* Top Floating Navigation Bar */}
         <motion.div
           {...variants.fadeIn}
-          className="flex flex-col gap-4 rounded-[14px] border border-onboarding-primary/25 bg-onboarding-surface/75 px-4 py-3 shadow-[0_24px_55px_-35px_rgba(13,20,32,0.95)] backdrop-blur-md sm:flex-row sm:items-center sm:justify-between md:px-5"
+          className="flex flex-col gap-4 rounded-2xl border border-zinc-800/80 bg-zinc-900/60 px-5 py-3.5 shadow-2xl backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between"
         >
           <Breadcrumb>
-            <BreadcrumbList className="flex-wrap gap-y-2 text-onboarding-ink/75">
+            <BreadcrumbList className="flex-wrap gap-y-2 text-zinc-400">
               <BreadcrumbItem>
                 <BreadcrumbLink asChild>
                   <Link
                     href="/"
-                    className="flex min-h-11 items-center gap-1.5 rounded-md px-1 transition-colors hover:text-(--color-onboarding-primary) focus-visible:outline-2 focus-visible:outline-(--color-focus-ring) focus-visible:outline-offset-2"
+                    className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium transition-colors hover:text-emerald-400 focus-visible:outline-2 focus-visible:outline-emerald-500"
                   >
                     <Home className="h-4 w-4" />
-                    Home
+                    <span>Home</span>
                   </Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <ChevronRight className="h-3.5 w-3.5 text-zinc-600" />
               </BreadcrumbSeparator>
               <BreadcrumbItem>
-                <BreadcrumbPage className="text-onboarding-ink/65">
+                <BreadcrumbPage className="text-zinc-400 text-sm">
                   Onboarding
                 </BreadcrumbPage>
               </BreadcrumbItem>
               <BreadcrumbSeparator>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <ChevronRight className="h-3.5 w-3.5 text-zinc-600" />
               </BreadcrumbSeparator>
               <BreadcrumbItem>
-                <BreadcrumbPage className="font-medium text-(--color-onboarding-primary)">
+                <BreadcrumbPage className="font-semibold text-emerald-400 text-sm">
                   {getCurrentStepLabel()}
                 </BreadcrumbPage>
               </BreadcrumbItem>
@@ -171,30 +191,30 @@ export function OnboardingView({
               <Button
                 variant="ghost"
                 size="sm"
-                className="min-h-11 text-onboarding-ink/75 hover:text-(--color-onboarding-ink) hover:bg-white/[0.07] rounded-xl gap-2"
+                className="text-zinc-400 hover:text-white hover:bg-zinc-800/80 rounded-xl gap-2 h-9 px-3 text-xs font-medium"
               >
-                <X className="h-4 w-4 mr-2" />
+                <X className="h-4 w-4" />
                 Cancel
               </Button>
             </AlertDialogTrigger>
-            <AlertDialogContent className="bg-background border-border">
+            <AlertDialogContent className="bg-zinc-900 border-zinc-800 text-white shadow-2xl">
               <AlertDialogHeader>
-                <AlertDialogTitle className="text-white">
+                <AlertDialogTitle className="text-xl font-bold text-white">
                   Cancel Onboarding?
                 </AlertDialogTitle>
-                <AlertDialogDescription className="text-muted-foreground">
+                <AlertDialogDescription className="text-zinc-400">
                   Are you sure you want to cancel the onboarding process? Your
                   progress will not be saved and you&apos;ll be redirected to
                   the homepage.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel className="bg-muted text-muted-foreground border-border hover:bg-muted/80 hover:text-foreground">
+                <AlertDialogCancel className="bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:text-white">
                   Continue Onboarding
                 </AlertDialogCancel>
                 <AlertDialogAction
                   onClick={handleCancelOnboarding}
-                  className="bg-(--color-error) text-white hover:opacity-90"
+                  className="bg-red-600 text-white hover:bg-red-700"
                 >
                   Yes, Cancel
                 </AlertDialogAction>
@@ -203,106 +223,124 @@ export function OnboardingView({
           </AlertDialog>
         </motion.div>
 
+        {/* Hero Step Header */}
         <motion.div
           {...variants.fadeIn}
-          className="flex flex-col items-center text-center"
+          className="flex flex-col items-center text-center space-y-4"
         >
-          <div className="mb-4 flex flex-wrap items-center justify-center gap-3">
-            <StepIndicator current={step} stepNumber={1} label="Role" />
-            <div
-              className={cn(
-                "h-px w-12 transition-colors duration-500 sm:w-16",
-                step >= 2
-                  ? "bg-(--color-onboarding-primary)"
-                  : "bg-onboarding-ink/35",
-              )}
-            />
-            <StepIndicator current={step} stepNumber={2} label="Details" />
-          </div>
-
-          <h1
-            ref={stepHeadingRef}
-            tabIndex={-1}
-            className="mb-3 font-['Syne'] text-[22px] font-extrabold leading-[1.2] tracking-tight text-(--color-onboarding-ink) md:text-4xl md:leading-[1.08]"
-          >
-            {step === 1
-              ? "Build your legacy."
-              : role === "client"
-                ? "Tell us about your dream."
-                : "Showcase your expertise."}
-          </h1>
-
-          <div className="mb-5 w-full max-w-sm px-2">
-            <div className="mb-1.5 flex items-center justify-between text-[11px] text-onboarding-ink/45">
-              <span>
-                Step {currentStep} of {totalSteps}
-              </span>
-              <span className="font-semibold text-(--color-onboarding-primary)">
-                {progressPercent}%
-              </span>
-            </div>
-            <div className="h-0.5 overflow-hidden rounded-full bg-white/8">
-              <motion.div
-                className="h-full rounded-full bg-(--color-onboarding-primary)"
-                initial={{ width: 0 }}
-                animate={{ width: `${progressPercent}%` }}
-                transition={{ duration: prefersReducedMotion ? 0 : 0.35 }}
+          {role !== "professional" && (
+            <div className="flex items-center justify-center gap-4 mb-2">
+              <StepIndicator
+                current={step}
+                stepNumber={1}
+                label="Choose Role"
+              />
+              <div
+                className={cn(
+                  "h-0.5 w-12 sm:w-20 transition-all duration-500 rounded-full",
+                  step >= 2
+                    ? "bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.5)]"
+                    : "bg-zinc-800",
+                )}
+              />
+              <StepIndicator
+                current={step}
+                stepNumber={2}
+                label="Profile Details"
               />
             </div>
+          )}
+
+          <div className="space-y-2">
+            <h1
+              ref={stepHeadingRef}
+              tabIndex={-1}
+              className="font-['Syne'] text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-white leading-tight"
+            >
+              {step === 1
+                ? "Build your legacy."
+                : role === "client"
+                  ? "Tell us about your project."
+                  : "Showcase your expertise."}
+            </h1>
+
+            <p className="max-w-xl mx-auto text-base sm:text-lg text-zinc-400 font-light leading-relaxed">
+              {step === 1
+                ? "Join Kenya's premier network of homeowners, architects, and builders."
+                : "Complete your profile to unlock custom matches and verified opportunities."}
+            </p>
           </div>
 
-          <p className="max-w-2xl text-base leading-7 text-onboarding-ink/80 sm:text-lg sm:leading-8">
-            {step === 1
-              ? "Join Kenya's premier network of homeowners and building professionals."
-              : "Complete your profile to get started."}
-          </p>
+          {role !== "professional" && (
+            <div className="w-full max-w-xs pt-1">
+              <div className="mb-1.5 flex items-center justify-between text-xs text-zinc-400">
+                <span>
+                  Step {currentStep} of {totalSteps}
+                </span>
+                <span className="font-semibold text-emerald-400">
+                  {progressPercent}%
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800/80">
+                <motion.div
+                  className="h-full rounded-full bg-linear-to-r from-emerald-600 to-emerald-400"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progressPercent}%` }}
+                  transition={{ duration: prefersReducedMotion ? 0 : 0.35 }}
+                />
+              </div>
+            </div>
+          )}
         </motion.div>
 
+        {/* Dynamic Step View */}
         <AnimatePresence mode="wait">
           {step === 1 && (
             <motion.div
               key="step1"
               {...variants.fadeScale}
-              className="mx-auto grid w-full max-w-4xl grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2"
+              className="mx-auto w-full max-w-4xl space-y-8"
             >
-              <RoleCard
-                icon={<Home size={32} />}
-                title="I Am a Project Owner"
-                description="I am planning a project and I need verified experts."
-                onClick={() => handleRoleSelect("client")}
-                delay={prefersReducedMotion ? 0 : 0.1}
-                highlight
-                prefersReducedMotion={prefersReducedMotion}
-                disabled={roleSelectionPending}
-                isLoading={roleSelectionPending}
-                isSelected={role === "client"}
-                helperText="Get matched with reliable professionals for your project."
-              />
-              <RoleCard
-                icon={<Briefcase size={32} />}
-                title="I am a Professional"
-                description="I am an Architect, Engineer, or Contractor looking for quality leads."
-                onClick={() => handleRoleSelect("professional")}
-                delay={prefersReducedMotion ? 0 : 0.2}
-                prefersReducedMotion={prefersReducedMotion}
-                disabled={roleSelectionPending}
-                isLoading={roleSelectionPending}
-                isSelected={role === "professional"}
-                helperText="Build trust with verified credentials and grow your pipeline."
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <RoleCard
+                  icon={<Home size={28} />}
+                  title="I am a Project Owner"
+                  description="I am planning a construction or renovation project and need verified experts."
+                  onClick={() => onSelectRole("client")}
+                  delay={prefersReducedMotion ? 0 : 0.05}
+                  highlight
+                  prefersReducedMotion={prefersReducedMotion}
+                  disabled={roleSelectionPending}
+                  isLoading={roleSelectionPending}
+                  isSelected={role === "client"}
+                  helperText="Get matched with licensed professionals & vetted contractors"
+                />
+                <RoleCard
+                  icon={<Briefcase size={28} />}
+                  title="I am a Professional"
+                  description="I am an Architect, Engineer, Contractor, or Supplier looking for quality leads."
+                  onClick={() => onSelectRole("professional")}
+                  delay={prefersReducedMotion ? 0 : 0.1}
+                  prefersReducedMotion={prefersReducedMotion}
+                  disabled={roleSelectionPending}
+                  isLoading={roleSelectionPending}
+                  isSelected={role === "professional"}
+                  helperText="Build trust with verified credentials & expand your client pipeline"
+                />
+              </div>
 
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
-                className="col-span-1 md:col-span-2 flex justify-center mt-4"
+                transition={{ delay: 0.2 }}
+                className="flex justify-center"
               >
                 <Link
                   href="/"
-                  className="group flex min-h-11 items-center gap-2 rounded-md px-2 text-sm text-onboarding-ink/70 transition-colors hover:text-(--color-onboarding-primary) focus-visible:outline-2 focus-visible:outline-(--color-focus-ring) focus-visible:outline-offset-2"
+                  className="group inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-zinc-400 transition-colors hover:text-white hover:bg-zinc-900/60 focus-visible:outline-2 focus-visible:outline-emerald-500"
                 >
                   <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
-                  Back to Homepage
+                  <span>Return to Homepage</span>
                 </Link>
               </motion.div>
             </motion.div>
@@ -312,65 +350,74 @@ export function OnboardingView({
             <motion.div
               key="step2"
               {...variants.slideIn}
-              className="mx-auto w-full max-w-4xl"
+              className="mx-auto w-full max-w-3xl"
             >
               {role === "client" ? (
-                <div className="relative mx-auto max-w-2xl rounded-2xl border border-onboarding-primary/30 bg-onboarding-surface/90 p-1 shadow-[0_32px_64px_-24px_rgba(4,10,18,0.90),0_0_0_1px_oklch(0.70_0.21_162/0.10)] backdrop-blur-xl">
-                  <div className="absolute left-3 top-3 z-20 sm:left-4 sm:top-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setStep(1)}
-                      disabled={submitting}
-                      className="min-h-11 border-onboarding-primary/35 bg-onboarding-surface/60 text-onboarding-ink/80 hover:bg-onboarding-primary/10 hover:text-(--color-onboarding-ink)"
-                    >
-                      <ArrowLeft className="mr-2 h-4 w-4" /> Back
-                    </Button>
-                  </div>
-
-                  <div className="rounded-xl border border-white/8 bg-onboarding-surface/95 p-4 pt-16 sm:p-6 sm:pt-16 md:p-8 md:pt-16">
-                    {submitting && (
-                      <div className="absolute inset-0 z-50 flex items-center justify-center rounded-xl bg-background/80 backdrop-blur-sm">
-                        <div className="flex flex-col items-center gap-3">
-                          <Loader2 className="h-8 w-8 animate-spin text-(--color-onboarding-primary)" />
-                          <span className="font-medium text-(--color-onboarding-primary) animate-pulse">
-                            Creating Profile...
-                          </span>
-                        </div>
-                      </div>
+                <div className="relative rounded-3xl border border-zinc-800 bg-zinc-900/90 p-6 sm:p-10 shadow-2xl backdrop-blur-2xl">
+                  <div className="mb-6 flex items-center justify-between">
+                    {!roleLocked ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setStep(1)}
+                        disabled={submitting}
+                        className="border-zinc-700 bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700 hover:text-white rounded-xl"
+                      >
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Change Role
+                      </Button>
+                    ) : (
+                      <div />
                     )}
-
-                    <HomeownerForm
-                      onBack={() => setStep(1)}
-                      onSubmit={handleSubmit}
-                      onAuthSuccess={() => {}}
-                      onSkip={() => handleSkip("client")}
-                    />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                      Project Owner
+                    </span>
                   </div>
+
+                  {submitting && (
+                    <div className="absolute inset-0 z-50 flex items-center justify-center rounded-3xl bg-zinc-950/80 backdrop-blur-sm">
+                      <div className="flex flex-col items-center gap-3">
+                        <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
+                        <span className="font-semibold text-emerald-400 animate-pulse">
+                          Creating Profile...
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <HomeownerForm
+                    onBack={() => {
+                      if (!roleLocked) setStep(1);
+                    }}
+                    onSubmit={handleSubmit}
+                    onAuthSuccess={() => {}}
+                    onSkip={() => handleSkip("client")}
+                  />
                 </div>
               ) : (
                 <div className="relative">
                   <ProfessionalForm
-                    onBack={() => setStep(1)}
+                    onBack={() => {
+                      if (!roleLocked) setStep(1);
+                    }}
                     onSubmit={handleSubmit}
                     onAuthSuccess={() => {}}
                   />
 
-                  <div className="mx-auto mt-6 max-w-2xl border-t border-onboarding-primary/25 pt-4">
+                  <div className="mx-auto mt-8 max-w-2xl border-t border-zinc-800 pt-6 text-center space-y-2">
                     <Button
                       type="button"
-                      variant="link"
+                      variant="ghost"
                       onClick={() => handleSkip("professional")}
                       isLoading={submitting}
                       loadingText="Skipping..."
-                      className="min-h-11 w-full justify-center text-onboarding-ink/75 hover:text-(--color-onboarding-primary)"
+                      className="text-zinc-400 hover:text-emerald-400 hover:bg-zinc-900 rounded-xl"
                     >
                       <FastForward className="h-4 w-4 mr-2" />
-                      Skip for now - complete profile later
+                      Skip for now — complete profile later
                     </Button>
-                    <p className="mt-2 text-center text-xs text-onboarding-ink/60">
-                      You can complete your verification from the dashboard
-                      anytime
+                    <p className="text-xs text-zinc-500">
+                      You can complete your verification details from the
+                      professional dashboard anytime
                     </p>
                   </div>
                 </div>

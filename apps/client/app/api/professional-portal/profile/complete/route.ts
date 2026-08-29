@@ -14,10 +14,9 @@ import {
 import { checkBodySize } from "@/app/lib/api/api-guards";
 import { completeProfileSchema } from "@/app/lib/validation/profile-validation";
 import { IdempotencyService } from "@/app/lib/services/idempotency.service";
+import { safeIdempotencyComplete } from "@/app/lib/services/idempotency-helpers";
 import { professionalSettingsService } from "@/app/lib/domains/professional-settings";
 import { normalizeRole } from "@/app/lib/security/roles";
-
-const logger = getClientLogger();
 
 function normalizeCompletionResponse(response: unknown): { completed: true } {
   if (
@@ -54,7 +53,7 @@ export const POST = withAuth(
 
     const validation = completeProfileSchema.safeParse(body);
     if (!validation.success) {
-      logger.warn("Profile completion validation failed", {
+      getClientLogger().warn("Profile completion validation failed", {
         correlationId,
         actorRole,
         errors: validation.error.issues,
@@ -80,13 +79,6 @@ export const POST = withAuth(
       dbUserId,
       "POST",
     );
-
-    if (!idempotencyCheck) {
-      return apiError(
-        "Failed to process idempotency key",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
 
     if (idempotencyCheck.status === "completed") {
       return apiSuccess(
@@ -132,7 +124,7 @@ export const POST = withAuth(
     );
 
     if (!result.success || !result.data) {
-      logger.error(
+      getClientLogger().error(
         "Failed to complete professional profile",
         result.error instanceof Error
           ? result.error
@@ -158,9 +150,9 @@ export const POST = withAuth(
     }
 
     const responseData = normalizeCompletionResponse(result.data.data);
-    await IdempotencyService.complete(idempotencyKey, responseData);
+    await safeIdempotencyComplete(idempotencyKey, responseData);
 
-    logger.info("Professional profile completed successfully", {
+    getClientLogger().info("Professional profile completed successfully", {
       correlationId,
       actorRole,
     });
