@@ -276,6 +276,37 @@ export const ADMIN_ACTION_POLICY_MAP = {
     AdminCapability.SYSTEM_ADMIN_ONLY,
     "onboarding",
   ),
+
+  // ---- Subscriptions & Tiers (Tier 1) ----
+  get_subscription_plans: lowRiskReadPolicy(AdminCapability.VIEW_FINANCIALS),
+  update_subscription_plan: strictMutationPolicy(
+    AdminCapability.MANAGE_USERS,
+    "subscriptions",
+  ),
+  get_professional_subscription: lowRiskReadPolicy(
+    AdminCapability.VIEW_FINANCIALS,
+  ),
+  override_professional_subscription: strictMutationPolicy(
+    AdminCapability.MANAGE_USERS,
+    "subscriptions",
+  ),
+  override_trust_tier: strictMutationPolicy(
+    AdminCapability.MANAGE_VERIFICATION,
+    "verification",
+  ),
+  manage_professional_badge: strictMutationPolicy(
+    AdminCapability.MANAGE_VERIFICATION,
+    "verification",
+  ),
+  create_profile_boost: strictMutationPolicy(
+    AdminCapability.MANAGE_USERS,
+    "subscriptions",
+  ),
+  get_lead_credit_wallet: lowRiskReadPolicy(AdminCapability.VIEW_FINANCIALS),
+  adjust_lead_credit_wallet: strictMutationPolicy(
+    AdminCapability.MANAGE_USERS,
+    "wallets",
+  ),
 } as const satisfies Record<string, AdminActionPolicy>;
 
 const DEFAULT_ADMIN_ACTION_POLICY: AdminActionPolicy = {

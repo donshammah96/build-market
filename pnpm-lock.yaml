@@ -1392,6 +1392,31 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  packages/entitlements:
+    dependencies:
+      '@build/db':
+        specifier: workspace:*
+        version: link:../db
+      '@build/redis':
+        specifier: workspace:*
+        version: link:../redis
+      '@build/types':
+        specifier: workspace:*
+        version: link:../types
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
+    devDependencies:
+      '@build/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(@vitest/coverage-v8@4.1.9)(@vitest/ui@4.1.9)(jsdom@27.4.0(@noble/hashes@1.8.0))(vite@8.0.16(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.16.9)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/enums:
     devDependencies:
       '@build/eslint-config':

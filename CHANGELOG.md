@@ -2,6 +2,46 @@
 
 ## [Unreleased]
 
+### Added — Professional Tier System Phases 5 & 6: Badges & Trust Demotion, AI Copilot, CPD Hub, Enterprise API, BOQ-Store Bridge, & Price Index
+
+- **Database Models & Enums (`packages/db/prisma/schema.prisma`)**:
+  - Added models: `EnterpriseApiClient` (hashed API keys, scopes, token-bucket rate limiting), `ProfessionalCpdRecord` (annual CPD tracking), and `ProfessionalNotificationSettings` (Meta WhatsApp opt-in compliance).
+  - Added enum: `CpdActivityType` (`NCA_SEMINAR`, `BORAQS_WORKSHOP`, `EBK_TRAINING`, `INSTITUTIONAL_COURSE`, `HEALTH_AND_SAFETY`, `OTHER`).
+  - Linked `ProfessionalProfile.cpdRecords`, `ProfessionalProfile.notificationSettings`, and `Asset.cpdEvidenceRecords`.
+- **Background Worker Processors (`apps/workers/src/processors/`)**:
+  - **Badge Recompute & Trust-Tier Demotion Processor (`badge-recompute.processor.ts`)**: Evaluates `ELITE_PRO`, `FAST_RESPONDER`, `RISING_TALENT`, `TOP_RATED` criteria; revokes badges when metrics lapse; actively demotes `trustTier` (`ELITE` → `LICENSE_VERIFIED`, `LICENSE_VERIFIED` → `SKILLS_VERIFIED`) when `ProfessionalLicense.validUntil` expires or annual CPD points fall below NCA thresholds (< 10 pts).
+  - **Materials Price Index Processor (`price-index.processor.ts`)**: Aggregates monthly building materials price benchmarks with minimum sample size enforcement (≥ 3 stores per county×category) and IQR outlier trimming.
+- **Client Domain Services (`apps/client/app/lib/domains/`, `apps/client/app/lib/services/`)**:
+  - **AI Copilot (`professionals/ai-copilot.ts`)**: Generates draft professional bios with human-in-the-loop review invariants and localized service pricing context percentiles (`p25`, `median`, `p75`).
+  - **CPD Compliance Service (`professionals/cpd.ts`)**: Activity logging and annual regulatory compliance evaluation against national benchmarks.
+  - **BOQ-to-Store Bridge (`quotes/boq-store-bridge.ts`)**: Converts accepted quote BOQ line items into draft store materials orders with explicit `MATCHED` vs `UNMATCHED_NEEDS_MANUAL_SELECTION` confidence states.
+  - **Notification Gateway (`notification-gateway.ts`)**: Multi-channel router enforcing Meta WhatsApp opt-in preferences and approved templates with automatic SMS/Email fallbacks.
+- **REST API Endpoints (`apps/client/app/api/`)**:
+  - `GET /api/v1/directory/verified-contractors`: Enterprise directory with SHA-256 API key authentication, rate limiting, and zero-PII privacy protection.
+  - `GET /api/v1/market-data/materials-price-index`: Public market data endpoint returning validated price benchmarks.
+  - `GET /api/quotes/[id]/checkout-materials`: Converts quote BOQ items into store checkout drafts.
+  - `GET | POST /api/professionals/cpd`: CPD activity logging and annual compliance retrieval.
+
+### Added — Professional Tiers, Entitlements Engine, Subscriptions, Wallets & M-Pesa Architecture
+
+- **Shared Entitlements Package (`packages/entitlements`, `@build/entitlements`)**:
+  - Implemented core entitlement and capability resolution engine for professional subscription plans (`FREE`, `GROWTH`, `BUSINESS`).
+  - Added feature entitlement gates for portfolio limits, team seats, lead credit quotas, discount rates, badge verification, and priority search placement.
+- **Database Schema Extensions (`packages/db/prisma/schema.prisma`)**:
+  - Added enums: `SubscriptionTierKey`, `SubscriptionStatus`, `BillingInterval`, `TrustTier`, `BadgeType`, `BoostType`, `LeadCreditTxnType`, and `MpesaTransactionPurpose`.
+  - Added models: `SubscriptionPlan`, `ProfessionalSubscription`, `LeadCreditWallet`, `LeadCreditLedgerEntry`, `ProfessionalBadge`, and `ProfileBoost`.
+  - Extended `ProfessionalProfile` with trust tiers and subscription/wallet relations, and `MpesaTransaction` with `purpose` tracking (`PROJECT_PAYMENT`, `ESCROW_FUNDING`, `SUBSCRIPTION_RENEWAL`, `LEAD_CREDIT_PURCHASE`, `BOOST_PURCHASE`).
+- **Client Subscription & Wallet Domains (`apps/client/app/lib/domains/subscriptions/`, `apps/client/app/lib/domains/wallets/`, `apps/client/app/lib/domains/professionals/ranking.ts`)**:
+  - Built `subscriptions` and `wallets` domain slices with Result-pattern contracts, repositories, and services.
+  - Added search ranking engine incorporating subscription tier, trust tier, verification status, and active profile boosts.
+  - Implemented STK checkout initiation endpoints and phone number normalization for Kenyan Safaricom formats (`2547XX...` / `2541XX...`).
+- **Admin Subscription & Wallet Actions (`apps/admin/src/actions/admin/subscriptions.ts`, `apps/admin/src/actions/admin/wallets.ts`)**:
+  - Created type-safe `safeAction` admin mutation adapters for plan overrides, founding pro status grants, subscription grace period updates, and wallet credit adjustments adhering to ADR-ADMIN-001/002.
+- **Worker Subscription Renewal Processor (`apps/workers/src/processors/subscription-renewal.processor.ts`)**:
+  - Added BullMQ processor for recurring subscription renewal sweeps, grace period transitions, and automatic downgrades to free tier.
+- **M-Pesa (Daraja) Integration Architecture (`docs/build-market-mpesa-implementation-plan.md`)**:
+  - Authored comprehensive staff-level implementation plan establishing dual-app architecture (`BuildMarket-STK` vs `BuildMarket-B2C`), `@build/mpesa` shared client package design, webhook receipt routing, BullMQ async reconciliation, and 5-phase rollout roadmap.
+
 ### Fixed — Module Resolution, Build Architecture, & Turborepo Environment Contract Synchronization
 
 - **Lead Qualification Package Distribution & Project References (`packages/lead-qualification`, `tsconfig.json`)**:

@@ -4,6 +4,22 @@ All notable changes to the `workers` application will be documented in this file
 
 ## [Unreleased]
 
+### Added — Automated Badge Recomputation, Active Trust-Tier Demotions & Materials Price Index Processor
+
+- **Badge Recomputation & Trust-Tier Demotion Processor (`src/processors/badge-recompute.processor.ts`)**:
+  - Automatically evaluates badge criteria for `ELITE_PRO`, `FAST_RESPONDER`, `RISING_TALENT`, and `TOP_RATED`.
+  - Recomputes snapshots and revokes badges when professionals drop below eligibility thresholds.
+  - Actively enforces trust-tier demotions (`ELITE` → `LICENSE_VERIFIED` / `SKILLS_VERIFIED`, `LICENSE_VERIFIED` → `SKILLS_VERIFIED`) when `ProfessionalLicense.validUntil` expires, KRA TCC lapses, or annual CPD points fall below NCA thresholds (< 10 pts).
+- **Kenya Building Materials Price Index Processor (`src/processors/price-index.processor.ts`)**:
+  - Aggregates monthly building materials pricing across active stores and products by category and county.
+  - Enforces minimum sample size threshold (≥ 3 stores per cell) and IQR outlier trimming.
+
+### Added — Subscription Lifecycle & Automated Renewal Processor
+
+- **Subscription Renewal Processor (`src/processors/subscription-renewal.processor.ts`)**:
+  - Implemented BullMQ worker processor for subscription lifecycle automation.
+  - Handles upcoming renewal notifications (<= 3 days before expiry), grace period transitions on expired paid plans, and automatic fallback/downgrade to `FREE` tier once grace periods lapse.
+
 ### Added — Cross-Network NATS JetStream HA Clustering & Render Worker Auth
 
 - **AKS Multi-Node Cluster Configuration (`packages/nats/nats-values.yaml`)**:

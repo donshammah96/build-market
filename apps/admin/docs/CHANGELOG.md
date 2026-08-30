@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added — Professional Subscriptions & Wallet Balance Admin Actions
+
+- **Admin Subscription Management (`src/actions/admin/subscriptions.ts`, `src/lib/domains/subscriptions/`)**:
+  - Implemented `safeAction` adapters for overriding subscription plans, toggling Founding Pro status, setting grace periods, and canceling subscriptions.
+  - Enforced `AdminCapability.MANAGE_SUBSCRIPTIONS` / `MANAGE_USERS` capability guards and audit logging adhering to ADR-ADMIN-001, ADR-ADMIN-002, and ADR-ADMIN-008.
+- **Admin Wallet Management (`src/actions/admin/wallets.ts`)**:
+  - Implemented `safeAction` adapters for manual lead credit balance adjustments and promotional credit grants with immutable ledger tracking.
+  - Enforced `AdminCapability.MANAGE_FINANCES` capability check with Tier 1 session freshness requirements (`maxAgeSeconds: 180`).
+
 ### Added — Datadog Direct Ingestion Telemetry & Shared `@build/telemetry` Integration
 
 - **OpenTelemetry & Datadog Telemetry Integration (`src/instrumentation.ts`, `src/lib/infrastructure/otel.ts`, `src/lib/infrastructure/env-schema.ts`)**:

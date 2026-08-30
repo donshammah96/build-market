@@ -564,6 +564,76 @@ enum QuoteStatus {
   REVISED
 }
 
+// --- SUBSCRIPTION & TIERS ---
+enum SubscriptionTierKey {
+  FREE
+  GROWTH
+  BUSINESS
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  GRACE_PERIOD
+  CANCELED
+  EXPIRED
+}
+
+enum BillingInterval {
+  MONTHLY
+  ANNUAL
+}
+
+enum TrustTier {
+  UNVERIFIED
+  ID_VERIFIED
+  SKILLS_VERIFIED
+  LICENSE_VERIFIED
+  ELITE
+}
+
+enum BadgeType {
+  FOUNDING_PRO
+  FAST_RESPONDER
+  RISING_TALENT
+  TOP_RATED
+  ELITE_PRO
+}
+
+enum BoostType {
+  PROFILE_BOOST_7D
+  PROFILE_BOOST_30D
+  CATEGORY_FEATURED
+  HOMEPAGE_FEATURED
+}
+
+enum LeadCreditTxnType {
+  GRANT_MONTHLY
+  GRANT_PROMO
+  PURCHASE
+  CONSUME
+  REFUND
+  EXPIRE
+}
+
+enum MpesaTransactionPurpose {
+  PROJECT_PAYMENT
+  ESCROW_FUNDING
+  SUBSCRIPTION_RENEWAL
+  LEAD_CREDIT_PURCHASE
+  BOOST_PURCHASE
+}
+
+enum CpdActivityType {
+  NCA_SEMINAR
+  BORAQS_WORKSHOP
+  EBK_TRAINING
+  INSTITUTIONAL_COURSE
+  HEALTH_AND_SAFETY
+  OTHER
+}
+
 // --- COMMUNICATION & SOCIAL ---
 enum ReviewType {
   PROFESSIONAL
@@ -1308,6 +1378,10 @@ model ProfessionalProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  trustTier           TrustTier @default(UNVERIFIED)
+  trustTierUpdatedAt  DateTime?
+  eliteRecalculatedAt DateTime?
+
   documents       ProfessionalDocument[]
   portfolios      Portfolio[]
   licenses        ProfessionalLicense[]
@@ -1324,7 +1398,15 @@ model ProfessionalProfile {
   offeredServices ProfessionalService[]
   teamMembers     TeamMember[] // For agencies/companies
 
+  subscription   ProfessionalSubscription?
+  leadWallet     LeadCreditWallet?
+  badges         ProfessionalBadge[]
+  boosts         ProfileBoost[]
+  cpdRecords     ProfessionalCpdRecord[]
+  notificationSettings ProfessionalNotificationSettings?
+
   @@index([slug])
+  @@index([trustTier])
   @@index([profession, county, verificationStatus]) // Main search index
   @@index([kraPin])
   @@index([rating, reviewCount])
@@ -1812,6 +1894,7 @@ model Asset {
   reviewImages        ReviewImage[]        @relation("ReviewImageAssets")
   ideaBookAttachments IdeaBookAttachment[] @relation("IdeaBookAttachmentAssets")
   directUploads       DirectUpload[]
+  cpdEvidenceRecords  ProfessionalCpdRecord[] @relation("CpdEvidenceAssets")
 
   // Usage tracking
   downloadCount Int       @default(0)
@@ -2555,6 +2638,7 @@ model ProfessionalTransaction {
   project        Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
   leadId         String?
   subscriptionId String?
+  subscription   ProfessionalSubscription? @relation("SubscriptionTransactions", fields: [subscriptionId], references: [id], onDelete: SetNull)
 
   description String
   type        TransactionType
@@ -2578,7 +2662,187 @@ model ProfessionalTransaction {
   updatedAt    DateTime          @updatedAt
 
   @@index([professionalId])
+  @@index([subscriptionId])
   @@index([referenceCode])
+}
+
+// ========================================================
+// 9b. PROFESSIONAL TIERS, SUBSCRIPTIONS & ENTITLEMENTS
+// ========================================================
+
+model SubscriptionPlan {
+  id          String              @id @default(uuid())
+  key         SubscriptionTierKey @unique
+  name        String
+  description String?             @db.Text
+
+  priceMonthlyKES Decimal  @db.Decimal(10, 2)
+  priceAnnualKES  Decimal? @db.Decimal(10, 2)
+
+  maxPortfolioProjects         Int?
+  maxPortfolioImagesPerProject Int?
+  maxTeamMembers               Int?
+  monthlyLeadCredits           Int     @default(0)
+  leadCreditDiscountPct        Int     @default(0)
+  boostsIncludedPerMonth       Int     @default(0)
+  platformFeePct               Decimal @db.Decimal(5, 2)
+
+  // Canonical entitlement map read by @build/entitlements — source of truth
+  // for anything not modeled as its own column above.
+  featureFlags Json @db.JsonB
+
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions ProfessionalSubscription[]
+}
+
+model ProfessionalSubscription {
+  id             String              @id @default(uuid())
+  professionalId String              @unique // one active subscription per professional
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+
+  planId String
+  plan   SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  status          SubscriptionStatus @default(TRIALING)
+  billingInterval BillingInterval    @default(MONTHLY)
+
+  currentPeriodStart DateTime  @default(now())
+  currentPeriodEnd   DateTime?
+  graceEndsAt        DateTime?
+  canceledAt         DateTime?
+  cancelAtPeriodEnd  Boolean   @default(false)
+
+  isFoundingPro          Boolean   @default(false)
+  foundingProDiscountPct Int?
+  foundingProUntil       DateTime?
+
+  lastMpesaCheckoutRequestId String?
+  lastPaymentAttemptAt       DateTime?
+  lastPaymentFailReason      String?
+
+  transactions ProfessionalTransaction[] @relation("SubscriptionTransactions")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, currentPeriodEnd])
+  @@index([planId])
+}
+
+model LeadCreditWallet {
+  professionalId String              @id
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+  balance        Int                 @default(0)
+  updatedAt      DateTime            @updatedAt
+
+  ledger LeadCreditLedgerEntry[]
+}
+
+model LeadCreditLedgerEntry {
+  id             String           @id @default(uuid())
+  professionalId String
+  wallet         LeadCreditWallet @relation(fields: [professionalId], references: [professionalId], onDelete: Cascade)
+
+  type                 LeadCreditTxnType
+  amount               Int // positive = credit, negative = debit
+  balanceAfter         Int
+  relatedLeadId        String? // MarketplaceLead.id or MarketplaceLeadRoutingEvent.id
+  relatedTransactionId String? // ProfessionalTransaction.id, if purchased with money
+  note                 String?
+
+  createdAt DateTime @default(now())
+
+  @@index([professionalId, createdAt])
+}
+
+model ProfessionalBadge {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+
+  type             BadgeType
+  awardedAt        DateTime  @default(now())
+  revokedAt        DateTime?
+  criteriaSnapshot Json?     @db.JsonB
+
+  @@unique([professionalId, type])
+  @@index([professionalId])
+}
+
+model ProfileBoost {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+
+  type              BoostType
+  startsAt          DateTime
+  endsAt            DateTime
+  paidTransactionId String?
+  includedInPlan    Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([professionalId, startsAt, endsAt])
+  @@index([endsAt]) // expiry-sweep job
+}
+
+model ProfessionalCpdRecord {
+  id             String              @id @default(uuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+
+  activityType  CpdActivityType
+  providerName  String
+  activityTitle String
+  pointsEarned  Int                 @default(1)
+  completedAt   DateTime
+  
+  evidenceAssetId String?
+  evidenceAsset   Asset?            @relation("CpdEvidenceAssets", fields: [evidenceAssetId], references: [id], onDelete: SetNull)
+
+  verified   Boolean   @default(false)
+  verifiedAt DateTime?
+  verifiedBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([professionalId, completedAt])
+  @@index([verified])
+}
+
+model ProfessionalNotificationSettings {
+  id             String              @id @default(uuid())
+  professionalId String              @unique
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [userId], onDelete: Cascade)
+
+  whatsappEnabled Boolean  @default(false) // Opt-in required for Meta WhatsApp API compliance
+  smsEnabled      Boolean  @default(true)
+  emailEnabled    Boolean  @default(true)
+  optedInAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EnterpriseApiClient {
+  id           String    @id @default(uuid())
+  name         String
+  hashedApiKey String    @unique
+  scopes       String[]  // e.g. ["directory:read", "market-data:read"]
+  rateLimitRpm Int       @default(60)
+  isActive     Boolean   @default(true)
+  contactEmail String
+  createdAt    DateTime  @default(now())
+  revokedAt    DateTime?
+
+  @@index([hashedApiKey])
+  @@index([isActive])
 }
 
 // ========================================================
@@ -3096,6 +3360,8 @@ model MpesaTransaction {
   userId          String
   projectId       String?
   escrowId        String?
+  subscriptionId  String?
+  purpose         MpesaTransactionPurpose @default(PROJECT_PAYMENT)
   transactionType MpesaTransactionType
 
   // Financials
@@ -3126,6 +3392,7 @@ model MpesaTransaction {
 
   @@index([userId, status])
   @@index([checkoutRequestId])
+  @@index([subscriptionId])
   @@index([mpesaReceiptNumber])
   @@index([status, createdAt]) // Reconciliation queries
   @@index([nextRetryAt]) // Retry job queue

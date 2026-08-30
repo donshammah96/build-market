@@ -28,6 +28,35 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Added — Professional Tier System Phases 5 & 6: AI Copilot, CPD Hub, Enterprise Directory API, BOQ-Store Bridge, & Multi-Channel Notifications
+
+- **AI Copilot Domain Service (`app/lib/domains/professionals/ai-copilot.ts`)**:
+  - Generates draft bios with `isDraft: true` and disclaimer for human review before publishing.
+  - Generates informational pricing context percentiles (`p25`, `median`, `p75`) across Kenyan trades.
+- **CPD Compliance Domain Service (`app/lib/domains/professionals/cpd.ts`, `app/api/professionals/cpd/route.ts`)**:
+  - Submits and tracks annual CPD activity records and evaluates progress against national targets (10 points).
+- **BOQ-to-Store Checkout Bridge (`app/lib/domains/quotes/boq-store-bridge.ts`, `app/api/quotes/[id]/checkout-materials/route.ts`)**:
+  - Automatically matches accepted BOQ items to store products with confidence scoring and explicit `UNMATCHED_NEEDS_MANUAL_SELECTION` state for ambiguous items.
+- **Multi-Channel Notification Gateway (`app/lib/services/notification-gateway.ts`)**:
+  - Implemented multi-channel dispatcher enforcing Meta WhatsApp Business API opt-in rules and approved templates with automatic fallback to Africa's Talking SMS and Email.
+- **Enterprise Verified Contractor Directory API (`app/api/v1/directory/verified-contractors/route.ts`, `app/api/v1/shared/enterprise-auth.ts`)**:
+  - Implemented SHA-256 API key authentication, per-client token-bucket rate limiting, and zero-PII directory output.
+- **Materials Price Index Market Data Endpoint (`app/api/v1/market-data/materials-price-index/route.ts`)**:
+  - Returns statistically validated price benchmarks, suppressing under-sampled regions (< 3 stores).
+
+### Added — Professional Subscriptions, Wallets, Ranking Algorithm & M-Pesa Architecture
+
+- **Subscriptions Domain Slice (`app/lib/domains/subscriptions/`)**:
+  - Implemented `contracts.ts`, `repository.ts`, and `service.ts` providing type-safe `Result<T, SubscriptionsDomainError>` operations for plan querying, active subscription retrieval, and STK checkout initiation.
+  - Added Kenyan phone number normalization utility supporting Safaricom prefixes (`07...`, `01...`, `+254...`, `254...`).
+  - Added support for Founding Pro 100% comped trial periods and permanent discounts (15%).
+- **Lead Credit Wallets Domain Slice (`app/lib/domains/wallets/`)**:
+  - Implemented wallet ledger queries and credit balance management for professional marketplace lead unlock operations.
+- **Professional Search Ranking Engine (`app/lib/domains/professionals/ranking.ts`)**:
+  - Implemented multi-factor ranking scoring prioritizing active subscriptions, trust tiers (`ELITE`, `LICENSE_VERIFIED`), verified badges, and active profile boosts (`HOMEPAGE_FEATURED`, `CATEGORY_FEATURED`).
+- **M-Pesa Integration Plan Documentation (`docs/build-market-mpesa-implementation-plan.md`)**:
+  - Aligned client app role as thin HTTP adapter for public Safaricom callbacks and checkout initiation with shared `@build/mpesa` contracts.
+
 ### Fixed — Module Resolution, Monorepo Build Architecture, & Turborepo Environment Tracking
 
 - **Lead Qualification Package Packaging & Project References (`packages/lead-qualification`, `tsconfig.json`)**:
