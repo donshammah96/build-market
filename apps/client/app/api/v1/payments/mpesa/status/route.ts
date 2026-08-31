@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TransactionStatus, prisma } from "@build/db";
 import { withAuth } from "@/app/lib/api/api-middleware";
-import { checkRateLimit, getRateLimitIdentifier, RateLimits } from "@/app/lib/api/rate-limit";
+import {
+  checkRateLimit,
+  getRateLimitIdentifier,
+  RateLimits,
+} from "@/app/lib/api/rate-limit";
 
 export const GET = withAuth(async (request: NextRequest, { dbUserId }) => {
   const rateLimit = await checkRateLimit(
@@ -14,7 +18,8 @@ export const GET = withAuth(async (request: NextRequest, { dbUserId }) => {
   }
 
   const transactionId = request.nextUrl.searchParams.get("transactionId");
-  const checkoutRequestId = request.nextUrl.searchParams.get("checkoutRequestId");
+  const checkoutRequestId =
+    request.nextUrl.searchParams.get("checkoutRequestId");
   if (!transactionId && !checkoutRequestId) {
     return NextResponse.json(
       { error: "transactionId or checkoutRequestId is required" },
@@ -28,20 +33,29 @@ export const GET = withAuth(async (request: NextRequest, { dbUserId }) => {
         where: { checkoutRequestId: checkoutRequestId! },
       });
 
-  if (!txn) return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
-  if (txn.userId !== dbUserId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!txn)
+    return NextResponse.json(
+      { error: "Transaction not found" },
+      { status: 404 },
+    );
+  if (txn.userId !== dbUserId)
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const isTerminal = [
-    TransactionStatus.SUCCESS,
-    TransactionStatus.FAILED,
-    TransactionStatus.REVERSED,
-    TransactionStatus.REFUNDED,
-    TransactionStatus.CANCELLED,
-    TransactionStatus.COMPLETED,
-  ].includes(txn.status);
+  const isTerminal = (
+    [
+      TransactionStatus.SUCCESS,
+      TransactionStatus.FAILED,
+      TransactionStatus.REVERSED,
+      TransactionStatus.REFUNDED,
+      TransactionStatus.CANCELLED,
+      TransactionStatus.COMPLETED,
+    ] as readonly TransactionStatus[]
+  ).includes(txn.status);
+
   const ageMs = Date.now() - txn.createdAt.getTime();
   const normalizedStatus = isTerminal
-    ? txn.status === TransactionStatus.SUCCESS || txn.status === TransactionStatus.COMPLETED
+    ? txn.status === TransactionStatus.SUCCESS ||
+      txn.status === TransactionStatus.COMPLETED
       ? "SUCCESS"
       : "FAILED"
     : ageMs > 90_000

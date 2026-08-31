@@ -172,13 +172,16 @@ export async function processMpesaStkCallbackJob(
 
     const nextStatus = resolveStkCallbackStatus(transaction.status, resultCode);
     const isSuccess = nextStatus === "SUCCESS";
-    const currentStatusIsTerminal = [
-      TransactionStatus.SUCCESS,
-      TransactionStatus.REVERSED,
-      TransactionStatus.REFUNDED,
-      TransactionStatus.CANCELLED,
-      TransactionStatus.COMPLETED,
-    ].includes(transaction.status);
+    const currentStatusIsTerminal = (
+      [
+        TransactionStatus.SUCCESS,
+        TransactionStatus.REVERSED,
+        TransactionStatus.REFUNDED,
+        TransactionStatus.CANCELLED,
+        TransactionStatus.COMPLETED,
+      ] as readonly TransactionStatus[]
+    ).includes(transaction.status);
+
     await tx.mpesaTransaction.update({
       where: { id: transaction.id },
       data: {

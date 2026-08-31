@@ -377,7 +377,8 @@ function initializeBullMqWorkers() {
   mpesaWorker.on("failed", (job, err) => {
     logger.error("[Worker:mpesa] STK initiation failed", err, {
       jobId: job?.id,
-      transactionId: job?.data?.transactionId,
+      transactionId: (job?.data as { transactionId?: string } | undefined)
+        ?.transactionId,
     });
   });
 

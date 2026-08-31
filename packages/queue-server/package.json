@@ -19,7 +19,7 @@
     "check-types": "tsc --noEmit",
     "build": "tsc",
     "prepack": "pnpm run build",
-    "test": "echo \"No tests configured\" && exit 0"
+    "test": "vitest run"
   },
   "dependencies": {
     "@build/db": "workspace:*",
@@ -33,6 +33,7 @@
     "@build/typescript-config": "workspace:*",
     "@types/node": "catalog:",
     "eslint": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

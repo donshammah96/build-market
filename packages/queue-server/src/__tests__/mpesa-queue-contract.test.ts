@@ -15,8 +15,8 @@ describe("M-Pesa queue contracts", () => {
 
     expect(MPESA_QUEUE_NAMES.PAYMENTS).toBe("mpesa-payments");
     expect(MPESA_JOB_NAMES.INITIATE_STK).toBe("initiate-stk");
-    expect(getMpesaJobId(MPESA_JOB_NAMES.INITIATE_STK, data.transactionId)).toBe(
-      "mpesa:initiate-stk:tx-1",
-    );
+    expect(
+      getMpesaJobId(MPESA_JOB_NAMES.INITIATE_STK, data.transactionId),
+    ).toBe("mpesa:initiate-stk:tx-1");
   });
 });

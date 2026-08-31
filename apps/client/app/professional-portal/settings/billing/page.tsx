@@ -219,6 +219,7 @@ export default function BillingManagementPage() {
               subtitle: "Instant 30-day renewal via Safaricom M-Pesa",
               amountKES: 1500,
               purpose: "SUBSCRIPTION_RENEWAL",
+              billingInterval: "MONTHLY",
               planKey: currentPlanKey,
             })
           }
@@ -345,9 +346,11 @@ export default function BillingManagementPage() {
                             "Immediate upgrade via Safaricom M-Pesa STK",
                           amountKES: plan.priceMonthlyKES,
                           purpose: "SUBSCRIPTION_RENEWAL",
+                          billingInterval: "MONTHLY",
                           planKey: plan.key,
                         })
                       }
+
                       className="w-full py-2 bg-[#3F6B4E] hover:bg-[#32563E] text-white rounded text-xs font-bold uppercase tracking-wider transition-colors shadow-2xs cursor-pointer"
                     >
                       Upgrade with M-Pesa
