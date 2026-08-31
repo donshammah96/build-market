@@ -36,12 +36,14 @@ export class ClientSubscriptionsRepository {
     subscriptionId?: string;
     amount: number;
     phoneNumber: string;
-    checkoutRequestId: string;
-    merchantRequestId: string;
+    checkoutRequestId?: string | null;
+    merchantRequestId?: string | null;
     idempotencyKey: string;
+    metadata?: Record<string, string>;
   }) {
-    return prisma.mpesaTransaction.create({
-      data: {
+    return prisma.mpesaTransaction.upsert({
+      where: { idempotencyKey: params.idempotencyKey },
+      create: {
         userId: params.userId,
         subscriptionId: params.subscriptionId,
         purpose: MpesaTransactionPurpose.SUBSCRIPTION_RENEWAL,
@@ -51,7 +53,9 @@ export class ClientSubscriptionsRepository {
         checkoutRequestId: params.checkoutRequestId,
         merchantRequestId: params.merchantRequestId,
         idempotencyKey: params.idempotencyKey,
+        metadata: params.metadata,
       },
+      update: {},
     });
   }
 

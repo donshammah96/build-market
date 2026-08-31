@@ -24,6 +24,14 @@ import {
 } from "./processors/newsletter.processor.js";
 import { processImageUploadJob } from "./processors/upload.processor.js";
 import { processLicenseVerificationJob } from "./processors/license-verification.processor.js";
+import {
+  processMpesaB2cInitiateJob,
+  processMpesaB2cResultJob,
+} from "./processors/mpesa-b2c.processor.js";
+import {
+  processMpesaStkCallbackJob,
+  processMpesaStkInitiateJob,
+} from "./processors/mpesa-stk.processor.js";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import {
   getBullMQConnectionOptions,
@@ -36,6 +44,10 @@ import {
   type NewsletterEspSyncJobData,
   type ImageUploadProcessingJobData,
   type LicenseVerificationJobData,
+  type MpesaStkInitiateJobData,
+  type MpesaStkCallbackJobData,
+  type MpesaB2cInitiateJobData,
+  type MpesaB2cResultJobData,
 } from "@build/queue-server";
 import {
   createConsumer,
@@ -330,6 +342,45 @@ function initializeBullMqWorkers() {
     });
   });
 
+  const mpesaWorker = new Worker<
+    | MpesaStkInitiateJobData
+    | MpesaStkCallbackJobData
+    | MpesaB2cInitiateJobData
+    | MpesaB2cResultJobData
+  >(
+    "mpesa-payments",
+    async (
+      job: Job<
+        | MpesaStkInitiateJobData
+        | MpesaStkCallbackJobData
+        | MpesaB2cInitiateJobData
+        | MpesaB2cResultJobData
+      >,
+    ) =>
+      CorrelationIdManager.run(job.data.correlationId, () =>
+        job.name === "process-stk-callback"
+          ? processMpesaStkCallbackJob(job as Job<MpesaStkCallbackJobData>)
+          : job.name === "initiate-b2c"
+            ? processMpesaB2cInitiateJob(
+                job as Job<MpesaB2cInitiateJobData>,
+                env,
+              )
+            : job.name === "process-b2c-result"
+              ? processMpesaB2cResultJob(job as Job<MpesaB2cResultJobData>)
+              : processMpesaStkInitiateJob(
+                  job as Job<MpesaStkInitiateJobData>,
+                  env,
+                ),
+      ),
+    { connection: redisConnectionOptions, concurrency: 2 },
+  );
+  mpesaWorker.on("failed", (job, err) => {
+    logger.error("[Worker:mpesa] STK initiation failed", err, {
+      jobId: job?.id,
+      transactionId: job?.data?.transactionId,
+    });
+  });
+
   activeWorkers.push(
     maintenanceWorker,
     notificationWorker,
@@ -340,6 +391,7 @@ function initializeBullMqWorkers() {
     newsletterEspSyncWorker,
     uploadProcessingWorker,
     licenseVerificationWorker,
+    mpesaWorker,
   );
 }
 

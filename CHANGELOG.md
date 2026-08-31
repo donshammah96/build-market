@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added - M-Pesa integration hardening pass
+
+- Added a worker-only Daraja provider package, typed BullMQ payment contracts,
+  idempotent subscription STK checkout, public callback receipts, and audited
+  admin B2C payout enqueueing.
+- Added the additive Prisma migration for callback receipts, B2C idempotency,
+  retry metadata, and provider correlation indexes.
+- Production enablement remains gated on reconciliation, ledger coverage,
+  sandbox evidence, provider onboarding, and strict security drift checks.
+
 ### Fixed — Worker Test Mocking & Admin Route Registry Governance
 
 - **Background Worker Test Harness (`apps/workers/__tests__/processors/badge-recompute.test.ts`)**:

@@ -3378,6 +3378,8 @@ model MpesaTransaction {
   // Callback tracking
   callbackReceivedAt DateTime?
   callbackPayload    Json?
+  callbackEventCount Int      @default(0)
+  metadata           Json?    @db.JsonB
 
   // Reversal handling
   reversalTransactionId String?
@@ -3454,6 +3456,7 @@ model MpesaB2C {
   professionalId String
   amount         Decimal @db.Decimal(10, 2)
   phoneNumber    String
+  idempotencyKey  String  @unique
 
   // Status
   status           TransactionStatus @default(PENDING)
@@ -3461,6 +3464,10 @@ model MpesaB2C {
   originatorConvId String?
   resultCode       String?
   resultDesc       String?
+  callbackReceivedAt DateTime?
+  callbackPayload    Json?
+  retryCount         Int      @default(0)
+  nextRetryAt        DateTime?
 
   // Completion
   transactionId String?   @unique // M-Pesa transaction ID
@@ -3468,6 +3475,32 @@ model MpesaB2C {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([professionalId, status])
+}
+
+// Append-only provider callback receipt. The raw payload is redacted before
+// persistence; payloadHash supports incident correlation without logging or
+// storing secrets and unbounded provider data in application logs.
+model MpesaCallbackEvent {
+  id                String   @id @default(uuid())
+  providerEventKey  String   @unique
+  callbackType      String
+  transactionId     String?
+  payoutId          String?
+  checkoutRequestId String?
+  conversationId    String?
+  payloadHash       String
+  redactedPayload   Json?    @db.JsonB
+  processingStatus  String   @default("RECEIVED")
+  receivedAt        DateTime @default(now())
+  processedAt       DateTime?
+  createdAt         DateTime @default(now())
+
+  @@index([callbackType, receivedAt])
+  @@index([transactionId, processingStatus])
+  @@index([payoutId, processingStatus])
 }
 
 // ========================================================

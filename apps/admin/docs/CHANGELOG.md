@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added - M-Pesa payout controls
+
+- Added capability-gated, recently-authenticated, audited B2C payout enqueueing
+  with strict amount and Kenyan phone validation and database idempotency.
+- Added the operation registry and declarative policy entry for payout creation.
+- Provider credentials and direct Daraja calls remain forbidden in admin.
+
 ### Fixed — Route Registry Security Governance
 
 - **Route Registry Cataloging (`src/lib/security/route-registry.ts`)**:

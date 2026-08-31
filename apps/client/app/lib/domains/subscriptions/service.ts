@@ -1,6 +1,12 @@
 import { err, ok, type Result } from "@/app/lib/errors/result";
 import { BillingInterval, SubscriptionTierKey } from "@build/db";
+import { addMpesaStkInitiateJob } from "@build/queue-server";
+import { randomUUID } from "node:crypto";
 import { clientSubscriptionsRepository } from "./repository.js";
+import {
+  buildSubscriptionIdempotencyKey,
+  calculateSubscriptionAmount,
+} from "./checkout.js";
 import type {
   ClientActor,
   InitiateSubscriptionCheckoutInput,
@@ -132,40 +138,48 @@ export class ClientSubscriptionsService {
         ? (existingSub.foundingProDiscountPct ?? 15)
         : 0;
 
-      const basePrice =
-        input.billingInterval === BillingInterval.ANNUAL
-          ? Number(plan.priceAnnualKES ?? Number(plan.priceMonthlyKES) * 10)
-          : Number(plan.priceMonthlyKES);
-
-      const finalAmount = Math.max(
-        1,
-        Math.round(basePrice * (1 - discountPct / 100)),
-      );
-
-      // Generate deterministic tracking IDs
-      const checkoutRequestId = `ws_CO_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-      const merchantRequestId = `MR_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-      const idempotencyKey = `sub_stk_${actor.userId}_${input.planKey}_${Date.now()}`;
-
-      await clientSubscriptionsRepository.createPendingMpesaCheckout({
+      const finalAmount = calculateSubscriptionAmount({
+        monthlyPriceKES: Number(plan.priceMonthlyKES),
+        annualPriceKES: plan.priceAnnualKES
+          ? Number(plan.priceAnnualKES)
+          : null,
+        billingInterval: input.billingInterval,
+        discountPct,
+      });
+      const idempotencyKey = buildSubscriptionIdempotencyKey({
         userId: actor.userId,
-        subscriptionId: existingSub?.id,
-        amount: finalAmount,
-        phoneNumber: formattedPhone,
-        checkoutRequestId,
-        merchantRequestId,
-        idempotencyKey,
+        planKey: input.planKey,
+        billingInterval: input.billingInterval,
+        clientKey: input.idempotencyKey,
+      });
+
+      const transaction =
+        await clientSubscriptionsRepository.createPendingMpesaCheckout({
+          userId: actor.userId,
+          subscriptionId: existingSub?.id,
+          amount: finalAmount,
+          phoneNumber: formattedPhone,
+          idempotencyKey,
+          metadata: {
+            planKey: String(input.planKey),
+            billingInterval: String(input.billingInterval),
+          },
+        });
+      await addMpesaStkInitiateJob({
+        transactionId: transaction.id,
+        correlationId: randomUUID(),
       });
 
       return ok({
-        checkoutRequestId,
-        merchantRequestId,
+        transactionId: transaction.id,
+        checkoutRequestId: transaction.id,
+        merchantRequestId: null,
         amount: finalAmount,
         phoneNumber: formattedPhone,
         planName: plan.name,
         billingInterval: input.billingInterval,
         discountAppliedPct: discountPct,
-        status: "PENDING_USER_PIN",
+        status: "QUEUED",
       });
     } catch (error) {
       return err({

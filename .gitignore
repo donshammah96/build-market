@@ -85,6 +85,8 @@ create-pr.ps1
 create-pr.sh
 docs/*
 !docs/CLOUDFLARE_WORKERS_RUNBOOK.md
+!docs/CHANGELOG.md
+!docs/build-market-mpesa-implementation-plan.md
 !apps/admin/docs/
 !apps/admin/docs/**
 !apps/client/docs/
@@ -98,6 +100,12 @@ apps/client/docs/*
 !apps/workers/docs/
 !apps/workers/docs/**
 apps/workers/exports/
+!packages/db/docs/
+!packages/db/docs/CHANGELOG.md
+!packages/mpesa/docs/
+!packages/mpesa/docs/CHANGELOG.md
+!packages/queue-server/docs/
+!packages/queue-server/docs/CHANGELOG.md
 .agent
 .idea/
 apps/client/public/uploads/

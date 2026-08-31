@@ -14,3 +14,5 @@ export * from "./notification.queue.js";
 export * from "./newsletter.queue.js";
 export * from "./upload-processing.queue.js";
 export * from "./license-verification.queue.js";
+export * from "./mpesa.queue.js";
+export * from "./mpesa-queue-contracts.js";
