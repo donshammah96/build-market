@@ -28,18 +28,19 @@ export const GET = withAuth(async (request: NextRequest, { dbUserId }) => {
   }
 
   const txn = transactionId
-    ? await prisma.mpesaTransaction.findUnique({ where: { id: transactionId } })
-    : await prisma.mpesaTransaction.findUnique({
-        where: { checkoutRequestId: checkoutRequestId! },
+    ? await prisma.mpesaTransaction.findFirst({
+        where: { id: transactionId, userId: dbUserId },
+      })
+    : await prisma.mpesaTransaction.findFirst({
+        where: { checkoutRequestId: checkoutRequestId!, userId: dbUserId },
       });
 
-  if (!txn)
+  if (!txn) {
     return NextResponse.json(
       { error: "Transaction not found" },
       { status: 404 },
     );
-  if (txn.userId !== dbUserId)
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const isTerminal = (
     [

@@ -2,12 +2,14 @@
 
 ## [Unreleased]
 
-### Added - M-Pesa payout controls
+### Added - M-Pesa payout & reconciliation operational controls (Phase 5)
 
 - Added capability-gated, recently-authenticated, audited B2C payout enqueueing
   with strict amount and Kenyan phone validation and database idempotency.
-- Added the operation registry and declarative policy entry for payout creation.
-- Provider credentials and direct Daraja calls remain forbidden in admin.
+- Added read-only transaction search and detailed inspection under `AdminCapability.VIEW_FINANCIALS` with phone number masking and privacy-preserving HMAC search index.
+- Added queued transaction requery under `AdminCapability.RECONCILE_PAYMENTS` with `recentAuth: { maxAgeSeconds: 180 }` and append-only audit logging before response.
+- Registered `RECONCILE_PAYMENTS` capability and `search_mpesa_transactions`, `get_mpesa_transaction_details`, `requery_mpesa_transaction` operations in registry and policy map.
+- Provider credentials and direct Daraja calls remain strictly forbidden in admin.
 
 ### Fixed — Route Registry Security Governance & Client Bundle Isolation
 

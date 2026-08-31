@@ -21,3 +21,12 @@ export function buildSubscriptionIdempotencyKey(params: {
 }): string {
   return `sub_stk:${params.userId}:${params.planKey}:${params.billingInterval}:${params.clientKey}`;
 }
+
+export function buildPaymentIdempotencyKey(params: {
+  userId: string;
+  purpose: string;
+  targetId: string;
+  clientKey: string;
+}): string {
+  return `mpesa_stk:${params.userId}:${params.purpose}:${params.targetId}:${params.clientKey}`;
+}

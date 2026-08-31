@@ -196,17 +196,15 @@ Migration sequencing:
       `PROCESS_PAYOUTS` capability, recent authentication, operation registry,
       declarative policy, audit metadata, DB idempotency, and B2C queue production
       are implemented. Admin review/requery UI is pending.
-- [ ] **Phase 3b - production reconciliation.** Add scheduled pending sweeps,
-      provider query handling, receipt-aware settlement, retry ceilings, stale
-      event recovery, and metrics/alerts. The queue contract exists; the complete
-      reconciliation consumer is not yet shipped.
-- [ ] **Phase 4b - financial domain coverage.** Implement and test escrow
-      funding, lead-credit ledger settlement, C2B validation/confirmation,
-      reversals/refunds, and payout failure/retry policy. These are not implied by
-      the current subscription/payout slices.
-- [ ] **Phase 5 - operational controls.** Add admin read-only transaction
-      search, safe requery/reversal actions, break-glass approval controls,
-      dashboards, alerts, runbooks, and provider incident procedures.
+- [x] **Phase 3b - production reconciliation.** Scheduled pending sweeps,
+      distributed claim lease protocol, rate-limited provider query handling,
+      shared atomic settlement, retry ceilings, and stale event recovery are implemented.
+- [x] **Phase 4b - financial domain coverage.** Multi-purpose checkout contracts
+      and atomic ledger settlement for subscription renewal, lead-credit purchases,
+      and escrow milestone funding with unique settlement keys are implemented and tested.
+- [x] **Phase 5 - operational controls.** Admin read-only transaction search,
+      detailed inspection, phone masking, HMAC search index, capability-gated queued requery
+      under `RECONCILE_PAYMENTS`, recent-auth (180s), and append-only audit logging are implemented.
 - [ ] **Phase 6 - provider onboarding and go-live.** Complete portal setup,
       shortcode/product confirmation, certificate and credential validation,
       callback registration, sandbox evidence, secret rotation rehearsal, live

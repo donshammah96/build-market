@@ -1,12 +1,4 @@
-import {
-  BillingInterval,
-  PaymentMethod,
-  SubscriptionStatus,
-  TransactionCategory,
-  TransactionStatus,
-  TransactionType,
-  prisma,
-} from "@build/db";
+import { TransactionStatus, prisma } from "@build/db";
 import { createMpesaClient, type MpesaClient } from "@build/mpesa";
 import type {
   MpesaStkCallbackJobData,
@@ -14,6 +6,7 @@ import type {
 } from "@build/queue-server";
 import type { Job } from "bullmq";
 import { validateWorkerEnv, type WorkerEnv } from "../env.js";
+import { executeMpesaStkSettlement } from "../domains/mpesa/settlement.js";
 
 export function mapStkResultCode(resultCode: number): "SUCCESS" | "FAILED" {
   return resultCode === 0 ? "SUCCESS" : "FAILED";
@@ -165,107 +158,14 @@ export async function processMpesaStkCallbackJob(
       : undefined;
 
   return prisma.$transaction(async (tx) => {
-    const transaction = await tx.mpesaTransaction.findUnique({
-      where: { id: job.data.transactionId },
+    const result = await executeMpesaStkSettlement(tx, {
+      transactionId: job.data.transactionId,
+      resultCode,
+      resultDesc: payload.ResultDesc,
+      receiptNumber: receipt,
+      providerPayload: (event.redactedPayload as Record<string, unknown>) ?? {},
+      callbackEventId: event.id,
     });
-    if (!transaction) throw new Error("M-Pesa transaction not found");
-
-    const nextStatus = resolveStkCallbackStatus(transaction.status, resultCode);
-    const isSuccess = nextStatus === "SUCCESS";
-    const currentStatusIsTerminal = (
-      [
-        TransactionStatus.SUCCESS,
-        TransactionStatus.REVERSED,
-        TransactionStatus.REFUNDED,
-        TransactionStatus.CANCELLED,
-        TransactionStatus.COMPLETED,
-      ] as readonly TransactionStatus[]
-    ).includes(transaction.status);
-
-    await tx.mpesaTransaction.update({
-      where: { id: transaction.id },
-      data: {
-        status: currentStatusIsTerminal
-          ? transaction.status
-          : isSuccess
-            ? TransactionStatus.SUCCESS
-            : TransactionStatus.FAILED,
-        resultCode: String(resultCode),
-        resultDesc: payload.ResultDesc,
-        mpesaReceiptNumber: receipt,
-        callbackReceivedAt: event.receivedAt,
-        callbackPayload: event.redactedPayload ?? undefined,
-        callbackEventCount: { increment: 1 },
-      },
-    });
-
-    if (
-      isSuccess &&
-      transaction.purpose === "SUBSCRIPTION_RENEWAL" &&
-      transaction.subscriptionId
-    ) {
-      const subscription = await tx.professionalSubscription.findUnique({
-        where: { id: transaction.subscriptionId },
-      });
-      if (subscription) {
-        const checkoutMetadata = (transaction.metadata ?? {}) as {
-          planKey?: string;
-          billingInterval?: string;
-        };
-        const plan = checkoutMetadata.planKey
-          ? await tx.subscriptionPlan.findUnique({
-              where: { key: checkoutMetadata.planKey as never },
-            })
-          : null;
-        const interval =
-          checkoutMetadata.billingInterval === "ANNUAL"
-            ? BillingInterval.ANNUAL
-            : BillingInterval.MONTHLY;
-        const start =
-          subscription.currentPeriodEnd &&
-          subscription.currentPeriodEnd > new Date()
-            ? subscription.currentPeriodEnd
-            : new Date();
-        const end = new Date(start);
-        if (interval === BillingInterval.ANNUAL)
-          end.setFullYear(end.getFullYear() + 1);
-        else end.setMonth(end.getMonth() + 1);
-        await tx.professionalSubscription.update({
-          where: { id: subscription.id },
-          data: {
-            planId: plan?.id ?? subscription.planId,
-            status: SubscriptionStatus.ACTIVE,
-            billingInterval: interval,
-            currentPeriodStart: start,
-            currentPeriodEnd: end,
-            graceEndsAt: null,
-            lastPaymentAttemptAt: new Date(),
-            lastPaymentFailReason: null,
-          },
-        });
-        if (receipt) {
-          await tx.professionalTransaction.create({
-            data: {
-              professionalId: subscription.professionalId,
-              subscriptionId: subscription.id,
-              description: `Subscription renewal (${interval.toLowerCase()})`,
-              type: TransactionType.EXPENSE,
-              category: TransactionCategory.SUBSCRIPTION_FEE,
-              method: PaymentMethod.MPESA,
-              amount: transaction.amount,
-              referenceCode: receipt,
-              status: TransactionStatus.SUCCESS,
-              completedAt: new Date(),
-            },
-          });
-        }
-      }
-    }
-
-    await tx.mpesaCallbackEvent.update({
-      where: { id: event.id },
-      data: { processingStatus: "PROCESSED", processedAt: new Date() },
-    });
-    return { eventId: event.id, status: nextStatus };
+    return { eventId: event.id, status: result.status };
   });
 }

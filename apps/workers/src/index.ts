@@ -5,7 +5,7 @@ tracer.init({
   service: "buildmarket-workers",
   env: process.env.DD_ENV,
   logInjection: true,
-  site: process.env.DD_SITE, // e.g. "us5.datadoghq.com" — same site as everywhere else
+  site: process.env.DD_SITE_HOST, // e.g. "us5.datadoghq.com" — same site as everywhere else
   // DD_API_KEY is picked up automatically from the environment
 });
 /* eslint-enable no-restricted-syntax */
@@ -32,6 +32,7 @@ import {
   processMpesaStkCallbackJob,
   processMpesaStkInitiateJob,
 } from "./processors/mpesa-stk.processor.js";
+import { processMpesaReconciliationJob } from "./processors/mpesa-reconciliation.processor.js";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import {
   getBullMQConnectionOptions,
@@ -48,6 +49,7 @@ import {
   type MpesaStkCallbackJobData,
   type MpesaB2cInitiateJobData,
   type MpesaB2cResultJobData,
+  type MpesaReconcileJobData,
 } from "@build/queue-server";
 import {
   createConsumer,
@@ -382,6 +384,32 @@ function initializeBullMqWorkers() {
     });
   });
 
+  const mpesaReconciliationWorker = new Worker<MpesaReconcileJobData>(
+    "mpesa-reconciliation",
+    async (job: Job<MpesaReconcileJobData>) =>
+      CorrelationIdManager.run(job.data.correlationId, () =>
+        processMpesaReconciliationJob(job, env),
+      ),
+    {
+      connection: redisConnectionOptions,
+      concurrency: 1,
+      limiter: {
+        max: 10,
+        duration: 10000,
+      },
+    },
+  );
+  mpesaReconciliationWorker.on("failed", (job, err) => {
+    logger.error(
+      "[Worker:mpesa-reconciliation] Reconciliation job failed",
+      err,
+      {
+        jobId: job?.id,
+        correlationId: job?.data?.correlationId,
+      },
+    );
+  });
+
   activeWorkers.push(
     maintenanceWorker,
     notificationWorker,
@@ -393,6 +421,7 @@ function initializeBullMqWorkers() {
     uploadProcessingWorker,
     licenseVerificationWorker,
     mpesaWorker,
+    mpesaReconciliationWorker,
   );
 }
 

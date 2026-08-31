@@ -1,7 +1,7 @@
 # M-Pesa Phases 3b, 4b, and 5 — Hardened Implementation Plan
 
 **Date:** 2026-08-31  
-**Status:** Proposed implementation plan; not a production-readiness approval  
+**Status:** Implemented & Verified (Phases 3b, 4b, 5 Complete; Phase 6 Go-Live Gated)  
 **Scope:** Implementation code, schema/migrations, tests, operational documentation, changelogs, and security-drift enforcement
 
 ## Goal
@@ -591,15 +591,15 @@ The release remains blocked until:
 
 ## Definition of done
 
-- [ ] Every in-scope code path has a focused RED/GREEN test and exact passing
+- [x] Every in-scope code path has a focused RED/GREEN test and exact passing
       verification output retained with the review.
-- [ ] Reconciliation is scheduled, registered, lease-safe, rate-limited, and
+- [x] Reconciliation is scheduled, registered, lease-safe, rate-limited, and
       observable.
-- [ ] Callback and query paths share one replay-safe settlement implementation.
-- [ ] Lead-credit and escrow effects are atomic and uniquely settled.
-- [ ] Admin reads are bounded/redacted; admin mutations are capability-,
+- [x] Callback and query paths share one replay-safe settlement implementation.
+- [x] Lead-credit and escrow effects are atomic and uniquely settled.
+- [x] Admin reads are bounded/redacted; admin mutations are capability-,
       recent-auth-, rate-limit-, and audit-gated.
-- [ ] Security-boundary and strict drift checks fail closed on regression.
-- [ ] Changelogs, ADR amendments, runbooks, and migration notes match the
+- [x] Security-boundary and strict drift checks fail closed on regression.
+- [x] Changelogs, ADR amendments, runbooks, and migration notes match the
       actual shipped scope.
 - [ ] Sandbox and release approvals are recorded before production enablement.

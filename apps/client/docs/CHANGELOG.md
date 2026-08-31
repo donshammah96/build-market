@@ -16,13 +16,14 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
-### Added - M-Pesa payment boundary
+### Added - M-Pesa payment boundary & multi-purpose contracts (Phase 4b)
 
-- Added authenticated subscription checkout intent creation with deterministic
+- Added authenticated subscription, lead-credit, and escrow checkout intent creation with deterministic
   idempotency and worker queue production.
+- Enforced database-level user ownership querying in `/api/v1/payments/mpesa/status` and corrected status DTOs to return actual `checkoutRequestId` (nullable) without fabricating provider identifiers.
 - Added user-scoped status reads and thin STK/B2C callback receivers that
   persist redacted callback receipts before enqueueing processing.
-- Provider credentials and direct Daraja calls remain outside the client
+- Provider credentials and direct Daraja calls remain strictly outside the client app.
   runtime; lead-credit checkout remains disabled until ledger settlement exists.
 
 ### 1) Identity and Auth Model
@@ -36,8 +37,6 @@ This format is based on Keep a Changelog and uses semantic categories:
 - Middleware must stay thin and deterministic.
 - Allowed concerns: route classification, redirect orchestration, and lightweight claim checks.
 - Disallowed concerns: heavy business logic, mutable in-memory cross-request state, and complex data orchestration.
-
-## [Unreleased]
 
 ### Added — Professional Tier System UI & Presentation Layer
 

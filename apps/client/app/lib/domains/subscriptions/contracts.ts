@@ -29,7 +29,7 @@ export interface InitiateSubscriptionCheckoutInput {
 
 export interface SubscriptionCheckoutResult {
   transactionId: string;
-  checkoutRequestId: string;
+  checkoutRequestId: string | null;
   merchantRequestId: string | null;
   amount: number;
   phoneNumber: string;

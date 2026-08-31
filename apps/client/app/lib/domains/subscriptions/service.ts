@@ -1,19 +1,19 @@
 import { err, ok, type Result } from "@/app/lib/errors/result";
-import { BillingInterval, SubscriptionTierKey } from "@build/db";
+import { SubscriptionTierKey } from "@build/db";
 import { addMpesaStkInitiateJob } from "@build/queue-server";
 import { randomUUID } from "node:crypto";
-import { clientSubscriptionsRepository } from "./repository.js";
+import { clientSubscriptionsRepository } from "./repository";
 import {
   buildSubscriptionIdempotencyKey,
   calculateSubscriptionAmount,
-} from "./checkout.js";
+} from "./checkout";
 import type {
   ClientActor,
   InitiateSubscriptionCheckoutInput,
   SubscriptionCheckoutResult,
   PublicSubscriptionPlan,
   SubscriptionsDomainError,
-} from "./contracts.js";
+} from "./contracts";
 
 export function normalizeKenyanPhoneNumber(phone: string): string | null {
   const cleaned = phone.replace(/[^\d+]/g, "");
@@ -172,7 +172,7 @@ export class ClientSubscriptionsService {
 
       return ok({
         transactionId: transaction.id,
-        checkoutRequestId: transaction.id,
+        checkoutRequestId: transaction.checkoutRequestId ?? null,
         merchantRequestId: null,
         amount: finalAmount,
         phoneNumber: formattedPhone,

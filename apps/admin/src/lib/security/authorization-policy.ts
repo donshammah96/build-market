@@ -13,6 +13,7 @@ export enum AdminCapability {
   MANAGE_USERS = "MANAGE_USERS",
   VIEW_FINANCIALS = "VIEW_FINANCIALS",
   PROCESS_PAYOUTS = "PROCESS_PAYOUTS",
+  RECONCILE_PAYMENTS = "RECONCILE_PAYMENTS",
   MANAGE_VERIFICATION = "MANAGE_VERIFICATION",
   EXPORT_DATA = "EXPORT_DATA",
   VIEW_CONTENT = "VIEW_CONTENT",
@@ -57,6 +58,10 @@ export const ADMIN_CAPABILITY_ROLE_MAP: Record<
     AdminRole.AUDITOR,
   ],
   [AdminCapability.PROCESS_PAYOUTS]: [
+    AdminRole.SUPER_ADMIN,
+    AdminRole.FINANCE_MANAGER,
+  ],
+  [AdminCapability.RECONCILE_PAYMENTS]: [
     AdminRole.SUPER_ADMIN,
     AdminRole.FINANCE_MANAGER,
   ],
@@ -310,6 +315,14 @@ export const ADMIN_ACTION_POLICY_MAP = {
   create_mpesa_payout: strictMutationPolicy(
     AdminCapability.PROCESS_PAYOUTS,
     "mpesa_payouts",
+  ),
+  search_mpesa_transactions: lowRiskReadPolicy(AdminCapability.VIEW_FINANCIALS),
+  get_mpesa_transaction_details: lowRiskReadPolicy(
+    AdminCapability.VIEW_FINANCIALS,
+  ),
+  requery_mpesa_transaction: strictMutationPolicy(
+    AdminCapability.RECONCILE_PAYMENTS,
+    "mpesa_reconciliation",
   ),
 } as const satisfies Record<string, AdminActionPolicy>;
 

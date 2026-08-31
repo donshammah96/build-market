@@ -35,9 +35,21 @@ export interface MpesaB2cResultJobData {
 
 export interface MpesaReconcileJobData {
   olderThanMinutes: number;
+  batchSize?: number;
+  leaseSeconds?: number;
   correlationId: string;
 }
 
 export function getMpesaJobId(jobName: string, resourceId: string): string {
   return `mpesa:${jobName}:${resourceId}`;
+}
+
+export function getMpesaReconciliationWindowKey(
+  date = new Date(),
+  windowMinutes = 5,
+): string {
+  const roundedMs =
+    Math.floor(date.getTime() / (windowMinutes * 60 * 1000)) *
+    (windowMinutes * 60 * 1000);
+  return new Date(roundedMs).toISOString();
 }

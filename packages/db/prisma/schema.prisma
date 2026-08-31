@@ -1794,8 +1794,9 @@ model EscrowTransaction {
   status EscrowStatus @default(PENDING_FUNDING)
 
   // Funding
-  fundedAt   DateTime?
-  fundingRef String?   @unique // M-Pesa transaction code
+  fundedAt      DateTime?
+  fundingRef    String?   @unique // M-Pesa transaction code
+  settlementKey String?   @unique
 
   // Release
   releasedAt   DateTime?
@@ -2753,6 +2754,7 @@ model LeadCreditLedgerEntry {
   balanceAfter         Int
   relatedLeadId        String? // MarketplaceLead.id or MarketplaceLeadRoutingEvent.id
   relatedTransactionId String? // ProfessionalTransaction.id, if purchased with money
+  settlementKey        String?          @unique
   note                 String?
 
   createdAt DateTime @default(now())
@@ -3389,6 +3391,17 @@ model MpesaTransaction {
   retryCount  Int       @default(0)
   nextRetryAt DateTime?
 
+  // Privacy & Search
+  phoneSearchHash String? // HMAC-SHA256 search fingerprint
+
+  // Reconciliation & Leases
+  reconciliationAttempts      Int       @default(0)
+  reconciliationNextAttemptAt DateTime?
+  reconciliationClaimedAt     DateTime?
+  reconciliationClaimId       String?
+  lastProviderQueryAt         DateTime?
+  lastProviderQueryCode       String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -3398,6 +3411,9 @@ model MpesaTransaction {
   @@index([mpesaReceiptNumber])
   @@index([status, createdAt]) // Reconciliation queries
   @@index([nextRetryAt]) // Retry job queue
+  @@index([status, checkoutRequestId, reconciliationNextAttemptAt])
+  @@index([reconciliationClaimedAt])
+  @@index([phoneSearchHash])
 }
 
 // Cold storage archive for settled M-Pesa transactions (>180 days)

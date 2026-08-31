@@ -4,14 +4,14 @@ All notable changes to the `workers` application will be documented in this file
 
 ## [Unreleased]
 
-### Added - M-Pesa workers
+### Added - M-Pesa reconciliation worker (Phase 3b) & multi-domain settlement (Phase 4b)
 
+- Added dedicated `mpesa-reconciliation` BullMQ worker and processor (`src/processors/mpesa-reconciliation.processor.ts`) using distributed claim leases (`reconciliationClaimId`, `reconciliationClaimedAt`), exponential backoff, and rate-limited `queryStkPush`.
+- Added shared multi-domain STK settlement module (`src/domains/mpesa/settlement.ts`) enforcing immutable terminal states and atomic ledger uniqueness across subscription renewal, lead-credit purchases, and escrow milestone funding.
 - Added worker-only STK initiation/subscription settlement and B2C payout
   initiation/result processors behind explicit environment kill switches.
 - Added typed provider error handling, redacted callback processing, and
   terminal-state protection against duplicate callback regressions.
-- Full scheduled reconciliation, reversal, and ledger coverage remain gated
-  work and are not represented as production-ready.
 
 ### Added — Automated Badge Recomputation, Active Trust-Tier Demotions & Materials Price Index Processor
 

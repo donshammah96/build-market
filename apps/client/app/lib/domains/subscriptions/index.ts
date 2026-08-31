@@ -2,11 +2,11 @@ export {
   ClientSubscriptionsService,
   clientSubscriptionsService,
   normalizeKenyanPhoneNumber,
-} from "./service.js";
+} from "./service";
 export {
   ClientSubscriptionsRepository,
   clientSubscriptionsRepository,
-} from "./repository.js";
+} from "./repository";
 export type {
   ClientActor,
   InitiateSubscriptionCheckoutInput,
@@ -14,4 +14,4 @@ export type {
   PublicSubscriptionPlan,
   SubscriptionsDomainError,
   SubscriptionsDomainErrorCode,
-} from "./contracts.js";
+} from "./contracts";

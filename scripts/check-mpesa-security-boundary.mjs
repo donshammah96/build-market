@@ -85,11 +85,32 @@ const adminControlSource = `${adminSource}\n${adminServiceSource}`;
 for (const required of [
   "safeAction",
   "AdminCapability.PROCESS_PAYOUTS",
+  "AdminCapability.RECONCILE_PAYMENTS",
   "CREATE_MPESA_PAYOUT",
+  "REQUERY_MPESA_TRANSACTION",
+  "SEARCH_MPESA_TRANSACTIONS",
   "recentAuth",
 ]) {
   if (!adminControlSource.includes(required))
     findings.push(`${adminPaths.join(", ")}: missing ${required} control`);
+}
+
+const workerIndexSource = await read("apps/workers/src/index.ts");
+for (const required of [
+  "mpesa-reconciliation",
+  "processMpesaReconciliationJob",
+]) {
+  if (!workerIndexSource.includes(required))
+    findings.push(`apps/workers/src/index.ts: missing reconciliation worker wiring (${required})`);
+}
+
+const settlementSource = await read("apps/workers/src/domains/mpesa/settlement.ts");
+for (const required of [
+  "settlementKey",
+  "executeMpesaStkSettlement",
+]) {
+  if (!settlementSource.includes(required))
+    findings.push(`apps/workers/src/domains/mpesa/settlement.ts: missing settlement invariant (${required})`);
 }
 
 if (findings.length) {

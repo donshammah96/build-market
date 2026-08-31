@@ -1,12 +1,9 @@
-export { ClientWalletsService, clientWalletsService } from "./service.js";
-export {
-  ClientWalletsRepository,
-  clientWalletsRepository,
-} from "./repository.js";
+export { ClientWalletsService, clientWalletsService } from "./service";
+export { ClientWalletsRepository, clientWalletsRepository } from "./repository";
 export type {
   DeductCreditsInput,
   DeductCreditsResult,
   PurchaseCreditsInput,
   WalletsDomainError,
   WalletsDomainErrorCode,
-} from "./contracts.js";
+} from "./contracts";

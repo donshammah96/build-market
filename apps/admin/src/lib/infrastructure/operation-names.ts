@@ -120,6 +120,9 @@ export const AdminOperationName = {
   GET_LEAD_CREDIT_WALLET: "get_lead_credit_wallet",
   ADJUST_LEAD_CREDIT_WALLET: "adjust_lead_credit_wallet",
   CREATE_MPESA_PAYOUT: "create_mpesa_payout",
+  SEARCH_MPESA_TRANSACTIONS: "search_mpesa_transactions",
+  GET_MPESA_TRANSACTION_DETAILS: "get_mpesa_transaction_details",
+  REQUERY_MPESA_TRANSACTION: "requery_mpesa_transaction",
 } as const;
 
 export type AdminOperationName =

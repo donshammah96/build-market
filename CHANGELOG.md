@@ -2,15 +2,13 @@
 
 ## [Unreleased]
 
-### Added - M-Pesa integration hardening pass
+### Added - M-Pesa integration hardening pass (Phases 3b, 4b, and 5)
 
-- Added a worker-only Daraja provider package, typed BullMQ payment contracts,
-  idempotent subscription STK checkout, public callback receipts, and audited
-  admin B2C payout enqueueing.
-- Added the additive Prisma migration for callback receipts, B2C idempotency,
-  retry metadata, and provider correlation indexes.
-- Production enablement remains gated on reconciliation, ledger coverage,
-  sandbox evidence, provider onboarding, and strict security drift checks.
+- **Phase 3b (Reconciliation & Leases)**: Added dedicated `mpesa-reconciliation` BullMQ worker with distributed claim lease protocol (`reconciliationClaimId`, `reconciliationClaimedAt`), exponential backoff, rate-limited Daraja queries, and shared atomic settlement.
+- **Phase 4b (Financial Multi-Domain Settlement)**: Added multi-purpose payment contracts and atomic ledger uniqueness (`settlementKey`) across subscription renewals, lead-credit purchases, and escrow milestone funding.
+- **Phase 5 (Admin Operational Controls)**: Added capability-gated transaction search, detailed inspection, and queued requeries under `VIEW_FINANCIALS` and `RECONCILE_PAYMENTS` with phone masking, HMAC search index, recent authentication (180s), and append-only audit trails.
+- Added additive Prisma migration `20260831090000_mpesa_reconciliation_and_settlement_uniqueness`.
+- Security boundary drift validation scripts (`mpesa:check-security-boundary`, `report-security-drift:strict`) verified with 0 findings.
 
 ### Fixed — Worker Test Mocking & Admin Route Registry Governance
 

@@ -1,11 +1,11 @@
 import { err, ok, type Result } from "@/app/lib/errors/result";
 import { LeadCreditTxnType } from "@build/db";
-import { clientWalletsRepository } from "./repository.js";
+import { clientWalletsRepository } from "./repository";
 import type {
   DeductCreditsInput,
   DeductCreditsResult,
   WalletsDomainError,
-} from "./contracts.js";
+} from "./contracts";
 
 export class ClientWalletsService {
   async getWalletBalance(
