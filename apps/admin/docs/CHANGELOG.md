@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed — Route Registry Security Governance
+
+- **Route Registry Cataloging (`src/lib/security/route-registry.ts`)**:
+  - Registered `/settings/subscriptions` in `ADMIN_ROUTE_REGISTRY` with `super_admin` and `finance_admin` allowed roles to ensure 100% filesystem-to-registry parity and maintain security policy governance across admin dashboard routes.
+
 ### Added — Professional Tier System UI & Admin Management Overrides
 
 - **Admin Professional Details Tier & Subscription Overrides (`src/components/admin/tier-override-modal.tsx`, `src/app/(dashboard)/professionals/[id]/page.tsx`)**:

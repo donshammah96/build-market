@@ -29,9 +29,14 @@ vi.mock("@build/db", () => ({
   },
   VerificationStatus: {
     PENDING: "PENDING",
+    IN_REVIEW: "IN_REVIEW",
+    VERIFIED: "VERIFIED",
+    NEEDS_CORRECTION: "NEEDS_CORRECTION",
     AUTO_VERIFIED: "AUTO_VERIFIED",
     MANUALLY_VERIFIED: "MANUALLY_VERIFIED",
     REJECTED: "REJECTED",
+    EXPIRED: "EXPIRED",
+    SUSPENDED: "SUSPENDED",
   },
   prisma: {
     professionalProfile: {
@@ -51,6 +56,13 @@ vi.mock("@build/db", () => ({
 describe("Badge Recompute & Trust-Tier Demotion Processor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(prisma.professionalBadge.update).mockResolvedValue({
+      id: "badge-updated",
+    } as never);
+    vi.mocked(prisma.professionalBadge.upsert).mockResolvedValue({
+      id: "badge-upserted",
+    } as never);
+    vi.mocked(prisma.professionalProfile.update).mockResolvedValue({} as never);
   });
 
   it("awards ELITE_PRO and retains ELITE trust tier when all quality and license criteria are met", async () => {

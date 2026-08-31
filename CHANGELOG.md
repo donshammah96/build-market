@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed — Worker Test Mocking & Admin Route Registry Governance
+
+- **Background Worker Test Harness (`apps/workers/__tests__/processors/badge-recompute.test.ts`)**:
+  - Aligned `@build/db` mock definition with the complete `VerificationStatus` enum (`VERIFIED`, `IN_REVIEW`, `NEEDS_CORRECTION`, `EXPIRED`, `SUSPENDED`) to prevent undefined property evaluation during license verification checks.
+  - Configured default mock resolved values for `prisma.professionalBadge.update` and `prisma.professionalBadge.upsert` in test setup, ensuring badge revocation counters and database update calls are cleanly asserted.
+- **Admin Route Registry Governance (`apps/admin/src/lib/security/route-registry.ts`)**:
+  - Registered `/settings/subscriptions` in `ADMIN_ROUTE_REGISTRY` under the `settings` section with `super_admin` and `finance_admin` role access, resolving filesystem parity governance test failures.
+
 ### Added — Professional Tier System UI & Presentation Layer (@build/ui, Client Portal, Admin Overrides, & Worker Safeguards)
 
 - **Shared UI Primitives (`packages/ui`, `@build/ui`)**:

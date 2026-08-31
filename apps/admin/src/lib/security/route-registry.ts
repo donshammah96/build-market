@@ -186,6 +186,12 @@ export const ADMIN_ROUTE_REGISTRY: readonly AdminRouteMetadata[] = [
     title: "Admin System Settings",
     allowedRoles: ["super_admin"],
   },
+  {
+    path: "/settings/subscriptions",
+    section: "settings",
+    title: "Subscription Tier & Pricing Management",
+    allowedRoles: ["super_admin", "finance_admin"],
+  },
 ] as const;
 
 /** Matcher for public authentication and status pages */
