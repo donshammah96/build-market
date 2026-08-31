@@ -14,6 +14,9 @@
 
 ### Fixed — Worker Test Mocking & Admin Route Registry Governance
 
+- **Admin Tier Override Modal Client Bundle Boundary (`apps/admin/src/components/admin/tier-override-modal.tsx`)**:
+  - Replaced runtime value imports from `@build/db` with type-only imports (`import type { TrustTier, SubscriptionTierKey, SubscriptionStatus, BadgeType }`) and substituted runtime enum property accesses with string literal type assertions for default component state.
+  - Resolved Turbopack build failure (`Module not found: Can't resolve 'fs'/'net'/'tls'`) caused by unintentional inclusion of Node database drivers (`pg`, `pg-connection-string`) in client bundle.
 - **Background Worker Test Harness (`apps/workers/__tests__/processors/badge-recompute.test.ts`)**:
   - Aligned `@build/db` mock definition with the complete `VerificationStatus` enum (`VERIFIED`, `IN_REVIEW`, `NEEDS_CORRECTION`, `EXPIRED`, `SUSPENDED`) to prevent undefined property evaluation during license verification checks.
   - Configured default mock resolved values for `prisma.professionalBadge.update` and `prisma.professionalBadge.upsert` in test setup, ensuring badge revocation counters and database update calls are cleanly asserted.

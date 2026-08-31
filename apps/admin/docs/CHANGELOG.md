@@ -9,8 +9,11 @@
 - Added the operation registry and declarative policy entry for payout creation.
 - Provider credentials and direct Daraja calls remain forbidden in admin.
 
-### Fixed — Route Registry Security Governance
+### Fixed — Route Registry Security Governance & Client Bundle Isolation
 
+- **Admin Tier Override Modal Client Bundle Boundary (`src/components/admin/tier-override-modal.tsx`)**:
+  - Converted `@build/db` runtime value imports to type-only imports (`import type { TrustTier, SubscriptionTierKey, SubscriptionStatus, BadgeType }`) and replaced runtime enum object references with typed string literals.
+  - Eliminated server-only database dependencies (`pg`, `pgpass`, `fs`, `net`, `tls`) from the browser bundle, resolving Turbopack client component compilation errors.
 - **Route Registry Cataloging (`src/lib/security/route-registry.ts`)**:
   - Registered `/settings/subscriptions` in `ADMIN_ROUTE_REGISTRY` with `super_admin` and `finance_admin` allowed roles to ensure 100% filesystem-to-registry parity and maintain security policy governance across admin dashboard routes.
 

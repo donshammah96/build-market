@@ -20,9 +20,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { toast } from "react-toastify";
-import {
+import type {
   TrustTier,
   SubscriptionTierKey,
   SubscriptionStatus,
@@ -33,8 +32,7 @@ import {
   overrideProfessionalSubscription,
   manageProfessionalBadge,
 } from "@/actions/admin/subscriptions";
-import { TrustSealBadge, TrustTierType } from "@build/ui/trust-seal-badge";
-import { PlanChip } from "@build/ui/plan-chip";
+import { TrustTierType } from "@build/ui/trust-seal-badge";
 
 export interface TierOverrideModalProps {
   professionalId: string;
@@ -57,24 +55,26 @@ export function TierOverrideModal({
 
   // Trust Tier State
   const [targetTier, setTargetTier] = useState<TrustTier>(
-    (currentTrustTier as TrustTier) || TrustTier.UNVERIFIED,
+    (currentTrustTier as TrustTier) || ("UNVERIFIED" as TrustTier),
   );
   const [trustReason, setTrustReason] = useState("");
 
   // Subscription State
   const [targetPlan, setTargetPlan] = useState<SubscriptionTierKey>(
-    (currentPlanKey as SubscriptionTierKey) || SubscriptionTierKey.FREE,
+    (currentPlanKey as SubscriptionTierKey) || ("FREE" as SubscriptionTierKey),
   );
   const [targetStatus, setTargetStatus] = useState<SubscriptionStatus>(
     (currentSubscriptionStatus as SubscriptionStatus) ||
-      SubscriptionStatus.ACTIVE,
+      ("ACTIVE" as SubscriptionStatus),
   );
   const [foundingProFlag, setFoundingProFlag] =
     useState<boolean>(isFoundingPro);
   const [subReason, setSubReason] = useState("");
 
   // Badge State
-  const [badgeType, setBadgeType] = useState<BadgeType>(BadgeType.TOP_RATED);
+  const [badgeType, setBadgeType] = useState<BadgeType>(
+    "TOP_RATED" as BadgeType,
+  );
   const [badgeAction, setBadgeAction] = useState<"AWARD" | "REVOKE">("AWARD");
   const [badgeReason, setBadgeReason] = useState("");
 
