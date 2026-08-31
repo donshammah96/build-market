@@ -47,7 +47,9 @@ export type WidgetId =
   | "property_inquiries"
   | "sales_pipeline"
   // Hybrid widgets (for property developers)
-  | "development_projects";
+  | "development_projects"
+  // Tier & monetization widgets
+  | "tier_system";
 
 /**
  * Metric card identifiers

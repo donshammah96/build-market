@@ -16,7 +16,7 @@ import type {
   TrustTier,
   Prisma,
 } from "@build/db";
-import { subscriptionsRepository } from "./repository.js";
+import { subscriptionsRepository } from "./repository";
 import type {
   SubscriptionsActor,
   SubscriptionsDomainError,
@@ -26,7 +26,7 @@ import type {
   AdjustLeadCreditWalletInput,
   ManageBadgeInput,
   CreateProfileBoostInput,
-} from "./contracts.js";
+} from "./contracts";
 
 function requireManageUsers(
   actor: SubscriptionsActor,

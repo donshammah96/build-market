@@ -28,6 +28,27 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Added — Professional Tier System UI & Presentation Layer
+
+- **Shared UI Primitives (`@build/ui`)**:
+  - `TrustSealBadge`: Implemented 3-way visual split separating regulator-backed seals (`LICENSE_VERIFIED`/`ELITE` with arced NCA/BORAQS/EBK text) from non-regulator checkmark chips (`ID_VERIFIED`/`SKILLS_VERIFIED`) and plain text (`UNVERIFIED`).
+  - `BadgeRow`: Strictly displays the 5 schema `BadgeType` values with earned vs locked styling.
+  - `InsuredIndicator`: Credential indicator for `ProfessionalProfile.isInsured`.
+  - `SponsoredLabel`: High-contrast badge with aria-label enforcing ranking transparency on boosted cards.
+  - `PlanChip`: Subscription tier pills supporting `TRIALING`, `GRACE_PERIOD`, `ACTIVE`, `EXPIRED`, and Founding Pro markers.
+  - `RenewalStatus`: Subscription cycle countdown with animated progress bar and grace-period alerts.
+  - `LeadCreditWallet`: Lead credit balance and active subscription discount preview.
+  - `MpesaStkModal`: Unified STK modal with Kenyan phone validation, 60s countdown, polling, retry, and timeout reconciliation.
+- **REST API Endpoints**:
+  - `GET /api/v1/payments/mpesa/status`: Authenticated polling endpoint querying `MpesaTransaction` status by `checkoutRequestId`.
+- **Portal Pages & Component Integrations**:
+  - `app/professional-portal/profile/verification/page.tsx`: Trust ladder with seal, requirements checklist, and 60-day NCA renewal countdown.
+  - `app/professional-portal/settings/billing/page.tsx`: 3-tier comparison cards, `RenewalStatus`, `LeadCreditWallet`, and `MpesaStkModal` integration.
+  - `components/dashboard/widgets/shared/TierSystemWidget.tsx`: Dashboard widget registered as `tier_system`.
+  - `components/professional/ProfessionalCard.tsx` & `app/professionals/[id]/page.tsx`: Server-determined `SponsoredLabel` on boosted cards and public profile credentials header.
+- **Unit Tests**:
+  - `__tests__/components/tier-system-ui.test.tsx`: 9 unit tests covering visual split, badge constraints, phone validation, and UI states.
+
 ### Added — Professional Tier System Phases 5 & 6: AI Copilot, CPD Hub, Enterprise Directory API, BOQ-Store Bridge, & Multi-Channel Notifications
 
 - **AI Copilot Domain Service (`app/lib/domains/professionals/ai-copilot.ts`)**:

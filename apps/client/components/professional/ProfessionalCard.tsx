@@ -14,9 +14,15 @@ import { getProfessionalUrl } from "@/lib/routes";
 import { ProfessionalCardData } from "@/types/professional";
 import { getProfessionLabel } from "@/lib/constants/professionalCategories";
 import { cn } from "@/lib/utils";
+import { SponsoredLabel } from "@build/ui/sponsored-label";
+import type { TrustTierType } from "@build/ui/trust-seal-badge";
 
 interface ProfessionalCardProps {
-  professional: ProfessionalCardData;
+  professional: ProfessionalCardData & {
+    isSponsored?: boolean;
+    trustTier?: TrustTierType;
+    authority?: string;
+  };
 }
 
 const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
@@ -30,15 +36,27 @@ const ProfessionalCard: React.FC<ProfessionalCardProps> = memo(
     const displayTitle =
       professional.title || getProfessionLabel(primaryService);
     const projectCount = professional.projectCount || 0;
+    const isSponsored = Boolean(professional.isSponsored);
 
     return (
       <div className="h-full p-1 hover-lift">
         <Card
           className={cn(
-            "h-full flex flex-col border border-zinc-200 bg-white overflow-hidden rounded-xl shadow-sm",
-            "transition-all duration-300 hover:shadow-lg group",
+            "h-full flex flex-col border overflow-hidden rounded-xl shadow-xs transition-all duration-300 hover:shadow-lg group",
+            isSponsored
+              ? "border-[#F2D18B] bg-[#FFFCF5] ring-1 ring-[#F2D18B]/50"
+              : "border-zinc-200 bg-white",
           )}
         >
+          {/* Top Banner for Boosted / Sponsored placements */}
+          {isSponsored && (
+            <div className="px-3 py-1.5 bg-[#FFF8E6] border-b border-[#F2D18B] flex items-center justify-between">
+              <SponsoredLabel size="sm" />
+              <span className="text-[10px] font-mono text-neutral-500">
+                Featured Partner
+              </span>
+            </div>
+          )}
           {/* Hero Image (Portfolio Preview) */}
           <div className="relative aspect-4/3 overflow-hidden bg-zinc-100 border-b border-zinc-100">
             <Link href={profileUrl} className="block h-full w-full">

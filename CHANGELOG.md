@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+### Added — Professional Tier System UI & Presentation Layer (@build/ui, Client Portal, Admin Overrides, & Worker Safeguards)
+
+- **Shared UI Primitives (`packages/ui`, `@build/ui`)**:
+  - **`TrustSealBadge` (`trust-seal-badge.tsx`)**: Implemented strict 3-way visual tier split: regulator-backed tiers (`LICENSE_VERIFIED`, `ELITE`) render circular engraved SVG seals with arced authority names (`NCA`, `BORAQS`, `EBK`); platform-internal tiers (`ID_VERIFIED`, `SKILLS_VERIFIED`) render lightweight checkmark chips (no circular stamp or curved text); `UNVERIFIED` renders plain text ("Not yet verified") with no seal geometry. Accessible `aria-label` included.
+  - **`BadgeRow` (`badge-row.tsx`)**: Strictly renders the 5 Prisma schema `BadgeType` values (`FOUNDING_PRO`, `FAST_RESPONDER`, `RISING_TALENT`, `TOP_RATED`, `ELITE_PRO`) with earned vs locked states and metadata tooltips.
+  - **`InsuredIndicator` (`insured-indicator.tsx`)**: Standalone credential chip for `ProfessionalProfile.isInsured` separated from the badge row.
+  - **`SponsoredLabel` (`sponsored-label.tsx`)**: High-contrast, tinted placement badge with aria-label enforcing ranking transparency on boosted cards.
+  - **`PlanChip` (`plan-chip.tsx`)**: Subscription tier pills with status badges (`ACTIVE`, `TRIALING`, `GRACE_PERIOD`, `PAST_DUE`, `EXPIRED`, `CANCELED`) and Founding Pro markers.
+  - **`RenewalStatus` (`renewal-status.tsx`)**: Subscription cycle countdown with animated progress bar and grace-period warning banners.
+  - **`LeadCreditWallet` (`lead-credit-wallet.tsx`)**: Balance display with active plan discount indicators and top-up triggers.
+  - **`MpesaStkModal` (`mpesa-stk-modal.tsx`)**: Parameterized STK Push interactive modal with Kenyan phone normalization (`07...`, `01...`, `254...`), 60s countdown, background polling, explicit retry on failure, and timeout reconciliation messaging.
+- **Backend API & Background Worker Safeguards**:
+  - **M-Pesa Polling Endpoint (`apps/client/app/api/v1/payments/mpesa/status/route.ts`)**: Fast, authenticated `GET` endpoint querying `MpesaTransaction` status by `checkoutRequestId` with 90s transaction age timeout detection.
+  - **Badge Recompute Override Protection (`apps/workers/src/processors/badge-recompute.processor.ts`)**: Updated `revokeBadge()` logic to inspect `criteriaSnapshot.manualOverride`, preserving admin-granted overrides across monthly BullMQ sweeps.
+- **Client App Presentation Surfaces (`apps/client`)**:
+  - **Trust & Verification Status (`app/professional-portal/profile/verification/page.tsx`)**: Trust ladder showing current seal, checklist of missing requirements for next tier, and license renewal countdown alert (< 60 days).
+  - **Subscription & Billing Management (`app/professional-portal/settings/billing/page.tsx`)**: 3-tier comparison cards (`Msingi`, `Kuza`, `Bora`), `RenewalStatus`, `LeadCreditWallet`, and `MpesaStkModal` checkout integration.
+  - **Dashboard Tier Widget (`components/dashboard/widgets/shared/TierSystemWidget.tsx`)**: Registered `tier_system` in widget registry.
+  - **Marketplace Directory & Public Profiles (`components/professional/ProfessionalCard.tsx`, `app/professionals/[id]/page.tsx`)**: Server-driven `SponsoredLabel` on boosted cards with distinct tint (`#FFFCF5` + `#F2D18B` border); public profile header integrating `TrustSealBadge`, `InsuredIndicator`, and `BadgeRow`.
+- **Admin App Management & Overrides (`apps/admin`)**:
+  - **Tier Override Modal (`src/components/admin/tier-override-modal.tsx`)**: Integrated in [Professional Details](<file:///c:/Users/User/build-market/apps/admin/src/app/(dashboard)/professionals/[id]/page.tsx>) for Trust Tier, Subscription, and Badge overrides with mandatory audit reason logging and `manualOverride: true` tagging.
+  - **Subscription Plans Settings (`src/app/(dashboard)/settings/subscriptions/page.tsx`)**: Plan configuration editor with policy notice regarding price updates for new vs existing subscribers.
+- **Test Suite**:
+  - Added unit test suite in `apps/client/__tests__/components/tier-system-ui.test.tsx` verifying the 3-way seal split, schema badge constraints, Kenyan phone validation, and UI states.
+
 ### Added — Professional Tier System Phases 5 & 6: Badges & Trust Demotion, AI Copilot, CPD Hub, Enterprise API, BOQ-Store Bridge, & Price Index
 
 - **Database Models & Enums (`packages/db/prisma/schema.prisma`)**:

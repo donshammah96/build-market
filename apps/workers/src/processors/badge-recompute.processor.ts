@@ -172,8 +172,8 @@ export async function processBadgeRecomputeJob(job: {
       await awardBadge(profile.userId, BadgeType.FAST_RESPONDER);
       badgesAwarded++;
     } else if (!isFastResponder && fastResponderBadge) {
-      await revokeBadge(fastResponderBadge.id);
-      badgesRevoked++;
+      const revoked = await revokeBadge(fastResponderBadge);
+      if (revoked) badgesRevoked++;
     }
 
     // 2. RISING_TALENT: Joined < 90 days, >= 3 projects, rating >= 4.8
@@ -190,8 +190,8 @@ export async function processBadgeRecomputeJob(job: {
       await awardBadge(profile.userId, BadgeType.RISING_TALENT);
       badgesAwarded++;
     } else if (!isRisingTalent && risingTalentBadge) {
-      await revokeBadge(risingTalentBadge.id);
-      badgesRevoked++;
+      const revoked = await revokeBadge(risingTalentBadge);
+      if (revoked) badgesRevoked++;
     }
 
     // 3. TOP_RATED: >= 10 reviews, rating >= 4.85, 0 unresolved disputes
@@ -213,8 +213,8 @@ export async function processBadgeRecomputeJob(job: {
       await awardBadge(profile.userId, BadgeType.TOP_RATED);
       badgesAwarded++;
     } else if (!isTopRated && topRatedBadge) {
-      await revokeBadge(topRatedBadge.id);
-      badgesRevoked++;
+      const revoked = await revokeBadge(topRatedBadge);
+      if (revoked) badgesRevoked++;
     }
 
     // 4. ELITE_PRO: TrustTier == ELITE, rating >= 4.7, >= 10 completed projects, insured
@@ -229,8 +229,8 @@ export async function processBadgeRecomputeJob(job: {
       await awardBadge(profile.userId, BadgeType.ELITE_PRO);
       badgesAwarded++;
     } else if (!isElitePro && eliteBadge) {
-      await revokeBadge(eliteBadge.id);
-      badgesRevoked++;
+      const revoked = await revokeBadge(eliteBadge);
+      if (revoked) badgesRevoked++;
     }
   }
 
@@ -271,9 +271,21 @@ async function awardBadge(professionalId: string, badgeType: BadgeType) {
   });
 }
 
-async function revokeBadge(badgeId: string) {
+async function revokeBadge(badge: ProfessionalBadge) {
+  const snapshot = badge.criteriaSnapshot as Record<string, unknown> | null;
+  if (snapshot?.manualOverride === true) {
+    logger.info(
+      "[BadgeRecompute] Skipping revocation for manually overridden badge",
+      {
+        badgeId: badge.id,
+        badgeType: badge.type,
+        professionalId: badge.professionalId,
+      },
+    );
+    return null;
+  }
   return prisma.professionalBadge.update({
-    where: { id: badgeId },
+    where: { id: badge.id },
     data: { revokedAt: new Date() },
   });
 }

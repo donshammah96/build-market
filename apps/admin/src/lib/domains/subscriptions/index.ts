@@ -1,8 +1,5 @@
-export { SubscriptionsService, subscriptionsService } from "./service.js";
-export {
-  SubscriptionsRepository,
-  subscriptionsRepository,
-} from "./repository.js";
+export { SubscriptionsService, subscriptionsService } from "./service";
+export { SubscriptionsRepository, subscriptionsRepository } from "./repository";
 export type {
   SubscriptionsActor,
   SubscriptionsDomainError,
@@ -13,4 +10,4 @@ export type {
   AdjustLeadCreditWalletInput,
   ManageBadgeInput,
   CreateProfileBoostInput,
-} from "./contracts.js";
+} from "./contracts";

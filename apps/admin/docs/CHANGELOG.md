@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added — Professional Tier System UI & Admin Management Overrides
+
+- **Admin Professional Details Tier & Subscription Overrides (`src/components/admin/tier-override-modal.tsx`, `src/app/(dashboard)/professionals/[id]/page.tsx`)**:
+  - Integrated `TierOverrideModal` in the header actions of the professional detail view, supporting Trust Tier overrides, Subscription plan comps/adjustments, and Badge awards/revocations.
+  - Enforced mandatory audit log reasons (≥ 5 chars) attached to `safeAction` mutations and applied `manualOverride: true` tagging to protect manual grants from background BullMQ sweeps.
+  - Integrated `TrustSealBadge` from `@build/ui` on the professional detail header.
+- **Subscription Plans Settings Management (`src/app/(dashboard)/settings/subscriptions/page.tsx`)**:
+  - Built interactive subscription plans configuration dashboard and edit dialog with price update policy guidance for new vs existing subscribers.
+
 ### Added — Professional Subscriptions & Wallet Balance Admin Actions
 
 - **Admin Subscription Management (`src/actions/admin/subscriptions.ts`, `src/lib/domains/subscriptions/`)**:

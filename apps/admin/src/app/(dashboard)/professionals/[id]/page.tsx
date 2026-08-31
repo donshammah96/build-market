@@ -8,25 +8,21 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import {
-  CheckCircle,
-  XCircle,
-  FileText,
-  Globe,
-  MapPin,
-  User as UserIcon,
-} from "lucide-react";
+import { FileText, Globe, MapPin, User as UserIcon } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ProfessionalProfileEditor } from "@/components/admin/professional-profile-editor";
 import { CertificateManager } from "@/components/admin/certificate-manager";
 import { getAdminPermissions } from "@/actions/admin/_core/permissions";
+import { TierOverrideModal } from "@/components/admin/tier-override-modal";
+import { TrustSealBadge, type TrustTierType } from "@build/ui/trust-seal-badge";
 
 type ProfessionalDetailView = {
   userId: string;
   companyName: string;
   verified: boolean;
+  trustTier?: TrustTierType;
   user: {
     firstName: string | null;
     lastName: string | null;
@@ -78,6 +74,9 @@ export default async function ProfessionalDetailsPage({
     "VERIFICATION_SPECIALIST",
   ].includes(granularRole || "");
 
+  const proTrustTier: TrustTierType =
+    pro.trustTier || (pro.verified ? "SKILLS_VERIFIED" : "UNVERIFIED");
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -97,17 +96,17 @@ export default async function ProfessionalDetailsPage({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div
-            className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-2 ${pro.verified ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}
-          >
-            {pro.verified ? (
-              <CheckCircle className="h-4 w-4" />
-            ) : (
-              <XCircle className="h-4 w-4" />
-            )}
-            {pro.verified ? "Verified" : "Unverified"}
-          </div>
+        <div className="flex items-center gap-3">
+          <TrustSealBadge
+            tier={proTrustTier}
+            authority={pro.licenseNumber ? "NCA" : undefined}
+            licenseNumber={pro.licenseNumber || undefined}
+            size="sm"
+          />
+          <TierOverrideModal
+            professionalId={pro.userId}
+            currentTrustTier={proTrustTier}
+          />
         </div>
       </div>
 
