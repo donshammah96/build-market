@@ -59,6 +59,25 @@ const workerEnvSchema = z.object({
     .enum(["trace", "debug", "info", "warn", "error", "fatal"])
     .default("info"),
 
+  // M-Pesa is disabled by default and must be explicitly enabled after
+  // sandbox credentials and callback routes have been verified.
+  MPESA_ENABLED: booleanString,
+  MPESA_BASE_URL: z.string().url().optional(),
+  MPESA_CONSUMER_KEY: z.string().min(1).optional(),
+  MPESA_CONSUMER_SECRET: z.string().min(1).optional(),
+  MPESA_SHORTCODE: z
+    .string()
+    .regex(/^\d{5,7}$/)
+    .optional(),
+  MPESA_PASSKEY: z.string().min(1).optional(),
+  MPESA_CALLBACK_URL: z.string().url().optional(),
+  MPESA_B2C_ENABLED: booleanString,
+  MPESA_B2C_INITIATOR_NAME: z.string().min(1).optional(),
+  MPESA_B2C_INITIATOR_PASSWORD: z.string().min(1).optional(),
+  MPESA_B2C_CERTIFICATE_PEM: z.string().min(1).optional(),
+  MPESA_B2C_RESULT_URL: z.string().url().optional(),
+  MPESA_B2C_TIMEOUT_URL: z.string().url().optional(),
+
   // Storage / S3 / R2 Configuration for Export Processor
   S3_DISABLED: booleanString,
   R2_EXPORT_BUCKET: z.string().min(1).optional(),
@@ -130,6 +149,40 @@ export function validateWorkerEnv(): WorkerEnv {
   }
 
   const data = result.data;
+
+  if (data.MPESA_ENABLED) {
+    const requiredMpesa = [
+      "MPESA_BASE_URL",
+      "MPESA_CONSUMER_KEY",
+      "MPESA_CONSUMER_SECRET",
+      "MPESA_SHORTCODE",
+      "MPESA_PASSKEY",
+      "MPESA_CALLBACK_URL",
+    ] as const;
+    const missing = requiredMpesa.filter((key) => !data[key]);
+    if (missing.length > 0) {
+      console.error(`[FATAL] MPESA_ENABLED requires: ${missing.join(", ")}`);
+      process.exit(1);
+    }
+  }
+
+  if (data.MPESA_B2C_ENABLED) {
+    const requiredB2c = [
+      "MPESA_ENABLED",
+      "MPESA_B2C_INITIATOR_NAME",
+      "MPESA_B2C_INITIATOR_PASSWORD",
+      "MPESA_B2C_CERTIFICATE_PEM",
+      "MPESA_B2C_RESULT_URL",
+      "MPESA_B2C_TIMEOUT_URL",
+    ] as const;
+    const missing = requiredB2c.filter((key) => !data[key]);
+    if (missing.length > 0) {
+      console.error(
+        `[FATAL] MPESA_B2C_ENABLED requires: ${missing.join(", ")}`,
+      );
+      process.exit(1);
+    }
+  }
 
   let natsUrl = data.NATS_URL;
   if (!natsUrl) {

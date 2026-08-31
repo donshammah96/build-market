@@ -4,6 +4,15 @@ All notable changes to the `workers` application will be documented in this file
 
 ## [Unreleased]
 
+### Added - M-Pesa workers
+
+- Added worker-only STK initiation/subscription settlement and B2C payout
+  initiation/result processors behind explicit environment kill switches.
+- Added typed provider error handling, redacted callback processing, and
+  terminal-state protection against duplicate callback regressions.
+- Full scheduled reconciliation, reversal, and ledger coverage remain gated
+  work and are not represented as production-ready.
+
 ### Added — Automated Badge Recomputation, Active Trust-Tier Demotions & Materials Price Index Processor
 
 - **Badge Recomputation & Trust-Tier Demotion Processor (`src/processors/badge-recompute.processor.ts`)**:

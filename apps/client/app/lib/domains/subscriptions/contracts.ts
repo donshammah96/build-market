@@ -24,17 +24,19 @@ export interface InitiateSubscriptionCheckoutInput {
   planKey: SubscriptionTierKey;
   billingInterval: BillingInterval;
   phoneNumber: string; // e.g. 254712345678
+  idempotencyKey: string;
 }
 
 export interface SubscriptionCheckoutResult {
+  transactionId: string;
   checkoutRequestId: string;
-  merchantRequestId: string;
+  merchantRequestId: string | null;
   amount: number;
   phoneNumber: string;
   planName: string;
   billingInterval: BillingInterval;
   discountAppliedPct: number;
-  status: "PENDING_USER_PIN";
+  status: "QUEUED";
 }
 
 export interface PublicSubscriptionPlan {

@@ -307,6 +307,10 @@ export const ADMIN_ACTION_POLICY_MAP = {
     AdminCapability.MANAGE_USERS,
     "wallets",
   ),
+  create_mpesa_payout: strictMutationPolicy(
+    AdminCapability.PROCESS_PAYOUTS,
+    "mpesa_payouts",
+  ),
 } as const satisfies Record<string, AdminActionPolicy>;
 
 const DEFAULT_ADMIN_ACTION_POLICY: AdminActionPolicy = {

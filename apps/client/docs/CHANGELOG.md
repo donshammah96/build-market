@@ -14,6 +14,17 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## Engineering Guardrails (Staff Guidance)
 
+## [Unreleased]
+
+### Added - M-Pesa payment boundary
+
+- Added authenticated subscription checkout intent creation with deterministic
+  idempotency and worker queue production.
+- Added user-scoped status reads and thin STK/B2C callback receivers that
+  persist redacted callback receipts before enqueueing processing.
+- Provider credentials and direct Daraja calls remain outside the client
+  runtime; lead-credit checkout remains disabled until ledger settlement exists.
+
 ### 1) Identity and Auth Model
 
 - Clerk is the primary runtime identity provider for `apps/client`.

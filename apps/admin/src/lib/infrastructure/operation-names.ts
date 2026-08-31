@@ -119,6 +119,7 @@ export const AdminOperationName = {
   CREATE_PROFILE_BOOST: "create_profile_boost",
   GET_LEAD_CREDIT_WALLET: "get_lead_credit_wallet",
   ADJUST_LEAD_CREDIT_WALLET: "adjust_lead_credit_wallet",
+  CREATE_MPESA_PAYOUT: "create_mpesa_payout",
 } as const;
 
 export type AdminOperationName =

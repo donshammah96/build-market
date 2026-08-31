@@ -24,6 +24,7 @@
     "@build/env-validation": "workspace:*",
     "@build/mail-server": "workspace:*",
     "@build/media": "workspace:*",
+    "@build/mpesa": "workspace:*",
     "@build/nats": "workspace:*",
     "@build/queue-server": "workspace:*",
     "@build/redis": "workspace:*",

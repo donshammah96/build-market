@@ -31,7 +31,8 @@ export default function BillingManagementPage() {
     title: string;
     subtitle?: string;
     amountKES: number;
-    purpose: "SUBSCRIPTION_RENEWAL" | "LEAD_CREDIT_PURCHASE";
+    purpose: "SUBSCRIPTION_RENEWAL";
+    billingInterval: "MONTHLY" | "ANNUAL";
     planKey?: string;
     leadCreditsPack?: number;
   }>({
@@ -39,6 +40,7 @@ export default function BillingManagementPage() {
     title: "",
     amountKES: 0,
     purpose: "SUBSCRIPTION_RENEWAL",
+    billingInterval: "MONTHLY",
   });
 
   const fetchData = async () => {
@@ -126,23 +128,24 @@ export default function BillingManagementPage() {
         body: JSON.stringify({
           planKey: modalConfig.planKey,
           phoneNumber,
-          purpose: modalConfig.purpose,
-          amountKES: modalConfig.amountKES,
+          billingInterval: modalConfig.billingInterval,
+          idempotencyKey: crypto.randomUUID(),
         }),
       });
 
       if (!res.ok) {
-        // Mock fallback checkout ID for demonstration if endpoint is pending
         return {
-          checkoutRequestId: `ws_CO_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          checkoutRequestId: "",
+          error: "Unable to start M-Pesa checkout",
         };
       }
 
-      const data = await res.json();
-      return { checkoutRequestId: data.checkoutRequestId };
+      const payload = await res.json();
+      return { checkoutRequestId: payload.data?.checkoutRequestId ?? "" };
     } catch {
       return {
-        checkoutRequestId: `ws_CO_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        checkoutRequestId: "",
+        error: "Unable to start M-Pesa checkout",
       };
     }
   };
@@ -231,21 +234,8 @@ export default function BillingManagementPage() {
                 : 0
           }
           unitPriceKES={500}
-          onBuyCreditsClick={() =>
-            setModalConfig({
-              isOpen: true,
-              title: "Top Up Marketplace Lead Credits",
-              subtitle: "Purchase 5 lead credits with your plan discount",
-              amountKES:
-                currentPlanKey === "BUSINESS"
-                  ? 1625
-                  : currentPlanKey === "GROWTH"
-                    ? 2000
-                    : 2500,
-              purpose: "LEAD_CREDIT_PURCHASE",
-              leadCreditsPack: 5,
-            })
-          }
+          // Lead-credit top-ups remain disabled until their ledger settlement
+          // handler is implemented; do not route them through subscription checkout.
         />
       </div>
 

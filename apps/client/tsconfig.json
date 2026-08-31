@@ -47,5 +47,6 @@
     { "path": "../../packages/telemetry" },
     { "path": "../../packages/media" },
     { "path": "../../packages/lead-qualification" }
+    ,{ "path": "../../packages/mpesa" }
   ]
 }

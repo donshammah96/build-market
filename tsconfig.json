@@ -18,6 +18,7 @@
     { "path": "packages/telemetry" },
     { "path": "packages/media" },
     { "path": "packages/lead-qualification" },
+    { "path": "packages/mpesa" },
     { "path": "apps/admin" },
     { "path": "apps/client" },
     { "path": "apps/verification-ops" },
