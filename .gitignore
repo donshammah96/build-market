@@ -105,6 +105,7 @@ apps/client/tsc.log
 packages/resilience/tsconfig.tsbuildinfo
 .eslintcache
 /scratch
+.worktrees/
 
 # Temp logs and rot files
 tmp-*
