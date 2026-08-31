@@ -87,6 +87,8 @@ docs/*
 !docs/CLOUDFLARE_WORKERS_RUNBOOK.md
 !docs/CHANGELOG.md
 !docs/build-market-mpesa-implementation-plan.md
+!docs/plans/
+!docs/plans/**
 !apps/admin/docs/
 !apps/admin/docs/**
 !apps/client/docs/
