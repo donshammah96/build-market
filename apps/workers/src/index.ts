@@ -113,6 +113,15 @@ function initializeBullMqWorkers() {
     return;
   }
 
+  // Optimize BullMQ worker polling intervals against managed Redis:
+  // - stalledInterval: 300s (5m) instead of default 30s to reduce periodic Lua script writes
+  // - drainDelay: 30s delay between queue drain sweeps
+  const baseWorkerOptions = {
+    connection: redisConnectionOptions,
+    stalledInterval: 300_000,
+    drainDelay: 30,
+  };
+
   // Maintenance & GDPR Queues Worker
   const maintenanceWorker = new Worker<MaintenanceJobData>(
     "maintenance-jobs",
@@ -125,7 +134,7 @@ function initializeBullMqWorkers() {
       );
     },
     {
-      connection: redisConnectionOptions,
+      ...baseWorkerOptions,
       concurrency: 5,
     },
   );
@@ -157,7 +166,7 @@ function initializeBullMqWorkers() {
       );
     },
     {
-      connection: redisConnectionOptions,
+      ...baseWorkerOptions,
       concurrency: 5,
     },
   );
@@ -180,7 +189,7 @@ function initializeBullMqWorkers() {
       );
     },
     {
-      connection: redisConnectionOptions,
+      ...baseWorkerOptions,
       concurrency: 2,
     },
   );
@@ -204,7 +213,7 @@ function initializeBullMqWorkers() {
       );
     },
     {
-      connection: redisConnectionOptions,
+      ...baseWorkerOptions,
       concurrency: 2,
       limiter: {
         max: 10,
@@ -232,7 +241,7 @@ function initializeBullMqWorkers() {
       );
     },
     {
-      connection: redisConnectionOptions,
+      ...baseWorkerOptions,
       concurrency: 2,
     },
   );
@@ -256,7 +265,7 @@ function initializeBullMqWorkers() {
       );
     },
     {
-      connection: redisConnectionOptions,
+      ...baseWorkerOptions,
       concurrency: 5,
     },
   );
@@ -280,7 +289,7 @@ function initializeBullMqWorkers() {
       );
     },
     {
-      connection: redisConnectionOptions,
+      ...baseWorkerOptions,
       concurrency: 5,
     },
   );
@@ -304,7 +313,7 @@ function initializeBullMqWorkers() {
       );
     },
     {
-      connection: redisConnectionOptions,
+      ...baseWorkerOptions,
       concurrency: 2,
       limiter: {
         max: 20,
@@ -332,7 +341,7 @@ function initializeBullMqWorkers() {
       );
     },
     {
-      connection: redisConnectionOptions,
+      ...baseWorkerOptions,
       concurrency: 5,
     },
   );
@@ -374,7 +383,7 @@ function initializeBullMqWorkers() {
                   env,
                 ),
       ),
-    { connection: redisConnectionOptions, concurrency: 2 },
+    { ...baseWorkerOptions, concurrency: 2 },
   );
   mpesaWorker.on("failed", (job, err) => {
     logger.error("[Worker:mpesa] STK initiation failed", err, {
@@ -391,7 +400,7 @@ function initializeBullMqWorkers() {
         processMpesaReconciliationJob(job, env),
       ),
     {
-      connection: redisConnectionOptions,
+      ...baseWorkerOptions,
       concurrency: 1,
       limiter: {
         max: 10,

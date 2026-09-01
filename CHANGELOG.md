@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Fixed — Upstash Redis Write Amplification Elimination & Rate Limiter / Worker Polling Optimization
+
+- **`@build/resilience` (`packages/resilience/src/cache.ts`, `packages/resilience/src/__tests__/cache.test.ts`)**:
+  - Resolved an L2-to-L1 read-to-write amplification bug in `ResilientCache.get()` and `ResilientCache.getOrCompute()` where cache hits from Redis (`redisCache.get()`) previously invoked `await this.set(key, cached)`, writing the same value back to Redis (`redisCache.set()`) on every read.
+  - Implemented `setMemoryOnly()` so that L2 cache hits backfill only the process-local in-memory LRU cache (`memoryCache`), eliminating 100% of read-triggered Redis write commands.
+  - Added a dedicated test suite in `cache.test.ts` verifying that L2 Redis hits never trigger `redisCache.set()` while subsequent reads are served directly from L1 memory.
+
+- **`@build/redis` (`packages/redis/src/rate-limit.ts`, `packages/redis/src/__tests__/rate-limit.test.ts`)**:
+  - Injected an in-memory `ephemeralCache: new Map()` and `analytics: false` into the `Ratelimit` constructor options in `getOrCreateLimiter()`.
+  - Enables local process-level deduplication of sliding-window rate limit checks during high-concurrency bursts, eliminating redundant remote `ZADD`/`EVAL` write calls to Upstash.
+  - Added unit test suite in `rate-limit.test.ts` asserting normalized result contracts and factory behavior.
+
+- **`apps/workers` (`apps/workers/src/index.ts`)**:
+  - Standardized BullMQ worker configuration via `baseWorkerOptions` with `stalledInterval: 300_000` (5 minutes) and `drainDelay: 30` across all 11 background workers (`maintenanceWorker`, `exportWorker`, `mpesaWorker`, `licenseVerificationWorker`, etc.).
+  - Reduced idle Redis Lua script execution frequency (`moveStalledJobsToWait` / lock renewals) by $10\times$, eliminating continuous 30-second polling write bursts against Upstash when queues are idle.
+
 ### Added - M-Pesa integration hardening pass (Phases 3b, 4b, and 5)
 
 - **Phase 3b (Reconciliation & Leases)**: Added dedicated `mpesa-reconciliation` BullMQ worker with distributed claim lease protocol (`reconciliationClaimId`, `reconciliationClaimedAt`), exponential backoff, rate-limited Daraja queries, and shared atomic settlement.

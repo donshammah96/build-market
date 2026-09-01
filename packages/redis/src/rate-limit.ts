@@ -29,6 +29,9 @@ function getLimiterCacheKey(limit: number, windowMs: number): string {
   return `${limit}:${windowMs}`;
 }
 
+// In-memory cache shared across limiters to deduplicate Redis writes within the process
+const ephemeralCache = new Map();
+
 function getOrCreateLimiter(limit: number, windowMs: number): Ratelimit {
   const cacheKey = getLimiterCacheKey(limit, windowMs);
   const cached = limiterCache.get(cacheKey);
@@ -42,6 +45,8 @@ function getOrCreateLimiter(limit: number, windowMs: number): Ratelimit {
     // Prefix all rate-limit keys with "rl:" to isolate them from other
     // namespaces in the same Upstash database.
     prefix: "rl",
+    ephemeralCache,
+    analytics: false,
   });
 
   limiterCache.set(cacheKey, limiter);
@@ -165,4 +170,5 @@ export function createRateLimiter(options: RateLimiterOptions): RateLimiter {
  */
 export function resetLimiterCache(): void {
   limiterCache.clear();
+  ephemeralCache.clear();
 }
