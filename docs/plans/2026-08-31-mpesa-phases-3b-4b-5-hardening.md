@@ -498,10 +498,9 @@ bundle rules to accommodate fixtures.
 Update in the same implementation release, with actual shipped scope and
 deferrals:
 
-- `CHANGELOG.md` — user-visible payment behavior, migration, feature flags,
-  and release gates.
-- `docs/CHANGELOG.md` — architecture, data protection, incident response, and
-  operational changes.
+- `docs/CHANGELOG.md` — sole root-level release record for user-visible
+  payment behavior, migration, feature flags, release gates, architecture, data
+  protection, incident response, and operational changes.
 - `apps/client/docs/CHANGELOG.md` — checkout purposes, status DTO, callback
   receipt behavior, and ownership/rate-limit changes.
 - `apps/admin/docs/CHANGELOG.md` — search/details, capabilities, audit, requery,

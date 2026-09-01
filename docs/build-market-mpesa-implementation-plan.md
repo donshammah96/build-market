@@ -327,8 +327,8 @@ Required additions before go-live:
 Update these files in the same release PR, with the actual shipped scope and
 known deferrals:
 
-- `CHANGELOG.md` - repository-level architecture, migration, and release gate;
-- `docs/CHANGELOG.md` - cross-application operational/security summary;
+- `docs/CHANGELOG.md` - sole root-level release record for architecture,
+  migration, release-gate, and cross-application operational/security updates;
 - `apps/client/docs/CHANGELOG.md` - checkout, callback, status, and secret
   boundary changes;
 - `apps/admin/docs/CHANGELOG.md` - payout capability, audit, and policy;
