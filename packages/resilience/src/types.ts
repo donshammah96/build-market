@@ -4,6 +4,14 @@
 
 export type OperationCriticality = "critical" | "normal" | "background";
 
+export type ResilienceOutcome =
+  | "success"
+  | "cache_hit"
+  | "fallback"
+  | "timeout"
+  | "circuit_open"
+  | "error";
+
 export interface TimeoutConfig {
   critical: number;
   normal: number;
@@ -91,22 +99,24 @@ export interface CircuitBreakerState {
   nextAttemptTime?: number;
 }
 
-export interface ResilienceOptions {
+export interface ResilienceOptions<T = unknown> {
   timeout?: number | OperationCriticality;
   retry?: Partial<RetryConfig> | boolean;
   circuitBreaker?: Partial<CircuitBreakerConfig> | boolean;
   cache?: Partial<CacheConfig> | boolean;
-  fallback?: () => Promise<any>;
+  fallback?: () => Promise<T>;
   metrics?: boolean;
   operationName?: string;
+  cacheKey?: string;
 }
 
 export interface OperationResult<T> {
   success: boolean;
   data?: T;
   error?: Error;
+  outcome: ResilienceOutcome;
   fromCache?: boolean;
   fromFallback?: boolean;
-  attempts?: number;
-  duration?: number;
+  attempts: number;
+  duration: number;
 }

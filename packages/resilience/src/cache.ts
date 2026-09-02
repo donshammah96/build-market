@@ -164,8 +164,10 @@ export class ResilientCache<T = any> {
     const now = Date.now();
 
     if (cachedEntry) {
-      const isExpired = now > cachedEntry.timestamp + (ttl ?? this.config.ttl);
-      const isStale = cachedEntry.staleAt && now > cachedEntry.staleAt;
+      const effectiveTtl = ttl ?? this.config.ttl;
+      const swrWindow = this.config.staleWhileRevalidate ?? 0;
+      const isExpired = now > cachedEntry.timestamp + effectiveTtl + swrWindow;
+      const isStale = cachedEntry.staleAt !== undefined && now > cachedEntry.staleAt;
 
       if (isExpired) {
         // Expired - must recompute
@@ -231,7 +233,7 @@ export class ResilientCache<T = any> {
           key,
           error: error.message,
         });
-        throw error;
+        return undefined as T;
       })
       .finally(() => {
         this.revalidationPromises.delete(key);

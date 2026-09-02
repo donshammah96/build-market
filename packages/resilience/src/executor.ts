@@ -7,14 +7,16 @@ import {
   ResilienceOptions,
   OperationResult,
   OperationCriticality,
+  ResilienceOutcome,
 } from "./types.js";
-import { withTimeout, DEFAULT_TIMEOUTS } from "./timeout.js";
+import { TimeoutError, withTimeout, DEFAULT_TIMEOUTS } from "./timeout.js";
 import { withRetry } from "./retry.js";
 import {
   CircuitBreakerRegistry,
   DEFAULT_CIRCUIT_BREAKER_CONFIG,
+  CircuitBreakerOpenError,
 } from "./circuit-breaker.js";
-import { CacheRegistry, DEFAULT_CACHE_CONFIG } from "./cache.js";
+import { CacheRegistry, DEFAULT_CACHE_CONFIG, ResilientCache } from "./cache.js";
 import { withFallback } from "./fallback.js";
 import { MetricsCollector } from "./metrics.js";
 import { StructuredLogger } from "./logger.js";
@@ -43,37 +45,29 @@ export class ResilientExecutor {
    */
   async execute<T>(
     operation: () => Promise<T>,
-    options: ResilienceOptions = {},
+    options: ResilienceOptions<T> = {},
   ): Promise<OperationResult<T>> {
     const startTime = Date.now();
     const operationName = options.operationName || "unnamed-operation";
     let attempts = 0;
     let fromCache = false;
     let fromFallback = false;
+    let outcome: ResilienceOutcome = "success";
+    let cache: ResilientCache<T> | undefined;
+    let cacheKey: string | undefined;
 
     try {
       // Check cache first if enabled
       if (options.cache) {
         const cacheConfig =
           typeof options.cache === "object" ? options.cache : {};
-        const cache = this.caches.getCache<T>(operationName, cacheConfig);
-
-        const cacheKey = `${operationName}:default`;
-        const cached = await cache.get(cacheKey);
-
-        if (cached !== undefined) {
-          this.logger.debug(`Cache hit for operation: ${operationName}`);
-          this.metrics.incrementCounter(`${operationName}.cache.hit`);
-
-          return {
-            success: true,
-            data: cached,
-            fromCache: true,
-            duration: Date.now() - startTime,
-          };
+        if (!options.cacheKey?.trim()) {
+          throw new Error(
+            `Cache-enabled operation '${operationName}' requires an explicit cacheKey`,
+          );
         }
-
-        this.metrics.incrementCounter(`${operationName}.cache.miss`);
+        cacheKey = options.cacheKey;
+        cache = this.caches.getCache<T>(operationName, cacheConfig);
       }
 
       // Build the operation pipeline
@@ -122,25 +116,42 @@ export class ResilientExecutor {
 
       // 4. Execute with fallback if provided
       let result: T;
+      const compute = async () => resilientOperation();
 
-      if (options.fallback) {
-        const fallbackResult = await withFallback(resilientOperation, {
-          fallbackFn: options.fallback,
-          logger: this.logger,
-        });
+      try {
+        if (cache && cacheKey) {
+          const cachedResult = await cache.getOrCompute(
+            cacheKey,
+            compute,
+            typeof options.cache === "object" ? options.cache.ttl : undefined,
+          );
+          result = cachedResult.value;
+          fromCache = cachedResult.fromCache;
+          if (fromCache) {
+            outcome = "cache_hit";
+            this.metrics.incrementCounter(`${operationName}.cache.hit`);
+          } else {
+            this.metrics.incrementCounter(`${operationName}.cache.miss`);
+          }
+        } else {
+          result = await compute();
+        }
+      } catch (error) {
+        if (!options.fallback) throw error;
+        const originalError =
+          error instanceof Error ? error : new Error(String(error));
+        const fallbackResult = await withFallback<T>(
+          async () => {
+            throw originalError;
+          },
+          {
+            fallbackFn: options.fallback,
+            logger: this.logger,
+          },
+        );
         result = fallbackResult.value;
         fromFallback = fallbackResult.usedFallback;
-      } else {
-        result = await resilientOperation();
-      }
-
-      // Cache the successful result if caching is enabled
-      if (options.cache && !fromCache) {
-        const cacheConfig =
-          typeof options.cache === "object" ? options.cache : {};
-        const cache = this.caches.getCache<T>(operationName, cacheConfig);
-        const cacheKey = `${operationName}:default`;
-        await cache.set(cacheKey, result);
+        outcome = "fallback";
       }
 
       const duration = Date.now() - startTime;
@@ -159,12 +170,19 @@ export class ResilientExecutor {
         data: result,
         fromCache,
         fromFallback,
-        attempts: attempts || 1,
+        outcome,
+        attempts: fromCache ? 0 : attempts || 1,
         duration,
       };
     } catch (error) {
       const duration = Date.now() - startTime;
       const err = error instanceof Error ? error : new Error(String(error));
+      outcome =
+        err instanceof TimeoutError
+          ? "timeout"
+          : err instanceof CircuitBreakerOpenError
+            ? "circuit_open"
+            : "error";
 
       // Record failure metrics
       if (options.metrics !== false) {
@@ -174,14 +192,17 @@ export class ResilientExecutor {
 
       this.logger.error(`Operation failed: ${operationName}`, err, {
         operationName,
-        attempts: attempts || 1,
+        outcome,
+        attempts:
+          outcome === "circuit_open" ? 0 : attempts || 1,
         duration,
       });
 
       return {
         success: false,
         error: err,
-        attempts: attempts || 1,
+        outcome,
+        attempts: outcome === "circuit_open" ? 0 : attempts || 1,
         duration,
       };
     }
@@ -195,7 +216,7 @@ export class ResilientExecutor {
     criticality: OperationCriticality,
     operationName?: string,
   ): Promise<OperationResult<T>> {
-    const options: ResilienceOptions = {
+    const options: ResilienceOptions<T> = {
       timeout: criticality,
       operationName,
     };
