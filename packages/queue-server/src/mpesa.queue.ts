@@ -1,5 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq";
-import { createRedisConnection } from "@build/redis/tcp";
+import { getQueueConnectionOptions } from "./backend.js";
+import { QueueRetentionPolicies } from "./retention.js";
 import {
   getMpesaJobId,
   MPESA_JOB_NAMES,
@@ -14,26 +15,24 @@ import {
 let paymentsQueue: Queue | null = null;
 let reconciliationQueue: Queue | null = null;
 
-function getPaymentsQueue(): Queue {
+export function getPaymentsQueue(): Queue {
   return (paymentsQueue ??= new Queue(MPESA_QUEUE_NAMES.PAYMENTS, {
-    connection: createRedisConnection(),
+    connection: getQueueConnectionOptions(MPESA_QUEUE_NAMES.PAYMENTS),
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: "exponential", delay: 5_000 },
-      removeOnComplete: { age: 86_400, count: 1_000 },
-      removeOnFail: false,
+      ...QueueRetentionPolicies.FINANCIAL_AUDIT,
     },
   }));
 }
 
-function getReconciliationQueue(): Queue {
+export function getReconciliationQueue(): Queue {
   return (reconciliationQueue ??= new Queue(MPESA_QUEUE_NAMES.RECONCILIATION, {
-    connection: createRedisConnection(),
+    connection: getQueueConnectionOptions(MPESA_QUEUE_NAMES.RECONCILIATION),
     defaultJobOptions: {
       attempts: 5,
       backoff: { type: "exponential", delay: 10_000 },
-      removeOnComplete: { age: 86_400, count: 500 },
-      removeOnFail: false,
+      ...QueueRetentionPolicies.FINANCIAL_AUDIT,
     },
   }));
 }

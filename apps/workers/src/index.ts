@@ -33,9 +33,9 @@ import {
   processMpesaStkInitiateJob,
 } from "./processors/mpesa-stk.processor.js";
 import { processMpesaReconciliationJob } from "./processors/mpesa-reconciliation.processor.js";
-import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 import {
-  getBullMQConnectionOptions,
+  getQueueConnectionOptions,
+  getQueueBackendType,
   type MaintenanceJobData,
   type NotificationRetryJobData,
   type ExportJobData,
@@ -58,6 +58,7 @@ import {
 } from "@build/nats";
 import { Worker, type Job } from "bullmq";
 import { Redis } from "ioredis";
+import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 
 // 1. Fail-closed boot validation (P0: Must run before any socket initialization)
 const env = validateWorkerEnv();
@@ -78,7 +79,6 @@ if (env.DISABLE_BACKGROUND_JOBS) {
 }
 
 // 2. Redis connection check probe
-const redisConnectionOptions = getBullMQConnectionOptions();
 const healthRedisClient = new Redis(env.REDIS_URL, {
   lazyConnect: true,
   maxRetriesPerRequest: 1,
@@ -113,14 +113,28 @@ function initializeBullMqWorkers() {
     return;
   }
 
-  // Optimize BullMQ worker polling intervals against managed Redis:
-  // - stalledInterval: 300s (5m) instead of default 30s to reduce periodic Lua script writes
-  // - drainDelay: 30s delay between queue drain sweeps
-  const baseWorkerOptions = {
-    connection: redisConnectionOptions,
-    stalledInterval: 300_000,
-    drainDelay: 30,
-  };
+  function getWorkerOptions(
+    queueName: string,
+    concurrency: number = 5,
+    limiter?: { max: number; duration: number },
+  ) {
+    const backend = getQueueBackendType(queueName);
+    logger.info(
+      `[Worker:${queueName}] Initializing worker with backend: ${backend}`,
+      {
+        queueName,
+        backend,
+        concurrency,
+      },
+    );
+    return {
+      connection: getQueueConnectionOptions(queueName) as any,
+      stalledInterval: 300_000,
+      drainDelay: 30,
+      concurrency,
+      ...(limiter ? { limiter } : {}),
+    };
+  }
 
   // Maintenance & GDPR Queues Worker
   const maintenanceWorker = new Worker<MaintenanceJobData>(
@@ -133,10 +147,7 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      ...baseWorkerOptions,
-      concurrency: 5,
-    },
+    getWorkerOptions("maintenance-jobs", 5),
   );
 
   maintenanceWorker.on("failed", (job, err) => {
@@ -165,10 +176,7 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      ...baseWorkerOptions,
-      concurrency: 5,
-    },
+    getWorkerOptions("notification-retries", 5),
   );
 
   notificationWorker.on("failed", (job, err) => {
@@ -188,10 +196,7 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      ...baseWorkerOptions,
-      concurrency: 2,
-    },
+    getWorkerOptions("gdpr-data-export", 2),
   );
 
   exportWorker.on("failed", (job, err) => {
@@ -212,14 +217,10 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      ...baseWorkerOptions,
-      concurrency: 2,
-      limiter: {
-        max: 10,
-        duration: 60000,
-      },
-    },
+    getWorkerOptions("security-incidents", 2, {
+      max: 10,
+      duration: 60000,
+    }),
   );
 
   incidentWorker.on("failed", (job, err) => {
@@ -240,10 +241,7 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      ...baseWorkerOptions,
-      concurrency: 2,
-    },
+    getWorkerOptions("compliance-notifications", 2),
   );
 
   complianceNotificationWorker.on("failed", (job, err) => {
@@ -264,10 +262,7 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      ...baseWorkerOptions,
-      concurrency: 5,
-    },
+    getWorkerOptions("newsletter-confirmation-email", 5),
   );
 
   newsletterEmailWorker.on("failed", (job, err) => {
@@ -288,10 +283,7 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      ...baseWorkerOptions,
-      concurrency: 5,
-    },
+    getWorkerOptions("newsletter-esp-sync", 5),
   );
 
   newsletterEspSyncWorker.on("failed", (job, err) => {
@@ -312,14 +304,10 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      ...baseWorkerOptions,
-      concurrency: 2,
-      limiter: {
-        max: 20,
-        duration: 60000,
-      },
-    },
+    getWorkerOptions("uploads-image-processing", 2, {
+      max: 20,
+      duration: 60000,
+    }),
   );
 
   uploadProcessingWorker.on("failed", (job, err) => {
@@ -340,10 +328,7 @@ function initializeBullMqWorkers() {
         },
       );
     },
-    {
-      ...baseWorkerOptions,
-      concurrency: 5,
-    },
+    getWorkerOptions("license-verification", 5),
   );
 
   licenseVerificationWorker.on("failed", (job, err) => {
@@ -383,7 +368,7 @@ function initializeBullMqWorkers() {
                   env,
                 ),
       ),
-    { ...baseWorkerOptions, concurrency: 2 },
+    getWorkerOptions("mpesa-payments", 2),
   );
   mpesaWorker.on("failed", (job, err) => {
     logger.error("[Worker:mpesa] STK initiation failed", err, {
@@ -399,14 +384,10 @@ function initializeBullMqWorkers() {
       CorrelationIdManager.run(job.data.correlationId, () =>
         processMpesaReconciliationJob(job, env),
       ),
-    {
-      ...baseWorkerOptions,
-      concurrency: 1,
-      limiter: {
-        max: 10,
-        duration: 10000,
-      },
-    },
+    getWorkerOptions("mpesa-reconciliation", 1, {
+      max: 10,
+      duration: 10000,
+    }),
   );
   mpesaReconciliationWorker.on("failed", (job, err) => {
     logger.error(
@@ -508,6 +489,30 @@ const healthServer = startHealthServer({
       }
       const pong = await healthRedisClient.ping();
       return pong === "PONG";
+    } catch {
+      return false;
+    }
+  },
+  checkPostgres: async () => {
+    try {
+      const hasPostgres =
+        env.QUEUE_BACKEND === "postgres" ||
+        activeWorkers.some((w) => getQueueBackendType(w.name) === "postgres");
+      if (!hasPostgres) return true;
+
+      const pgModule = await import("pg");
+      const Client = pgModule.default?.Client || pgModule.Client;
+      const client = new Client({
+        connectionString: env.DATABASE_URL,
+        ssl:
+          env.NODE_ENV === "production"
+            ? { rejectUnauthorized: true }
+            : undefined,
+      });
+      await client.connect();
+      await client.query("SELECT 1;");
+      await client.end();
+      return true;
     } catch {
       return false;
     }

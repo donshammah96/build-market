@@ -32,6 +32,18 @@ describe("Worker Environment Validation (apps/workers/src/env.ts)", () => {
     expect(env.DB_POOL_MAX).toBe(5);
     expect(env.HEALTH_PORT).toBe(8080);
     expect(env.LOG_LEVEL).toBe("info");
+    expect(env.QUEUE_BACKEND).toBe("redis");
+  });
+
+  it("should parse custom QUEUE_BACKEND value", () => {
+    process.env.DATABASE_URL =
+      "postgresql://postgres:postgres@localhost:5432/buildmarket";
+    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.QUEUE_BACKEND = "postgres";
+
+    const env = validateWorkerEnv();
+
+    expect(env.QUEUE_BACKEND).toBe("postgres");
   });
 
   it("should fail-closed and call process.exit(1) when DATABASE_URL is missing or has invalid scheme", () => {

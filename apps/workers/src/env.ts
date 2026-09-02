@@ -58,6 +58,7 @@ const workerEnvSchema = z.object({
   LOG_LEVEL: z
     .enum(["trace", "debug", "info", "warn", "error", "fatal"])
     .default("info"),
+  QUEUE_BACKEND: z.enum(["redis", "postgres"]).default("redis"),
 
   // M-Pesa is disabled by default and must be explicitly enabled after
   // sandbox credentials and callback routes have been verified.

@@ -1,5 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq";
-import { createRedisConnection } from "@build/redis/tcp";
+import { getQueueConnectionOptions } from "./backend.js";
+import { QueueRetentionPolicies } from "./retention.js";
 
 export const MaintenanceJobNames = {
   CLEANUP_EXPIRED_EXPORTS: "cleanup-expired-exports",
@@ -45,12 +46,11 @@ export function getMaintenanceQueue(): Queue<
       unknown,
       MaintenanceJobName
     >("maintenance-jobs", {
-      connection: createRedisConnection(),
+      connection: getQueueConnectionOptions("maintenance-jobs"),
       defaultJobOptions: {
         attempts: 3,
         backoff: { type: "exponential", delay: 5000 },
-        removeOnComplete: { age: 24 * 3600, count: 500 },
-        removeOnFail: { age: 7 * 24 * 3600 },
+        ...QueueRetentionPolicies.STANDARD,
       },
     });
   }

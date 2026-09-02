@@ -34,7 +34,7 @@
     "@build/types": "workspace:*",
     "@prisma/adapter-pg": "catalog:",
     "@prisma/client": "catalog:",
-    "pg": "^8.18.0",
+    "pg": "catalog:",
     "prisma": "catalog:",
     "zod": "catalog:"
   },
@@ -44,7 +44,7 @@
   "devDependencies": {
     "@prisma/config": "catalog:",
     "@types/node": "catalog:",
-    "@types/pg": "^8.16.0",
+    "@types/pg": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:"
   }

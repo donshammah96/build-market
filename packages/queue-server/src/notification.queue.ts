@@ -1,5 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq";
-import { createRedisConnection } from "@build/redis/tcp";
+import { getQueueConnectionOptions } from "./backend.js";
+import { QueueRetentionPolicies } from "./retention.js";
 
 export interface NotificationRetryJobData {
   recipientUserId: string;
@@ -23,12 +24,11 @@ export function getNotificationRetryQueue(): Queue<NotificationRetryJobData> {
     notificationQueueInstance = new Queue<NotificationRetryJobData>(
       "notification-retries",
       {
-        connection: createRedisConnection(),
+        connection: getQueueConnectionOptions("notification-retries"),
         defaultJobOptions: {
           attempts: 5,
           backoff: { type: "exponential", delay: 2000 },
-          removeOnComplete: { age: 24 * 3600, count: 1000 },
-          removeOnFail: { age: 7 * 24 * 3600 },
+          ...QueueRetentionPolicies.STANDARD,
         },
       },
     );

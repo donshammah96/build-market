@@ -95,6 +95,8 @@ catalog:
   # --- Data fetching / queues / cache (client + admin + redis) ---
   "@tanstack/react-query": ^5.90.5
   bullmq: ^5.76.8
+  pg: 8.18.0
+  "@types/pg": 8.18.0
   # Was declared as ^5.4.1 in packages/redis while pnpm.overrides silently
   # forced 5.11.1 everywhere. Catalog value matches the enforced version so
   # the manifest stops lying about what's actually installed.

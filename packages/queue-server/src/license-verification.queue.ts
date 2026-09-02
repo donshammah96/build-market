@@ -1,5 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq";
-import { createRedisConnection } from "@build/redis/tcp";
+import { getQueueConnectionOptions } from "./backend.js";
+import { QueueRetentionPolicies } from "./retention.js";
 import type { LicenseAuthority, Profession } from "@prisma/client";
 
 export interface LicenseVerificationJobData {
@@ -25,12 +26,11 @@ export function getLicenseVerificationQueue(): Queue<LicenseVerificationJobData>
     licenseVerificationQueueInstance = new Queue<LicenseVerificationJobData>(
       LICENSE_VERIFICATION_QUEUE_NAME,
       {
-        connection: createRedisConnection(),
+        connection: getQueueConnectionOptions(LICENSE_VERIFICATION_QUEUE_NAME),
         defaultJobOptions: {
           attempts: LICENSE_VERIFICATION_MAX_ATTEMPTS,
           backoff: { type: "exponential", delay: 5_000 },
-          removeOnComplete: { age: 60 * 60 * 24 * 7 },
-          removeOnFail: false,
+          ...QueueRetentionPolicies.FINANCIAL_AUDIT,
         },
       },
     );

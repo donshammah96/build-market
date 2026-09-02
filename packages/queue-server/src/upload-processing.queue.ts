@@ -1,5 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq";
-import { createRedisConnection } from "@build/redis/tcp";
+import { getQueueConnectionOptions } from "./backend.js";
+import { QueueRetentionPolicies } from "./retention.js";
 
 export type ImageUploadProcessingJobData = {
   uploadId: string;
@@ -52,12 +53,11 @@ export function getUploadProcessingQueue(): Queue<
       unknown,
       UploadProcessingJobName
     >(UPLOADS_PROCESSING_QUEUE_NAME, {
-      connection: createRedisConnection(),
+      connection: getQueueConnectionOptions(UPLOADS_PROCESSING_QUEUE_NAME),
       defaultJobOptions: {
         attempts: 3,
         backoff: { type: "exponential", delay: 2_000 },
-        removeOnComplete: { age: 3600, count: 1000 },
-        removeOnFail: { age: 24 * 3600 },
+        ...QueueRetentionPolicies.STANDARD,
       },
     });
   }

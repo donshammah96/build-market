@@ -7,6 +7,10 @@ export type {
   BullMQRedisConnectionOptions,
   BullMQConnectionSummary,
 } from "@build/redis/tcp";
+
+export * from "./backend.js";
+export * from "./retention.js";
+export * from "./migrate.js";
 export * from "./compliance.queue.js";
 export * from "./export.queue.js";
 export * from "./maintenance.queue.js";

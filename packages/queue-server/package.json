@@ -19,20 +19,25 @@
     "check-types": "tsc --noEmit",
     "build": "tsc",
     "prepack": "pnpm run build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "migrate": "tsx src/migrate.ts"
   },
   "dependencies": {
     "@build/db": "workspace:*",
     "@build/redis": "workspace:*",
     "@prisma/client": "catalog:",
     "bullmq": "catalog:",
-    "ioredis": "catalog:"
+    "dotenv": "catalog:",
+    "ioredis": "catalog:",
+    "pg": "catalog:"
   },
   "devDependencies": {
     "@build/eslint-config": "workspace:*",
     "@build/typescript-config": "workspace:*",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
     "eslint": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

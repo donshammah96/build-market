@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Added — BullMQ Redis to PostgreSQL Backend Migration Architecture
+
+- **`@build/queue-server` (`packages/queue-server/src/backend.ts`, `retention.ts`, `migrate.ts`, `*.queue.ts`)**:
+  - Implemented dynamic per-queue backend resolution (`getQueueBackendType`, `getQueueConnectionOptions`) supporting granular canary rollout (`QUEUE_BACKEND_<NAME>=postgres|redis`) with global `QUEUE_BACKEND` fallback.
+  - Implemented PostgreSQL connection options factory (`getPostgresQueueConnectionOptions`) enforcing dedicated `bullmq` schema namespace isolation, production TLS verification (`ssl: { rejectUnauthorized: true }`), and bounded per-queue client connection pools (`max: 3`).
+  - Added standardized queue retention policies (`QueueRetentionPolicies.STANDARD`, `FINANCIAL_AUDIT`, `HIGH_THROUGHPUT`) to prevent table bloat.
+  - Added standalone pre-deploy migration runner (`packages/queue-server/src/migrate.ts`) to initialize and verify the `bullmq` schema before daemon startup.
+  - Converted queue definitions (`maintenance`, `notification`, `export`, `compliance`, `license-verification`, `mpesa`, `newsletter`, `upload-processing`) to lazy backend-aware factory functions with backward-compatible export proxies.
+  - Added unit test suite in `packages/queue-server/src/__tests__/backend.test.ts` (10/10 tests passing).
+
+- **`apps/workers` (`apps/workers/src/index.ts`, `apps/workers/src/health.ts`)**:
+  - Refactored worker initializations to consume `getWorkerOptions()` with dynamic backend resolution and standardized polling/drain intervals.
+  - Enhanced `/healthz` probe in `health.ts` to verify PostgreSQL backend connectivity and schema accessibility when PostgreSQL queues are active.
+
+- **Tooling & Operational Governance (`scripts/reconcile-queue-backend.ts`, `docs/runbooks/queue-postgres-migration.md`)**:
+  - Created two-way CLI reconciliation tool for inspecting queue counts and safely transferring/draining in-flight and delayed jobs between Redis and PostgreSQL without state loss.
+  - Published comprehensive 3-tier canary rollout and emergency rollback runbook.
+
 ### Changed - Canonical changelog location
 
 - docs/CHANGELOG.md is now the sole root-level release changelog.

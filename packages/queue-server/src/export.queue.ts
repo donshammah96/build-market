@@ -1,5 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq";
-import { createRedisConnection } from "@build/redis/tcp";
+import { getQueueConnectionOptions } from "./backend.js";
+import { QueueRetentionPolicies } from "./retention.js";
 
 export interface ExportJobData {
   exportId: string;
@@ -13,27 +14,45 @@ export const JobNames = {
   CLEANUP_EXPIRED: "cleanup-expired",
 } as const;
 
-type ExportJobName = (typeof JobNames)[keyof typeof JobNames];
+export type ExportJobName = (typeof JobNames)[keyof typeof JobNames];
+
+let exportQueueInstance: Queue<ExportJobData, unknown, ExportJobName> | null =
+  null;
+
+export function getExportQueue(): Queue<ExportJobData, unknown, ExportJobName> {
+  if (!exportQueueInstance) {
+    exportQueueInstance = new Queue<ExportJobData, unknown, ExportJobName>(
+      "gdpr-data-export",
+      {
+        connection: getQueueConnectionOptions("gdpr-data-export"),
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: { type: "exponential", delay: 2000 },
+          ...QueueRetentionPolicies.STANDARD,
+        },
+      },
+    );
+  }
+  return exportQueueInstance;
+}
 
 /**
- * BullMQ requires a dedicated ioredis connection per Queue instance.
- * Do not share this connection with Workers or other Queues.
+ * Proxy for backward compatibility with direct exportQueue access
  */
-export const exportQueue = new Queue<ExportJobData, unknown, ExportJobName>(
-  "gdpr-data-export",
+export const exportQueue = new Proxy(
+  {} as Queue<ExportJobData, unknown, ExportJobName>,
   {
-    connection: createRedisConnection(),
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: "exponential", delay: 2000 },
-      removeOnComplete: { age: 24 * 3600, count: 1000 },
-      removeOnFail: { age: 7 * 24 * 3600 },
+    get(_target, prop, receiver) {
+      const queue = getExportQueue();
+      const value = Reflect.get(queue, prop, receiver);
+      return typeof value === "function" ? value.bind(queue) : value;
     },
   },
 );
 
 export async function addExportJob(data: ExportJobData, opts?: JobsOptions) {
-  return exportQueue.add(JobNames.PROCESS_EXPORT, data, {
+  const queue = getExportQueue();
+  return queue.add(JobNames.PROCESS_EXPORT, data, {
     jobId: data.exportId,
     ...opts,
   });
