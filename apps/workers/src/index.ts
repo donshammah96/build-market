@@ -533,7 +533,7 @@ const healthServer = startHealthServer({
           connectionString: env.DATABASE_URL,
           ssl:
             env.NODE_ENV === "production"
-              ? { rejectUnauthorized: true }
+              ? { rejectUnauthorized: false }
               : undefined,
           lookup: (
             hostname: string,

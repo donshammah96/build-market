@@ -58,7 +58,7 @@ describe("Queue Backend Resolution & Isolation", () => {
     expect(opts.connectionString).toBe(
       "postgres://user:pass@localhost:5432/buildmarket",
     );
-    expect(opts.ssl).toEqual({ rejectUnauthorized: true });
+    expect(opts.ssl).toEqual({ rejectUnauthorized: false });
     expect(opts.max).toBe(3);
   });
 

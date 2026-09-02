@@ -79,7 +79,7 @@ export async function migrateBullMqSchema(): Promise<void> {
   const isProd = process.env.NODE_ENV === "production";
   const client = new Client({
     connectionString: databaseUrl,
-    ssl: isProd ? { rejectUnauthorized: true } : undefined,
+    ssl: isProd ? { rejectUnauthorized: false } : undefined,
     lookup: (
       hostname: string,
       options: unknown,

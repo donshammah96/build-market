@@ -105,7 +105,7 @@ export function getPostgresQueueConnectionOptions(
   return {
     connectionString: databaseUrl,
     schema: "bullmq",
-    ssl: isProd ? { rejectUnauthorized: true } : undefined,
+    ssl: isProd ? { rejectUnauthorized: false } : undefined,
     max: maxPool,
   };
 }
