@@ -77,7 +77,28 @@ export async function migrateBullMqSchema(): Promise<void> {
   const client = new Client({
     connectionString: databaseUrl,
     ssl: isProd ? { rejectUnauthorized: true } : undefined,
-  });
+    lookup: (
+      hostname: string,
+      options: unknown,
+      callback: (
+        err: NodeJS.ErrnoException | null,
+        address: string,
+        family: number,
+      ) => void,
+    ) => {
+      const cb =
+        typeof options === "function"
+          ? (options as (
+              err: NodeJS.ErrnoException | null,
+              address: string,
+              family: number,
+            ) => void)
+          : callback;
+      const opts =
+        typeof options === "object" && options !== null ? options : {};
+      dns.lookup(hostname, { ...opts, family: 4 }, cb);
+    },
+  } as any);
 
   try {
     await client.connect();

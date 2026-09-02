@@ -528,13 +528,35 @@ const healthServer = startHealthServer({
       if (!healthPgClient) {
         const pgModule = await import("pg");
         const Client = pgModule.default?.Client || pgModule.Client;
+        const dnsModule = await import("node:dns");
         healthPgClient = new Client({
           connectionString: env.DATABASE_URL,
           ssl:
             env.NODE_ENV === "production"
               ? { rejectUnauthorized: true }
               : undefined,
-        });
+          lookup: (
+            hostname: string,
+            options: unknown,
+            callback: (
+              err: NodeJS.ErrnoException | null,
+              address: string,
+              family: number,
+            ) => void,
+          ) => {
+            const cb =
+              typeof options === "function"
+                ? (options as (
+                    err: NodeJS.ErrnoException | null,
+                    address: string,
+                    family: number,
+                  ) => void)
+                : callback;
+            const opts =
+              typeof options === "object" && options !== null ? options : {};
+            dnsModule.default.lookup(hostname, { ...opts, family: 4 }, cb);
+          },
+        } as any);
         await healthPgClient.connect();
       }
 
