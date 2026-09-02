@@ -23,21 +23,21 @@ The approved design selects Node 24 as the only supported runtime. Runtime refer
 - **Output:** zero when every governance rule passes; concise file/rule failures and non-zero otherwise
 - **Rules:** ADR inventory/metadata, canonical status metadata, launch scorecard evidence, current worker runbook link, and Node 24 active runtime configuration
 
-- [ ] **Step 1: Write the failing behavior tests**
+- [x] **Step 1: Write the failing behavior tests**
       Create Node test fixtures that represent a valid minimal repository and one invalid case for each rule. The test break to catch is a checker that silently accepts a missing ADR metadata field, incomplete index, incomplete status evidence, unreferenced scorecard control, missing worker recovery runbook, or Node 20 active runtime configuration.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
       Run: `node --test scripts/__tests__/check-launch-documentation-governance.test.mjs`
       Expected: FAIL because the checker module/CLI does not exist.
 
-- [ ] **Step 3: Implement the minimal checker**
+- [x] **Step 3: Implement the minimal checker**
       Resolve paths relative to the supplied root, collect all violations deterministically, print each violation, and use exit code `1` only when violations exist. Do not mutate files.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
       Run: `node --test scripts/__tests__/check-launch-documentation-governance.test.mjs`
       Expected: PASS with all valid and invalid fixture behaviors asserted.
 
-- [ ] **Step 5: Wire root package and CI**
+- [x] **Step 5: Wire root package and CI**
       Add a non-mutating root script and execute it from the existing CI validation path after checkout/install. Preserve existing CI commands and cache behavior.
 
 ### 2. Establish complete ADR authority and metadata
@@ -47,13 +47,13 @@ The approved design selects Node 24 as the only supported runtime. Runtime refer
 - **Interfaces produced:** an explicit complete index for client ADR-001..ADR-010 and admin ADR-ADMIN-001..ADR-ADMIN-016
 - **Error contract:** the checker rejects missing or stale index entries
 
-- [ ] **Step 1: Update all current ADRs**
+- [x] **Step 1: Update all current ADRs**
       Add `Status`, `Owner`, and `Next review` metadata consistently without modifying their decision rationale. Use `Accepted` for current ADRs unless the decision itself explicitly marks it superseded/deprecated.
 
-- [ ] **Step 2: Update authority references**
+- [x] **Step 2: Update authority references**
       Replace obsolete upper bounds and ensure the root and app architecture guidance point to the full indexes.
 
-- [ ] **Step 3: Verify against the real repository**
+- [x] **Step 3: Verify against the real repository**
       Run: `pnpm run docs:check-launch-governance`
       Expected: PASS with an exhaustive current ADR set.
 
@@ -66,13 +66,13 @@ The approved design selects Node 24 as the only supported runtime. Runtime refer
 - **Interfaces produced:** health semantics and queue recovery procedure for operations
 - **Evidence consumed:** `apps/workers/src/health.ts`, `src/index.ts`, processor code, and existing worker tests
 
-- [ ] **Step 1: Reconcile documentation with implementation**
+- [x] **Step 1: Reconcile documentation with implementation**
       Describe process liveness separately from aggregate readiness, list Redis/PostgreSQL/BullMQ/NATS checks, and identify the health endpoint as an aggregate readiness signal rather than a recent-job-success proof.
 
-- [ ] **Step 2: Document maintenance semantics and queue recovery**
+- [x] **Step 2: Document maintenance semantics and queue recovery**
       For each active processor/queue, state the actual effect and exclusions; provide owner role, detection, pause/restart/recovery, and verification procedure. Do not claim erasure/anonymization/asset deletion beyond implementation evidence.
 
-- [ ] **Step 3: Verify worker behavior and documentation contract**
+- [x] **Step 3: Verify worker behavior and documentation contract**
       Run: `pnpm --filter workers test __tests__/health.test.ts __tests__/processors.test.ts`
       Run: `pnpm run docs:check-launch-governance`
       Expected: PASS; checker finds the required runbook link.
@@ -88,16 +88,16 @@ The approved design selects Node 24 as the only supported runtime. Runtime refer
 - **Interfaces produced:** one current evidence document per deployable application and a single launch go/no-go scorecard
 - **Required fields:** Status, Scope, Evidence date, Git SHA, Environment, Commands and results, Owner, Known exclusions, Next review
 
-- [ ] **Step 1: Create current-status documents**
+- [x] **Step 1: Create current-status documents**
       Use the exact required evidence fields, explicitly state that unexecuted items remain pending, and link historical progress/autopsy records as non-current supporting context.
 
-- [ ] **Step 2: Create/update launch scorecard evidence**
+- [x] **Step 2: Create/update launch scorecard evidence**
       Every criterion names supporting ADRs and controls; the status is evidence-scoped and never claims public launch approval without the listed proof.
 
-- [ ] **Step 3: Mark historical records as historical where necessary**
+- [x] **Step 3: Mark historical records as historical where necessary**
       Add small status banners/links only to currently misleading progress or autopsy documentation. Do not rewrite historical facts.
 
-- [ ] **Step 4: Verify governance contract**
+- [x] **Step 4: Verify governance contract**
       Run: `pnpm run docs:check-launch-governance`
       Expected: PASS with every canonical document and scorecard control referenced.
 
@@ -108,13 +108,13 @@ The approved design selects Node 24 as the only supported runtime. Runtime refer
 - **Runtime contract:** Node.js `24.x` only
 - **Error contract:** a divergent active runtime reference causes the governance check and CI to fail
 
-- [ ] **Step 1: Write/assert the failing Node mismatch fixture**
+- [x] **Step 1: Write/assert the failing Node mismatch fixture**
       Confirm the fixture test fails when active runtime configuration uses Node 20.
 
-- [ ] **Step 2: Update active runtime selections**
+- [x] **Step 2: Update active runtime selections**
       Change `.nvmrc`, package engine ranges, Docker bases, CI action setup, and current READMEs to Node 24. Keep disabled/archived historical context only when clearly marked as non-active.
 
-- [ ] **Step 3: Verify runtime consistency**
+- [x] **Step 3: Verify runtime consistency**
       Run: `pnpm run docs:check-launch-governance`
       Expected: PASS and report Node 24 compliance.
 
@@ -122,15 +122,15 @@ The approved design selects Node 24 as the only supported runtime. Runtime refer
 
 #### [MODIFY] `docs/CHANGELOG.md`, `apps/workers/docs/CHANGELOG.md`, and application changelogs whose current-status or architecture documentation changes
 
-- [ ] **Step 1: Add changelog entries**
+- [x] **Step 1: Add changelog entries**
       Record the governance checker, ADR index, worker operations runbook, current-status contract, and Node 24 convergence in the appropriate unreleased sections.
 
-- [ ] **Step 2: Run focused proof**
+- [x] **Step 2: Run focused proof**
       Run: `node --test scripts/__tests__/check-launch-documentation-governance.test.mjs`
       Run: `pnpm run docs:check-launch-governance`
       Run: `pnpm --filter workers test __tests__/health.test.ts __tests__/processors.test.ts`
 
-- [ ] **Step 3: Run repository quality gates appropriate to changed code**
+- [x] **Step 3: Run repository quality gates appropriate to changed code**
       Run: `pnpm run client:tsc-noemit`
       Run: `pnpm run admin:check-types`
       Run: `pnpm run client:report-security-drift:strict`
