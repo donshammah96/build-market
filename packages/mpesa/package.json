@@ -18,7 +18,7 @@
     "check-types": "tsc --noEmit",
     "build": "tsc",
     "prepack": "pnpm run build",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --exclude '**/dist/**' --passWithNoTests"
   },
   "dependencies": {
     "zod": "catalog:"

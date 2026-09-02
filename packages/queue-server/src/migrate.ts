@@ -1,7 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
+import dns from "node:dns";
 import dotenv from "dotenv";
 import pg from "pg";
+
+if (typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
 
 const { Client } = pg;
 

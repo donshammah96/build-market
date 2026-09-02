@@ -19,7 +19,7 @@
     "check-types": "tsc --noEmit",
     "build": "tsc",
     "prepack": "pnpm run build",
-    "test": "vitest run",
+    "test": "vitest run --exclude '**/dist/**'",
     "migrate": "tsx src/migrate.ts"
   },
   "dependencies": {

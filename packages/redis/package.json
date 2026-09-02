@@ -29,7 +29,7 @@
     "healthcheck": "node --env-file=../.env --import tsx ./src/healthcheck.ts",
     "enforce-maxmemory-policy": "node --env-file=../.env --import tsx ./src/enforce-maxmemory-policy.ts",
     "check-types": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --exclude '**/dist/**' --passWithNoTests"
   },
   "dependencies": {
     "@upstash/ratelimit": "catalog:",
