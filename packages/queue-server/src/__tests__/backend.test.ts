@@ -12,7 +12,7 @@ describe("Queue Backend Resolution & Isolation", () => {
 
   beforeEach(() => {
     vi.resetModules();
-    process.env = { ...originalEnv };
+    process.env = { ...originalEnv, REDIS_URL: "redis://localhost:6379" };
     delete process.env.QUEUE_BACKEND;
   });
 
@@ -44,7 +44,7 @@ describe("Queue Backend Resolution & Isolation", () => {
     process.env.QUEUE_BACKEND = "postgres";
 
     expect(getQueueBackendType("maintenance-jobs")).toBe("postgres");
-    expect(getQueueBackendType("gdpr-data-export")).toBe("postgres");
+    expect(getQueueBackendType("license-verification")).toBe("postgres");
   });
 
   it("configures PostgreSQL connection options scoped to 'bullmq' schema with pool bounds", () => {
@@ -62,17 +62,16 @@ describe("Queue Backend Resolution & Isolation", () => {
     expect(opts.max).toBe(3);
   });
 
-  it("returns postgres connection options when backend resolves to postgres", () => {
-    process.env.QUEUE_BACKEND_NOTIFICATION_RETRIES = "postgres";
-    process.env.DATABASE_URL =
-      "postgres://user:pass@localhost:5432/buildmarket";
+
+  it("returns valid Redis connection options for BullMQ queue instances", () => {
+    process.env.REDIS_URL = "redis://:secret@localhost:6380/2";
 
     const conn = getQueueConnectionOptions("notification-retries") as any;
 
-    expect(conn.schema).toBe("bullmq");
-    expect(conn.connectionString).toBe(
-      "postgres://user:pass@localhost:5432/buildmarket",
-    );
+    expect(conn.host).toBe("localhost");
+    expect(conn.port).toBe(6380);
+    expect(conn.password).toBe("secret");
+    expect(conn.db).toBe(2);
   });
 
   it("enforces immutable retention policies for audit safety and bloat control", () => {

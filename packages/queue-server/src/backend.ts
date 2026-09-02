@@ -30,14 +30,16 @@ export function normalizeQueueEnvKey(queueName: string): string {
  */
 export function getQueueBackendType(queueName: string): QueueBackendType {
   const envSuffix = normalizeQueueEnvKey(queueName);
-  const specificEnv = process.env[`QUEUE_BACKEND_${envSuffix}`];
-  if (specificEnv === "postgres" || specificEnv === "redis") {
-    return specificEnv;
+  const specificEnv = process.env[`QUEUE_BACKEND_${envSuffix}`]
+    ?.trim()
+    ?.toLowerCase();
+  if (specificEnv?.startsWith("postgres") || specificEnv === "redis") {
+    return specificEnv.startsWith("postgres") ? "postgres" : "redis";
   }
 
-  const globalEnv = process.env.QUEUE_BACKEND;
-  if (globalEnv === "postgres" || globalEnv === "redis") {
-    return globalEnv;
+  const globalEnv = process.env.QUEUE_BACKEND?.trim()?.toLowerCase();
+  if (globalEnv?.startsWith("postgres") || globalEnv === "redis") {
+    return globalEnv.startsWith("postgres") ? "postgres" : "redis";
   }
 
   return "redis";
@@ -62,17 +64,12 @@ export function getPostgresQueueConnectionOptions(
 }
 
 /**
- * Returns the appropriate connection options for a Queue or Worker instance
- * based on the resolved backend type.
+ * Returns the appropriate connection options for BullMQ Queue and Worker instances.
+ * BullMQ v5 is an ioredis-driven queue runner; connection options must provide
+ * valid Redis TCP options (from REDIS_URL).
  */
 export function getQueueConnectionOptions(
-  queueName: string,
-): ConnectionOptions | PostgresQueueConnectionConfig {
-  const backend = getQueueBackendType(queueName);
-  if (backend === "postgres") {
-    return getPostgresQueueConnectionOptions(
-      queueName,
-    ) as unknown as ConnectionOptions;
-  }
-  return createRedisConnection();
+  _queueName?: string,
+): ConnectionOptions {
+  return createRedisConnection() as unknown as ConnectionOptions;
 }

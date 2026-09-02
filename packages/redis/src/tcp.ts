@@ -75,8 +75,26 @@ function requireRedisUrl(): string {
 }
 
 function buildConnectionFromUrl(redisUrl: string): RedisOptions {
-  const parsed = new URL(redisUrl);
+  let normalizedUrl = redisUrl.trim();
+
+  // Strip enclosing quotes
+  normalizedUrl = normalizedUrl.replace(/^["']|["']$/g, "");
+
+  // Normalize schemes if mistakenly provided as https://, http://, or bare host:port
+  if (normalizedUrl.startsWith("https://")) {
+    normalizedUrl = normalizedUrl.replace(/^https:\/\//, "rediss://");
+  } else if (normalizedUrl.startsWith("http://")) {
+    normalizedUrl = normalizedUrl.replace(/^http:\/\//, "redis://");
+  } else if (!normalizedUrl.includes("://")) {
+    normalizedUrl = `rediss://${normalizedUrl}`;
+  }
+
+  const parsed = new URL(normalizedUrl);
   const db = parseIntOrDefault(parsed.pathname.replace(/^\//, ""), 0);
+  const isTls =
+    parsed.protocol === "rediss:" ||
+    parsed.hostname.endsWith(".upstash.io") ||
+    Boolean(process.env.REDIS_TLS === "true");
 
   return {
     host: parsed.hostname || "localhost",
@@ -85,7 +103,7 @@ function buildConnectionFromUrl(redisUrl: string): RedisOptions {
     // URL-encoded password is decoded automatically by the URL constructor
     password: parsed.password || undefined,
     db,
-    tls: parsed.protocol === "rediss:" ? {} : undefined,
+    tls: isTls ? {} : undefined,
   };
 }
 
