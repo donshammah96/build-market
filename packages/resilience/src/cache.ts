@@ -167,7 +167,8 @@ export class ResilientCache<T = any> {
       const effectiveTtl = ttl ?? this.config.ttl;
       const swrWindow = this.config.staleWhileRevalidate ?? 0;
       const isExpired = now > cachedEntry.timestamp + effectiveTtl + swrWindow;
-      const isStale = cachedEntry.staleAt !== undefined && now > cachedEntry.staleAt;
+      const isStale =
+        cachedEntry.staleAt !== undefined && now > cachedEntry.staleAt;
 
       if (isExpired) {
         // Expired - must recompute

@@ -86,6 +86,7 @@ const result = await executor.execute(
     retry: { maxAttempts: 3 },
     circuitBreaker: true,
     cache: { ttl: 60000 },
+    cacheKey: "fetch-user-data",
     fallback: async () => cachedData,
     operationName: "fetch-user-data",
   },
@@ -214,6 +215,27 @@ logger.error("Payment failed", error, {
 const childLogger = logger.child({ component: "auth" });
 childLogger.info("Token validated");
 ```
+
+### Datadog Option B (persistent Node workers)
+
+`@build/resilience` owns structured logging and can add a bounded, fail-open
+Datadog Logs intake target for long-running workers. Direct delivery is
+disabled unless `DD_LOGS_ENABLED=true` and `DD_API_KEY` are both present.
+`DD_SITE` is canonical; `DD_SITE_HOST` is accepted only as a temporary
+read-only compatibility fallback. Configure `DD_SERVICE`, `DD_ENV`, and
+`DD_VERSION` for stable Datadog facets, then flush during shutdown:
+
+```typescript
+import { closeResilienceLogs } from "@build/resilience";
+
+process.once("SIGTERM", async () => {
+  await closeResilienceLogs();
+  process.exit(0);
+});
+```
+
+Serverless applications continue to emit redacted NDJSON to stdout for their
+platform Log Drain; they do not enable the in-process target.
 
 ## Configuration
 

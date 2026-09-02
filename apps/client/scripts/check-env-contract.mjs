@@ -20,6 +20,9 @@ const ALLOWED_UNDECLARED = new Set([
   "CI",
   "NEXT_PHASE",
   "NEXT_RUNTIME",
+  // Temporary compatibility read: DD_SITE is canonical and is the only
+  // Datadog site variable documented in templates.
+  "DD_SITE_HOST",
 ]);
 
 const HIGH_RISK_UNUSED_KEY_PATTERNS = [

@@ -4,6 +4,14 @@
 
 **Design:** [Option B design](../specs/2026-09-02-resilience-telemetry-datadog-option-b-design.md)
 
+## Implementation status (2026-09-02)
+
+The code, automated contract tests, local HTTP intake integration test, package
+builds, environment-contract checks, and app/package changelog updates in this
+plan are complete on the `feature/resilience-telemetry-option-b` worktree.
+Preview Datadog/Vercel configuration, production enablement, monitor tuning,
+and rollback rehearsal remain operator-run release activities.
+
 **Architecture & Tier Alignment:**
 
 - Target packages: `packages/resilience`, `packages/telemetry`
@@ -71,7 +79,8 @@ This plan deliberately breaks the private `@build/telemetry` logging API: `creat
     | "cache_hit"
     | "fallback"
     | "timeout"
-    | "circuit_open";
+    | "circuit_open"
+    | "error";
 
   export interface ResilienceOptions<T = unknown> {
     // Existing options, with fallback typed to the executed value.

@@ -5,12 +5,7 @@
 export type OperationCriticality = "critical" | "normal" | "background";
 
 export type ResilienceOutcome =
-  | "success"
-  | "cache_hit"
-  | "fallback"
-  | "timeout"
-  | "circuit_open"
-  | "error";
+  "success" | "cache_hit" | "fallback" | "timeout" | "circuit_open" | "error";
 
 export interface TimeoutConfig {
   critical: number;

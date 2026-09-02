@@ -16,7 +16,11 @@ import {
   DEFAULT_CIRCUIT_BREAKER_CONFIG,
   CircuitBreakerOpenError,
 } from "./circuit-breaker.js";
-import { CacheRegistry, DEFAULT_CACHE_CONFIG, ResilientCache } from "./cache.js";
+import {
+  CacheRegistry,
+  DEFAULT_CACHE_CONFIG,
+  ResilientCache,
+} from "./cache.js";
 import { withFallback } from "./fallback.js";
 import { MetricsCollector } from "./metrics.js";
 import { StructuredLogger } from "./logger.js";
@@ -193,8 +197,7 @@ export class ResilientExecutor {
       this.logger.error(`Operation failed: ${operationName}`, err, {
         operationName,
         outcome,
-        attempts:
-          outcome === "circuit_open" ? 0 : attempts || 1,
+        attempts: outcome === "circuit_open" ? 0 : attempts || 1,
         duration,
       });
 

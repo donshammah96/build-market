@@ -82,7 +82,10 @@ export async function withRetry<T>(
   logger?: Logger,
 ): Promise<{ result: T; attempts: number }> {
   const retryConfig = { ...DEFAULT_RETRY_CONFIG, ...config };
-  if (!Number.isInteger(retryConfig.maxAttempts) || retryConfig.maxAttempts < 1) {
+  if (
+    !Number.isInteger(retryConfig.maxAttempts) ||
+    retryConfig.maxAttempts < 1
+  ) {
     throw new Error(
       `Invalid retry config for '${operationName}': maxAttempts must be >= 1, got ${retryConfig.maxAttempts}`,
     );

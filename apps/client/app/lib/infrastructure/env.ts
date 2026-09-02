@@ -666,9 +666,13 @@ const envGroups: EnvGroup[] = [
         required: false,
       },
       {
-        name: "DD_SITE_HOST",
+        name: "DD_SITE",
         required: false,
         default: "us5.datadoghq.com",
+      },
+      {
+        name: "DD_SITE_HOST",
+        required: false,
       },
       {
         name: "DD_SERVICE",
@@ -677,6 +681,15 @@ const envGroups: EnvGroup[] = [
       {
         name: "DD_ENV",
         required: false,
+      },
+      {
+        name: "DD_VERSION",
+        required: false,
+      },
+      {
+        name: "DD_LOGS_ENABLED",
+        required: false,
+        default: "false",
       },
     ],
   },
@@ -1524,8 +1537,13 @@ function buildEnvConfig() {
       ),
       resourceAttributes: getOptionalStringEnv("OTEL_RESOURCE_ATTRIBUTES"),
       apiKey: getOptionalStringEnv("DD_API_KEY"),
-      siteHost: getStringEnv("DD_SITE_HOST", "us5.datadoghq.com"),
+      siteHost: getStringEnv(
+        "DD_SITE",
+        getStringEnv("DD_SITE_HOST", "us5.datadoghq.com"),
+      ),
       ddEnv: getStringEnv("DD_ENV", isProd ? "production" : "staging"),
+      ddVersion: getOptionalStringEnv("DD_VERSION"),
+      logsEnabled: getBooleanEnv("DD_LOGS_ENABLED", false),
     },
 
     // Regulator Verification API Credentials (ADR-004 boundary compliant)

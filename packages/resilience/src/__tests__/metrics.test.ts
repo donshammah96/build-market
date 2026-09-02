@@ -8,9 +8,9 @@ describe("MetricsCollector bounds and snapshots", () => {
       metrics.recordHistogram("operation.duration", index);
     }
 
-    expect(metrics.getHistogramStats("operation.duration")?.count).toBeLessThanOrEqual(
-      1_000,
-    );
+    expect(
+      metrics.getHistogramStats("operation.duration")?.count,
+    ).toBeLessThanOrEqual(1_000);
     expect(
       metrics.getMetrics().some((metric) => metric.type === "histogram"),
     ).toBe(true);

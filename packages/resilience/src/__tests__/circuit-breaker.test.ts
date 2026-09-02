@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  CircuitBreaker,
-  CircuitBreakerOpenError,
-} from "../circuit-breaker.js";
+import { CircuitBreaker, CircuitBreakerOpenError } from "../circuit-breaker.js";
 
 describe("CircuitBreaker half-open probes", () => {
   it("allows one concurrent probe after opening", async () => {

@@ -16,6 +16,11 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Added — Datadog environment contract alignment
+
+- Added canonical `DD_SITE`, `DD_VERSION`, and `DD_LOGS_ENABLED` configuration entries with a compatibility fallback for legacy `DD_SITE_HOST` deployments.
+- Exposed resolved Datadog metadata through the client telemetry environment boundary.
+
 ### Fixed — Upstash Redis Write Optimization & Route-Tiered Rate Limiting
 
 - **Rate Limiting Architecture (`app/lib/api/rate-limit.ts`, `app/lib/api/rate-limit.redis.ts`, `types/external-modules..d.ts`)**:

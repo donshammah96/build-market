@@ -9,7 +9,9 @@ describe("withTimeout cancellation", () => {
       const operation = (_signal?: AbortSignal) =>
         new Promise<string>((resolve, reject) => {
           signal = _signal;
-          _signal?.addEventListener("abort", () => reject(new Error("aborted")));
+          _signal?.addEventListener("abort", () =>
+            reject(new Error("aborted")),
+          );
           void resolve;
         });
 

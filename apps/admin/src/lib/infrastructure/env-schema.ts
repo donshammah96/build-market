@@ -93,9 +93,12 @@ export const adminBaseEnvSchema = z.object({
   OTEL_SERVICE_NAME: z.string().min(1).optional(),
   OTEL_RESOURCE_ATTRIBUTES: z.string().min(1).optional(),
   DD_API_KEY: z.string().min(1).optional(),
+  DD_SITE: z.string().min(1).optional(),
   DD_SITE_HOST: z.string().min(1).optional(),
   DD_SERVICE: z.string().min(1).optional(),
   DD_ENV: z.string().min(1).optional(),
+  DD_VERSION: z.string().min(1).optional(),
+  DD_LOGS_ENABLED: booleanString,
   UPSTASH_REDIS_REST_URL: z.string().min(1).optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
 });
