@@ -8,13 +8,15 @@ All notable changes to the `workers` application will be documented in this file
 
 - **Dynamic Backend Resolver & Schema Isolation**:
   - Integrated `@build/queue-server` dynamic backend resolution (`QUEUE_BACKEND=postgres|redis`) with per-queue canary overrides.
-  - Added `QUEUE_BACKEND` to `workerEnvSchema` in `src/env.ts` with strict validation and unit tests in `__tests__/env.test.ts`.
+  - Added `PORT` and `QUEUE_BACKEND` to `workerEnvSchema` in `src/env.ts` with strict validation and unit tests in `__tests__/env.test.ts`.
+  - Added fail-closed `migrateBullMqSchema()` execution during daemon boot in `src/index.ts`.
 - **Healthcheck & Connection Lifecycle Hardening**:
-  - Refactored `checkPostgres` in `src/health.ts` and `src/index.ts` to probe schema health only when PostgreSQL queues are active.
-  - Made `healthRedisClient` lazily initialized and bypassed in `checkRedis` during pure PostgreSQL operation, eliminating `ECONNREFUSED 127.0.0.1:6379` on Render.
-  - Hardened `gracefulShutdown` to disconnect only active backend connections.
+  - Configured health check server in `src/health.ts` to listen on `0.0.0.0` and respond `200 OK` on `/`, `/healthz`, `/health`, and `/ping` for zero-friction Render deploy readiness probes.
+  - Memoized `healthPgClient` and `healthRedisClient` in `src/index.ts` to eliminate connection churn during health polling.
+  - Enhanced `checkPostgres` to verify `bullmq` schema availability via `information_schema.schemata`.
+  - Hardened `gracefulShutdown` to cleanly drain active workers and disconnect only initialized clients.
 - **Operational Runbook**:
-  - Published `docs/runbooks/queue-postgres-migration.md` defining the 3-tier canary rollout and rollback strategy.
+  - Published `docs/runbooks/queue-postgres-migration.md` defining the 3-tier canary rollout, Render Start Command wiring, and emergency rollback strategy.
 
 ### Added - M-Pesa reconciliation worker (Phase 3b) & multi-domain settlement (Phase 4b)
 

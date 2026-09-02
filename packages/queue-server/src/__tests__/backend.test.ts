@@ -62,6 +62,30 @@ describe("Queue Backend Resolution & Isolation", () => {
     expect(opts.max).toBe(3);
   });
 
+  it("supports configurable per-queue pool sizes and global fallback", () => {
+    process.env.DATABASE_URL =
+      "postgres://user:pass@localhost:5432/buildmarket";
+    process.env.QUEUE_POOL_MAX = "4";
+    process.env.QUEUE_POOL_MAX_MPESA_RECONCILIATION = "1";
+
+    const defaultQueueOpts =
+      getPostgresQueueConnectionOptions("maintenance-jobs");
+    const overrideQueueOpts = getPostgresQueueConnectionOptions(
+      "mpesa-reconciliation",
+    );
+
+    expect(defaultQueueOpts.max).toBe(4);
+    expect(overrideQueueOpts.max).toBe(1);
+  });
+
+  it("omits ssl requirement outside production environments", () => {
+    process.env.DATABASE_URL =
+      "postgres://user:pass@localhost:5432/buildmarket";
+    process.env.NODE_ENV = "test";
+
+    const opts = getPostgresQueueConnectionOptions("maintenance-jobs");
+    expect(opts.ssl).toBeUndefined();
+  });
 
   it("returns valid Redis connection options for BullMQ queue instances", () => {
     process.env.REDIS_URL = "redis://:secret@localhost:6380/2";

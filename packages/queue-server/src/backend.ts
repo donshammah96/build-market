@@ -47,19 +47,38 @@ export function getQueueBackendType(queueName: string): QueueBackendType {
 
 /**
  * Builds PostgreSQL connection options scoped to the dedicated "bullmq" schema.
- * Enforces explicit TLS rejection in production and bounds pool sizes.
+ * Enforces explicit TLS rejection in production and configurable pool sizes per queue.
  */
 export function getPostgresQueueConnectionOptions(
-  _queueName?: string,
+  queueName?: string,
 ): PostgresQueueConnectionConfig {
   const isProd = process.env.NODE_ENV === "production";
   const databaseUrl = process.env.DATABASE_URL;
+
+  let maxPool = 3;
+  if (queueName) {
+    const envSuffix = normalizeQueueEnvKey(queueName);
+    const specificPool = process.env[`QUEUE_POOL_MAX_${envSuffix}`];
+    if (specificPool && !Number.isNaN(Number(specificPool))) {
+      maxPool = Math.max(1, Number(specificPool));
+    } else if (
+      process.env.QUEUE_POOL_MAX &&
+      !Number.isNaN(Number(process.env.QUEUE_POOL_MAX))
+    ) {
+      maxPool = Math.max(1, Number(process.env.QUEUE_POOL_MAX));
+    }
+  } else if (
+    process.env.QUEUE_POOL_MAX &&
+    !Number.isNaN(Number(process.env.QUEUE_POOL_MAX))
+  ) {
+    maxPool = Math.max(1, Number(process.env.QUEUE_POOL_MAX));
+  }
 
   return {
     connectionString: databaseUrl,
     schema: "bullmq",
     ssl: isProd ? { rejectUnauthorized: true } : undefined,
-    max: 3, // Bounded client pool per queue backend instance
+    max: maxPool,
   };
 }
 

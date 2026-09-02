@@ -30,17 +30,41 @@ function loadEnvIfMissing() {
 }
 
 /**
+ * Checks whether any queue is configured to use the PostgreSQL backend.
+ */
+export function isPostgresQueueConfigured(): boolean {
+  loadEnvIfMissing();
+  if (
+    process.env.QUEUE_BACKEND?.trim()?.toLowerCase()?.startsWith("postgres")
+  ) {
+    return true;
+  }
+  return Object.keys(process.env).some(
+    (key) =>
+      key.startsWith("QUEUE_BACKEND_") &&
+      process.env[key]?.trim()?.toLowerCase()?.startsWith("postgres"),
+  );
+}
+
+/**
  * Pre-deploy database migration runner for BullMQ PostgreSQL backend.
- * Ensures the dedicated "bullmq" schema is created and verified
- * before application workers boot.
+ * Ensures the dedicated "bullmq" schema is created and verified.
+ * Gracefully no-ops if no queues are currently configured for postgres.
  */
 export async function migrateBullMqSchema(): Promise<void> {
   loadEnvIfMissing();
 
+  if (!isPostgresQueueConfigured()) {
+    console.log(
+      "[BullMQ Migration] No queues currently configured for PostgreSQL backend. Skipping schema migration.",
+    );
+    return;
+  }
+
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error(
-      "[BullMQ Migration] DATABASE_URL environment variable is required to run migrations.",
+      "[BullMQ Migration] DATABASE_URL environment variable is required when PostgreSQL queue backend is active.",
     );
   }
 

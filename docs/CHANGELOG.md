@@ -4,27 +4,29 @@
 
 ### Added — BullMQ Redis to PostgreSQL Backend Migration Architecture
 
-- **`@build/queue-server` (`packages/queue-server/src/backend.ts`, `retention.ts`, `migrate.ts`, `*.queue.ts`)**:
+- **`@build/queue-server` (`packages/queue-server/src/backend.ts`, `retention.ts`, `migrate.ts`, `compliance.queue.ts`, `*.queue.ts`)**:
   - Implemented dynamic per-queue backend resolution (`getQueueBackendType`, `getQueueConnectionOptions`) supporting granular canary rollout (`QUEUE_BACKEND_<NAME>=postgres|redis`) with global `QUEUE_BACKEND` fallback.
-  - Implemented PostgreSQL connection options factory (`getPostgresQueueConnectionOptions`) enforcing dedicated `bullmq` schema namespace isolation, production TLS verification (`ssl: { rejectUnauthorized: true }`), and bounded per-queue client connection pools (`max: 3`).
+  - Implemented PostgreSQL connection options factory (`getPostgresQueueConnectionOptions`) enforcing dedicated `bullmq` schema namespace isolation, production TLS verification (`ssl: { rejectUnauthorized: true }`), and configurable per-queue client connection pools (`QUEUE_POOL_MAX_<NAME>` / `QUEUE_POOL_MAX`, defaulting to `max: 3`).
+  - Corrected BullMQ priority ordering in `compliance.queue.ts` where lower numeric values represent higher priority (HIGH $\rightarrow$ 5, NORMAL $\rightarrow$ 15, LOW $\rightarrow$ 30, EMERGENCY $\rightarrow$ 1).
   - Added standardized queue retention policies (`QueueRetentionPolicies.STANDARD`, `FINANCIAL_AUDIT`, `HIGH_THROUGHPUT`) to prevent table bloat.
-  - Added standalone pre-deploy migration runner (`packages/queue-server/src/migrate.ts`) to initialize and verify the `bullmq` schema before daemon startup.
+  - Added standalone pre-deploy migration runner (`packages/queue-server/src/migrate.ts`) that executes as a safe no-op when no queue uses postgres and creates/verifies the `bullmq` schema namespace before daemon startup.
   - Converted queue definitions (`maintenance`, `notification`, `export`, `compliance`, `license-verification`, `mpesa`, `newsletter`, `upload-processing`) to lazy backend-aware factory functions with backward-compatible export proxies.
-  - Added unit test suite in `packages/queue-server/src/__tests__/backend.test.ts` (10/10 tests passing).
+  - Added unit test suite in `packages/queue-server/src/__tests__/backend.test.ts` (12/12 tests passing).
 
 - **`apps/workers` (`apps/workers/src/index.ts`, `apps/workers/src/env.ts`, `apps/workers/src/health.ts`, `apps/workers/.env.example`)**:
+  - Wired `migrateBullMqSchema()` into daemon boot sequence before worker initialization with fail-closed process termination on failure.
   - Refactored worker initializations to consume `getWorkerOptions()` with dynamic backend resolution and standardized polling/drain intervals.
-  - Added `QUEUE_BACKEND` (`"redis" | "postgres"`, default: `"redis"`) to validated `workerEnvSchema` in `src/env.ts` with test coverage in `__tests__/env.test.ts`.
-  - Lazy-instantiated `healthRedisClient` and made the `/healthz` Redis check conditional on active Redis queues, eliminating `ECONNREFUSED 127.0.0.1:6379` errors when running entirely on the PostgreSQL backend.
-  - Enhanced `/healthz` probe in `health.ts` to verify PostgreSQL backend connectivity and schema accessibility when PostgreSQL queues are active.
-  - Protected `gracefulShutdown` to only disconnect Redis if a Redis client was initialized.
+  - Added `PORT` and `QUEUE_BACKEND` (`"redis" | "postgres"`, default: `"redis"`) to validated `workerEnvSchema` in `src/env.ts`.
+  - Memoized `healthRedisClient` and `healthPgClient` for non-churning connection reuse, checking `bullmq` schema availability on PostgreSQL and conditional Redis ping only when active Redis workers exist.
+  - Configured health check server to listen on `0.0.0.0` and respond `200 OK` on `/`, `/healthz`, `/health`, and `/ping` for zero-friction Render deployment readiness checks.
+  - Protected `gracefulShutdown` to cleanly close active workers, Redis probe, PostgreSQL probe, and health server.
 
-- **Tooling, Build & Operational Governance (`scripts/reconcile-queue-backend.ts`, `packages/queue-server/src/migrate.ts`, `packages/telemetry/package.json`, `turbo.json`, `apps/workers/docs/runbooks/queue-postgres-migration.md`)**:
+- **Tooling, Build & Operational Governance (`scripts/reconcile-queue-backend.ts`, `packages/queue-server/src/migrate.ts`, `packages/telemetry/package.json`, `turbo.json`, `docs/runbooks/queue-postgres-migration.md`)**:
   - Added automatic `.env.local` / `.env` discovery to `migrate.ts` and `reconcile-queue-backend.ts` for frictionless CLI execution.
   - Added `QUEUE_BACKEND` to `turbo.json` global env list.
   - Added `--exclude '**/dist/**'` to `packages/telemetry/package.json` test runner to prevent Vitest from executing precompiled build artifacts during `pnpm validate`.
   - Created two-way CLI reconciliation tool for inspecting queue counts and safely transferring/draining in-flight and delayed jobs between Redis and PostgreSQL without state loss.
-  - Published comprehensive 3-tier canary rollout and emergency rollback runbook.
+  - Published comprehensive 3-tier canary rollout runbook with explicit per-queue environment flags across all tiers, 72h high-stakes soak duration, pre-migration worker pause safety step, and Render Start Command wiring instructions (`pnpm --filter @build/queue-server run migrate && pnpm --filter workers start`).
 
 ### Changed - Canonical changelog location
 

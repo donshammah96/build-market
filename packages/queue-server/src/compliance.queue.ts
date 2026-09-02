@@ -176,7 +176,7 @@ export async function queueEmergencyProtocol(
   return queue.add(
     ComplianceJobs.TRIGGER_EMERGENCY,
     { incidentId, type: "EMERGENCY_PROTOCOL", severity },
-    { priority: 100, delay: 0 },
+    { priority: 1, delay: 0 },
   );
 }
 
@@ -188,6 +188,8 @@ export async function queueUserNotifications(
   const queue = getUserNotificationQueue();
   const batchSize = 100;
   const batches = [];
+  const numericPriority =
+    data.priority === "HIGH" ? 5 : data.priority === "NORMAL" ? 15 : 30;
 
   for (let i = 0; i < userIds.length; i += batchSize) {
     const batch = userIds.slice(i, i + batchSize);
@@ -199,7 +201,7 @@ export async function queueUserNotifications(
         ComplianceJobs.NOTIFY_USERS_BATCH,
         { incidentId, userIds: batch, ...data, batchNumber, totalBatches },
         {
-          priority: data.priority === "HIGH" ? 50 : 10,
+          priority: numericPriority,
           delay: batchNumber * 1000,
         },
       ),

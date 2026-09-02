@@ -50,6 +50,7 @@ import {
   type MpesaB2cInitiateJobData,
   type MpesaB2cResultJobData,
   type MpesaReconcileJobData,
+  migrateBullMqSchema,
 } from "@build/queue-server";
 import {
   createConsumer,
@@ -58,6 +59,7 @@ import {
 } from "@build/nats";
 import { Worker, type Job } from "bullmq";
 import { Redis } from "ioredis";
+import type { Client as PgClient } from "pg";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
 
 // 1. Fail-closed boot validation (P0: Must run before any socket initialization)
@@ -72,14 +74,26 @@ logger.info("Starting BuildMarket background worker daemon...", {
   dbPoolMax: env.DB_POOL_MAX,
 });
 
+// 3. Pre-deploy BullMQ schema validation / migration (no-ops safely if no queue uses postgres)
+try {
+  await migrateBullMqSchema();
+} catch (err) {
+  logger.error(
+    "[Fatal] Failed to verify or migrate BullMQ schema on boot",
+    err instanceof Error ? err : new Error(String(err)),
+  );
+  process.exit(1);
+}
+
 if (env.DISABLE_BACKGROUND_JOBS) {
   logger.warn(
     "DISABLE_BACKGROUND_JOBS is enabled — worker processing will remain dormant.",
   );
 }
 
-// 2. Redis connection check probe (lazily instantiated when Redis backend is active)
+// 4. Connection check probes (lazily instantiated)
 let healthRedisClient: Redis | null = null;
+let healthPgClient: PgClient | null = null;
 
 let isShuttingDown = false;
 let isNatsConnected = false;
@@ -478,6 +492,7 @@ const healthServer = startHealthServer({
   port: env.PORT || env.HEALTH_PORT,
   checkRedis: async () => {
     try {
+      if (env.DISABLE_BACKGROUND_JOBS) return true;
       const hasRedis =
         env.QUEUE_BACKEND === "redis" ||
         activeWorkers.some((w) => getQueueBackendType(w.name) === "redis");
@@ -504,25 +519,38 @@ const healthServer = startHealthServer({
   },
   checkPostgres: async () => {
     try {
+      if (env.DISABLE_BACKGROUND_JOBS) return true;
       const hasPostgres =
         env.QUEUE_BACKEND === "postgres" ||
         activeWorkers.some((w) => getQueueBackendType(w.name) === "postgres");
       if (!hasPostgres) return true;
 
-      const pgModule = await import("pg");
-      const Client = pgModule.default?.Client || pgModule.Client;
-      const client = new Client({
-        connectionString: env.DATABASE_URL,
-        ssl:
-          env.NODE_ENV === "production"
-            ? { rejectUnauthorized: true }
-            : undefined,
-      });
-      await client.connect();
-      await client.query("SELECT 1;");
-      await client.end();
-      return true;
+      if (!healthPgClient) {
+        const pgModule = await import("pg");
+        const Client = pgModule.default?.Client || pgModule.Client;
+        healthPgClient = new Client({
+          connectionString: env.DATABASE_URL,
+          ssl:
+            env.NODE_ENV === "production"
+              ? { rejectUnauthorized: true }
+              : undefined,
+        });
+        await healthPgClient.connect();
+      }
+
+      const res = await healthPgClient.query(
+        "SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'bullmq';",
+      );
+      return res.rows.length > 0;
     } catch {
+      if (healthPgClient) {
+        try {
+          await healthPgClient.end();
+        } catch {
+          // ignore
+        }
+        healthPgClient = null;
+      }
       return false;
     }
   },
@@ -566,13 +594,22 @@ async function gracefulShutdown(signal: string) {
     await Promise.all(activeWorkers.map((w) => w.close()));
     logger.info("[BullMQ] All workers closed gracefully.");
 
-    // 3. Disconnect Redis
+    // 3. Disconnect Redis and Postgres health probe clients
     if (healthRedisClient) {
       try {
         await healthRedisClient.quit();
       } catch {
         healthRedisClient.disconnect();
       }
+      healthRedisClient = null;
+    }
+    if (healthPgClient) {
+      try {
+        await healthPgClient.end();
+      } catch {
+        // ignore
+      }
+      healthPgClient = null;
     }
 
     // 4. Close health server last
