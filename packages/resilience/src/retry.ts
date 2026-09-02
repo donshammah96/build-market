@@ -82,6 +82,14 @@ export async function withRetry<T>(
   logger?: Logger,
 ): Promise<{ result: T; attempts: number }> {
   const retryConfig = { ...DEFAULT_RETRY_CONFIG, ...config };
+  if (
+    !Number.isInteger(retryConfig.maxAttempts) ||
+    retryConfig.maxAttempts < 1
+  ) {
+    throw new Error(
+      `Invalid retry config for '${operationName}': maxAttempts must be >= 1, got ${retryConfig.maxAttempts}`,
+    );
+  }
   let lastError: Error | undefined;
 
   for (let attempt = 0; attempt < retryConfig.maxAttempts; attempt++) {
@@ -139,11 +147,10 @@ export async function withRetry<T>(
     }
   }
 
-  // This should never be reached, but TypeScript needs it
   throw new RetryError(
     `Operation '${operationName}' failed after ${retryConfig.maxAttempts} attempts`,
     retryConfig.maxAttempts,
-    lastError!,
+    lastError ?? new Error("Retry operation did not execute"),
   );
 }
 

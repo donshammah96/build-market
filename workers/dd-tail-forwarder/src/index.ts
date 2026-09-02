@@ -22,6 +22,7 @@ export interface Env {
   DD_API_KEY: string;
   SERVICE_NAME?: string;
   ENVIRONMENT?: string;
+  DD_SITE?: string;
   DD_SITE_HOST?: string;
 }
 
@@ -93,7 +94,7 @@ export default {
       return;
     }
 
-    const siteHost = env.DD_SITE_HOST || "us5.datadoghq.com";
+    const siteHost = env.DD_SITE || env.DD_SITE_HOST || "us5.datadoghq.com";
     const intakeUrl = `https://http-intake.logs.${siteHost}/api/v2/logs`;
 
     try {

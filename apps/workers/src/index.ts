@@ -1,17 +1,8 @@
 import "./bootstrap.js";
-/* eslint-disable no-restricted-syntax -- bootstrap-only: Datadog APM initialization requires early bootstrap before module imports */
-import tracer from "dd-trace";
-tracer.init({
-  service: "buildmarket-workers",
-  env: process.env.DD_ENV,
-  logInjection: true,
-  site: process.env.DD_SITE_HOST, // e.g. "us5.datadoghq.com" — same site as everywhere else
-  // DD_API_KEY is picked up automatically from the environment
-});
-/* eslint-enable no-restricted-syntax */
 
 import { validateWorkerEnv } from "./env.js";
 import { initOtel, shutdownOtel } from "./otel.js";
+import { initTracer } from "./tracer.js";
 import { startHealthServer } from "./health.js";
 import { processMaintenanceJob } from "./processors/maintenance.processor.js";
 import { processNotificationRetryJob } from "./processors/notification.processor.js";
@@ -60,12 +51,17 @@ import {
 import { Worker, type Job } from "bullmq";
 import { Redis } from "ioredis";
 import type { Client as PgClient } from "pg";
-import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
+import {
+  StructuredLogger,
+  CorrelationIdManager,
+  closeResilienceLogs,
+} from "@build/resilience";
 
 // 1. Fail-closed boot validation (P0: Must run before any socket initialization)
 const env = validateWorkerEnv();
 
-// 2. OpenTelemetry / Datadog APM instrumentation initialization
+// 2. Datadog APM and OpenTelemetry instrumentation initialization
+initTracer(env);
 initOtel(env);
 
 const logger = new StructuredLogger("workers-daemon");
@@ -637,11 +633,12 @@ async function gracefulShutdown(signal: string) {
     // 4. Close health server last
     healthServer.close();
 
-    // 5. Flush and terminate OpenTelemetry
+    // 5. Flush resilience logs and terminate OpenTelemetry
+    logger.info("Graceful shutdown complete.");
+    await closeResilienceLogs();
     await shutdownOtel();
 
     clearTimeout(shutdownTimeout);
-    logger.info("Graceful shutdown complete.");
     process.exit(0);
   } catch (err) {
     logger.error(

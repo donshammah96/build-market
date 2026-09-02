@@ -26,6 +26,9 @@ function collectBoundaryKeys() {
   for (const match of content.matchAll(/^\s*{ name: "([A-Z0-9_]+)"/gm)) {
     keys.add(match[1]);
   }
+  // DD_SITE_HOST is a read-only compatibility alias; DD_SITE is canonical
+  // and is the only site variable required in environment templates.
+  keys.delete("DD_SITE_HOST");
   return keys;
 }
 

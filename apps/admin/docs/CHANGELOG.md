@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added — Datadog environment contract alignment
+
+- Added canonical Datadog site, version, and log-enable fields to schema, wrapper, and environment templates; legacy `DD_SITE_HOST` remains a read-only fallback.
+
 ### Changed — ADR-ADMIN-009 Strangler-Fig v2 Feature Flag Retirement & Canonical Route Promotion
 
 - **Retired 4 v2 strangler-fig feature flags (`admin_v2_user_management`, `admin_v2_verification_queue`, `admin_v2_finance_dashboard`, `admin_v2_audit_log_ui`)**:

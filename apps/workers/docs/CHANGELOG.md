@@ -4,6 +4,13 @@ All notable changes to the `workers` application will be documented in this file
 
 ## [Unreleased]
 
+### Added — Datadog structured log transport and lifecycle hardening
+
+- Added bounded Datadog log batching with transient-failure retries, queue/drop metrics, and fail-open behavior in `@build/resilience`.
+- Added Pino redaction for identity, contact, credential, payment, and token fields, including nested and circular payloads.
+- Validated `DD_LOGS_ENABLED=true` requires `DD_API_KEY`; canonicalized `DD_SITE` with backwards-compatible `DD_SITE_HOST` fallback.
+- Initialized Datadog tracing only after worker environment validation and flushes resilience logs during graceful shutdown.
+
 ### Added — BullMQ PostgreSQL Backend Architecture & Operational Hardening
 
 - **Dynamic Backend Resolver & Schema Isolation**:

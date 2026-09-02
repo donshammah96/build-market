@@ -17,6 +17,10 @@ import { LogContext } from "./types.js";
 import type { Logger } from "./types.js";
 import { getConfig } from "./config.js";
 import { AsyncLocalStorage } from "node:async_hooks";
+import {
+  createDatadogPinoTarget,
+  type DatadogPinoTarget,
+} from "./datadog-pino-target.js";
 
 // Re-export Logger type for convenience
 export type { Logger } from "./types.js";
@@ -119,12 +123,69 @@ const REDACT_PATHS = [
   "*.kraPin",
   "*.mpesaRecords",
   "*.tokenHash",
+  "nationalId",
+  "clerkId",
+  "email",
+  "phone",
+  "*.nationalId",
+  "*.clerkId",
+  "*.email",
+  "*.phone",
 ];
+
+const DEEP_REDACT_KEYS = new Set(
+  [
+    "password",
+    "token",
+    "accesstoken",
+    "refreshtoken",
+    "authorization",
+    "secret",
+    "apikey",
+    "creditcard",
+    "cvv",
+    "krapin",
+    "mpesarecords",
+    "tokenhash",
+    "nationalid",
+    "clerkid",
+    "email",
+    "phone",
+  ].map((key) => key.toLowerCase()),
+);
+
+function deepRedact(
+  value: unknown,
+  depth = 0,
+  seen = new WeakSet<object>(),
+): unknown {
+  if (depth > 8 || value === null || typeof value !== "object") return value;
+  if (value instanceof Error) return value;
+  if (seen.has(value)) return "[Circular]";
+  seen.add(value);
+  if (Array.isArray(value)) {
+    const output = value.map((item) => deepRedact(item, depth + 1, seen));
+    seen.delete(value);
+    return output;
+  }
+
+  const output: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (DEEP_REDACT_KEYS.has(key.toLowerCase())) {
+      output[key] = "[REDACTED]";
+    } else {
+      output[key] = deepRedact(item, depth + 1, seen);
+    }
+  }
+  seen.delete(value);
+  return output;
+}
 
 // ============================================
 // Base Pino instance
 // ============================================
 let testDestination: { write: (msg: string) => void } | undefined;
+let activeDatadogTarget: DatadogPinoTarget | undefined;
 
 export function setTestDestination(
   destination: { write: (msg: string) => void } | undefined,
@@ -146,6 +207,9 @@ function buildPinoInstance(): PinoLogger {
       paths: REDACT_PATHS,
       censor: "[REDACTED]",
     },
+    formatters: {
+      log: (object) => deepRedact(object) as Record<string, unknown>,
+    },
     // Runs once per log call; injects correlation + trace context without
     // every call site having to remember to do it.
     mixin() {
@@ -161,6 +225,34 @@ function buildPinoInstance(): PinoLogger {
   // If a test destination is registered, write directly to it synchronously.
   if (testDestination) {
     return pino(options, testDestination);
+  }
+
+  if (config.logging.datadog.enabled) {
+    activeDatadogTarget = createDatadogPinoTarget({
+      enabled: true,
+      apiKey: config.logging.datadog.apiKey,
+      site: config.logging.datadog.site,
+      service: config.logging.datadog.service,
+      environment: config.logging.datadog.environment,
+      version: config.logging.datadog.version,
+    });
+
+    const stdout =
+      config.logging.format === "pretty"
+        ? pino.transport({
+            target: "pino-pretty",
+            options: {
+              colorize: true,
+              translateTime: "HH:MM:ss.l",
+              ignore: "pid,hostname,service",
+            },
+          })
+        : pino.destination(1);
+
+    return pino(
+      options,
+      pino.multistream([{ stream: stdout }, { stream: activeDatadogTarget }]),
+    );
   }
 
   // Pretty output for local dev only. In prod we emit newline-delimited
@@ -201,8 +293,26 @@ let basePinoLoggerVersion = 0;
  * logging.* env vars change at runtime (e.g. a hot-reloaded dev server).
  */
 export function reinitializeLogger(): void {
+  const previousTarget = activeDatadogTarget;
+  activeDatadogTarget = undefined;
+  if (previousTarget) {
+    void previousTarget.sink.close().then(() => previousTarget.end());
+  }
   basePinoLogger = buildPinoInstance();
   basePinoLoggerVersion++;
+}
+
+export async function flushResilienceLogs(): Promise<void> {
+  await activeDatadogTarget?.sink.flush();
+}
+
+export async function closeResilienceLogs(): Promise<void> {
+  const target = activeDatadogTarget;
+  activeDatadogTarget = undefined;
+  if (!target) return;
+
+  await target.sink.close();
+  await new Promise<void>((resolve) => target.end(() => resolve()));
 }
 
 // ============================================

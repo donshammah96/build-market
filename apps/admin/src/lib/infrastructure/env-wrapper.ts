@@ -335,6 +335,14 @@ function buildEnvConfig() {
       exporterEndpoint: raw.OTEL_EXPORTER_OTLP_ENDPOINT,
       serviceName: raw.OTEL_SERVICE_NAME,
       resourceAttributes: raw.OTEL_RESOURCE_ATTRIBUTES,
+      datadog: {
+        apiKey: raw.DD_API_KEY,
+        site: raw.DD_SITE ?? raw.DD_SITE_HOST ?? "us5.datadoghq.com",
+        service: raw.DD_SERVICE,
+        environment: raw.DD_ENV,
+        version: raw.DD_VERSION,
+        logsEnabled: raw.DD_LOGS_ENABLED,
+      },
     },
 
     nats: {

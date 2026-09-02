@@ -139,4 +139,26 @@ describe("Worker Environment Validation (apps/workers/src/env.ts)", () => {
     expect(env.NATS_URL).toBe("wss://nats.onrender.com");
     expect(env.NATS_TOKEN).toBe("secret-auth-token-1234");
   });
+
+  it("should reject direct Datadog logging without an API key", () => {
+    process.env.DATABASE_URL =
+      "postgresql://postgres:postgres@localhost:5432/buildmarket";
+    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.DD_LOGS_ENABLED = "true";
+    Reflect.deleteProperty(process.env, "DD_API_KEY");
+
+    const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit called");
+    }) as unknown as () => never);
+    const mockConsoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    expect(() => validateWorkerEnv()).toThrow("process.exit called");
+    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(mockConsoleError).toHaveBeenCalled();
+
+    mockExit.mockRestore();
+    mockConsoleError.mockRestore();
+  });
 });

@@ -125,20 +125,25 @@ const workerEnvSchema = z.object({
   OTEL_SERVICE_NAME: z.string().min(1).default("build-market-workers"),
   OTEL_RESOURCE_ATTRIBUTES: z.string().optional(),
   DD_API_KEY: z.string().min(1).optional(),
-  DD_SITE: z.string().min(1).default("us5.datadoghq.com"),
-  DD_SITE_HOST: z.string().min(1).default("us5.datadoghq.com"),
+  DD_SITE: z.string().min(1).optional(),
+  DD_SITE_HOST: z.string().min(1).optional(),
   DD_ENV: z.string().min(1).optional(),
   DD_SERVICE: z.string().min(1).optional(),
   DD_VERSION: z.string().min(1).optional(),
   DD_AGENT_HOST: z.string().min(1).optional(),
   DD_TRACE_ENABLED: booleanString,
+  DD_LOGS_ENABLED: booleanString,
 });
 
 // NATS_URL is optional on the raw schema (see comment above) but is always
 // guaranteed to be a defined string by the time validateWorkerEnv() returns —
 // either the caller-provided value, or the dev-only localhost fallback.
-export type WorkerEnv = Omit<z.infer<typeof workerEnvSchema>, "NATS_URL"> & {
+export type WorkerEnv = Omit<
+  z.infer<typeof workerEnvSchema>,
+  "NATS_URL" | "DD_SITE"
+> & {
   NATS_URL: string;
+  DD_SITE: string;
 };
 
 /**
@@ -162,6 +167,11 @@ export function validateWorkerEnv(): WorkerEnv {
   }
 
   const data = result.data;
+
+  if (data.DD_LOGS_ENABLED && !data.DD_API_KEY) {
+    console.error("[FATAL] DD_LOGS_ENABLED requires DD_API_KEY");
+    process.exit(1);
+  }
 
   if (data.MPESA_ENABLED) {
     const requiredMpesa = [
@@ -259,5 +269,9 @@ export function validateWorkerEnv(): WorkerEnv {
     natsUrl = "nats://localhost:4222";
   }
 
-  return { ...data, NATS_URL: natsUrl };
+  return {
+    ...data,
+    NATS_URL: natsUrl,
+    DD_SITE: data.DD_SITE ?? data.DD_SITE_HOST ?? "us5.datadoghq.com",
+  };
 }

@@ -10,7 +10,7 @@ describe("dd-tail-forwarder Cloudflare Worker", () => {
     DD_API_KEY: "test-dd-api-key",
     SERVICE_NAME: "buildmarket-cf-workers",
     ENVIRONMENT: "staging",
-    DD_SITE_HOST: "us5.datadoghq.com",
+    DD_SITE: "us5.datadoghq.com",
   };
 
   const sampleEvents: TraceItem[] = [
@@ -97,6 +97,24 @@ describe("dd-tail-forwarder Cloudflare Worker", () => {
           "DD-API-KEY": "test-dd-api-key",
         },
       }),
+    );
+  });
+
+  it("prefers canonical DD_SITE over the legacy host alias", async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    globalThis.fetch = fetchSpy;
+
+    await worker.tail(sampleEvents, {
+      ...sampleEnv,
+      DD_SITE: "eu1.datadoghq.com",
+      DD_SITE_HOST: "us5.datadoghq.com",
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://http-intake.logs.eu1.datadoghq.com/api/v2/logs",
+      expect.anything(),
     );
   });
 

@@ -2,6 +2,7 @@
     "name": "@build/telemetry",
     "version": "0.1.0",
     "private": true,
+    "description": "OpenTelemetry tracing bootstrap for BuildMarket; structured logging is provided by @build/resilience.",
     "type": "module",
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",

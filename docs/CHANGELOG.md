@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added — Resilience Telemetry Option B (Datadog)
+
+- **`@build/resilience`**: Added bounded, fail-open Datadog log batching with retry/backoff, Pino redaction, correlation identifiers, explicit outcome taxonomy, and lifecycle flush/close hooks.
+- **`apps/workers`**: Added fail-closed `DD_LOGS_ENABLED`/`DD_API_KEY` validation, canonical `DD_SITE` resolution with legacy `DD_SITE_HOST` fallback, tracer initialization after environment validation, and shutdown log flushing.
+- **App environment boundaries**: Added `DD_SITE`, `DD_VERSION`, and `DD_LOGS_ENABLED` to client, admin, verification-ops, and worker templates; Cloudflare tail forwarding now uses the same canonical site variable.
+
+### Changed — Consolidated structured logging ownership
+
+- Retired the duplicate `@build/telemetry` logger API. The package now exports only OpenTelemetry tracing bootstrap; structured logs and Datadog delivery are owned by `@build/resilience`.
+
 ### Added — BullMQ Redis to PostgreSQL Backend Migration Architecture
 
 - **`@build/queue-server` (`packages/queue-server/src/backend.ts`, `retention.ts`, `migrate.ts`, `compliance.queue.ts`, `*.queue.ts`)**:
