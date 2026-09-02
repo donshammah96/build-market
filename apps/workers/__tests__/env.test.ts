@@ -70,8 +70,31 @@ describe("Worker Environment Validation (apps/workers/src/env.ts)", () => {
     Object.assign(process.env, { NODE_ENV: "production" });
     process.env.DATABASE_URL =
       "postgresql://postgres:postgres@localhost:5432/buildmarket";
-    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.REDIS_URL = "rediss://:secret@upstash.io:6379";
     Reflect.deleteProperty(process.env, "NATS_URL");
+
+    const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit called");
+    }) as unknown as () => never);
+
+    const mockConsoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    expect(() => validateWorkerEnv()).toThrow("process.exit called");
+    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(mockConsoleError).toHaveBeenCalled();
+
+    mockExit.mockRestore();
+    mockConsoleError.mockRestore();
+  });
+
+  it("should fail-closed in production when REDIS_URL points to localhost", () => {
+    Object.assign(process.env, { NODE_ENV: "production" });
+    process.env.DATABASE_URL =
+      "postgresql://postgres:postgres@localhost:5432/buildmarket";
+    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.NATS_URL = "tls://nats.buildmarket.io:4222";
 
     const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
       throw new Error("process.exit called");

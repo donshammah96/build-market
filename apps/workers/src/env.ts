@@ -185,6 +185,23 @@ export function validateWorkerEnv(): WorkerEnv {
     }
   }
 
+  if (
+    data.NODE_ENV === "production" &&
+    (data.REDIS_URL.includes("localhost") ||
+      data.REDIS_URL.includes("127.0.0.1") ||
+      data.REDIS_URL.includes("0.0.0.0"))
+  ) {
+    console.error(
+      `\n========================================================\n` +
+        `[FATAL] Worker environment validation failed on boot:\n` +
+        `  - REDIS_URL: cannot point to localhost/127.0.0.1 in production.\n` +
+        `    On Render, set REDIS_URL to your Upstash TCP endpoint:\n` +
+        `    rediss://:TOKEN@<host>.upstash.io:6379\n` +
+        `========================================================\n`,
+    );
+    process.exit(1);
+  }
+
   let natsUrl = data.NATS_URL;
   if (!natsUrl) {
     if (data.NODE_ENV === "production") {
