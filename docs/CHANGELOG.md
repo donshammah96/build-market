@@ -12,11 +12,17 @@
   - Converted queue definitions (`maintenance`, `notification`, `export`, `compliance`, `license-verification`, `mpesa`, `newsletter`, `upload-processing`) to lazy backend-aware factory functions with backward-compatible export proxies.
   - Added unit test suite in `packages/queue-server/src/__tests__/backend.test.ts` (10/10 tests passing).
 
-- **`apps/workers` (`apps/workers/src/index.ts`, `apps/workers/src/health.ts`)**:
+- **`apps/workers` (`apps/workers/src/index.ts`, `apps/workers/src/env.ts`, `apps/workers/src/health.ts`, `apps/workers/.env.example`)**:
   - Refactored worker initializations to consume `getWorkerOptions()` with dynamic backend resolution and standardized polling/drain intervals.
+  - Added `QUEUE_BACKEND` (`"redis" | "postgres"`, default: `"redis"`) to validated `workerEnvSchema` in `src/env.ts` with test coverage in `__tests__/env.test.ts`.
+  - Lazy-instantiated `healthRedisClient` and made the `/healthz` Redis check conditional on active Redis queues, eliminating `ECONNREFUSED 127.0.0.1:6379` errors when running entirely on the PostgreSQL backend.
   - Enhanced `/healthz` probe in `health.ts` to verify PostgreSQL backend connectivity and schema accessibility when PostgreSQL queues are active.
+  - Protected `gracefulShutdown` to only disconnect Redis if a Redis client was initialized.
 
-- **Tooling & Operational Governance (`scripts/reconcile-queue-backend.ts`, `docs/runbooks/queue-postgres-migration.md`)**:
+- **Tooling, Build & Operational Governance (`scripts/reconcile-queue-backend.ts`, `packages/queue-server/src/migrate.ts`, `packages/telemetry/package.json`, `turbo.json`, `apps/workers/docs/runbooks/queue-postgres-migration.md`)**:
+  - Added automatic `.env.local` / `.env` discovery to `migrate.ts` and `reconcile-queue-backend.ts` for frictionless CLI execution.
+  - Added `QUEUE_BACKEND` to `turbo.json` global env list.
+  - Added `--exclude '**/dist/**'` to `packages/telemetry/package.json` test runner to prevent Vitest from executing precompiled build artifacts during `pnpm validate`.
   - Created two-way CLI reconciliation tool for inspecting queue counts and safely transferring/draining in-flight and delayed jobs between Redis and PostgreSQL without state loss.
   - Published comprehensive 3-tier canary rollout and emergency rollback runbook.
 

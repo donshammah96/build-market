@@ -78,11 +78,8 @@ if (env.DISABLE_BACKGROUND_JOBS) {
   );
 }
 
-// 2. Redis connection check probe
-const healthRedisClient = new Redis(env.REDIS_URL, {
-  lazyConnect: true,
-  maxRetriesPerRequest: 1,
-});
+// 2. Redis connection check probe (lazily instantiated when Redis backend is active)
+let healthRedisClient: Redis | null = null;
 
 let isShuttingDown = false;
 let isNatsConnected = false;
@@ -481,6 +478,18 @@ const healthServer = startHealthServer({
   port: env.HEALTH_PORT,
   checkRedis: async () => {
     try {
+      const hasRedis =
+        env.QUEUE_BACKEND === "redis" ||
+        activeWorkers.some((w) => getQueueBackendType(w.name) === "redis");
+      if (!hasRedis) return true;
+
+      if (!healthRedisClient) {
+        healthRedisClient = new Redis(env.REDIS_URL, {
+          lazyConnect: true,
+          maxRetriesPerRequest: 1,
+        });
+      }
+
       if (
         healthRedisClient.status !== "ready" &&
         healthRedisClient.status !== "connecting"
@@ -558,7 +567,13 @@ async function gracefulShutdown(signal: string) {
     logger.info("[BullMQ] All workers closed gracefully.");
 
     // 3. Disconnect Redis
-    await healthRedisClient.quit();
+    if (healthRedisClient) {
+      try {
+        await healthRedisClient.quit();
+      } catch {
+        healthRedisClient.disconnect();
+      }
+    }
 
     // 4. Close health server last
     healthServer.close();

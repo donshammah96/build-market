@@ -4,6 +4,18 @@ All notable changes to the `workers` application will be documented in this file
 
 ## [Unreleased]
 
+### Added — BullMQ PostgreSQL Backend Architecture & Operational Hardening
+
+- **Dynamic Backend Resolver & Schema Isolation**:
+  - Integrated `@build/queue-server` dynamic backend resolution (`QUEUE_BACKEND=postgres|redis`) with per-queue canary overrides.
+  - Added `QUEUE_BACKEND` to `workerEnvSchema` in `src/env.ts` with strict validation and unit tests in `__tests__/env.test.ts`.
+- **Healthcheck & Connection Lifecycle Hardening**:
+  - Refactored `checkPostgres` in `src/health.ts` and `src/index.ts` to probe schema health only when PostgreSQL queues are active.
+  - Made `healthRedisClient` lazily initialized and bypassed in `checkRedis` during pure PostgreSQL operation, eliminating `ECONNREFUSED 127.0.0.1:6379` on Render.
+  - Hardened `gracefulShutdown` to disconnect only active backend connections.
+- **Operational Runbook**:
+  - Published `docs/runbooks/queue-postgres-migration.md` defining the 3-tier canary rollout and rollback strategy.
+
 ### Added - M-Pesa reconciliation worker (Phase 3b) & multi-domain settlement (Phase 4b)
 
 - Added dedicated `mpesa-reconciliation` BullMQ worker and processor (`src/processors/mpesa-reconciliation.processor.ts`) using distributed claim leases (`reconciliationClaimId`, `reconciliationClaimedAt`), exponential backoff, and rate-limited `queryStkPush`.

@@ -34,6 +34,6 @@
         "prepack": "pnpm run build",
         "lint": "eslint . --max-warnings 0",
         "check-types": "tsc --noEmit",
-        "test": "vitest run --passWithNoTests"
+        "test": "vitest run --exclude '**/dist/**' --passWithNoTests"
     }
 }
