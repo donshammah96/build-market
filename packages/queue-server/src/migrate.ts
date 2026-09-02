@@ -66,10 +66,13 @@ export async function migrateBullMqSchema(): Promise<void> {
     return;
   }
 
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl =
+    process.env.QUEUE_DATABASE_URL ||
+    process.env.DIRECT_URL ||
+    process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error(
-      "[BullMQ Migration] DATABASE_URL environment variable is required when PostgreSQL queue backend is active.",
+      "[BullMQ Migration] QUEUE_DATABASE_URL or DATABASE_URL environment variable is required when PostgreSQL queue backend is active.",
     );
   }
 
@@ -120,8 +123,19 @@ export async function migrateBullMqSchema(): Promise<void> {
     }
 
     console.log("[BullMQ Migration] 'bullmq' schema successfully verified.");
+  } catch (err: any) {
+    if (err?.code === "ENETUNREACH" || String(err).includes("ENETUNREACH")) {
+      console.error(
+        "[BullMQ Migration] Network unreachable (ENETUNREACH). If using Supabase on Render/IPv4, your DATABASE_URL might be using the direct IPv6 hostname (db.xxxx.supabase.co). Please switch DATABASE_URL to the Supabase IPv4 Pooler URL (aws-0-[region].pooler.supabase.com:5432) or run with QUEUE_BACKEND=redis.",
+      );
+    }
+    throw err;
   } finally {
-    await client.end();
+    try {
+      await client.end();
+    } catch {
+      // ignore
+    }
   }
 }
 

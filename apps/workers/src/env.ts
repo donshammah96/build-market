@@ -23,6 +23,13 @@ const workerEnvSchema = z.object({
       /^(postgresql|postgres):\/\//,
       "DATABASE_URL must be a valid PostgreSQL connection string starting with postgresql:// or postgres://",
     ),
+  QUEUE_DATABASE_URL: z
+    .string()
+    .regex(
+      /^(postgresql|postgres):\/\//,
+      "QUEUE_DATABASE_URL must be a valid PostgreSQL connection string starting with postgresql:// or postgres://",
+    )
+    .optional(),
   DIRECT_URL: z.string().optional(),
   REDIS_URL: z
     .string()
@@ -205,6 +212,32 @@ export function validateWorkerEnv(): WorkerEnv {
         `========================================================\n`,
     );
     process.exit(1);
+  }
+
+  // BullMQ PostgreSQL backend requires session-level LISTEN/NOTIFY and advisory locks.
+  // Transaction poolers (e.g. Supabase port 6543) break these primitives silently.
+  const queueDbUrl =
+    data.QUEUE_DATABASE_URL || data.DIRECT_URL || data.DATABASE_URL;
+  if (data.QUEUE_BACKEND === "postgres" && queueDbUrl) {
+    try {
+      const parsed = new URL(queueDbUrl);
+      if (
+        parsed.port === "6543" ||
+        parsed.searchParams.get("pgbouncer") === "true"
+      ) {
+        console.error(
+          `\n========================================================\n` +
+            `[FATAL] Worker environment validation failed on boot:\n` +
+            `  - QUEUE_DATABASE_URL / DATABASE_URL: target port 6543 (transaction-mode pooler).\n` +
+            `    BullMQ PostgreSQL backend requires session-level LISTEN/NOTIFY and advisory locks.\n` +
+            `    Please configure QUEUE_DATABASE_URL to use a direct connection or Session Pooler (port 5432).\n` +
+            `========================================================\n`,
+        );
+        process.exit(1);
+      }
+    } catch {
+      // url regex handles structural validation
+    }
   }
 
   let natsUrl = data.NATS_URL;

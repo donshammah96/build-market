@@ -87,6 +87,26 @@ describe("Queue Backend Resolution & Isolation", () => {
     expect(opts.ssl).toBeUndefined();
   });
 
+  it("prioritizes QUEUE_DATABASE_URL over DATABASE_URL", () => {
+    process.env.DATABASE_URL = "postgres://user:pass@localhost:5432/defaultdb";
+    process.env.QUEUE_DATABASE_URL =
+      "postgres://user:pass@localhost:5432/queuedb";
+
+    const opts = getPostgresQueueConnectionOptions("maintenance-jobs");
+    expect(opts.connectionString).toBe(
+      "postgres://user:pass@localhost:5432/queuedb",
+    );
+  });
+
+  it("throws fail-closed error when transaction-mode pooler port 6543 is detected", () => {
+    process.env.DATABASE_URL =
+      "postgres://user:pass@aws-0-eu-central-1.pooler.supabase.com:6543/postgres";
+
+    expect(() =>
+      getPostgresQueueConnectionOptions("maintenance-jobs"),
+    ).toThrowError(/Transaction-mode pooler detected on port 6543/);
+  });
+
   it("returns valid Redis connection options for BullMQ queue instances", () => {
     process.env.REDIS_URL = "redis://:secret@localhost:6380/2";
 
