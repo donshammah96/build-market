@@ -21,10 +21,11 @@ vi.mock("@/app/lib/infrastructure/env", () => ({
 }));
 
 vi.mock("@build/redis", () => ({
+  checkRateLimit: checkSlidingWindowRateLimitMock,
   checkSlidingWindowRateLimit: checkSlidingWindowRateLimitMock,
 }));
 
-import { checkRateLimit } from "@/app/lib/api/rate-limit";
+import { checkRateLimit, checkReadRateLimit } from "@/app/lib/api/rate-limit";
 
 describe("rate-limit backend routing", () => {
   beforeEach(() => {
@@ -50,6 +51,19 @@ describe("rate-limit backend routing", () => {
       key: "client-rate-limit:docs-write:user-1",
       limit: 10,
       windowMs: 1_000,
+      algorithm: "sliding",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("supports checkReadRateLimit with cachedFixed algorithm", async () => {
+    const result = await checkReadRateLimit("public-read:user-1", 100, 60_000);
+
+    expect(checkSlidingWindowRateLimitMock).toHaveBeenCalledWith({
+      key: "client-rate-limit:public-read:user-1",
+      limit: 100,
+      windowMs: 60_000,
+      algorithm: "cachedFixed",
     });
     expect(result.success).toBe(true);
   });

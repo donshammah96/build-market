@@ -16,6 +16,14 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Fixed — Upstash Redis Write Optimization & Route-Tiered Rate Limiting
+
+- **Rate Limiting Architecture (`app/lib/api/rate-limit.ts`, `app/lib/api/rate-limit.redis.ts`, `types/external-modules..d.ts`)**:
+  - Upgraded Redis rate limiter integration to support multi-algorithm routing (`sliding` for sensitive mutations/auth, `cachedFixed` for high-throughput reads).
+  - Added `checkReadRateLimit()` helper leveraging in-memory window caching to deduplicate and batch rate-limiting queries across warm instances, eliminating unnecessary Redis `ZADD`/`EVAL` write calls.
+  - Updated `GET /api/settings/public` (`app/api/settings/public/route.ts`) to use `checkReadRateLimit()` alongside CDN edge `Cache-Control` headers.
+  - Added unit test coverage in `__tests__/lib/rate-limit-redis.test.ts` and `__tests__/api/settings/public.route.test.ts` asserting algorithm pass-through, fail-closed production behavior, and error fallbacks.
+
 ### Added - M-Pesa payment boundary & multi-purpose contracts (Phase 4b)
 
 - Added authenticated subscription, lead-credit, and escrow checkout intent creation with deterministic

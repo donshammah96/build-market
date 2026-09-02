@@ -62,6 +62,7 @@ declare module "@upstash/ratelimit" {
   export class Ratelimit {
     constructor(config: Record<string, unknown>);
     static slidingWindow(limit: number, window: string): unknown;
+    static cachedFixedWindow(limit: number, window: string): unknown;
     limit(key: string): Promise<{
       success: boolean;
       limit: number;

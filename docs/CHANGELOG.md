@@ -42,8 +42,13 @@
 
 - **`@build/redis` (`packages/redis/src/rate-limit.ts`, `packages/redis/src/__tests__/rate-limit.test.ts`)**:
   - Injected an in-memory `ephemeralCache: new Map()` and `analytics: false` into the `Ratelimit` constructor options in `getOrCreateLimiter()`.
-  - Enables local process-level deduplication of sliding-window rate limit checks during high-concurrency bursts, eliminating redundant remote `ZADD`/`EVAL` write calls to Upstash.
-  - Added unit test suite in `rate-limit.test.ts` asserting normalized result contracts and factory behavior.
+  - Added multi-algorithm support (`RateLimitAlgorithm = "sliding" | "cachedFixed"`) to `checkRateLimit()` and `createRateLimiter()`. High-throughput read endpoints use `cachedFixedWindow` to batch window checks in process memory and minimize Redis round trips, while sensitive mutations retain strict distributed `slidingWindow` enforcement.
+  - Added unit test suite in `rate-limit.test.ts` covering both `sliding` and `cachedFixed` algorithms and normalized return contracts.
+
+- **`apps/client` (`apps/client/app/lib/api/rate-limit.ts`, `apps/client/app/lib/api/rate-limit.redis.ts`, `apps/client/app/api/settings/public/route.ts`)**:
+  - Extended client rate limiter adapter with `checkReadRateLimit()` using the optimized `cachedFixed` algorithm.
+  - Adopted `checkReadRateLimit()` on high-volume public read endpoints (e.g. `GET /api/settings/public`) alongside edge CDN `Cache-Control` headers.
+  - Added test coverage in `rate-limit-redis.test.ts` asserting algorithm pass-through and routing.
 
 - **`apps/workers` (`apps/workers/src/index.ts`)**:
   - Standardized BullMQ worker configuration via `baseWorkerOptions` with `stalledInterval: 300_000` (5 minutes) and `drainDelay: 30` across all 11 background workers (`maintenanceWorker`, `exportWorker`, `mpesaWorker`, `licenseVerificationWorker`, etc.).

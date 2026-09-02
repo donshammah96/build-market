@@ -49,6 +49,10 @@ function resolveRateLimitBackend(): ResolvedRateLimitBackend {
   return hasUpstashCredentials ? "redis" : "memory";
 }
 
+export interface RateLimitOptions {
+  algorithm?: "sliding" | "cachedFixed";
+}
+
 /**
  * Check rate limit for an identifier.
  *
@@ -63,12 +67,18 @@ export async function checkRateLimit(
   identifier: string,
   limit: number = 10,
   window: number = 10000, // 10 seconds
+  options?: RateLimitOptions,
 ): Promise<RateLimitResult> {
   const backend = resolveRateLimitBackend();
 
   if (backend === "redis") {
     try {
-      return await checkRateLimitWithRedis(identifier, limit, window);
+      return await checkRateLimitWithRedis(
+        identifier,
+        limit,
+        window,
+        options?.algorithm,
+      );
     } catch {
       // Production must fail closed if the configured limiter backend fails.
       if (envConfig.isProd) {
@@ -85,6 +95,20 @@ export async function checkRateLimit(
   }
 
   return checkRateLimitInMemory(identifier, limit, window);
+}
+
+/**
+ * Optimized rate limit check for read-only and high-throughput queries.
+ * Uses cachedFixedWindow algorithm when Redis is enabled to minimize command volume.
+ */
+export async function checkReadRateLimit(
+  identifier: string,
+  limit: number = 100,
+  window: number = 60000,
+): Promise<RateLimitResult> {
+  return checkRateLimit(identifier, limit, window, {
+    algorithm: "cachedFixed",
+  });
 }
 
 /**
