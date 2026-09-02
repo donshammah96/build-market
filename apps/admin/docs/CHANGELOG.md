@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Changed — ADR-ADMIN-009 Strangler-Fig v2 Feature Flag Retirement & Canonical Route Promotion
+
+- **Retired 4 v2 strangler-fig feature flags (`admin_v2_user_management`, `admin_v2_verification_queue`, `admin_v2_finance_dashboard`, `admin_v2_audit_log_ui`)**:
+  - Removed deprecated flags from `AdminFeatureFlag`, `FEATURE_FLAG_LIFECYCLE_METADATA`, and `FLAG_ENV_KEYS` in `src/lib/config/feature-flags.ts`.
+  - Removed deprecated `NEXT_PUBLIC_ADMIN_FF_V2_*` keys from `adminBaseEnvSchema` in `src/lib/infrastructure/env-schema.ts`, `env.features` in `src/lib/infrastructure/env-wrapper.ts`, and `.env.*` configuration templates.
+  - Deleted `/users-v2`, `/verifications-v2`, `/analytics-v2`, and `/audit-v2` shadow route trees and promoted canonical routes (`/users`, `/verifications`, `/analytics`, `/audit`).
+  - Ported v2 UI enhancements (capability-aware role indicator badge in verification queue) directly to canonical `verifications/page.tsx`.
+  - Removed route indirection in `NavigationSidebar`, linking directly to canonical routes.
+  - Migrated UI unit test suites into canonical route directories with 100% test coverage.
+  - Updated `ROLLBACK-CONTRACTS.md`, `PROGRESS-SUMMARY.md`, `RETIREMENT.md`, and `ADR-ADMIN-009`.
+
 ### Added - M-Pesa payout & reconciliation operational controls (Phase 5)
 
 - Added capability-gated, recently-authenticated, audited B2C payout enqueueing

@@ -20,16 +20,10 @@ async function loadFeatureFlags(
   vi.doMock("@/lib/infrastructure/env", () => ({
     adminEnvConfig: {
       NODE_ENV: nodeEnv,
-      NEXT_PUBLIC_ADMIN_FF_V2_USER_MANAGEMENT:
-        flags.NEXT_PUBLIC_ADMIN_FF_V2_USER_MANAGEMENT,
-      NEXT_PUBLIC_ADMIN_FF_V2_VERIFICATION_QUEUE:
-        flags.NEXT_PUBLIC_ADMIN_FF_V2_VERIFICATION_QUEUE,
-      NEXT_PUBLIC_ADMIN_FF_V2_FINANCE_DASHBOARD:
-        flags.NEXT_PUBLIC_ADMIN_FF_V2_FINANCE_DASHBOARD,
-      NEXT_PUBLIC_ADMIN_FF_V2_AUDIT_LOG_UI:
-        flags.NEXT_PUBLIC_ADMIN_FF_V2_AUDIT_LOG_UI,
       NEXT_PUBLIC_ADMIN_FF_V2_STRUCTURED_LOGGING:
         flags.NEXT_PUBLIC_ADMIN_FF_V2_STRUCTURED_LOGGING,
+      NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE:
+        flags.NEXT_PUBLIC_ADMIN_FF_LICENSE_VERIFICATION_QUEUE,
     },
   }));
 
@@ -37,50 +31,36 @@ async function loadFeatureFlags(
 }
 
 describe("admin feature flags", () => {
-  it("keeps v2 admin routes disabled by default", async () => {
-    const { AdminFeatureFlag, isAdminFeatureEnabled, getAdminV2Route } =
-      await loadFeatureFlags({});
+  it("keeps feature flags disabled by default", async () => {
+    const { AdminFeatureFlag, isAdminFeatureEnabled } = await loadFeatureFlags(
+      {},
+    );
 
     expect(
-      isAdminFeatureEnabled(AdminFeatureFlag.ADMIN_V2_USER_MANAGEMENT),
+      isAdminFeatureEnabled(AdminFeatureFlag.ADMIN_V2_STRUCTURED_LOGGING),
     ).toBe(false);
-    expect(
-      getAdminV2Route(
-        AdminFeatureFlag.ADMIN_V2_USER_MANAGEMENT,
-        "/users",
-        "/users-v2",
-      ),
-    ).toBe("/users");
   });
 
-  it("enables route switching when the env flag is true", async () => {
-    const { AdminFeatureFlag, isAdminFeatureEnabled, getAdminV2Route } =
-      await loadFeatureFlags({
-        NEXT_PUBLIC_ADMIN_FF_V2_USER_MANAGEMENT: true,
-      });
+  it("enables feature flag when the env flag is true", async () => {
+    const { AdminFeatureFlag, isAdminFeatureEnabled } = await loadFeatureFlags({
+      NEXT_PUBLIC_ADMIN_FF_V2_STRUCTURED_LOGGING: true,
+    });
 
     expect(
-      isAdminFeatureEnabled(AdminFeatureFlag.ADMIN_V2_USER_MANAGEMENT),
+      isAdminFeatureEnabled(AdminFeatureFlag.ADMIN_V2_STRUCTURED_LOGGING),
     ).toBe(true);
-    expect(
-      getAdminV2Route(
-        AdminFeatureFlag.ADMIN_V2_USER_MANAGEMENT,
-        "/users",
-        "/users-v2",
-      ),
-    ).toBe("/users-v2");
   });
 
   it("does not let SUPER_ADMIN bypass a disabled flag", async () => {
     const { AdminFeatureFlag, isAdminFeatureEnabled } = await loadFeatureFlags(
       {
-        NEXT_PUBLIC_ADMIN_FF_V2_AUDIT_LOG_UI: false,
+        NEXT_PUBLIC_ADMIN_FF_V2_STRUCTURED_LOGGING: false,
       },
       "development",
     );
 
     expect(
-      isAdminFeatureEnabled(AdminFeatureFlag.ADMIN_V2_AUDIT_LOG_UI, {
+      isAdminFeatureEnabled(AdminFeatureFlag.ADMIN_V2_STRUCTURED_LOGGING, {
         adminRole: AdminRole.SUPER_ADMIN,
       }),
     ).toBe(false);

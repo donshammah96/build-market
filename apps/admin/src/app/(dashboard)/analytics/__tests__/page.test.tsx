@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import React from "react";
-import AnalyticsV2Page from "../page";
+import AnalyticsPage from "../page";
 import {
   getPlatformAnalytics,
   getTopProfessionals,
@@ -26,7 +26,7 @@ vi.mock("@/components/ui/action-error-state", () => ({
   )),
 }));
 
-describe("AnalyticsV2Page", () => {
+describe("AnalyticsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -75,15 +75,11 @@ describe("AnalyticsV2Page", () => {
     { county: "MOMBASA", count: 45 },
   ];
 
-  it("renders page title and suspense boundary correctly", async () => {
-    const pageElement = AnalyticsV2Page();
+  it("renders page title and description correctly", async () => {
+    const pageElement = AnalyticsPage();
     render(pageElement);
 
-    // Verify root route attribute
-    const rootDiv = screen
-      .getByText("Analytics & Reports")
-      .closest('[data-v2-route="analytics"]');
-    expect(rootDiv).toHaveAttribute("data-v2-route", "analytics");
+    expect(screen.getByText("Analytics & Reports")).toBeInTheDocument();
     expect(
       screen.getByText("Platform-wide analytics and performance metrics."),
     ).toBeInTheDocument();
@@ -106,7 +102,7 @@ describe("AnalyticsV2Page", () => {
     });
 
     // Extract the AnalyticsDashboard component from the page element
-    const pageElement = AnalyticsV2Page();
+    const pageElement = AnalyticsPage();
     const suspenseEl = pageElement.props.children[1];
     const AnalyticsDashboardFn = suspenseEl.props.children.type;
     const dashboardJSX = await AnalyticsDashboardFn();
@@ -155,7 +151,7 @@ describe("AnalyticsV2Page", () => {
       data: [] as any,
     });
 
-    const pageElement = AnalyticsV2Page();
+    const pageElement = AnalyticsPage();
     const suspenseEl = pageElement.props.children[1];
     const AnalyticsDashboardFn = suspenseEl.props.children.type;
     const dashboardJSX = await AnalyticsDashboardFn();

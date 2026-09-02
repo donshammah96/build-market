@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import React from "react";
-import AuditV2Page from "../page";
+import AuditPage from "../page";
 import { getAuditLogs } from "@/actions/admin";
 
 // Mock page dependencies
@@ -20,7 +20,7 @@ vi.mock("@/components/ui/action-error-state", () => ({
   )),
 }));
 
-describe("AuditV2Page", () => {
+describe("AuditPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -48,7 +48,7 @@ describe("AuditV2Page", () => {
     },
   ];
 
-  it("renders page header and v2 route attributes", async () => {
+  it("renders page header correctly", async () => {
     vi.mocked(getAuditLogs).mockResolvedValue({
       success: true,
       data: {
@@ -57,17 +57,13 @@ describe("AuditV2Page", () => {
       } as any,
     });
 
-    const pageElement = await AuditV2Page({
+    const pageElement = await AuditPage({
       searchParams: Promise.resolve({}),
     });
 
     render(pageElement);
 
-    // Verify root route attribute
-    const container = screen
-      .getByText("Audit Logs")
-      .closest('[data-v2-route="audit"]');
-    expect(container).toHaveAttribute("data-v2-route", "audit");
+    expect(screen.getByText("Audit Logs")).toBeInTheDocument();
     expect(
       screen.getByText(
         "Track all system activities and administrative actions",
@@ -93,7 +89,7 @@ describe("AuditV2Page", () => {
         } as any,
       });
 
-    const pageElement = await AuditV2Page({
+    const pageElement = await AuditPage({
       searchParams: Promise.resolve({}),
     });
 
@@ -120,7 +116,7 @@ describe("AuditV2Page", () => {
       } as any,
     });
 
-    const pageElement = await AuditV2Page({
+    const pageElement = await AuditPage({
       searchParams: Promise.resolve({}),
     });
 
@@ -149,7 +145,7 @@ describe("AuditV2Page", () => {
       } as any,
     });
 
-    const pageElement = await AuditV2Page({
+    const pageElement = await AuditPage({
       searchParams: Promise.resolve({}),
     });
 
@@ -184,7 +180,7 @@ describe("AuditV2Page", () => {
       error: "Authorization failed",
     });
 
-    const pageElement = await AuditV2Page({
+    const pageElement = await AuditPage({
       searchParams: Promise.resolve({}),
     });
 

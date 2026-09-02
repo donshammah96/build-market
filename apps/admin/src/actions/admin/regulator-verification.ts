@@ -143,7 +143,6 @@ export async function recordRegulatorManualDecision(
 
           revalidatePath("/verifications");
           revalidatePath("/verifications/regulator");
-          revalidatePath("/verifications-v2");
 
           return result.data;
         },

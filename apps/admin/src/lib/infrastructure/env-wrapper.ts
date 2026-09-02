@@ -295,12 +295,6 @@ function buildEnvConfig() {
     },
 
     features: {
-      v2UserManagement: raw.NEXT_PUBLIC_ADMIN_FF_V2_USER_MANAGEMENT ?? false,
-      v2VerificationQueue:
-        raw.NEXT_PUBLIC_ADMIN_FF_V2_VERIFICATION_QUEUE ?? false,
-      v2FinanceDashboard:
-        raw.NEXT_PUBLIC_ADMIN_FF_V2_FINANCE_DASHBOARD ?? false,
-      v2AuditLogUi: raw.NEXT_PUBLIC_ADMIN_FF_V2_AUDIT_LOG_UI ?? false,
       v2StructuredLogging:
         raw.NEXT_PUBLIC_ADMIN_FF_V2_STRUCTURED_LOGGING ?? false,
       licenseVerificationQueue:

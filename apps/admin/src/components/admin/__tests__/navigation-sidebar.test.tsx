@@ -32,17 +32,6 @@ vi.mock("@/actions/admin", () => ({
   }),
 }));
 
-// Mock @/lib/config/feature-flags
-vi.mock("@/lib/config/feature-flags", () => ({
-  AdminFeatureFlag: {
-    ADMIN_V2_USER_MANAGEMENT: "ADMIN_V2_USER_MANAGEMENT",
-    ADMIN_V2_VERIFICATION_QUEUE: "ADMIN_V2_VERIFICATION_QUEUE",
-    ADMIN_V2_FINANCE_DASHBOARD: "ADMIN_V2_FINANCE_DASHBOARD",
-    ADMIN_V2_AUDIT_LOG_UI: "ADMIN_V2_AUDIT_LOG_UI",
-  },
-  getAdminV2Route: vi.fn((_flag, fallback, _v2Route) => fallback),
-}));
-
 describe("NavigationSidebar component", () => {
   beforeEach(() => {
     vi.clearAllMocks();

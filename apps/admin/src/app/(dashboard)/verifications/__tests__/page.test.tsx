@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import React from "react";
-import VerificationsV2Page from "../page";
+import VerificationsPage from "../page";
 import { getPendingVerifications, getVerificationStats } from "@/actions/admin";
 import { getAdminPermissions } from "@/actions/admin/_core/permissions";
 
@@ -43,7 +43,7 @@ vi.mock("@/components/ui/action-error-state", () => ({
   )),
 }));
 
-describe("VerificationsV2Page", () => {
+describe("VerificationsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -68,17 +68,11 @@ describe("VerificationsV2Page", () => {
       role: "admin" as any,
     });
 
-    const pageElement = await VerificationsV2Page({
+    const pageElement = await VerificationsPage({
       searchParams: Promise.resolve({}),
     });
 
     render(pageElement);
-
-    // Verify root route attribute
-    const container = screen.getByTestId(
-      "verification-queue-wrapper-mock",
-    ).parentElement;
-    expect(container).toHaveAttribute("data-v2-route", "verifications");
 
     // Verify page elements
     expect(screen.getByText("Verifications")).toBeInTheDocument();
@@ -120,7 +114,7 @@ describe("VerificationsV2Page", () => {
       role: "admin" as any,
     });
 
-    const pageElement = await VerificationsV2Page({
+    const pageElement = await VerificationsPage({
       searchParams: Promise.resolve({
         tab: "store",
         status: "APPROVED",
@@ -155,7 +149,7 @@ describe("VerificationsV2Page", () => {
       role: "admin" as any,
     });
 
-    const pageElement = await VerificationsV2Page({
+    const pageElement = await VerificationsPage({
       searchParams: Promise.resolve({}),
     });
 
@@ -189,7 +183,7 @@ describe("VerificationsV2Page", () => {
       role: "admin" as any,
     });
 
-    const pageElement = await VerificationsV2Page({
+    const pageElement = await VerificationsPage({
       searchParams: Promise.resolve({}),
     });
 

@@ -6,6 +6,8 @@ import { VerificationStatsCards } from "@/components/admin/verification/Verifica
 import { Skeleton } from "@/components/ui/skeleton";
 import { ActionErrorState } from "@/components/ui/action-error-state";
 import { VerificationQueueWrapper } from "@/app/(dashboard)/verifications/VerificationQueueWrapper";
+import { Badge } from "@/components/ui/badge";
+import { Shield } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +73,7 @@ export default async function VerificationsPage({
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
+      {/* Page Header — capability-aware role indicator */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Verifications</h1>
@@ -80,6 +82,15 @@ export default async function VerificationsPage({
             and properties.
           </p>
         </div>
+        {permissions.granularRole && (
+          <Badge
+            variant="outline"
+            className="flex items-center gap-1.5 self-start sm:self-auto"
+          >
+            <Shield className="h-3.5 w-3.5" />
+            {permissions.granularRole.replace(/_/g, " ")}
+          </Badge>
+        )}
       </div>
 
       {/* Stats Cards */}

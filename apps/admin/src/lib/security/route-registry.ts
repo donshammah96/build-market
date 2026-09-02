@@ -39,13 +39,6 @@ export const ADMIN_ROUTE_REGISTRY: readonly AdminRouteMetadata[] = [
     allowedRoles: ["super_admin", "ops_admin", "support_admin"],
   },
   {
-    path: "/users-v2",
-    section: "core",
-    title: "User Management V2",
-    allowedRoles: ["super_admin", "ops_admin"],
-    featureFlag: "NEXT_PUBLIC_ADMIN_FF_V2_USER_MANAGEMENT",
-  },
-  {
     path: "/users/[id]",
     section: "core",
     title: "User Detail & Activity",
@@ -56,13 +49,6 @@ export const ADMIN_ROUTE_REGISTRY: readonly AdminRouteMetadata[] = [
     section: "compliance",
     title: "Verification Queue",
     allowedRoles: ["super_admin", "ops_admin", "verification_admin"],
-  },
-  {
-    path: "/verifications-v2",
-    section: "compliance",
-    title: "Verification Queue V2",
-    allowedRoles: ["super_admin", "verification_admin"],
-    featureFlag: "NEXT_PUBLIC_ADMIN_FF_V2_VERIFICATION_QUEUE",
   },
   {
     path: "/verifications/[entityType]/[id]",
@@ -89,24 +75,10 @@ export const ADMIN_ROUTE_REGISTRY: readonly AdminRouteMetadata[] = [
     allowedRoles: ["super_admin", "ops_admin"],
   },
   {
-    path: "/audit-v2",
-    section: "compliance",
-    title: "System Audit Log V2",
-    allowedRoles: ["super_admin"],
-    featureFlag: "NEXT_PUBLIC_ADMIN_FF_V2_AUDIT_LOG_UI",
-  },
-  {
     path: "/analytics",
     section: "finance",
     title: "Finance & Market Analytics",
     allowedRoles: ["super_admin", "finance_admin"],
-  },
-  {
-    path: "/analytics-v2",
-    section: "finance",
-    title: "Finance Analytics V2",
-    allowedRoles: ["super_admin", "finance_admin"],
-    featureFlag: "NEXT_PUBLIC_ADMIN_FF_V2_FINANCE_DASHBOARD",
   },
   {
     path: "/leads",

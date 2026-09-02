@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import React from "react";
-import UsersV2Page from "../page";
+import UsersPage from "../page";
 import { getUsers } from "@/actions/admin";
 import { getAdminPermissions } from "@/actions/admin/_core/permissions";
 
@@ -17,25 +17,25 @@ vi.mock("@/actions/admin/_core/permissions", () => ({
 }));
 
 // Mock subcomponents to isolate page tests
-vi.mock("../../users/users-table-client", () => ({
+vi.mock("../users-table-client", () => ({
   UsersTableClient: vi.fn(() => (
     <div data-testid="users-table-client-mock">UsersTableClientMock</div>
   )),
 }));
 
-vi.mock("../../users/user-action-controls", () => ({
+vi.mock("../user-action-controls", () => ({
   UserActionControls: vi.fn(() => (
     <div data-testid="user-action-controls-mock">UserActionControlsMock</div>
   )),
 }));
 
-vi.mock("../../users/users-filter", () => ({
+vi.mock("../users-filter", () => ({
   UsersFilter: vi.fn(() => (
     <div data-testid="users-filter-mock">UsersFilterMock</div>
   )),
 }));
 
-describe("UsersV2Page", () => {
+describe("UsersPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -62,17 +62,11 @@ describe("UsersV2Page", () => {
       role: "admin" as any,
     });
 
-    const pageElement = await UsersV2Page({
+    const pageElement = await UsersPage({
       searchParams: Promise.resolve({}),
     });
 
     render(pageElement);
-
-    // Verify root route attribute
-    const container = screen.getByTestId(
-      "users-table-client-mock",
-    ).parentElement;
-    expect(container).toHaveAttribute("data-v2-route", "users");
 
     // Verify page elements
     expect(screen.getByText("Users")).toBeInTheDocument();
@@ -108,7 +102,7 @@ describe("UsersV2Page", () => {
       role: "admin" as any,
     });
 
-    const pageElement = await UsersV2Page({
+    const pageElement = await UsersPage({
       searchParams: Promise.resolve({
         page: "2",
         search: "query",
@@ -145,7 +139,7 @@ describe("UsersV2Page", () => {
     });
 
     await expect(
-      UsersV2Page({
+      UsersPage({
         searchParams: Promise.resolve({}),
       }),
     ).rejects.toThrow("Database lookup failed");

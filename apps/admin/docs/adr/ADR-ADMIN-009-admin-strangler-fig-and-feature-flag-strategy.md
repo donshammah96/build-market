@@ -42,14 +42,14 @@ Retirement steps:
 5. Update `ROLLBACK-CONTRACTS.md` to mark the flag as retired.
 6. Add a changelog entry under the relevant phase.
 
-| Flag                                  | v2 Route            | Retirement Owner | Status      |
-| ------------------------------------- | ------------------- | ---------------- | ----------- |
-| `admin_v2_user_management`            | `/users-v2`         | TBD              | In progress |
-| `admin_v2_verification_queue`         | `/verifications-v2` | TBD              | In progress |
-| `admin_v2_finance_dashboard`          | `/analytics-v2`     | TBD              | In progress |
-| `admin_v2_audit_log_ui`               | `/audit-v2`         | TBD              | In progress |
-| `admin_v2_structured_logging`         | N/A (behaviour)     | TBD              | In progress |
-| `admin_ff_license_verification_queue` | N/A (behaviour)     | TBD              | In progress |
+| Flag                                  | v2 Route            | Retirement Owner      | Status      |
+| ------------------------------------- | ------------------- | --------------------- | ----------- |
+| `admin_v2_user_management`            | `/users-v2`         | admin-platform-team   | Retired     |
+| `admin_v2_verification_queue`         | `/verifications-v2` | admin-platform-team   | Retired     |
+| `admin_v2_finance_dashboard`          | `/analytics-v2`     | admin-platform-team   | Retired     |
+| `admin_v2_audit_log_ui`               | `/audit-v2`         | admin-platform-team   | Retired     |
+| `admin_v2_structured_logging`         | N/A (behaviour)     | admin-platform-team   | In progress |
+| `admin_ff_license_verification_queue` | N/A (behaviour)     | admin-compliance-team | In progress |
 
 ## Consequences
 
@@ -61,10 +61,11 @@ Progress docs record rollback variables, runtime/deploy requirements, and data-s
 
 ## Revision History
 
-| Date       | Author        | Change                                                                                                        |
-| ---------- | ------------- | ------------------------------------------------------------------------------------------------------------- |
-| 2026-05-18 | Phase 10 impl | Initial acceptance. Branch: `feat/admin-overhaul/feature-flags`.                                              |
-| 2026-06-05 | Autopsy impl  | Added Alternatives Considered, Migration Criteria, Retirement Checklist, and Revision History (F-Doc1, F-D3). |
+| Date       | Author        | Change                                                                                                            |
+| ---------- | ------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 2026-05-18 | Phase 10 impl | Initial acceptance. Branch: `feat/admin-overhaul/feature-flags`.                                                  |
+| 2026-06-05 | Autopsy impl  | Added Alternatives Considered, Migration Criteria, Retirement Checklist, and Revision History (F-Doc1, F-D3).     |
+| 2026-09-02 | Governance    | Retired 4 strangler-fig v2 shadow routes (`users`, `verifications`, `finance`, `audit`) per retirement checklist. |
 
 ## Related Documentation
 
