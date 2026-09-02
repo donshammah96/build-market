@@ -118,6 +118,13 @@
 
 ---
 
+## Current Tier 0 ADR Index
+
+- Client: [`ADR-001` through `ADR-010`](../apps/client/docs/adr/). ADR-009 governs documentation lifecycle; ADR-010 governs background-job execution and worker daemon isolation.
+- Admin: [`ADR-ADMIN-001` through `ADR-ADMIN-016`](../apps/admin/docs/adr/). Check each ADR's `Status`, `Owner`, and `Next review` metadata before treating it as a current control.
+
+Current release evidence is separate from architectural rationale: use the application `docs/STATUS.md` pages and [`docs/launch/GO_NO_GO.md`](../docs/launch/GO_NO_GO.md). Progress summaries and autopsies are historical supporting context unless they carry the required evidence metadata.
+
 ## Conflict-Resolution Algorithm
 
 When two documents appear to disagree, apply these rules in order. Stop at the first rule that resolves the conflict.
@@ -199,7 +206,7 @@ When a lower-tier document contradicts a higher-tier document:
 | How should I structure a new `apps/admin` domain?         | `.agent/ADMIN-ARCHITECTURE.md`                             |
 | What are the admin auth and capability rules?             | `ADR-ADMIN-001` + `.agent/ADMIN-ARCHITECTURE.md` Section 2 |
 | What are the admin layer boundary rules?                  | `ADR-ADMIN-002` + `.agent/ADMIN-ARCHITECTURE.md` Section 3 |
-| What is the current admin overhaul status?                | `apps/admin/docs/PROGRESS-SUMMARY.md`                      |
+| What is the current admin readiness status?               | `apps/admin/docs/STATUS.md`                                |
 | What admin milestones have shipped?                       | `apps/admin/docs/CHANGELOG.md`                             |
 | What are the open admin architectural defects?            | `apps/admin/docs/DEFECTS.md`                               |
 | How do I verify the admin app is clean before merging?    | `apps/admin/docs/VERIFICATION.md`                          |
@@ -208,7 +215,7 @@ When a lower-tier document contradicts a higher-tier document:
 | What are the structural findings and improvement roadmap? | `apps/admin/docs/ARCHITECTURE-AUTOPSY.md`                  |
 | How do I review a system-level proposal?                  | `staff-architecture-lens.prompt.md`                        |
 | How do I audit a component or form implementation?        | `ui-implementation-standard.prompt.md`                     |
-| What is the current client migration status?              | `apps/client/docs/PROGRESS-SUMMARY.md`                     |
+| What is the current client readiness status?              | `apps/client/docs/STATUS.md`                               |
 | What client architectural milestones have shipped?        | `apps/client/docs/CHANGELOG.md`                            |
 | How does a specific domain slice work?                    | Domain-local `README.md`                                   |
 
@@ -219,11 +226,16 @@ When a lower-tier document contradicts a higher-tier document:
 - `.github/copilot-instructions.md` — repo-wide baseline rules
 - `.agent/API-TO-FRONTEND-ARCHITECTURE.md` — `apps/client` canonical architecture
 - `.agent/ADMIN-ARCHITECTURE.md` — `apps/admin` canonical architecture
-- `apps/client/docs/adr/` — all accepted client ADRs
-- `apps/admin/docs/adr/` — all accepted admin ADRs (ADR-ADMIN-001 through ADR-ADMIN-009; each now includes Alternatives Considered and Revision History)
-- `apps/client/docs/PROGRESS-SUMMARY.md` — current client migration queue and slice status
+- `apps/client/docs/adr/` — current client ADR index (ADR-001 through ADR-010; inspect each ADR lifecycle status)
+- `apps/admin/docs/adr/` — current admin ADR index (ADR-ADMIN-001 through ADR-ADMIN-016; inspect each ADR lifecycle status)
+- `apps/client/docs/STATUS.md` — canonical current client readiness evidence
+- `apps/admin/docs/STATUS.md` — canonical current admin readiness evidence
+- `apps/verification-ops/docs/STATUS.md` — canonical current verification-operations readiness evidence
+- `apps/workers/docs/STATUS.md` — canonical current worker readiness evidence
+- `docs/launch/GO_NO_GO.md` — canonical cross-application public-launch scorecard
+- `apps/client/docs/PROGRESS-SUMMARY.md` — historical client migration queue and slice status; not a release-evidence source
 - `apps/client/docs/CHANGELOG.md` — client architectural milestones and hardening history
-- `apps/admin/docs/PROGRESS-SUMMARY.md` — current admin overhaul phase, slice status, and next priority
+- `apps/admin/docs/PROGRESS-SUMMARY.md` — historical admin overhaul phase, slice status, and next priority; not a release-evidence source
 - `apps/admin/docs/CHANGELOG.md` — admin overhaul milestones and hardening history
 - `apps/admin/docs/DEFECTS.md` — open defect registry (ADM-001 through ADM-020) with severity, class, and owner
 - `apps/admin/docs/VERIFICATION.md` — verification commands, gate policy, and latest results

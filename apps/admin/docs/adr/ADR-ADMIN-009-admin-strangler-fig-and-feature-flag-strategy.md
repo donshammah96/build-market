@@ -1,5 +1,9 @@
 # ADR-ADMIN-009: Admin Strangler Fig and Feature Flag Strategy
 
+Status: Accepted
+Owner: Admin Architecture
+Next review: 2026-12-03
+
 ## Status
 
 Accepted

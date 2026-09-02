@@ -4,6 +4,12 @@ All notable changes to the `workers` application will be documented in this file
 
 ## [Unreleased]
 
+### Added — P0 worker operations evidence and recovery contract
+
+- Reconciled the worker README with the implemented maintenance, notification, BullMQ, and NATS consumers.
+- Documented liveness versus readiness semantics, disabled-background-jobs behavior, exact maintenance-job effects/exclusions, queue ownership, and safe recovery verification in [`QUEUE_RECOVERY_RUNBOOK.md`](QUEUE_RECOVERY_RUNBOOK.md).
+- Added the canonical worker readiness evidence page at [`STATUS.md`](STATUS.md).
+
 ### Added — Datadog structured log transport and lifecycle hardening
 
 - Added bounded Datadog log batching with transient-failure retries, queue/drop metrics, and fail-open behavior in `@build/resilience`.

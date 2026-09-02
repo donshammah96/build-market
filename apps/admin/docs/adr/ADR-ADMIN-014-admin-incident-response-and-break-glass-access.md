@@ -1,5 +1,9 @@
 # ADR-ADMIN-014: Admin Incident Response and Break-Glass Access
 
+Status: Proposed
+Owner: Admin Architecture
+Next review: 2026-12-03
+
 ## Status
 
 Proposed

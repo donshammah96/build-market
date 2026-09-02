@@ -1,5 +1,9 @@
 # ADR-ADMIN-011: Admin Observability SLO and Telemetry Contract
 
+Status: Accepted
+Owner: Admin Architecture
+Next review: 2026-12-03
+
 ## Status
 
 Accepted

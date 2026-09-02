@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added — P0 launch documentation authority
+
+- Added [`STATUS.md`](STATUS.md) as the canonical, evidence-scoped admin readiness page.
+- Updated architecture references to the complete `ADR-ADMIN-001` through `ADR-ADMIN-016` index and lifecycle-status contract.
+
 ### Added — Datadog environment contract alignment
 
 - Added canonical Datadog site, version, and log-enable fields to schema, wrapper, and environment templates; legacy `DD_SITE_HOST` remains a read-only fallback.

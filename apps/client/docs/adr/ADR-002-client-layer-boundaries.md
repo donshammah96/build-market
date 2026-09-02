@@ -1,5 +1,9 @@
 # ADR-002: `apps/client` Layer Boundaries and Import Rules
 
+Status: Accepted
+Owner: Client Architecture
+Next review: 2026-12-03
+
 ## Status
 
 Accepted

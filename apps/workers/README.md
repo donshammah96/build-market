@@ -2,7 +2,7 @@
 
 Standalone BullMQ + NATS JetStream background worker daemon for Build Market. Extracted out of the Next.js apps because Vercel's serverless runtime terminates the event loop on response completion — a hard incompatibility with long-running queue consumers.
 
-> **Status: scaffolding.** The daemon boots, connects, and processes jobs end-to-end, but `maintenance.processor.ts` and `notification.processor.ts` currently contain stub handlers that return success without doing real work. Do not treat GDPR erasure, retention enforcement, or notification delivery as live until the domain logic is ported in. See [Known Limitations](#known-limitations).
+> **Status: implemented daemon, not launch-certified.** The daemon has concrete maintenance and in-app notification processors plus export, incident, compliance notification, newsletter, upload, verification, and M-Pesa processors. Processing remains at-least-once and the documented effects are intentionally narrower than complete privacy erasure, anonymization, object-store deletion, or provider confirmation where the processor does not perform those actions. See the [queue recovery runbook](docs/QUEUE_RECOVERY_RUNBOOK.md) and [current status](docs/STATUS.md).
 
 ## Architecture
 
@@ -28,7 +28,9 @@ This app is a **pure consumer**. Queue definitions, job payload schemas, and pro
 | `maintenance-jobs`     | `processMaintenanceJob`       | `cleanup-expired-exports`, `data-retention-enforcement`, `anonymization-batch`, `asset-cleanup`, `onboarding-upload-cleanup`, `newsletter-sweep`, `license-expiry`, `gdpr-erasure`, `archive-settled-records` |
 | `notification-retries` | `processNotificationRetryJob` | notification delivery retry                                                                                                                                                                                   |
 
-NATS JetStream: a durable consumer (`notification-retry-worker-group`) subscribes for notification retry events independent of the BullMQ queue above.
+Additional BullMQ consumers handle `gdpr-data-export`, `security-incidents`, `compliance-notifications`, `newsletter-confirmation-email`, `newsletter-esp-sync`, `uploads-image-processing`, `license-verification`, `mpesa-payments`, and `mpesa-reconciliation`. The daemon also owns the NATS durable consumers `notification-retry-worker-group` and `license-auto-verify-group`.
+
+Operational ownership, safe recovery, and business-effect verification for each queue/consumer are defined in the [queue recovery runbook](docs/QUEUE_RECOVERY_RUNBOOK.md). Do not use a generic restart or a completed job state as proof of a successful privacy, regulatory, or financial outcome.
 
 ## Prerequisites
 
@@ -108,15 +110,17 @@ Local Redis is configured with `noeviction` directly in `docker-compose.yml`. Th
 
 ## Health Check
 
-`GET /healthz` (or `/health`) on `HEALTH_PORT`:
+`GET /`, `/healthz`, `/health`, or `/ping` on `HEALTH_PORT`:
 
-| Status | Condition                                  |
-| ------ | ------------------------------------------ |
-| `200`  | Redis reachable, not shutting down         |
-| `503`  | Redis unreachable, or shutdown in progress |
-| `404`  | Any other path                             |
+| Status | Meaning                                                                                                                                                                                         |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `200`  | The process is live and the aggregate readiness check reports Redis, PostgreSQL where a PostgreSQL queue backend is active, all started BullMQ workers, and required NATS consumers as healthy. |
+| `503`  | The daemon is shutting down, a required dependency is unavailable, or a health probe threw. The JSON body identifies the known dependency states when available.                                |
+| `404`  | Any other path.                                                                                                                                                                                 |
 
-**Current scope:** this checks Redis connectivity only — it does not currently reflect whether the BullMQ `Worker` instances are actively running or whether the NATS JetStream consumer is connected. A "healthy" response doesn't guarantee jobs are being processed if NATS has silently disconnected. Treat as a liveness signal, not a full readiness signal, until this is extended.
+**Liveness is not readiness.** A reachable HTTP process is a liveness signal. A `200` is an aggregate dependency/readiness signal, not proof that a particular queue processed a recent job successfully. A queue-specific incident requires the procedure and post-recovery evidence in the [queue recovery runbook](docs/QUEUE_RECOVERY_RUNBOOK.md).
+
+**Disabled mode:** with `DISABLE_BACKGROUND_JOBS=true`, worker and NATS checks intentionally report ready because no consumers are expected to be running. This mode is a deliberate maintenance/containment state and must not be used as evidence that background processing is available.
 
 ## Graceful Shutdown
 
@@ -170,9 +174,9 @@ The worker daemon is **not deployed to Vercel** — see [Vercel vs. Render](#ver
 
 ## Known Limitations
 
-- **Stub processors.** `maintenance.processor.ts` and `notification.processor.ts` log and return success without performing real work. GDPR erasure, retention enforcement, anonymization, asset cleanup, license-expiry checks, archival, and notification delivery are all **not yet implemented** — this daemon currently only proves the queue plumbing works end-to-end.
-- **No idempotency guarantees in processors yet.** BullMQ is at-least-once delivery — once real logic is ported in, processors handling non-idempotent operations (GDPR erasure, financial archival in particular) need explicit job deduplication or optimistic locking before they can safely run in production.
-- **Health check is Redis-only.** Doesn't reflect BullMQ worker run-state or NATS consumer connectivity.
+- **Maintenance effects are deliberately narrow.** The processor makes the database changes documented in the [queue recovery runbook](docs/QUEUE_RECOVERY_RUNBOOK.md). Several job names are broader than their implementation: marking an export or asset record does not delete its object-store data; scheduling/deactivating a user is not complete erasure; profile-field anonymization does not prove cross-system deletion.
+- **At-least-once delivery remains a production risk.** BullMQ can invoke a job more than once. Operators must verify idempotency and downstream effects before retrying privacy, financial, regulatory, or provider-backed jobs; M-Pesa replays require finance approval and reconciliation evidence.
+- **Health is aggregate, not an outcome audit.** The health endpoint checks Redis, PostgreSQL where applicable, BullMQ worker run-state, and NATS connectivity. It does not inspect queue depth, dead-letter state, processor latency, storage state, regulator state, or a completed business outcome.
 
 ## Vercel vs. Render
 

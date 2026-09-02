@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added — P0 launch documentation and toolchain governance
+
+- Added the canonical [`docs/launch/GO_NO_GO.md`](launch/GO_NO_GO.md) scorecard and evidence contract, plus current status pages for every deployable application.
+- Added a deterministic, non-mutating `docs:check-launch-governance` CI check covering ADR indexes/lifecycle metadata, readiness evidence, worker runbooks, scorecard controls, and Node 24 runtime consistency.
+- Reconciled the repository hierarchy, launch audit/recommendations, and application references with client `ADR-001` through `ADR-010` and admin `ADR-ADMIN-001` through `ADR-ADMIN-016`.
+- Standardized active developer and CI runtime guidance on Node 24.
+
 ### Security — Dependency Vulnerability Remediation (fast-uri)
 
 - **`pnpm-workspace.yaml` / `pnpm-lock.yaml`**: Upgraded `fast-uri` monorepo override from `>=4.1.2` to `>=4.1.4`, remediating 4 high-severity vulnerabilities:

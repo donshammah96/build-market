@@ -347,6 +347,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check launch documentation governance
+        run: pnpm run docs:check-launch-governance
+
       - name: Production dependency audit
         run: pnpm run deps:audit
 

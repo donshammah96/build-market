@@ -89,6 +89,8 @@ docs/*
 !docs/build-market-mpesa-implementation-plan.md
 !docs/plans/
 !docs/plans/**
+!docs/launch/
+!docs/launch/**
 !apps/admin/docs/
 !apps/admin/docs/**
 !apps/client/docs/
@@ -98,6 +100,7 @@ apps/client/docs/*
 !apps/client/docs/operations/
 !apps/client/docs/operations/**
 !apps/client/docs/CHANGELOG.md
+!apps/client/docs/STATUS.md
 !apps/client/docs/STORAGE-INTEGRATION-GUIDE.md
 !apps/workers/docs/
 !apps/workers/docs/**

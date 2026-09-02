@@ -1,5 +1,9 @@
 # ADR-ADMIN-015: Admin Data Retention, Export, and Tamper-Evident Audit
 
+Status: Accepted
+Owner: Admin Architecture
+Next review: 2026-12-03
+
 ## Status
 
 Accepted

@@ -1,5 +1,9 @@
 # ADR-ADMIN-002: Admin Action Boundary and Layer Structure
 
+Status: Accepted
+Owner: Admin Architecture
+Next review: 2026-12-03
+
 ## Status
 
 Accepted

@@ -1,5 +1,9 @@
 # ADR-ADMIN-013: Admin Environment and Secret Governance
 
+Status: Proposed
+Owner: Admin Architecture
+Next review: 2026-12-03
+
 ## Status
 
 Proposed

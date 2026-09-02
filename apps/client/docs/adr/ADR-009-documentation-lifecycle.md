@@ -1,5 +1,9 @@
 # ADR-009: Documentation Lifecycle Policy
 
+Status: Accepted
+Owner: Client Architecture
+Next review: 2026-12-03
+
 **Status:** Accepted  
 **Date:** 2026-05-07  
 **Deciders:** Engineering team  

@@ -1,5 +1,9 @@
 # ADR-ADMIN-001: Admin Authentication and Authorization Model
 
+Status: Accepted
+Owner: Admin Architecture
+Next review: 2026-12-03
+
 ## Status
 
 Accepted

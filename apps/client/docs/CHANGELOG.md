@@ -16,6 +16,11 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Added — P0 launch documentation authority
+
+- Added [`STATUS.md`](STATUS.md) as the canonical, evidence-scoped client readiness page.
+- Updated client onboarding and architecture references to the complete `ADR-001` through `ADR-010` index and Node 24 toolchain.
+
 ### Changed — Test Script Encapsulation & Workspace Manifest Alignment
 
 - **Test Script Consolidation (`apps/client/package.json`)**: Relocated and consolidated 17 domain, contract, and regression test commands previously residing in root `package.json` directly into the client package manifest:

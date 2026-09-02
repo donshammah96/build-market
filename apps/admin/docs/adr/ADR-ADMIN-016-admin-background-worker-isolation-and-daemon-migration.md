@@ -1,5 +1,9 @@
 # ADR-ADMIN-016: Admin Background Worker Isolation and Daemon Migration
 
+Status: Accepted
+Owner: Platform Engineering
+Next review: 2026-12-03
+
 ## Status
 
 Accepted

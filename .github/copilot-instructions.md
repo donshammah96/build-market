@@ -313,8 +313,8 @@ Core components: `JetStreamProducer`, `JetStreamConsumer`, `StreamManager`, `cre
 ## Admin App (`apps/admin`)
 
 > **Canonical architecture guide:** `.agent/ADMIN-ARCHITECTURE.md` — read this before touching `apps/admin` code.
-> **Admin ADR precedent:** `apps/admin/docs/adr/ADR-ADMIN-001` through `ADR-ADMIN-009`
-> **Current overhaul state:** `apps/admin/docs/PROGRESS-SUMMARY.md` (Phases 0–12 complete; post-Phase-12 autopsy defects/cleanup queued)
+> **Admin ADR index:** `apps/admin/docs/adr/ADR-ADMIN-001` through `ADR-ADMIN-016` (read each lifecycle status before relying on it).
+> **Current readiness evidence:** `apps/admin/docs/STATUS.md`; `PROGRESS-SUMMARY.md` is historical migration context, not a release-evidence source.
 
 `apps/admin` differs materially from `apps/client`. It is a Next.js app with a `src/` layout that uses server actions as its primary interaction model, not the browser-facade + API-route pattern of the client app.
 
