@@ -75,12 +75,7 @@ This plan deliberately breaks the private `@build/telemetry` logging API: `creat
 
   ```ts
   export type ResilienceOutcome =
-    | "success"
-    | "cache_hit"
-    | "fallback"
-    | "timeout"
-    | "circuit_open"
-    | "error";
+    "success" | "cache_hit" | "fallback" | "timeout" | "circuit_open" | "error";
 
   export interface ResilienceOptions<T = unknown> {
     // Existing options, with fallback typed to the executed value.
