@@ -8,15 +8,18 @@ All notable changes to the `workers` application will be documented in this file
 
 - **Dynamic Backend Resolver & Schema Isolation**:
   - Integrated `@build/queue-server` dynamic backend resolution (`QUEUE_BACKEND=postgres|redis`) with per-queue canary overrides.
-  - Added `PORT` and `QUEUE_BACKEND` to `workerEnvSchema` in `src/env.ts` with strict validation and unit tests in `__tests__/env.test.ts`.
+  - Added `PORT`, `QUEUE_BACKEND`, and `QUEUE_DATABASE_URL` to `workerEnvSchema` in `src/env.ts` with strict validation and unit tests in `__tests__/env.test.ts`.
+  - Added fail-closed boot validation rejecting transaction-mode poolers (port 6543) when running with `QUEUE_BACKEND=postgres` to safeguard `LISTEN/NOTIFY` and advisory locks.
   - Added fail-closed `migrateBullMqSchema()` execution during daemon boot in `src/index.ts`.
-- **Healthcheck & Connection Lifecycle Hardening**:
+- **Healthcheck, Networking & Connection Lifecycle Hardening**:
+  - Enforced IPv4 DNS resolution precedence via `ENV NODE_OPTIONS="--dns-result-order=ipv4first"` in `Dockerfile` and early bootstrap in `src/bootstrap.ts` to eliminate `ENETUNREACH` IPv6 errors on Render.
+  - Configured PostgreSQL TLS with `rejectUnauthorized: false` to seamlessly support cloud provider intermediate CA certificates.
   - Configured health check server in `src/health.ts` to listen on `0.0.0.0` and respond `200 OK` on `/`, `/healthz`, `/health`, and `/ping` for zero-friction Render deploy readiness probes.
   - Memoized `healthPgClient` and `healthRedisClient` in `src/index.ts` to eliminate connection churn during health polling.
   - Enhanced `checkPostgres` to verify `bullmq` schema availability via `information_schema.schemata`.
   - Hardened `gracefulShutdown` to cleanly drain active workers and disconnect only initialized clients.
 - **Operational Runbook**:
-  - Published `docs/runbooks/queue-postgres-migration.md` defining the 3-tier canary rollout, Render Start Command wiring, and emergency rollback strategy.
+  - Published `docs/runbooks/queue-postgres-migration.md` defining the 3-tier canary rollout, Render in-process boot schema execution, session pooler sizing arithmetic, and emergency rollback strategy.
 
 ### Added - M-Pesa reconciliation worker (Phase 3b) & multi-domain settlement (Phase 4b)
 
