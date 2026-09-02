@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Security — Dependency Vulnerability Remediation (fast-uri)
+
+- **`pnpm-workspace.yaml` / `pnpm-lock.yaml`**: Upgraded `fast-uri` monorepo override from `>=4.1.2` to `>=4.1.4`, remediating 4 high-severity vulnerabilities:
+  - GHSA-f65p-4m7j-42xc: Server-side request forgery via repeated hostname percent-decoding
+  - GHSA-fph4-wmhf-6fwf: Host confusion via percent-encoded scheme normalization
+  - GHSA-jqff-g426-hqxp: Host confusion via scheme normalization
+- Verified `pnpm run deps:audit` passes with 0 known vulnerabilities.
+
+### Changed — Monorepo Root `package.json` Audit & Structured Cleanup
+
+- **Dependency Boundaries**: Removed runtime `"dependencies": { "js-cookie": "catalog:" }` from private monorepo root [`package.json`](file:///c:/Users/User/build-market/package.json); runtime dependencies belong solely in apps/packages and are coordinated via workspace catalog.
+- **Pruned Dead Tooling**: Removed unreferenced `"ngrok": "5.0.0-beta.2"` and root `"next": "catalog:"` from root `devDependencies`.
+- **Script Hygiene & Test Isolation**: Relocated 17 ad-hoc client test scripts (`test:leads`, `test:button-slot-regression`, `test:projects-api`, `test:dashboard-hook`, etc.) from root into [`apps/client/package.json`](file:///c:/Users/User/build-market/apps/client/package.json).
+- **Standardized Developer Tooling**: Added `typecheck` alias for `check-types` mapped to `turbo run check-types`.
+- **Preserved CI Contracts**: Maintained all CI and pre-commit task commands intact for zero CI disruption.
+
 ### Added — Resilience Telemetry Option B (Datadog)
 
 - **`@build/resilience`**: Added bounded, fail-open Datadog log batching with retry/backoff, Pino redaction, correlation identifiers, explicit outcome taxonomy, and lifecycle flush/close hooks.

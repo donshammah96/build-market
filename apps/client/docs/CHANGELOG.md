@@ -16,6 +16,15 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Changed — Test Script Encapsulation & Workspace Manifest Alignment
+
+- **Test Script Consolidation (`apps/client/package.json`)**: Relocated and consolidated 17 domain, contract, and regression test commands previously residing in root `package.json` directly into the client package manifest:
+  - Domain & Risk Contracts: `test:properties-risk`, `test:properties-service-once`, `test:projects-api`, `test:projects-api:json`, `test:portfolio-api`, `test:secure-action`, `test:leads`, `test:stores-route`, `test:projects-property-focused`.
+  - Concurrency & Envelope Regressions: `test:projects-envelope-focused`, `test:projects-envelope-focused:single-worker`.
+  - Browser Hooks & Client Facades: `test:browser-hook-sweep`, `test:dashboard-hook`, `test:dashboard-browser-clients`.
+  - Component & Accessibility Regressions: `test:button-slot-regression`, `test:button-slot-regression:single-worker`, `test:onboarding-ui-a11y:single-worker`.
+- Reclaimed clean boundary separation between the monorepo coordinator and the client app presentation/domain tier. All test suites can now be run locally via `pnpm test:<name>` inside `apps/client` or via `pnpm --filter client run test:<name>` from repo root.
+
 ### Added — Datadog environment contract alignment
 
 - Added canonical `DD_SITE`, `DD_VERSION`, and `DD_LOGS_ENABLED` configuration entries with a compatibility fallback for legacy `DD_SITE_HOST` deployments.
