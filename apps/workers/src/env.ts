@@ -49,6 +49,11 @@ const workerEnvSchema = z.object({
     .optional()
     .transform((val) => (val ? parseInt(val, 10) : 5))
     .pipe(z.number().min(1).max(20)),
+  PORT: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : undefined))
+    .pipe(z.number().optional()),
   HEALTH_PORT: z
     .string()
     .optional()

@@ -4,26 +4,33 @@ import type { Server } from "node:http";
 
 describe("Worker Health Server (apps/workers/src/health.ts)", () => {
   let server: Server | null = null;
-  const testPort = 18080;
+  let testPort = 18080;
 
-  afterEach(() => {
+  afterEach(async () => {
     if (server) {
-      server.close();
+      if ("closeAllConnections" in server) {
+        (server as any).closeAllConnections();
+      }
+      await new Promise<void>((resolve) => server!.close(() => resolve()));
       server = null;
     }
   });
 
   it("should respond with 200 OK when Redis, workers, and NATS are healthy", async () => {
+    const port = ++testPort;
     server = startHealthServer({
-      port: testPort,
+      port,
       checkRedis: async () => true,
       checkWorkers: () => true,
       checkNats: () => true,
       isShuttingDown: () => false,
     });
 
-    const response = await fetch(`http://localhost:${testPort}/healthz`);
+    const response = await fetch(`http://localhost:${port}/healthz`);
     expect(response.status).toBe(200);
+
+    const rootResponse = await fetch(`http://localhost:${port}/`);
+    expect(rootResponse.status).toBe(200);
 
     const body = (await response.json()) as {
       status: string;
@@ -38,15 +45,16 @@ describe("Worker Health Server (apps/workers/src/health.ts)", () => {
   });
 
   it("should respond with 503 Service Unavailable when Redis is unhealthy", async () => {
+    const port = ++testPort;
     server = startHealthServer({
-      port: testPort,
+      port,
       checkRedis: async () => false,
       checkWorkers: () => true,
       checkNats: () => true,
       isShuttingDown: () => false,
     });
 
-    const response = await fetch(`http://localhost:${testPort}/healthz`);
+    const response = await fetch(`http://localhost:${port}/healthz`);
     expect(response.status).toBe(503);
 
     const body = (await response.json()) as { status: string; redis: string };
@@ -55,15 +63,16 @@ describe("Worker Health Server (apps/workers/src/health.ts)", () => {
   });
 
   it("should respond with 503 Service Unavailable when workers are stalled", async () => {
+    const port = ++testPort;
     server = startHealthServer({
-      port: testPort,
+      port,
       checkRedis: async () => true,
       checkWorkers: () => false,
       checkNats: () => true,
       isShuttingDown: () => false,
     });
 
-    const response = await fetch(`http://localhost:${testPort}/healthz`);
+    const response = await fetch(`http://localhost:${port}/healthz`);
     expect(response.status).toBe(503);
 
     const body = (await response.json()) as { status: string; workers: string };
@@ -72,13 +81,14 @@ describe("Worker Health Server (apps/workers/src/health.ts)", () => {
   });
 
   it("should respond with 503 Service Unavailable during graceful shutdown", async () => {
+    const port = ++testPort;
     server = startHealthServer({
-      port: testPort,
+      port,
       checkRedis: async () => true,
       isShuttingDown: () => true,
     });
 
-    const response = await fetch(`http://localhost:${testPort}/health`);
+    const response = await fetch(`http://localhost:${port}/health`);
     expect(response.status).toBe(503);
 
     const body = (await response.json()) as { status: string };
@@ -86,13 +96,14 @@ describe("Worker Health Server (apps/workers/src/health.ts)", () => {
   });
 
   it("should return 404 for unknown endpoints", async () => {
+    const port = ++testPort;
     server = startHealthServer({
-      port: testPort,
+      port,
       checkRedis: async () => true,
       isShuttingDown: () => false,
     });
 
-    const response = await fetch(`http://localhost:${testPort}/unknown-route`);
+    const response = await fetch(`http://localhost:${port}/unknown-route`);
     expect(response.status).toBe(404);
   });
 });

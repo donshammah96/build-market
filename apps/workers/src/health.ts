@@ -12,7 +12,13 @@ export interface HealthCheckOptions {
 export function startHealthServer(options: HealthCheckOptions) {
   const server = http.createServer(
     async (req: IncomingMessage, res: ServerResponse) => {
-      if (req.url === "/healthz" || req.url === "/health") {
+      const url = req.url ? req.url.split("?")[0] : "";
+      if (
+        url === "/" ||
+        url === "/healthz" ||
+        url === "/health" ||
+        url === "/ping"
+      ) {
         if (options.isShuttingDown()) {
           res.writeHead(503, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ status: "shutting_down" }));
@@ -67,9 +73,9 @@ export function startHealthServer(options: HealthCheckOptions) {
     },
   );
 
-  server.listen(options.port, () => {
+  server.listen(options.port, "0.0.0.0", () => {
     console.info(
-      `[WorkerHealth] Healthcheck probe listening on port ${options.port} (/healthz)`,
+      `[WorkerHealth] Healthcheck probe listening on 0.0.0.0:${options.port} (/, /healthz)`,
     );
   });
 

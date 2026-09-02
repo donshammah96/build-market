@@ -473,9 +473,9 @@ async function initializeNatsConsumer() {
   }
 }
 
-// 5. Start Healthcheck Server (P1: Port 8080)
+// 5. Start Healthcheck Server (P1: Port 8080 / Render PORT)
 const healthServer = startHealthServer({
-  port: env.HEALTH_PORT,
+  port: env.PORT || env.HEALTH_PORT,
   checkRedis: async () => {
     try {
       const hasRedis =
