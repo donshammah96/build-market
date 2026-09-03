@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "installCommand": "node -v && corepack enable && corepack prepare pnpm@11.1.1 --activate && pnpm -v && pnpm install --frozen-lockfile",
+  "installCommand": "node -v && corepack enable && corepack prepare pnpm@11.1.2 --activate && pnpm -v && pnpm install --frozen-lockfile",
   "buildCommand": "pnpm tsc --build tsconfig.json && pnpm -w run build:client",
   "outputDirectory": "apps/client/.next"
 }
