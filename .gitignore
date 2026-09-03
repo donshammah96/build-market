@@ -89,6 +89,8 @@ docs/*
 !docs/build-market-mpesa-implementation-plan.md
 !docs/plans/
 !docs/plans/**
+!docs/specs/
+!docs/specs/**
 !docs/launch/
 !docs/launch/**
 !apps/admin/docs/
