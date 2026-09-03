@@ -12,16 +12,16 @@ Next review: 2026-12-03 or before each launch-decision meeting.
 
 ## Required evidence
 
-| Area | Release threshold | Owner | Required ADR and control evidence | Current decision |
-| --- | --- | --- | --- | --- |
-| Supply | At least three eligible verified professionals for 90% of pilot intents across the selected trade/location matrix. | Marketplace Operations | ADR-010; Control: supply-liquidity matrix and verified-professional eligibility report. | No-go — evidence not attached. |
-| Responsiveness | Median first qualified response is at or below two business hours. | Marketplace Operations | ADR-005, ADR-010; Control: response-time dashboard and staffed-routing drill. | No-go — evidence not attached. |
-| Verification | P95 completion is at or below 24 hours with zero incorrect or expired public trust badges. | Verification Operations | ADR-006, ADR-010; Control: regulator shadow-mode report, expiry audit, and override sample. | No-go — evidence not attached. |
-| Lead experience | At least 65% mobile intake completion and zero known P0 disclosure defects. | Product and Engineering | ADR-006, ADR-008; Control: staging intake funnel and masked-disclosure test evidence. | No-go — evidence not attached. |
-| Safety | Reporting, moderation, escalation, and emergency contact paths are tested end-to-end. | Trust and Safety | ADR-ADMIN-014; Control: escalation and breach tabletop record. | No-go — evidence not attached. |
-| Payments | No paid flow is live until callback, replay, reconciliation, reversal, support, and disclosure drills pass. | Finance and Engineering | ADR-008, ADR-ADMIN-012; Control: M-Pesa callback/replay/reconciliation drill and support runbook. | No-go — evidence not attached. |
-| Resilience | Queue outage, NATS outage, regulator outage, bad upload, callback replay, and flag rollback drills pass in staging. | Platform Engineering | ADR-010, ADR-ADMIN-012, ADR-ADMIN-016; Control: staging drill records and queue recovery runbook. | No-go — evidence not attached. |
-| Compliance | DPIA, data map, retention, processor inventory, registration assessment, and breach tabletop are approved. | Privacy and Legal | ADR-006, ADR-ADMIN-015; Control: signed privacy/compliance decision record. | No-go — evidence not attached. |
+| Area            | Release threshold                                                                                                   | Owner                   | Required ADR and control evidence                                                                 | Current decision               |
+| --------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------ |
+| Supply          | At least three eligible verified professionals for 90% of pilot intents across the selected trade/location matrix.  | Marketplace Operations  | ADR-010; Control: supply-liquidity matrix and verified-professional eligibility report.           | No-go — evidence not attached. |
+| Responsiveness  | Median first qualified response is at or below two business hours.                                                  | Marketplace Operations  | ADR-005, ADR-010; Control: response-time dashboard and staffed-routing drill.                     | No-go — evidence not attached. |
+| Verification    | P95 completion is at or below 24 hours with zero incorrect or expired public trust badges.                          | Verification Operations | ADR-006, ADR-010; Control: regulator shadow-mode report, expiry audit, and override sample.       | No-go — evidence not attached. |
+| Lead experience | At least 65% mobile intake completion and zero known P0 disclosure defects.                                         | Product and Engineering | ADR-006, ADR-008; Control: staging intake funnel and masked-disclosure test evidence.             | No-go — evidence not attached. |
+| Safety          | Reporting, moderation, escalation, and emergency contact paths are tested end-to-end.                               | Trust and Safety        | ADR-ADMIN-014; Control: escalation and breach tabletop record.                                    | No-go — evidence not attached. |
+| Payments        | No paid flow is live until callback, replay, reconciliation, reversal, support, and disclosure drills pass.         | Finance and Engineering | ADR-008, ADR-ADMIN-012; Control: M-Pesa callback/replay/reconciliation drill and support runbook. | No-go — evidence not attached. |
+| Resilience      | Queue outage, NATS outage, regulator outage, bad upload, callback replay, and flag rollback drills pass in staging. | Platform Engineering    | ADR-010, ADR-ADMIN-012, ADR-ADMIN-016; Control: staging drill records and queue recovery runbook. | No-go — evidence not attached. |
+| Compliance      | DPIA, data map, retention, processor inventory, registration assessment, and breach tabletop are approved.          | Privacy and Legal       | ADR-006, ADR-ADMIN-015; Control: signed privacy/compliance decision record.                       | No-go — evidence not attached. |
 
 ## Evidence rules
 
