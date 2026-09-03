@@ -12,6 +12,14 @@ import {
 import { apiError, apiSuccess, HttpStatus } from "@/app/lib/api/api-response";
 import { reviewsService } from "@/app/lib/domains/reviews";
 import { z } from "zod";
+import { withAuth } from "@/app/lib/api/api-middleware";
+
+const SubmitReviewSchema = z.object({
+  projectId: z.string().uuid(),
+  rating: z.number().int().min(1).max(5),
+  title: z.string().max(200).optional(),
+  comment: z.string().max(5000).optional(),
+});
 
 const QuerySchema = z.object({
   type: z.enum(["PROFESSIONAL", "STORE"]).optional(),
@@ -86,3 +94,25 @@ export async function GET(request: NextRequest) {
 
   return apiSuccess(data.data, HttpStatus.OK);
 }
+
+/** Project reviews are deliberately narrower than public review reads. */
+export const POST = withAuth(async (request: NextRequest, context) => {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return apiError("Invalid JSON body", HttpStatus.BAD_REQUEST);
+  }
+  const parsed = SubmitReviewSchema.safeParse(body);
+  if (!parsed.success) {
+    return apiError("Invalid review", HttpStatus.BAD_REQUEST, parsed.error.issues);
+  }
+  const result = await reviewsService.submitProjectReview(
+    { userId: context.dbUserId },
+    parsed.data,
+  );
+  if (!result.ok) {
+    return apiError(result.message, result.status);
+  }
+  return apiSuccess(result.data, HttpStatus.CREATED);
+});

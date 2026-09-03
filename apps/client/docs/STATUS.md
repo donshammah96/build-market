@@ -1,13 +1,13 @@
 # Client Current Status
 
 Status: Not public-launch ready; documentation-governance snapshot only.
-Scope: `apps/client` current architecture and release-evidence documentation; this is not an approval of marketplace, payment, privacy, or production readiness.
+Scope: `apps/client` current architecture, capability-boundary, and release-evidence documentation; this is not an approval of marketplace, payment, privacy, or production readiness.
 Evidence date: 2026-09-03
 Git SHA: 38e18958c2eebb62fecdf260427c04e8974eaa18
 Environment: Repository checkout; no deployed environment was exercised for this snapshot.
 Commands and results: No client release command was executed for this baseline document; release evidence must be attached before a go decision.
 Owner: Client Engineering
-Known exclusions: End-to-end lead routing, trust badges, payment callbacks, queue failure, privacy drills, and production deployment evidence.
+Known exclusions: Isolated onboarding/verification mutation remains a no-go control because the application has no resettable per-run identity adapter. Project-linked review eligibility and bounded queue-recovery flows now have implementation coverage but still require a protected staging execution artifact. A deployment has not been exercised for this snapshot; staging artifact evidence is still required.
 Next review: 2026-12-03 or before any public-launch decision.
 
 ## Authority and evidence

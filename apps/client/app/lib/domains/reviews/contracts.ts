@@ -10,7 +10,7 @@ export type ReviewType = "PROFESSIONAL" | "STORE";
 /** Public read actor — no auth required; empty for unauthenticated access */
 export type ReviewsActor = Record<string, never>;
 
-export type ReviewsDomainErrorCode = "forbidden";
+export type ReviewsDomainErrorCode = "forbidden" | "review_not_eligible";
 
 export type ReviewsDomainError = DomainError<ReviewsDomainErrorCode>;
 
@@ -53,4 +53,11 @@ export type ReviewsQueryInput = {
   search?: string;
   limit?: number;
   offset?: number;
+};
+
+export type SubmitProjectReviewInput = {
+  projectId: string;
+  rating: number;
+  comment?: string;
+  title?: string;
 };

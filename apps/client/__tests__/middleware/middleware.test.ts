@@ -194,6 +194,15 @@ beforeEach(() => {
 });
 
 describe("middleware — API route classification order", () => {
+  it("denies dormant capability deep links before auth or route classification", async () => {
+    const res = await middleware(createMockRequest("/api/properties/property_1"));
+
+    expect(res.status).toBe(404);
+    await expect(res.json()).resolves.toEqual({ error: "Not found" });
+    expect(mockAuth).not.toHaveBeenCalled();
+    expect(eventsLogged()).toContain("mw_deny_disabled_capability");
+  });
+
   it("allows public API routes without calling auth()", async () => {
     const res = await middleware(createMockRequest("/api/health"));
     expect(res.status).toBe(200);

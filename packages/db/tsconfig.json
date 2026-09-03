@@ -17,7 +17,7 @@
     "outDir": "./dist",
     "rootDir": "./"
   },
-  "include": ["lib/**/*", "prisma/**/*"],
+  "include": ["lib/**/*", "prisma/**/*", "src/**/*"],
   "exclude": ["node_modules", "dist"],
   "references": [{ "path": "../../packages/types" }]
 }

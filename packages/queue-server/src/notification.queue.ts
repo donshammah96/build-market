@@ -1,6 +1,7 @@
 import { Queue, type JobsOptions } from "bullmq";
 import { getQueueConnectionOptions } from "./backend.js";
 import { QueueRetentionPolicies } from "./retention.js";
+import type { StagingTestControlEnvelope } from "./staging-test-control.js";
 
 export interface NotificationRetryJobData {
   recipientUserId: string;
@@ -12,6 +13,7 @@ export interface NotificationRetryJobData {
     reason?: string;
     metadata?: Record<string, unknown>;
   };
+  testControl?: StagingTestControlEnvelope;
 }
 
 let notificationQueueInstance: Queue<NotificationRetryJobData> | null = null;

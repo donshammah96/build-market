@@ -7,6 +7,8 @@ import type {
 import type { Job } from "bullmq";
 import { validateWorkerEnv, type WorkerEnv } from "../env.js";
 import { executeMpesaStkSettlement } from "../domains/mpesa/settlement.js";
+import { shouldProcessCapabilityWork } from "../capabilities/guard.js";
+import { checkSimulatedFailure } from "../interceptors/staging-test-control.js";
 
 export function mapStkResultCode(resultCode: number): "SUCCESS" | "FAILED" {
   return resultCode === 0 ? "SUCCESS" : "FAILED";
@@ -90,8 +92,46 @@ export async function processMpesaStkInitiateJob(
   });
   if (!transaction) throw new Error("M-Pesa transaction not found");
 
+  if (transaction.escrowId) {
+    const capability = shouldProcessCapabilityWork("wallets_escrow", {
+      FEATURE_MVP_WALLETS_ESCROW: workerEnv.FEATURE_MVP_WALLETS_ESCROW,
+    });
+    if (!capability.process) {
+      return { suppressed: true, reason: capability.reason };
+    }
+  }
+
   if (transaction.status !== TransactionStatus.PENDING) {
     return { transactionId: transaction.id, status: transaction.status };
+  }
+
+  if (transaction.stagingTestRunId) {
+    checkSimulatedFailure((job.data as any).testControl, workerEnv);
+    if ((job.data as any).testControl?.mockResponse) {
+      const mock = (job.data as any).testControl.mockResponse;
+      const status =
+        mock.ResponseCode === "0"
+          ? TransactionStatus.PROCESSING
+          : TransactionStatus.FAILED;
+      await prisma.mpesaTransaction.update({
+        where: { id: transaction.id },
+        data: {
+          merchantRequestId:
+            mock.MerchantRequestID ?? transaction.merchantRequestId,
+          checkoutRequestId:
+            mock.CheckoutRequestID ?? transaction.checkoutRequestId,
+          status,
+          resultDesc:
+            mock.ResponseDescription ?? "Simulated sandbox STK response",
+        },
+      });
+      return {
+        transactionId: transaction.id,
+        status,
+        checkoutRequestId:
+          mock.CheckoutRequestID ?? transaction.checkoutRequestId,
+      };
+    }
   }
 
   const client = createWorkerMpesaClient(workerEnv);

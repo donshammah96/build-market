@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
@@ -8,7 +8,20 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./__tests__/setup.ts"],
     environment: "node", // Default to node for API tests
-    include: ["**/__tests__/**/*.{test,spec}.{js,ts,tsx}"],
+    include: [
+      "__tests__/**/*.{test,spec}.{js,ts,tsx}",
+      "app/**/*.{test,spec}.{js,ts,tsx}",
+    ],
+    exclude: [
+      ...configDefaults.exclude,
+      ".next/**",
+      ".turbo/**",
+      ".wrangler/**",
+      "tmp/**",
+      "cypress/**",
+    ],
+    pool: "threads",
+    maxWorkers: 4,
     testTimeout: 20000, // 20 seconds for parallel monorepo test runs with dynamic module imports
     hookTimeout: 20000,
     coverage: {
@@ -74,8 +87,7 @@ export default defineConfig({
         find: "@/routes",
         replacement: path.resolve(__dirname, "./lib/routes/index"),
       },
-      // Catch-all must be last
-      { find: "@", replacement: path.resolve(__dirname, "./") },
+      // Explicit package paths must precede the general @ prefix alias
       {
         find: "@build/lead-qualification",
         replacement: path.resolve(
@@ -90,6 +102,8 @@ export default defineConfig({
           "../../packages/resilience/src/index.ts",
         ),
       },
+      // Catch-all must be last
+      { find: "@", replacement: path.resolve(__dirname, "./") },
     ],
   },
 });

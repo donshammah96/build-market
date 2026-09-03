@@ -7,6 +7,51 @@ const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 100;
 
 export const reviewsRepository = {
+  /**
+   * The project/duplicate checks and creation share one transaction so retries
+   * cannot turn a completed project into multiple reviews.
+   */
+  async createEligibleProjectReview(
+    reviewerId: string,
+    input: { projectId: string; rating: number; comment?: string; title?: string },
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const project = await tx.project.findFirst({
+        where: {
+          id: input.projectId,
+          clientId: reviewerId,
+          status: "COMPLETED",
+          deletedAt: null,
+          professionalId: { not: null },
+        },
+        select: { id: true, professionalId: true, stagingTestRunId: true },
+      });
+      if (!project?.professionalId) return null;
+
+      const duplicate = await tx.review.findFirst({
+        where: { reviewerId, projectId: project.id, deletedAt: null },
+        select: { id: true },
+      });
+      if (duplicate) return null;
+
+      return tx.review.create({
+        data: {
+          reviewerId,
+          professionalId: project.professionalId,
+          projectId: project.id,
+          type: "PROFESSIONAL",
+          rating: input.rating,
+          comment: input.comment,
+          title: input.title,
+          status: "PENDING",
+          isVerified: true,
+          stagingTestRunId: project.stagingTestRunId,
+        },
+        select: { id: true },
+      });
+    });
+  },
+
   async findPublished(input: ReviewsQueryInput = {}) {
     const limit = Math.min(input.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
     const offset = input.offset ?? 0;

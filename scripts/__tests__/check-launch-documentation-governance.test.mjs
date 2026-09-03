@@ -159,6 +159,21 @@ test("rejects a scorecard criterion without ADR and control evidence", () => {
   });
 });
 
+test("accepts scorecard rows whose Markdown columns are padded", () => {
+  withRepository((root) => {
+    const scorecardPath = join(root, "docs/launch/GO_NO_GO.md");
+    writeFileSync(
+      scorecardPath,
+      readFileSync(scorecardPath, "utf8").replace(
+        "| Supply |",
+        "| Supply          |",
+      ),
+    );
+    const result = runChecker(root);
+    assert.equal(result.status, 0, result.output);
+  });
+});
+
 test("rejects worker operations documentation without its recovery runbook", () => {
   withRepository((root) => {
     writeFileSync(join(root, "apps/workers/README.md"), "# Workers\n");

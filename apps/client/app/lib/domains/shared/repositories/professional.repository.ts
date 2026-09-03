@@ -543,7 +543,7 @@ export class ProfessionalRepository {
     try {
       return await this.prisma.professionalProfile.upsert({
         where: { userId },
-        update: data,
+        update: data as Prisma.ProfessionalProfileUpdateInput,
         create: {
           userId,
           ...(data as any),

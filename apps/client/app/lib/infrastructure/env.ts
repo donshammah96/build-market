@@ -550,6 +550,12 @@ const envGroups: EnvGroup[] = [
       { name: "FEATURE_PORTAL_STORES_V2", required: false, default: "true" },
       { name: "FEATURE_PORTAL_CALENDAR_V2", required: false, default: "true" },
       { name: "FEATURE_PORTAL_PORTFOLIO_V2", required: false, default: "true" },
+      { name: "FEATURE_MVP_MATERIALS_COMMERCE", required: false, default: "false" },
+      { name: "FEATURE_MVP_PROPERTY_TRANSACTIONS", required: false, default: "false" },
+      { name: "FEATURE_MVP_IDEA_BOOKS", required: false, default: "false" },
+      { name: "FEATURE_MVP_CPD", required: false, default: "false" },
+      { name: "FEATURE_MVP_WALLETS_ESCROW", required: false, default: "false" },
+      { name: "FEATURE_MVP_PLATFORM_CUSTODY", required: false, default: "false" },
     ],
   },
   {
@@ -701,6 +707,14 @@ const envGroups: EnvGroup[] = [
       { name: "STAGING_AUTH_PASSWORD", required: false },
       { name: "STAGING_AUTH_SECRET", required: false },
       { name: "STAGING_AUTH_ENABLED", required: false },
+    ],
+  },
+  {
+    name: "stagingTestControl",
+    description: "Staging Test Control Authority Configuration",
+    variables: [
+      { name: "TEST_CONTROL_SECRET", required: false },
+      { name: "TEST_CONTROL_GRANT_PUBLIC_KEY", required: false },
     ],
   },
   {
@@ -1418,6 +1432,14 @@ function buildEnvConfig() {
       portalStoresV2: getBooleanEnv("FEATURE_PORTAL_STORES_V2", true),
       portalCalendarV2: getBooleanEnv("FEATURE_PORTAL_CALENDAR_V2", true),
       portalPortfolioV2: getBooleanEnv("FEATURE_PORTAL_PORTFOLIO_V2", true),
+      mvpMaterialsCommerce: getBooleanEnv("FEATURE_MVP_MATERIALS_COMMERCE"),
+      mvpPropertyTransactions: getBooleanEnv(
+        "FEATURE_MVP_PROPERTY_TRANSACTIONS",
+      ),
+      mvpIdeaBooks: getBooleanEnv("FEATURE_MVP_IDEA_BOOKS"),
+      mvpCpd: getBooleanEnv("FEATURE_MVP_CPD"),
+      mvpWalletsEscrow: getBooleanEnv("FEATURE_MVP_WALLETS_ESCROW"),
+      mvpPlatformCustody: getBooleanEnv("FEATURE_MVP_PLATFORM_CUSTODY"),
     },
 
     analytics: {
@@ -1597,6 +1619,12 @@ function buildEnvConfig() {
       user: getStringEnv("STAGING_AUTH_USER", "buildmarket"),
       password: getOptionalStringEnv("STAGING_AUTH_PASSWORD"),
       secret: getOptionalStringEnv("STAGING_AUTH_SECRET"),
+    },
+
+    // Staging Test Control Authority (DD_ENV === "staging" || NODE_ENV === "test")
+    stagingTestControl: {
+      secret: getOptionalStringEnv("TEST_CONTROL_SECRET"),
+      grantPublicKey: getOptionalStringEnv("TEST_CONTROL_GRANT_PUBLIC_KEY"),
     },
   } as const;
 }

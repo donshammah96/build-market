@@ -1,5 +1,7 @@
 import { prisma, StoreCategory, County } from "@build/db";
 import { StructuredLogger, CorrelationIdManager } from "@build/resilience";
+import { validateWorkerEnv } from "../env.js";
+import { shouldProcessCapabilityWork } from "../capabilities/guard.js";
 
 const logger = new StructuredLogger("price-index-processor");
 
@@ -56,6 +58,19 @@ export async function processPriceIndexJob(job: {
   id?: string;
   data: PriceIndexJobData;
 }) {
+  const capability = shouldProcessCapabilityWork("materials_commerce", {
+    FEATURE_MVP_MATERIALS_COMMERCE:
+      validateWorkerEnv().FEATURE_MVP_MATERIALS_COMMERCE,
+  });
+  if (!capability.process) {
+    logger.info("[PriceIndex] Suppressed dormant capability work", {
+      capability: "materials_commerce",
+      reason: capability.reason,
+      jobId: job.id,
+    });
+    return { suppressed: true, reason: capability.reason };
+  }
+
   const correlationId = CorrelationIdManager.generate();
   const minStores = job.data.minStoresThreshold ?? 3;
   const now = new Date();

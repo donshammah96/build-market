@@ -1,0 +1,110 @@
+name: Staging E2E Cross-Service Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Target staging scenario (or 'all' to run full suite)"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - onboarding
+          - lead-routing
+          - messaging
+          - review-eligibility
+          - mpesa-replay
+          - capability-rollback
+          - queue-recovery
+  push:
+    branches:
+      - staging
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-e2e
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    name: Execute Real Staging E2E Validation
+    runs-on: ubuntu-latest
+    environment: staging-e2e
+    timeout-minutes: 20
+
+    env:
+      NODE_VERSION: "24"
+      STAGING_E2E_BASE_URL: ${{ secrets.STAGING_E2E_BASE_URL }}
+      STAGING_E2E_ALLOWED_HOSTS: ${{ secrets.STAGING_E2E_ALLOWED_HOSTS }}
+      INTERNAL_SERVICE_SECRET: ${{ secrets.INTERNAL_SERVICE_SECRET }}
+      TEST_CONTROL_SECRET: ${{ secrets.TEST_CONTROL_SECRET }}
+      STAGING_AUTH_SECRET: ${{ secrets.STAGING_AUTH_SECRET }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: pnpm run build --filter="@build/*"
+
+      - name: Run Cypress staging E2E suite
+        run: |
+          if [ "${{ github.event.inputs.scenario }}" = "all" ] || [ -z "${{ github.event.inputs.scenario }}" ]; then
+            pnpm -C apps/client run test:staging-release-e2e
+          else
+            case "${{ github.event.inputs.scenario }}" in
+              onboarding)
+                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/01-onboarding-and-verification.cy.ts"
+                ;;
+              lead-routing)
+                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/02-routing-and-masked-disclosure.cy.ts" --env STAGING_RELEASE_E2E=true
+                ;;
+              messaging)
+                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/06-messaging.cy.ts" --env STAGING_RELEASE_E2E=true
+                ;;
+              review-eligibility)
+                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/03-review-eligibility.cy.ts" --env STAGING_RELEASE_E2E=true
+                ;;
+              mpesa-replay)
+                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/04-mpesa-replay-and-idempotency.cy.ts" --env STAGING_RELEASE_E2E=true
+                ;;
+              capability-rollback)
+                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/05-capability-rollback.cy.ts" --env STAGING_RELEASE_E2E=true
+                ;;
+              queue-recovery)
+                pnpm -C apps/client exec cypress run --spec "cypress/e2e/staging/07-queue-recovery.cy.ts" --env STAGING_RELEASE_E2E=true
+                ;;
+            esac
+          fi
+
+      - name: Emergency cleanup of stranded test runs
+        if: always()
+        run: node scripts/emergency-staging-cleanup.mjs
+
+      - name: Upload redacted Cypress failure media
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-e2e-failure-media-${{ github.run_id }}
+          path: |
+            apps/client/cypress/screenshots
+            apps/client/cypress/videos
+          if-no-files-found: warn
+          retention-days: 30

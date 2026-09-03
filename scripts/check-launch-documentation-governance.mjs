@@ -50,7 +50,11 @@ function findFiles(directory, predicate) {
   for (const entry of readdirSync(directory)) {
     const path = join(directory, entry);
     if (statSync(path).isDirectory()) {
-      if (entry === "node_modules" || entry === ".git" || entry === ".next") {
+      if (
+        ["node_modules", ".git", ".next", ".open-next", ".turbo", ".wrangler"].includes(
+          entry,
+        )
+      ) {
         continue;
       }
       files.push(...findFiles(path, predicate));
@@ -113,7 +117,9 @@ function checkScorecard(root, findings) {
   const path = join(root, "docs", "launch", "GO_NO_GO.md");
   const content = readText(path, findings, root);
   for (const area of scorecardAreas) {
-    const line = content.split(/\r?\n/).find((candidate) => candidate.includes(`| ${area} |`));
+    const line = content
+      .split(/\r?\n/)
+      .find((candidate) => new RegExp(`\\|\\s*${area}\\s*\\|`).test(candidate));
     if (!line || !/ADR-/i.test(line) || !/Control:/i.test(line)) {
       findings.push(`docs/launch/GO_NO_GO.md: ${area} must name ADR and Control evidence`);
     }

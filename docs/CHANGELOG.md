@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Changed â€” Staging test-control integrity
+
+- Extended staging-run ownership and emergency cleanup to cross-service routing and messaging roots, hardened test-control credential/host gates, and updated the protected staging workflow to retain redacted Cypress failure media.
+
+### Added — P0 capability boundary and release evidence foundation
+
+- Added a typed, default-off MVP capability registry and server middleware denial for deferred stores/materials, property transactions, Idea Books, CPD, wallets/escrow, and platform custody entry points.
+- Added non-mutating `release:verify` and SHA-256 manifest generation, plus a staging-only CI artifact retained for 90 days.
+- Added the staging capability-rollback Cypress scenario and its runbook. The wider marketplace E2E suite remains an explicit no-go prerequisite until isolated staging fixtures are provisioned.
+
+### Changed — Client Test Command Parity in Root Manifest
+
+- **Root Coordinator (`package.json`)**: Added `"client:test": "pnpm -C apps/client run test"` to achieve symmetry with `"admin:test"`. Allows root-level invocation of targeted test files (e.g. `pnpm client:test <path>`) with clean argument passthrough, avoiding `pnpm --filter` double-dash argument-stripping quirks.
+
 ### Added — P0 launch documentation and toolchain governance
 
 - Added the canonical [`docs/launch/GO_NO_GO.md`](launch/GO_NO_GO.md) scorecard and evidence contract, plus current status pages for every deployable application.

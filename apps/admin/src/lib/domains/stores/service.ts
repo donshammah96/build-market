@@ -14,6 +14,7 @@ import type {
   StoresDomainError,
 } from "./contracts";
 import { storesRepository } from "./repository";
+import { requireLiveAdminMvpCapability } from "@/lib/capabilities/mvp-capabilities";
 
 // ============================================================================
 // Capability helpers
@@ -43,6 +44,16 @@ function requireManageContent(
     });
   }
   return ok(true);
+}
+
+function requireLiveStoresCapability(): Result<true, StoresDomainError> {
+  const capability = requireLiveAdminMvpCapability("materials_commerce");
+  return capability.ok
+    ? ok(true)
+    : err({
+        code: "STORES_POLICY_DENIED",
+        message: "Materials commerce is dormant for this MVP release",
+      });
 }
 
 function requireVerifyContent(
@@ -166,6 +177,8 @@ export async function updateStore(
 > {
   const cap = requireManageContent(actor);
   if (!cap.ok) return cap;
+  const capability = requireLiveStoresCapability();
+  if (!capability.ok) return capability;
 
   const store = await storesRepository.updateStoreById(storeId, data);
   return ok({ updated: true, store });
@@ -185,6 +198,8 @@ export async function toggleStoreFeatured(
 > {
   const cap = requireManageContent(actor);
   if (!cap.ok) return cap;
+  const capability = requireLiveStoresCapability();
+  if (!capability.ok) return capability;
 
   const current = await storesRepository.getStoreFeaturedStatus(storeId);
   if (!current)
@@ -214,6 +229,8 @@ export async function verifyStore(
 > {
   const cap = requireVerifyContent(actor);
   if (!cap.ok) return cap;
+  const capability = requireLiveStoresCapability();
+  if (!capability.ok) return capability;
 
   const current = await storesRepository.findStoreVerificationStatus(storeId);
   if (!current)
@@ -251,6 +268,8 @@ export async function rejectStore(
 > {
   const cap = requireVerifyContent(actor);
   if (!cap.ok) return cap;
+  const capability = requireLiveStoresCapability();
+  if (!capability.ok) return capability;
 
   if (!reason.trim()) {
     return err({

@@ -15,6 +15,7 @@ import type {
   PropertyUpdateInput,
 } from "./contracts";
 import { propertiesRepository } from "./repository";
+import { requireLiveAdminMvpCapability } from "@/lib/capabilities/mvp-capabilities";
 
 // ============================================================================
 // Capability helpers
@@ -44,6 +45,16 @@ function requireManageContent(
     });
   }
   return ok(true);
+}
+
+function requireLivePropertiesCapability(): Result<true, PropertiesDomainError> {
+  const capability = requireLiveAdminMvpCapability("property_transactions");
+  return capability.ok
+    ? ok(true)
+    : err({
+        code: "PROPERTIES_POLICY_DENIED",
+        message: "Property transactions are dormant for this MVP release",
+      });
 }
 
 function requireVerifyContent(
@@ -171,6 +182,8 @@ export async function updateProperty(
 > {
   const cap = requireManageContent(actor);
   if (!cap.ok) return cap;
+  const capability = requireLivePropertiesCapability();
+  if (!capability.ok) return capability;
 
   const property = await propertiesRepository.updatePropertyById(
     propertyId,
@@ -193,6 +206,8 @@ export async function togglePropertyFeatured(
 > {
   const cap = requireManageContent(actor);
   if (!cap.ok) return cap;
+  const capability = requireLivePropertiesCapability();
+  if (!capability.ok) return capability;
 
   const current =
     await propertiesRepository.getPropertyFeaturedStatus(propertyId);
@@ -222,6 +237,8 @@ export async function verifyProperty(
 > {
   const cap = requireVerifyContent(actor);
   if (!cap.ok) return cap;
+  const capability = requireLivePropertiesCapability();
+  if (!capability.ok) return capability;
 
   const property = await propertiesRepository.updatePropertyVerification(
     propertyId,
@@ -250,6 +267,8 @@ export async function rejectProperty(
 > {
   const cap = requireVerifyContent(actor);
   if (!cap.ok) return cap;
+  const capability = requireLivePropertiesCapability();
+  if (!capability.ok) return capability;
 
   if (!reason.trim()) {
     return err({

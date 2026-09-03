@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
         { merchantRequestId: callback.MerchantRequestID },
       ],
     },
-    select: { id: true, status: true },
+    select: { id: true, status: true, stagingTestRunId: true },
   });
 
   // Unknown callbacks are acknowledged to stop provider retry storms, but are
@@ -71,6 +71,7 @@ export async function POST(request: NextRequest) {
           providerEventKey,
           callbackType: "STK_CALLBACK",
           transactionId: transaction.id,
+          stagingTestRunId: transaction.stagingTestRunId,
           checkoutRequestId: callback.CheckoutRequestID,
           payloadHash: hashCallbackPayload(rawBody),
           redactedPayload,

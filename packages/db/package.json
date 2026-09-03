@@ -15,6 +15,11 @@
       "types": "./dist/lib/system-settings.d.ts",
       "import": "./dist/lib/system-settings.js",
       "default": "./dist/lib/system-settings.js"
+    },
+    "./staging-test-runs": {
+      "types": "./dist/src/staging-test-runs/contracts.d.ts",
+      "import": "./dist/src/staging-test-runs/contracts.js",
+      "default": "./dist/src/staging-test-runs/contracts.js"
     }
   },
   "scripts": {
@@ -24,7 +29,7 @@
     "prepack": "pnpm run build",
     "check-types": "tsc --noEmit",
     "lint": "echo \"No lint configured\" && exit 0",
-    "test": "echo \"No tests configured\" && exit 0",
+    "test": "vitest run --exclude '**/dist/**'",
     "postinstall": "prisma generate"
   },
   "keywords": [],
@@ -46,6 +51,7 @@
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
     "tsx": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

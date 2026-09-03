@@ -62,6 +62,7 @@
     "cy:component": "cypress run --component",
     "test:e2e": "start-server-and-test dev http://localhost:3500 cy:run",
     "test:e2e:open": "start-server-and-test dev http://localhost:3500 cy:open",
+    "test:staging-release-e2e": "cypress run --spec cypress/e2e/staging/**/*.cy.ts --env STAGING_RELEASE_E2E=true",
     "gen-keys": "tsx generate-keys.ts",
     "build": "next build",
     "build:cloudflare-worker": "pnpm run check:worker-asset-budget:public && opennextjs-cloudflare build --config wrangler.toml --skipWranglerConfigCheck && pnpm run check:worker-asset-budget:open-next",

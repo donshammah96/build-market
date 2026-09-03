@@ -20,3 +20,5 @@ export * from "./upload-processing.queue.js";
 export * from "./license-verification.queue.js";
 export * from "./mpesa.queue.js";
 export * from "./mpesa-queue-contracts.js";
+export * from "./test-inspection.js";
+export * from "./staging-test-control.js";

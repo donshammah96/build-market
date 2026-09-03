@@ -2,6 +2,11 @@ import { NotificationChannel, prisma } from "@build/db";
 import { StructuredLogger } from "@build/resilience";
 import type { Job } from "bullmq";
 import type { NotificationRetryJobData } from "@build/queue-server";
+import {
+  checkSimulatedFailure,
+  interceptOutboundDelivery,
+} from "../interceptors/staging-test-control.js";
+import { validateWorkerEnv } from "../env.js";
 
 const logger = new StructuredLogger("worker-notification-processor");
 
@@ -35,7 +40,7 @@ export async function processNotificationRetryJob(
   // 1. Verify recipient user exists
   const user = await prisma.user.findUnique({
     where: { id: recipientUserId },
-    select: { id: true, email: true, phone: true },
+    select: { id: true, email: true, phone: true, stagingTestRunId: true },
   });
 
   if (!user) {
@@ -52,6 +57,33 @@ export async function processNotificationRetryJob(
       timestamp: now.toISOString(),
       channel: "none",
     };
+  }
+
+  const workerEnv = validateWorkerEnv();
+  const testRunId =
+    user.stagingTestRunId || (job.data as any).testControl?.stagingTestRunId;
+  if (testRunId) {
+    const run = await prisma.stagingTestRun.findUnique({
+      where: { id: testRunId },
+      select: { state: true, expiresAt: true },
+    });
+    const activeTestRun = run?.state === "ACTIVE" && run.expiresAt > new Date();
+    if (activeTestRun) {
+      checkSimulatedFailure((job.data as any).testControl, workerEnv, job.attemptsMade);
+    }
+    await interceptOutboundDelivery(
+      {
+        stagingTestRunId: testRunId,
+        channel: "EMAIL",
+        recipient: user.email,
+        subject: `Verification Update: ${result.decision || "Decision Recorded"}`,
+        metadata: {
+          entityId: result?.entityId,
+          decision: result?.decision,
+        },
+      },
+      workerEnv,
+    );
   }
 
   // 2. Persist in-app notification

@@ -90,6 +90,8 @@ const workerEnvSchema = z.object({
   MPESA_B2C_CERTIFICATE_PEM: z.string().min(1).optional(),
   MPESA_B2C_RESULT_URL: z.string().url().optional(),
   MPESA_B2C_TIMEOUT_URL: z.string().url().optional(),
+  FEATURE_MVP_MATERIALS_COMMERCE: booleanString,
+  FEATURE_MVP_WALLETS_ESCROW: booleanString,
 
   // Storage / S3 / R2 Configuration for Export Processor
   S3_DISABLED: booleanString,

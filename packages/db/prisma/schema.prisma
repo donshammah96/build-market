@@ -1187,6 +1187,9 @@ model User {
   marketplaceLeads            MarketplaceLead[]      @relation("ClientMarketplaceLeads")
   newsletterSubscribers       NewsletterSubscriber[]
 
+  stagingTestRunId            String?
+  stagingTestRun              StagingTestRun?        @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
   @@index([clerkId])
   @@index([email])
   @@index([role])
@@ -1195,6 +1198,7 @@ model User {
   @@index([phone])
   @@index([status, scheduledDeletionAt])
   @@index([anonymizedAt])
+  @@index([stagingTestRunId])
   @@map("users") // Explicit naming convention
 }
 
@@ -1405,6 +1409,9 @@ model ProfessionalProfile {
   cpdRecords     ProfessionalCpdRecord[]
   notificationSettings ProfessionalNotificationSettings?
 
+  stagingTestRunId     String?
+  stagingTestRun       StagingTestRun? @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
   @@index([slug])
   @@index([trustTier])
   @@index([profession, county, verificationStatus]) // Main search index
@@ -1412,6 +1419,7 @@ model ProfessionalProfile {
   @@index([rating, reviewCount])
   @@index([availability])
   @@index([location]) // PostGIS index (if using PostGIS extension)
+  @@index([stagingTestRunId])
 }
 
 model ProfessionalLicense {
@@ -1660,10 +1668,14 @@ model Project {
   quotes                   Quote[]
   savedInIdeaBooks         SavedProject[]
 
+  stagingTestRunId         String?
+  stagingTestRun           StagingTestRun?     @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
   @@index([clientId, status])
   @@index([professionalId, status])
   @@index([county])
   @@index([title, description]) // PostgreSQL FTS index
+  @@index([stagingTestRunId])
 }
 
 model ProjectMilestone {
@@ -2887,11 +2899,15 @@ model Lead {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  stagingTestRunId String?
+  stagingTestRun   StagingTestRun? @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
   @@index([professionalId])
   @@index([status])
   @@index([county])
   @@index([professionalId, status, priority]) // CRM pipeline view
   @@index([status, createdAt]) // Lead aging reports
+  @@index([stagingTestRunId])
 }
 
 // ========================================================
@@ -2909,6 +2925,8 @@ model MarketplaceLead {
   description   String?               @db.Text
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
+  stagingTestRunId String?
+  stagingTestRun   StagingTestRun? @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
 
   qualification MarketplaceLeadQualification?
   documents     MarketplaceLeadDocument[]
@@ -2917,6 +2935,7 @@ model MarketplaceLead {
   @@index([clientId])
   @@index([status, projectCounty])
   @@index([createdAt])
+  @@index([stagingTestRunId])
 }
 
 model MarketplaceLeadQualification {
@@ -3028,11 +3047,15 @@ model MessageThread {
 
   isArchived Boolean @default(false)
 
+  stagingTestRunId String?
+  stagingTestRun   StagingTestRun? @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
   participants ThreadParticipant[]
   messages     Message[]
   // Note: Index on participants removed (cannot index relation fields)
 
   @@index([lastMessageAt])
+  @@index([stagingTestRunId])
 }
 
 model ThreadParticipant {
@@ -3172,9 +3195,13 @@ model Review {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  stagingTestRunId String?
+  stagingTestRun   StagingTestRun? @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
   @@index([status])
   @@index([professionalId])
   @@index([storeId])
+  @@index([stagingTestRunId])
 }
 
 model ReviewImage {
@@ -3405,6 +3432,9 @@ model MpesaTransaction {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  stagingTestRunId String?
+  stagingTestRun   StagingTestRun? @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
   @@index([userId, status])
   @@index([checkoutRequestId])
   @@index([subscriptionId])
@@ -3414,6 +3444,7 @@ model MpesaTransaction {
   @@index([status, checkoutRequestId, reconciliationNextAttemptAt])
   @@index([reconciliationClaimedAt])
   @@index([phoneSearchHash])
+  @@index([stagingTestRunId])
 }
 
 // Cold storage archive for settled M-Pesa transactions (>180 days)
@@ -3514,9 +3545,13 @@ model MpesaCallbackEvent {
   processedAt       DateTime?
   createdAt         DateTime @default(now())
 
+  stagingTestRunId  String?
+  stagingTestRun    StagingTestRun? @relation(fields: [stagingTestRunId], references: [id], onDelete: SetNull)
+
   @@index([callbackType, receivedAt])
   @@index([transactionId, processingStatus])
   @@index([payoutId, processingStatus])
+  @@index([stagingTestRunId])
 }
 
 // ========================================================
@@ -3896,3 +3931,50 @@ model RegulatorVerificationEvidenceView {
   @@index([viewerId, createdAt])
   @@map("regulator_verification_evidence_views")
 }
+
+// ========================================================
+// 14. STAGING TEST RUN & FIXTURE OWNERSHIP
+// ========================================================
+
+model StagingTestRun {
+  id            String    @id @default(uuid())
+  scenario      String
+  state         String    @default("ACTIVE") // ACTIVE, CLEANING, CLEANED, EXPIRED
+  gitSha        String
+  workflowRunId String?
+  actorLabel    String
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime
+  cleanedAt     DateTime?
+
+  users               User[]
+  profiles            ProfessionalProfile[]
+  leads               Lead[]
+  projects            Project[]
+  reviews             Review[]
+  mpesaTransactions   MpesaTransaction[]
+  mpesaCallbackEvents MpesaCallbackEvent[]
+  outboundDeliveries  StagingTestOutboundDelivery[]
+  marketplaceLeads   MarketplaceLead[]
+  messageThreads     MessageThread[]
+
+  @@index([state, expiresAt])
+  @@index([scenario, createdAt])
+  @@map("staging_test_runs")
+}
+
+model StagingTestOutboundDelivery {
+  id               String         @id @default(uuid())
+  stagingTestRunId String
+  stagingTestRun   StagingTestRun @relation(fields: [stagingTestRunId], references: [id], onDelete: Cascade)
+  channel          String         // EMAIL, SMS, WHATSAPP, PUSH
+  recipientHash    String
+  templateId       String?
+  subject          String?
+  redactedMetadata Json           @db.JsonB
+  createdAt        DateTime       @default(now())
+
+  @@index([stagingTestRunId, channel])
+  @@map("staging_test_outbound_deliveries")
+}
+

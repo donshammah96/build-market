@@ -121,6 +121,7 @@ packages/resilience/tsconfig.tsbuildinfo
 .eslintcache
 /scratch
 .worktrees/
+.release-evidence/
 
 # Temp logs and rot files
 tmp-*
@@ -133,6 +134,8 @@ terminal-smoke.txt
 vitest-*.json
 vitest-*.txt
 cypress/screenshots/
+**/cypress/screenshots/
+**/cypress/videos/
 .env*
 !**/.env.example
 !**/.env.test

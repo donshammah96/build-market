@@ -5,6 +5,7 @@
 // ***********************************************************
 
 import "./commands";
+import "./staging-test-control";
 
 // Prevent uncaught exceptions from failing tests
 Cypress.on("uncaught:exception", (err) => {

@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 export * from "@prisma/client";
+export * from "../src/staging-test-runs/contracts.js";
 
 interface GlobalDatabaseContext {
   prisma?: PrismaClient;

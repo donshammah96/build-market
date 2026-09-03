@@ -36,6 +36,7 @@ import {
 import { PROFESSIONAL_ROUTES } from "@/lib/routes";
 import { recordMiddlewareFallback } from "@/app/lib/auth/telemetry-metrics";
 import { handleStagingProtection } from "@/app/lib/security/middleware/staging-auth";
+import { capabilityBoundaryForPath } from "@/app/lib/capabilities/boundary";
 
 // =============================================================================
 // Middleware
@@ -165,6 +166,17 @@ const clerkHandler = clerkMiddleware(async (auth, req: NextRequest) => {
   const baseUrl = nextReq.nextUrl.origin;
   const nonce = generateCspNonce();
   const cspValue = buildRequestCsp(nonce);
+
+  // Deferred MVP verticals are server-enforced capability boundaries, not
+  // navigation hints. Evaluate them before auth, onboarding, and API route
+  // classification so deep links and direct requests share the same denial.
+  const capabilityDenial = capabilityBoundaryForPath(pathname);
+  if (capabilityDenial) {
+    logMiddlewareDecision(nextReq, "mw_deny_disabled_capability");
+    return NextResponse.json(capabilityDenial.body, {
+      status: capabilityDenial.status,
+    });
+  }
 
   // 0. Maintenance mode and signup blocking (skip for exempt routes)
   if (!isSettingsExemptRoute(nextReq)) {

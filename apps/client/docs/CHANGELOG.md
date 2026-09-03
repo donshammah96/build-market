@@ -16,6 +16,44 @@ This format is based on Keep a Changelog and uses semantic categories:
 
 ## [Unreleased]
 
+### Changed â€” Staging E2E control-plane hardening
+
+- Replaced the `seed-scenario` acknowledgement with durable, run-owned routing, messaging, and review fixtures; added ownership/cleanup coverage for `MarketplaceLead` and `MessageThread` roots.
+- Removed deployable default credentials from the Cypress and route adapters, require an HTTPS allowlisted staging host, and bind M-Pesa callback events to their owned test run.
+- Replaced route/page placeholder checks with real routed-lead masking/acceptance, participant messaging, callback replay, project-linked review eligibility, bounded queue recovery, and capability-boundary scenarios. Isolated onboarding/verification mutation remains an explicit no-go control until a resettable identity adapter exists.
+
+### Added — Staging test-control authority and cross-service E2E evidence
+
+- **Staging Test-Control Authority (`app/api/internal/test-control/route.ts`, `app/lib/domains/testing/test-control/`)**:
+  - Implemented the fail-closed `/api/internal/test-control` route adapter with dual-layer gate: internal service secret plus short-lived (<= 5 min), audience-bound HMAC-SHA256 staging test grant (`buildmarket-staging-test-control`).
+  - Added dynamic importing of Prisma, Clerk, and test-control modules strictly after verifying `DD_ENV === "staging" || NODE_ENV === "test"`; returns uniform 404 in production before evaluating payload.
+  - Implemented `TestControlService` and `TestControlRepository` supporting `createRun`, `seedScenario`, `issueBrowserSessionHandoff` (via Clerk Backend API single-use tickets for dedicated staging pool accounts), `seedPendingMpesaTransaction`, `getRunProjection`, and atomic leaf-to-root `cleanupRun`.
+- **Database Staging Ownership & Outbound Sink (`packages/db`)**:
+  - Added `StagingTestRun` and `StagingTestOutboundDelivery` models with active run expiry, cascade review, and explicit `stagingTestRunId` foreign keys on `User`, `ProfessionalProfile`, `Lead`, `Project`, `Review`, `MpesaTransaction`, and `MpesaCallbackEvent`.
+  - Added deterministic compound seed keys and dependency-ordered cleanup validation.
+- **Worker Staging Interceptor & Sink (`apps/workers`)**:
+  - Added `apps/workers/src/interceptors/staging-test-control.ts` intercepting all outbound SMS/email communications for staging runs into `staging_test_outbound_deliveries` with non-reversible SHA-256 recipient hashing and PII redaction.
+  - Added simulated worker failure triggers (`CRASH`, `TIMEOUT`, `TRANSIENT_ERROR`) to validate queue retry and recovery without customer-facing side effects.
+- **Queue Inspection (`packages/queue-server`)**:
+  - Implemented `QueueTestInspector` with dual-mode inspection: querying PostgreSQL `bullmq.jobs` schema in staging, with an `ioredis` fallback for Redis queue mode.
+- **Cypress Real Staging Suite (`apps/client/cypress/`)**:
+  - Implemented Node-side tasks in `cypress.config.ts` acquiring audience-bound grants without exposing persistent secrets to browser execution context.
+  - Added custom commands (`cy.initStagingRun`, `cy.loginStagingUser`, `cy.seedStagingMpesa`, `cy.getStagingProjection`, `cy.cleanupStagingRun`) and 5 end-to-end staging specs (`01-onboarding-and-verification.cy.ts`, `02-routing-and-messaging.cy.ts`, `03-review-eligibility.cy.ts`, `04-mpesa-replay-and-idempotency.cy.ts`, `05-queue-failure-recovery.cy.ts`).
+- **CI & Concurrency (`.github/workflows/staging-e2e.yml`)**:
+  - Added dedicated single-tenant workflow bound to GitHub Environment `staging-e2e` with `always()` guaranteed cleanup.
+
+### Added — P0 deferred-capability boundary
+
+- Added the server-owned default-off MVP capability registry and generic 404 middleware denial for deferred vertical deep links and APIs; client navigation is no longer the authorization boundary.
+- Added explicit `FEATURE_MVP_*` kill switches, all defaulting to false, and the staging rollback Cypress scenario/runbook.
+
+### Fixed — Vitest Startup Hang & Discovery Traversal Hardening
+
+- **Test Runner Environment (`apps/client/vitest.config.ts`)**:
+  - Bound file discovery by constraining `test.include` to `__tests__/**/*.{test,spec}.{js,ts,tsx}` and `app/**/*.{test,spec}.{js,ts,tsx}`, and explicitly extending `test.exclude` with `.next/**`, `.turbo/**`, `.wrangler/**`, `tmp/**`, and `cypress/**`. This eliminates recursive directory traversal across 4,400+ Next.js build artifacts during test discovery and watcher registration on Windows.
+  - Replaced the default `forks` pool with `pool: "threads"` and configured bounded worker concurrency (`maxWorkers: 4`), eliminating Windows `child_process.fork` spawning latency, IPC contention, and the startup hang before test discovery.
+  - Reordered module aliases so specific package mappings (`@build/lead-qualification`, `@build/resilience`) strictly precede the general `@` catch-all alias.
+
 ### Added — P0 launch documentation authority
 
 - Added [`STATUS.md`](STATUS.md) as the canonical, evidence-scoped client readiness page.
