@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed — Verification Notification Test Isolation Under Dormant MVP Capabilities
+
+- **Verification Notification Tests (`src/lib/domains/verification/__tests__/notification-service.test.ts`)**:
+  - Resolved test failures where deferred MVP capabilities (`materials_commerce` for stores, `property_transactions` for properties) defaulting to dormant status caused notification dispatch to short-circuit before database record insertion.
+  - Isolated capability policy resolution via `vi.hoisted()` and `vi.mock("@/lib/capabilities/mvp-capabilities")`, defaulting to live capabilities for notification formatting unit tests.
+  - Added regression test asserting that dormant capabilities properly suppress notification delivery without triggering database writes or event publishing.
+
 ### Added — P0 launch documentation authority
 
 - Added [`STATUS.md`](STATUS.md) as the canonical, evidence-scoped admin readiness page.

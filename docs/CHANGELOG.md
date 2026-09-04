@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed — Admin Verification Notification Test Isolation for Dormant MVP Capabilities
+
+- **`apps/admin`**:
+  - Mocked `requireLiveAdminMvpCapability` in `apps/admin/src/lib/domains/verification/__tests__/notification-service.test.ts` to isolate capability checks and allow live-path notification formatting tests to run.
+  - Added explicit unit test verifying that dormant MVP capabilities (`materials_commerce` for stores, `property_transactions` for properties) suppress notification dispatch and database record creation in accordance with capability policy.
+  - Restored clean test execution across all 77 test suites (581 tests) in `pnpm run admin:test`.
+
 ### Added — Resettable Staging Onboarding & Verification Test Identities
 
 - **`packages/db`**:
